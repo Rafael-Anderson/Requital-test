@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE `shop` ADD COLUMN `address` TEXT NULL,
+    ADD COLUMN `country` VARCHAR(191) NULL,
+    ADD COLUMN `description` TEXT NULL,
+    ADD COLUMN `displayName` VARCHAR(191) NULL,
+    ADD COLUMN `email` VARCHAR(191) NULL,
+    ADD COLUMN `legalName` VARCHAR(191) NULL,
+    ADD COLUMN `logoUrl` VARCHAR(191) NULL,
+    ADD COLUMN `notifyCustomersWhatsapp` BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN `notifyEmail` BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN `notifyWhatsapp` BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN `timezone` VARCHAR(191) NOT NULL DEFAULT 'Asia/Dubai',
+    ADD COLUMN `trademarkFormat` VARCHAR(191) NOT NULL DEFAULT 'brand',
+    ADD COLUMN `whatsappCountryCode` VARCHAR(191) NULL,
+    ADD COLUMN `whatsappNumber` VARCHAR(191) NULL;

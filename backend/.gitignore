@@ -56,3 +56,7 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# Locally-stored product image uploads (dev-only storage, see
+# product-image-upload.config.ts)
+/uploads

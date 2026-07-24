@@ -8,29 +8,55 @@ datasource db {
 }
 
 model order {
-  id                 Int                  @id @default(autoincrement())
-  shopId             Int
-  customerEmail      String
-  status             String               @default("Pending")
-  paymentStatus      String               @default("Pending")
-  total              Decimal
-  createdAt          DateTime             @default(now())
-  shop               shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Order_shopId_fkey")
-  orderitem          orderitem[]
-  paymenttransaction paymenttransaction[]
+  id                   Int                  @id @default(autoincrement())
+  shopId               Int
+  outletId             Int
+  customerName         String
+  customerPhone        String
+  customerEmail        String?
+  customerAddress      String               @db.Text
+  emirate              String
+  area                 String?
+  deliveryDate         DateTime?
+  deliveryTimeSlot     String?
+  deliveryNotes        String?              @db.Text
+  receiverMessage      String?              @db.Text
+  channel              String?
+  orderType            String?
+  status               String               @default("pending")
+  paymentStatus        String               @default("unpaid")
+  // Snapshotted at creation from the request or shop.defaultDeliveryFee at
+  // that moment (same principle as orderitem.priceAtPurchase) — a later
+  // change to the shop default never retroactively changes this order's
+  // total. Null only for orders created before this column existed.
+  deliveryFee          Decimal?
+  total                Decimal
+  createdAt            DateTime             @default(now())
+  paymentLinkToken     String?              @unique(map: "Order_paymentLinkToken_key")
+  paymentLinkExpiresAt DateTime?
+  shop                 shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Order_shopId_fkey")
+  outlet               outlet               @relation(fields: [outletId], references: [id], onDelete: Restrict, map: "Order_outletId_fkey")
+  orderitem            orderitem[]
+  paymenttransaction   paymenttransaction[]
 
   @@index([shopId], map: "Order_shopId_fkey")
+  @@index([shopId, status], map: "Order_shopId_status_idx")
+  @@index([shopId, createdAt], map: "Order_shopId_createdAt_idx")
+  @@index([outletId, status], map: "Order_outletId_status_idx")
 }
 
 model orderitem {
-  id               Int     @id @default(autoincrement())
-  orderId          Int
-  productVariantId Int
-  quantity         Int
-  priceAtPurchase  Decimal
-  order            order   @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderItem_orderId_fkey")
+  id              Int     @id @default(autoincrement())
+  orderId         Int
+  productId       Int
+  productName     String
+  quantity        Int
+  priceAtPurchase Decimal
+  order           order   @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderItem_orderId_fkey")
+  product         product @relation(fields: [productId], references: [id], onDelete: Restrict, map: "OrderItem_productId_fkey")
 
   @@index([orderId], map: "OrderItem_orderId_fkey")
+  @@index([productId], map: "OrderItem_productId_fkey")
 }
 
 model paymenttransaction {
@@ -43,23 +69,82 @@ model paymenttransaction {
   createdAt        DateTime @default(now())
   order            order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "PaymentTransaction_orderId_fkey")
 
+  @@unique([gateway, gatewayReference], map: "PaymentTransaction_gateway_gatewayReference_key")
   @@index([orderId], map: "PaymentTransaction_orderId_fkey")
 }
 
 model product {
-  id             Int              @id @default(autoincrement())
-  shopId         Int
-  name           String
-  description    String?
-  price          Decimal
-  costPrice      Decimal
-  sku            String
-  category       String?
-  createdAt      DateTime         @default(now())
-  shop           shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Product_shopId_fkey")
-  productvariant productvariant[]
+  id                Int               @id @default(autoincrement())
+  shopId            Int
+  name              String
+  description       String?
+  shortSummary      String?
+  longSummary       String?
+  thumbnail         String
+  price             Decimal
+  costPrice         Decimal?
+  sku               String
+  status            String            @default("Available")
+  trackInventory    Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  shop              shop              @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Product_shopId_fkey")
+  productvariant    productvariant[]
+  productcategory   productcategory[]
+  producttag        producttag[]
+  orderitem         orderitem[]
+  outletstock       outletstock[]
 
   @@unique([shopId, sku], map: "Product_shopId_sku_key")
+}
+
+model category {
+  id               Int               @id @default(autoincrement())
+  shopId           Int
+  name             String
+  slug             String
+  displayOrder     Int               @default(0)
+  image            String?
+  isFeatured       Boolean           @default(false)
+  parentCategoryId Int?
+  createdAt        DateTime          @default(now())
+  shop             shop              @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Category_shopId_fkey")
+  parent           category?         @relation("CategoryToParent", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Category_parentCategoryId_fkey")
+  children         category[]        @relation("CategoryToParent")
+  productcategory  productcategory[]
+
+  @@unique([shopId, slug], map: "Category_shopId_slug_key")
+  @@index([shopId], map: "Category_shopId_fkey")
+  @@index([parentCategoryId], map: "Category_parentCategoryId_fkey")
+}
+
+model productcategory {
+  productId  Int
+  categoryId Int
+  product    product  @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductCategory_productId_fkey")
+  category   category @relation(fields: [categoryId], references: [id], onDelete: Cascade, map: "ProductCategory_categoryId_fkey")
+
+  @@id([productId, categoryId])
+  @@index([categoryId], map: "ProductCategory_categoryId_fkey")
+}
+
+model tag {
+  id         Int          @id @default(autoincrement())
+  shopId     Int
+  name       String
+  shop       shop         @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Tag_shopId_fkey")
+  producttag producttag[]
+
+  @@unique([shopId, name], map: "Tag_shopId_name_key")
+}
+
+model producttag {
+  productId Int
+  tagId     Int
+  product   product @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductTag_productId_fkey")
+  tag       tag     @relation(fields: [tagId], references: [id], onDelete: Cascade, map: "ProductTag_tagId_fkey")
+
+  @@id([productId, tagId])
+  @@index([tagId], map: "ProductTag_tagId_fkey")
 }
 
 model productvariant {
@@ -74,15 +159,184 @@ model productvariant {
 }
 
 model shop {
-  id            Int            @id @default(autoincrement())
-  name          String
-  subdomain     String         @unique(map: "Shop_subdomain_key")
-  currency      String         @default("AED")
-  createdAt     DateTime       @default(now())
-  order         order[]
-  product       product[]
-  themesettings themesettings?
-  user          user[]
+  id                      Int            @id @default(autoincrement())
+  name                    String
+  subdomain               String         @unique(map: "Shop_subdomain_key")
+  currency                String         @default("AED")
+  createdAt               DateTime       @default(now())
+  displayName             String?
+  legalName               String?
+  trademarkFormat         String         @default("brand")
+  logoUrl                 String?
+  email                   String?
+  whatsappCountryCode     String?
+  whatsappNumber          String?
+  description             String?        @db.Text
+  country                 String?
+  address                 String?        @db.Text
+  timezone                String         @default("Asia/Dubai")
+  notifyWhatsapp          Boolean        @default(false)
+  notifyCustomersWhatsapp Boolean        @default(false)
+  notifyEmail             Boolean        @default(false)
+
+  // --- Store Configuration: functional, actually wired into behavior ---
+  businessType             String?
+  defaultLanguage          String  @default("en")
+  defaultDeliveryFee       Decimal @default(0)
+  taxDisplayText           String?
+  productDisplayOrientation String @default("grid")
+  productImageZoomEnabled  Boolean @default(true)
+  showCategoryMenu         Boolean @default(true)
+  allowPreOrders           Boolean @default(false)
+  customerConfirmationRequired Boolean @default(false)
+  externalDeliveryEnabled  Boolean @default(false)
+  asapDeliveryEnabled      Boolean @default(false)
+  deliveryCalendarEnabled  Boolean @default(false)
+  // JSON map of day -> { open, close, closed }, e.g. {"mon":{"open":"09:00","close":"18:00","closed":false},...}
+  businessHours            String? @db.Text
+  whatsappFloatingButtonEnabled Boolean @default(false)
+  birthdayDiscountEnabled  Boolean @default(false)
+
+  // --- Store Configuration: placeholder preferences only — the underlying
+  // feature (variants, attributes, FAQs, surveys, theme builder, storefront
+  // cart/maps) doesn't exist yet, so toggling these has no effect. ---
+  productVariantsEnabled     Boolean @default(false)
+  productAttributesEnabled   Boolean @default(false)
+  productFaqsEnabled         Boolean @default(false)
+  customerSurveyEnabled      Boolean @default(false)
+  dynamicThemeBuilderEnabled Boolean @default(false)
+  disableStoreCart           Boolean @default(false)
+  disableGoogleMaps          Boolean @default(false)
+
+  // --- Online Presence ---
+  // platform -> URL, e.g. {"instagram":"https://instagram.com/..."}. Only
+  // toggled-on platforms have a key. No storefront exists yet to render
+  // these into — this only persists the data for when it does.
+  socialLinks Json?
+
+  // --- Delivery & Pickup: business-level, shared across every outlet ---
+  // (each outlet only has its own on/off toggle + delivery radius/zones —
+  // see the outlet model). At least one payment method per context is
+  // enforced in ShopService, not expressible as a plain column constraint.
+  deliveryPaymentCardOnline     Boolean @default(true)
+  deliveryPaymentCashOnDelivery Boolean @default(true)
+  deliveryPaymentCardOnDelivery Boolean @default(false)
+  pickupPaymentCardOnline       Boolean @default(true)
+  pickupPaymentCashOnPickup     Boolean @default(true)
+  pickupPaymentCardOnPickup     Boolean @default(false)
+
+  // Independent of shop.businessHours (store hours) and of each other —
+  // same day -> {open,close,closed} shape, reusing the BusinessHoursEditor
+  // component on the frontend for all three.
+  deliveryHours Json?
+  pickupHours   Json?
+
+  deliveryTimeSlotGapMinutes              Int @default(60)
+  deliveryPreparationTimeMinutes          Int @default(15)
+  // Entered independently, not derived from the field above — source data
+  // (Dukany reference) shows this as its own input, not a computed sum.
+  deliveryPreparationPlusDeliveryTimeMinutes Int @default(45)
+
+  // Range shown to customers on the order-tracking page.
+  estimatedDeliveryTimeFrom Int    @default(30)
+  estimatedDeliveryTimeTo   Int    @default(60)
+  estimatedDeliveryTimeUnit String @default("minutes")
+
+  pickupTimeSlotGapMinutes           Int @default(30)
+  pickupPreparationTimeMinutes       Int @default(15)
+  pickupPreparationPlusTimeMinutes   Int @default(30)
+
+  order                   order[]
+  product                 product[]
+  category                category[]
+  tag                     tag[]
+  themesettings           themesettings?
+  user                    user[]
+  outlet                  outlet[]
+}
+
+// A shop's physical branch. Products/categories are NOT outlet-scoped (one
+// shared catalog across branches) — only orders and stock levels are.
+model outlet {
+  id          Int           @id @default(autoincrement())
+  shopId      Int
+  name        String
+  nameAr      String?
+  // Outlet-level contact details, distinct from Shop's — a branch's own
+  // email/WhatsApp, not the shop-wide ones from Business Settings.
+  email       String?
+  whatsapp    String?
+  // Top-level enable/disable switch, independent of the hours-derived
+  // open/closed status — an inactive outlet is disabled regardless of what
+  // its schedule says. Not wired into computeIsOpen (out of scope for the
+  // page-conversion pass that introduced this field).
+  active      Boolean       @default(true)
+  emirate     String?
+  area        String?
+  phone       String?
+  latitude    Float?
+  longitude   Float?
+  // Per-branch schedule, independent of and not falling back to any
+  // shop-level setting. JSON map of day -> { open, close, closed }, same
+  // shape as shop.businessHours. Absent (null) means no schedule has been
+  // set yet — treated as always-open, not always-closed, so a freshly
+  // created outlet doesn't show as broken.
+  businessHours    Json?
+  // Manual "force closed" switch — always wins over the computed schedule
+  // when true (holiday, unplanned closure). Not a dated exception calendar.
+  // Auto-expires at the next day rollover (in shop.timezone) — see
+  // computeIsOpen's check-on-read logic — but this raw flag itself is only
+  // ever changed by an explicit merchant write, never by a read.
+  closedOverride      Boolean   @default(false)
+  // Server-stamped whenever closedOverride is set true; never client-writable.
+  closedOverrideSetAt DateTime?
+  pickupEnabled    Boolean @default(false)
+  deliveryEnabled  Boolean @default(false)
+  // Required (and validated) whenever deliveryEnabled is true — see
+  // OutletsService. Not enforced against anything yet (no checkout exists);
+  // captured and displayed only.
+  deliveryRadiusKm Float?
+  createdAt   DateTime      @default(now())
+  shop        shop          @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Outlet_shopId_fkey")
+  order       order[]
+  user        user[]
+  outletstock outletstock[]
+  deliveryzone deliveryzone[]
+
+  @@index([shopId], map: "Outlet_shopId_fkey")
+}
+
+// Named delivery zone (e.g. "Dubai", "DXB/SHJ/AJM") with its own flat fee and
+// minimum order amount — additive to, not replacing, the radius-based
+// deliveryRadiusKm on the outlet itself. Real CRUD table, not a JSON blob,
+// since zones need independent create/edit/delete.
+model deliveryzone {
+  id             Int      @id @default(autoincrement())
+  outletId       Int
+  name           String
+  fee            Decimal
+  minOrderAmount Decimal  @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  outlet         outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "DeliveryZone_outletId_fkey")
+
+  @@index([outletId], map: "DeliveryZone_outletId_fkey")
+}
+
+// Per-outlet stock count for a shop-wide product. Replaces the old
+// Product.stockQuantity/lowStockThreshold columns — the catalog stays
+// shared, but how many units sit at each branch (and each branch's reorder
+// threshold) genuinely differs, so it lives on the join, not the product.
+model outletstock {
+  outletId          Int
+  productId         Int
+  stockQuantity     Int     @default(0)
+  lowStockThreshold Int     @default(0)
+  outlet            outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletStock_outletId_fkey")
+  product           product @relation(fields: [productId], references: [id], onDelete: Cascade, map: "OutletStock_productId_fkey")
+
+  @@id([outletId, productId])
+  @@index([productId], map: "OutletStock_productId_fkey")
 }
 
 model themesettings {
@@ -96,14 +350,22 @@ model themesettings {
   shop       shop    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "ThemeSettings_shopId_fkey")
 }
 
+// role: "admin" (full shop access, outletId always null) or "branch"
+// (scoped to exactly one outlet — outletId always set). Enforced in
+// application code, not a DB constraint — see auth/roles.guard.ts.
 model user {
-  id           Int      @id @default(autoincrement())
-  shopId       Int
-  email        String
-  passwordHash String
-  role         String   @default("merchant")
-  createdAt    DateTime @default(now())
-  shop         shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "User_shopId_fkey")
+  id            Int      @id @default(autoincrement())
+  shopId        Int
+  outletId      Int?
+  email         String   @unique(map: "User_email_key")
+  name          String
+  passwordHash  String
+  role          String   @default("admin")
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  shop          shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "User_shopId_fkey")
+  outlet        outlet?  @relation(fields: [outletId], references: [id], onDelete: SetNull, map: "User_outletId_fkey")
 
-  @@unique([shopId, email], map: "User_shopId_email_key")
+  @@index([shopId], map: "User_shopId_fkey")
+  @@index([outletId], map: "User_outletId_fkey")
 }

@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `outlet` ADD COLUMN `nameAr` VARCHAR(191) NULL,
+    ADD COLUMN `email` VARCHAR(191) NULL,
+    ADD COLUMN `whatsapp` VARCHAR(191) NULL,
+    ADD COLUMN `active` BOOLEAN NOT NULL DEFAULT true;
