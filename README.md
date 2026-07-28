@@ -1,2 +1,2 @@
 # Requital-test
-test repo for proof of concept
+An open-source e-commerce platform primary built in javascript.
