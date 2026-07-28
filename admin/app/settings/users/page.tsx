@@ -8,6 +8,7 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import Button from "@/components/ui/Button";
 import BranchUserFormModal from "@/components/BranchUserFormModal";
+import PageShell from "@/components/ui/PageShell";
 
 export default function SettingsUsersPage() {
   const [outlets, setOutlets] = useState<Outlet[] | null>(null);
@@ -25,7 +26,7 @@ export default function SettingsUsersPage() {
   }, [refresh]);
 
   return (
-    <div>
+    <PageShell>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="text-lg font-semibold">Branch accounts</h2>
         <Button
@@ -70,6 +71,6 @@ export default function SettingsUsersPage() {
       {addingUser && outlets && (
         <BranchUserFormModal outlets={outlets} onClose={() => setAddingUser(false)} onSaved={refresh} />
       )}
-    </div>
+    </PageShell>
   );
 }

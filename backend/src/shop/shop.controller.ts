@@ -29,6 +29,14 @@ export class ShopController {
     return this.shopService.findOne(ctx);
   }
 
+  // Backs the admin Publish toggle's disabled/tooltip state — checked
+  // before the merchant even tries to publish, using the exact same logic
+  // update() enforces server-side (see ShopService.getPublishReadiness).
+  @Get('publish-readiness')
+  getPublishReadiness(@CurrentUser() ctx: TenantContext) {
+    return this.shopService.getPublishReadiness(ctx);
+  }
+
   @Patch()
   update(@CurrentUser() ctx: TenantContext, @Body() dto: UpdateShopDto) {
     return this.shopService.update(ctx, dto);

@@ -1,18 +1,25 @@
-"use client";
+﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { listOrders } from "@/lib/api";
-import type { Order } from "@/lib/types";
+import { bulkUpdateOrderStatus, listOrders } from "@/lib/api";
+import { ORDER_STATUSES, type Order, type OrderStatus } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
+import { useRowSelection } from "@/lib/useRowSelection";
+import { downloadCsv } from "@/lib/csv";
 import StatusBadge from "@/components/StatusBadge";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
+import Checkbox from "@/components/ui/Checkbox";
+import BulkActionBar from "@/components/ui/BulkActionBar";
+import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
+import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
+import PageShell from "@/components/ui/PageShell";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -26,6 +33,11 @@ export default function OrderHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const { selectedOutletId } = useOutletFilter();
+  const toast = useToast();
+  const visibleIds = useMemo(() => (orders ?? []).map((o) => o.id), [orders]);
+  const selection = useRowSelection(visibleIds);
+  const [bulkStatus, setBulkStatus] = useState<OrderStatus | "">("");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Debounce: wait for typing to pause before it becomes the actual query.
   useEffect(() => {
@@ -65,9 +77,53 @@ export default function OrderHistoryPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  async function handleBulkStatus() {
+    if (!bulkStatus) {
+      toast("Pick a status", "error");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const { succeeded, results } = await bulkUpdateOrderStatus(selection.selectedIds, bulkStatus);
+      const failed = results.filter((r) => !r.success);
+      if (failed.length > 0) {
+        toast(`Updated ${succeeded}, ${failed.length} couldn't make that transition`, "error");
+      } else {
+        toast(`Updated ${succeeded} order${succeeded === 1 ? "" : "s"}`);
+      }
+      setBulkStatus("");
+      selection.clear();
+      refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to update orders", "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function handleBulkExport() {
+    const rows = (orders ?? []).filter((o) => selection.selected.has(o.id));
+    downloadCsv(
+      `orders-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Ref No", "Status", "Customer", "Type", "Payment Status", "Total", "Channel", "Placed At"],
+      rows.map((o) => [
+        o.id,
+        o.status,
+        o.customerName,
+        o.orderType ?? "",
+        o.paymentStatus,
+        o.total,
+        o.channel ?? "",
+        new Date(o.createdAt).toLocaleString(),
+      ]),
+    );
+    toast(`Exported ${rows.length} order${rows.length === 1 ? "" : "s"}`);
+  }
+
   return (
-    <div className="page-transition">
-      <BackButton fallbackHref="/orders" />
+    <PageShell>
+      <BackButton href="/orders" />
+      <BranchBar />
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Orders</h1>
         <div className="relative w-full sm:w-72">
@@ -76,7 +132,7 @@ export default function OrderHistoryPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search ref no, customer, or phone…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-black/40 dark:focus:border-white/40 focus:ring-[3px] focus:ring-black/10 dark:focus:ring-white/15"
+            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>
@@ -84,9 +140,37 @@ export default function OrderHistoryPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
+      <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>
+        <select
+          value={bulkStatus}
+          onChange={(e) => setBulkStatus(e.target.value as OrderStatus | "")}
+          className="border rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
+        >
+          <option value="">Move to…</option>
+          {ORDER_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s.replace(/_/g, " ")}
+            </option>
+          ))}
+        </select>
+        <Button size="sm" variant="secondary" onClick={handleBulkStatus} disabled={bulkBusy}>
+          Apply
+        </Button>
+        <Button size="sm" variant="secondary" onClick={handleBulkExport} disabled={bulkBusy}>
+          Export CSV
+        </Button>
+      </BulkActionBar>
+
       <Table>
         <THead>
           <tr>
+            <TH className="w-8">
+              <Checkbox
+                checked={selection.allSelected}
+                onChange={selection.toggleAll}
+                aria-label="Select all orders"
+              />
+            </TH>
             <TH>Ref No</TH>
             <TH>Status</TH>
             <TH>Customer Name</TH>
@@ -101,13 +185,13 @@ export default function OrderHistoryPage() {
         <TBody>
           {orders === null ? (
             <tr>
-              <td colSpan={9}>
-                <TableSkeleton rows={8} cols={9} />
+              <td colSpan={10}>
+                <TableSkeleton rows={8} cols={10} />
               </td>
             </tr>
           ) : orders.length === 0 && !error ? (
             <tr>
-              <td colSpan={9}>
+              <td colSpan={10}>
                 <EmptyState
                   title={search ? "No matching orders" : "No orders yet"}
                   description={
@@ -123,6 +207,13 @@ export default function OrderHistoryPage() {
               const latestTxn = order.paymenttransaction?.[0];
               return (
                 <TR key={order.id}>
+                  <TD>
+                    <Checkbox
+                      checked={selection.selected.has(order.id)}
+                      onChange={() => selection.toggle(order.id)}
+                      aria-label={`Select order #${order.id}`}
+                    />
+                  </TD>
                   <TD className="font-medium">#{order.id}</TD>
                   <TD>
                     <StatusBadge status={order.status} />
@@ -188,6 +279,6 @@ export default function OrderHistoryPage() {
         onClose={() => setSelectedOrderId(null)}
         onChanged={refresh}
       />
-    </div>
+    </PageShell>
   );
 }

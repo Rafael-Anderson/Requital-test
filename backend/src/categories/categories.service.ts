@@ -10,10 +10,14 @@ import type { TenantContext } from '../common/tenant-context';
 import { slugify } from '../common/slugify';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   findAll(ctx: TenantContext) {
     return this.prisma.category.findMany({
@@ -85,7 +89,7 @@ export class CategoriesService {
   }
 
   async remove(ctx: TenantContext, id: number) {
-    await this.findOne(ctx, id);
+    const category = await this.findOne(ctx, id);
 
     const [childCount, productCount] = await this.prisma.$transaction([
       this.prisma.category.count({ where: { parentCategoryId: id } }),
@@ -98,6 +102,12 @@ export class CategoriesService {
     }
 
     await this.prisma.category.delete({ where: { id } });
+    await this.auditLogService.logCtx(ctx, {
+      action: 'category.deleted',
+      entityType: 'category',
+      entityId: id,
+      before: { name: category.name },
+    });
     return { id, deleted: true };
   }
 

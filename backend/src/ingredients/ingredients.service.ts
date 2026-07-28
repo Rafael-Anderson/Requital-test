@@ -1,0 +1,263 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import type { TenantContext } from '../common/tenant-context';
+import { resolveOutletFilter } from '../common/outlet-scope';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { CreateIngredientDto } from './dto/create-ingredient.dto';
+import { UpdateIngredientDto } from './dto/update-ingredient.dto';
+import { parseCsv } from '../common/csv.util';
+import { ImportAction, ImportRowResult, parseImportBoolean, parseImportNumber } from '../products/products-import';
+
+function includeFor(outletId: number | undefined) {
+  return {
+    ...(outletId !== undefined && {
+      outletingredientstock: {
+        where: { outletId },
+        select: { stockQuantity: true, lowStockThreshold: true },
+      },
+    }),
+  } satisfies Prisma.ingredientInclude;
+}
+
+type IngredientWithStock = Prisma.ingredientGetPayload<{
+  include: ReturnType<typeof includeFor>;
+}>;
+
+// Deliberately a much lighter CRUD than ProductsService — no categories,
+// tags, images, options/variants, SEO, or publishing fields exist on this
+// model at all (see schema.prisma's comment on `ingredient` for why this is
+// a separate model rather than a Product flag). Stock transfer/adjustment
+// itself stays in ProductsService (see its transferStock/
+// adjustStockWithReason — extended to accept ingredientId as an alternative
+// to productId) rather than duplicated here, per the task's "reuse the
+// existing StockMovement endpoints" instruction.
+@Injectable()
+export class IngredientsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
+
+  async findAll(ctx: TenantContext, requestedOutletId?: number) {
+    const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    const ingredients = await this.prisma.ingredient.findMany({
+      where: { shopId: ctx.shopId },
+      include: includeFor(outletId),
+      orderBy: { id: 'asc' },
+    });
+    return ingredients.map((i) => this.toResponse(i, outletId));
+  }
+
+  async findOne(ctx: TenantContext, id: number, requestedOutletId?: number) {
+    const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    const ingredient = await this.prisma.ingredient.findFirst({
+      where: { id, shopId: ctx.shopId },
+      include: includeFor(outletId),
+    });
+    if (!ingredient) {
+      throw new NotFoundException(`Ingredient ${id} not found`);
+    }
+    return this.toResponse(ingredient, outletId);
+  }
+
+  async create(ctx: TenantContext, dto: CreateIngredientDto) {
+    const ingredient = await this.prisma.ingredient.create({
+      data: {
+        shopId: ctx.shopId,
+        name: dto.name,
+        unit: dto.unit,
+        trackInventory: dto.trackInventory ?? true,
+      },
+    });
+    return this.toResponse({ ...ingredient, outletingredientstock: [] }, undefined);
+  }
+
+  async update(ctx: TenantContext, id: number, dto: UpdateIngredientDto) {
+    await this.assertBelongsToShop(ctx, id);
+    const ingredient = await this.prisma.ingredient.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        unit: dto.unit,
+        trackInventory: dto.trackInventory,
+      },
+    });
+    return this.toResponse({ ...ingredient, outletingredientstock: [] }, undefined);
+  }
+
+  async remove(ctx: TenantContext, id: number) {
+    const ingredient = await this.assertBelongsToShop(ctx, id);
+    await this.prisma.ingredient.delete({ where: { id } });
+    await this.auditLogService.logCtx(ctx, {
+      action: 'ingredient.deleted',
+      entityType: 'ingredient',
+      entityId: id,
+      before: { name: ingredient.name },
+    });
+    return { id, deleted: true };
+  }
+
+  // Same stateless preview/confirm pair and shopId-scoped-name matching
+  // convention as ProductsService's CSV import — see the comment there for
+  // the full rationale.
+  async previewImportIngredients(ctx: TenantContext, file: Express.Multer.File) {
+    const rawRows = parseCsv(file.buffer.toString('utf-8'));
+    const { results } = await this.classifyImportRows(ctx, rawRows);
+    return { rows: results };
+  }
+
+  async confirmImportIngredients(ctx: TenantContext, file: Express.Multer.File, outletId: number | undefined) {
+    const rawRows = parseCsv(file.buffer.toString('utf-8'));
+    const { results, groups } = await this.classifyImportRows(ctx, rawRows);
+
+    let created = 0;
+    let updated = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const group of groups) {
+        if (group.action === 'reject') continue;
+
+        let ingredientId: number;
+        if (group.action === 'create') {
+          const newIngredient = await tx.ingredient.create({
+            data: {
+              shopId: ctx.shopId,
+              name: group.data.name,
+              unit: group.data.unit!,
+              trackInventory: group.data.trackInventory ?? true,
+            },
+            select: { id: true },
+          });
+          ingredientId = newIngredient.id;
+          created += 1;
+        } else {
+          ingredientId = group.ingredientId!;
+          await tx.ingredient.update({
+            where: { id: ingredientId },
+            data: { unit: group.data.unit, trackInventory: group.data.trackInventory },
+          });
+          updated += 1;
+        }
+
+        if (group.stock !== undefined && outletId !== undefined) {
+          const before =
+            (
+              await tx.outletingredientstock.findUnique({
+                where: { outletId_ingredientId: { outletId, ingredientId } },
+              })
+            )?.stockQuantity ?? 0;
+          await tx.outletingredientstock.upsert({
+            where: { outletId_ingredientId: { outletId, ingredientId } },
+            update: { stockQuantity: group.stock },
+            create: { outletId, ingredientId, stockQuantity: group.stock },
+          });
+          await tx.stockmovement.create({
+            data: {
+              shopId: ctx.shopId,
+              productId: null,
+              variantId: null,
+              ingredientId,
+              type: 'IMPORT',
+              reason: null,
+              delta: group.stock - before,
+              outletId,
+              toOutletId: null,
+              note: 'CSV import',
+              actorUserId: ctx.userId,
+            },
+          });
+        }
+      }
+    });
+
+    return { rows: results, created, updated, skipped: results.filter((r) => r.action === 'reject').length };
+  }
+
+  private async classifyImportRows(
+    ctx: TenantContext,
+    rawRows: Record<string, string>[],
+  ): Promise<{
+    results: ImportRowResult[];
+    groups: { rowNumber: number; action: ImportAction; ingredientId?: number; data: { name: string; unit?: string; trackInventory?: boolean }; stock?: number }[];
+  }> {
+    const results: ImportRowResult[] = [];
+    const groups: {
+      rowNumber: number;
+      action: ImportAction;
+      ingredientId?: number;
+      data: { name: string; unit?: string; trackInventory?: boolean };
+      stock?: number;
+    }[] = [];
+    const usedNewNames = new Set<string>();
+
+    for (let i = 0; i < rawRows.length; i += 1) {
+      const raw = rawRows[i];
+      const rowNumber = i + 2;
+      const errors: string[] = [];
+
+      const name = raw['Name']?.trim();
+      const unit = raw['Unit']?.trim() || undefined;
+      const trackInventory = parseImportBoolean(raw['Track Inventory'] ?? '');
+      const stock = parseImportNumber(raw['Stock'] ?? '');
+
+      if (!name) errors.push('Name is required');
+      if (raw['Track Inventory'] && trackInventory === undefined) errors.push('Track Inventory must be true/false');
+      if (raw['Stock'] && Number.isNaN(stock)) errors.push('Stock is not a number');
+
+      const existing = name
+        ? await this.prisma.ingredient.findFirst({ where: { shopId: ctx.shopId, name }, select: { id: true } })
+        : null;
+      const action: ImportAction = existing ? 'update' : 'create';
+
+      if (action === 'create') {
+        if (!unit) errors.push('Unit is required to create a new ingredient');
+        if (name) {
+          if (usedNewNames.has(name.toLowerCase())) errors.push(`Duplicate name within this file: ${name}`);
+          usedNewNames.add(name.toLowerCase());
+        }
+      }
+
+      const finalAction: ImportAction = errors.length > 0 ? 'reject' : action;
+      results.push({
+        rowNumber,
+        kind: 'ingredient',
+        identifier: name ?? `row ${rowNumber}`,
+        action: finalAction,
+        errors,
+      });
+      groups.push({
+        rowNumber,
+        action: finalAction,
+        ingredientId: existing?.id,
+        data: { name: name ?? '', unit, trackInventory },
+        stock,
+      });
+    }
+
+    return { results, groups };
+  }
+
+  private async assertBelongsToShop(ctx: TenantContext, id: number) {
+    const ingredient = await this.prisma.ingredient.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
+    if (!ingredient) {
+      throw new NotFoundException(`Ingredient ${id} not found`);
+    }
+    return ingredient;
+  }
+
+  private toResponse(ingredient: IngredientWithStock, outletId: number | undefined) {
+    const stockRow = outletId !== undefined ? ingredient.outletingredientstock?.[0] : undefined;
+    return {
+      id: ingredient.id,
+      name: ingredient.name,
+      unit: ingredient.unit,
+      trackInventory: ingredient.trackInventory,
+      createdAt: ingredient.createdAt,
+      stockQuantity: stockRow?.stockQuantity ?? null,
+      lowStockThreshold: stockRow?.lowStockThreshold ?? null,
+    };
+  }
+}

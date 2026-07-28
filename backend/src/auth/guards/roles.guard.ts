@@ -24,7 +24,9 @@ export class RolesGuard implements CanActivate {
       .switchToHttp()
       .getRequest<Request & { user?: TenantContext }>();
     if (!request.user || !roles.includes(request.user.role)) {
-      throw new ForbiddenException('This action requires an admin account');
+      throw new ForbiddenException(
+        `This action requires one of the following roles: ${roles.join(', ')}`,
+      );
     }
     return true;
   }

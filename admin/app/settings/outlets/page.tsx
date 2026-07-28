@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { listOutlets, deleteOutlet } from "@/lib/api";
 import type { Outlet } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -11,6 +11,7 @@ import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
 import OutletFormModal from "@/components/OutletFormModal";
 import { useToast } from "@/components/ui/Toast";
+import PageShell from "@/components/ui/PageShell";
 
 function locationLabel(outlet: Outlet): string {
   if (outlet.area && outlet.emirate) return `${outlet.area}, ${outlet.emirate}`;
@@ -42,7 +43,7 @@ export default function SettingsOutletsPage() {
   }
 
   return (
-    <div>
+    <PageShell>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="text-lg font-semibold">Branches</h2>
         <Button variant="primary" onClick={() => setShowCreateModal(true)}>
@@ -88,17 +89,19 @@ export default function SettingsOutletsPage() {
                 <TD>
                   <Link
                     href={`/settings/outlets/${o.id}/edit`}
-                    className="text-xs underline decoration-transparent hover:decoration-current"
+                    className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                    aria-label={`Edit ${o.name}`}
                   >
-                    Edit
+                    <Pencil className="size-4" />
                   </Link>
                 </TD>
                 <TD>
                   <button
                     onClick={() => handleDelete(o)}
-                    className="text-xs text-red-600 dark:text-red-400 underline decoration-transparent hover:decoration-current"
+                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                    aria-label={`Delete ${o.name}`}
                   >
-                    Delete
+                    <Trash2 className="size-4" />
                   </button>
                 </TD>
               </TR>
@@ -108,6 +111,6 @@ export default function SettingsOutletsPage() {
       </Table>
 
       {showCreateModal && <OutletFormModal onClose={() => setShowCreateModal(false)} />}
-    </div>
+    </PageShell>
   );
 }

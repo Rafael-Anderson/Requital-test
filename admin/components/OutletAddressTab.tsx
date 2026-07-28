@@ -6,6 +6,7 @@ import { geocodeAddress, updateOutlet } from "@/lib/api";
 import type { Outlet } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 
 export default function OutletAddressTab({
@@ -66,25 +67,29 @@ export default function OutletAddressTab({
   }
 
   return (
-    <div className="max-w-xl space-y-5">
-      <Input label="Emirate" value={emirate} onChange={(e) => setEmirate(e.target.value)} />
-      <Input label="Area" value={area} onChange={(e) => setArea(e.target.value)} />
+    <div className="space-y-4">
+      <Card>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Input label="Emirate" value={emirate} onChange={(e) => setEmirate(e.target.value)} />
+          <Input label="Area" value={area} onChange={(e) => setArea(e.target.value)} />
+        </div>
+      </Card>
 
-      <div>
+      <Card>
         <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Coordinates</p>
         <div className="flex gap-2 mb-2">
           <input
             value={geocodeQuery}
             onChange={(e) => setGeocodeQuery(e.target.value)}
             placeholder="Search an address (optional — falls back to name/area/emirate)"
-            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-black/40 dark:focus:border-white/40 focus:ring-[3px] focus:ring-black/10 dark:focus:ring-white/15"
+            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
           <Button type="button" variant="secondary" onClick={handleFindCoordinates} disabled={geocoding}>
             <MapPin className="size-4 inline -mt-0.5 mr-1" />
             Find
           </Button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input
             label="Latitude"
             type="number"
@@ -103,7 +108,7 @@ export default function OutletAddressTab({
         <p className="text-xs text-zinc-400 mt-1.5">
           Powered by OpenStreetMap — or enter coordinates manually.
         </p>
-      </div>
+      </Card>
 
       <Button variant="primary" onClick={handleSave} disabled={saving}>
         <Check className="size-4 inline -mt-0.5 mr-1" />

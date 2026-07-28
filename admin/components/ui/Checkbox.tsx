@@ -25,7 +25,7 @@ export default function Checkbox({ label, id, className = "", ...props }: Checkb
       />
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[5px] border-[1.5px] border-black/25 dark:border-white/30 bg-white dark:bg-zinc-900 transition-colors duration-150 peer-hover:border-black/45 dark:peer-hover:border-white/45 peer-checked:border-black peer-checked:bg-black dark:peer-checked:border-white dark:peer-checked:bg-white peer-focus-visible:ring-2 peer-focus-visible:ring-black/30 dark:peer-focus-visible:ring-white/40 peer-focus-visible:ring-offset-1 peer-disabled:opacity-40"
+        className="pointer-events-none absolute inset-0 rounded-[5px] border-[1.5px] border-black/25 dark:border-white/30 bg-white dark:bg-zinc-900 transition-colors duration-150 peer-hover:border-black/45 dark:peer-hover:border-white/45 peer-checked:border-black peer-checked:bg-black dark:peer-checked:border-white dark:peer-checked:bg-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent/50 peer-focus-visible:ring-offset-1 peer-disabled:opacity-40"
       />
       <Check
         aria-hidden="true"

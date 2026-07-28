@@ -5,15 +5,21 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
-const TOKEN_LIFETIME = '7d';
+// The access-token lifetime itself is set per-call in AuthService.issueTokenPair
+// (ACCESS_TOKEN_LIFETIME) — refresh-token rotation means a short-lived access
+// token is cheap to re-issue, so this module-level default only matters as a
+// fallback for any future signAsync() call site that forgets to override it.
+const DEFAULT_TOKEN_LIFETIME = '15m';
 
 @Module({
   imports: [
     JwtModule.register({
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: TOKEN_LIFETIME },
+      signOptions: { expiresIn: DEFAULT_TOKEN_LIFETIME },
     }),
+    AuditLogModule,
   ],
   controllers: [AuthController],
   providers: [

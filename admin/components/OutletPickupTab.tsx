@@ -7,7 +7,8 @@ import type { Outlet, Shop } from "@/lib/types";
 import { defaultBusinessHours, mergeBusinessHours } from "@/lib/business-hours";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Checkbox from "@/components/ui/Checkbox";
+import Toggle from "@/components/ui/Toggle";
+import Card from "@/components/ui/Card";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
 import { useToast } from "@/components/ui/Toast";
@@ -103,56 +104,55 @@ export default function OutletPickupTab({
   }
 
   return (
-    <div className="max-w-xl space-y-8">
-      <div>
+    <div className="space-y-4">
+      <Card>
         <h3 className="text-sm font-semibold mb-3">Pickup Availability</h3>
         <div className="space-y-4">
-          <Checkbox
-            label="Pickup available"
-            checked={pickupEnabled}
-            onChange={(e) => setPickupEnabled(e.target.checked)}
-          />
+          <div className="flex items-center gap-2">
+            <Toggle checked={pickupEnabled} onChange={setPickupEnabled} />
+            <span className="text-sm">Pickup available</span>
+          </div>
           <Button variant="primary" onClick={handleSaveAvailability} disabled={savingAvailability}>
             <Check className="size-4 inline -mt-0.5 mr-1" />
             Save changes
           </Button>
         </div>
-      </div>
-
-      <hr className="border-black/10 dark:border-white/10" />
+      </Card>
 
       {!shop ? (
         <p className="text-sm text-zinc-500">Loading pickup settings…</p>
       ) : (
-        <div>
-          <h3 className="text-sm font-semibold mb-1">Pickup Settings</h3>
-          <p className="text-xs text-zinc-400 mb-4">
-            These apply shop-wide, across every outlet — not just this one.
-          </p>
-
-          <div className="space-y-6">
-            <div>
-              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Payment Methods</p>
-              <PaymentMethodsEditor context="pickup" value={paymentMethods} onChange={setPaymentMethods} />
-            </div>
-
-            <div>
-              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
-                Opening Hours for Pickup
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Card>
+              <h3 className="text-sm font-semibold mb-1">Pickup Settings</h3>
+              <p className="text-xs text-zinc-400 mb-4">
+                These apply shop-wide, across every outlet — not just this one.
               </p>
-              <BusinessHoursEditor value={hours} onChange={setHours} />
-            </div>
 
-            <div>
-              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
-                Preparation Time Settings
-              </p>
-              <div className="space-y-3">
+              <div className="space-y-6">
+                <div>
+                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Payment Methods</p>
+                  <PaymentMethodsEditor context="pickup" value={paymentMethods} onChange={setPaymentMethods} />
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
+                    Opening Hours for Pickup
+                  </p>
+                  <BusinessHoursEditor value={hours} onChange={setHours} />
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Preparation Time Settings</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Time Slot Gap">
                   <select
                     value={timeSlotGapMinutes}
                     onChange={(e) => setTimeSlotGapMinutes(Number(e.target.value))}
-                    className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-black/40 dark:focus:border-white/40 focus:ring-[3px] focus:ring-black/10 dark:focus:ring-white/15"
+                    className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
                   >
                     {TIME_SLOT_PRESETS.map((p) => (
                       <option key={p.minutes} value={p.minutes}>
@@ -176,14 +176,14 @@ export default function OutletPickupTab({
                   onChange={(e) => setPreparationPlusTimeMinutes(Number(e.target.value))}
                 />
               </div>
-            </div>
-
-            <Button variant="primary" onClick={handleSaveBusinessSettings} disabled={savingBusinessSettings}>
-              <Check className="size-4 inline -mt-0.5 mr-1" />
-              Save changes
-            </Button>
+            </Card>
           </div>
-        </div>
+
+          <Button variant="primary" onClick={handleSaveBusinessSettings} disabled={savingBusinessSettings}>
+            <Check className="size-4 inline -mt-0.5 mr-1" />
+            Save changes
+          </Button>
+        </>
       )}
     </div>
   );

@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `shop` ADD COLUMN `allowSameDayOrders` BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN `allowNextDayOrders` BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN `taxRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    ADD COLUMN `taxInclusive` BOOLEAN NOT NULL DEFAULT true;

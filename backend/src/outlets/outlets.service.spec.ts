@@ -204,3 +204,80 @@ describe('OutletsService — closedOverride timestamp stamping', () => {
     expect(data).not.toHaveProperty('closedOverrideSetAt');
   });
 });
+
+describe('OutletsService.geocode', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('maps a successful Nominatim result to latitude/longitude/displayName', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { lat: '25.197044', lon: '55.2789516', display_name: 'Dubai Mall, Dubai, UAE' },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const service = new OutletsService(createMockPrisma());
+
+    const result = await service.geocode('Dubai Mall');
+
+    expect(result).toEqual({
+      latitude: 25.197044,
+      longitude: 55.2789516,
+      displayName: 'Dubai Mall, Dubai, UAE',
+    });
+  });
+
+  // The bug this regression-tests: Nominatim returning zero results used to
+  // become a bare `return null`, which Nest serializes as an empty response
+  // body (no Content-Type, Content-Length: 0) rather than the JSON literal
+  // `null` — the frontend's `res.json()` on that then throws "Unexpected
+  // end of JSON input". A thrown NotFoundException always gets a real JSON
+  // body from Nest's exception filter, so it can't reproduce that failure.
+  it('throws NotFoundException (not a bare null) when Nominatim returns zero results', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const service = new OutletsService(createMockPrisma());
+
+    await expect(service.geocode('zzznonexistentplace')).rejects.toThrow(
+      'No location found for that search',
+    );
+  });
+
+  it('rejects an empty query without calling fetch', async () => {
+    global.fetch = jest.fn();
+    const service = new OutletsService(createMockPrisma());
+
+    await expect(service.geocode('')).rejects.toThrow('A search query is required');
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('throws a friendly error when the upstream request itself fails (network/non-200)', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false } as unknown as Response);
+    const service = new OutletsService(createMockPrisma());
+
+    await expect(service.geocode('Dubai Mall')).rejects.toThrow('Geocoding lookup failed');
+  });
+
+  it('sends the required Nominatim User-Agent header', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ lat: '1', lon: '2', display_name: 'x' }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const service = new OutletsService(createMockPrisma());
+
+    await service.geocode('Dubai Mall');
+
+    const [, options] = (global.fetch as jest.Mock).mock.calls[0];
+    // Shared with the public storefront geocode endpoint now — see
+    // common/nominatim.ts — so this no longer says "-Admin" specifically.
+    expect(options.headers['User-Agent']).toContain('Requital');
+  });
+});

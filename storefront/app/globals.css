@@ -1,26 +1,164 @@
 @import "tailwindcss";
 
 :root {
+  /* Static light defaults — no longer flipped by an unconditional
+     `@media (prefers-color-scheme: dark)` rule (removed; see the storefront
+     dark-mode-mismatch bug report). The storefront has no per-shop dark/light
+     concept in Theme settings at all, so the page canvas auto-going black
+     while every merchant-configured surface (header, buttons, etc.) stayed
+     on its own light default was a real bug, not a supported dark-mode
+     feature partially covered — a visitor's OS preference has no business
+     overriding a shop's own branding. --background is now just another
+     merchant-settable field (Page Background Color, defaulting to this same
+     white) via the exact same runtime override mechanism as every other
+     granular Appearance Color field — see lib/theme-colors.ts/shop-context.tsx.
+     productNameColor/priceMainColor/strokeColor previously carried a second,
+     OS-dark-only default for exactly this reason (Phase 1 storefront audit);
+     that's gone too, since the scenario it existed for (the page going dark
+     out from under them without the merchant asking for it) no longer
+     happens — same as headerTextColor, they're now just plain independent
+     fields the merchant pairs with their own background choice. */
   --background: #ffffff;
   --foreground: #171717;
+  /* Text-selection highlight color — consumed directly via the ::selection
+     rule below, not a Tailwind utility class, so it lives here rather than
+     in @theme inline (which would generate an unused bg-selection/
+     text-selection utility nobody references). Overridden at runtime by
+     ShopProvider from theme.colors.mouseSelectionColor — see
+     lib/theme-colors.ts and lib/shop-context.tsx. */
+  --color-selection: #b2e0e0;
 }
 
+/* Only tokens whose OWN value is itself a var() reference live here.
+   @theme *inline* tells Tailwind v4 to bake the resolved value directly
+   into every generated utility at build time, rather than emitting
+   `color: var(--token)` — the opposite of what per-shop runtime
+   overriding needs, and exactly why it's reserved for these four: each
+   one's default already points at another CSS variable (a curated font
+   variable, or --background/--foreground below), which is the one case
+   `@theme` (non-inline) can't compile at all. Every literal-valued token
+   (the accent/button/product-name/etc. block below) deliberately lives in
+   a *plain* @theme instead — found during the Phase 2 storefront pass:
+   every one of those was previously inside this same `inline` block,
+   which silently baked its default as a static value into every utility
+   class using it. root.style.setProperty() was updating the real custom
+   property (confirmed via getComputedStyle on :root) but no Tailwind
+   utility class ever actually read it — merchant Appearance Color
+   customization has never taken visual effect for any of them, only for
+   the handful of places (this file's own hero/icon-chip inline `style`
+   attributes) that reference the variable directly instead of through a
+   compiled utility. See shop-context.test.ts / the Phase 2 report for how
+   this was diagnosed. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /* Default (Inter) until ShopProvider points this at the shop's chosen
+     curated font — see app/layout.tsx for the full preloaded set. */
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@theme {
+  /* Brand accent — overridden per-shop at runtime by ShopProvider (see
+     lib/shop-context.tsx) from themesettings.brandColor/secondaryColor,
+     falling back to Requital's teal when a shop hasn't set a theme.
+     --color-accent-foreground is the text color placed ON TOP of
+     --color-accent (buttons etc.) — also set dynamically, via
+     lib/color-contrast.ts's WCAG contrast check, specifically so a
+     merchant's near-white primary color never ships unreadable
+     white-on-white button text. Never hardcode text-white on a bg-accent
+     element — use text-accent-foreground instead. */
+  --color-accent: #069494;
+  --color-accent-hover: #057a7a;
+  --color-accent-foreground: #ffffff;
+
+  /* Granular Appearance Color palette (Theme > Appearance Color in admin) —
+     the 11 of ~22 saved colors that have a real storefront element to apply
+     to; see lib/theme-colors.ts's WIRED_THEME_COLOR_FIELDS for the full
+     list (and which ones are currently saved-but-inert) and
+     shop-context.tsx's applyTheme() for where these get overridden
+     per-shop at runtime. Defaults here match the storefront's current
+     unstyled appearance, so shipping this feature is a no-visual-diff for
+     any shop that hasn't touched these fields yet. */
+  --color-mouse-over: #057a7a;
+  --color-button: #069494;
+  /* Auto-contrast text for bg-button, same WCAG-guarded logic as
+     --color-accent-foreground (never hardcode a fixed text color on a
+     merchant-chosen background) — set from getReadableTextColor(buttonColor). */
+  --color-button-foreground: #ffffff;
+  --color-add-to-cart-text: #ffffff;
+  --color-add-to-cart-button: #069494;
+  --color-stroke: #e4e4e7;
+  --color-homepage-info: #ffffff;
+  --color-header: #ffffff;
+  --color-header-fg: #171717;
+  --color-footer-bg: #18181b;
+  --color-footer-fg: #f4f4f5;
+  --color-product-name: #171717;
+  --color-price-main: #71717a;
+
+  /* Added for the Advanced/homepageLayout task's real Featured Grid and
+     Slideshow layout components (components/home-layouts/) — previously
+     inert (no matching element existed), see theme-colors.ts. */
+  --color-featured-bg: #f4f4f5;
+  --color-slider-bg: #f4f4f5;
+  --color-slider-fg: #171717;
+
+  /* Wired for the storefront layout/dead-settings pass — see theme-colors.ts
+     for which existing element each now applies to (PDP compare-at price,
+     Featured Grid tile labels, CategoryNav's mobile scroll arrows). */
+  --color-price-secondary: #a1a1aa;
+  --color-featured-fg: #171717;
+  --color-category-arrow: #069494;
+  --color-category-arrow-active: #057a7a;
+}
+
+::selection {
+  background: var(--color-selection);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* FLAGGED FIX (storefront design audit, Phase 1): this previously read
+     `font-family: Arial, Helvetica, sans-serif` unconditionally — a literal
+     hardcoded override that sat in front of the entire curated-font system
+     (app/layout.tsx preloads Inter/Poppins/Playfair Display/Roboto;
+     ShopProvider points --font-sans at whichever one the merchant picked in
+     Theme). Nothing ever applied `.font-sans` to <body> or <html>, so that
+     whole per-shop font picker has been rendering as plain Arial for every
+     shop, regardless of what's selected in Theme > Appearance. This restores
+     the mechanism to actually do what it was already built to do — var(--font-sans)
+     first, same Arial/Helvetica as the final fallback if that's ever unset. */
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Announcement bar's scrolling/marquee mode — pure CSS animation (translateX
+   loop over a doubled track), not JS-driven, per the feature's own
+   performance requirement. The track renders its content twice back-to-back
+   (see components/AnnouncementBar.tsx) so the -50% translate seamlessly
+   loops with no visible seam/jump.
+   NOT named animate-marquee: Tailwind v4 treats any `animate-*` class name
+   as a request to resolve a `--animate-*` theme token — since no
+   `--animate-marquee` token exists, it silently produced no animation at
+   all (confirmed via computed style: animation-name came back "none" even
+   though this exact rule was present in globals.css) instead of falling
+   back to this hand-written rule. marquee-track avoids the collision. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee-scroll 18s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
 }

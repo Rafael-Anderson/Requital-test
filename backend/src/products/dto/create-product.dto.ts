@@ -10,8 +10,12 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Matches,
   MaxLength,
+  Min,
+  ValidateNested,
 } from 'class-validator';
+import { ProductIngredientInput } from './product-ingredient-input.dto';
 
 export const PRODUCT_STATUSES = [
   'Available',
@@ -19,6 +23,20 @@ export const PRODUCT_STATUSES = [
   'Archived',
 ] as const;
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
+
+export const WEIGHT_UNITS = ['kg', 'g', 'lb'] as const;
+export type WeightUnit = (typeof WEIGHT_UNITS)[number];
+
+export class ProductImageInput {
+  @IsString()
+  @IsNotEmpty()
+  url: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  order?: number;
+}
 
 export class CreateProductDto {
   @IsString()
@@ -59,6 +77,63 @@ export class CreateProductDto {
   @IsPositive()
   costPrice?: number;
 
+  // Shown struck-through as a "was" price when set — display only, never
+  // part of order total math.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  compareAtPrice?: number;
+
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  chargeTax?: boolean;
+
+  // "Continue selling when out of stock" — only meaningful alongside
+  // trackInventory; ignored otherwise (untracked products never block on
+  // stock regardless).
+  @IsOptional()
+  @IsBoolean()
+  continueSellingOutOfStock?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  vendor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  productType?: string;
+
+  // Off means digital/service — hides weight/dimensions in the UI and
+  // skips shipping entirely at checkout (no fulfillment behavior actually
+  // branches on this yet, matching the task's descoped shipping-rate scope).
+  @IsOptional()
+  @IsBoolean()
+  physicalProduct?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  weight?: number;
+
+  @IsOptional()
+  @IsIn(WEIGHT_UNITS)
+  weightUnit?: WeightUnit;
+
+  // Single free-text field, not Shopify's full package-profile system
+  // (explicitly descoped in the task) — e.g. "20 x 15 x 10 cm".
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  dimensions?: string;
+
   @IsOptional()
   @IsIn(PRODUCT_STATUSES)
   status?: ProductStatus;
@@ -73,6 +148,58 @@ export class CreateProductDto {
   // entry — set them via PATCH /products/stock/bulk-adjust after creating
   // the product.
 
+  // Gift Cards — see schema.prisma's comment on product.isGiftCard. `price`
+  // above still has to be set (a positive placeholder) to satisfy the
+  // column's own NOT NULL constraint, but is ignored for a gift-card
+  // product — the real amount is always the shopper's chosen denomination/
+  // custom amount at order time.
+  @IsOptional()
+  @IsBoolean()
+  isGiftCard?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsPositive({ each: true })
+  giftCardDenominations?: number[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  giftCardCustomAmountMin?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  giftCardCustomAmountMax?: number;
+
+  // Bill of Materials — product-level default recipe (always variantId:
+  // null server-side; a variant-specific override is set separately via
+  // UpdateVariantDto once the variant itself exists — see VariantsSection
+  // in the admin frontend). Omitted entirely (every caller that predates
+  // this feature) means "no recipe defined," fully backward compatible —
+  // ProductsService.consumeForOrderItems is simply a no-op for this
+  // product. Full-replace on update, same convention as images/
+  // categoryIds/tags — see ProductsService.replaceProductIngredients.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductIngredientInput)
+  ingredients?: ProductIngredientInput[];
+
+  // Media gallery — when provided (non-empty), images[0].url becomes the
+  // canonical `thumbnail` (see ProductsService), overriding the legacy
+  // `thumbnail` field above. Omitted entirely (the common case for every
+  // caller that predates this feature, incl. every existing e2e fixture)
+  // leaves `thumbnail` as the single source of truth, unchanged.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductImageInput)
+  images?: ProductImageInput[];
+
   // At least one category is required (SRS FR-4.2).
   @IsArray()
   @ArrayNotEmpty()
@@ -85,4 +212,25 @@ export class CreateProductDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  // Auto-derived from name if omitted (see ProductsService.resolveUniqueSlug).
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, {
+    message: 'slug must be lowercase alphanumeric words separated by hyphens',
+  })
+  slug?: string;
+
+  // Falls back to name/description on the storefront if left unset — see
+  // public/PublicService's product metadata fallback.
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  metaTitle?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  metaDescription?: string;
 }

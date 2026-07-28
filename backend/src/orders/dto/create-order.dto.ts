@@ -20,9 +20,25 @@ class OrderItemInput {
   @IsPositive()
   productId: number;
 
+  // Required when the product has options configured, omitted otherwise —
+  // enforced in ProductsService.resolveOrderItems.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  variantId?: number;
+
   @IsInt()
   @IsPositive()
   quantity: number;
+
+  // Admin-only manual price adjustment (phone orders, draft orders) — wins
+  // over the product/variant's own price when set. Deliberately absent from
+  // the public/storefront order DTO — a customer can never set their own price.
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  priceOverride?: number;
 }
 
 export class CreateOrderDto {
@@ -66,6 +82,21 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   receiverMessage?: string;
+
+  // A merchant manually applying an affiliate code to an order entered
+  // on their behalf — same resolution as the storefront flow (see
+  // AffiliateService.resolveAttribution); an unknown/expired/blocked code is
+  // silently ignored, never blocks order creation.
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+
+  // Re-validated and atomically claimed server-side at creation time (see
+  // OrdersService.create) — a client-supplied discountAmount is never
+  // trusted, only the code itself.
+  @IsOptional()
+  @IsString()
+  discountCode?: string;
 
   // Attribution / source channel, e.g. "Website organic", "Instagram", "Walk-in".
   // Free text rather than an enum — channel names are marketing-defined and

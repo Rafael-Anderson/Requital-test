@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Check, Ghost, MessageCircle, Music2, Play, Send, Users, X } from "lucide-react";
+import { Camera, Check, Ghost, MessageCircle, Music2, Pin, Play, Send, Users, X } from "lucide-react";
 import { getShop, updateShop } from "@/lib/api";
 import { SOCIAL_PLATFORMS, type Shop, type SocialPlatform } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
+import PageShell from "@/components/ui/PageShell";
 
 // lucide-react has no brand/social icons (removed upstream for trademark
 // reasons — confirmed against the installed version) — these are generic
@@ -20,6 +22,7 @@ const PLATFORM_META: Record<SocialPlatform, { label: string; icon: typeof Camera
   x: { label: "X (Twitter)", icon: X },
   threads: { label: "Threads", icon: MessageCircle },
   youtube: { label: "YouTube", icon: Play },
+  pinterest: { label: "Pinterest", icon: Pin },
 };
 
 // Mirrors backend/src/shop/constants.ts SOCIAL_PLATFORM_DOMAINS — kept in
@@ -33,6 +36,7 @@ const EXPECTED_DOMAINS: Record<SocialPlatform, string[]> = {
   x: ["x.com", "twitter.com"],
   threads: ["threads.net", "threads.com"],
   youtube: ["youtube.com", "youtu.be"],
+  pinterest: ["pinterest.com", "pin.it"],
 };
 
 function validateUrl(platform: SocialPlatform, value: string): string | null {
@@ -112,8 +116,14 @@ export default function OnlinePresencePage() {
   if (!shop) return <p className="text-sm text-zinc-500">Loading…</p>;
 
   return (
-    <div className="space-y-8">
-      <div>
+    // "wide", not "form" — same PageShell variant-misclassification as
+    // Business Information: this page's own Cards manage real
+    // sm:grid-cols-4 (platform toggles) and lg:grid-cols-3 (social link
+    // inputs) grids that a max-w-3xl outer cap left cramped into far fewer
+    // effective columns' worth of width.
+    <PageShell variant="wide">
+      <div className="space-y-4">
+      <Card>
         <h3 className="text-sm font-semibold mb-1">Platforms</h3>
         <p className="text-xs text-zinc-400 mb-3">
           Toggle the platforms you&apos;re active on to add a link for each.
@@ -139,12 +149,12 @@ export default function OnlinePresencePage() {
             );
           })}
         </div>
-      </div>
+      </Card>
 
       {enabled.size > 0 && (
-        <div>
+        <Card>
           <h3 className="text-sm font-semibold mb-3">Social Media Links</h3>
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {SOCIAL_PLATFORMS.filter((p) => enabled.has(p)).map((platform) => (
               <Input
                 key={platform}
@@ -159,13 +169,14 @@ export default function OnlinePresencePage() {
               />
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       <Button variant="primary" onClick={handleSave} disabled={saving}>
         <Check className="size-4 inline -mt-0.5 mr-1" />
         Save changes
       </Button>
-    </div>
+      </div>
+    </PageShell>
   );
 }

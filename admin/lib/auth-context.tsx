@@ -8,7 +8,17 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (data: { name: string; email: string; password: string; shopName: string; subdomain: string }) => Promise<void>;
+  // Resolves with the raw signup response (not just void) so the signup
+  // page can surface devVerificationLink — the dev-only stand-in for a real
+  // verification email, see backend/src/common/email.ts.
+  signup: (data: {
+    name: string;
+    email: string;
+    password: string;
+    shopName: string;
+    subdomain: string;
+  }) => Promise<{ devVerificationLink?: string }>;
+  acceptInvite: (data: { token: string; password: string }) => Promise<void>;
   logout: () => void;
 }
 
@@ -21,38 +31,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!api.getToken()) {
+    if (!api.getAccessToken()) {
       setLoading(false);
       return;
     }
     api
       .me()
+      // A dead access token still gets one silent-refresh attempt inside
+      // api.me() itself (apiFetch's 401 handling) before this ever rejects —
+      // reaching .catch() here means the refresh token is gone/expired too.
       .then(setUser)
-      .catch(() => api.clearToken())
+      .catch(() => api.clearTokens())
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
-    api.setToken(result.token);
+    api.setTokens(result);
     setUser(result.user);
   }, []);
 
   const signup = useCallback(
     async (data: { name: string; email: string; password: string; shopName: string; subdomain: string }) => {
       const result = await api.signup(data);
-      api.setToken(result.token);
+      api.setTokens(result);
       setUser(result.user);
+      return result;
     },
     [],
   );
 
+  const acceptInvite = useCallback(async (data: { token: string; password: string }) => {
+    const result = await api.acceptInvite(data);
+    api.setTokens(result);
+    setUser(result.user);
+  }, []);
+
   const logout = useCallback(() => {
-    api.clearToken();
+    // Fire-and-forget: tokens are cleared locally regardless of whether the
+    // server-side revocation round-trip succeeds.
+    void api.logout();
+    api.clearTokens();
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, signup, logout }), [user, loading, login, signup, logout]);
+  const value = useMemo(
+    () => ({ user, loading, login, signup, acceptInvite, logout }),
+    [user, loading, login, signup, acceptInvite, logout],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

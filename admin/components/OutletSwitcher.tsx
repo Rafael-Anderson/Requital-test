@@ -20,7 +20,7 @@ export default function OutletSwitcher() {
         value={selectedOutletId ?? ""}
         disabled={loading}
         onChange={(e) => setSelectedOutletId(e.target.value ? Number(e.target.value) : null)}
-        className="h-8 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm outline-none cursor-pointer transition-shadow focus:border-black/40 dark:focus:border-white/40 focus:ring-[3px] focus:ring-black/10 dark:focus:ring-white/15"
+        className="h-8 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
       >
         <option value="">All branches</option>
         {outlets.map((o) => (

@@ -13,6 +13,13 @@ class StockAdjustment {
   @IsPositive()
   productId: number;
 
+  // When set, adjusts this variant's own outletvariantstock row instead of
+  // the parent product's outletstock row — see ProductsService.adjustStock.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  variantId?: number;
+
   // Signed delta applied to current stockQuantity — positive for restocks,
   // negative for shrinkage/damage corrections.
   @IsInt()
