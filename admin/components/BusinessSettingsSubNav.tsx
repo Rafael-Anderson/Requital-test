@@ -8,6 +8,9 @@ const ITEMS = [
   { href: "/settings/business/information", label: "Business Information" },
   { href: "/settings/business/store-configuration", label: "Store Configuration" },
   { href: "/settings/business/online-presence", label: "Online Presence" },
+  { href: "/settings/business/seo", label: "SEO" },
+  { href: "/settings/business/payments", label: "Payment Gateways" },
+  { href: "/settings/business/policy-pages", label: "Policy Pages" },
 ];
 
 export default function BusinessSettingsSubNav() {
@@ -21,10 +24,10 @@ export default function BusinessSettingsSubNav() {
           <Link
             key={href}
             href={href}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
               active
-                ? "bg-black/5 dark:bg-white/10 text-black dark:text-white"
-                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                ? "bg-accent/10 text-accent-text dark:text-accent"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
             }`}
           >
             {label}

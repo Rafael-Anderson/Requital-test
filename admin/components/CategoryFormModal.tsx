@@ -17,7 +17,7 @@ import {
 } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Checkbox from "@/components/ui/Checkbox";
+import Toggle from "@/components/ui/Toggle";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { useToast } from "@/components/ui/Toast";
 
@@ -151,7 +151,7 @@ export default function CategoryFormModal({
             <select
               value={parentCategoryId}
               onChange={(e) => setParentCategoryId(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-black/40 dark:focus:border-white/40 focus:ring-[3px] focus:ring-black/10 dark:focus:ring-white/15"
+              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             >
               <option value="">— None (top level) —</option>
               {parentOptions.map((c) => (
@@ -172,11 +172,10 @@ export default function CategoryFormModal({
 
           <ImageDropzone preview={imagePreview} onFileSelected={handleFileSelected} />
 
-          <Checkbox
-            label="Featured on homepage"
-            checked={isFeatured}
-            onChange={(e) => setIsFeatured(e.target.checked)}
-          />
+          <div className="flex items-center gap-2">
+            <Toggle checked={isFeatured} onChange={setIsFeatured} />
+            <span className="text-sm">Featured on homepage</span>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-5">

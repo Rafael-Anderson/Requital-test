@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
+/* Manual light/dark toggle (profile menu) needs `dark:` to follow a class,
+   not just the OS preference — this is Tailwind v4's documented way to swap
+   the default @media-based dark variant for a selector-based one. The
+   `.dark` class is applied to <html> by an inline script in layout.tsx
+   (before paint, to avoid a flash) and toggled at runtime by useTheme(). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -10,13 +22,19 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Brand accent (teal) — single source of truth for every active/selected
+     UI state, primary button, and focus ring. Change the color here, not at
+     the call sites. `--color-accent-text` is a darker shade reserved for
+     text sitting directly on a light background: #069494 at normal text
+     size is only ~3.7:1 against white (fails WCAG AA's 4.5:1), so light-mode
+     text uses the darker shade while dark-mode text (~5:1 against the near-
+     black page background) uses the standard one. Backgrounds, borders, and
+     focus rings don't have this problem (WCAG's non-text 3:1 threshold, or
+     white-on-accent for filled buttons) and use --color-accent everywhere. */
+  --color-accent: #069494;
+  --color-accent-hover: #057a7a;
+  --color-accent-text: #046e6e;
 }
 
 body {

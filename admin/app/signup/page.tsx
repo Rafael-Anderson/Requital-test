@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import AuthCard from "@/components/auth/AuthCard";
+import { AUTH_INPUT_CLASS } from "@/components/auth/auth-input-class";
 
 function slugifySubdomain(value: string): string {
   return value
@@ -34,6 +36,11 @@ export default function SignupPage() {
     setError(null);
     setSubmitting(true);
     try {
+      // The signup page redirects to "/" the instant the session is set (see
+      // RequireAuth), so there's no window to show a dev-only verification
+      // link here — it's still logged server-side, and surfaced properly on
+      // the profile menu's "Resend verification" action instead, which
+      // doesn't navigate away.
       await signup({ name, email, password, shopName, subdomain });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create shop");
@@ -43,13 +50,8 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
-        <div className="text-center mb-2">
-          <h1 className="text-2xl font-semibold">Create your shop</h1>
-          <p className="text-sm text-zinc-500 mt-1">You&apos;ll be the shop&apos;s admin account</p>
-        </div>
-
+    <AuthCard heading="Create your shop" subtitle="You'll be the shop's admin account">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <Input
@@ -58,12 +60,14 @@ export default function SignupPage() {
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
+          className={AUTH_INPUT_CLASS}
         />
         <Input
           label="Shop name"
           required
           value={shopName}
           onChange={(e) => handleShopNameChange(e.target.value)}
+          className={AUTH_INPUT_CLASS}
         />
         <Input
           label="Subdomain"
@@ -74,6 +78,7 @@ export default function SignupPage() {
             setSubdomainTouched(true);
             setSubdomain(e.target.value);
           }}
+          className={AUTH_INPUT_CLASS}
         />
         <Input
           label="Email"
@@ -82,6 +87,7 @@ export default function SignupPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className={AUTH_INPUT_CLASS}
         />
         <Input
           label="Password"
@@ -91,19 +97,20 @@ export default function SignupPage() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className={AUTH_INPUT_CLASS}
         />
 
         <Button type="submit" variant="primary" className="w-full" disabled={submitting}>
           {submitting ? "Creating…" : "Create shop"}
         </Button>
 
-        <p className="text-sm text-center text-zinc-500">
+        <p className="text-sm text-center text-zinc-500 dark:text-zinc-400">
           Already have a shop?{" "}
           <Link href="/login" className="underline decoration-transparent hover:decoration-current">
             Sign in
           </Link>
         </p>
       </form>
-    </div>
+    </AuthCard>
   );
 }

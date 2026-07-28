@@ -6,7 +6,7 @@ import { createDeliveryZone, updateDeliveryZone } from "@/lib/api";
 import type { DeliveryZone } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Checkbox from "@/components/ui/Checkbox";
+import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 
 export default function DeliveryZoneFormModal({
@@ -96,7 +96,10 @@ export default function DeliveryZoneFormModal({
             value={minOrderAmount}
             onChange={(e) => setMinOrderAmount(e.target.value)}
           />
-          <Checkbox label="Active" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+          <div className="flex items-center gap-2">
+            <Toggle checked={isActive} onChange={setIsActive} />
+            <span className="text-sm">Active</span>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2 mt-5">

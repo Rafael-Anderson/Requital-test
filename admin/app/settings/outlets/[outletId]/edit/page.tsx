@@ -12,6 +12,7 @@ import OutletAddressTab from "@/components/OutletAddressTab";
 import OutletDeliveryTab from "@/components/OutletDeliveryTab";
 import OutletDeliveryAreaTab from "@/components/OutletDeliveryAreaTab";
 import OutletPickupTab from "@/components/OutletPickupTab";
+import PageShell from "@/components/ui/PageShell";
 
 function ComingSoonTab({ label }: { label: string }) {
   return <p className="text-sm text-zinc-500">{label} isn&apos;t built yet — coming soon.</p>;
@@ -52,11 +53,11 @@ export default function EditOutletPage() {
   }
 
   return (
-    <div className="page-transition">
+    <PageShell>
       {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
       {!outlet && !error ? (
-        <div className="max-w-2xl space-y-4">
+        <div className="space-y-4">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-40 w-full" />
         </div>
@@ -81,6 +82,6 @@ export default function EditOutletPage() {
           </div>
         </>
       ) : null}
-    </div>
+    </PageShell>
   );
 }

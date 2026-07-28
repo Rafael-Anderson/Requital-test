@@ -91,7 +91,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
                     className={`text-xs rounded-full px-2.5 py-1 font-medium border transition-colors cursor-pointer ${
                       z.isActive
                         ? "border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400"
-                        : "border-black/10 dark:border-white/15 text-zinc-400"
+                        : "border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"
                     }`}
                   >
                     {z.isActive ? "On" : "Off"}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="page-transition">
-      <BackButton fallbackHref="/" />
+      <BackButton href="/" />
       <h1 className="text-2xl font-semibold mb-4">Settings</h1>
       <SettingsTabs />
       {children}

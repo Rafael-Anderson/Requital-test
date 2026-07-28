@@ -13,8 +13,17 @@ import { getValidNextStatuses, type Order, type OrderStatus } from "@/lib/types"
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
+import PageShell from "@/components/ui/PageShell";
+import OrderNotesSection from "@/components/OrderNotesSection";
+import OrderReturnsSection from "@/components/OrderReturnsSection";
+import EditOrderItemsModal from "@/components/EditOrderItemsModal";
+
+// Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
+// staff start physically preparing the order.
+const EDITABLE_ITEM_STATUSES = ["pending", "confirmed"];
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -26,6 +35,7 @@ export default function OrderDetailPage() {
   const [linkResult, setLinkResult] = useState<{ url: string; expiresAt: string } | null>(
     null,
   );
+  const [editingItems, setEditingItems] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -73,7 +83,7 @@ export default function OrderDetailPage() {
   if (error) return <p className="text-red-600">{error}</p>;
   if (!order) {
     return (
-      <div className="max-w-2xl space-y-4">
+      <div className="max-w-3xl space-y-4">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
@@ -85,8 +95,8 @@ export default function OrderDetailPage() {
   const canCancel = order.status !== "delivered" && order.status !== "cancelled";
 
   return (
-    <div className="max-w-2xl page-transition">
-      <BackButton fallbackHref="/orders" />
+    <PageShell variant="form">
+      <BackButton href="/orders" />
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Order #{order.id}</h1>
@@ -96,7 +106,7 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      <section className="border rounded-lg p-4 mb-4 dark:border-white/10">
+      <Card className="mb-4">
         <h2 className="font-medium mb-2">Customer</h2>
         <p>{order.customerName}</p>
         <p className="text-sm text-zinc-500">{order.customerPhone}</p>
@@ -108,9 +118,9 @@ export default function OrderDetailPage() {
           {order.area ? `${order.area}, ` : ""}
           {order.emirate}
         </p>
-      </section>
+      </Card>
 
-      <section className="border rounded-lg p-4 mb-4 dark:border-white/10">
+      <Card className="mb-4">
         <h2 className="font-medium mb-2">Delivery</h2>
         <p className="text-sm">
           {order.deliveryDate
@@ -118,15 +128,25 @@ export default function OrderDetailPage() {
             : "No delivery date set"}
           {order.deliveryTimeSlot ? ` — ${order.deliveryTimeSlot}` : ""}
         </p>
-      </section>
+      </Card>
 
-      <section className="border rounded-lg p-4 mb-4 dark:border-white/10">
-        <h2 className="font-medium mb-2">Items</h2>
+      <Card className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-medium">Items</h2>
+          {EDITABLE_ITEM_STATUSES.includes(order.status) && (
+            <Button variant="secondary" size="sm" onClick={() => setEditingItems(true)}>
+              Edit items
+            </Button>
+          )}
+        </div>
         <table className="w-full text-sm">
           <tbody>
             {order.orderitem.map((item) => (
               <tr key={item.id} className="border-t dark:border-white/10 first:border-t-0">
-                <td className="py-2">{item.productName}</td>
+                <td className="py-2">
+                  {item.productName}
+                  {item.variantLabel ? ` — ${item.variantLabel}` : ""}
+                </td>
                 <td className="py-2 text-zinc-500">× {item.quantity}</td>
                 <td className="py-2 text-right">{item.priceAtPurchase} AED</td>
               </tr>
@@ -141,9 +161,9 @@ export default function OrderDetailPage() {
             </tr>
           </tfoot>
         </table>
-      </section>
+      </Card>
 
-      <section className="border rounded-lg p-4 mb-4 dark:border-white/10">
+      <Card className="mb-4">
         <h2 className="font-medium mb-3">Actions</h2>
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <label className="text-sm text-zinc-500">Move to:</label>
@@ -187,7 +207,21 @@ export default function OrderDetailPage() {
             </p>
           )}
         </div>
-      </section>
-    </div>
+      </Card>
+
+      <div className="mb-4">
+        <OrderReturnsSection order={order} onChanged={refresh} />
+      </div>
+
+      <OrderNotesSection orderId={order.id} notes={order.ordernote ?? []} onAdded={refresh} />
+
+      {editingItems && (
+        <EditOrderItemsModal
+          order={order}
+          onClose={() => setEditingItems(false)}
+          onSaved={(updated) => setOrder(updated)}
+        />
+      )}
+    </PageShell>
   );
 }

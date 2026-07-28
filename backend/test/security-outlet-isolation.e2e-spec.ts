@@ -35,8 +35,20 @@ interface IdRow {
   id: number;
 }
 interface AuthResponse {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   user: { role: string; outletId: number | null };
+}
+interface SignupResponse extends AuthResponse {
+  devVerificationLink?: string;
+}
+
+// The dev-only devVerificationLink/devResetLink in non-production auth
+// responses (see auth.service.ts — no real email infra exists) carries the
+// raw token as a query param; tests that need to actually verify/reset pull
+// it out this way instead of querying the DB directly for the token hash.
+function tokenFromDevLink(link: string): string {
+  return new URL(link).searchParams.get('token')!;
 }
 interface DeliveryZoneRow {
   id: number;
@@ -108,7 +120,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         subdomain: `sec-test-a-${runId}`,
       })
       .expect(201);
-    shopAAdminToken = body<AuthResponse>(signupA).token;
+    shopAAdminToken = body<AuthResponse>(signupA).accessToken;
 
     // Signup auto-creates one default outlet — that's outletA1.
     const outletsA = await request(app.getHttpServer())
@@ -141,7 +153,7 @@ describe('Outlet & shop isolation (e2e)', () => {
       .send({ email: `branch-a1-${runId}@test.com`, password: 'password123' })
       .expect(201);
     const branchAuth = body<AuthResponse>(branchLogin);
-    shopABranchToken = branchAuth.token;
+    shopABranchToken = branchAuth.accessToken;
     expect(branchAuth.user.role).toBe('branch');
     expect(branchAuth.user.outletId).toBe(outletA1Id);
 
@@ -224,7 +236,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         subdomain: `sec-test-b-${runId}`,
       })
       .expect(201);
-    shopBAdminToken = body<AuthResponse>(signupB).token;
+    shopBAdminToken = body<AuthResponse>(signupB).accessToken;
 
     const outletsB = await request(app.getHttpServer())
       .get('/outlets')
@@ -750,7 +762,7 @@ describe('Outlet & shop isolation (e2e)', () => {
 
     it('change-password rejects a wrong current password and leaves the original login working', async () => {
       const email = `pw-wrong-${runId}@test.com`;
-      await request(app.getHttpServer())
+      const signup = await request(app.getHttpServer())
         .post('/auth/signup')
         .send({
           name: 'PW Test',
@@ -760,11 +772,18 @@ describe('Outlet & shop isolation (e2e)', () => {
           subdomain: `pw-wrong-${runId}`,
         })
         .expect(201);
+      // change-password requires a verified email — verify via the dev-only
+      // link before exercising the actual current-password check.
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token: tokenFromDevLink(body<SignupResponse>(signup).devVerificationLink!) })
+        .expect(201);
+
       const login = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email, password: 'original123' })
         .expect(201);
-      const token = body<AuthResponse>(login).token;
+      const token = body<AuthResponse>(login).accessToken;
 
       await request(app.getHttpServer())
         .post('/auth/change-password')
@@ -780,7 +799,7 @@ describe('Outlet & shop isolation (e2e)', () => {
 
     it('change-password updates the hash used by login — old password stops working, new one works', async () => {
       const email = `pw-change-${runId}@test.com`;
-      await request(app.getHttpServer())
+      const signup = await request(app.getHttpServer())
         .post('/auth/signup')
         .send({
           name: 'PW Change',
@@ -790,11 +809,16 @@ describe('Outlet & shop isolation (e2e)', () => {
           subdomain: `pw-change-${runId}`,
         })
         .expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token: tokenFromDevLink(body<SignupResponse>(signup).devVerificationLink!) })
+        .expect(201);
+
       const login = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email, password: 'original123' })
         .expect(201);
-      const token = body<AuthResponse>(login).token;
+      const token = body<AuthResponse>(login).accessToken;
 
       await request(app.getHttpServer())
         .post('/auth/change-password')

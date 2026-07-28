@@ -41,6 +41,8 @@ export interface OrderItem {
   id: number;
   productId: number;
   productName: string;
+  variantId?: number | null;
+  variantLabel?: string | null;
   quantity: number;
   priceAtPurchase: string;
   // Only populated on the single-order detail fetch (GET /orders/:id).
@@ -83,6 +85,39 @@ export interface Order {
   // Only populated on the single-order detail fetch (GET /orders/:id).
   paymenttransaction?: PaymentTransaction[];
   customerOrderCount?: number;
+  // Only populated on the single-order detail fetch — null until a merchant
+  // logs a courier handoff (see ExternalDelivery, components/OrderDetailModal.tsx).
+  externaldelivery?: ExternalDelivery | null;
+  // Only populated on the single-order detail fetch — staff-only, never
+  // present on anything the storefront/public tracking page reads.
+  ordernote?: OrderNote[];
+}
+
+export interface OrderReturnItem {
+  id: number;
+  orderItemId: number;
+  quantity: number;
+}
+
+export interface OrderReturn {
+  id: number;
+  orderId: number;
+  reason: "damaged" | "wrong_item" | "changed_mind" | "other";
+  refundAmount: string;
+  refundMethod: "provider" | "manual";
+  providerRefundReference: string | null;
+  restocked: boolean;
+  status: string;
+  staff: { id: number; name: string };
+  orderreturnitem: OrderReturnItem[];
+  createdAt: string;
+}
+
+export interface OrderNote {
+  id: number;
+  note: string;
+  author: { id: number; name: string };
+  createdAt: string;
 }
 
 export interface PaginatedOrders {
@@ -90,6 +125,143 @@ export interface PaginatedOrders {
   page: number;
   pageSize: number;
   total: number;
+}
+
+export interface ReportsFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  outletId?: number;
+  orderType?: string;
+  status?: OrderStatus;
+  // Free-text, not a closed enum — see backend ReportsFilterQueryDto:
+  // paymentMethod is only ever set by storefront orders today, and channel
+  // has no real multi-channel attribution system behind it yet.
+  paymentMode?: string;
+  channel?: string;
+}
+
+export interface GeneralReportSummary {
+  totalOrders: number;
+  grandTotal: number;
+  totalPayments: number;
+  totalDeliveryFee: number;
+}
+
+export interface GeneralReportOrderRow {
+  id: number;
+  outletName: string;
+  status: OrderStatus;
+  customerId: number | null;
+  customerName: string;
+  customerPhone: string;
+  orderType: string | null;
+  paymentMethod: string | null;
+  total: string;
+  channel: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedGeneralReportOrders {
+  data: GeneralReportOrderRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+// Same non-date filters as ReportsFilters — Monthly Report swaps
+// dateFrom/dateTo for a single month, everything else is identical.
+export interface MonthlyReportFilters {
+  month: string; // "YYYY-MM"
+  outletId?: number;
+  orderType?: string;
+  status?: OrderStatus;
+  paymentMode?: string;
+  channel?: string;
+}
+
+export interface ExternalDeliveryRow {
+  id: number;
+  orderId: number;
+  outletName: string;
+  customerName: string;
+  customerPhone: string;
+  carrier: string;
+  vehicleType: string | null;
+  price: string;
+  destination: string;
+  status: "pending" | "picked_up" | "delivered" | "failed";
+  createdAt: string;
+}
+
+export interface PaginatedExternalDeliveries {
+  data: ExternalDeliveryRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface ExternalDelivery {
+  id: number;
+  orderId: number;
+  carrier: string;
+  vehicleType: string | null;
+  price: string;
+  destination: string;
+  status: "pending" | "picked_up" | "delivered" | "failed";
+  createdAt: string;
+}
+
+export interface ProductSalesRow {
+  productId: number;
+  name: string;
+  thumbnail: string;
+  currentPrice: string;
+  orderCount: number;
+  totalQuantity: number;
+  totalSalePrice: number;
+  deliveryFee: number;
+}
+
+export interface PaginatedProductSales {
+  data: ProductSalesRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface CustomerListItem {
+  id: number;
+  name: string;
+  phone: string;
+  email: string | null;
+  createdAt: string;
+  // Cancelled orders are excluded from both — see backend CustomersService.
+  orderCount: number;
+  lifetimeValue: number;
+  lastOrderDate: string | null;
+}
+
+export interface PaginatedCustomers {
+  data: CustomerListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface CustomerDetail {
+  id: number;
+  name: string;
+  phone: string;
+  email: string | null;
+  birthday: string | null;
+  createdAt: string;
+  orderCount: number;
+  lifetimeValue: number;
+  firstOrderDate: string | null;
+  lastOrderDate: string | null;
+  // Full history, including cancelled orders (only excluded from the
+  // orderCount/lifetimeValue aggregates above, not from this list).
+  orders: Order[];
 }
 
 export interface Category {
@@ -161,6 +333,92 @@ export function descendantIds(categoryId: number, categories: Category[]): Set<n
   return result;
 }
 
+export const WEIGHT_UNITS = ["kg", "g", "lb"] as const;
+export type WeightUnit = (typeof WEIGHT_UNITS)[number];
+
+// Cosmetic relabel only — the underlying stored values (Available/
+// Unavailable/Archived) are unchanged, see backend PRODUCT_STATUSES. Reusing
+// the existing lifecycle values rather than adding a real "Draft" concept
+// that doesn't otherwise exist in this schema.
+export const PRODUCT_STATUS_LABELS: Record<string, string> = {
+  Available: "Active",
+  Unavailable: "Draft",
+  Archived: "Archived",
+};
+
+export interface ProductImage {
+  id: number;
+  url: string;
+  order: number;
+}
+
+export interface ProductOptionValue {
+  id: number;
+  value: string;
+  order: number;
+}
+
+export interface ProductOption {
+  id: number;
+  name: string;
+  order: number;
+  values: ProductOptionValue[];
+}
+
+export interface StockByOutlet {
+  outletId: number;
+  outletName: string;
+  stockQuantity: number;
+}
+
+// price/compareAtPrice/weight null = not overridden on this variant, falls
+// back to the parent product's own field until a merchant edits it — see
+// backend ProductsService.updateOptions (new variants inherit the current
+// product price at generation time, so this is rarely actually null).
+//
+// Bill of Materials — one recipe row, ingredient name/unit resolved
+// server-side for display (not just the bare id) since the editing UI
+// always needs the label anyway. Shared shape for both a product's
+// default recipe (Product.ingredients) and a variant's own override list
+// (ProductVariant.ingredientOverrides).
+export interface ProductIngredientLink {
+  id: number;
+  ingredientId: number;
+  ingredientName: string;
+  ingredientUnit: string;
+  quantityPerUnit: number;
+}
+
+export interface ProductVariant {
+  id: number;
+  sku: string | null;
+  barcode: string | null;
+  price: string | null;
+  compareAtPrice: string | null;
+  weight: string | null;
+  imageId: number | null;
+  imageUrl: string | null;
+  order: number;
+  optionValue1Id: number | null;
+  optionValue2Id: number | null;
+  optionValue3Id: number | null;
+  label: string | null;
+  stockQuantity: number | null;
+  lowStockThreshold: number | null;
+  // Only present when fetched with allOutlets: true (the product edit page)
+  // — see getProduct.
+  stockByOutlet?: StockByOutlet[];
+  // Bill of Materials — this variant's own override rows only; empty means
+  // it inherits the product's default recipe wholesale (see
+  // Product.ingredients). makeableQuantity/limitedByIngredient are computed
+  // from the *effective* recipe (override if set, else the product
+  // default) — informational only, doesn't gate cart/checkout, null when
+  // no recipe applies or no outlet was resolved for this request.
+  ingredientOverrides: ProductIngredientLink[];
+  makeableQuantity: number | null;
+  limitedByIngredient: string | null;
+}
+
 // Shape accepted by POST/PATCH /products — distinct from Product (the API
 // response) because category assignment is written as categoryIds, not the
 // expanded Category[] the response returns. Stock is no longer set here —
@@ -171,9 +429,47 @@ export interface ProductInput {
   thumbnail: string;
   sku: string;
   description?: string;
+  compareAtPrice?: number;
+  barcode?: string;
+  chargeTax?: boolean;
+  continueSellingOutOfStock?: boolean;
+  vendor?: string;
+  productType?: string;
+  physicalProduct?: boolean;
+  weight?: number;
+  weightUnit?: WeightUnit;
+  dimensions?: string;
   trackInventory?: boolean;
   status?: string;
   categoryIds: number[];
+  tags?: string[];
+  // Replaces the full gallery when provided — images[0] (by `order`)
+  // becomes the canonical thumbnail server-side. Omitted leaves the
+  // existing gallery/thumbnail untouched on update.
+  images?: { url: string; order?: number }[];
+  // Storefront SEO — all optional, sensible fallbacks computed server-side
+  // (see backend PublicService) when left unset. slug is auto-generated
+  // from name on create if omitted; editing it after publish is a deliberate
+  // choice (see products.service.ts), not something the form does silently.
+  slug?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  // Bill of Materials — product-level default recipe. Replaces the full
+  // set on update when provided (same convention as images/categoryIds);
+  // omitted leaves it untouched. See ProductIngredientLink.
+  ingredients?: { ingredientId: number; quantityPerUnit: number }[];
+}
+
+export interface UpdateVariantInput {
+  sku?: string;
+  barcode?: string;
+  price?: number;
+  compareAtPrice?: number;
+  weight?: number;
+  imageId?: number | null;
+  // Bill of Materials — this variant's override recipe, replacing the
+  // product default for exactly this variant when provided.
+  ingredients?: { ingredientId: number; quantityPerUnit: number }[];
 }
 
 export interface Product {
@@ -181,21 +477,134 @@ export interface Product {
   name: string;
   description: string | null;
   price: string;
+  compareAtPrice: string | null;
+  // Returned by the API (toResponse spreads every scalar product column) but
+  // not previously declared here — used by the CSV export/import round trip.
+  costPrice: string | null;
   sku: string;
+  barcode: string | null;
   status: string;
   trackInventory: boolean;
+  continueSellingOutOfStock: boolean;
+  chargeTax: boolean;
+  vendor: string | null;
+  productType: string | null;
+  physicalProduct: boolean;
+  weight: string | null;
+  weightUnit: WeightUnit;
+  dimensions: string | null;
+  slug: string;
+  metaTitle: string | null;
+  metaDescription: string | null;
   // null when no outlet was resolved for this request (e.g. an admin
   // viewing the catalog without picking a branch) — distinct from 0, which
   // means "this outlet genuinely has none in stock". Always resolved for a
   // branch user (forced to their own outlet server-side).
   stockQuantity: number | null;
   lowStockThreshold: number | null;
+  // Only present when fetched with allOutlets: true — see getProduct.
+  stockByOutlet?: StockByOutlet[];
+  // All-time units sold across non-cancelled orders, shop-wide (not
+  // outlet-filtered — unlike stockQuantity, which is per-selected-branch).
+  totalSold: number;
   thumbnail: string;
+  images: ProductImage[];
+  hasVariants: boolean;
+  options: ProductOption[];
+  variants: ProductVariant[];
   categories: Category[];
   tags: string[];
+  // Bill of Materials — this product's own default recipe (applies
+  // directly when hasVariants is false; each variant either overrides it
+  // or inherits it, see ProductVariant.ingredientOverrides).
+  // makeableQuantity/limitedByIngredient mirror the variant-level fields'
+  // own doc comment.
+  ingredients: ProductIngredientLink[];
+  makeableQuantity: number | null;
+  limitedByIngredient: string | null;
 }
 
-export type UserRole = "admin" | "branch";
+// Shared by products' and ingredients' CSV import preview/confirm — see
+// backend's products-import.ts for the header/type contract this mirrors.
+export interface ImportRowResult {
+  rowNumber: number;
+  kind: "product" | "variant" | "ingredient";
+  identifier: string;
+  action: "create" | "update" | "reject";
+  errors: string[];
+}
+export interface ImportPreviewResult {
+  rows: ImportRowResult[];
+}
+export interface ImportConfirmResult {
+  rows: ImportRowResult[];
+  created: number;
+  updated: number;
+  skipped: number;
+}
+
+// "Scan to Stock" — see backend/src/scan for the OCR/parsing pipeline this
+// mirrors.
+export interface ScanSettings {
+  excludeKeywords: string[];
+  includeKeywords: string[];
+  defaultOutletId: number | null;
+  unmatchedBehavior: "ask" | "create";
+}
+
+export interface ScanMatchSuggestion {
+  id: number;
+  type: "product" | "ingredient";
+  name: string;
+  score: number;
+}
+
+export interface ScanPreviewItem {
+  rawLine: string;
+  name: string;
+  quantity: number;
+  price: number | null;
+  suggestions: ScanMatchSuggestion[];
+}
+
+export interface ScanPreviewResult {
+  imageUrl: string;
+  rawText: string;
+  items: ScanPreviewItem[];
+  defaultOutletId: number | null;
+  unmatchedBehavior: "ask" | "create";
+}
+
+export interface ScanCommitNewItem {
+  name: string;
+  price?: number;
+  categoryId?: number;
+  unit?: string;
+}
+
+export interface ScanCommitItem {
+  targetType: "product" | "ingredient";
+  matchedId?: number;
+  outletId: number;
+  quantity: number;
+  createNew?: ScanCommitNewItem;
+}
+
+export interface ScanCommitResult {
+  batchId: number;
+  created: number;
+  updated: number;
+  total: number;
+}
+
+export type UserRole = "admin" | "branch" | "order_manager" | "viewer";
+
+export const STAFF_ROLE_LABELS: Record<UserRole, string> = {
+  admin: "Admin (full access)",
+  branch: "Branch (one outlet, day-to-day orders/inventory)",
+  order_manager: "Order manager (orders only, no pricing/settings)",
+  viewer: "Viewer (read-only — reports, orders, customers)",
+};
 
 export interface AuthUser {
   id: number;
@@ -251,6 +660,10 @@ export interface Shop {
   id: number;
   name: string;
   subdomain: string;
+  // Gates storefront visibility + the platform sitemap — see the "Publish
+  // your store" action on this page (Settings > Business Information) and
+  // backend PublicService.assertPublished.
+  published: boolean;
   currency: string;
   displayName: string | null;
   legalName: string | null;
@@ -266,6 +679,10 @@ export interface Shop {
   notifyWhatsapp: boolean;
   notifyCustomersWhatsapp: boolean;
   notifyEmail: boolean;
+  notifyAbandonedCart: boolean;
+  abandonedCartWindowMinutes: number;
+  notifyLowStockDigest: boolean;
+  autoDeductIngredientStock: boolean;
 
   // Store Configuration — functional
   businessType: string | null;
@@ -317,6 +734,275 @@ export interface Shop {
   pickupTimeSlotGapMinutes: number;
   pickupPreparationTimeMinutes: number;
   pickupPreparationPlusTimeMinutes: number;
+
+  // --- Order Setting ---
+  allowSameDayOrders: boolean;
+  allowNextDayOrders: boolean;
+  taxRate: string;
+  taxInclusive: boolean;
+}
+
+// Backs the Publish toggle's disabled/tooltip state — see
+// backend ShopService.getPublishReadiness, the single source of truth this
+// mirrors (also enforced server-side on the PATCH /shop transition itself,
+// so this is a UX nicety on top of a real check, not the only guard).
+export interface PublishReadiness {
+  ready: boolean;
+  missing: string[];
+}
+
+export const FONT_CHOICES = ["inter", "poppins", "playfair-display", "roboto"] as const;
+export type FontChoice = (typeof FONT_CHOICES)[number];
+
+export interface BannerImage {
+  id?: number;
+  url: string;
+  linkUrl?: string | null;
+  order: number;
+}
+
+export interface ThemeSettings {
+  shopId: number;
+  brandColor: string | null;
+  secondaryColor: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  faviconUrl: string | null;
+  // Rendered in the storefront footer's brand column (see
+  // storefront/components/Footer.tsx).
+  footerLogoUrl: string | null;
+  // Merchant-written blurb for the footer's brand column.
+  footerDescription: string | null;
+  heroText: string | null;
+  fontFamily: FontChoice | null;
+  // Announcement-bar messages, rendered above the storefront header.
+  notificationText: string[] | null;
+  // Off by default even with saved text — see the field's own schema
+  // comment (backend/prisma/schema.prisma).
+  announcementBarEnabled: boolean;
+  // Static (joined with "•") vs. a continuously scrolling marquee.
+  announcementBarScrolling: boolean;
+  // Real multi-image homepage slideshow — see BannerImage above. Ordered.
+  images: BannerImage[];
+  // Storefront-facing contact number(s) — distinct from shop.whatsappNumber.
+  contactNumbers: string[] | null;
+  // Record<ThemeColorKey, hex> — see THEME_COLOR_FIELDS below for the full
+  // key list, grouping, and which ones the storefront actually applies.
+  colors: Record<string, string> | null;
+  // Advanced tab — see HOMEPAGE_LAYOUTS below.
+  homepageLayout: HomepageLayout;
+  // Theme Customizer v2 — see the enum exports below. Always a real value,
+  // same rule as homepageLayout.
+  topBarLayout: TopBarLayout;
+  iconStyle: IconStyle;
+  buttonRadius: ButtonRadius;
+  buttonFill: ButtonFill;
+  pdpLayout: PdpLayout;
+  cartLayout: CartLayout;
+  checkoutLayout: CheckoutLayout;
+  footerLayout: FooterLayout;
+  headerDensity: Density;
+  footerDensity: Density;
+  // Null only for a shop that's never saved any theme field yet (no row
+  // exists) — used for the Theme library page's "last saved" timestamp.
+  updatedAt: string | null;
+}
+
+// Mirrors backend/src/theme/constants.ts's HOMEPAGE_LAYOUTS by hand. 'custom'
+// exists in the type (forward-compatible with a future full drag-and-drop
+// builder slotting in as a fourth option) but is deliberately absent from
+// SELECTABLE_HOMEPAGE_LAYOUTS/HOMEPAGE_LAYOUT_OPTIONS below — nothing in the
+// admin UI can pick it yet, matching the backend DTO's validator.
+export const HOMEPAGE_LAYOUTS = ["classic", "slideshow", "featured_grid", "grid_first", "custom"] as const;
+export type HomepageLayout = (typeof HOMEPAGE_LAYOUTS)[number];
+
+export interface HomepageLayoutOption {
+  key: Exclude<HomepageLayout, "custom">;
+  label: string;
+  description: string;
+}
+
+export const HOMEPAGE_LAYOUT_OPTIONS: HomepageLayoutOption[] = [
+  {
+    key: "classic",
+    label: "Classic",
+    description: "A single hero banner above your product grid — simple and familiar.",
+  },
+  {
+    key: "slideshow",
+    label: "Slideshow",
+    description: "A rotating hero that cycles through your banner and top products.",
+  },
+  {
+    key: "featured_grid",
+    label: "Featured Grid",
+    description: "Category tiles up front, so shoppers can jump straight to what they want.",
+  },
+  {
+    key: "grid_first",
+    label: "Grid First",
+    description: "Skip the hero — products start right below the header.",
+  },
+];
+
+// Theme Customizer v2 — mirrors backend/src/theme/constants.ts by hand (same
+// tradeoff as HOMEPAGE_LAYOUTS above). Each *_OPTIONS array feeds the preset
+// picker cards on the Advanced tab; see app/theme/edit/advanced/page.tsx.
+export const TOP_BAR_LAYOUTS = ["logo_left", "logo_center", "minimal"] as const;
+export type TopBarLayout = (typeof TOP_BAR_LAYOUTS)[number];
+export const TOP_BAR_LAYOUT_OPTIONS: { key: TopBarLayout; label: string; description: string }[] = [
+  { key: "logo_left", label: "Logo left", description: "Logo on the left, icons on the right — the current default." },
+  { key: "logo_center", label: "Logo centered", description: "Logo centered, icons split to either side." },
+  { key: "minimal", label: "Minimal", description: "Logo and cart only — everything else tucked into a menu." },
+];
+
+export const ICON_STYLES = ["outline", "solid"] as const;
+export type IconStyle = (typeof ICON_STYLES)[number];
+export const ICON_STYLE_OPTIONS: { key: IconStyle; label: string; description: string }[] = [
+  { key: "outline", label: "Outline", description: "Light, stroke-based icons — the current default." },
+  { key: "solid", label: "Solid", description: "Bolder, filled icons." },
+];
+
+export const BUTTON_RADII = ["sharp", "rounded", "pill"] as const;
+export type ButtonRadius = (typeof BUTTON_RADII)[number];
+export const BUTTON_RADIUS_OPTIONS: { key: ButtonRadius; label: string }[] = [
+  { key: "sharp", label: "Sharp" },
+  { key: "rounded", label: "Rounded" },
+  { key: "pill", label: "Pill" },
+];
+
+export const BUTTON_FILLS = ["solid", "outline"] as const;
+export type ButtonFill = (typeof BUTTON_FILLS)[number];
+export const BUTTON_FILL_OPTIONS: { key: ButtonFill; label: string }[] = [
+  { key: "solid", label: "Solid" },
+  { key: "outline", label: "Outline" },
+];
+
+export const PDP_LAYOUTS = ["gallery_left", "gallery_top"] as const;
+export type PdpLayout = (typeof PDP_LAYOUTS)[number];
+export const PDP_LAYOUT_OPTIONS: { key: PdpLayout; label: string; description: string }[] = [
+  { key: "gallery_left", label: "Gallery left", description: "Images on the left, details on the right — the current default." },
+  { key: "gallery_top", label: "Gallery top", description: "Full-width image gallery, details below." },
+];
+
+export const CART_LAYOUTS = ["full_page", "drawer"] as const;
+export type CartLayout = (typeof CART_LAYOUTS)[number];
+export const CART_LAYOUT_OPTIONS: { key: CartLayout; label: string; description: string }[] = [
+  { key: "full_page", label: "Full page", description: "The cart icon opens a dedicated page — the current default." },
+  { key: "drawer", label: "Slide-out drawer", description: "The cart icon opens a panel over the current page instead." },
+];
+
+export const CHECKOUT_LAYOUTS = ["single_page", "step_by_step"] as const;
+export type CheckoutLayout = (typeof CHECKOUT_LAYOUTS)[number];
+export const CHECKOUT_LAYOUT_OPTIONS: { key: CheckoutLayout; label: string; description: string }[] = [
+  { key: "single_page", label: "Single page", description: "Every field on one page — the current default." },
+  { key: "step_by_step", label: "Step by step", description: "Contact, delivery, and payment as separate steps." },
+];
+
+export const FOOTER_LAYOUTS = ["columns", "centered"] as const;
+export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
+export const FOOTER_LAYOUT_OPTIONS: { key: FooterLayout; label: string; description: string }[] = [
+  { key: "columns", label: "Columns", description: "Brand, links, and contact side by side — the current default." },
+  { key: "centered", label: "Centered", description: "A single simplified column, centered — a lighter alternative." },
+];
+
+// Shared by both headerDensity and footerDensity — same three sizes, two
+// independent columns (see schema.prisma's comment on themesettings).
+export const DENSITY_OPTIONS = ["compact", "regular", "spacious"] as const;
+export type Density = (typeof DENSITY_OPTIONS)[number];
+export const HEADER_DENSITY_OPTIONS: { key: Density; label: string; description: string }[] = [
+  { key: "compact", label: "Compact", description: "A slimmer header, less vertical padding." },
+  { key: "regular", label: "Regular", description: "The current default." },
+  { key: "spacious", label: "Spacious", description: "A taller header, more breathing room." },
+];
+export const FOOTER_DENSITY_OPTIONS: { key: Density; label: string; description: string }[] = [
+  { key: "compact", label: "Compact", description: "A slimmer footer, less vertical padding." },
+  { key: "regular", label: "Regular", description: "The current default." },
+  { key: "spacious", label: "Spacious", description: "A taller footer, more breathing room." },
+];
+
+// Mirrors backend/src/theme/constants.ts's THEME_COLOR_GROUPS/THEME_COLOR_FIELDS
+// by hand (no shared package between admin/backend/storefront — same
+// tradeoff as FONT_CHOICES/color-contrast.ts elsewhere in this codebase).
+// `wired` drives the "not yet visible on your storefront" hint shown next to
+// unwired fields on the Appearance Color tab — see app/theme/appearance-color/page.tsx.
+export const THEME_COLOR_GROUPS = [
+  { key: "ui_button_colors", label: "UI/Button Colors" },
+  { key: "background_header_colors", label: "Background/Header Colors" },
+  { key: "product_category_colors", label: "Product/Category Colors" },
+] as const;
+export type ThemeColorGroupKey = (typeof THEME_COLOR_GROUPS)[number]["key"];
+
+export interface ThemeColorFieldDef {
+  key: string;
+  label: string;
+  group: ThemeColorGroupKey;
+  wired: boolean;
+}
+
+// Sensible fallbacks (Requital teal-derived / matches the storefront's
+// current unstyled appearance) so an unset color never renders as broken —
+// same rule as brandColor/secondaryColor. Only used to pre-fill the color
+// picker's displayed value here in admin; the storefront applies its own
+// identical copy of these defaults (see storefront/lib/theme-colors.ts).
+export const THEME_COLOR_DEFAULTS: Record<string, string> = {
+  mouseOverColor: "#057a7a",
+  mouseSelectionColor: "#b2e0e0",
+  buttonColor: "#069494",
+  addToCartTextColor: "#ffffff",
+  addToCartButtonColor: "#069494",
+  strokeColor: "#e4e4e7",
+  homepageInfoBackgroundColor: "#ffffff",
+  pageBackgroundColor: "#ffffff",
+  headerBackgroundColor: "#ffffff",
+  headerTextColor: "#171717",
+  footerBackgroundColor: "#18181b",
+  footerTextColor: "#f4f4f5",
+  featuredBackgroundColor: "#f4f4f5",
+  productNameColor: "#171717",
+  priceMainColor: "#71717a",
+  priceSecondaryColor: "#a1a1aa",
+  categorySliderArrowColor: "#069494",
+  categorySliderArrowActiveColor: "#057a7a",
+  featuredProductTextColor: "#171717",
+  brandBackgroundColor: "#f4f4f5",
+  homeSliderBackgroundColor: "#f4f4f5",
+  homeSliderColor: "#171717",
+};
+
+export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
+  { key: "mouseOverColor", label: "Mouse Over Color", group: "ui_button_colors", wired: true },
+  { key: "mouseSelectionColor", label: "Mouse Selection Color", group: "ui_button_colors", wired: true },
+  { key: "buttonColor", label: "Button Color", group: "ui_button_colors", wired: true },
+  { key: "addToCartTextColor", label: "Add to Cart Text", group: "ui_button_colors", wired: true },
+  { key: "addToCartButtonColor", label: "Add to Cart Button Color", group: "ui_button_colors", wired: true },
+  { key: "strokeColor", label: "Stroke Color", group: "ui_button_colors", wired: true },
+  { key: "homepageInfoBackgroundColor", label: "Homepage Info Background Color", group: "background_header_colors", wired: true },
+  { key: "pageBackgroundColor", label: "Page Background Color", group: "background_header_colors", wired: true },
+  { key: "headerBackgroundColor", label: "Header Background Color", group: "background_header_colors", wired: true },
+  { key: "headerTextColor", label: "Header Text Color", group: "background_header_colors", wired: true },
+  { key: "footerBackgroundColor", label: "Footer Background Color", group: "background_header_colors", wired: true },
+  { key: "footerTextColor", label: "Footer Text Color", group: "background_header_colors", wired: true },
+  { key: "featuredBackgroundColor", label: "Featured Background Color", group: "background_header_colors", wired: true },
+  { key: "productNameColor", label: "Product Name Color", group: "product_category_colors", wired: true },
+  { key: "priceMainColor", label: "Price Main Color", group: "product_category_colors", wired: true },
+  { key: "priceSecondaryColor", label: "Price Secondary Color", group: "product_category_colors", wired: true },
+  { key: "categorySliderArrowColor", label: "Category Slider Arrow Color (mobile view)", group: "product_category_colors", wired: true },
+  { key: "categorySliderArrowActiveColor", label: "Category Slider Arrow Active Color (mobile view)", group: "product_category_colors", wired: true },
+  { key: "featuredProductTextColor", label: "Featured Product Text Color", group: "product_category_colors", wired: true },
+  { key: "brandBackgroundColor", label: "Brand Background Color", group: "product_category_colors", wired: true },
+  { key: "homeSliderBackgroundColor", label: "Home Slider Background Color", group: "product_category_colors", wired: true },
+  { key: "homeSliderColor", label: "Home Slider Color", group: "product_category_colors", wired: true },
+];
+
+export interface SeoSettings {
+  shopId: number;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  // Falls back to Theme's banner/logo on the storefront when unset — see
+  // backend PublicService.getShop.
+  ogImage: string | null;
+  keywords: string | null;
 }
 
 export interface DeliveryZone {
@@ -338,6 +1024,10 @@ export const SOCIAL_PLATFORMS = [
   "x",
   "threads",
   "youtube",
+  // Added so Bio Links' SOCIAL_ICON option for Pinterest has somewhere to
+  // actually be configured — mirrors backend/src/shop/constants.ts
+  // SOCIAL_PLATFORM_DOMAINS, which already includes it.
+  "pinterest",
 ] as const;
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
@@ -377,4 +1067,521 @@ export interface TopProduct {
   thumbnail: string | null;
   revenue: number;
   unitsSold: number;
+}
+
+// Mirrors backend/src/payments/provider-credentials.ts by hand (no shared
+// package between admin and backend — same tradeoff as every other mirrored
+// constant in this codebase, e.g. theme/constants.ts). Cash on Delivery
+// ('cod') isn't in this list — it has no credentials and isn't part of
+// PaymentProviderRegistry, just a visibility toggle on existing shop
+// booleans — but it IS one of the rows PaymentSettingsResponse returns.
+export const PAYMENT_GATEWAY_PROVIDERS = ["nomod", "stripe", "paypal", "tabby", "tamara"] as const;
+export type PaymentGatewayProvider = (typeof PAYMENT_GATEWAY_PROVIDERS)[number];
+
+// "Card processing" — mutually exclusive, pick one (radio, not independent
+// toggles) — enforced server-side in PaymentSettingsService; this list only
+// drives which UI section a provider's card renders in.
+export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ["nomod", "stripe"];
+
+export interface CredentialFieldDef {
+  key: string;
+  label: string;
+}
+
+export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, CredentialFieldDef[]> = {
+  nomod: [
+    { key: "apiKey", label: "API Key" },
+    { key: "secretKey", label: "Secret Key" },
+  ],
+  stripe: [
+    { key: "secretKey", label: "Secret Key" },
+    { key: "webhookSecret", label: "Webhook Secret" },
+  ],
+  paypal: [
+    { key: "clientId", label: "Client ID" },
+    { key: "clientSecret", label: "Client Secret" },
+  ],
+  tabby: [{ key: "secretKey", label: "Secret Key" }],
+  tamara: [{ key: "apiToken", label: "API Token" }],
+};
+
+export const PAYMENT_PROVIDER_LABELS: Record<string, string> = {
+  nomod: "Nomod",
+  stripe: "Stripe",
+  paypal: "PayPal",
+  tabby: "Tabby",
+  tamara: "Tamara",
+  cod: "Cash on Delivery",
+};
+
+// Response shape for both GET /payment-settings and PATCH /payment-settings/:provider.
+export interface PaymentProviderSettings {
+  provider: string;
+  enabled: boolean;
+  isCardProcessor: boolean;
+  hasCredentials: boolean;
+  // Masked, e.g. { secretKey: "••••1234" } — never the real value. See
+  // PaymentSettingsService.maskCredentials on the backend.
+  maskedCredentials: Record<string, string> | null;
+}
+
+// --- WhatsApp Cloud API credentials — mirrors backend/src/whatsapp/whatsapp-credential-fields.ts by hand. ---
+
+export const WHATSAPP_CREDENTIAL_FIELDS: CredentialFieldDef[] = [
+  { key: "phoneNumberId", label: "Phone Number ID" },
+  { key: "accessToken", label: "Access Token" },
+];
+
+// Response shape for GET/PATCH /whatsapp-settings.
+export interface WhatsAppSettings {
+  hasCredentials: boolean;
+  maskedCredentials: Record<string, string> | null;
+}
+
+// --- Affiliate (referral marketing) — mirrors backend/src/affiliate/constants.ts by hand. ---
+
+export const AFFILIATE_STATUSES = ["active", "inactive", "blocked"] as const;
+export type AffiliateStatus = (typeof AFFILIATE_STATUSES)[number];
+
+export const AFFILIATE_CODE_STATUSES = ["approved", "pending", "blocked"] as const;
+export type AffiliateCodeStatus = (typeof AFFILIATE_CODE_STATUSES)[number];
+
+export const COMMISSION_TYPES = ["percentage", "fixed"] as const;
+export type CommissionType = (typeof COMMISSION_TYPES)[number];
+
+// Only ever moves out of 'pending' — see AffiliateService.syncOrderStatus.
+export const AFFILIATE_ORDER_STATUSES = ["pending", "approved", "blocked"] as const;
+export type AffiliateOrderStatus = (typeof AFFILIATE_ORDER_STATUSES)[number];
+
+export interface AffiliateSummary {
+  totalCode: number;
+  totalAffiliate: number;
+  activeAffiliate: number;
+  pendingOrders: number;
+  approvedOrderRevenue: number;
+  codeStatus: { approved: number; pending: number; blocked: number };
+}
+
+export interface AffiliateListItem {
+  id: number;
+  name: string;
+  mobile: string;
+  status: AffiliateStatus;
+  createdAt: string;
+  codesCount: number;
+  ordersCount: number;
+}
+
+export interface AffiliateCodeListItem {
+  id: number;
+  code: string;
+  affiliateId: number;
+  affiliateName: string;
+  promotionFor: string;
+  url: string;
+  status: AffiliateCodeStatus;
+  commissionType: CommissionType;
+  commissionValue: number;
+  validFrom: string | null;
+  validUntil: string | null;
+  ordersCount: number;
+  createdAt: string;
+}
+
+export interface AffiliateOrderListItem {
+  id: number;
+  orderId: number;
+  customerName: string;
+  orderTotal: number;
+  code: string;
+  affiliateName: string;
+  commissionAmount: number;
+  status: AffiliateOrderStatus;
+  createdAt: string;
+}
+
+export interface PaginatedAffiliates {
+  data: AffiliateListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface PaginatedAffiliateCodes {
+  data: AffiliateCodeListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface PaginatedAffiliateOrders {
+  data: AffiliateOrderListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+// --- Bio Links — mirrors backend/src/bio-links/bio-link-constants.ts by hand. ---
+
+export const BIO_LINK_TYPES = ["EXTERNAL_URL", "PRODUCT", "CATEGORY", "COLLECTION", "SOCIAL_ICON"] as const;
+export type BioLinkType = (typeof BIO_LINK_TYPES)[number];
+
+export const BIO_LINK_TYPE_LABELS: Record<BioLinkType, string> = {
+  EXTERNAL_URL: "External URL",
+  PRODUCT: "Product",
+  CATEGORY: "Category",
+  COLLECTION: "Collection",
+  SOCIAL_ICON: "Social Icon",
+};
+
+// Deliberately a different set than SOCIAL_PLATFORMS (Online Presence) —
+// see the backend constants file for why.
+export const BIO_LINK_SOCIAL_PLATFORMS = [
+  "instagram",
+  "facebook",
+  "x",
+  "tiktok",
+  "whatsapp",
+  "youtube",
+  "snapchat",
+  "pinterest",
+] as const;
+export type BioLinkSocialPlatform = (typeof BIO_LINK_SOCIAL_PLATFORMS)[number];
+
+export const BIO_LINK_SOCIAL_PLATFORM_LABELS: Record<BioLinkSocialPlatform, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  x: "X (Twitter)",
+  tiktok: "TikTok",
+  whatsapp: "WhatsApp",
+  youtube: "YouTube",
+  snapchat: "Snapchat",
+  pinterest: "Pinterest",
+};
+
+export interface BioLink {
+  id: number;
+  type: BioLinkType;
+  label: string;
+  url: string | null;
+  productId: number | null;
+  productName: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  collectionId: number | null;
+  collectionTitle: string | null;
+  socialPlatform: BioLinkSocialPlatform | null;
+  order: number;
+  active: boolean;
+  clickCount: number;
+  createdAt: string;
+}
+
+// Raw overrides only — no fallback-to-Theme resolution here, same as the
+// backend response (see BioLinksService.getPageConfig). The admin form just
+// edits these fields directly; it doesn't need to know what they'd fall
+// back to (that's a storefront-only concern).
+export interface BioPageConfig {
+  logoUrl: string | null;
+  backgroundUrl: string | null;
+  description: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+}
+
+// --- Discounts / Promo Codes — mirrors backend/src/discounts/discount-constants.ts by hand. ---
+
+export const DISCOUNT_TYPES = ["PERCENTAGE", "FIXED_AMOUNT", "FREE_SHIPPING"] as const;
+export type DiscountType = (typeof DISCOUNT_TYPES)[number];
+export const DISCOUNT_TYPE_LABELS: Record<DiscountType, string> = {
+  PERCENTAGE: "Percentage",
+  FIXED_AMOUNT: "Fixed amount",
+  FREE_SHIPPING: "Free shipping",
+};
+
+export const DISCOUNT_APPLIES_TO = ["ALL_PRODUCTS", "SPECIFIC_PRODUCTS", "SPECIFIC_CATEGORIES"] as const;
+export type DiscountAppliesTo = (typeof DISCOUNT_APPLIES_TO)[number];
+export const DISCOUNT_APPLIES_TO_LABELS: Record<DiscountAppliesTo, string> = {
+  ALL_PRODUCTS: "All products",
+  SPECIFIC_PRODUCTS: "Specific products",
+  SPECIFIC_CATEGORIES: "Specific categories",
+};
+
+export interface Discount {
+  id: number;
+  code: string;
+  type: DiscountType;
+  value: string | null;
+  minPurchaseAmount: string | null;
+  appliesTo: DiscountAppliesTo;
+  products: { id: number; name: string }[];
+  categories: { id: number; name: string }[];
+  usageLimit: number | null;
+  usageLimitPerCustomer: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  active: boolean;
+  timesUsed: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DiscountInput {
+  code: string;
+  type: DiscountType;
+  value?: number;
+  minPurchaseAmount?: number;
+  appliesTo?: DiscountAppliesTo;
+  productIds?: number[];
+  categoryIds?: number[];
+  usageLimit?: number;
+  usageLimitPerCustomer?: number;
+  startsAt?: string;
+  endsAt?: string;
+  active?: boolean;
+}
+
+export interface ValidateDiscountResult {
+  valid: boolean;
+  reason?: string;
+  message?: string;
+  discountId?: number;
+  code?: string;
+  type?: DiscountType;
+  discountAmount?: number;
+  freeShipping?: boolean;
+}
+
+// --- Draft Orders — mirrors backend/src/draft-orders/draft-order-constants.ts by hand. ---
+
+export const DRAFT_ORDER_STATUSES = ["OPEN", "INVOICE_SENT", "COMPLETED", "CANCELLED"] as const;
+export type DraftOrderStatus = (typeof DRAFT_ORDER_STATUSES)[number];
+export const DRAFT_ORDER_STATUS_LABELS: Record<DraftOrderStatus, string> = {
+  OPEN: "Open",
+  INVOICE_SENT: "Invoice sent",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
+
+export interface DraftOrderItem {
+  id: number;
+  productId: number;
+  productName: string;
+  thumbnail: string;
+  variantId: number | null;
+  variantLabel: string | null;
+  quantity: number;
+  price: string;
+}
+
+export interface DraftOrder {
+  id: number;
+  status: DraftOrderStatus;
+  customerId: number | null;
+  customer: { id: number; name: string; phone: string } | null;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string | null;
+  customerAddress: string | null;
+  emirate: string | null;
+  area: string | null;
+  orderType: string | null;
+  outletId: number;
+  outlet: { id: number; name: string };
+  discountId: number | null;
+  discount: { id: number; code: string; type: DiscountType } | null;
+  notes: string | null;
+  convertedOrderId: number | null;
+  convertedOrder: {
+    id: number;
+    status: string;
+    paymentStatus: string;
+    total: string;
+    trackingToken: string | null;
+  } | null;
+  items: DraftOrderItem[];
+  subtotal: number;
+  discountAmount: number;
+  total: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DraftOrderItemInput {
+  productId: number;
+  variantId?: number;
+  quantity: number;
+  price?: number;
+}
+
+export interface DraftOrderInput {
+  outletId: number;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  customerAddress: string;
+  emirate: string;
+  area?: string;
+  orderType?: string;
+  discountCode?: string | null;
+  notes?: string;
+  items?: DraftOrderItemInput[];
+}
+
+export const ADJUSTMENT_REASONS = ["received", "damaged", "recount", "other"] as const;
+export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number];
+
+export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
+  received: "Received shipment",
+  damaged: "Damaged",
+  recount: "Recount correction",
+  other: "Other",
+};
+
+export type StockMovementType = "ADJUSTMENT" | "TRANSFER";
+
+// Exactly one of productId/ingredientId is ever set on a given row — see
+// backend/prisma/schema.prisma's comment on the stockmovement model.
+export interface StockMovement {
+  id: number;
+  productId: number | null;
+  productName: string | null;
+  variantId: number | null;
+  variantLabel: string | null;
+  ingredientId: number | null;
+  ingredientName: string | null;
+  ingredientUnit: string | null;
+  type: StockMovementType;
+  reason: AdjustmentReason | null;
+  delta: number;
+  outletId: number;
+  outletName: string;
+  toOutletId: number | null;
+  toOutletName: string | null;
+  note: string | null;
+  actorName: string;
+  createdAt: string;
+}
+
+// Deliberately a much lighter shape than Product — no price/sku-for-sale/
+// variants/SEO/publishing fields exist on this model at all (see backend
+// schema.prisma's comment on `ingredient`).
+export interface Ingredient {
+  id: number;
+  name: string;
+  unit: string;
+  trackInventory: boolean;
+  createdAt: string;
+  // Only populated when the request specified an outletId (list/detail
+  // fetch scoped to one outlet) — null otherwise, same convention as
+  // Product's own per-outlet stock fields.
+  stockQuantity: number | null;
+  lowStockThreshold: number | null;
+}
+
+export interface AuditLogEntry {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId: number | null;
+  before: unknown;
+  after: unknown;
+  metadata: unknown;
+  actorId: number;
+  actorName: string;
+  createdAt: string;
+}
+
+export interface PaginatedAuditLog {
+  data: AuditLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PaginatedStockMovements {
+  data: StockMovement[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// --- Collections — mirrors backend/src/collections/collection-constants.ts by hand. ---
+
+export const COLLECTION_TYPES = ["MANUAL", "RULE_BASED"] as const;
+export type CollectionType = (typeof COLLECTION_TYPES)[number];
+
+export const COLLECTION_TYPE_LABELS: Record<CollectionType, string> = {
+  MANUAL: "Manual (pick products yourself)",
+  RULE_BASED: "Rule-based (auto-updates)",
+};
+
+// Every field ANDed together — see backend CollectionsService.resolveProductIds.
+export interface CollectionRules {
+  categoryId?: number;
+  tagName?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  createdWithinDays?: number;
+}
+
+export interface Collection {
+  id: number;
+  title: string;
+  slug: string;
+  description: string | null;
+  image: string | null;
+  type: CollectionType;
+  rules: CollectionRules | null;
+  isActive: boolean;
+  displayOrder: number;
+  productCount: number;
+  createdAt: string;
+  // Only present on the single-collection detail fetch.
+  productIds?: number[];
+}
+
+export interface AbandonedCart {
+  id: number;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string | null;
+  cartValue: string;
+  capturedAt: string;
+  recoveryEmailSentAt: string | null;
+  recoveredOrderId: number | null;
+}
+
+export type GiftCardStatus = "active" | "redeemed" | "expired" | "disabled";
+
+export interface GiftCard {
+  id: number;
+  code: string;
+  initialValue: string;
+  remainingBalance: string;
+  status: GiftCardStatus;
+  expiresAt: string | null;
+  purchasedByCustomerId: number | null;
+  purchasedByCustomer: { id: number; name: string } | null;
+  purchaseOrderId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Mirrors backend/src/policy-pages/policy-page-constants.ts by hand.
+export const POLICY_PAGE_TYPES = ["TERMS", "PRIVACY", "REFUND", "PAYMENT", "SHIPPING"] as const;
+export type PolicyPageType = (typeof POLICY_PAGE_TYPES)[number];
+
+export const POLICY_PAGE_LABELS: Record<PolicyPageType, string> = {
+  TERMS: "Terms & Conditions",
+  PRIVACY: "Privacy Policy",
+  REFUND: "Refund & Return Policy",
+  PAYMENT: "Payment Policy",
+  SHIPPING: "Shipping & Delivery Policy",
+};
+
+export interface PolicyPage {
+  type: PolicyPageType;
+  content: string | null;
+  updatedAt: string | null;
 }

@@ -8,10 +8,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { computeIsOpen } from './outlet-status';
+import { geocodeAddress } from '../common/nominatim';
 import type { TenantContext } from '../common/tenant-context';
 import type { outlet as OutletModel } from '@prisma/client';
-
-const NOMINATIM_USER_AGENT = 'Requital-Admin/1.0 (merchant outlet address lookup)';
 
 @Injectable()
 export class OutletsService {
@@ -152,34 +151,11 @@ export class OutletsService {
     return { id, deleted: true };
   }
 
-  // Server-side proxy to Nominatim (OpenStreetMap) rather than calling it
-  // from the browser: their usage policy requires a descriptive User-Agent
-  // and disallows anonymous client-side traffic. This is a manual,
-  // merchant-triggered lookup (not autocomplete-as-you-type), so it stays
-  // well within their free-tier rate limit without needing extra throttling.
+  // This is a manual, merchant-triggered lookup (not autocomplete-as-you-type),
+  // so it stays well within Nominatim's free-tier rate limit without needing
+  // extra throttling. See common/nominatim.ts for the proxy rationale.
   async geocode(query?: string) {
-    if (!query?.trim()) {
-      throw new BadRequestException('A search query is required');
-    }
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
-    } catch {
-      throw new BadRequestException('Geocoding lookup failed — try again');
-    }
-    if (!res.ok) {
-      throw new BadRequestException('Geocoding lookup failed — try again');
-    }
-    const results = (await res.json()) as { lat: string; lon: string; display_name: string }[];
-    if (results.length === 0) {
-      return null;
-    }
-    return {
-      latitude: Number(results[0].lat),
-      longitude: Number(results[0].lon),
-      displayName: results[0].display_name,
-    };
+    return geocodeAddress(query);
   }
 
   // Admin-only endpoints (create/update/remove are gated by @Roles('admin')

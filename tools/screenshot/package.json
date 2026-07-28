@@ -1,0 +1,8 @@
+{
+  "name": "requital-screenshot-tool",
+  "private": true,
+  "description": "Visual-verification helper for UI/layout tasks — not part of the app, not deployed. Uses puppeteer-core against the machine's installed Chrome (no bundled Chromium download).",
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}

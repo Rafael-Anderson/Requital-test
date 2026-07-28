@@ -13,6 +13,7 @@ import type { TenantContext, UserRole } from '../../common/tenant-context';
 
 interface JwtPayload {
   sub: number;
+  typ?: 'staff';
 }
 
 @Injectable()
@@ -41,6 +42,17 @@ export class AuthGuard implements CanActivate {
       payload = await this.jwtService.verifyAsync<JwtPayload>(token);
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
+    }
+    // Same JWT secret as CustomerAuthModule's storefront tokens — without
+    // this check, a customer token whose numeric `sub` happens to match a
+    // real staff user.id would authenticate as that staff member. See
+    // CustomerAuthGuard's matching `typ: 'customer'` check on the other
+    // side. Tokens issued before this check existed lack `typ` entirely and
+    // are rejected too; any such session self-heals on its very next
+    // request via the admin app's existing 401 -> silent-refresh flow,
+    // since AuthService.issueTokenPair now always sets typ: 'staff'.
+    if (payload.typ !== 'staff') {
+      throw new UnauthorizedException('Invalid token type');
     }
 
     // Re-read role/shop/outlet from the DB on every request instead of

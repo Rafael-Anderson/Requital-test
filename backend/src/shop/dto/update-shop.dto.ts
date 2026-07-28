@@ -3,15 +3,26 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
+  IsPositive,
   IsString,
+  Max,
   Min,
   MaxLength,
 } from 'class-validator';
 
 export class UpdateShopDto {
+  // Gates storefront visibility — see PublicService.assertPublished and the
+  // admin "Publish your store" action (Settings > Business Information). A
+  // plain boolean, not a one-way "publish" endpoint: a merchant can also
+  // unpublish (e.g. going on hiatus) through the same field.
+  @IsOptional()
+  @IsBoolean()
+  published?: boolean;
+
   @IsOptional()
   @IsString()
   @MaxLength(255)
@@ -83,6 +94,29 @@ export class UpdateShopDto {
   @IsOptional()
   @IsBoolean()
   notifyEmail?: boolean;
+
+  // Abandoned Cart Recovery — off by default, deliberate opt-in (see
+  // schema.prisma's comment on shop.notifyAbandonedCart).
+  @IsOptional()
+  @IsBoolean()
+  notifyAbandonedCart?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  abandonedCartWindowMinutes?: number;
+
+  // Low Stock daily digest — off by default.
+  @IsOptional()
+  @IsBoolean()
+  notifyLowStockDigest?: boolean;
+
+  // Bill of Materials auto-deduction — on by default (see schema.prisma's
+  // comment on shop.autoDeductIngredientStock for why this one defaults
+  // differently from the notify* toggles above).
+  @IsOptional()
+  @IsBoolean()
+  autoDeductIngredientStock?: boolean;
 
   // --- Store Configuration ---
 
@@ -273,4 +307,33 @@ export class UpdateShopDto {
   @IsNumber()
   @Min(0)
   pickupPreparationPlusTimeMinutes?: number;
+
+  // --- Order Setting ---
+
+  @IsOptional()
+  @IsBoolean()
+  allowSameDayOrders?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowNextDayOrders?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  taxRate?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  taxInclusive?: boolean;
+
+  // paymentGateway is deliberately NOT settable here anymore — it moved to
+  // PATCH /payment-settings/:provider, the only place that enforces the
+  // nomod/stripe mutual-exclusivity rule. Leaving it reachable through this
+  // generic shop-update endpoint too would let a direct API call bypass
+  // that check entirely (whitelist:true + forbidNonWhitelisted:true on the
+  // global ValidationPipe means a client that still sends it now gets a
+  // clean 400, not a silent no-op). See PaymentSettingsService.
 }

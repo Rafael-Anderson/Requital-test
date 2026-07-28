@@ -1,4 +1,10 @@
-export type UserRole = 'admin' | 'branch';
+// 'order_manager': shop-wide (not outlet-pinned, unlike 'branch') access to
+// the Orders/Draft Orders domain only — no pricing, catalog, or settings
+// access. 'viewer': shop-wide read-only — reports, orders, customers, but
+// no mutation of anything. Both are additive on top of the original
+// admin/branch split; 'branch' keeps its existing outlet-pinned semantics
+// unchanged (see resolveOutletFilter) rather than being folded into these.
+export type UserRole = 'admin' | 'branch' | 'order_manager' | 'viewer';
 
 // Resolved by AuthGuard from the authenticated request (re-read from the DB
 // on every request, not trusted off the JWT payload — see auth.guard.ts) and

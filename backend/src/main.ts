@@ -11,9 +11,11 @@ async function bootstrap() {
   });
   // Merchant auth landed — tighten from the prior wide-open CORS to an
   // explicit allowlist. Bearer tokens go in a header, not a cookie, so
-  // `credentials: true` isn't needed here.
+  // `credentials: true` isn't needed here. Storefront (:3002) calls the
+  // @Public() routes under /public/:shopSlug with no token at all — still
+  // needs to be in this allowlist for the browser to permit the request.
   const allowedOrigins = (
-    process.env.ADMIN_ORIGINS ?? 'http://localhost:3001'
+    process.env.ADMIN_ORIGINS ?? 'http://localhost:3001,http://localhost:3002'
   ).split(',');
   app.enableCors({ origin: allowedOrigins });
   // Local-disk product image uploads — see product-image-upload.config.ts

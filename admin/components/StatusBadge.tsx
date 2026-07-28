@@ -16,6 +16,10 @@ const DOT_STYLES: Record<string, string> = {
   refunded: "bg-zinc-400",
   open: "bg-green-500",
   closed: "bg-red-500",
+  // External delivery (courier handoff) statuses — distinct from the
+  // order's own status above, see externaldelivery model.
+  picked_up: "bg-blue-500",
+  failed: "bg-red-500",
 };
 
 export default function StatusBadge({ status }: { status: string }) {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { cancelOrder, listOrders, updateOrderStatus } from "@/lib/api";
@@ -10,8 +10,10 @@ import Button from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
+import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
+import PageShell from "@/components/ui/PageShell";
 
 const POLL_INTERVAL_MS = 20_000;
 
@@ -111,8 +113,9 @@ export default function OrdersPage() {
     : [];
 
   return (
-    <div className="page-transition">
-      <BackButton fallbackHref="/" />
+    <PageShell>
+      <BackButton href="/" />
+      <BranchBar />
       <h1 className="text-2xl font-semibold mb-1">Orders</h1>
       <OrdersTabs />
 
@@ -189,6 +192,6 @@ export default function OrdersPage() {
         onClose={() => setSelectedOrderId(null)}
         onChanged={refresh}
       />
-    </div>
+    </PageShell>
   );
 }

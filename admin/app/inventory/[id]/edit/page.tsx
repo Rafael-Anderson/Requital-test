@@ -7,6 +7,7 @@ import type { Product } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
 import Skeleton from "@/components/ui/Skeleton";
 import ProductForm from "@/components/ProductForm";
+import PageShell from "@/components/ui/PageShell";
 
 export default function EditProductPage() {
   const params = useParams<{ id: string }>();
@@ -16,14 +17,14 @@ export default function EditProductPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getProduct(productId)
+    getProduct(productId, { allOutlets: true })
       .then(setProduct)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load product"));
   }, [productId]);
 
   return (
-    <div className="page-transition">
-      <BackButton fallbackHref="/inventory" />
+    <PageShell>
+      <BackButton href="/inventory" />
       <h1 className="text-2xl font-semibold mb-4">Edit product</h1>
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {!product && !error ? (
@@ -35,6 +36,6 @@ export default function EditProductPage() {
       ) : product ? (
         <ProductForm product={product} />
       ) : null}
-    </div>
+    </PageShell>
   );
 }

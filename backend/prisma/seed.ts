@@ -66,6 +66,7 @@ async function main() {
     create: {
       shopId: shop.id,
       name: 'Red Rose Bouquet',
+      slug: 'red-rose-bouquet',
       sku: 'ROSE-RED-01',
       price: 149.0,
       thumbnail: 'https://example.com/images/red-rose-bouquet.jpg',
@@ -82,6 +83,7 @@ async function main() {
     create: {
       shopId: shop.id,
       name: 'Chocolate Gift Box',
+      slug: 'chocolate-gift-box',
       sku: 'GIFT-BOX-01',
       price: 89.0,
       thumbnail: 'https://example.com/images/chocolate-gift-box.jpg',

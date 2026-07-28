@@ -12,9 +12,49 @@ export class ShopService {
     return this.prisma.shop.findUniqueOrThrow({ where: { id: ctx.shopId } });
   }
 
+  // Same proxy the migration backfill used for existing shops (see
+  // 20260726100000_shop_published): at least one outlet that can actually
+  // take orders (deliveryEnabled or pickupEnabled — bare row existence isn't
+  // a signal, every signup auto-creates one with both false) AND at least
+  // one product in the catalog. Single source of truth for both the
+  // GET /shop/publish-readiness endpoint (drives the admin Publish toggle's
+  // disabled/tooltip state before the merchant even tries) and the write-side
+  // check in update() below — the two can never drift apart.
+  async getPublishReadiness(ctx: TenantContext): Promise<{ ready: boolean; missing: string[] }> {
+    const [hasReadyOutlet, hasProduct] = await Promise.all([
+      this.prisma.outlet.findFirst({
+        where: { shopId: ctx.shopId, OR: [{ deliveryEnabled: true }, { pickupEnabled: true }] },
+        select: { id: true },
+      }),
+      this.prisma.product.findFirst({ where: { shopId: ctx.shopId }, select: { id: true } }),
+    ]);
+    const missing: string[] = [];
+    if (!hasProduct) missing.push('Add at least one product');
+    if (!hasReadyOutlet) missing.push('Enable delivery or pickup on at least one outlet');
+    return { ready: missing.length === 0, missing };
+  }
+
   async update(ctx: TenantContext, dto: UpdateShopDto) {
     if (dto.socialLinks) {
       this.validateSocialLinks(dto.socialLinks);
+    }
+
+    if (dto.published === true) {
+      // Only gates the false -> true transition, not every save while
+      // already published — a shop that later loses its only product (or
+      // whatever) must never get silently unpublished by an unrelated
+      // update, and a merchant re-saving {published: true} on an
+      // already-live shop shouldn't suddenly hit a readiness error either.
+      const current = await this.prisma.shop.findUniqueOrThrow({ where: { id: ctx.shopId } });
+      if (!current.published) {
+        const readiness = await this.getPublishReadiness(ctx);
+        if (!readiness.ready) {
+          const sentence = readiness.missing
+            .map((m, i) => (i === 0 ? m : m[0].toLowerCase() + m.slice(1)))
+            .join(' and ');
+          throw new BadRequestException(`Cannot publish yet — ${sentence} before publishing.`);
+        }
+      }
     }
 
     const touchesDeliveryPayment =

@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   GoneException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,17 +9,20 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
-import { PAYMENT_PROVIDER } from './payment-provider.interface';
-import type { PaymentProvider } from './payment-provider.interface';
+import { PaymentProviderRegistry } from './payment-provider.registry';
+import { PaymentSettingsService } from './payment-settings.service';
+import { AffiliateService } from '../affiliate/affiliate.service';
 
 const LINK_EXPIRY_DAYS = 3;
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3001';
+const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    private readonly providerRegistry: PaymentProviderRegistry,
+    private readonly paymentSettingsService: PaymentSettingsService,
+    private readonly affiliateService: AffiliateService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -76,18 +78,50 @@ export class PaymentsService {
       throw new GoneException('Payment link has expired');
     }
 
-    const session = await this.provider.createCheckoutSession({
+    const provider = this.providerRegistry.get(order.shop.paymentGateway);
+    const credentials = await this.paymentSettingsService.resolveCredentials(
+      order.shop.id,
+      order.shop.paymentGateway,
+    );
+    const session = await provider.createCheckoutSession({
       orderId: order.id,
       amount: Number(order.total),
       currency: order.shop.currency,
       successUrl: `${STOREFRONT_URL}/pay/${token}/success`,
       cancelUrl: `${STOREFRONT_URL}/pay/${token}`,
+      credentials,
     });
     return { alreadyPaid: false as const, checkoutUrl: session.checkoutUrl };
   }
 
-  async handleWebhook(rawBody: Buffer, signatureHeader: string) {
-    const result = this.provider.parseWebhookEvent(rawBody, signatureHeader);
+  // `gateway` comes from the webhook URL path (/payments/webhook/:gateway or
+  // /payments/webhook/:gateway/:shopId), not from anything in the payload
+  // itself — the provider registered under that name is the only one asked
+  // to parse/verify this delivery.
+  //
+  // `shopId` (only present on the per-shop route) is what makes per-shop
+  // webhook secrets possible at all: the shop is known from the URL before
+  // signature verification even starts, so that shop's own stored
+  // webhookSecret credential is resolved and handed to the provider to
+  // verify against — never the platform-level secret in that case. Omitted
+  // entirely on the legacy platform-wide route, which still verifies
+  // against the provider's own platform-level fallback (Stripe's
+  // STRIPE_WEBHOOK_SECRET) exactly as before.
+  async handleWebhook(gateway: string, rawBody: Buffer, signatureHeader: string, shopId?: number) {
+    const provider = this.providerRegistry.get(gateway);
+
+    let webhookSecret: string | undefined;
+    if (shopId !== undefined) {
+      const credentials = await this.paymentSettingsService.resolveCredentials(shopId, gateway);
+      webhookSecret = credentials?.webhookSecret;
+      if (!webhookSecret) {
+        throw new BadRequestException(
+          `Shop ${shopId} has no ${gateway} webhook secret configured`,
+        );
+      }
+    }
+
+    const result = provider.parseWebhookEvent(rawBody, signatureHeader, webhookSecret);
     if (!result) {
       return { received: true };
     }
@@ -96,6 +130,16 @@ export class PaymentsService {
       where: { id: result.orderId },
     });
     if (!order) {
+      return { received: true };
+    }
+    // Defense in depth on top of signature verification itself (which
+    // already rejects an event signed with the wrong shop's secret): even a
+    // validly-signed event must actually belong to the shop whose URL it
+    // arrived on, never silently applied to a different shop's order.
+    if (shopId !== undefined && order.shopId !== shopId) {
+      console.warn(
+        `[payments] webhook for order ${order.id} (shop ${order.shopId}) received on shop ${shopId}'s webhook URL — ignoring`,
+      );
       return { received: true };
     }
 
@@ -111,8 +155,9 @@ export class PaymentsService {
         this.prisma.paymenttransaction.create({
           data: {
             orderId: order.id,
-            gateway: this.provider.name,
+            gateway: provider.name,
             gatewayReference: result.providerReference,
+            providerChargeReference: result.chargeReference,
             amount: order.total,
             status: result.status,
           },
@@ -135,12 +180,16 @@ export class PaymentsService {
         // either has committed, so neither has hit P2002 yet. Both outcomes
         // mean "a concurrent/prior delivery of this exact event owns this
         // write," so both no-op the same way instead of surfacing a 500 that
-        // would make Stripe retry a delivery that already succeeded elsewhere.
+        // would make the gateway retry a delivery that already succeeded elsewhere.
         if (error.code === 'P2002' || error.code === 'P2034') {
           return { received: true };
         }
       }
       throw error;
+    }
+
+    if (result.status === 'paid') {
+      await this.affiliateService.syncOrderStatus(order.id, { paymentPaid: true });
     }
 
     return { received: true };

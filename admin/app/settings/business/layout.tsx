@@ -4,7 +4,7 @@ export default function BusinessSettingsLayout({ children }: { children: React.R
   return (
     <div className="flex gap-8 flex-col sm:flex-row">
       <BusinessSettingsSubNav />
-      <div className="max-w-xl flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

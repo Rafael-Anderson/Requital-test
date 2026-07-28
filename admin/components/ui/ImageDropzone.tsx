@@ -13,10 +13,16 @@ export default function ImageDropzone({
   preview,
   onFileSelected,
   error,
+  label = "Image",
+  hint,
 }: {
   preview: string | null;
   onFileSelected: (file: File) => void;
   error?: string;
+  label?: string;
+  // Recommended-size copy shown under the dropzone, e.g. "Recommended size:
+  // 300 x 90 px (WxH)" — optional, backward-compatible with existing call sites.
+  hint?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -28,7 +34,7 @@ export default function ImageDropzone({
 
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Image</label>
+      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">{label}</label>
       <div
         role="button"
         tabIndex={0}
@@ -81,6 +87,7 @@ export default function ImageDropzone({
           {error}
         </p>
       )}
+      {hint && !error && <p className="mt-1.5 text-xs text-zinc-400">{hint}</p>}
     </div>
   );
 }

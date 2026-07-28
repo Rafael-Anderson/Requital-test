@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, KeyRound, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/lib/theme";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import ChangePasswordModal from "./ChangePasswordModal";
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
+  const { isDark, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -57,13 +60,25 @@ export default function UserMenu() {
             <div className="space-y-0.5">
               <div className="flex items-center justify-between rounded px-1.5 py-1 text-sm">
                 <span>🇬🇧 English</span>
-                <Check className="size-3.5 text-zinc-500" />
+                <Check className="size-3.5 text-accent-text dark:text-accent" />
               </div>
               <div className="flex items-center justify-between rounded px-1.5 py-1 text-sm text-zinc-400 cursor-not-allowed">
                 <span>🇦🇪 Arabic</span>
                 <span className="text-xs">Coming soon</span>
               </div>
             </div>
+          </div>
+
+          <div className="px-3.5 py-2.5 border-b border-black/10 dark:border-white/10">
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1.5">Theme</p>
+            <SegmentedToggle
+              value={isDark ? "dark" : "light"}
+              onChange={(v) => setTheme(v === "dark")}
+              options={[
+                { value: "light", label: "☀️ Light" },
+                { value: "dark", label: "🌙 Dark" },
+              ]}
+            />
           </div>
 
           <button

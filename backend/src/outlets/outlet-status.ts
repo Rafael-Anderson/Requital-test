@@ -7,8 +7,10 @@ interface DayHours {
 }
 
 // "YYYY-MM-DD" in the given timezone — en-CA formats dates in that order,
-// making same-day comparison a plain string equality check.
-function dateKeyInTimezone(date: Date, timezone: string): string {
+// making same-day comparison a plain string equality check. Exported for the
+// storefront's same-day/next-day order-window check (PublicService), which
+// needs the identical timezone-aware date-key logic this file already has.
+export function dateKeyInTimezone(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
     year: 'numeric',

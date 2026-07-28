@@ -34,7 +34,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         className={`flex h-9 w-full rounded-lg border bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 ${
           error
             ? "border-red-400 dark:border-red-700 text-red-700 dark:text-red-400 focus:border-red-400 focus:ring-[3px] focus:ring-red-500/20"
-            : "border-black/15 dark:border-white/15 focus:border-black/40 dark:focus:border-white/40 focus:ring-[3px] focus:ring-black/10 dark:focus:ring-white/15"
+            : "border-black/15 dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         } ${className}`}
         {...props}
       />

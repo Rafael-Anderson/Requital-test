@@ -4,6 +4,17 @@
 // CSS-variable classes (border-border, bg-muted, text-muted-foreground) were
 // translated to this project's plain black/white-opacity Tailwind palette
 // rather than adding shadcn's theme tokens.
+//
+// Row-action convention: per-row Edit/Delete (and similar) actions are
+// icon-only buttons, one per action, each its own trailing `<TH className=
+// "w-10"></TH>` / `<TD>` pair — a lucide icon (Pencil/Trash2/...), no visible
+// text, `aria-label={`Edit ${name}`}`, this exact class pair:
+//   edit/neutral: "p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+//   delete:       "p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+// (see Products/Ingredients/Categories/Collections for reference). Two other
+// treatments — a full `Button` with visible text, and a plain underlined
+// text link — existed on different list pages before being converged onto
+// this one; don't reintroduce either for a new list page's row actions.
 import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 
 export function Table({ className = "", ...props }: HTMLAttributes<HTMLTableElement>) {

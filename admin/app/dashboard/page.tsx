@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Wallet, Star, ClipboardList, Banknote, Users } from "lucide-react";
@@ -12,6 +12,9 @@ import DonutChart, { SEGMENT_COLORS } from "@/components/ui/DonutChart";
 import Thumbnail from "@/components/ui/Thumbnail";
 import Skeleton, { CardSkeleton } from "@/components/ui/Skeleton";
 import BackButton from "@/components/ui/BackButton";
+import BranchBar from "@/components/BranchBar";
+import Card from "@/components/ui/Card";
+import PageShell from "@/components/ui/PageShell";
 
 const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] = [
   { key: "placed", label: "Placed" },
@@ -55,8 +58,9 @@ export default function DashboardPage() {
   if (error) return <p className="text-red-600">{error}</p>;
 
   return (
-    <div className="page-transition">
-      <BackButton fallbackHref="/" />
+    <PageShell>
+      <BackButton href="/" />
+      <BranchBar />
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-2xl font-semibold">Sales dashboard</h1>
         <DateRangePicker value={range} onChange={setRange} />
@@ -104,14 +108,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Sale overview */}
-      <section className="border rounded-lg p-4 mb-6 dark:border-white/10">
+      <Card className="mb-6">
         <h2 className="font-medium mb-3">Sale Overview</h2>
         {daily === null ? <Skeleton className="h-56 w-full" /> : <SalesOverviewChart data={daily} />}
-      </section>
+      </Card>
 
       {/* Outlet / Sales activity / Customer growth */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <section className="border rounded-lg p-4 dark:border-white/10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <Card>
           <h2 className="font-medium mb-4">Outlet Distribution</h2>
           {!summary ? (
             <Skeleton className="h-32 w-32 rounded-full mx-auto" />
@@ -139,9 +143,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-        </section>
+        </Card>
 
-        <section className="border rounded-lg p-4 dark:border-white/10">
+        <Card>
           <h2 className="font-medium mb-4">Sales Activity</h2>
           {!summary ? (
             <div className="space-y-3">
@@ -170,7 +174,7 @@ export default function DashboardPage() {
               })}
             </div>
           )}
-        </section>
+        </Card>
 
         {!summary ? (
           <CardSkeleton />
@@ -186,8 +190,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Channel distribution / Top products */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <section className="border rounded-lg p-4 dark:border-white/10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+        <Card>
           <h2 className="font-medium mb-4">Sales Distribution by Channel</h2>
           {!summary ? (
             <Skeleton className="h-32 w-full" />
@@ -215,9 +219,9 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-        </section>
+        </Card>
 
-        <section className="border rounded-lg p-4 dark:border-white/10">
+        <Card>
           <h2 className="font-medium mb-4">Top Selling Products</h2>
           {topProducts === null ? (
             <div className="space-y-3">
@@ -242,8 +246,8 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </section>
+        </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }
