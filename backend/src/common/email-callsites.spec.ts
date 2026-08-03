@@ -21,10 +21,14 @@ describe('no call site bypasses sendEmail() to call sendEmailStub() directly', (
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           walk(full);
-        } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.spec.ts')) {
+        } else if (
+          entry.name.endsWith('.ts') &&
+          !entry.name.endsWith('.spec.ts')
+        ) {
           if (full === path.join(__dirname, 'email.ts')) continue;
           const src = fs.readFileSync(full, 'utf8');
-          if (/\bsendEmailStub\(/.test(src)) offenders.push(path.relative(srcRoot, full));
+          if (/\bsendEmailStub\(/.test(src))
+            offenders.push(path.relative(srcRoot, full));
         }
       }
     }

@@ -1,4 +1,11 @@
-import { ArrayNotEmpty, ArrayMaxSize, IsArray, IsIn, IsInt, IsPositive } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsPositive,
+} from 'class-validator';
 import { ORDER_STATUSES } from '../constants';
 import type { OrderStatus } from '../constants';
 

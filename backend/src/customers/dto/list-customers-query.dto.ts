@@ -1,7 +1,13 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export const CUSTOMER_SORT_FIELDS = ['name', 'phone', 'orderCount', 'lifetimeValue', 'lastOrderDate'] as const;
+export const CUSTOMER_SORT_FIELDS = [
+  'name',
+  'phone',
+  'orderCount',
+  'lifetimeValue',
+  'lastOrderDate',
+] as const;
 export type CustomerSortField = (typeof CUSTOMER_SORT_FIELDS)[number];
 
 export class ListCustomersQueryDto {

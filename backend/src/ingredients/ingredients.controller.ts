@@ -19,6 +19,7 @@ import { IngredientsService } from './ingredients.service';
 import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { UpdateIngredientDto } from './dto/update-ingredient.dto';
 import { csvUploadOptions } from '../common/csv-upload.config';
+import { createImageUploadOptions } from '../common/image-upload.config';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -29,6 +30,12 @@ class ListIngredientsQueryDto {
   @IsInt()
   @IsPositive()
   outletId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  categoryId?: number;
 }
 
 // Reads open to any authenticated role (a branch user checking ingredient
@@ -42,8 +49,30 @@ export class IngredientsController {
   constructor(private readonly ingredientsService: IngredientsService) {}
 
   @Get()
-  findAll(@CurrentUser() ctx: TenantContext, @Query() query: ListIngredientsQueryDto) {
-    return this.ingredientsService.findAll(ctx, query.outletId);
+  findAll(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListIngredientsQueryDto,
+  ) {
+    return this.ingredientsService.findAll(
+      ctx,
+      query.outletId,
+      query.categoryId,
+    );
+  }
+
+  // Registered before ':id' so a literal "upload" segment never gets
+  // swallowed by the param route — same reasoning as Categories/Products'
+  // own upload endpoints.
+  @Roles('admin')
+  @Post('upload')
+  @UseInterceptors(
+    FileInterceptor('file', createImageUploadOptions('ingredients')),
+  )
+  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return { url: `/uploads/ingredients/${file.filename}` };
   }
 
   @Get(':id')
@@ -64,7 +93,10 @@ export class IngredientsController {
   @Roles('admin')
   @Post('import/preview')
   @UseInterceptors(FileInterceptor('file', csvUploadOptions))
-  previewImport(@CurrentUser() ctx: TenantContext, @UploadedFile() file?: Express.Multer.File) {
+  previewImport(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
@@ -82,7 +114,11 @@ export class IngredientsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.ingredientsService.confirmImportIngredients(ctx, file, query.outletId);
+    return this.ingredientsService.confirmImportIngredients(
+      ctx,
+      file,
+      query.outletId,
+    );
   }
 
   @Roles('admin')
@@ -97,7 +133,10 @@ export class IngredientsController {
 
   @Roles('admin')
   @Delete(':id')
-  remove(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  remove(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.ingredientsService.remove(ctx, id);
   }
 }

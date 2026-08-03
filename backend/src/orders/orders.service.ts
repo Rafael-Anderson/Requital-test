@@ -29,6 +29,7 @@ import {
   OrderStatus,
 } from './constants';
 import { computeOrderTotals } from '../public/order-pricing';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
 const orderInclude = {
   orderitem: true,
@@ -53,6 +54,9 @@ const orderDetailInclude = {
     include: { author: { select: { id: true, name: true } } },
     orderBy: { createdAt: 'desc' as const },
   },
+  // Read-only in the admin UI — responses are customer-submitted only via
+  // the public survey endpoints, see PublicSurveyController.
+  surveyresponse: true,
 } satisfies Prisma.orderInclude;
 
 @Injectable()
@@ -65,6 +69,7 @@ export class OrdersService {
     private readonly discountsService: DiscountsService,
     private readonly auditLogService: AuditLogService,
     private readonly orderNotificationsService: OrderNotificationsService,
+    private readonly branchRolesService: BranchRolesService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -74,6 +79,13 @@ export class OrdersService {
     const searchAsId =
       searchTerm && /^\d+$/.test(searchTerm) ? Number(searchTerm) : undefined;
     const outletId = resolveOutletFilter(ctx, query.outletId);
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'orders.view',
+      );
+    }
     const where: Prisma.orderWhereInput = {
       shopId: ctx.shopId,
       ...(outletId !== undefined && { outletId }),
@@ -109,6 +121,16 @@ export class OrdersService {
     return { data: orders, page, pageSize, total };
   }
 
+  // The single shared "load + tenant/outlet scope check" every read and
+  // write endpoint below goes through — orders.view is checked here, once,
+  // for every caller. Uses the fetched order's own outletId, not the
+  // pre-fetch filter variable: for an admin, the filter is undefined (no
+  // WHERE clause restriction), but the order itself always belongs to one
+  // real outlet, and a restrictive override at that specific outlet must
+  // still apply. Write endpoints (updateStatus, cancel, etc.) additionally
+  // check 'orders.manage' themselves after calling this — a bundle that
+  // grants manage without view would still be rejected here first, which
+  // is intentional: you can't manage what you can't view.
   async findOne(ctx: TenantContext, id: number) {
     const outletId = resolveOutletFilter(ctx);
     const order = await this.prisma.order.findFirst({
@@ -122,6 +144,11 @@ export class OrdersService {
     if (!order) {
       throw new NotFoundException(`Order ${id} not found`);
     }
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.view',
+    );
     return order;
   }
 
@@ -146,7 +173,12 @@ export class OrdersService {
   // other order mutation goes through — a note can't be added to an order
   // outside this shop (or, for a branch user, outside their own outlet).
   async addNote(ctx: TenantContext, orderId: number, dto: CreateOrderNoteDto) {
-    await this.findOne(ctx, orderId);
+    const order = await this.findOne(ctx, orderId);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
     return this.prisma.ordernote.create({
       data: { orderId, authorUserId: ctx.userId, note: dto.note },
       include: { author: { select: { id: true, name: true } } },
@@ -159,7 +191,11 @@ export class OrdersService {
   // storefront checkout uses (see DraftOrdersService.complete) — same
   // CAS-guarded WHERE clause as PublicService.createOrder, just gated
   // behind this flag so the default admin-entered-order path is unchanged.
-  async create(ctx: TenantContext, dto: CreateOrderDto, options: { reserveStock?: boolean } = {}) {
+  async create(
+    ctx: TenantContext,
+    dto: CreateOrderDto,
+    options: { reserveStock?: boolean } = {},
+  ) {
     // Branch users are always pinned to their own outlet — any outletId in
     // the request body is ignored, not just validated, so a branch account
     // can never place an order against a different branch by spoofing this
@@ -174,6 +210,11 @@ export class OrdersService {
     if (!outlet) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
+    await this.branchRolesService.assertPermission(
+      ctx,
+      outletId,
+      'orders.manage',
+    );
 
     const resolvedItems = await this.productsService.resolveOrderItems(
       ctx.shopId,
@@ -186,17 +227,19 @@ export class OrdersService {
     );
 
     let subtotal = new Prisma.Decimal(0);
-    const itemsData = resolvedItems.map(({ product, variant, quantity, price, variantLabel }) => {
-      subtotal = subtotal.add(price.mul(quantity));
-      return {
-        productId: product.id,
-        productName: product.name,
-        variantId: variant?.id,
-        variantLabel: variantLabel ?? undefined,
-        quantity,
-        priceAtPurchase: price,
-      };
-    });
+    const itemsData = resolvedItems.map(
+      ({ product, variant, quantity, price, variantLabel }) => {
+        subtotal = subtotal.add(price.mul(quantity));
+        return {
+          productId: product.id,
+          productName: product.name,
+          variantId: variant?.id,
+          variantLabel: variantLabel ?? undefined,
+          quantity,
+          priceAtPurchase: price,
+        };
+      },
+    );
 
     // A caller-supplied fee (e.g. 0 for pickup) wins outright; otherwise
     // resolve and snapshot the shop's current default at creation time, same
@@ -220,10 +263,17 @@ export class OrdersService {
     let discountAmount = new Prisma.Decimal(0);
     let discountCodeSnapshot: string | undefined;
     if (dto.discountCode) {
-      const resolved = await this.discountsService.resolveByCode(ctx.shopId, dto.discountCode);
-      const evaluated = await this.discountsService.evaluate(resolved, { cartSubtotal: Number(subtotal) });
+      const resolved = await this.discountsService.resolveByCode(
+        ctx.shopId,
+        dto.discountCode,
+      );
+      const evaluated = await this.discountsService.evaluate(resolved, {
+        cartSubtotal: Number(subtotal),
+      });
       if (!evaluated.valid) {
-        throw new BadRequestException(evaluated.message ?? 'This discount code cannot be applied');
+        throw new BadRequestException(
+          evaluated.message ?? 'This discount code cannot be applied',
+        );
       }
       discount = resolved!;
       discountAmount = new Prisma.Decimal(evaluated.discountAmount ?? 0);
@@ -236,11 +286,14 @@ export class OrdersService {
     let total = subtotal.add(deliveryFee).sub(discountAmount);
     if (total.isNegative()) total = new Prisma.Decimal(0);
 
-    const customer = await this.customersService.findOrCreateForOrder(ctx.shopId, {
-      name: dto.customerName,
-      phone: dto.customerPhone,
-      email: dto.customerEmail,
-    });
+    const customer = await this.customersService.findOrCreateForOrder(
+      ctx.shopId,
+      {
+        name: dto.customerName,
+        phone: dto.customerPhone,
+        email: dto.customerEmail,
+      },
+    );
 
     const attribution = await this.affiliateService.resolveAttribution(
       ctx.shopId,
@@ -261,11 +314,19 @@ export class OrdersService {
           if (!product.trackInventory) continue;
           const result = variant
             ? await tx.outletvariantstock.updateMany({
-                where: { outletId, variantId: variant.id, stockQuantity: { gte: quantity } },
+                where: {
+                  outletId,
+                  variantId: variant.id,
+                  stockQuantity: { gte: quantity },
+                },
                 data: { stockQuantity: { decrement: quantity } },
               })
             : await tx.outletstock.updateMany({
-                where: { outletId, productId: product.id, stockQuantity: { gte: quantity } },
+                where: {
+                  outletId,
+                  productId: product.id,
+                  stockQuantity: { gte: quantity },
+                },
                 data: { stockQuantity: { decrement: quantity } },
               });
           if (result.count === 0) {
@@ -301,7 +362,9 @@ export class OrdersService {
           customerAddress: dto.customerAddress,
           emirate: dto.emirate,
           area: dto.area,
-          deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
+          deliveryDate: dto.deliveryDate
+            ? new Date(dto.deliveryDate)
+            : undefined,
           deliveryTimeSlot: dto.deliveryTimeSlot,
           deliveryNotes: dto.deliveryNotes,
           receiverMessage: dto.receiverMessage,
@@ -319,25 +382,47 @@ export class OrdersService {
       });
 
       if (discount) {
-        await this.discountsService.redeem(tx, discount, created.id, customer.id);
+        await this.discountsService.redeem(
+          tx,
+          discount,
+          created.id,
+          customer.id,
+        );
       }
 
       return created;
     });
 
     if (attribution) {
-      await this.affiliateService.recordAttribution(this.prisma, ctx.shopId, order.id, attribution);
+      await this.affiliateService.recordAttribution(
+        this.prisma,
+        ctx.shopId,
+        order.id,
+        attribution,
+      );
     }
 
-    await this.orderNotificationsService.notifyOrderConfirmed(ctx.shopId, order);
+    await this.orderNotificationsService.notifyOrderConfirmed(
+      ctx.shopId,
+      order,
+    );
 
     return order;
   }
 
   // Editable up to the point fulfillment is effectively done — matches the
   // same cutoff `cancel()` uses (delivered/cancelled are terminal states).
-  async updateDeliveryFee(ctx: TenantContext, id: number, dto: UpdateDeliveryFeeDto) {
+  async updateDeliveryFee(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateDeliveryFeeDto,
+  ) {
     const order = await this.findOne(ctx, id);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
     if (order.status === 'delivered' || order.status === 'cancelled') {
       throw new BadRequestException(
         `Cannot edit delivery fee for an order that is already '${order.status}'`,
@@ -366,6 +451,11 @@ export class OrdersService {
     // requesting an order outside their outlet gets a 404 here and never
     // reaches the CAS update below.
     const order = await this.findOne(ctx, id);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
     if (!isValidStatusTransition(order.status as OrderStatus, dto.status)) {
       throw new BadRequestException(
         `Cannot move order from '${order.status}' to '${dto.status}'`,
@@ -409,7 +499,14 @@ export class OrdersService {
         dto.status === 'confirmed' &&
         !IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')
       ) {
-        await this.adjustStockForOrder(tx, ctx, order.id, order.outletId, -1, false);
+        await this.adjustStockForOrder(
+          tx,
+          ctx,
+          order.id,
+          order.outletId,
+          -1,
+          false,
+        );
       }
       return tx.order.findUniqueOrThrow({
         where: { id },
@@ -417,7 +514,9 @@ export class OrdersService {
       });
     });
 
-    await this.affiliateService.syncOrderStatus(id, { orderStatus: dto.status });
+    await this.affiliateService.syncOrderStatus(id, {
+      orderStatus: dto.status,
+    });
     // Covers bulkUpdateStatus() too — it's a loop over this same method, so
     // a bulk status change naturally produces one log row per order here,
     // not a separate summary call.
@@ -429,7 +528,16 @@ export class OrdersService {
       after: { status: dto.status },
     });
     if (dto.status === 'out_for_delivery') {
-      await this.orderNotificationsService.notifyOutForDelivery(ctx.shopId, updated);
+      await this.orderNotificationsService.notifyOutForDelivery(
+        ctx.shopId,
+        updated,
+      );
+    }
+    if (dto.status === 'delivered') {
+      await this.orderNotificationsService.notifySurveyRequest(
+        ctx.shopId,
+        updated,
+      );
     }
     return updated;
   }
@@ -466,8 +574,17 @@ export class OrdersService {
   // create()) and the exact CAS-guarded updateMany discipline checkout's
   // reserveStock uses for the "need more stock" direction — not a parallel
   // implementation.
-  async updateItems(ctx: TenantContext, orderId: number, dto: UpdateOrderItemsDto) {
+  async updateItems(
+    ctx: TenantContext,
+    orderId: number,
+    dto: UpdateOrderItemsDto,
+  ) {
     const order = await this.findOne(ctx, orderId);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
     if (!EDITABLE_ORDER_STATUSES.includes(order.status as OrderStatus)) {
       throw new BadRequestException(
         `Order items can only be edited while status is one of: ${EDITABLE_ORDER_STATUSES.join(', ')} (current: '${order.status}')`,
@@ -485,17 +602,19 @@ export class OrdersService {
     );
 
     let newSubtotal = new Prisma.Decimal(0);
-    const newItemsData = resolvedItems.map(({ product, variant, quantity, price, variantLabel }) => {
-      newSubtotal = newSubtotal.add(price.mul(quantity));
-      return {
-        productId: product.id,
-        productName: product.name,
-        variantId: variant?.id,
-        variantLabel: variantLabel ?? undefined,
-        quantity,
-        priceAtPurchase: price,
-      };
-    });
+    const newItemsData = resolvedItems.map(
+      ({ product, variant, quantity, price, variantLabel }) => {
+        newSubtotal = newSubtotal.add(price.mul(quantity));
+        return {
+          productId: product.id,
+          productName: product.name,
+          variantId: variant?.id,
+          variantLabel: variantLabel ?? undefined,
+          quantity,
+          priceAtPurchase: price,
+        };
+      },
+    );
 
     // Stock is "already reserved" for this order (so a quantity change must
     // adjust it, not just be free to overwrite) whenever either: the
@@ -506,7 +625,8 @@ export class OrdersService {
     // its items needs no stock adjustment at all — the eventual confirm
     // will decrement whatever the (now-edited) item list says.
     const stockReserved =
-      IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '') || order.status === 'confirmed';
+      IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '') ||
+      order.status === 'confirmed';
 
     // Re-validate an attached discount against the NEW subtotal/items
     // rather than blindly carrying the old amount over — e.g. a
@@ -518,7 +638,10 @@ export class OrdersService {
     let discountAmount = order.discountAmount ?? new Prisma.Decimal(0);
     let discountDropped = false;
     if (order.discountId) {
-      const discount = await this.discountsService.resolveById(ctx.shopId, order.discountId);
+      const discount = await this.discountsService.resolveById(
+        ctx.shopId,
+        order.discountId,
+      );
       const evaluated = await this.discountsService.evaluate(discount, {
         cartSubtotal: Number(newSubtotal),
         productIds: resolvedItems.map((i) => i.product.id),
@@ -555,12 +678,20 @@ export class OrdersService {
     const updated = await this.prisma.$transaction(async (tx) => {
       if (stockReserved) {
         const oldItems = await tx.orderitem.findMany({ where: { orderId } });
-        const key = (productId: number, variantId: number | null) => `${productId}:${variantId ?? ''}`;
-        const oldQtyByKey = new Map(oldItems.map((i) => [key(i.productId, i.variantId), i.quantity]));
-        const newQtyByKey = new Map(
-          resolvedItems.map((i) => [key(i.product.id, i.variant?.id ?? null), i.quantity]),
+        const key = (productId: number, variantId: number | null) =>
+          `${productId}:${variantId ?? ''}`;
+        const oldQtyByKey = new Map(
+          oldItems.map((i) => [key(i.productId, i.variantId), i.quantity]),
         );
-        const productTrackInventory = new Map(resolvedItems.map((i) => [i.product.id, i.product.trackInventory]));
+        const newQtyByKey = new Map(
+          resolvedItems.map((i) => [
+            key(i.product.id, i.variant?.id ?? null),
+            i.quantity,
+          ]),
+        );
+        const productTrackInventory = new Map(
+          resolvedItems.map((i) => [i.product.id, i.product.trackInventory]),
+        );
         const allKeys = new Set([...oldQtyByKey.keys(), ...newQtyByKey.keys()]);
 
         for (const k of allKeys) {
@@ -572,42 +703,70 @@ export class OrdersService {
 
           const trackInventory =
             productTrackInventory.get(productId) ??
-            (await tx.product.findUnique({ where: { id: productId }, select: { trackInventory: true } }))
-              ?.trackInventory ??
+            (
+              await tx.product.findUnique({
+                where: { id: productId },
+                select: { trackInventory: true },
+              })
+            )?.trackInventory ??
             false;
           if (!trackInventory) continue;
 
           if (delta > 0) {
             const result = variantId
               ? await tx.outletvariantstock.updateMany({
-                  where: { outletId: order.outletId, variantId, stockQuantity: { gte: delta } },
+                  where: {
+                    outletId: order.outletId,
+                    variantId,
+                    stockQuantity: { gte: delta },
+                  },
                   data: { stockQuantity: { decrement: delta } },
                 })
               : await tx.outletstock.updateMany({
-                  where: { outletId: order.outletId, productId, stockQuantity: { gte: delta } },
+                  where: {
+                    outletId: order.outletId,
+                    productId,
+                    stockQuantity: { gte: delta },
+                  },
                   data: { stockQuantity: { decrement: delta } },
                 });
             if (result.count === 0) {
-              throw new ConflictException('Not enough stock available to increase this item’s quantity');
+              throw new ConflictException(
+                'Not enough stock available to increase this item’s quantity',
+              );
             }
           } else if (variantId) {
             await tx.outletvariantstock.upsert({
-              where: { outletId_variantId: { outletId: order.outletId, variantId } },
+              where: {
+                outletId_variantId: { outletId: order.outletId, variantId },
+              },
               update: { stockQuantity: { increment: -delta } },
-              create: { outletId: order.outletId, variantId, stockQuantity: -delta },
+              create: {
+                outletId: order.outletId,
+                variantId,
+                stockQuantity: -delta,
+              },
             });
           } else {
             await tx.outletstock.upsert({
-              where: { outletId_productId: { outletId: order.outletId, productId } },
+              where: {
+                outletId_productId: { outletId: order.outletId, productId },
+              },
               update: { stockQuantity: { increment: -delta } },
-              create: { outletId: order.outletId, productId, stockQuantity: -delta },
+              create: {
+                outletId: order.outletId,
+                productId,
+                stockQuantity: -delta,
+              },
             });
           }
         }
       }
 
       await tx.orderitem.deleteMany({ where: { orderId } });
-      await tx.orderitem.createMany({ data: newItemsData.map((d) => ({ ...d, orderId })) });
+      await tx.orderitem.createMany({
+        data: newItemsData.map((d) => ({ ...d, orderId })),
+      });
 
       return tx.order.update({
         where: { id: orderId },
@@ -625,7 +784,10 @@ export class OrdersService {
       action: 'order.items_edited',
       entityType: 'order',
       entityId: orderId,
-      before: { total: order.total.toString(), itemCount: order.orderitem.length },
+      before: {
+        total: order.total.toString(),
+        itemCount: order.orderitem.length,
+      },
       after: { total: total.toString(), itemCount: newItemsData.length },
       metadata: discountDropped ? { discountDropped: true } : undefined,
     });
@@ -635,6 +797,11 @@ export class OrdersService {
 
   async cancel(ctx: TenantContext, id: number) {
     const order = await this.findOne(ctx, id);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
     if (order.status === 'delivered' || order.status === 'cancelled') {
       throw new BadRequestException(
         `Cannot cancel an order that is already '${order.status}'`,
@@ -662,8 +829,17 @@ export class OrdersService {
         // confirm — see updateStatus above) — cancelling from 'pending' must
         // restock it here, unlike the deferred-reservation path where
         // nothing was ever decremented yet at this stage.
-        if (IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')) {
-          await this.adjustStockForOrder(tx, ctx, id, order.outletId, 1, order.ingredientsConsumedAt !== null);
+        if (
+          IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')
+        ) {
+          await this.adjustStockForOrder(
+            tx,
+            ctx,
+            id,
+            order.outletId,
+            1,
+            order.ingredientsConsumedAt !== null,
+          );
         }
         return tx.order.findUniqueOrThrow({
           where: { id },
@@ -681,7 +857,14 @@ export class OrdersService {
         data: { status: 'cancelled' },
       });
       if (fromStockDecremented.count === 1) {
-        await this.adjustStockForOrder(tx, ctx, id, order.outletId, 1, order.ingredientsConsumedAt !== null);
+        await this.adjustStockForOrder(
+          tx,
+          ctx,
+          id,
+          order.outletId,
+          1,
+          order.ingredientsConsumedAt !== null,
+        );
         return tx.order.findUniqueOrThrow({
           where: { id },
           include: orderInclude,
@@ -693,8 +876,46 @@ export class OrdersService {
       );
     });
 
-    await this.affiliateService.syncOrderStatus(id, { orderStatus: 'cancelled' });
+    await this.affiliateService.syncOrderStatus(id, {
+      orderStatus: 'cancelled',
+    });
+    // Was previously missing entirely — updateStatus() logs every other
+    // transition (see its own call above), but cancel() is a separate
+    // method/endpoint and had no audit trail of its own, which would have
+    // silently dropped every cancellation from the order timeline.
+    await this.auditLogService.logCtx(ctx, {
+      action: 'order.status_changed',
+      entityType: 'order',
+      entityId: id,
+      before: { status: order.status },
+      after: { status: 'cancelled' },
+    });
     return cancelled;
+  }
+
+  // Backs the order detail modal's status timeline. Reuses findOne's
+  // outlet-scoped lookup (404s a branch user out of an order outside their
+  // outlet, same as every other order endpoint) rather than querying
+  // auditlog directly off a bare id.
+  async getHistory(ctx: TenantContext, id: number) {
+    const order = await this.findOne(ctx, id);
+    const entries = await this.auditLogService.listForEntity(
+      ctx,
+      'order',
+      id,
+      'order.status_changed',
+    );
+    return [
+      // The very first "became pending" moment is the order's own creation,
+      // not a logged transition — updateStatus/cancel only ever log a
+      // *change*, so this is synthesized rather than duplicated in auditlog.
+      { status: 'pending', timestamp: order.createdAt, actorName: null },
+      ...entries.map((e) => ({
+        status: (e.after as { status?: string } | null)?.status ?? null,
+        timestamp: e.createdAt,
+        actorName: e.actorName,
+      })),
+    ];
   }
 
   // ingredientsAlreadyConsumed only matters for direction 1 (restock): the
@@ -730,7 +951,9 @@ export class OrdersService {
       // stays untouched once a product has variants.
       if (item.variantId) {
         await tx.outletvariantstock.upsert({
-          where: { outletId_variantId: { outletId, variantId: item.variantId } },
+          where: {
+            outletId_variantId: { outletId, variantId: item.variantId },
+          },
           update: { stockQuantity: { increment: direction * item.quantity } },
           create: {
             outletId,
@@ -760,19 +983,30 @@ export class OrdersService {
         tx,
         ctx.shopId,
         outletId,
-        items.map((item) => ({ productId: item.productId, variantId: item.variantId, quantity: item.quantity })),
+        items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
         -1,
         { throwOnInsufficientStock: false, actorUserId: ctx.userId },
       );
       if (consumed) {
-        await tx.order.update({ where: { id: orderId }, data: { ingredientsConsumedAt: new Date() } });
+        await tx.order.update({
+          where: { id: orderId },
+          data: { ingredientsConsumedAt: new Date() },
+        });
       }
     } else if (ingredientsAlreadyConsumed) {
       await this.productsService.consumeForOrderItems(
         tx,
         ctx.shopId,
         outletId,
-        items.map((item) => ({ productId: item.productId, variantId: item.variantId, quantity: item.quantity })),
+        items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
         1,
         { throwOnInsufficientStock: false, actorUserId: ctx.userId },
       );

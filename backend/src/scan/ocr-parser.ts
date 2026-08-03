@@ -45,8 +45,12 @@ export function filterLines(
   excludeKeywords: string[],
   includeKeywords: string[],
 ): string[] {
-  const excludes = excludeKeywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
-  const includes = includeKeywords.map((k) => k.toLowerCase().trim()).filter(Boolean);
+  const excludes = excludeKeywords
+    .map((k) => k.toLowerCase().trim())
+    .filter(Boolean);
+  const includes = includeKeywords
+    .map((k) => k.toLowerCase().trim())
+    .filter(Boolean);
 
   return rawText
     .split(/\r?\n/)
@@ -55,7 +59,8 @@ export function filterLines(
     .filter((line) => {
       const lower = line.toLowerCase();
       if (excludes.some((k) => lower.includes(k))) return false;
-      if (includes.length > 0 && !includes.some((k) => lower.includes(k))) return false;
+      if (includes.length > 0 && !includes.some((k) => lower.includes(k)))
+        return false;
       return true;
     });
 }
@@ -82,7 +87,10 @@ export function parseLine(rawLine: string): ParsedLineItem {
     const match = line.match(pattern);
     if (match) {
       quantity = Number(match[1]);
-      line = (line.slice(0, match.index) + line.slice((match.index ?? 0) + match[0].length)).trim();
+      line = (
+        line.slice(0, match.index) +
+        line.slice((match.index ?? 0) + match[0].length)
+      ).trim();
       break;
     }
   }

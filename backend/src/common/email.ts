@@ -6,7 +6,11 @@ import { ResendEmailProvider } from '../email/providers/resend-email.provider';
 // silent no-op that looks like it worked. Also the fallback sendEmail()
 // below reaches for when the real provider call itself fails (invalid key,
 // unverified domain, network error) — never crashes the caller either way.
-export function sendEmailStub(to: string, subject: string, bodyText: string): void {
+export function sendEmailStub(
+  to: string,
+  subject: string,
+  bodyText: string,
+): void {
   console.log(`[email:stub] to=${to} subject="${subject}"\n${bodyText}`);
 }
 
@@ -27,10 +31,16 @@ function textToSimpleHtml(bodyText: string): string {
     .split(/\n{2,}/)
     .map((block) =>
       escapeHtml(block)
-        .replace(/(https?:\/\/\S+)/g, '<a href="$1" style="color:#069494;">$1</a>')
+        .replace(
+          /(https?:\/\/\S+)/g,
+          '<a href="$1" style="color:#069494;">$1</a>',
+        )
         .replace(/\n/g, '<br>'),
     )
-    .map((p) => `<p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#111;">${p}</p>`)
+    .map(
+      (p) =>
+        `<p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#111;">${p}</p>`,
+    )
     .join('');
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">${paragraphs}</div>`;
 }
@@ -73,7 +83,10 @@ export async function sendEmail(
       credentials: { apiKey },
     });
   } catch (err) {
-    console.error(`[email] send to ${to} failed, falling back to stub —`, err instanceof Error ? err.message : err);
+    console.error(
+      `[email] send to ${to} failed, falling back to stub —`,
+      err instanceof Error ? err.message : err,
+    );
     sendEmailStub(to, subject, bodyText);
   }
 }

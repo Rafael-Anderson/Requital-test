@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -21,7 +22,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
-import type { TenantContext } from '../common/tenant-context';
+import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
+import type { TenantContext, UserRole } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
 const BCRYPT_ROUNDS = 10;
@@ -95,7 +97,10 @@ export class AuthService {
     }
 
     const devVerificationLink = await this.sendVerificationEmail(user);
-    return { ...(await this.issueTokenPair(user)), ...(devVerificationLink ? { devVerificationLink } : {}) };
+    return {
+      ...(await this.issueTokenPair(user)),
+      ...(devVerificationLink ? { devVerificationLink } : {}),
+    };
   }
 
   async login(dto: LoginDto) {
@@ -120,7 +125,9 @@ export class AuthService {
   // the same token — is treated identically.
   async refresh(dto: RefreshTokenDto) {
     const tokenHash = hashToken(dto.refreshToken);
-    const stored = await this.prisma.refreshtoken.findUnique({ where: { tokenHash } });
+    const stored = await this.prisma.refreshtoken.findUnique({
+      where: { tokenHash },
+    });
     if (!stored) {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -227,10 +234,16 @@ export class AuthService {
 
     if (!dto.password) {
       const devInviteLink = await this.sendInviteEmail(user);
-      return { ...this.toUserResponse(user), ...(devInviteLink ? { devInviteLink } : {}) };
+      return {
+        ...this.toUserResponse(user),
+        ...(devInviteLink ? { devInviteLink } : {}),
+      };
     }
     const devVerificationLink = await this.sendVerificationEmail(user);
-    return { ...this.toUserResponse(user), ...(devVerificationLink ? { devVerificationLink } : {}) };
+    return {
+      ...this.toUserResponse(user),
+      ...(devVerificationLink ? { devVerificationLink } : {}),
+    };
   }
 
   // Staff member follows the emailed link and sets their own password —
@@ -241,8 +254,14 @@ export class AuthService {
     const stored = await this.prisma.authtoken.findUnique({
       where: { tokenHash: hashToken(dto.token) },
     });
-    if (!stored || stored.purpose !== 'staff_invite' || stored.expiresAt < new Date()) {
-      throw new BadRequestException('This invite link is invalid or has expired');
+    if (
+      !stored ||
+      stored.purpose !== 'staff_invite' ||
+      stored.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This invite link is invalid or has expired',
+      );
     }
     const claimed = await this.prisma.authtoken.updateMany({
       where: { id: stored.id, usedAt: null },
@@ -273,19 +292,139 @@ export class AuthService {
     return users.map((u) => this.toUserResponse(u));
   }
 
+  // The first place an existing staff member's role/outlet becomes
+  // editable at all — until now, /auth/branch-users only ever supported
+  // create. Self-edit is deliberately refused: use profile settings
+  // (changePassword/me) instead, which also sidesteps an admin locking
+  // themselves out of their own account through this endpoint.
+  async updateStaffUser(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateStaffUserDto,
+  ) {
+    if (id === ctx.userId) {
+      throw new BadRequestException(
+        'Use your profile settings to change your own account',
+      );
+    }
+    const existing = await this.prisma.user.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
+
+    const effectiveRole: UserRole = dto.role ?? (existing.role as UserRole);
+    if (existing.role === 'admin' && effectiveRole !== 'admin') {
+      await this.assertNotLastAdmin(ctx, id);
+    }
+
+    // Same outlet-required-for-branch-only rule as createBranchUser: an
+    // outletId carried over from the existing row (if this request doesn't
+    // touch role/outletId) is re-validated too, not just a fresh one.
+    let outletId: number | null = null;
+    if (effectiveRole === 'branch') {
+      const requestedOutletId = dto.outletId ?? existing.outletId ?? undefined;
+      const outlet = requestedOutletId
+        ? await this.prisma.outlet.findFirst({
+            where: { id: requestedOutletId, shopId: ctx.shopId },
+          })
+        : null;
+      if (!outlet) {
+        throw new BadRequestException(
+          'A valid outletId is required for the branch role',
+        );
+      }
+      outletId = outlet.id;
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.role !== undefined && { role: dto.role }),
+        outletId,
+      },
+      include: SHOP_NAME_SELECT,
+    });
+    return this.toUserResponse(user);
+  }
+
+  // Historical records (audit log, order notes, returns, stock movements,
+  // scan batches) reference this user's id without ON DELETE CASCADE —
+  // deliberately, so a staff departure never silently rewrites who did
+  // what. Pre-checking here turns that into a clear, actionable error
+  // instead of a raw FK constraint failure surfacing from Prisma.
+  async deleteStaffUser(ctx: TenantContext, id: number) {
+    if (id === ctx.userId) {
+      throw new BadRequestException(
+        'Use your profile settings to manage your own account',
+      );
+    }
+    const existing = await this.prisma.user.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
+    if (existing.role === 'admin') {
+      await this.assertNotLastAdmin(ctx, id);
+    }
+
+    const [notes, logs, batches, movements, returns] =
+      await this.prisma.$transaction([
+        this.prisma.ordernote.count({ where: { authorUserId: id } }),
+        this.prisma.auditlog.count({ where: { actorUserId: id } }),
+        this.prisma.scanbatch.count({ where: { actorUserId: id } }),
+        this.prisma.stockmovement.count({ where: { actorUserId: id } }),
+        this.prisma.orderreturn.count({ where: { staffUserId: id } }),
+      ]);
+    if (notes + logs + batches + movements + returns > 0) {
+      throw new ConflictException(
+        'Cannot delete this account: it has existing activity history (notes, audit log, stock movements, or returns). Reassign is not currently supported.',
+      );
+    }
+
+    await this.prisma.user.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
+  private async assertNotLastAdmin(
+    ctx: TenantContext,
+    excludingUserId: number,
+  ) {
+    const otherAdminCount = await this.prisma.user.count({
+      where: {
+        shopId: ctx.shopId,
+        role: 'admin',
+        id: { not: excludingUserId },
+      },
+    });
+    if (otherAdminCount === 0) {
+      throw new BadRequestException(
+        "Cannot remove the shop's only remaining admin",
+      );
+    }
+  }
+
   async changePassword(ctx: TenantContext, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: ctx.userId },
     });
     if (!user.emailVerified) {
-      throw new ForbiddenException('Verify your email before changing your password');
+      throw new ForbiddenException(
+        'Verify your email before changing your password',
+      );
     }
     if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
       throw new UnauthorizedException('Current password is incorrect');
     }
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: ctx.userId }, data: { passwordHash } }),
+      this.prisma.user.update({
+        where: { id: ctx.userId },
+        data: { passwordHash },
+      }),
       // A changed password should end every other session too, not just
       // require re-login on this one device eventually.
       this.prisma.refreshtoken.updateMany({
@@ -297,7 +436,9 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
     // Same response shape whether or not the email exists — don't let this
     // endpoint be used to enumerate registered accounts.
     if (!user) {
@@ -310,7 +451,9 @@ export class AuthService {
         userId: user.id,
         purpose: 'password_reset',
         tokenHash: hashToken(raw),
-        expiresAt: new Date(Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000,
+        ),
       },
     });
     const resetLink = `${ADMIN_URL}/reset-password?token=${raw}`;
@@ -326,8 +469,14 @@ export class AuthService {
     const stored = await this.prisma.authtoken.findUnique({
       where: { tokenHash: hashToken(dto.token) },
     });
-    if (!stored || stored.purpose !== 'password_reset' || stored.expiresAt < new Date()) {
-      throw new BadRequestException('This reset link is invalid or has expired');
+    if (
+      !stored ||
+      stored.purpose !== 'password_reset' ||
+      stored.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired',
+      );
     }
     // CAS on usedAt — a single-use token claimed exactly once even if the
     // reset form is somehow submitted twice concurrently.
@@ -341,7 +490,10 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: stored.userId }, data: { passwordHash } }),
+      this.prisma.user.update({
+        where: { id: stored.userId },
+        data: { passwordHash },
+      }),
       this.prisma.refreshtoken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -354,22 +506,35 @@ export class AuthService {
     const stored = await this.prisma.authtoken.findUnique({
       where: { tokenHash: hashToken(dto.token) },
     });
-    if (!stored || stored.purpose !== 'email_verification' || stored.expiresAt < new Date()) {
-      throw new BadRequestException('This verification link is invalid or has expired');
+    if (
+      !stored ||
+      stored.purpose !== 'email_verification' ||
+      stored.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This verification link is invalid or has expired',
+      );
     }
     const claimed = await this.prisma.authtoken.updateMany({
       where: { id: stored.id, usedAt: null },
       data: { usedAt: new Date() },
     });
     if (claimed.count === 0) {
-      throw new BadRequestException('This verification link has already been used');
+      throw new BadRequestException(
+        'This verification link has already been used',
+      );
     }
-    await this.prisma.user.update({ where: { id: stored.userId }, data: { emailVerified: true } });
+    await this.prisma.user.update({
+      where: { id: stored.userId },
+      data: { emailVerified: true },
+    });
     return { success: true };
   }
 
   async resendVerification(ctx: TenantContext) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: ctx.userId } });
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: ctx.userId },
+    });
     if (user.emailVerified) {
       return { success: true, alreadyVerified: true as const };
     }
@@ -392,7 +557,9 @@ export class AuthService {
         userId: user.id,
         familyId: familyId ?? randomUUID(),
         tokenHash: hashToken(rawRefreshToken),
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
+        ),
       },
     });
     return {
@@ -403,29 +570,43 @@ export class AuthService {
     };
   }
 
-  private async sendVerificationEmail(user: { id: number; email: string }): Promise<string | undefined> {
+  private async sendVerificationEmail(user: {
+    id: number;
+    email: string;
+  }): Promise<string | undefined> {
     const raw = generateOpaqueToken();
     await this.prisma.authtoken.create({
       data: {
         userId: user.id,
         purpose: 'email_verification',
         tokenHash: hashToken(raw),
-        expiresAt: new Date(Date.now() + VERIFICATION_TOKEN_LIFETIME_HOURS * 60 * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + VERIFICATION_TOKEN_LIFETIME_HOURS * 60 * 60 * 1000,
+        ),
       },
     });
     const link = `${ADMIN_URL}/verify-email?token=${raw}`;
-    await sendEmail(user.email, 'Verify your Requital email', `Verify your email: ${link}`);
+    await sendEmail(
+      user.email,
+      'Verify your Requital email',
+      `Verify your email: ${link}`,
+    );
     return isDev ? link : undefined;
   }
 
-  private async sendInviteEmail(user: { id: number; email: string }): Promise<string | undefined> {
+  private async sendInviteEmail(user: {
+    id: number;
+    email: string;
+  }): Promise<string | undefined> {
     const raw = generateOpaqueToken();
     await this.prisma.authtoken.create({
       data: {
         userId: user.id,
         purpose: 'staff_invite',
         tokenHash: hashToken(raw),
-        expiresAt: new Date(Date.now() + INVITE_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + INVITE_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
+        ),
       },
     });
     const link = `${ADMIN_URL}/accept-invite?token=${raw}`;

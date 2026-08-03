@@ -23,3 +23,12 @@ export function hashToken(raw: string): string {
 export function generateTrackingCode(): string {
   return randomBytes(5).toString('hex').toUpperCase();
 }
+
+// Customer-facing survey link token — same shape/threat model as
+// generateTrackingCode() above (plaintext, possession proves it's your
+// survey, not a login credential). Kept as its own named function rather
+// than reusing generateTrackingCode() directly so a future reader never
+// confuses a survey token with an order-tracking code in the codebase.
+export function generateSurveyToken(): string {
+  return randomBytes(5).toString('hex').toUpperCase();
+}

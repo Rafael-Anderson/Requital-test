@@ -34,14 +34,18 @@ function body<T>(res: Response): T {
 function emailStubCalls(spy: jest.SpyInstance, to: string): string[] {
   return spy.mock.calls
     .map((args) => String(args[0]))
-    .filter((line) => line.startsWith('[email:stub]') && line.includes(`to=${to}`));
+    .filter(
+      (line) => line.startsWith('[email:stub]') && line.includes(`to=${to}`),
+    );
 }
 
 // Same idea for sendWhatsAppStub (backend/src/common/whatsapp.ts).
 function whatsAppStubCalls(spy: jest.SpyInstance, to: string): string[] {
   return spy.mock.calls
     .map((args) => String(args[0]))
-    .filter((line) => line.startsWith('[whatsapp:stub]') && line.includes(`to=${to}`));
+    .filter(
+      (line) => line.startsWith('[whatsapp:stub]') && line.includes(`to=${to}`),
+    );
 }
 
 describe('Order status customer email notifications (e2e)', () => {
@@ -56,7 +60,11 @@ describe('Order status customer email notifications (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -149,9 +157,14 @@ describe('Order status customer email notifications (e2e)', () => {
   }
 
   it('sends an order-confirmation email when the shop has notifications enabled and the order has a customer email', async () => {
-    const { adminToken, outletId, productId } = await setupShop('notify-confirm-on', true);
+    const { adminToken, outletId, productId } = await setupShop(
+      'notify-confirm-on',
+      true,
+    );
     const email = `confirm-on-${runId}@test.com`;
-    const order = await createOrder(adminToken, outletId, productId, { customerEmail: email });
+    const order = await createOrder(adminToken, outletId, productId, {
+      customerEmail: email,
+    });
 
     const calls = emailStubCalls(logSpy, email);
     expect(calls.length).toBe(1);
@@ -159,15 +172,23 @@ describe('Order status customer email notifications (e2e)', () => {
   });
 
   it('does NOT send anything when the shop has notifications disabled', async () => {
-    const { adminToken, outletId, productId } = await setupShop('notify-confirm-off', false);
+    const { adminToken, outletId, productId } = await setupShop(
+      'notify-confirm-off',
+      false,
+    );
     const email = `confirm-off-${runId}@test.com`;
-    await createOrder(adminToken, outletId, productId, { customerEmail: email });
+    await createOrder(adminToken, outletId, productId, {
+      customerEmail: email,
+    });
 
     expect(emailStubCalls(logSpy, email).length).toBe(0);
   });
 
   it('does NOT send anything when the order has no customer email, even with notifications enabled', async () => {
-    const { adminToken, outletId, productId } = await setupShop('notify-no-email', true);
+    const { adminToken, outletId, productId } = await setupShop(
+      'notify-no-email',
+      true,
+    );
     const before = logSpy.mock.calls.length;
     await createOrder(adminToken, outletId, productId, {});
     // Nothing new logged with an "[email:stub] to=" line at all for this order.
@@ -178,7 +199,10 @@ describe('Order status customer email notifications (e2e)', () => {
   });
 
   it('sends an out-for-delivery email at that exact status transition, worded for delivery orders', async () => {
-    const { adminToken, outletId, productId } = await setupShop('notify-ofd-delivery', true);
+    const { adminToken, outletId, productId } = await setupShop(
+      'notify-ofd-delivery',
+      true,
+    );
     const email = `ofd-delivery-${runId}@test.com`;
     const order = await createOrder(adminToken, outletId, productId, {
       customerEmail: email,
@@ -209,7 +233,10 @@ describe('Order status customer email notifications (e2e)', () => {
   });
 
   it('words the same transition as "ready for pickup" for a pickup order', async () => {
-    const { adminToken, outletId, productId } = await setupShop('notify-ofd-pickup', true);
+    const { adminToken, outletId, productId } = await setupShop(
+      'notify-ofd-pickup',
+      true,
+    );
     const email = `ofd-pickup-${runId}@test.com`;
     const order = await createOrder(adminToken, outletId, productId, {
       customerEmail: email,
@@ -336,11 +363,17 @@ describe('Order status customer email notifications (e2e)', () => {
     // WhatsApp-specific tests on an environment with that key set; filtering
     // by URL is what actually isolates "did the Meta Cloud API get called."
     function metaApiCalls() {
-      return fetchSpy.mock.calls.filter(([url]) => String(url).includes('/messages'));
+      return fetchSpy.mock.calls.filter(([url]) =>
+        String(url).includes('/messages'),
+      );
     }
 
     it('fires via the stub when notifyCustomersWhatsapp is on and no credentials are configured — independent of the email toggle', async () => {
-      const { adminToken, outletId, productId } = await setupShop('wa-stub', false, true);
+      const { adminToken, outletId, productId } = await setupShop(
+        'wa-stub',
+        false,
+        true,
+      );
       const order = await createOrder(adminToken, outletId, productId, {
         customerPhone: '0501234567',
       });
@@ -353,7 +386,11 @@ describe('Order status customer email notifications (e2e)', () => {
     });
 
     it('does NOT fire when notifyCustomersWhatsapp is off, even if notifyEmail is on', async () => {
-      const { adminToken, outletId, productId } = await setupShop('wa-off', true, false);
+      const { adminToken, outletId, productId } = await setupShop(
+        'wa-off',
+        true,
+        false,
+      );
       const email = `wa-off-customer-${runId}@test.com`;
       await createOrder(adminToken, outletId, productId, {
         customerPhone: '0501234568',
@@ -369,16 +406,22 @@ describe('Order status customer email notifications (e2e)', () => {
       fetchSpy.mockResolvedValue({
         ok: true,
         json: async () => ({ messages: [{ id: 'wamid.fake123' }] }),
-      } as unknown as Response);
+      });
 
-      const { adminToken, outletId, productId } = await setupShop('wa-real', false, true);
+      const { adminToken, outletId, productId } = await setupShop(
+        'wa-real',
+        false,
+        true,
+      );
       await request(app.getHttpServer())
         .patch('/whatsapp-settings')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ phoneNumberId: '1234567890', accessToken: 'fake-access-token' })
         .expect(200);
 
-      await createOrder(adminToken, outletId, productId, { customerPhone: '0501234569' });
+      await createOrder(adminToken, outletId, productId, {
+        customerPhone: '0501234569',
+      });
 
       const calls = metaApiCalls();
       expect(calls).toHaveLength(1);
@@ -396,9 +439,13 @@ describe('Order status customer email notifications (e2e)', () => {
         ok: false,
         status: 500,
         text: async () => 'Meta is down',
-      } as unknown as Response);
+      });
 
-      const { adminToken, outletId, productId } = await setupShop('wa-fail', true, true);
+      const { adminToken, outletId, productId } = await setupShop(
+        'wa-fail',
+        true,
+        true,
+      );
       await request(app.getHttpServer())
         .patch('/whatsapp-settings')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -418,7 +465,11 @@ describe('Order status customer email notifications (e2e)', () => {
     });
 
     it('skips silently (no throw, no send) when the customer phone cannot be normalized to E.164', async () => {
-      const { adminToken, outletId, productId } = await setupShop('wa-badphone', false, true);
+      const { adminToken, outletId, productId } = await setupShop(
+        'wa-badphone',
+        false,
+        true,
+      );
       const order = await createOrder(adminToken, outletId, productId, {
         customerPhone: 'not-a-real-number',
       });
@@ -446,7 +497,8 @@ describe('Order status customer email notifications (e2e)', () => {
       fetchSpy.mockRestore();
       if (originalKey === undefined) delete process.env.RESEND_API_KEY;
       else process.env.RESEND_API_KEY = originalKey;
-      if (originalFromAddress === undefined) delete process.env.EMAIL_FROM_ADDRESS;
+      if (originalFromAddress === undefined)
+        delete process.env.EMAIL_FROM_ADDRESS;
       else process.env.EMAIL_FROM_ADDRESS = originalFromAddress;
     });
 
@@ -456,16 +508,24 @@ describe('Order status customer email notifications (e2e)', () => {
       fetchSpy.mockResolvedValue({
         ok: true,
         json: async () => ({ id: 're_fake' }),
-      } as unknown as Response);
+      });
 
-      const { adminToken, outletId, productId } = await setupShop('email-real', true, false);
+      const { adminToken, outletId, productId } = await setupShop(
+        'email-real',
+        true,
+        false,
+      );
       // Distinct from the admin's own signup email — setupShop's signup call
       // now also sends a real verification email once RESEND_API_KEY is set,
       // so fetchSpy sees that call too; filter to this order's own send.
       const email = `email-real-customer-${runId}@test.com`;
-      const order = await createOrder(adminToken, outletId, productId, { customerEmail: email });
+      const order = await createOrder(adminToken, outletId, productId, {
+        customerEmail: email,
+      });
 
-      const orderCalls = fetchSpy.mock.calls.filter(([, init]) => JSON.parse(init.body).to === email);
+      const orderCalls = fetchSpy.mock.calls.filter(
+        ([, init]) => JSON.parse(init.body).to === email,
+      );
       expect(orderCalls.length).toBe(1);
       const [url, init] = orderCalls[0];
       expect(String(url)).toBe('https://api.resend.com/emails');
@@ -486,13 +546,19 @@ describe('Order status customer email notifications (e2e)', () => {
         ok: false,
         status: 401,
         json: async () => ({ message: 'Invalid API key' }),
-      } as unknown as Response);
+      });
 
-      const { adminToken, outletId, productId } = await setupShop('email-fail', true, false);
+      const { adminToken, outletId, productId } = await setupShop(
+        'email-fail',
+        true,
+        false,
+      );
       const email = `email-fail-customer-${runId}@test.com`;
       // Order creation itself must still return 201 despite the Resend call
       // failing — createOrder() already asserts .expect(201).
-      await createOrder(adminToken, outletId, productId, { customerEmail: email });
+      await createOrder(adminToken, outletId, productId, {
+        customerEmail: email,
+      });
 
       expect(emailStubCalls(logSpy, email).length).toBe(1);
     });

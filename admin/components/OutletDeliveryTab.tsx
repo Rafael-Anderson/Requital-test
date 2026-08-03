@@ -164,7 +164,7 @@ export default function OutletDeliveryTab({
         <p className="text-sm text-zinc-500">Loading delivery settings…</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <Card>
               <h3 className="text-sm font-semibold mb-1">Delivery Settings</h3>
               <p className="text-xs text-zinc-400 mb-4">

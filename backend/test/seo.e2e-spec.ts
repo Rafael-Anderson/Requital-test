@@ -63,7 +63,11 @@ describe('SEO (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -167,7 +171,9 @@ describe('SEO (e2e)', () => {
 
     it('the public shop payload has null SEO fields, not a broken/missing shape', async () => {
       const shop = await setupShop('seo-default-public');
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       const publicShop = body<PublicShopBody>(res);
       expect(publicShop.metaTitle).toBeNull();
       expect(publicShop.metaDescription).toBeNull();
@@ -181,7 +187,11 @@ describe('SEO (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/seo')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ metaTitle: 'Best Flowers in Dubai', metaDescription: 'Same-day flower delivery.', keywords: 'flowers, dubai' })
+        .send({
+          metaTitle: 'Best Flowers in Dubai',
+          metaDescription: 'Same-day flower delivery.',
+          keywords: 'flowers, dubai',
+        })
         .expect(200);
 
       const afterFirst = await request(app.getHttpServer())
@@ -208,7 +218,9 @@ describe('SEO (e2e)', () => {
         metaDescription: 'Same-day flower delivery.',
       });
 
-      const rowCount = await prisma.shopseosettings.count({ where: { shop: { subdomain: shop.slug } } });
+      const rowCount = await prisma.shopseosettings.count({
+        where: { shop: { subdomain: shop.slug } },
+      });
       expect(rowCount).toBe(1);
     });
 
@@ -217,20 +229,31 @@ describe('SEO (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ bannerUrl: '/uploads/theme/banner.jpg', logoUrl: '/uploads/theme/logo.jpg' })
+        .send({
+          bannerUrl: '/uploads/theme/banner.jpg',
+          logoUrl: '/uploads/theme/logo.jpg',
+        })
         .expect(200);
 
-      const publicNoSeoImage = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
-      expect(body<PublicShopBody>(publicNoSeoImage).ogImage).toBe('/uploads/theme/banner.jpg');
+      const publicNoSeoImage = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
+      expect(body<PublicShopBody>(publicNoSeoImage).ogImage).toBe(
+        '/uploads/theme/banner.jpg',
+      );
 
       await request(app.getHttpServer())
         .patch('/seo')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ ogImage: '/uploads/seo/og.jpg' })
         .expect(200);
-      const publicWithSeoImage = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const publicWithSeoImage = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       // An explicit SEO ogImage wins over the Theme banner fallback.
-      expect(body<PublicShopBody>(publicWithSeoImage).ogImage).toBe('/uploads/seo/og.jpg');
+      expect(body<PublicShopBody>(publicWithSeoImage).ogImage).toBe(
+        '/uploads/seo/og.jpg',
+      );
     });
   });
 
@@ -251,7 +274,9 @@ describe('SEO (e2e)', () => {
         .expect(200);
       expect(body<SeoBody>(seoB).metaTitle).toBeNull();
 
-      const publicB = await request(app.getHttpServer()).get(`/public/${shopB.slug}`).expect(200);
+      const publicB = await request(app.getHttpServer())
+        .get(`/public/${shopB.slug}`)
+        .expect(200);
       expect(body<PublicShopBody>(publicB).metaTitle).toBeNull();
     });
   });
@@ -263,7 +288,7 @@ describe('SEO (e2e)', () => {
         .get('/outlets')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const outletId = (body<{ id: number }[]>(outlets))[0].id;
+      const outletId = body<{ id: number }[]>(outlets)[0].id;
 
       await request(app.getHttpServer())
         .post('/auth/branch-users')
@@ -277,17 +302,26 @@ describe('SEO (e2e)', () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `seo-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `seo-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 
-      await request(app.getHttpServer()).get('/seo').set('Authorization', `Bearer ${branchToken}`).expect(403);
+      await request(app.getHttpServer())
+        .get('/seo')
+        .set('Authorization', `Bearer ${branchToken}`)
+        .expect(403);
       await request(app.getHttpServer())
         .patch('/seo')
         .set('Authorization', `Bearer ${branchToken}`)
         .send({ metaTitle: 'nope' })
         .expect(403);
-      await request(app.getHttpServer()).get('/seo').set('Authorization', `Bearer ${shop.adminToken}`).expect(200);
+      await request(app.getHttpServer())
+        .get('/seo')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
     });
   });
 
@@ -315,12 +349,16 @@ describe('SEO (e2e)', () => {
         .expect(201);
       const productId = body<IdRow>(created).id;
 
-      const pub = await request(app.getHttpServer()).get(`/public/${shop.slug}/products/${productId}`).expect(200);
+      const pub = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products/${productId}`)
+        .expect(200);
       const product = body<PublicProductBody>(pub);
       expect(product.metaTitle).toBe('Rose Bouquet');
       expect(product.metaDescription).not.toBeNull();
       expect(product.metaDescription!.length).toBeLessThanOrEqual(161); // 160 + ellipsis
-      expect(longDescription.startsWith(product.metaDescription!.replace('…', ''))).toBe(true);
+      expect(
+        longDescription.startsWith(product.metaDescription!.replace('…', '')),
+      ).toBe(true);
     });
 
     it('explicit metaTitle/metaDescription override the fallback', async () => {
@@ -342,7 +380,9 @@ describe('SEO (e2e)', () => {
         .expect(201);
       const productId = body<IdRow>(created).id;
 
-      const pub = await request(app.getHttpServer()).get(`/public/${shop.slug}/products/${productId}`).expect(200);
+      const pub = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products/${productId}`)
+        .expect(200);
       const product = body<PublicProductBody>(pub);
       expect(product.metaTitle).toBe('Buy Fresh Roses Online');
       expect(product.metaDescription).toBe('Custom description for SEO.');
@@ -384,8 +424,12 @@ describe('SEO (e2e)', () => {
       expect(firstSlug).not.toBe(secondSlug);
 
       // Both resolve correctly via the public slug route.
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/products/slug/${firstSlug}`).expect(200);
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/products/slug/${secondSlug}`).expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products/slug/${firstSlug}`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products/slug/${secondSlug}`)
+        .expect(200);
     });
 
     it('the same product name in two different shops is fine — no cross-shop collision', async () => {
@@ -424,11 +468,19 @@ describe('SEO (e2e)', () => {
       await request(app.getHttpServer())
         .get(`/public/${shopA.slug}/products/slug/signature-bouquet`)
         .expect(200)
-        .then((res) => expect(body<PublicProductBody>(res).id).toBe(body<ProductBody>(productA).id));
+        .then((res) =>
+          expect(body<PublicProductBody>(res).id).toBe(
+            body<ProductBody>(productA).id,
+          ),
+        );
       await request(app.getHttpServer())
         .get(`/public/${shopB.slug}/products/slug/signature-bouquet`)
         .expect(200)
-        .then((res) => expect(body<PublicProductBody>(res).id).toBe(body<ProductBody>(productB).id));
+        .then((res) =>
+          expect(body<PublicProductBody>(res).id).toBe(
+            body<ProductBody>(productB).id,
+          ),
+        );
     });
 
     it('an explicit slug that collides is rejected with a 409, not silently disambiguated', async () => {
@@ -526,7 +578,9 @@ describe('SEO (e2e)', () => {
         .expect(201);
       const productId = body<IdRow>(created).id;
 
-      const byId = await request(app.getHttpServer()).get(`/public/${shop.slug}/products/${productId}`).expect(200);
+      const byId = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products/${productId}`)
+        .expect(200);
       expect(body<ProductBody>(byId).slug).toBe('legacy-link-product');
     });
   });

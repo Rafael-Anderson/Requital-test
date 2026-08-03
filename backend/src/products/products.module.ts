@@ -3,9 +3,10 @@ import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
 import { LowStockDigestService } from './low-stock-digest.service';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 
 @Module({
-  imports: [AuditLogModule],
+  imports: [AuditLogModule, BranchRolesModule],
   controllers: [ProductsController],
   providers: [ProductsService, LowStockDigestService],
   // Consumed by OrdersModule/PublicModule for order-time variant resolution

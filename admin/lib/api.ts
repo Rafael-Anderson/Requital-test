@@ -9,6 +9,9 @@ import type {
   PaginatedAffiliateOrders,
   PaginatedAffiliates,
   AuthUser,
+  BranchRole,
+  BranchRoleAssignment,
+  Permission,
   BioLink,
   BioLinkSocialPlatform,
   BioLinkType,
@@ -34,9 +37,11 @@ import type {
   ImportConfirmResult,
   ImportPreviewResult,
   Ingredient,
+  IngredientCategory,
   MonthlyReportFilters,
   Order,
   Outlet,
+  OrderHistoryEntry,
   OrderNote,
   OrderReturn,
   OrderStatus,
@@ -297,6 +302,57 @@ export function resendVerification() {
   );
 }
 
+export function updateStaffUser(id: number, data: { name?: string; role?: UserRole; outletId?: number }) {
+  return apiFetch<AuthUser>(`/auth/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteStaffUser(id: number) {
+  return apiFetch<{ id: number; deleted: boolean }>(`/auth/users/${id}`, { method: "DELETE" });
+}
+
+export function listBranchRoles() {
+  return apiFetch<BranchRole[]>("/shop/branch-roles");
+}
+
+export function createBranchRole(data: { name: string; permissions: Permission[] }) {
+  return apiFetch<BranchRole>("/shop/branch-roles", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateBranchRole(id: number, data: { name?: string; permissions?: Permission[] }) {
+  return apiFetch<BranchRole>(`/shop/branch-roles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteBranchRole(id: number) {
+  return apiFetch<{ id: number; deleted: boolean }>(`/shop/branch-roles/${id}`, { method: "DELETE" });
+}
+
+export function listBranchRoleAssignments() {
+  return apiFetch<BranchRoleAssignment[]>("/shop/branch-roles/assignments");
+}
+
+export function assignBranchRole(data: { userId: number; outletId: number; branchRoleId: number }) {
+  return apiFetch<BranchRoleAssignment>("/shop/branch-roles/assignments", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function unassignBranchRole(userId: number, outletId: number) {
+  return apiFetch<{ userId: number; outletId: number; deleted: boolean }>(
+    `/shop/branch-roles/assignments/${userId}/${outletId}`,
+    { method: "DELETE" },
+  );
+}
+
 export function listOutlets() {
   return apiFetch<Outlet[]>("/outlets");
 }
@@ -376,6 +432,21 @@ export async function geocodeAddress(
   } catch (err) {
     // 404 = no matching location, a normal outcome for this search — not a
     // failure. Anything else (network, 5xx, rate-limit) still propagates.
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+// MapPicker's pin-drag flow — lat/lng -> address. Same 404-is-not-a-failure
+// handling as geocodeAddress above (a point with no resolvable address is a
+// normal outcome, not an error).
+export async function reverseGeocodeAddress(latitude: number, longitude: number): Promise<string | null> {
+  try {
+    const result = await apiFetch<{ displayName: string }>(
+      `/outlets/reverse-geocode?lat=${latitude}&lon=${longitude}`,
+    );
+    return result.displayName;
+  } catch (err) {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
@@ -496,6 +567,10 @@ export function listOrders(params: ListOrdersParams = {}) {
 
 export function getOrder(id: number) {
   return apiFetch<Order>(`/orders/${id}`);
+}
+
+export function getOrderHistory(id: number) {
+  return apiFetch<OrderHistoryEntry[]>(`/orders/${id}/history`);
 }
 
 export function updateOrderStatus(id: number, status: OrderStatus) {
@@ -689,22 +764,33 @@ export function listStockMovements(params: {
   return apiFetch<PaginatedStockMovements>(`/products/stock/movements${query ? `?${query}` : ""}`);
 }
 
-export function listIngredients(outletId?: number) {
-  const query = outletId ? `?outletId=${outletId}` : "";
-  return apiFetch<Ingredient[]>(`/shop/ingredients${query}`);
+export interface IngredientInput {
+  name: string;
+  unit: string;
+  trackInventory?: boolean;
+  image?: string | null;
+  description?: string | null;
+  costPerUnit?: number | null;
+  supplier?: string | null;
+  categoryId?: number | null;
 }
 
-export function createIngredient(data: { name: string; unit: string; trackInventory?: boolean }) {
+export function listIngredients(outletId?: number, categoryId?: number) {
+  const search = new URLSearchParams();
+  if (outletId) search.set("outletId", String(outletId));
+  if (categoryId) search.set("categoryId", String(categoryId));
+  const query = search.toString();
+  return apiFetch<Ingredient[]>(`/shop/ingredients${query ? `?${query}` : ""}`);
+}
+
+export function createIngredient(data: IngredientInput) {
   return apiFetch<Ingredient>("/shop/ingredients", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export function updateIngredient(
-  id: number,
-  data: { name?: string; unit?: string; trackInventory?: boolean },
-) {
+export function updateIngredient(id: number, data: Partial<IngredientInput>) {
   return apiFetch<Ingredient>(`/shop/ingredients/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -713,6 +799,39 @@ export function updateIngredient(
 
 export function deleteIngredient(id: number) {
   return apiFetch<{ id: number; deleted: boolean }>(`/shop/ingredients/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function uploadIngredientImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<{ url: string }>("/shop/ingredients/upload", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function listIngredientCategories() {
+  return apiFetch<IngredientCategory[]>("/shop/ingredient-categories");
+}
+
+export function createIngredientCategory(name: string) {
+  return apiFetch<IngredientCategory>("/shop/ingredient-categories", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function updateIngredientCategory(id: number, name: string) {
+  return apiFetch<IngredientCategory>(`/shop/ingredient-categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteIngredientCategory(id: number) {
+  return apiFetch<{ id: number; deleted: boolean }>(`/shop/ingredient-categories/${id}`, {
     method: "DELETE",
   });
 }

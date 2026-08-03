@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Min,
+} from 'class-validator';
 
 // Shared by the admin-authenticated POST /shop/discounts/validate (used by
 // the draft-order builder) and the public POST /public/:shopSlug/discounts/validate

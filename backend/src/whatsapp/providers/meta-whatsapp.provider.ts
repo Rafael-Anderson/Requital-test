@@ -20,7 +20,9 @@ interface MetaSendResponse {
 export class MetaWhatsAppProvider implements WhatsAppProvider {
   readonly name = 'meta';
 
-  async sendMessage(params: SendWhatsAppMessageParams): Promise<WhatsAppSendResult> {
+  async sendMessage(
+    params: SendWhatsAppMessageParams,
+  ): Promise<WhatsAppSendResult> {
     const { phoneNumberId, accessToken } = params.credentials;
     if (!phoneNumberId || !accessToken) {
       throw new InternalServerErrorException(

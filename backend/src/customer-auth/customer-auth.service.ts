@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
@@ -46,10 +52,16 @@ export class CustomerAuthService {
       // guest checkouts sharing an email is harmless and pre-existing;
       // login-by-email needs uniqueness only among *registered* rows).
       const emailTaken = await this.prisma.customer.findFirst({
-        where: { shopId: shop.id, email: dto.email, passwordHash: { not: null } },
+        where: {
+          shopId: shop.id,
+          email: dto.email,
+          passwordHash: { not: null },
+        },
       });
       if (emailTaken) {
-        throw new ConflictException('An account with this email already exists');
+        throw new ConflictException(
+          'An account with this email already exists',
+        );
       }
     }
 
@@ -57,7 +69,9 @@ export class CustomerAuthService {
       where: { shopId_phone: { shopId: shop.id, phone: dto.phone } },
     });
     if (existing?.passwordHash) {
-      throw new ConflictException('An account with this phone number already exists');
+      throw new ConflictException(
+        'An account with this phone number already exists',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -96,7 +110,10 @@ export class CustomerAuthService {
         OR: [{ phone: dto.identifier }, { email: dto.identifier }],
       },
     });
-    if (!customer?.passwordHash || !(await bcrypt.compare(dto.password, customer.passwordHash))) {
+    if (
+      !customer?.passwordHash ||
+      !(await bcrypt.compare(dto.password, customer.passwordHash))
+    ) {
       throw new UnauthorizedException('Invalid phone/email or password');
     }
     return this.issueTokenPair(customer);
@@ -105,7 +122,9 @@ export class CustomerAuthService {
   async refresh(shopSlug: string, dto: RefreshCustomerTokenDto) {
     const shop = await this.resolveShop(shopSlug);
     const tokenHash = hashToken(dto.refreshToken);
-    const stored = await this.prisma.customerrefreshtoken.findUnique({ where: { tokenHash } });
+    const stored = await this.prisma.customerrefreshtoken.findUnique({
+      where: { tokenHash },
+    });
     if (!stored) {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -129,7 +148,9 @@ export class CustomerAuthService {
       );
     }
 
-    const customer = await this.prisma.customer.findUnique({ where: { id: stored.customerId } });
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: stored.customerId },
+    });
     if (!customer?.passwordHash || customer.shopId !== shop.id) {
       throw new UnauthorizedException('Account no longer exists');
     }
@@ -175,7 +196,9 @@ export class CustomerAuthService {
         customerId: customer.id,
         purpose: 'password_reset',
         tokenHash: hashToken(raw),
-        expiresAt: new Date(Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000,
+        ),
       },
     });
     const resetLink = `${STOREFRONT_URL}/${shopSlug}/account/reset-password?token=${raw}`;
@@ -192,8 +215,14 @@ export class CustomerAuthService {
     const stored = await this.prisma.customerauthtoken.findUnique({
       where: { tokenHash: hashToken(dto.token) },
     });
-    if (!stored || stored.purpose !== 'password_reset' || stored.expiresAt < new Date()) {
-      throw new BadRequestException('This reset link is invalid or has expired');
+    if (
+      !stored ||
+      stored.purpose !== 'password_reset' ||
+      stored.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This reset link is invalid or has expired',
+      );
     }
     const claimed = await this.prisma.customerauthtoken.updateMany({
       where: { id: stored.id, usedAt: null },
@@ -205,7 +234,10 @@ export class CustomerAuthService {
 
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.prisma.$transaction([
-      this.prisma.customer.update({ where: { id: stored.customerId }, data: { passwordHash } }),
+      this.prisma.customer.update({
+        where: { id: stored.customerId },
+        data: { passwordHash },
+      }),
       this.prisma.customerrefreshtoken.updateMany({
         where: { customerId: stored.customerId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -215,7 +247,9 @@ export class CustomerAuthService {
   }
 
   private async resolveShop(shopSlug: string) {
-    const shop = await this.prisma.shop.findUnique({ where: { subdomain: shopSlug } });
+    const shop = await this.prisma.shop.findUnique({
+      where: { subdomain: shopSlug },
+    });
     if (!shop) {
       throw new NotFoundException(`Shop '${shopSlug}' not found`);
     }
@@ -233,7 +267,9 @@ export class CustomerAuthService {
         customerId: customer.id,
         familyId: familyId ?? randomUUID(),
         tokenHash: hashToken(rawRefreshToken),
-        expiresAt: new Date(Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(
+          Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
+        ),
       },
     });
     return {
@@ -245,7 +281,25 @@ export class CustomerAuthService {
   }
 
   private toCustomerResponse(customer: CustomerModel) {
-    const { id, shopId, name, phone, email, emailVerified, registeredAt, createdAt } = customer;
-    return { id, shopId, name, phone, email, emailVerified, registeredAt, createdAt };
+    const {
+      id,
+      shopId,
+      name,
+      phone,
+      email,
+      emailVerified,
+      registeredAt,
+      createdAt,
+    } = customer;
+    return {
+      id,
+      shopId,
+      name,
+      phone,
+      email,
+      emailVerified,
+      registeredAt,
+      createdAt,
+    };
   }
 }

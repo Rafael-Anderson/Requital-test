@@ -50,7 +50,11 @@ describe('Order item editing after placement (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -112,7 +116,12 @@ describe('Order item editing after placement (e2e)', () => {
     return body<ProductRow>(res);
   }
 
-  async function seedStock(adminToken: string, outletId: number, productId: number, qty: number) {
+  async function seedStock(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+    qty: number,
+  ) {
     await request(app.getHttpServer())
       .post('/products/stock/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -120,7 +129,11 @@ describe('Order item editing after placement (e2e)', () => {
       .expect(201);
   }
 
-  async function stockAt(adminToken: string, outletId: number, productId: number): Promise<number> {
+  async function stockAt(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+  ): Promise<number> {
     const res = await request(app.getHttpServer())
       .get(`/products/${productId}?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -128,7 +141,12 @@ describe('Order item editing after placement (e2e)', () => {
     return body<{ stockQuantity: number | null }>(res).stockQuantity ?? 0;
   }
 
-  async function createAdminOrder(adminToken: string, outletId: number, productId: number, quantity: number) {
+  async function createAdminOrder(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+    quantity: number,
+  ) {
     const res = await request(app.getHttpServer())
       .post('/orders')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -147,7 +165,8 @@ describe('Order item editing after placement (e2e)', () => {
 
   describe('editable status window', () => {
     it('rejects edits once the order is preparing or beyond', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-status-window');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('edit-status-window');
       const product = await createProduct(adminToken, categoryId);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
       await request(app.getHttpServer())
@@ -169,11 +188,14 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('allows edits while pending and while confirmed', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-status-ok');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('edit-status-ok');
       // Not stock-tracked — this test is only about the status-window gate,
       // not stock semantics (covered separately below), so a quantity
       // increase past confirm must succeed regardless of stock levels.
-      const product = await createProduct(adminToken, categoryId, { trackInventory: false });
+      const product = await createProduct(adminToken, categoryId, {
+        trackInventory: false,
+      });
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
 
       await request(app.getHttpServer())
@@ -198,7 +220,9 @@ describe('Order item editing after placement (e2e)', () => {
 
   describe('stock reservation semantics', () => {
     it('a still-pending, admin-channel order has NOT reserved stock yet — editing its quantity touches no stock', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-pending-no-reserve');
+      const { adminToken, categoryId, outletId } = await setupShop(
+        'edit-pending-no-reserve',
+      );
       const product = await createProduct(adminToken, categoryId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
@@ -216,7 +240,9 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('increasing quantity on a confirmed order atomically decrements the extra amount', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-confirmed-increase');
+      const { adminToken, categoryId, outletId } = await setupShop(
+        'edit-confirmed-increase',
+      );
       const product = await createProduct(adminToken, categoryId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
@@ -238,7 +264,9 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('decreasing quantity on a confirmed order releases stock back', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-confirmed-decrease');
+      const { adminToken, categoryId, outletId } = await setupShop(
+        'edit-confirmed-decrease',
+      );
       const product = await createProduct(adminToken, categoryId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 5);
@@ -259,7 +287,8 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('removing an item from a confirmed order fully releases its stock, and adding a new item decrements it', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-add-remove');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('edit-add-remove');
       const p1 = await createProduct(adminToken, categoryId);
       const p2 = await createProduct(adminToken, categoryId);
       await seedStock(adminToken, outletId, p1.id, 10);
@@ -284,7 +313,8 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('rejects an increase beyond available stock (409) and leaves everything unchanged', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-insufficient');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('edit-insufficient');
       const product = await createProduct(adminToken, categoryId);
       await seedStock(adminToken, outletId, product.id, 5);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
@@ -332,22 +362,34 @@ describe('Order item editing after placement (e2e)', () => {
 
       const results = await Promise.all([attempt(), attempt()]);
       const succeeded = results.filter((r) => r.status === 200);
-      const failed = results.filter((r) => r.status === 409 || r.status === 500);
+      const failed = results.filter(
+        (r) => r.status === 409 || r.status === 500,
+      );
       expect(succeeded.length).toBeLessThanOrEqual(1);
       expect(succeeded.length + failed.length).toBe(2);
       // Whatever the final state, stock must never go negative.
-      expect(await stockAt(adminToken, outletId, product.id)).toBeGreaterThanOrEqual(0);
+      expect(
+        await stockAt(adminToken, outletId, product.id),
+      ).toBeGreaterThanOrEqual(0);
     });
   });
 
   describe('discount interaction', () => {
     it('drops a discount that no longer meets its minimum purchase after items shrink', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-discount-min');
-      const product = await createProduct(adminToken, categoryId, { price: 100 });
+      const { adminToken, categoryId, outletId } =
+        await setupShop('edit-discount-min');
+      const product = await createProduct(adminToken, categoryId, {
+        price: 100,
+      });
       const discount = await request(app.getHttpServer())
         .post('/shop/discounts')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ code: `EDITMIN${runId}`, type: 'FIXED_AMOUNT', value: 10, minPurchaseAmount: 150 })
+        .send({
+          code: `EDITMIN${runId}`,
+          type: 'FIXED_AMOUNT',
+          value: 10,
+          minPurchaseAmount: 150,
+        })
         .expect(201);
       void discount;
 
@@ -386,7 +428,12 @@ describe('Order item editing after placement (e2e)', () => {
       const shopA = await setupShop('edit-tenant-a');
       const shopB = await setupShop('edit-tenant-b');
       const productA = await createProduct(shopA.adminToken, shopA.categoryId);
-      const orderA = await createAdminOrder(shopA.adminToken, shopA.outletId, productA.id, 1);
+      const orderA = await createAdminOrder(
+        shopA.adminToken,
+        shopA.outletId,
+        productA.id,
+        1,
+      );
 
       await request(app.getHttpServer())
         .patch(`/orders/${orderA.id}/items`)
@@ -396,7 +443,8 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('viewer cannot edit order items; branch and order_manager can', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-role-gate');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('edit-role-gate');
       const product = await createProduct(adminToken, categoryId);
       const order = await createAdminOrder(adminToken, outletId, product.id, 1);
 
@@ -404,7 +452,12 @@ describe('Order item editing after placement (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Viewer', email: viewerEmail, password: 'password123', role: 'viewer' })
+        .send({
+          name: 'Viewer',
+          email: viewerEmail,
+          password: 'password123',
+          role: 'viewer',
+        })
         .expect(201);
       const viewerLogin = await request(app.getHttpServer())
         .post('/auth/login')
@@ -412,7 +465,10 @@ describe('Order item editing after placement (e2e)', () => {
         .expect(201);
       await request(app.getHttpServer())
         .patch(`/orders/${order.id}/items`)
-        .set('Authorization', `Bearer ${body<AuthResponse>(viewerLogin).accessToken}`)
+        .set(
+          'Authorization',
+          `Bearer ${body<AuthResponse>(viewerLogin).accessToken}`,
+        )
         .send({ items: [{ productId: product.id, quantity: 2 }] })
         .expect(403);
 
@@ -420,7 +476,12 @@ describe('Order item editing after placement (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'OM', email: omEmail, password: 'password123', role: 'order_manager' })
+        .send({
+          name: 'OM',
+          email: omEmail,
+          password: 'password123',
+          role: 'order_manager',
+        })
         .expect(201);
       const omLogin = await request(app.getHttpServer())
         .post('/auth/login')
@@ -428,7 +489,10 @@ describe('Order item editing after placement (e2e)', () => {
         .expect(201);
       await request(app.getHttpServer())
         .patch(`/orders/${order.id}/items`)
-        .set('Authorization', `Bearer ${body<AuthResponse>(omLogin).accessToken}`)
+        .set(
+          'Authorization',
+          `Bearer ${body<AuthResponse>(omLogin).accessToken}`,
+        )
         .send({ items: [{ productId: product.id, quantity: 2 }] })
         .expect(200);
     });

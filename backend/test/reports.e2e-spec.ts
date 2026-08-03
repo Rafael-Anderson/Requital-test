@@ -80,7 +80,11 @@ describe('Reports (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -162,7 +166,12 @@ describe('Reports (e2e)', () => {
     };
   }
 
-  function orderPayload(outletId: number, productId: number, quantity: number, overrides: Record<string, unknown> = {}) {
+  function orderPayload(
+    outletId: number,
+    productId: number,
+    quantity: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       customerName: 'Report Test Customer',
       customerPhone: '0501230001',
@@ -182,17 +191,35 @@ describe('Reports (e2e)', () => {
       const o1 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletAId, shop.productId, 2, { orderType: 'delivery', deliveryFee: 0, channel: 'Google Ads' }))
+        .send(
+          orderPayload(shop.outletAId, shop.productId, 2, {
+            orderType: 'delivery',
+            deliveryFee: 0,
+            channel: 'Google Ads',
+          }),
+        )
         .expect(201);
       const o2 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletAId, shop.productId, 1, { orderType: 'pickup', deliveryFee: 0, channel: 'Manual' }))
+        .send(
+          orderPayload(shop.outletAId, shop.productId, 1, {
+            orderType: 'pickup',
+            deliveryFee: 0,
+            channel: 'Manual',
+          }),
+        )
         .expect(201);
       const o3 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletBId, shop.productId, 3, { orderType: 'delivery', deliveryFee: 0, channel: 'Google Ads' }))
+        .send(
+          orderPayload(shop.outletBId, shop.productId, 3, {
+            orderType: 'delivery',
+            deliveryFee: 0,
+            channel: 'Google Ads',
+          }),
+        )
         .expect(201);
       // Orders: o1=40 AED (2*20), o2=20 AED (1*20), o3=60 AED (3*20). Total 120.
 
@@ -346,7 +373,9 @@ describe('Reports (e2e)', () => {
         .get('/reports/product-sales')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const rowBefore = body<ProductSalesBody>(beforeCancel).data.find((r) => r.productId === shop.productId)!;
+      const rowBefore = body<ProductSalesBody>(beforeCancel).data.find(
+        (r) => r.productId === shop.productId,
+      )!;
       expect(rowBefore.orderCount).toBe(3);
       expect(rowBefore.totalQuantity).toBe(6);
       expect(rowBefore.totalSalePrice).toBe(120); // 6 * 20 AED
@@ -363,7 +392,9 @@ describe('Reports (e2e)', () => {
         .get('/reports/product-sales')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const rowAfter = body<ProductSalesBody>(afterCancel).data.find((r) => r.productId === shop.productId)!;
+      const rowAfter = body<ProductSalesBody>(afterCancel).data.find(
+        (r) => r.productId === shop.productId,
+      )!;
       expect(rowAfter.orderCount).toBe(2);
       expect(rowAfter.totalQuantity).toBe(5); // 2 + 3, the cancelled order's 1 excluded
       expect(rowAfter.totalSalePrice).toBe(100);
@@ -452,7 +483,9 @@ describe('Reports (e2e)', () => {
         .get('/reports/product-sales')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      const productIdsA = body<ProductSalesBody>(productsA).data.map((p) => p.productId);
+      const productIdsA = body<ProductSalesBody>(productsA).data.map(
+        (p) => p.productId,
+      );
       expect(productIdsA).toContain(shopA.productId);
       expect(productIdsA).not.toContain(shopB.productId);
     });
@@ -473,7 +506,10 @@ describe('Reports (e2e)', () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `reports-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `reports-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 
@@ -516,7 +552,11 @@ describe('Reports (e2e)', () => {
       // never accidentally land in the current month regardless of today's
       // date, without the day-of-month rollover issues subtracting months
       // naively from "now" can hit near a month boundary.
-      const otherMonthDate = new Date(now.getFullYear(), now.getMonth() - 2, 15);
+      const otherMonthDate = new Date(
+        now.getFullYear(),
+        now.getMonth() - 2,
+        15,
+      );
       await prisma.order.update({
         where: { id: body<IdRow>(oOtherMonth).id },
         data: { createdAt: otherMonthDate },
@@ -535,7 +575,9 @@ describe('Reports (e2e)', () => {
         .get(`/reports/monthly/orders?month=${thisMonthKey}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const idsThisMonth = body<GeneralOrdersBody>(ordersThisMonth).data.map((o) => o.id);
+      const idsThisMonth = body<GeneralOrdersBody>(ordersThisMonth).data.map(
+        (o) => o.id,
+      );
       expect(idsThisMonth).toContain(body<IdRow>(oThisMonth).id);
       expect(idsThisMonth).not.toContain(body<IdRow>(oOtherMonth).id);
 
@@ -549,7 +591,9 @@ describe('Reports (e2e)', () => {
         .get(`/reports/monthly/orders?month=${otherMonthKey}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const idsOtherMonth = body<GeneralOrdersBody>(ordersOtherMonth).data.map((o) => o.id);
+      const idsOtherMonth = body<GeneralOrdersBody>(ordersOtherMonth).data.map(
+        (o) => o.id,
+      );
       expect(idsOtherMonth).toContain(body<IdRow>(oOtherMonth).id);
       expect(idsOtherMonth).not.toContain(body<IdRow>(oThisMonth).id);
     });
@@ -570,7 +614,9 @@ describe('Reports (e2e)', () => {
       const now = new Date();
       const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const filtered = await request(app.getHttpServer())
-        .get(`/reports/monthly/summary?month=${thisMonthKey}&outletId=${shop.outletAId}`)
+        .get(
+          `/reports/monthly/summary?month=${thisMonthKey}&outletId=${shop.outletAId}`,
+        )
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
       expect(body<GeneralSummary>(filtered).totalOrders).toBe(1);
@@ -598,7 +644,12 @@ describe('Reports (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post(`/orders/${orderId}/external-delivery`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ carrier: 'Careem', vehicleType: 'Bike', price: 15, destination: 'Downtown Dubai' })
+        .send({
+          carrier: 'Careem',
+          vehicleType: 'Bike',
+          price: 15,
+          destination: 'Downtown Dubai',
+        })
         .expect(201);
       expect(body<ExternalDeliveryRow>(created).status).toBe('pending');
 
@@ -621,14 +672,20 @@ describe('Reports (e2e)', () => {
         .get(`/orders/${orderId}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<OrderDetailRow>(detail).externaldelivery?.status).toBe('delivered');
-      expect(body<OrderDetailRow>(detail).externaldelivery?.carrier).toBe('Careem');
+      expect(body<OrderDetailRow>(detail).externaldelivery?.status).toBe(
+        'delivered',
+      );
+      expect(body<OrderDetailRow>(detail).externaldelivery?.carrier).toBe(
+        'Careem',
+      );
 
       const report = await request(app.getHttpServer())
         .get('/reports/external-delivery')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<ExternalDeliveryListBody>(report).data.find((r) => r.orderId === orderId)!;
+      const row = body<ExternalDeliveryListBody>(report).data.find(
+        (r) => r.orderId === orderId,
+      )!;
       expect(row.carrier).toBe('Careem');
       expect(row.vehicleType).toBe('Bike');
       expect(Number(row.price)).toBe(15);
@@ -656,7 +713,10 @@ describe('Reports (e2e)', () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `extdelivery-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `extdelivery-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 
@@ -699,7 +759,9 @@ describe('Reports (e2e)', () => {
         .get('/reports/external-delivery')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      expect(body<ExternalDeliveryListBody>(reportA).data.map((r) => r.orderId)).not.toContain(orderBId);
+      expect(
+        body<ExternalDeliveryListBody>(reportA).data.map((r) => r.orderId),
+      ).not.toContain(orderBId);
     });
   });
 });

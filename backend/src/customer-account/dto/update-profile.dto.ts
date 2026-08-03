@@ -1,4 +1,10 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 // Self-service profile fields only — name/email/phone. Nothing here touches
 // anything admin-only on the Customer CRM record (there are no
@@ -17,7 +23,8 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
-    message: 'phone must contain only digits, spaces, hyphens, and an optional leading +',
+    message:
+      'phone must contain only digits, spaces, hyphens, and an optional leading +',
   })
   phone?: string;
 }

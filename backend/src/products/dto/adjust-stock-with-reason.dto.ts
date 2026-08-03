@@ -1,4 +1,11 @@
-import { IsIn, IsInt, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { ADJUSTMENT_REASONS } from '../stock-movement.constants';
 
 // productId (+ optional variantId) OR ingredientId — see TransferStockDto's

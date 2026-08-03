@@ -60,12 +60,16 @@ export class BannerImageDto {
 export class UpdateThemeDto {
   // Primary/accent color — maps to storefront --color-accent.
   @IsOptional()
-  @Matches(HEX_COLOR, { message: 'brandColor must be a hex color like #069494' })
+  @Matches(HEX_COLOR, {
+    message: 'brandColor must be a hex color like #069494',
+  })
   brandColor?: string;
 
   // Secondary color — maps to storefront --color-accent-hover.
   @IsOptional()
-  @Matches(HEX_COLOR, { message: 'secondaryColor must be a hex color like #057a7a' })
+  @Matches(HEX_COLOR, {
+    message: 'secondaryColor must be a hex color like #057a7a',
+  })
   secondaryColor?: string;
 
   @IsOptional()

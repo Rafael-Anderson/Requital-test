@@ -68,7 +68,7 @@ export default function BranchUserFormModal({
 
   if (invited) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
         <div
           onClick={(e) => e.stopPropagation()}
           className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
@@ -96,7 +96,7 @@ export default function BranchUserFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}

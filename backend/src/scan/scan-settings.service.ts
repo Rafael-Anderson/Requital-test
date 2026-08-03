@@ -19,7 +19,9 @@ export class ScanSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findOne(ctx: TenantContext): Promise<ScanSettingsResponse> {
-    const settings = await this.prisma.scansettings.findUnique({ where: { shopId: ctx.shopId } });
+    const settings = await this.prisma.scansettings.findUnique({
+      where: { shopId: ctx.shopId },
+    });
     if (!settings) {
       return {
         shopId: ctx.shopId,
@@ -38,13 +40,18 @@ export class ScanSettingsService {
     };
   }
 
-  async upsert(ctx: TenantContext, dto: UpdateScanSettingsDto): Promise<ScanSettingsResponse> {
+  async upsert(
+    ctx: TenantContext,
+    dto: UpdateScanSettingsDto,
+  ): Promise<ScanSettingsResponse> {
     if (dto.defaultOutletId) {
       const outlet = await this.prisma.outlet.findFirst({
         where: { id: dto.defaultOutletId, shopId: ctx.shopId },
       });
       if (!outlet) {
-        throw new BadRequestException('defaultOutletId is invalid for this shop');
+        throw new BadRequestException(
+          'defaultOutletId is invalid for this shop',
+        );
       }
     }
 
@@ -58,10 +65,18 @@ export class ScanSettingsService {
         unmatchedBehavior: dto.unmatchedBehavior ?? 'ask',
       },
       update: {
-        ...(dto.excludeKeywords !== undefined && { excludeKeywords: dto.excludeKeywords }),
-        ...(dto.includeKeywords !== undefined && { includeKeywords: dto.includeKeywords }),
-        ...(dto.defaultOutletId !== undefined && { defaultOutletId: dto.defaultOutletId }),
-        ...(dto.unmatchedBehavior !== undefined && { unmatchedBehavior: dto.unmatchedBehavior }),
+        ...(dto.excludeKeywords !== undefined && {
+          excludeKeywords: dto.excludeKeywords,
+        }),
+        ...(dto.includeKeywords !== undefined && {
+          includeKeywords: dto.includeKeywords,
+        }),
+        ...(dto.defaultOutletId !== undefined && {
+          defaultOutletId: dto.defaultOutletId,
+        }),
+        ...(dto.unmatchedBehavior !== undefined && {
+          unmatchedBehavior: dto.unmatchedBehavior,
+        }),
       },
     });
 

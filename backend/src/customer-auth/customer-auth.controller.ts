@@ -18,7 +18,10 @@ export class CustomerAuthController {
   constructor(private readonly customerAuthService: CustomerAuthService) {}
 
   @Post('register')
-  register(@Param('shopSlug') shopSlug: string, @Body() dto: RegisterCustomerDto) {
+  register(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: RegisterCustomerDto,
+  ) {
     return this.customerAuthService.register(shopSlug, dto);
   }
 
@@ -28,7 +31,10 @@ export class CustomerAuthController {
   }
 
   @Post('refresh')
-  refresh(@Param('shopSlug') shopSlug: string, @Body() dto: RefreshCustomerTokenDto) {
+  refresh(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: RefreshCustomerTokenDto,
+  ) {
     return this.customerAuthService.refresh(shopSlug, dto);
   }
 
@@ -38,7 +44,10 @@ export class CustomerAuthController {
   }
 
   @Post('forgot-password')
-  forgotPassword(@Param('shopSlug') shopSlug: string, @Body() dto: ForgotCustomerPasswordDto) {
+  forgotPassword(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: ForgotCustomerPasswordDto,
+  ) {
     return this.customerAuthService.forgotPassword(shopSlug, dto);
   }
 

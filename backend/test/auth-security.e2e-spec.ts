@@ -51,7 +51,11 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -202,7 +206,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     it('a verification token is single-use', async () => {
       const signup = await signupShop('verify-once');
       const token = tokenFromDevLink(signup.devVerificationLink!);
-      await request(app.getHttpServer()).post('/auth/verify-email').send({ token }).expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token })
+        .expect(201);
       const second = await request(app.getHttpServer())
         .post('/auth/verify-email')
         .send({ token })
@@ -221,7 +228,9 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         .post('/auth/resend-verification')
         .set('Authorization', `Bearer ${signup.accessToken}`)
         .expect(201);
-      expect(body<{ alreadyVerified: boolean }>(res).alreadyVerified).toBe(true);
+      expect(body<{ alreadyVerified: boolean }>(res).alreadyVerified).toBe(
+        true,
+      );
     });
 
     it('changing the password revokes every existing refresh token', async () => {
@@ -249,7 +258,9 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         .post('/auth/forgot-password')
         .send({ email: `no-such-user-${runId}@test.com` })
         .expect(201);
-      expect(body<{ success: boolean; devResetLink?: string }>(res)).toEqual({ success: true });
+      expect(body<{ success: boolean; devResetLink?: string }>(res)).toEqual({
+        success: true,
+      });
     });
 
     it('a garbage reset token is rejected', async () => {
@@ -305,7 +316,9 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         .post('/auth/forgot-password')
         .send({ email: signup.email })
         .expect(201);
-      const token = tokenFromDevLink(body<{ devResetLink: string }>(forgot).devResetLink);
+      const token = tokenFromDevLink(
+        body<{ devResetLink: string }>(forgot).devResetLink,
+      );
 
       // Backdate this specific token's expiry directly — faster and more
       // deterministic than actually waiting out the real 30-minute window.
@@ -350,7 +363,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `branch-perms-employee-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `branch-perms-employee-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       branchToken = body<TokenPair>(login).accessToken;
     });
@@ -536,7 +552,11 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       const res = await request(app.getHttpServer())
         .patch(`/products/${productId}/availability`)
         .set('Authorization', `Bearer ${branchToken}`)
-        .send({ status: 'Unavailable', name: 'Sneaky rename attempt', price: 1 })
+        .send({
+          status: 'Unavailable',
+          name: 'Sneaky rename attempt',
+          price: 1,
+        })
         .expect(400);
       expect(messageContains(res, 'should not exist')).toBe(true);
 
@@ -545,7 +565,9 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         .get(`/products/${productId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<{ name: string; price: string }>(untouched).name).toBe('DTO-splitting test product');
+      expect(body<{ name: string; price: string }>(untouched).name).toBe(
+        'DTO-splitting test product',
+      );
     });
 
     it('the stock bulk-adjust endpoint stays open to branch users (day-to-day inventory, not catalog structure)', async () => {
@@ -570,7 +592,9 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
         .set('Authorization', `Bearer ${branchToken}`)
-        .send({ adjustments: [{ productId: body<IdRow>(product).id, delta: 5 }] })
+        .send({
+          adjustments: [{ productId: body<IdRow>(product).id, delta: 5 }],
+        })
         .expect(200);
     });
   });

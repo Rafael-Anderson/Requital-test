@@ -14,14 +14,21 @@ import type {
 export class TamaraPaymentProvider implements PaymentProvider {
   readonly name = 'tamara';
 
-  createCheckoutSession(_params: CreateCheckoutSessionParams): Promise<CheckoutSession> {
+  createCheckoutSession(
+    _params: CreateCheckoutSessionParams,
+  ): Promise<CheckoutSession> {
     throw new InternalServerErrorException(
       'Tamara integration is a structural stub — no real checkout-session API call is implemented yet',
     );
   }
 
-  parseWebhookEvent(_payload: Buffer, _signatureHeader: string): WebhookResult | null {
-    console.warn('[payments] tamara webhook received but parseWebhookEvent is a stub — ignoring');
+  parseWebhookEvent(
+    _payload: Buffer,
+    _signatureHeader: string,
+  ): WebhookResult | null {
+    console.warn(
+      '[payments] tamara webhook received but parseWebhookEvent is a stub — ignoring',
+    );
     return null;
   }
 }

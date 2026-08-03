@@ -15,17 +15,24 @@ import type {
 export class TelrPaymentProvider implements PaymentProvider {
   readonly name = 'telr';
 
-  createCheckoutSession(_params: CreateCheckoutSessionParams): Promise<CheckoutSession> {
+  createCheckoutSession(
+    _params: CreateCheckoutSessionParams,
+  ): Promise<CheckoutSession> {
     throw new InternalServerErrorException(
       'Telr integration is a structural stub — no real checkout-session API call is implemented yet',
     );
   }
 
-  parseWebhookEvent(_payload: Buffer, _signatureHeader: string): WebhookResult | null {
+  parseWebhookEvent(
+    _payload: Buffer,
+    _signatureHeader: string,
+  ): WebhookResult | null {
     // Safe no-op, not a throw: an unrecognized/test webhook delivery should
     // 200 as "received, nothing to do" (same as Stripe's unhandled-event
     // branch) rather than 500 the caller's retry loop.
-    console.warn('[payments] telr webhook received but parseWebhookEvent is a stub — ignoring');
+    console.warn(
+      '[payments] telr webhook received but parseWebhookEvent is a stub — ignoring',
+    );
     return null;
   }
 }

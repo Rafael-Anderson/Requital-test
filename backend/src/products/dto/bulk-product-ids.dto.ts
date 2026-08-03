@@ -1,4 +1,10 @@
-import { ArrayNotEmpty, ArrayMaxSize, IsArray, IsInt, IsPositive } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayMaxSize,
+  IsArray,
+  IsInt,
+  IsPositive,
+} from 'class-validator';
 
 export class BulkProductIdsDto {
   @IsArray()

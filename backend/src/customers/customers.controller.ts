@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import { CustomersService } from './customers.service';
 import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -20,13 +28,19 @@ export class CustomersController {
 
   @Roles('admin', 'viewer')
   @Get()
-  findAll(@CurrentUser() ctx: TenantContext, @Query() query: ListCustomersQueryDto) {
+  findAll(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListCustomersQueryDto,
+  ) {
     return this.customersService.findAll(ctx, query);
   }
 
   @Roles('admin', 'viewer')
   @Get(':id')
-  findOne(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  findOne(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.customersService.findOne(ctx, id);
   }
 

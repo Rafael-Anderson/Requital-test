@@ -47,6 +47,17 @@ export class OrdersController {
     return this.ordersService.findOneDetail(ctx, id);
   }
 
+  // Same read access as the detail fetch above — the timeline is part of
+  // viewing an order, not a separate permission tier.
+  @Roles('admin', 'branch', 'order_manager', 'viewer')
+  @Get(':id/history')
+  getHistory(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.ordersService.getHistory(ctx, id);
+  }
+
   @Roles('admin', 'branch', 'order_manager')
   @Post()
   create(@CurrentUser() ctx: TenantContext, @Body() dto: CreateOrderDto) {
@@ -65,7 +76,10 @@ export class OrdersController {
 
   @Roles('admin', 'branch', 'order_manager')
   @Patch('bulk-status')
-  bulkUpdateStatus(@CurrentUser() ctx: TenantContext, @Body() dto: BulkUpdateOrderStatusDto) {
+  bulkUpdateStatus(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: BulkUpdateOrderStatusDto,
+  ) {
     return this.ordersService.bulkUpdateStatus(ctx, dto);
   }
 

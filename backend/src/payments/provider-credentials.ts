@@ -8,13 +8,22 @@
 // and isn't part of PaymentProviderRegistry; it's a plain visibility toggle
 // on the two existing shop.deliveryPaymentCashOnDelivery/
 // pickupPaymentCashOnPickup booleans (see PaymentSettingsService).
-export const PAYMENT_GATEWAY_PROVIDERS = ['nomod', 'stripe', 'paypal', 'tabby', 'tamara'] as const;
+export const PAYMENT_GATEWAY_PROVIDERS = [
+  'nomod',
+  'stripe',
+  'paypal',
+  'tabby',
+  'tamara',
+] as const;
 export type PaymentGatewayProvider = (typeof PAYMENT_GATEWAY_PROVIDERS)[number];
 
 // "Card processing" — mutually exclusive, pick one. Every other provider in
 // PAYMENT_GATEWAY_PROVIDERS is independent (of this choice and of each
 // other).
-export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ['nomod', 'stripe'];
+export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = [
+  'nomod',
+  'stripe',
+];
 
 export interface CredentialFieldDef {
   key: string;
@@ -34,7 +43,10 @@ export interface CredentialFieldDef {
 //   available to implement (or even confidently shape credentials) against
 //   — this is a placeholder 2-field shape (api key + secret), flagged the
 //   same way the field itself is flagged as a structural stub.
-export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, CredentialFieldDef[]> = {
+export const PROVIDER_CREDENTIAL_FIELDS: Record<
+  PaymentGatewayProvider,
+  CredentialFieldDef[]
+> = {
   nomod: [
     { key: 'apiKey', label: 'API Key' },
     { key: 'secretKey', label: 'Secret Key' },

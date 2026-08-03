@@ -210,8 +210,8 @@ export class UpdateShopDto {
   disableStoreCart?: boolean;
 
   @IsOptional()
-  @IsBoolean()
-  disableGoogleMaps?: boolean;
+  @IsIn(['buy_now', 'contact_to_order'])
+  cartDisabledMode?: string;
 
   // --- Online Presence ---
   // Shape/domain validation happens in ShopService — keys and URL format
@@ -250,11 +250,17 @@ export class UpdateShopDto {
 
   @IsOptional()
   @IsObject()
-  deliveryHours?: Record<string, { open: string; close: string; closed: boolean }>;
+  deliveryHours?: Record<
+    string,
+    { open: string; close: string; closed: boolean }
+  >;
 
   @IsOptional()
   @IsObject()
-  pickupHours?: Record<string, { open: string; close: string; closed: boolean }>;
+  pickupHours?: Record<
+    string,
+    { open: string; close: string; closed: boolean }
+  >;
 
   @IsOptional()
   @Type(() => Number)

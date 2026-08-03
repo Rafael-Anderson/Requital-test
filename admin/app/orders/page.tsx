@@ -168,6 +168,17 @@ export default function OrdersPage() {
                         <div className="text-xs text-zinc-400 mt-1">
                           Ordered {relativeTime(order.createdAt)}
                         </div>
+                        {order.orderitem.some((item) => item.note) && (
+                          <div className="mt-1.5 space-y-0.5">
+                            {order.orderitem
+                              .filter((item) => item.note)
+                              .map((item) => (
+                                <p key={item.id} className="text-xs italic text-amber-600 dark:text-amber-400 truncate">
+                                  Customer ({item.productName}): {item.note}
+                                </p>
+                              ))}
+                          </div>
+                        )}
 
                         <div className="flex gap-1.5 mt-3" onClick={(e) => e.stopPropagation()}>
                           {showAdvance && (

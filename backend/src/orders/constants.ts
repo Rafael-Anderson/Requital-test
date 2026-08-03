@@ -40,7 +40,10 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 // a single hardcoded 'storefront' check, so a still-pending order from
 // either channel restocks correctly on cancel and never double-decrements
 // on confirm.
-export const IMMEDIATE_STOCK_RESERVATION_CHANNELS = ['storefront', 'draft_order'];
+export const IMMEDIATE_STOCK_RESERVATION_CHANNELS = [
+  'storefront',
+  'draft_order',
+];
 
 // #9: items can be added/removed/quantity-adjusted only while the order is
 // 'pending' or 'confirmed' — before 'preparing' starts. Once preparing

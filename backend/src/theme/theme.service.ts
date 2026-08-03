@@ -18,7 +18,10 @@ export class ThemeService {
       // model's own schema comment — banners shouldn't depend on a
       // themesettings row existing yet), so this is always a second query,
       // never a Prisma `include`.
-      this.prisma.bannerimage.findMany({ where: { shopId: ctx.shopId }, orderBy: { order: 'asc' } }),
+      this.prisma.bannerimage.findMany({
+        where: { shopId: ctx.shopId },
+        orderBy: { order: 'asc' },
+      }),
     ]);
     // No row yet (never saved) is a real, valid state — not an error. The
     // admin UI and storefront both already treat every field here as
@@ -78,7 +81,8 @@ export class ThemeService {
     // Only touched when images is actually part of this save (undefined
     // means "not being changed this call," same as every other optional
     // DTO field) — an explicit images:[] (all banners removed) clears it.
-    const bannerUrlSync = images !== undefined ? { bannerUrl: images[0]?.url ?? null } : {};
+    const bannerUrlSync =
+      images !== undefined ? { bannerUrl: images[0]?.url ?? null } : {};
 
     const [theme] = await this.prisma.$transaction([
       this.prisma.themesettings.upsert({
@@ -88,7 +92,9 @@ export class ThemeService {
       }),
       ...(images !== undefined
         ? [
-            this.prisma.bannerimage.deleteMany({ where: { shopId: ctx.shopId } }),
+            this.prisma.bannerimage.deleteMany({
+              where: { shopId: ctx.shopId },
+            }),
             this.prisma.bannerimage.createMany({
               data: images.map((img, i) => ({
                 shopId: ctx.shopId,
@@ -118,7 +124,9 @@ export class ThemeService {
         throw new BadRequestException(`Unknown theme color key: '${key}'`);
       }
       if (!HEX_COLOR.test(value)) {
-        throw new BadRequestException(`colors.${key} must be a hex color like #069494`);
+        throw new BadRequestException(
+          `colors.${key} must be a hex color like #069494`,
+        );
       }
     }
   }

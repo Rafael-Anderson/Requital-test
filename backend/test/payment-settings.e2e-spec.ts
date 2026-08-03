@@ -52,7 +52,11 @@ describe('Payment Settings (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -74,7 +78,10 @@ describe('Payment Settings (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
-    return { adminToken: body<AuthResponse>(signup).accessToken, slug: `${slugPrefix}-${runId}` };
+    return {
+      adminToken: body<AuthResponse>(signup).accessToken,
+      slug: `${slugPrefix}-${runId}`,
+    };
   }
 
   function findProvider(rows: ProviderRow[], provider: string) {
@@ -108,7 +115,12 @@ describe('Payment Settings (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/payment-settings/stripe')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ credentials: { secretKey: 'sk_live_abcdefgh1234', webhookSecret: 'whsec_zzzz9999' } })
+        .send({
+          credentials: {
+            secretKey: 'sk_live_abcdefgh1234',
+            webhookSecret: 'whsec_zzzz9999',
+          },
+        })
         .expect(200);
 
       const res = await request(app.getHttpServer())
@@ -117,7 +129,10 @@ describe('Payment Settings (e2e)', () => {
         .expect(200);
       const stripe = findProvider(body<ProviderRow[]>(res), 'stripe');
       expect(stripe.hasCredentials).toBe(true);
-      expect(stripe.maskedCredentials).toEqual({ secretKey: '••••1234', webhookSecret: '••••9999' });
+      expect(stripe.maskedCredentials).toEqual({
+        secretKey: '••••1234',
+        webhookSecret: '••••9999',
+      });
       // Never the real value anywhere in the response.
       expect(JSON.stringify(res.body)).not.toContain('sk_live_abcdefgh1234');
       expect(JSON.stringify(res.body)).not.toContain('whsec_zzzz9999');
@@ -128,7 +143,12 @@ describe('Payment Settings (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/payment-settings/stripe')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ credentials: { secretKey: 'sk_live_super_secret_value_999', webhookSecret: 'whsec_abc' } })
+        .send({
+          credentials: {
+            secretKey: 'sk_live_super_secret_value_999',
+            webhookSecret: 'whsec_abc',
+          },
+        })
         .expect(200);
 
       const row = await prisma.shoppaymentprovider.findFirst({
@@ -145,14 +165,18 @@ describe('Payment Settings (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/payment-settings/stripe')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ credentials: { secretKey: 'sk_live_x', webhookSecret: 'whsec_x' } })
+        .send({
+          credentials: { secretKey: 'sk_live_x', webhookSecret: 'whsec_x' },
+        })
         .expect(200);
 
       const res = await request(app.getHttpServer())
         .get('/payment-settings')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(findProvider(body<ProviderRow[]>(res), 'stripe').enabled).toBe(true);
+      expect(findProvider(body<ProviderRow[]>(res), 'stripe').enabled).toBe(
+        true,
+      );
     });
 
     it('rejects an unknown credential field for a provider', async () => {
@@ -181,7 +205,10 @@ describe('Payment Settings (e2e)', () => {
       const res = await request(app.getHttpServer())
         .patch('/payment-settings/nomod')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ enabled: true, credentials: { apiKey: 'key', secretKey: 'secret' } })
+        .send({
+          enabled: true,
+          credentials: { apiKey: 'key', secretKey: 'secret' },
+        })
         .expect(400);
       expect(messageContains(res, 'Disable Stripe')).toBe(true);
     });
@@ -196,7 +223,10 @@ describe('Payment Settings (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/payment-settings/nomod')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ enabled: true, credentials: { apiKey: 'key', secretKey: 'secret' } })
+        .send({
+          enabled: true,
+          credentials: { apiKey: 'key', secretKey: 'secret' },
+        })
         .expect(200);
 
       const res = await request(app.getHttpServer())
@@ -246,7 +276,9 @@ describe('Payment Settings (e2e)', () => {
         .get('/payment-settings')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(findProvider(body<ProviderRow[]>(res), 'stripe').enabled).toBe(true);
+      expect(findProvider(body<ProviderRow[]>(res), 'stripe').enabled).toBe(
+        true,
+      );
     });
 
     it('enabling PayPal/Tabby/Tamara/COD never triggers the exclusivity check, regardless of card-processor state', async () => {
@@ -286,12 +318,20 @@ describe('Payment Settings (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/payment-settings/stripe')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send({ credentials: { secretKey: 'sk_live_shopA_only', webhookSecret: 'whsec_shopA' } })
+        .send({
+          credentials: {
+            secretKey: 'sk_live_shopA_only',
+            webhookSecret: 'whsec_shopA',
+          },
+        })
         .expect(200);
       await request(app.getHttpServer())
         .patch('/payment-settings/paypal')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send({ enabled: true, credentials: { clientId: 'a', clientSecret: 'b' } })
+        .send({
+          enabled: true,
+          credentials: { clientId: 'a', clientSecret: 'b' },
+        })
         .expect(200);
 
       const settingsB = await request(app.getHttpServer())
@@ -303,8 +343,12 @@ describe('Payment Settings (e2e)', () => {
       expect(findProvider(rowsB, 'paypal').enabled).toBe(false);
       expect(JSON.stringify(settingsB.body)).not.toContain('shopA');
 
-      const publicB = await request(app.getHttpServer()).get(`/public/${shopB.slug}`).expect(200);
-      expect(body<PublicShopBody>(publicB).enabledPaymentProviders).not.toContain('paypal');
+      const publicB = await request(app.getHttpServer())
+        .get(`/public/${shopB.slug}`)
+        .expect(200);
+      expect(
+        body<PublicShopBody>(publicB).enabledPaymentProviders,
+      ).not.toContain('paypal');
     });
   });
 
@@ -329,7 +373,10 @@ describe('Payment Settings (e2e)', () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `pay-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `pay-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 
@@ -413,7 +460,9 @@ describe('Payment Settings (e2e)', () => {
 
     it('GET /public/:slug lists exactly the providers enabled for that shop', async () => {
       const shop = await setupOrderableShop('pay-storefront');
-      let res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      let res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       expect(body<PublicShopBody>(res).enabledPaymentProviders).toEqual([]);
       expect(body<PublicShopBody>(res).cardProcessorEnabled).toBe(true);
 
@@ -423,8 +472,12 @@ describe('Payment Settings (e2e)', () => {
         .send({ enabled: true })
         .expect(200);
 
-      res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
-      expect(body<PublicShopBody>(res).enabledPaymentProviders).toEqual(['tabby']);
+      res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
+      expect(body<PublicShopBody>(res).enabledPaymentProviders).toEqual([
+        'tabby',
+      ]);
     });
 
     it('a checkout attempt with an unenabled independent provider is rejected', async () => {

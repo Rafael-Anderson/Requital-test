@@ -31,7 +31,7 @@ export class StripePaymentProvider implements PaymentProvider {
     const key = secretKey ?? process.env.STRIPE_SECRET_KEY;
     if (!key) {
       throw new InternalServerErrorException(
-        'No Stripe secret key configured — set it on the shop\'s Payment Gateways settings, or STRIPE_SECRET_KEY as a platform fallback',
+        "No Stripe secret key configured — set it on the shop's Payment Gateways settings, or STRIPE_SECRET_KEY as a platform fallback",
       );
     }
     let client = this.clients.get(key);
@@ -91,7 +91,7 @@ export class StripePaymentProvider implements PaymentProvider {
     const secret = webhookSecret ?? this.webhookSecret;
     if (!secret) {
       throw new InternalServerErrorException(
-        'No Stripe webhook secret configured — set one on the shop\'s Payment Gateways settings, or STRIPE_WEBHOOK_SECRET as a platform fallback',
+        "No Stripe webhook secret configured — set one on the shop's Payment Gateways settings, or STRIPE_WEBHOOK_SECRET as a platform fallback",
       );
     }
     // Stripe.webhooks (static, not this.clientFor(...).webhooks) — pure
@@ -101,7 +101,11 @@ export class StripePaymentProvider implements PaymentProvider {
     // platform's STRIPE_SECRET_KEY is configured, even though verifying a
     // webhook never actually needed a checkout-session-capable client in
     // the first place.
-    const event = Stripe.webhooks.constructEvent(payload, signatureHeader, secret);
+    const event = Stripe.webhooks.constructEvent(
+      payload,
+      signatureHeader,
+      secret,
+    );
 
     // Keyed on event.id, not session.id — Stripe retries a delivery under
     // the same event.id, so that's the field that identifies "have we
@@ -112,8 +116,15 @@ export class StripePaymentProvider implements PaymentProvider {
       const orderId = Number(session.metadata?.orderId);
       if (!orderId) return null;
       const chargeReference =
-        typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
-      return { providerReference: event.id, orderId, status: 'paid', chargeReference };
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : session.payment_intent?.id;
+      return {
+        providerReference: event.id,
+        orderId,
+        status: 'paid',
+        chargeReference,
+      };
     }
     if (event.type === 'checkout.session.async_payment_failed') {
       const session = event.data.object;

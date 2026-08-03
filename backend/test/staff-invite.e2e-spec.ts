@@ -53,7 +53,11 @@ describe('Staff invite flow (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -119,7 +123,9 @@ describe('Staff invite flow (e2e)', () => {
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({ name: 'Invited Staff', email, outletId })
       .expect(201);
-    const token = tokenFromDevLink(body<BranchUserResponse>(created).devInviteLink!);
+    const token = tokenFromDevLink(
+      body<BranchUserResponse>(created).devInviteLink!,
+    );
 
     const accepted = await request(app.getHttpServer())
       .post('/auth/accept-invite')
@@ -133,7 +139,9 @@ describe('Staff invite flow (e2e)', () => {
       .get('/auth/me')
       .set('Authorization', `Bearer ${pair.accessToken}`)
       .expect(200);
-    expect(body<{ email: string; emailVerified: boolean }>(me).emailVerified).toBe(true);
+    expect(
+      body<{ email: string; emailVerified: boolean }>(me).emailVerified,
+    ).toBe(true);
 
     // And the staff member can now log in independently with their own
     // chosen password.
@@ -153,9 +161,15 @@ describe('Staff invite flow (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/auth/branch-users')
       .set('Authorization', `Bearer ${admin.accessToken}`)
-      .send({ name: 'Invited Staff', email: `invite-once-staff-${runId}@test.com`, outletId })
+      .send({
+        name: 'Invited Staff',
+        email: `invite-once-staff-${runId}@test.com`,
+        outletId,
+      })
       .expect(201);
-    const token = tokenFromDevLink(body<BranchUserResponse>(created).devInviteLink!);
+    const token = tokenFromDevLink(
+      body<BranchUserResponse>(created).devInviteLink!,
+    );
 
     await request(app.getHttpServer())
       .post('/auth/accept-invite')
@@ -179,9 +193,15 @@ describe('Staff invite flow (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/auth/branch-users')
       .set('Authorization', `Bearer ${admin.accessToken}`)
-      .send({ name: 'Invited Staff', email: `invite-expired-staff-${runId}@test.com`, outletId })
+      .send({
+        name: 'Invited Staff',
+        email: `invite-expired-staff-${runId}@test.com`,
+        outletId,
+      })
       .expect(201);
-    const token = tokenFromDevLink(body<BranchUserResponse>(created).devInviteLink!);
+    const token = tokenFromDevLink(
+      body<BranchUserResponse>(created).devInviteLink!,
+    );
 
     await prisma.authtoken.updateMany({
       where: { tokenHash: hashToken(token) },
@@ -209,7 +229,9 @@ describe('Staff invite flow (e2e)', () => {
       .post('/auth/forgot-password')
       .send({ email: admin.email })
       .expect(201);
-    const resetToken = tokenFromDevLink(body<{ devResetLink: string }>(forgot).devResetLink);
+    const resetToken = tokenFromDevLink(
+      body<{ devResetLink: string }>(forgot).devResetLink,
+    );
 
     const res = await request(app.getHttpServer())
       .post('/auth/accept-invite')
@@ -230,7 +252,12 @@ describe('Staff invite flow (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/auth/branch-users')
       .set('Authorization', `Bearer ${admin.accessToken}`)
-      .send({ name: 'Direct Staff', email, password: 'directpassword123', outletId })
+      .send({
+        name: 'Direct Staff',
+        email,
+        password: 'directpassword123',
+        outletId,
+      })
       .expect(201);
     const res = body<BranchUserResponse>(created);
     expect(res.devInviteLink).toBeUndefined();

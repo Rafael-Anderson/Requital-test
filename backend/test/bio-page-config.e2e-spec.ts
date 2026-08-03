@@ -39,7 +39,11 @@ describe('Bio Link page config (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -61,7 +65,10 @@ describe('Bio Link page config (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
-    return { adminToken: body<AuthResponse>(signup).accessToken, slug: `${slugPrefix}-${runId}` };
+    return {
+      adminToken: body<AuthResponse>(signup).accessToken,
+      slug: `${slugPrefix}-${runId}`,
+    };
   }
 
   async function setupPublishedShop(slugPrefix: string) {
@@ -128,7 +135,10 @@ describe('Bio Link page config (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/shop/bio-links/page-config')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ logoUrl: '/uploads/bio-links/logo.png', description: 'Welcome to our shop' })
+        .send({
+          logoUrl: '/uploads/bio-links/logo.png',
+          description: 'Welcome to our shop',
+        })
         .expect(200);
 
       await request(app.getHttpServer())
@@ -154,7 +164,10 @@ describe('Bio Link page config (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/shop/bio-links/upload')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .attach('file', Buffer.from([0x89, 0x50, 0x4e, 0x47]), { filename: 'logo.png', contentType: 'image/png' })
+        .attach('file', Buffer.from([0x89, 0x50, 0x4e, 0x47]), {
+          filename: 'logo.png',
+          contentType: 'image/png',
+        })
         .expect(201);
       expect(body<{ url: string }>(res).url).toMatch(/^\/uploads\/bio-links\//);
     });
@@ -189,7 +202,9 @@ describe('Bio Link page config (e2e)', () => {
         .get('/shop/bio-links/page-config')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      expect(body<BioPageConfigRow>(resB).description).toBe("B's real description");
+      expect(body<BioPageConfigRow>(resB).description).toBe(
+        "B's real description",
+      );
     });
   });
 
@@ -215,7 +230,9 @@ describe('Bio Link page config (e2e)', () => {
         })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}/bio-page-config`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/bio-page-config`)
+        .expect(200);
       const config = body<BioPageConfigRow>(res);
       expect(config.logoUrl).toBe('/uploads/bio-links/mylogo.png');
       expect(config.backgroundUrl).toBe('/uploads/bio-links/bg.png');
@@ -226,7 +243,9 @@ describe('Bio Link page config (e2e)', () => {
 
     it('returns an all-null shape for a published shop that never customized the bio page', async () => {
       const shop = await setupPublishedShop('biopage-public-empty');
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}/bio-page-config`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/bio-page-config`)
+        .expect(200);
       const config = body<BioPageConfigRow>(res);
       expect(config.logoUrl).toBeNull();
       expect(config.backgroundUrl).toBeNull();

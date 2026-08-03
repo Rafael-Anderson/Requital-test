@@ -34,7 +34,11 @@ describe('Roles & permissions granularity (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication({ rawBody: true });
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -98,8 +102,18 @@ describe('Roles & permissions granularity (e2e)', () => {
   describe('role creation', () => {
     it('creates order_manager and viewer staff without requiring an outletId', async () => {
       const { adminToken } = await setupShop('roles-create');
-      const omToken = await createStaff(adminToken, 'order_manager', undefined, 'om');
-      const viewerToken = await createStaff(adminToken, 'viewer', undefined, 'viewer');
+      const omToken = await createStaff(
+        adminToken,
+        'order_manager',
+        undefined,
+        'om',
+      );
+      const viewerToken = await createStaff(
+        adminToken,
+        'viewer',
+        undefined,
+        'viewer',
+      );
       expect(omToken).toBeTruthy();
       expect(viewerToken).toBeTruthy();
     });
@@ -109,7 +123,12 @@ describe('Roles & permissions granularity (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'No Outlet', email: `no-outlet-${runId}@test.com`, password: 'password123', role: 'branch' })
+        .send({
+          name: 'No Outlet',
+          email: `no-outlet-${runId}@test.com`,
+          password: 'password123',
+          role: 'branch',
+        })
         .expect(400);
     });
 
@@ -146,7 +165,12 @@ describe('Roles & permissions granularity (e2e)', () => {
   describe('order_manager: orders domain allowed, everything else blocked', () => {
     it('can list and read orders but not touch products, discounts, customers, or reports', async () => {
       const { adminToken } = await setupShop('om-scope');
-      const omToken = await createStaff(adminToken, 'order_manager', undefined, 'om-scope-staff');
+      const omToken = await createStaff(
+        adminToken,
+        'order_manager',
+        undefined,
+        'om-scope-staff',
+      );
 
       await request(app.getHttpServer())
         .get('/orders')
@@ -179,7 +203,12 @@ describe('Roles & permissions granularity (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${omToken}`)
-        .send({ name: 'escalate', email: `escalate-${runId}@test.com`, password: 'password123', role: 'admin' })
+        .send({
+          name: 'escalate',
+          email: `escalate-${runId}@test.com`,
+          password: 'password123',
+          role: 'admin',
+        })
         .expect(403);
 
       // Allowed: draft orders (order-management domain).
@@ -193,7 +222,12 @@ describe('Roles & permissions granularity (e2e)', () => {
   describe('viewer: read-only everywhere, no mutation anywhere', () => {
     it('can read orders/customers/reports but every write is rejected', async () => {
       const { adminToken } = await setupShop('viewer-scope');
-      const viewerToken = await createStaff(adminToken, 'viewer', undefined, 'viewer-scope-staff');
+      const viewerToken = await createStaff(
+        adminToken,
+        'viewer',
+        undefined,
+        'viewer-scope-staff',
+      );
 
       await request(app.getHttpServer())
         .get('/orders')
@@ -261,7 +295,12 @@ describe('Roles & permissions granularity (e2e)', () => {
   describe('branch role: unchanged regression coverage after adding the new roles', () => {
     it('branch staff can still create/read orders (no behavior change from this task)', async () => {
       const { adminToken, outletId } = await setupShop('branch-regress');
-      const branchToken = await createStaff(adminToken, 'branch', outletId, 'branch-regress-staff');
+      const branchToken = await createStaff(
+        adminToken,
+        'branch',
+        outletId,
+        'branch-regress-staff',
+      );
 
       await request(app.getHttpServer())
         .get('/orders')
@@ -284,7 +323,12 @@ describe('Roles & permissions granularity (e2e)', () => {
     it("a viewer from shop B cannot read shop A's order by guessing its id", async () => {
       const shopA = await setupShop('cross-a');
       const shopB = await setupShop('cross-b');
-      const viewerB = await createStaff(shopB.adminToken, 'viewer', undefined, 'cross-b-viewer');
+      const viewerB = await createStaff(
+        shopB.adminToken,
+        'viewer',
+        undefined,
+        'cross-b-viewer',
+      );
 
       // A plausible-looking order id from shop A's namespace — shop B's
       // viewer must get a 404 (not found in their tenant), never the data.

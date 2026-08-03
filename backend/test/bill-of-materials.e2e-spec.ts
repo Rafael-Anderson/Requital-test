@@ -85,7 +85,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -155,7 +159,12 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     return body<IngredientRow>(res).id;
   }
 
-  async function setIngredientStock(adminToken: string, ingredientId: number, outletId: number, delta: number) {
+  async function setIngredientStock(
+    adminToken: string,
+    ingredientId: number,
+    outletId: number,
+    delta: number,
+  ) {
     await request(app.getHttpServer())
       .post('/products/stock/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -184,7 +193,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     return body<ProductRow>(res);
   }
 
-  function adminOrderPayload(outletId: number, productId: number, overrides: Record<string, unknown> = {}) {
+  function adminOrderPayload(
+    outletId: number,
+    productId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       customerName: 'BOM Customer',
       customerPhone: '0501234567',
@@ -197,7 +210,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     };
   }
 
-  function storefrontOrderPayload(outletId: number, productId: number, overrides: Record<string, unknown> = {}) {
+  function storefrontOrderPayload(
+    outletId: number,
+    productId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       outletId,
       orderType: 'pickup',
@@ -221,7 +238,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       expect(product.ingredients).toHaveLength(1);
-      expect(product.ingredients[0]).toMatchObject({ ingredientId: rose, ingredientName: 'Rose', quantityPerUnit: 6 });
+      expect(product.ingredients[0]).toMatchObject({
+        ingredientId: rose,
+        ingredientName: 'Rose',
+        quantityPerUnit: 6,
+      });
 
       const updated = await request(app.getHttpServer())
         .patch(`/products/${product.id}`)
@@ -252,7 +273,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     it('rejects a recipe row referencing an ingredient from another shop', async () => {
       const shopA = await setupShop('tenant-a');
       const shopB = await setupShop('tenant-b');
-      const foreignIngredient = await createIngredient(shopB.adminToken, 'Foreign Rose');
+      const foreignIngredient = await createIngredient(
+        shopB.adminToken,
+        'Foreign Rose',
+      );
 
       const res = await request(app.getHttpServer())
         .post('/products')
@@ -263,7 +287,9 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
           thumbnail: 'https://example.com/x.jpg',
           sku: `BOM-XTENANT-${runId}`,
           categoryIds: [shopA.categoryId],
-          ingredients: [{ ingredientId: foreignIngredient, quantityPerUnit: 1 }],
+          ingredients: [
+            { ingredientId: foreignIngredient, quantityPerUnit: 1 },
+          ],
         })
         .expect(400);
       expect(messageContains(res, 'ingredientId')).toBe(true);
@@ -291,7 +317,8 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('a variant override wins for that variant; a variant with no override falls back to the product default', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('override');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('override');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 1000);
 
@@ -358,7 +385,8 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('consumption fires at the same trigger points as product stock, gated by the toggle', () => {
     it('storefront checkout (immediate reservation) consumes the recipe and logs a CONSUMED movement', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('consume-immediate');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('consume-immediate');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
       const product = await createProduct(adminToken, categoryId, {
@@ -373,7 +401,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
       const created = await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(storefrontOrderPayload(outletId, product.id, { items: [{ productId: product.id, quantity: 2 }] }))
+        .send(
+          storefrontOrderPayload(outletId, product.id, {
+            items: [{ productId: product.id, quantity: 2 }],
+          }),
+        )
         .expect(201);
       const orderId = body<OrderCreateResponse>(created).order.id;
 
@@ -382,7 +414,9 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       });
       expect(roseStock.stockQuantity).toBe(100 - 12); // 6 * 2
 
-      const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { id: orderId },
+      });
       expect(order.ingredientsConsumedAt).not.toBeNull();
 
       const movements = await request(app.getHttpServer())
@@ -391,11 +425,14 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .query({ ingredientId: rose })
         .expect(200);
       const rows = body<MovementList>(movements).data;
-      expect(rows.some((r) => r.type === 'CONSUMED' && r.delta === -12)).toBe(true);
+      expect(rows.some((r) => r.type === 'CONSUMED' && r.delta === -12)).toBe(
+        true,
+      );
     });
 
     it('a product/variant with no recipe defined consumes nothing — fully backward compatible', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('no-recipe');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('no-recipe');
       const product = await createProduct(adminToken, categoryId);
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
@@ -418,7 +455,8 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('respects the shop toggle: off means no deduction even though a recipe is linked', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('toggle-off');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('toggle-off');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
       const product = await createProduct(adminToken, categoryId, {
@@ -448,12 +486,15 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       });
       expect(roseStock.stockQuantity).toBe(100); // untouched
 
-      const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { id: orderId },
+      });
       expect(order.ingredientsConsumedAt).toBeNull();
     });
 
     it('a deferred admin order consumes at the pending->confirmed transition, not at creation', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('consume-confirm');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('consume-confirm');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
       const product = await createProduct(adminToken, categoryId, {
@@ -501,7 +542,8 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('cancelling a still-pending immediate-reservation order restocks ingredients immediately', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('cancel-immediate');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('cancel-immediate');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
       const product = await createProduct(adminToken, categoryId, {
@@ -537,9 +579,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
   });
 
-  describe('effective availability (informational, doesn\'t gate checkout)', () => {
+  describe("effective availability (informational, doesn't gate checkout)", () => {
     it('makeableQuantity/limitedByIngredient reflect the binding ingredient at the resolved outlet', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('availability');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('availability');
       const rose = await createIngredient(adminToken, 'Rose');
       const box = await createIngredient(adminToken, 'Box');
       await setIngredientStock(adminToken, rose, outletId, 25); // 25 / 10 = 2 makeable
@@ -574,14 +617,19 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       // (20) but above what's "makeable" (2) still succeeds here.
       await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(storefrontOrderPayload(outletId, product.id, { items: [{ productId: product.id, quantity: 1 }] }))
+        .send(
+          storefrontOrderPayload(outletId, product.id, {
+            items: [{ productId: product.id, quantity: 1 }],
+          }),
+        )
         .expect(201);
     });
   });
 
   describe('race safety: concurrent orders against a nearly-depleted ingredient', () => {
     it('two concurrent storefront orders racing a recipe that only one can fully cover never overdraw the ingredient', async () => {
-      const { adminToken, categoryId, outletId, slug } = await setupShop('bom-race');
+      const { adminToken, categoryId, outletId, slug } =
+        await setupShop('bom-race');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 10); // exactly one order's worth (quantityPerUnit 10)
       const product = await createProduct(adminToken, categoryId, {

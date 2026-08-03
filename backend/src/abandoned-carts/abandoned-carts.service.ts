@@ -32,11 +32,16 @@ export class AbandonedCartsService {
   // episode); a row left over from a *previous, already-completed*
   // episode gets fully reset into a fresh one.
   async capture(shopId: number, dto: CaptureAbandonedCartDto) {
-    const cartValue = dto.cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    const cartValue = dto.cartItems.reduce(
+      (sum, i) => sum + i.price * i.quantity,
+      0,
+    );
     const cartItems: CartItemSnapshot[] = dto.cartItems;
 
     const existing = await this.prisma.abandonedcart.findUnique({
-      where: { shopId_customerPhone: { shopId, customerPhone: dto.customerPhone } },
+      where: {
+        shopId_customerPhone: { shopId, customerPhone: dto.customerPhone },
+      },
     });
 
     if (existing && existing.recoveredOrderId === null) {
@@ -53,7 +58,9 @@ export class AbandonedCartsService {
     }
 
     return this.prisma.abandonedcart.upsert({
-      where: { shopId_customerPhone: { shopId, customerPhone: dto.customerPhone } },
+      where: {
+        shopId_customerPhone: { shopId, customerPhone: dto.customerPhone },
+      },
       create: {
         shopId,
         outletId: dto.outletId,
@@ -86,11 +93,16 @@ export class AbandonedCartsService {
   // recovery link re-adding items after they already checked out via it or
   // another device.
   async resolveByToken(token: string) {
-    const cart = await this.prisma.abandonedcart.findUnique({ where: { recoverToken: token } });
+    const cart = await this.prisma.abandonedcart.findUnique({
+      where: { recoverToken: token },
+    });
     if (!cart || cart.recoveredOrderId !== null) {
       throw new NotFoundException('This recovery link is no longer valid');
     }
-    return { cartItems: cart.cartItems as unknown as CartItemSnapshot[], outletId: cart.outletId };
+    return {
+      cartItems: cart.cartItems as unknown as CartItemSnapshot[],
+      outletId: cart.outletId,
+    };
   }
 
   // Called from inside PublicService.createOrder's transaction, right
@@ -100,7 +112,12 @@ export class AbandonedCartsService {
   // this call and the recovery job's own claim (see claimDueForShop below)
   // lands first in the DB wins the row, and the loser's own WHERE clause
   // simply matches zero rows.
-  async markRecovered(tx: Prisma.TransactionClient, shopId: number, customerPhone: string, orderId: number) {
+  async markRecovered(
+    tx: Prisma.TransactionClient,
+    shopId: number,
+    customerPhone: string,
+    orderId: number,
+  ) {
     await tx.abandonedcart.updateMany({
       where: { shopId, customerPhone, recoveredOrderId: null },
       data: { recoveredOrderId: orderId },
@@ -128,10 +145,20 @@ export class AbandonedCartsService {
   async sendDueRecoveryEmails() {
     const shops = await this.prisma.shop.findMany({
       where: { notifyAbandonedCart: true },
-      select: { id: true, name: true, subdomain: true, abandonedCartWindowMinutes: true },
+      select: {
+        id: true,
+        name: true,
+        subdomain: true,
+        abandonedCartWindowMinutes: true,
+      },
     });
     for (const shop of shops) {
-      await this.sendDueForShop(shop.id, shop.name, shop.subdomain, shop.abandonedCartWindowMinutes);
+      await this.sendDueForShop(
+        shop.id,
+        shop.name,
+        shop.subdomain,
+        shop.abandonedCartWindowMinutes,
+      );
     }
   }
 
@@ -139,13 +166,26 @@ export class AbandonedCartsService {
   // action) can trigger one shop's pass directly — checks the opt-in toggle
   // itself (not just relying on the cron's pre-filter) so it's correct no
   // matter how it's called.
-  async sendDueForShop(shopId: number, shopName: string, shopSlug: string, windowMinutes: number) {
-    const shop = await this.prisma.shop.findUnique({ where: { id: shopId }, select: { notifyAbandonedCart: true } });
+  async sendDueForShop(
+    shopId: number,
+    shopName: string,
+    shopSlug: string,
+    windowMinutes: number,
+  ) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+      select: { notifyAbandonedCart: true },
+    });
     if (!shop?.notifyAbandonedCart) return 0;
 
     const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000);
     const candidates = await this.prisma.abandonedcart.findMany({
-      where: { shopId, capturedAt: { lte: cutoff }, recoveryEmailSentAt: null, recoveredOrderId: null },
+      where: {
+        shopId,
+        capturedAt: { lte: cutoff },
+        recoveryEmailSentAt: null,
+        recoveredOrderId: null,
+      },
     });
 
     let sent = 0;
@@ -157,7 +197,11 @@ export class AbandonedCartsService {
       // completed, or another overlapping run may have claimed it, in the
       // interim). Only a successful claim (count 1) is allowed to send.
       const claimed = await this.prisma.abandonedcart.updateMany({
-        where: { id: cart.id, recoveryEmailSentAt: null, recoveredOrderId: null },
+        where: {
+          id: cart.id,
+          recoveryEmailSentAt: null,
+          recoveredOrderId: null,
+        },
         data: { recoveryEmailSentAt: new Date() },
       });
       if (claimed.count === 0) continue;
@@ -166,13 +210,21 @@ export class AbandonedCartsService {
       const bodyLines = [
         `Hi ${cart.customerName}, you left these in your cart at ${shopName}:`,
         '',
-        ...items.map((i) => `- ${i.quantity}x ${i.name}${i.variantLabel ? ` (${i.variantLabel})` : ''} — ${i.price}`),
+        ...items.map(
+          (i) =>
+            `- ${i.quantity}x ${i.name}${i.variantLabel ? ` (${i.variantLabel})` : ''} — ${i.price}`,
+        ),
         '',
         `Pick up where you left off: ${STOREFRONT_URL}/${shopSlug}/cart/recover?token=${cart.recoverToken}`,
       ];
-      await sendEmail(cart.customerEmail, `You left something at ${shopName}`, bodyLines.join('\n'), {
-        fromName: shopName,
-      });
+      await sendEmail(
+        cart.customerEmail,
+        `You left something at ${shopName}`,
+        bodyLines.join('\n'),
+        {
+          fromName: shopName,
+        },
+      );
       sent += 1;
     }
     return sent;

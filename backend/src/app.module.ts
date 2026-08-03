@@ -26,6 +26,7 @@ import { SearchModule } from './search/search.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { IngredientsModule } from './ingredients/ingredients.module';
+import { IngredientCategoriesModule } from './ingredient-categories/ingredient-categories.module';
 import { CollectionsModule } from './collections/collections.module';
 import { ReturnsModule } from './returns/returns.module';
 import { ScanModule } from './scan/scan.module';
@@ -34,6 +35,7 @@ import { CustomerAccountModule } from './customer-account/customer-account.modul
 import { AbandonedCartsModule } from './abandoned-carts/abandoned-carts.module';
 import { GiftCardsModule } from './gift-cards/gift-cards.module';
 import { PolicyPagesModule } from './policy-pages/policy-pages.module';
+import { BranchRolesModule } from './branch-roles/branch-roles.module';
 
 @Module({
   imports: [
@@ -65,6 +67,8 @@ import { PolicyPagesModule } from './policy-pages/policy-pages.module';
     AuditLogModule,
     WhatsAppModule,
     IngredientsModule,
+    IngredientCategoriesModule,
+    BranchRolesModule,
     CollectionsModule,
     ReturnsModule,
     ScanModule,

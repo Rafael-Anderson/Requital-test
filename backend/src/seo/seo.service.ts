@@ -8,7 +8,9 @@ export class SeoService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findOne(ctx: TenantContext) {
-    const seo = await this.prisma.shopseosettings.findUnique({ where: { shopId: ctx.shopId } });
+    const seo = await this.prisma.shopseosettings.findUnique({
+      where: { shopId: ctx.shopId },
+    });
     // Same convention as ThemeService.findOne — no row yet is a valid,
     // common state (nothing saved), not an error.
     return (

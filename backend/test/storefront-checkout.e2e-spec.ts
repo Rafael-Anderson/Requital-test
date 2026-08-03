@@ -83,7 +83,11 @@ describe('Storefront public checkout (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -183,7 +187,9 @@ describe('Storefront public checkout (e2e)', () => {
 
   describe('public catalog reads', () => {
     it('GET /public/:shopSlug returns shop info', async () => {
-      const res = await request(app.getHttpServer()).get(`/public/${shopSlug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}`)
+        .expect(200);
       expect(body<{ name: string }>(res).name).toBe('Storefront Test Shop');
     });
 
@@ -191,28 +197,92 @@ describe('Storefront public checkout (e2e)', () => {
       const res = await request(app.getHttpServer())
         .get(`/public/${shopSlug}/categories`)
         .expect(200);
-      expect(body<{ id: number }[]>(res).map((c) => c.id)).toContain(categoryId);
+      expect(body<{ id: number }[]>(res).map((c) => c.id)).toContain(
+        categoryId,
+      );
     });
 
     it('GET /public/:shopSlug/products returns the created product with stock for the outlet', async () => {
       const res = await request(app.getHttpServer())
         .get(`/public/${shopSlug}/products?outletId=${outletId}`)
         .expect(200);
-      const product = body<{ id: number; stockQuantity: number }[]>(res).find((p) => p.id === productId);
+      const product = body<{ id: number; stockQuantity: number }[]>(res).find(
+        (p) => p.id === productId,
+      );
       expect(product?.stockQuantity).toBe(100);
     });
 
     it('GET /public/:shopSlug/outlets returns the outlet with delivery/pickup flags', async () => {
-      const res = await request(app.getHttpServer()).get(`/public/${shopSlug}/outlets`).expect(200);
-      const outlet = body<{ id: number; deliveryEnabled: boolean; pickupEnabled: boolean }[]>(res).find(
-        (o) => o.id === outletId,
-      );
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}/outlets`)
+        .expect(200);
+      const outlet = body<
+        { id: number; deliveryEnabled: boolean; pickupEnabled: boolean }[]
+      >(res).find((o) => o.id === outletId);
       expect(outlet?.deliveryEnabled).toBe(true);
       expect(outlet?.pickupEnabled).toBe(true);
     });
 
     it('unknown shop slug returns 404, not another shop', async () => {
-      await request(app.getHttpServer()).get('/public/does-not-exist-shop').expect(404);
+      await request(app.getHttpServer())
+        .get('/public/does-not-exist-shop')
+        .expect(404);
+    });
+
+    it('GET /public/:shopSlug/products?isCheckoutAddon=true filters by the flag, tenant-isolated', async () => {
+      const addon = await request(app.getHttpServer())
+        .post('/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Add-on Candle',
+          price: 20,
+          thumbnail: 'https://example.com/candle.jpg',
+          sku: `ADDON-${runId}`,
+          isCheckoutAddon: true,
+          categoryIds: [categoryId],
+        })
+        .expect(201);
+      const addonId = body<IdRow>(addon).id;
+
+      // A second shop's own addon-flagged product must never leak into this
+      // shop's filtered results — tenant isolation, not just a status filter.
+      const otherSlug = `storefront-test-other-${runId}`;
+      const otherSignup = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({
+          name: 'Other Shop Admin',
+          email: `storefront-other-admin-${runId}@test.com`,
+          password: 'password123',
+          shopName: 'Other Test Shop',
+          subdomain: otherSlug,
+        })
+        .expect(201);
+      const otherToken = body<AuthResponse>(otherSignup).accessToken;
+      const otherCategory = await request(app.getHttpServer())
+        .post('/categories')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ name: 'Other Category' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/products')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({
+          name: 'Other Shop Add-on',
+          price: 10,
+          thumbnail: 'https://example.com/other.jpg',
+          sku: `OTHER-ADDON-${runId}`,
+          isCheckoutAddon: true,
+          categoryIds: [body<IdRow>(otherCategory).id],
+        })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}/products?isCheckoutAddon=true`)
+        .expect(200);
+      const ids = body<{ id: number }[]>(res).map((p) => p.id);
+      expect(ids).toContain(addonId);
+      expect(ids).not.toContain(productId); // Rose Bouquet isn't flagged
+      expect(ids.length).toBe(1); // only this shop's addon product, never the other shop's
     });
   });
 
@@ -244,7 +314,9 @@ describe('Storefront public checkout (e2e)', () => {
     });
 
     it('cash_on_delivery never touches Stripe — no checkoutUrl', async () => {
-      const order = await prisma.order.findUniqueOrThrow({ where: { id: createdOrderId } });
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { id: createdOrderId },
+      });
       expect(order.paymentMethod).toBe('cash_on_delivery');
     });
 
@@ -255,7 +327,9 @@ describe('Storefront public checkout (e2e)', () => {
         .send({ defaultDeliveryFee: 999, taxRate: 50 })
         .expect(200);
 
-      const order = await prisma.order.findUniqueOrThrow({ where: { id: createdOrderId } });
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { id: createdOrderId },
+      });
       expect(Number(order.deliveryFee)).toBe(15);
       expect(Number(order.taxAmount)).toBeCloseTo(5, 2);
       expect(Number(order.total)).toBeCloseTo(120, 2);
@@ -291,11 +365,57 @@ describe('Storefront public checkout (e2e)', () => {
     it('rejects a payment method not enabled for pickup (card_on_delivery is a delivery-only method)', async () => {
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'card_on_delivery' }))
+        .send(
+          basePayload({
+            orderType: 'pickup',
+            paymentMethod: 'card_on_delivery',
+          }),
+        )
         .expect(400);
       expect(body<ErrorBody>(res).message).toEqual(
         expect.stringContaining('not an available payment method'),
       );
+    });
+  });
+
+  describe('per-item customer note', () => {
+    it('persists items[].note onto orderitem.note', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'pickup',
+            paymentMethod: 'cash_on_pickup',
+            customerAddress: 'Pickup at outlet',
+            items: [{ productId, quantity: 1, note: 'No card, please' }],
+          }),
+        )
+        .expect(201);
+      const { order } = body<CreateOrderResponseBody>(res);
+
+      const item = await prisma.orderitem.findFirstOrThrow({
+        where: { orderId: order.id },
+      });
+      expect(item.note).toBe('No card, please');
+    });
+
+    it('leaves orderitem.note null when no note was supplied', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'pickup',
+            paymentMethod: 'cash_on_pickup',
+            customerAddress: 'Pickup at outlet',
+          }),
+        )
+        .expect(201);
+      const { order } = body<CreateOrderResponseBody>(res);
+
+      const item = await prisma.orderitem.findFirstOrThrow({
+        where: { orderId: order.id },
+      });
+      expect(item.note).toBeNull();
     });
   });
 
@@ -312,15 +432,24 @@ describe('Storefront public checkout (e2e)', () => {
           }),
         )
         .expect(400);
-      expect(body<ErrorBody>(res).message).toEqual(expect.stringContaining('delivery radius'));
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('delivery radius'),
+      );
     });
 
     it('rejects when radius is configured but no coordinates were supplied at all', async () => {
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'delivery', paymentMethod: 'cash_on_delivery' }))
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+          }),
+        )
         .expect(400);
-      expect(body<ErrorBody>(res).message).toEqual(expect.stringContaining('location is required'));
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('location is required'),
+      );
     });
   });
 
@@ -357,7 +486,9 @@ describe('Storefront public checkout (e2e)', () => {
           }),
         )
         .expect(400);
-      expect(body<ErrorBody>(res).message).toEqual(expect.stringContaining('Minimum order amount'));
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('Minimum order amount'),
+      );
     });
 
     it('uses the matched zone fee (25) instead of shop.defaultDeliveryFee (15) once the minimum is met', async () => {
@@ -498,13 +629,17 @@ describe('Storefront public checkout (e2e)', () => {
           }),
         )
         .expect(400);
-      expect(body<ErrorBody>(res).message).toEqual(expect.stringContaining('not available'));
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('not available'),
+      );
 
       // A pickup order must still work — deliveryHours being closed is
       // independent of pickupHours (both null = always open by default).
       await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }))
+        .send(
+          basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }),
+        )
         .expect(201);
     });
 
@@ -529,9 +664,13 @@ describe('Storefront public checkout (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }))
+        .send(
+          basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }),
+        )
         .expect(400);
-      expect(body<ErrorBody>(res).message).toEqual(expect.stringContaining('currently closed'));
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('currently closed'),
+      );
 
       // Restore for subsequent tests.
       await request(app.getHttpServer())
@@ -561,9 +700,17 @@ describe('Storefront public checkout (e2e)', () => {
       async (customerPhone) => {
         const res = await request(app.getHttpServer())
           .post(`/public/${shopSlug}/orders`)
-          .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup', customerPhone }))
+          .send(
+            basePayload({
+              orderType: 'pickup',
+              paymentMethod: 'cash_on_pickup',
+              customerPhone,
+            }),
+          )
           .expect(400);
-        expect(messageContains(res, 'customerPhone must contain only digits')).toBe(true);
+        expect(
+          messageContains(res, 'customerPhone must contain only digits'),
+        ).toBe(true);
       },
     );
   });
@@ -589,7 +736,10 @@ describe('Storefront public checkout (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: raceProductId, delta: 1 }] })
+        .send({
+          outletId,
+          adjustments: [{ productId: raceProductId, delta: 1 }],
+        })
         .expect(200);
     });
 
@@ -604,7 +754,9 @@ describe('Storefront public checkout (e2e)', () => {
           }),
         )
         .expect(409);
-      expect(body<ErrorBody>(res).message).toEqual(expect.stringContaining('out of stock'));
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('out of stock'),
+      );
 
       const stock = await prisma.outletstock.findUniqueOrThrow({
         where: { outletId_productId: { outletId, productId: raceProductId } },
@@ -634,7 +786,14 @@ describe('Storefront public checkout (e2e)', () => {
       expect(stock.stockQuantity).toBe(0);
 
       const orderCount = await prisma.order.count({
-        where: { shopId: (await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } })).id, orderitem: { some: { productId: raceProductId } } },
+        where: {
+          shopId: (
+            await prisma.shop.findUniqueOrThrow({
+              where: { subdomain: shopSlug },
+            })
+          ).id,
+          orderitem: { some: { productId: raceProductId } },
+        },
       });
       expect(orderCount).toBe(1); // the losing request's order was never created (rolled back)
     });
@@ -644,7 +803,9 @@ describe('Storefront public checkout (e2e)', () => {
     it('a valid tracking token returns full order detail — no auth required', async () => {
       const created = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }))
+        .send(
+          basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }),
+        )
         .expect(201);
       const { order } = body<CreateOrderResponseBody>(created);
       expect(order.trackingToken).toBeTruthy();
@@ -662,7 +823,9 @@ describe('Storefront public checkout (e2e)', () => {
     });
 
     it('a missing token is rejected (400), not treated as "no filter"', async () => {
-      await request(app.getHttpServer()).get('/public/orders/lookup').expect(400);
+      await request(app.getHttpServer())
+        .get('/public/orders/lookup')
+        .expect(400);
     });
 
     it('an unknown/wrong token returns 404, not partial or default data', async () => {
@@ -674,11 +837,23 @@ describe('Storefront public checkout (e2e)', () => {
     it("looking up order A's token never returns order B's data", async () => {
       const orderA = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup', customerName: 'Customer A' }))
+        .send(
+          basePayload({
+            orderType: 'pickup',
+            paymentMethod: 'cash_on_pickup',
+            customerName: 'Customer A',
+          }),
+        )
         .expect(201);
       const orderB = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup', customerName: 'Customer B' }))
+        .send(
+          basePayload({
+            orderType: 'pickup',
+            paymentMethod: 'cash_on_pickup',
+            customerName: 'Customer B',
+          }),
+        )
         .expect(201);
       const tokenA = body<CreateOrderResponseBody>(orderA).order.trackingToken;
       const idB = body<CreateOrderResponseBody>(orderB).order.id;
@@ -694,11 +869,15 @@ describe('Storefront public checkout (e2e)', () => {
     it('the lookup response never includes customerPhone/customerEmail/customerAddress', async () => {
       const created = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }))
+        .send(
+          basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }),
+        )
         .expect(201);
       const token = body<CreateOrderResponseBody>(created).order.trackingToken;
 
-      const res = await request(app.getHttpServer()).get(`/public/orders/lookup?token=${token}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/orders/lookup?token=${token}`)
+        .expect(200);
       const raw = res.body as Record<string, unknown>;
       expect(raw).not.toHaveProperty('customerPhone');
       expect(raw).not.toHaveProperty('customerEmail');

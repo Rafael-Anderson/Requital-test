@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -13,11 +18,17 @@ import {
 import { AuditLogService } from '../audit-log/audit-log.service';
 
 const discountInclude = {
-  discountproduct: { include: { product: { select: { id: true, name: true } } } },
-  discountcategory: { include: { category: { select: { id: true, name: true } } } },
+  discountproduct: {
+    include: { product: { select: { id: true, name: true } } },
+  },
+  discountcategory: {
+    include: { category: { select: { id: true, name: true } } },
+  },
 } satisfies Prisma.discountInclude;
 
-type DiscountWithEligibility = Prisma.discountGetPayload<{ include: typeof discountInclude }>;
+type DiscountWithEligibility = Prisma.discountGetPayload<{
+  include: typeof discountInclude;
+}>;
 
 export interface EvaluateResult {
   valid: boolean;
@@ -81,7 +92,9 @@ export class DiscountsService {
               : undefined,
           discountcategory:
             dto.appliesTo === 'SPECIFIC_CATEGORIES' && dto.categoryIds
-              ? { create: dto.categoryIds.map((categoryId) => ({ categoryId })) }
+              ? {
+                  create: dto.categoryIds.map((categoryId) => ({ categoryId })),
+                }
               : undefined,
         },
         include: discountInclude,
@@ -96,7 +109,10 @@ export class DiscountsService {
     const current = await this.findRaw(ctx, id);
     const effectiveType = dto.type ?? (current.type as DiscountType);
     if (dto.type || dto.value !== undefined) {
-      this.assertFieldsMatchType({ type: effectiveType, value: dto.value ?? (current.value ? Number(current.value) : undefined) });
+      this.assertFieldsMatchType({
+        type: effectiveType,
+        value: dto.value ?? (current.value ? Number(current.value) : undefined),
+      });
     }
     if (dto.productIds || dto.categoryIds) {
       await this.assertEligibilityTargetsBelongToShop(ctx, dto);
@@ -124,10 +140,14 @@ export class DiscountsService {
             endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
             active: dto.active,
             ...(dto.productIds && {
-              discountproduct: { create: dto.productIds.map((productId) => ({ productId })) },
+              discountproduct: {
+                create: dto.productIds.map((productId) => ({ productId })),
+              },
             }),
             ...(dto.categoryIds && {
-              discountcategory: { create: dto.categoryIds.map((categoryId) => ({ categoryId })) },
+              discountcategory: {
+                create: dto.categoryIds.map((categoryId) => ({ categoryId })),
+              },
             }),
           },
           include: discountInclude,
@@ -155,20 +175,32 @@ export class DiscountsService {
   // POST /shop/discounts/validate (admin-authenticated, draft-order builder)
   // and POST /public/:shopSlug/discounts/validate (storefront cart/checkout
   // — see PublicController) via the same shopId-scoped call.
-  async validate(shopId: number, dto: ValidateDiscountDto): Promise<EvaluateResult> {
+  async validate(
+    shopId: number,
+    dto: ValidateDiscountDto,
+  ): Promise<EvaluateResult> {
     const discount = await this.resolveByCode(shopId, dto.code);
     return this.evaluate(discount, dto);
   }
 
-  async resolveByCode(shopId: number, code: string): Promise<DiscountWithEligibility | null> {
+  async resolveByCode(
+    shopId: number,
+    code: string,
+  ): Promise<DiscountWithEligibility | null> {
     return this.prisma.discount.findUnique({
       where: { shopId_code: { shopId, code: this.normalizeCode(code) } },
       include: discountInclude,
     });
   }
 
-  async resolveById(shopId: number, id: number): Promise<DiscountWithEligibility | null> {
-    return this.prisma.discount.findFirst({ where: { id, shopId }, include: discountInclude });
+  async resolveById(
+    shopId: number,
+    id: number,
+  ): Promise<DiscountWithEligibility | null> {
+    return this.prisma.discount.findFirst({
+      where: { id, shopId },
+      include: discountInclude,
+    });
   }
 
   // Eligibility/amount computation given an already-resolved discount row
@@ -178,24 +210,39 @@ export class DiscountsService {
   // atomic claim, which happens separately, inside the order's transaction.
   async evaluate(
     discount: DiscountWithEligibility | null,
-    input: { cartSubtotal: number; productIds?: number[]; categoryIds?: number[]; customerId?: number },
+    input: {
+      cartSubtotal: number;
+      productIds?: number[];
+      categoryIds?: number[];
+      customerId?: number;
+    },
   ): Promise<EvaluateResult> {
     if (!discount) return this.reject('not_found');
     if (!discount.active) return this.reject('inactive');
 
     const now = new Date();
-    if (discount.startsAt && now < discount.startsAt) return this.reject('not_started');
+    if (discount.startsAt && now < discount.startsAt)
+      return this.reject('not_started');
     if (discount.endsAt && now > discount.endsAt) return this.reject('expired');
 
-    if (discount.minPurchaseAmount && input.cartSubtotal < Number(discount.minPurchaseAmount)) {
+    if (
+      discount.minPurchaseAmount &&
+      input.cartSubtotal < Number(discount.minPurchaseAmount)
+    ) {
       return this.reject('min_purchase_not_met');
     }
 
-    if (discount.usageLimit !== null && discount.timesUsed >= discount.usageLimit) {
+    if (
+      discount.usageLimit !== null &&
+      discount.timesUsed >= discount.usageLimit
+    ) {
       return this.reject('usage_limit_reached');
     }
 
-    if (discount.usageLimitPerCustomer !== null && input.customerId !== undefined) {
+    if (
+      discount.usageLimitPerCustomer !== null &&
+      input.customerId !== undefined
+    ) {
       const usedByCustomer = await this.prisma.discountredemption.count({
         where: { discountId: discount.id, customerId: input.customerId },
       });
@@ -205,12 +252,16 @@ export class DiscountsService {
     }
 
     if (discount.appliesTo === 'SPECIFIC_PRODUCTS') {
-      const eligibleIds = new Set(discount.discountproduct.map((d) => d.productId));
+      const eligibleIds = new Set(
+        discount.discountproduct.map((d) => d.productId),
+      );
       if (!(input.productIds ?? []).some((id) => eligibleIds.has(id))) {
         return this.reject('not_eligible');
       }
     } else if (discount.appliesTo === 'SPECIFIC_CATEGORIES') {
-      const eligibleIds = new Set(discount.discountcategory.map((d) => d.categoryId));
+      const eligibleIds = new Set(
+        discount.discountcategory.map((d) => d.categoryId),
+      );
       if (!(input.categoryIds ?? []).some((id) => eligibleIds.has(id))) {
         return this.reject('not_eligible');
       }
@@ -242,25 +293,40 @@ export class DiscountsService {
     const result = await tx.discount.updateMany({
       where: {
         id: discount.id,
-        ...(discount.usageLimit !== null && { timesUsed: { lt: discount.usageLimit } }),
+        ...(discount.usageLimit !== null && {
+          timesUsed: { lt: discount.usageLimit },
+        }),
       },
       data: { timesUsed: { increment: 1 } },
     });
     if (result.count === 0) {
-      throw new ConflictException('This promo code has just reached its usage limit');
+      throw new ConflictException(
+        'This promo code has just reached its usage limit',
+      );
     }
     await tx.discountredemption.create({
-      data: { discountId: discount.id, customerId: customerId ?? undefined, orderId },
+      data: {
+        discountId: discount.id,
+        customerId: customerId ?? undefined,
+        orderId,
+      },
     });
   }
 
   private reject(reason: DiscountRejectionReason): EvaluateResult {
-    return { valid: false, reason, message: DISCOUNT_REJECTION_MESSAGES[reason] };
+    return {
+      valid: false,
+      reason,
+      message: DISCOUNT_REJECTION_MESSAGES[reason],
+    };
   }
 
   // Public — reused by DraftOrdersService to preview the discount amount on
   // an as-yet-unconverted draft order without duplicating the type/value math.
-  computeAmount(discount: { type: string; value: Prisma.Decimal | null }, cartSubtotal: number): number {
+  computeAmount(
+    discount: { type: string; value: Prisma.Decimal | null },
+    cartSubtotal: number,
+  ): number {
     if (discount.type === 'FREE_SHIPPING') return 0;
     const value = Number(discount.value ?? 0);
     if (discount.type === 'PERCENTAGE') {
@@ -276,10 +342,14 @@ export class DiscountsService {
   private assertFieldsMatchType(dto: { type: DiscountType; value?: number }) {
     if (dto.type === 'FREE_SHIPPING') {
       if (dto.value !== undefined) {
-        throw new BadRequestException('value must not be set for a FREE_SHIPPING discount');
+        throw new BadRequestException(
+          'value must not be set for a FREE_SHIPPING discount',
+        );
       }
     } else if (dto.value === undefined) {
-      throw new BadRequestException(`value is required for a ${dto.type} discount`);
+      throw new BadRequestException(
+        `value is required for a ${dto.type} discount`,
+      );
     }
   }
 
@@ -292,7 +362,9 @@ export class DiscountsService {
         where: { id: { in: dto.productIds }, shopId: ctx.shopId },
       });
       if (count !== new Set(dto.productIds).size) {
-        throw new BadRequestException('One or more productIds are invalid for this shop');
+        throw new BadRequestException(
+          'One or more productIds are invalid for this shop',
+        );
       }
     }
     if (dto.categoryIds?.length) {
@@ -300,13 +372,17 @@ export class DiscountsService {
         where: { id: { in: dto.categoryIds }, shopId: ctx.shopId },
       });
       if (count !== new Set(dto.categoryIds).size) {
-        throw new BadRequestException('One or more categoryIds are invalid for this shop');
+        throw new BadRequestException(
+          'One or more categoryIds are invalid for this shop',
+        );
       }
     }
   }
 
   private async findRaw(ctx: TenantContext, id: number) {
-    const discount = await this.prisma.discount.findFirst({ where: { id, shopId: ctx.shopId } });
+    const discount = await this.prisma.discount.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!discount) {
       throw new NotFoundException(`Discount ${id} not found`);
     }
@@ -323,7 +399,10 @@ export class DiscountsService {
   }
 
   private handlePrismaError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       throw new ConflictException('A discount with this code already exists');
     }
     throw error;

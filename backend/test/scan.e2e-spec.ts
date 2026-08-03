@@ -70,7 +70,9 @@ function body<T>(res: Response): T {
   return res.body as T;
 }
 
-const RECEIPT_FIXTURE = readFileSync(join(__dirname, 'fixtures', 'receipt.png'));
+const RECEIPT_FIXTURE = readFileSync(
+  join(__dirname, 'fixtures', 'receipt.png'),
+);
 
 describe('Scan to Stock (e2e)', () => {
   let app: INestApplication<App>;
@@ -89,7 +91,11 @@ describe('Scan to Stock (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -134,7 +140,10 @@ describe('Scan to Stock (e2e)', () => {
     return request(app.getHttpServer())
       .post('/scan/preview')
       .set('Authorization', `Bearer ${adminToken}`)
-      .attach('file', RECEIPT_FIXTURE, { filename: 'receipt.png', contentType: 'image/png' });
+      .attach('file', RECEIPT_FIXTURE, {
+        filename: 'receipt.png',
+        contentType: 'image/png',
+      });
   }
 
   function updateSettings(adminToken: string, patch: Record<string, unknown>) {
@@ -155,7 +164,9 @@ describe('Scan to Stock (e2e)', () => {
     expect(names1).toContain('Fresh Rose Stems');
     expect(names1).toContain('White Lily Bunch');
     expect(names1).toContain('Ribbon Spool');
-    expect(names1.some((n) => /subtotal|vat|total|thank you/i.test(n))).toBe(false);
+    expect(names1.some((n) => /subtotal|vat|total|thank you/i.test(n))).toBe(
+      false,
+    );
 
     const roses = preview1.items.find((i) => i.name === 'Fresh Rose Stems')!;
     expect(roses.quantity).toBe(2);
@@ -209,7 +220,9 @@ describe('Scan to Stock (e2e)', () => {
     const previewB = body<ScanPreviewResponse>(res);
     // Shop A's product must never appear as a suggestion in shop B's scan,
     // even though the OCR text ("Fresh Rose Stems") matches it exactly.
-    const allSuggestionNames = previewB.items.flatMap((i) => i.suggestions.map((s) => s.name));
+    const allSuggestionNames = previewB.items.flatMap((i) =>
+      i.suggestions.map((s) => s.name),
+    );
     expect(allSuggestionNames).not.toContain('Fresh Rose Stems');
 
     // Preview is read-only — nothing was created or moved for either shop.
@@ -257,7 +270,9 @@ describe('Scan to Stock (e2e)', () => {
       .get(`/products?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const newProduct = body<ProductRow[]>(products).find((p) => p.name === 'Scanned New Rose');
+    const newProduct = body<ProductRow[]>(products).find(
+      (p) => p.name === 'Scanned New Rose',
+    );
     expect(newProduct).toBeDefined();
     expect(newProduct!.stockQuantity).toBe(12);
 
@@ -265,14 +280,17 @@ describe('Scan to Stock (e2e)', () => {
       .get(`/shop/ingredients?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const newIngredient = body<IngredientRow[]>(ingredients).find((i) => i.name === 'Scanned New Wire');
+    const newIngredient = body<IngredientRow[]>(ingredients).find(
+      (i) => i.name === 'Scanned New Wire',
+    );
     expect(newIngredient).toBeDefined();
     expect(newIngredient!.unit).toBe('spools');
     expect(newIngredient!.stockQuantity).toBe(7);
   });
 
   it('applies a RECEIVED StockMovement for a matched item — adds to existing stock, never overwrites it', async () => {
-    const { adminToken, outletId, categoryId } = await setupShop('scan-matched');
+    const { adminToken, outletId, categoryId } =
+      await setupShop('scan-matched');
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -299,7 +317,14 @@ describe('Scan to Stock (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         imageUrl: '/uploads/scans/test-fixture.png',
-        items: [{ targetType: 'product', matchedId: productId, outletId, quantity: 5 }],
+        items: [
+          {
+            targetType: 'product',
+            matchedId: productId,
+            outletId,
+            quantity: 5,
+          },
+        ],
       })
       .expect(201);
     expect(body<ScanCommitResponse>(res).updated).toBe(1);
@@ -345,7 +370,14 @@ describe('Scan to Stock (e2e)', () => {
       .set('Authorization', `Bearer ${shopB.adminToken}`)
       .send({
         imageUrl: '/uploads/scans/x.png',
-        items: [{ targetType: 'product', matchedId: productAId, outletId: shopB.outletId, quantity: 5 }],
+        items: [
+          {
+            targetType: 'product',
+            matchedId: productAId,
+            outletId: shopB.outletId,
+            quantity: 5,
+          },
+        ],
       });
     expect(attempt1.status).toBe(400);
 
@@ -360,7 +392,11 @@ describe('Scan to Stock (e2e)', () => {
             targetType: 'product',
             outletId: shopA.outletId,
             quantity: 5,
-            createNew: { name: 'Sneaky Product', price: 10, categoryId: shopB.categoryId },
+            createNew: {
+              name: 'Sneaky Product',
+              price: 10,
+              categoryId: shopB.categoryId,
+            },
           },
         ],
       });
@@ -380,16 +416,22 @@ describe('Scan to Stock (e2e)', () => {
     const shopA = await setupShop('scan-settings-tenant-a');
     const shopB = await setupShop('scan-settings-tenant-b');
 
-    await updateSettings(shopA.adminToken, { excludeKeywords: ['shop-a-only-keyword'] }).expect(200);
+    await updateSettings(shopA.adminToken, {
+      excludeKeywords: ['shop-a-only-keyword'],
+    }).expect(200);
 
     const settingsB = await request(app.getHttpServer())
       .get('/scan/settings')
       .set('Authorization', `Bearer ${shopB.adminToken}`)
       .expect(200);
-    expect(body<ScanSettingsResponse>(settingsB).excludeKeywords).not.toContain('shop-a-only-keyword');
+    expect(body<ScanSettingsResponse>(settingsB).excludeKeywords).not.toContain(
+      'shop-a-only-keyword',
+    );
 
     // Shop B can't set its default outlet to Shop A's outlet id.
-    const attempt = await updateSettings(shopB.adminToken, { defaultOutletId: shopA.outletId });
+    const attempt = await updateSettings(shopB.adminToken, {
+      defaultOutletId: shopA.outletId,
+    });
     expect(attempt.status).toBe(400);
   });
 });

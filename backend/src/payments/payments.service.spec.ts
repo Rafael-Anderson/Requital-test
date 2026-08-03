@@ -5,7 +5,16 @@ import type { PaymentSettingsService } from './payment-settings.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import { TelrPaymentProvider } from './providers/telr-payment.provider';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { PaymentProvider, WebhookResult } from './payment-provider.interface';
+import type {
+  PaymentProvider,
+  WebhookResult,
+} from './payment-provider.interface';
+import type { BranchRolesService } from '../branch-roles/branch-roles.service';
+
+// None of these tests exercise generateLink() (the only method that
+// actually calls into branch-roles), so a bare mock is enough to satisfy
+// the constructor.
+const mockBranchRolesService = {} as BranchRolesService;
 
 function createMockPrisma(opts: {
   order?: { id: number; total: Prisma.Decimal | number } | null;
@@ -19,7 +28,9 @@ function createMockPrisma(opts: {
     },
     paymenttransaction: {
       create: jest.fn(() =>
-        opts.createRejectsWith ? Promise.reject(opts.createRejectsWith) : Promise.resolve({}),
+        opts.createRejectsWith
+          ? Promise.reject(opts.createRejectsWith)
+          : Promise.resolve({}),
       ),
     },
     // Array-form $transaction: reject like the real thing if any operation
@@ -51,9 +62,19 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
     const registry = new PaymentProviderRegistry();
     registry.register(new TelrPaymentProvider());
     const prisma = createMockPrisma({});
-    const service = new PaymentsService(prisma, registry, {} as PaymentSettingsService, {} as AffiliateService);
+    const service = new PaymentsService(
+      prisma,
+      registry,
+      {} as PaymentSettingsService,
+      {} as AffiliateService,
+      mockBranchRolesService,
+    );
 
-    const result = await service.handleWebhook('telr', Buffer.from('{}'), 'sig');
+    const result = await service.handleWebhook(
+      'telr',
+      Buffer.from('{}'),
+      'sig',
+    );
 
     expect(result).toEqual({ received: true });
     expect(prisma.paymenttransaction.create).not.toHaveBeenCalled();
@@ -61,17 +82,41 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
 
   it('records the transaction and marks the order paid on a recognized "paid" event', async () => {
     const registry = new PaymentProviderRegistry();
-    registry.register(new FakeProvider({ providerReference: 'evt_1', orderId: 42, status: 'paid' }));
-    const prisma = createMockPrisma({ order: { id: 42, total: new Prisma.Decimal(100) } });
-    const affiliateService = { syncOrderStatus: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService;
-    const service = new PaymentsService(prisma, registry, {} as PaymentSettingsService, affiliateService);
+    registry.register(
+      new FakeProvider({
+        providerReference: 'evt_1',
+        orderId: 42,
+        status: 'paid',
+      }),
+    );
+    const prisma = createMockPrisma({
+      order: { id: 42, total: new Prisma.Decimal(100) },
+    });
+    const affiliateService = {
+      syncOrderStatus: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AffiliateService;
+    const service = new PaymentsService(
+      prisma,
+      registry,
+      {} as PaymentSettingsService,
+      affiliateService,
+      mockBranchRolesService,
+    );
 
-    const result = await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
+    const result = await service.handleWebhook(
+      'fake',
+      Buffer.from('{}'),
+      'sig',
+    );
 
     expect(result).toEqual({ received: true });
     expect(prisma.paymenttransaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ orderId: 42, gateway: 'fake', gatewayReference: 'evt_1' }),
+        data: expect.objectContaining({
+          orderId: 42,
+          gateway: 'fake',
+          gatewayReference: 'evt_1',
+        }),
       }),
     );
     expect(prisma.order.update).toHaveBeenCalledWith({
@@ -82,25 +127,55 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
 
   it('a duplicate delivery of the same event (P2002 on gateway+gatewayReference) is swallowed, not re-applied or thrown', async () => {
     const registry = new PaymentProviderRegistry();
-    registry.register(new FakeProvider({ providerReference: 'evt_dup', orderId: 7, status: 'paid' }));
+    registry.register(
+      new FakeProvider({
+        providerReference: 'evt_dup',
+        orderId: 7,
+        status: 'paid',
+      }),
+    );
     const prisma = createMockPrisma({
       order: { id: 7, total: new Prisma.Decimal(50) },
       createRejectsWith: p2002(),
     });
-    const service = new PaymentsService(prisma, registry, {} as PaymentSettingsService, {} as AffiliateService);
+    const service = new PaymentsService(
+      prisma,
+      registry,
+      {} as PaymentSettingsService,
+      {} as AffiliateService,
+      mockBranchRolesService,
+    );
 
-    await expect(service.handleWebhook('fake', Buffer.from('{}'), 'sig')).resolves.toEqual({
+    await expect(
+      service.handleWebhook('fake', Buffer.from('{}'), 'sig'),
+    ).resolves.toEqual({
       received: true,
     });
   });
 
   it('an unrecognized orderId (order not found) is a safe no-op, not an error', async () => {
     const registry = new PaymentProviderRegistry();
-    registry.register(new FakeProvider({ providerReference: 'evt_2', orderId: 999, status: 'paid' }));
+    registry.register(
+      new FakeProvider({
+        providerReference: 'evt_2',
+        orderId: 999,
+        status: 'paid',
+      }),
+    );
     const prisma = createMockPrisma({ order: null });
-    const service = new PaymentsService(prisma, registry, {} as PaymentSettingsService, {} as AffiliateService);
+    const service = new PaymentsService(
+      prisma,
+      registry,
+      {} as PaymentSettingsService,
+      {} as AffiliateService,
+      mockBranchRolesService,
+    );
 
-    const result = await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
+    const result = await service.handleWebhook(
+      'fake',
+      Buffer.from('{}'),
+      'sig',
+    );
     expect(result).toEqual({ received: true });
     expect(prisma.paymenttransaction.create).not.toHaveBeenCalled();
   });
@@ -108,9 +183,17 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
   it('an unregistered gateway name throws rather than silently doing nothing', async () => {
     const registry = new PaymentProviderRegistry();
     const prisma = createMockPrisma({});
-    const service = new PaymentsService(prisma, registry, {} as PaymentSettingsService, {} as AffiliateService);
+    const service = new PaymentsService(
+      prisma,
+      registry,
+      {} as PaymentSettingsService,
+      {} as AffiliateService,
+      mockBranchRolesService,
+    );
 
-    await expect(service.handleWebhook('unknown-gateway', Buffer.from('{}'), 'sig')).rejects.toThrow(
+    await expect(
+      service.handleWebhook('unknown-gateway', Buffer.from('{}'), 'sig'),
+    ).rejects.toThrow(
       "Unknown or unconfigured payment gateway 'unknown-gateway'",
     );
   });

@@ -1,4 +1,11 @@
-import { IsIn, IsLatitude, IsLongitude, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsLatitude,
+  IsLongitude,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { EMIRATES } from '../../orders/constants';
 
 export class UpdateAddressDto {

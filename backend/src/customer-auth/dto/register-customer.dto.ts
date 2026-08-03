@@ -1,4 +1,12 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterCustomerDto {
   @IsString()
@@ -11,7 +19,8 @@ export class RegisterCustomerDto {
   // must accept the same phone format since a registration is a claim
   // against a row checkout could equally have created.
   @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
-    message: 'phone must contain only digits, spaces, hyphens, and an optional leading +',
+    message:
+      'phone must contain only digits, spaces, hyphens, and an optional leading +',
   })
   phone: string;
 

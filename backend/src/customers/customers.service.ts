@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, type customer as Customer } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -49,7 +53,12 @@ export class CustomersService {
     }
     try {
       return await this.prisma.customer.create({
-        data: { shopId, name: data.name, phone: data.phone, email: data.email ?? undefined },
+        data: {
+          shopId,
+          name: data.name,
+          phone: data.phone,
+          email: data.email ?? undefined,
+        },
       });
     } catch (error) {
       // Two concurrent orders for the same brand-new phone number can both
@@ -59,7 +68,10 @@ export class CustomersService {
       // and resolve to the winner's row rather than letting a 500 surface,
       // running it through the same name/email-diff path an ordinary
       // (non-racing) repeat customer would take.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         const winner = await this.prisma.customer.findUniqueOrThrow({
           where: { shopId_phone: { shopId, phone: data.phone } },
         });
@@ -92,7 +104,8 @@ export class CustomersService {
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
     const sortColumn = SORT_COLUMN[query.sortBy ?? 'lastOrderDate'];
-    const sortDir = query.sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const sortDir =
+      query.sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
     const searchFilter = search
       ? Prisma.sql`AND (c.name LIKE ${`%${search}%`} OR c.phone LIKE ${`%${search}%`})`
       : Prisma.empty;
@@ -144,15 +157,22 @@ export class CustomersService {
       orderBy: { createdAt: 'desc' },
     });
     const completedOrders = orders.filter((o) => o.status !== 'cancelled');
-    const lifetimeValue = completedOrders.reduce((sum, o) => sum + Number(o.total), 0);
+    const lifetimeValue = completedOrders.reduce(
+      (sum, o) => sum + Number(o.total),
+      0,
+    );
     const orderDates = completedOrders.map((o) => o.createdAt.getTime());
 
     return {
       ...customer,
       orderCount: completedOrders.length,
       lifetimeValue,
-      firstOrderDate: orderDates.length ? new Date(Math.min(...orderDates)) : null,
-      lastOrderDate: orderDates.length ? new Date(Math.max(...orderDates)) : null,
+      firstOrderDate: orderDates.length
+        ? new Date(Math.min(...orderDates))
+        : null,
+      lastOrderDate: orderDates.length
+        ? new Date(Math.max(...orderDates))
+        : null,
       orders,
     };
   }
@@ -170,8 +190,13 @@ export class CustomersService {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Another customer with this phone number already exists');
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Another customer with this phone number already exists',
+        );
       }
       throw error;
     }

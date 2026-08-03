@@ -15,7 +15,12 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ProductImageInput, WEIGHT_UNITS } from './create-product.dto';
+import {
+  ProductAttributeInput,
+  ProductFaqInput,
+  ProductImageInput,
+  WEIGHT_UNITS,
+} from './create-product.dto';
 import type { WeightUnit } from './create-product.dto';
 import { ProductIngredientInput } from './product-ingredient-input.dto';
 
@@ -77,6 +82,12 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   chargeTax?: boolean;
+
+  // Offered in the storefront checkout's "would you like to add any
+  // extras?" popup for carts that don't already contain this product.
+  @IsOptional()
+  @IsBoolean()
+  isCheckoutAddon?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -156,6 +167,21 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductImageInput)
   images?: ProductImageInput[];
+
+  // If provided (even an empty array), replaces the full attribute list —
+  // same convention as images above.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductAttributeInput)
+  attributes?: ProductAttributeInput[];
+
+  // If provided (even an empty array), replaces the full FAQ list.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductFaqInput)
+  faqs?: ProductFaqInput[];
 
   // If provided, replaces the full category set — must stay non-empty.
   @IsOptional()

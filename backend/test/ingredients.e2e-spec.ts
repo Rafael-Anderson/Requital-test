@@ -62,7 +62,11 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -103,7 +107,11 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
     return { adminToken, outletA, outletB, slug };
   }
 
-  async function createIngredient(adminToken: string, name: string, unit = 'stems') {
+  async function createIngredient(
+    adminToken: string,
+    name: string,
+    unit = 'stems',
+  ) {
     const res = await request(app.getHttpServer())
       .post('/shop/ingredients')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -123,7 +131,9 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
         .get('/shop/ingredients')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<IngredientRow[]>(list).some((i) => i.id === created.id)).toBe(true);
+      expect(body<IngredientRow[]>(list).some((i) => i.id === created.id)).toBe(
+        true,
+      );
 
       await request(app.getHttpServer())
         .patch(`/shop/ingredients/${created.id}`)
@@ -156,7 +166,12 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch Staff', email: branchEmail, password: 'password123', outletId: outletA })
+        .send({
+          name: 'Branch Staff',
+          email: branchEmail,
+          password: 'password123',
+          outletId: outletA,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -187,10 +202,13 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
   });
 
   describe('tenant isolation', () => {
-    it('cannot read, update, or delete another shop\'s ingredient by spoofing its id', async () => {
+    it("cannot read, update, or delete another shop's ingredient by spoofing its id", async () => {
       const shopA = await setupShop('iso-a');
       const shopB = await setupShop('iso-b');
-      const ingredientA = await createIngredient(shopA.adminToken, 'Shop A Ribbon');
+      const ingredientA = await createIngredient(
+        shopA.adminToken,
+        'Shop A Ribbon',
+      );
 
       await request(app.getHttpServer())
         .get(`/shop/ingredients/${ingredientA.id}`)
@@ -215,15 +233,23 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       expect(body<IngredientRow>(stillThere).name).toBe('Shop A Ribbon');
     });
 
-    it('cannot transfer or adjust stock for another shop\'s ingredient by spoofing its id', async () => {
+    it("cannot transfer or adjust stock for another shop's ingredient by spoofing its id", async () => {
       const shopA = await setupShop('iso-stock-a');
       const shopB = await setupShop('iso-stock-b');
-      const ingredientA = await createIngredient(shopA.adminToken, 'Shop A Twine');
+      const ingredientA = await createIngredient(
+        shopA.adminToken,
+        'Shop A Twine',
+      );
 
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
-        .send({ ingredientId: ingredientA.id, outletId: shopB.outletA, delta: 50, reason: 'received' })
+        .send({
+          ingredientId: ingredientA.id,
+          outletId: shopB.outletA,
+          delta: 50,
+          reason: 'received',
+        })
         .expect(404);
 
       await request(app.getHttpServer())
@@ -247,7 +273,9 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ outletId: outletA, delta: 5, reason: 'received' })
         .expect(400);
-      expect(messageContains(res, 'productId or ingredientId is required')).toBe(true);
+      expect(
+        messageContains(res, 'productId or ingredientId is required'),
+      ).toBe(true);
     });
 
     it('rejects a stock request with both productId and ingredientId', async () => {
@@ -290,7 +318,13 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, variantId: 999, outletId: outletA, delta: 5, reason: 'received' })
+        .send({
+          ingredientId: ingredient.id,
+          variantId: 999,
+          outletId: outletA,
+          delta: 5,
+          reason: 'received',
+        })
         .expect(400);
       expect(messageContains(res, 'do not support variants')).toBe(true);
     });
@@ -299,12 +333,22 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
   describe('stock transfer + reason-coded adjustment against an ingredient', () => {
     it('adjusts ingredient stock with a reason and logs it to movement history', async () => {
       const { adminToken, outletA } = await setupShop('adjust');
-      const ingredient = await createIngredient(adminToken, 'Adjust Test Ribbon', 'meters');
+      const ingredient = await createIngredient(
+        adminToken,
+        'Adjust Test Ribbon',
+        'meters',
+      );
 
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, outletId: outletA, delta: 25, reason: 'received', note: 'PO #1' })
+        .send({
+          ingredientId: ingredient.id,
+          outletId: outletA,
+          delta: 25,
+          reason: 'received',
+          note: 'PO #1',
+        })
         .expect(201);
 
       const fetched = await request(app.getHttpServer())
@@ -332,13 +376,23 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, outletId: outletA, delta: 10, reason: 'received' })
+        .send({
+          ingredientId: ingredient.id,
+          outletId: outletA,
+          delta: 10,
+          reason: 'received',
+        })
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, outletId: outletA, delta: -20, reason: 'damaged' })
+        .send({
+          ingredientId: ingredient.id,
+          outletId: outletA,
+          delta: -20,
+          reason: 'damaged',
+        })
         .expect(409);
 
       const fetched = await request(app.getHttpServer())
@@ -354,13 +408,23 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, outletId: outletA, delta: 40, reason: 'received' })
+        .send({
+          ingredientId: ingredient.id,
+          outletId: outletA,
+          delta: 40,
+          reason: 'received',
+        })
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, fromOutletId: outletA, toOutletId: outletB, quantity: 15 })
+        .send({
+          ingredientId: ingredient.id,
+          fromOutletId: outletA,
+          toOutletId: outletB,
+          quantity: 15,
+        })
         .expect(201);
 
       const atA = await request(app.getHttpServer())
@@ -375,7 +439,9 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       expect(body<IngredientRow>(atB).stockQuantity).toBe(15);
 
       const movements = await request(app.getHttpServer())
-        .get(`/products/stock/movements?ingredientId=${ingredient.id}&type=TRANSFER`)
+        .get(
+          `/products/stock/movements?ingredientId=${ingredient.id}&type=TRANSFER`,
+        )
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       expect(body<MovementList>(movements).total).toBe(1);
@@ -387,14 +453,24 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ ingredientId: ingredient.id, outletId: outletA, delta: 40, reason: 'received' })
+        .send({
+          ingredientId: ingredient.id,
+          outletId: outletA,
+          delta: 40,
+          reason: 'received',
+        })
         .expect(201);
 
       const attempt = () =>
         request(app.getHttpServer())
           .post('/products/stock/transfer')
           .set('Authorization', `Bearer ${adminToken}`)
-          .send({ ingredientId: ingredient.id, fromOutletId: outletA, toOutletId: outletB, quantity: 30 });
+          .send({
+            ingredientId: ingredient.id,
+            fromOutletId: outletA,
+            toOutletId: outletB,
+            quantity: 30,
+          });
 
       const results = await Promise.all([attempt(), attempt()]);
       const succeeded = results.filter((r) => r.status === 201);
@@ -414,7 +490,7 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
   });
 
   describe('never reachable via any public/storefront endpoint', () => {
-    it('a published shop\'s public product listing never includes an ingredient, and creating one does not affect it', async () => {
+    it("a published shop's public product listing never includes an ingredient, and creating one does not affect it", async () => {
       const { adminToken, slug } = await setupShop('public-leak');
       const category = await request(app.getHttpServer())
         .post('/categories')
@@ -451,7 +527,11 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       // A deliberately identically-named ingredient — if the public product
       // listing ever accidentally unioned in ingredients, this specific
       // name collision is the sharpest way to catch it.
-      await createIngredient(adminToken, 'Public Leak Test Ingredient', 'grams');
+      await createIngredient(
+        adminToken,
+        'Public Leak Test Ingredient',
+        'grams',
+      );
 
       const publicProducts = await request(app.getHttpServer())
         .get(`/public/${slug}/products`)
@@ -459,6 +539,251 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       const names = body<{ name: string }[]>(publicProducts).map((p) => p.name);
       expect(names).toContain('Public Leak Test Product');
       expect(names).not.toContain('Public Leak Test Ingredient');
+    });
+  });
+
+  describe('detail fields (image/description/cost/supplier)', () => {
+    it('creates and updates an ingredient with the fuller field set, including image via the upload endpoint', async () => {
+      const { adminToken } = await setupShop('detail-fields');
+
+      const upload = await request(app.getHttpServer())
+        .post('/shop/ingredients/upload')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', Buffer.from('fake-image-bytes'), 'rose.jpg')
+        .expect(201);
+      const { url } = body<{ url: string }>(upload);
+      expect(url).toMatch(/^\/uploads\/ingredients\//);
+
+      const created = await request(app.getHttpServer())
+        .post('/shop/ingredients')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Detailed Rose',
+          unit: 'stems',
+          image: url,
+          description: 'Fresh-cut red roses',
+          costPerUnit: 2.5,
+          supplier: 'Dubai Flower Market',
+        })
+        .expect(201);
+      const ingredient = body<{
+        id: number;
+        image: string | null;
+        description: string | null;
+        costPerUnit: string | null;
+        supplier: string | null;
+      }>(created);
+      expect(ingredient.image).toBe(url);
+      expect(ingredient.description).toBe('Fresh-cut red roses');
+      expect(Number(ingredient.costPerUnit)).toBe(2.5);
+      expect(ingredient.supplier).toBe('Dubai Flower Market');
+
+      // Explicit null clears each field — same convention as CategoryDto.
+      const updated = await request(app.getHttpServer())
+        .patch(`/shop/ingredients/${ingredient.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          image: null,
+          description: null,
+          costPerUnit: null,
+          supplier: null,
+        })
+        .expect(200);
+      const cleared = body<{
+        image: string | null;
+        description: string | null;
+        costPerUnit: string | null;
+        supplier: string | null;
+      }>(updated);
+      expect(cleared.image).toBeNull();
+      expect(cleared.description).toBeNull();
+      expect(cleared.costPerUnit).toBeNull();
+      expect(cleared.supplier).toBeNull();
+    });
+  });
+
+  describe('Ingredient Categories', () => {
+    async function createCategory(adminToken: string, name: string) {
+      const res = await request(app.getHttpServer())
+        .post('/shop/ingredient-categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name })
+        .expect(201);
+      return body<IdRow>(res);
+    }
+
+    it('creates, lists, updates, and deletes an ingredient category', async () => {
+      const { adminToken } = await setupShop('cat-crud');
+      const category = await createCategory(adminToken, 'Florals');
+
+      const list = await request(app.getHttpServer())
+        .get('/shop/ingredient-categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(
+        body<{ id: number; name: string }[]>(list).some(
+          (c) => c.id === category.id,
+        ),
+      ).toBe(true);
+
+      await request(app.getHttpServer())
+        .patch(`/shop/ingredient-categories/${category.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Fresh Florals' })
+        .expect(200);
+
+      const listAfterRename = await request(app.getHttpServer())
+        .get('/shop/ingredient-categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(
+        body<{ id: number; name: string }[]>(listAfterRename).find(
+          (c) => c.id === category.id,
+        )?.name,
+      ).toBe('Fresh Florals');
+
+      await request(app.getHttpServer())
+        .delete(`/shop/ingredient-categories/${category.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+    });
+
+    it('a branch user can read categories but cannot create, update, or delete one', async () => {
+      const { adminToken, outletA } = await setupShop('cat-branch');
+      const category = await createCategory(adminToken, 'Packaging');
+
+      const staffEmail = `cat-branch-staff-${runId}@test.com`;
+      await request(app.getHttpServer())
+        .post('/auth/branch-users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Branch Staff',
+          email: staffEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId: outletA,
+        })
+        .expect(201);
+      const login = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: staffEmail, password: 'password123' })
+        .expect(201);
+      const branchToken = body<AuthResponse>(login).accessToken;
+
+      await request(app.getHttpServer())
+        .get('/shop/ingredient-categories')
+        .set('Authorization', `Bearer ${branchToken}`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post('/shop/ingredient-categories')
+        .set('Authorization', `Bearer ${branchToken}`)
+        .send({ name: 'Sneaky Category' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .patch(`/shop/ingredient-categories/${category.id}`)
+        .set('Authorization', `Bearer ${branchToken}`)
+        .send({ name: 'Renamed by branch' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .delete(`/shop/ingredient-categories/${category.id}`)
+        .set('Authorization', `Bearer ${branchToken}`)
+        .expect(403);
+    });
+
+    it('cannot delete a category that still has ingredients assigned', async () => {
+      const { adminToken } = await setupShop('cat-delete-blocked');
+      const category = await createCategory(adminToken, 'In Use');
+      await request(app.getHttpServer())
+        .post('/shop/ingredients')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Assigned Ingredient',
+          unit: 'grams',
+          categoryId: category.id,
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .delete(`/shop/ingredient-categories/${category.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(409);
+    });
+
+    it("filters the ingredient list by categoryId, and the BOM picker's search can rely on it", async () => {
+      const { adminToken } = await setupShop('cat-filter');
+      const florals = await createCategory(adminToken, 'Florals');
+      const packaging = await createCategory(adminToken, 'Packaging');
+      const rose = await createIngredient(
+        adminToken,
+        'Rose (filter test)',
+        'stems',
+      );
+      await request(app.getHttpServer())
+        .patch(`/shop/ingredients/${rose.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ categoryId: florals.id })
+        .expect(200);
+      const box = await createIngredient(
+        adminToken,
+        'Box (filter test)',
+        'pieces',
+      );
+      await request(app.getHttpServer())
+        .patch(`/shop/ingredients/${box.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ categoryId: packaging.id })
+        .expect(200);
+
+      const floralsOnly = await request(app.getHttpServer())
+        .get(`/shop/ingredients?categoryId=${florals.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const floralIds = body<{ id: number }[]>(floralsOnly).map((i) => i.id);
+      expect(floralIds).toContain(rose.id);
+      expect(floralIds).not.toContain(box.id);
+    });
+
+    it('rejects a categoryId that belongs to a different shop', async () => {
+      const shopA = await setupShop('cat-tenant-a');
+      const shopB = await setupShop('cat-tenant-b');
+      const categoryB = await createCategory(
+        shopB.adminToken,
+        'Shop B Category',
+      );
+
+      await request(app.getHttpServer())
+        .post('/shop/ingredients')
+        .set('Authorization', `Bearer ${shopA.adminToken}`)
+        .send({
+          name: 'Cross-tenant attempt',
+          unit: 'grams',
+          categoryId: categoryB.id,
+        })
+        .expect(404);
+    });
+
+    it("adversarial: cannot read, rename, or delete another shop's ingredient category by spoofing its id", async () => {
+      const shopA = await setupShop('cat-iso-a');
+      const shopB = await setupShop('cat-iso-b');
+      const categoryA = await createCategory(shopA.adminToken, 'Shop A Only');
+
+      await request(app.getHttpServer())
+        .patch(`/shop/ingredient-categories/${categoryA.id}`)
+        .set('Authorization', `Bearer ${shopB.adminToken}`)
+        .send({ name: 'Hijacked' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .delete(`/shop/ingredient-categories/${categoryA.id}`)
+        .set('Authorization', `Bearer ${shopB.adminToken}`)
+        .expect(404);
+
+      const listB = await request(app.getHttpServer())
+        .get('/shop/ingredient-categories')
+        .set('Authorization', `Bearer ${shopB.adminToken}`)
+        .expect(200);
+      expect(
+        body<{ id: number }[]>(listB).some((c) => c.id === categoryA.id),
+      ).toBe(false);
     });
   });
 });

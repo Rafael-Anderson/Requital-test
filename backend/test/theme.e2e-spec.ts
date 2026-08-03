@@ -71,7 +71,11 @@ describe('Theme (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -93,7 +97,10 @@ describe('Theme (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
-    return { adminToken: body<AuthResponse>(signup).accessToken, slug: `${slugPrefix}-${runId}` };
+    return {
+      adminToken: body<AuthResponse>(signup).accessToken,
+      slug: `${slugPrefix}-${runId}`,
+    };
   }
 
   describe('GET /theme defaults for an unconfigured shop', () => {
@@ -125,7 +132,9 @@ describe('Theme (e2e)', () => {
 
     it("the public storefront shop payload is never broken/missing fields for an unconfigured shop — just nulls, with Requital's teal applied client-side as the fallback", async () => {
       const shop = await setupShop('theme-default-public');
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       const publicShop = body<PublicShopBody>(res);
       expect(publicShop.brandColor).toBeNull();
       expect(publicShop.secondaryColor).toBeNull();
@@ -140,7 +149,12 @@ describe('Theme (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ brandColor: '#123456', secondaryColor: '#654321', heroText: 'Fresh flowers daily', fontFamily: 'poppins' })
+        .send({
+          brandColor: '#123456',
+          secondaryColor: '#654321',
+          heroText: 'Fresh flowers daily',
+          fontFamily: 'poppins',
+        })
         .expect(200);
 
       const afterFirst = await request(app.getHttpServer())
@@ -183,10 +197,16 @@ describe('Theme (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ brandColor: '#ff6600', bannerUrl: '/uploads/theme/banner.jpg', heroText: 'Welcome' })
+        .send({
+          brandColor: '#ff6600',
+          bannerUrl: '/uploads/theme/banner.jpg',
+          heroText: 'Welcome',
+        })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       const publicShop = body<PublicShopBody>(res);
       expect(publicShop.brandColor).toBe('#ff6600');
       expect(publicShop.bannerUrl).toBe('/uploads/theme/banner.jpg');
@@ -222,7 +242,10 @@ describe('Theme (e2e)', () => {
           footerLogoUrl: '/uploads/theme/footer-logo.png',
           notificationText: ['Free delivery over 100 AED', 'Eid sale now on'],
           contactNumbers: ['+971501234567', '+97141234567'],
-          colors: { headerBackgroundColor: '#fafafa', productNameColor: '#111111' },
+          colors: {
+            headerBackgroundColor: '#fafafa',
+            productNameColor: '#111111',
+          },
         })
         .expect(200);
 
@@ -232,9 +255,15 @@ describe('Theme (e2e)', () => {
         .expect(200);
       const theme = body<ThemeBody>(res);
       expect(theme.footerLogoUrl).toBe('/uploads/theme/footer-logo.png');
-      expect(theme.notificationText).toEqual(['Free delivery over 100 AED', 'Eid sale now on']);
+      expect(theme.notificationText).toEqual([
+        'Free delivery over 100 AED',
+        'Eid sale now on',
+      ]);
       expect(theme.contactNumbers).toEqual(['+971501234567', '+97141234567']);
-      expect(theme.colors).toEqual({ headerBackgroundColor: '#fafafa', productNameColor: '#111111' });
+      expect(theme.colors).toEqual({
+        headerBackgroundColor: '#fafafa',
+        productNameColor: '#111111',
+      });
     });
 
     it('a colors update replaces the whole colors object rather than merging (upsert semantics, same as every other field)', async () => {
@@ -242,7 +271,12 @@ describe('Theme (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ colors: { headerBackgroundColor: '#fafafa', productNameColor: '#111111' } })
+        .send({
+          colors: {
+            headerBackgroundColor: '#fafafa',
+            productNameColor: '#111111',
+          },
+        })
         .expect(200);
       await request(app.getHttpServer())
         .patch('/theme')
@@ -287,9 +321,13 @@ describe('Theme (e2e)', () => {
         })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       const publicShop = body<PublicShopBody>(res);
-      expect(publicShop.notificationText).toEqual(['Same-day delivery available']);
+      expect(publicShop.notificationText).toEqual([
+        'Same-day delivery available',
+      ]);
       expect(publicShop.contactNumbers).toEqual(['+971501234567']);
       expect(publicShop.colors).toEqual({ buttonColor: '#333333' });
     });
@@ -355,7 +393,9 @@ describe('Theme (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ homepageLayout: 'featured_grid' })
         .expect(200);
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       expect(body<PublicShopBody>(res).homepageLayout).toBe('featured_grid');
     });
   });
@@ -414,10 +454,16 @@ describe('Theme (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ cartLayout: 'drawer', checkoutLayout: 'step_by_step', iconStyle: 'solid' })
+        .send({
+          cartLayout: 'drawer',
+          checkoutLayout: 'step_by_step',
+          iconStyle: 'solid',
+        })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       const publicShop = body<PublicShopBody>(res);
       expect(publicShop.cartLayout).toBe('drawer');
       expect(publicShop.checkoutLayout).toBe('step_by_step');
@@ -462,7 +508,9 @@ describe('Theme (e2e)', () => {
       expect(body<ThemeBody>(themeB).cartLayout).toBe('full_page');
       expect(body<ThemeBody>(themeB).buttonFill).toBe('solid');
 
-      const publicB = await request(app.getHttpServer()).get(`/public/${shopB.slug}`).expect(200);
+      const publicB = await request(app.getHttpServer())
+        .get(`/public/${shopB.slug}`)
+        .expect(200);
       expect(body<PublicShopBody>(publicB).brandColor).toBeNull();
       expect(body<PublicShopBody>(publicB).heroText).toBeNull();
       expect(body<PublicShopBody>(publicB).notificationText).toBeNull();
@@ -480,7 +528,7 @@ describe('Theme (e2e)', () => {
         .get('/outlets')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const outletId = (body<{ id: number }[]>(outlets))[0].id;
+      const outletId = body<{ id: number }[]>(outlets)[0].id;
 
       await request(app.getHttpServer())
         .post('/auth/branch-users')
@@ -494,7 +542,10 @@ describe('Theme (e2e)', () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `theme-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `theme-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 

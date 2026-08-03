@@ -1,4 +1,15 @@
-import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsPositive, IsString, Matches, Min, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Matches,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { COMMISSION_TYPES } from '../constants';
 
 export class CreateAffiliateCodeDto {
@@ -8,7 +19,8 @@ export class CreateAffiliateCodeDto {
 
   // Shareable-URL-safe: letters, digits, hyphens, underscores only.
   @Matches(/^[A-Za-z0-9_-]{3,32}$/, {
-    message: 'code must be 3-32 characters of letters, digits, hyphens, or underscores',
+    message:
+      'code must be 3-32 characters of letters, digits, hyphens, or underscores',
   })
   code: string;
 

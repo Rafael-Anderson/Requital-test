@@ -62,7 +62,11 @@ describe('Discounts (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication({ rawBody: true });
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -134,7 +138,10 @@ describe('Discounts (e2e)', () => {
     return { adminToken, outletId, categoryId, productId, slug };
   }
 
-  async function createDiscount(adminToken: string, overrides: Record<string, unknown> = {}) {
+  async function createDiscount(
+    adminToken: string,
+    overrides: Record<string, unknown> = {},
+  ) {
     const res = await request(app.getHttpServer())
       .post('/shop/discounts')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -148,7 +155,10 @@ describe('Discounts (e2e)', () => {
     return body<DiscountRow>(res);
   }
 
-  function orderPayload(outletId: number, overrides: Record<string, unknown> = {}) {
+  function orderPayload(
+    outletId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       outletId,
       orderType: 'delivery',
@@ -207,7 +217,9 @@ describe('Discounts (e2e)', () => {
         .get('/shop/discounts')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<DiscountRow[]>(list).some((d) => d.id === discount.id)).toBe(true);
+      expect(body<DiscountRow[]>(list).some((d) => d.id === discount.id)).toBe(
+        true,
+      );
 
       await request(app.getHttpServer())
         .patch(`/shop/discounts/${discount.id}`)
@@ -235,7 +247,10 @@ describe('Discounts (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: 'NOPE', cartSubtotal: 100 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'not_found' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'not_found',
+      });
     });
 
     it('inactive when active is false', async () => {
@@ -246,7 +261,10 @@ describe('Discounts (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 100 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'inactive' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'inactive',
+      });
     });
 
     it('not_started before startsAt', async () => {
@@ -258,7 +276,10 @@ describe('Discounts (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 100 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'not_started' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'not_started',
+      });
     });
 
     it('expired after endsAt', async () => {
@@ -270,7 +291,10 @@ describe('Discounts (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 100 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'expired' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'expired',
+      });
     });
 
     it('min_purchase_not_met below the threshold', async () => {
@@ -281,7 +305,10 @@ describe('Discounts (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 50 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'min_purchase_not_met' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'min_purchase_not_met',
+      });
 
       const ok = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
@@ -294,21 +321,34 @@ describe('Discounts (e2e)', () => {
     it('usage_limit_reached once timesUsed hits the cap', async () => {
       const { adminToken } = await setupShop('reason-usagelimit');
       const d = await createDiscount(adminToken, { usageLimit: 1 });
-      await prisma.discount.update({ where: { id: d.id }, data: { timesUsed: 1 } });
+      await prisma.discount.update({
+        where: { id: d.id },
+        data: { timesUsed: 1 },
+      });
       const res = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 100 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'usage_limit_reached' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'usage_limit_reached',
+      });
     });
 
     it('per_customer_limit_reached once a customer has redeemed the cap', async () => {
-      const { adminToken, outletId, categoryId, slug } = await setupShop('reason-percustomer');
+      const { adminToken, outletId, categoryId, slug } =
+        await setupShop('reason-percustomer');
       const productRes = await request(app.getHttpServer())
         .post('/products')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Cap Item', price: 40, thumbnail: 'https://example.com/c.jpg', sku: `CAP-${runId}`, categoryIds: [categoryId] })
+        .send({
+          name: 'Cap Item',
+          price: 40,
+          thumbnail: 'https://example.com/c.jpg',
+          sku: `CAP-${runId}`,
+          categoryIds: [categoryId],
+        })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
       const d = await createDiscount(adminToken, { usageLimitPerCustomer: 1 });
@@ -316,28 +356,45 @@ describe('Discounts (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(orderPayload(outletId, { customerPhone: phone, discountCode: d.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            customerPhone: phone,
+            discountCode: d.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
 
       const shop = await prisma.shop.findUnique({ where: { subdomain: slug } });
-      const customer = await prisma.customer.findFirst({ where: { shopId: shop!.id, phone } });
+      const customer = await prisma.customer.findFirst({
+        where: { shopId: shop!.id, phone },
+      });
       const res = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 100, customerId: customer!.id })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'per_customer_limit_reached' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'per_customer_limit_reached',
+      });
     });
 
     it('not_eligible when appliesTo SPECIFIC_PRODUCTS excludes the cart', async () => {
       const { adminToken, productId } = await setupShop('reason-noteligible');
-      const d = await createDiscount(adminToken, { appliesTo: 'SPECIFIC_PRODUCTS', productIds: [productId] });
+      const d = await createDiscount(adminToken, {
+        appliesTo: 'SPECIFIC_PRODUCTS',
+        productIds: [productId],
+      });
       const res = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: d.code, cartSubtotal: 100, productIds: [999999] })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'not_eligible' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'not_eligible',
+      });
 
       const ok = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
@@ -349,7 +406,11 @@ describe('Discounts (e2e)', () => {
 
     it('storefront-facing validate is case-insensitive and reachable without auth', async () => {
       const { adminToken, slug } = await setupShop('reason-public');
-      const d = await createDiscount(adminToken, { code: 'SAVE20', type: 'PERCENTAGE', value: 20 });
+      const d = await createDiscount(adminToken, {
+        code: 'SAVE20',
+        type: 'PERCENTAGE',
+        value: 20,
+      });
       const res = await request(app.getHttpServer())
         .post(`/public/${slug}/discounts/validate`)
         .send({ code: 'save20', cartSubtotal: 100 })
@@ -363,51 +424,92 @@ describe('Discounts (e2e)', () => {
 
   describe('order integration — snapshot fields and totals', () => {
     it('PERCENTAGE discount reduces the order total and snapshots discountCode/discountAmount/discountId', async () => {
-      const { adminToken, outletId, categoryId, slug } = await setupShop('order-percent');
+      const { adminToken, outletId, categoryId, slug } =
+        await setupShop('order-percent');
       const productRes = await request(app.getHttpServer())
         .post('/products')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Percent Item', price: 100, thumbnail: 'https://example.com/p.jpg', sku: `PCT-${runId}`, categoryIds: [categoryId] })
+        .send({
+          name: 'Percent Item',
+          price: 100,
+          thumbnail: 'https://example.com/p.jpg',
+          sku: `PCT-${runId}`,
+          categoryIds: [categoryId],
+        })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
-      const d = await createDiscount(adminToken, { type: 'PERCENTAGE', value: 10 });
+      const d = await createDiscount(adminToken, {
+        type: 'PERCENTAGE',
+        value: 10,
+      });
 
       const res = await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(orderPayload(outletId, { discountCode: d.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            discountCode: d.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
       const order = body<{ order: { id: number; total: string } }>(res).order;
-      const dbOrder = await prisma.order.findUnique({ where: { id: order.id } });
+      const dbOrder = await prisma.order.findUnique({
+        where: { id: order.id },
+      });
       expect(dbOrder?.discountId).toBe(d.id);
       expect(dbOrder?.discountCode).toBe(d.code);
       expect(Number(dbOrder?.discountAmount)).toBe(10);
       // subtotal 100 - discount 10 = 90, plus whatever delivery fee applies (no tax configured).
       expect(Number(dbOrder?.total)).toBeLessThan(100);
 
-      const updatedDiscount = await prisma.discount.findUnique({ where: { id: d.id } });
+      const updatedDiscount = await prisma.discount.findUnique({
+        where: { id: d.id },
+      });
       expect(updatedDiscount?.timesUsed).toBe(1);
     });
 
     it('FIXED_AMOUNT and FREE_SHIPPING apply correctly, and an invalid code rejects checkout', async () => {
-      const { adminToken, outletId, categoryId, slug } = await setupShop('order-fixed');
+      const { adminToken, outletId, categoryId, slug } =
+        await setupShop('order-fixed');
       const productRes = await request(app.getHttpServer())
         .post('/products')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Fixed Item', price: 100, thumbnail: 'https://example.com/i.jpg', sku: `FIX-${runId}`, categoryIds: [categoryId] })
+        .send({
+          name: 'Fixed Item',
+          price: 100,
+          thumbnail: 'https://example.com/i.jpg',
+          sku: `FIX-${runId}`,
+          categoryIds: [categoryId],
+        })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
 
-      const fixed = await createDiscount(adminToken, { type: 'FIXED_AMOUNT', value: 30 });
+      const fixed = await createDiscount(adminToken, {
+        type: 'FIXED_AMOUNT',
+        value: 30,
+      });
       const orderRes = await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(orderPayload(outletId, { discountCode: fixed.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            discountCode: fixed.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
-      const order = body<{ order: { id: number; total: string; deliveryFee: string | null } }>(orderRes).order;
-      const dbOrder = await prisma.order.findUnique({ where: { id: order.id } });
+      const order = body<{
+        order: { id: number; total: string; deliveryFee: string | null };
+      }>(orderRes).order;
+      const dbOrder = await prisma.order.findUnique({
+        where: { id: order.id },
+      });
       expect(Number(dbOrder?.discountAmount)).toBe(30);
       expect(dbOrder?.discountCode).toBe(fixed.code);
 
-      const freeShip = await createDiscount(adminToken, { type: 'FREE_SHIPPING', value: undefined });
+      const freeShip = await createDiscount(adminToken, {
+        type: 'FREE_SHIPPING',
+        value: undefined,
+      });
       await request(app.getHttpServer())
         .patch('/shop')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -415,15 +517,27 @@ describe('Discounts (e2e)', () => {
         .expect(200);
       const freeShipRes = await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(orderPayload(outletId, { discountCode: freeShip.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            discountCode: freeShip.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
       const freeShipOrder = body<{ order: { id: number } }>(freeShipRes).order;
-      const dbFreeShip = await prisma.order.findUnique({ where: { id: freeShipOrder.id } });
+      const dbFreeShip = await prisma.order.findUnique({
+        where: { id: freeShipOrder.id },
+      });
       expect(Number(dbFreeShip?.deliveryFee)).toBe(0);
 
       const badRes = await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
-        .send(orderPayload(outletId, { discountCode: 'NOT-A-REAL-CODE', items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            discountCode: 'NOT-A-REAL-CODE',
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(400);
       expect(messageContains(badRes, 'not valid')).toBe(true);
     });
@@ -431,11 +545,18 @@ describe('Discounts (e2e)', () => {
 
   describe('race condition — usageLimit enforced under concurrency', () => {
     it('N concurrent orders against usageLimit 1: exactly one succeeds', async () => {
-      const { adminToken, outletId, categoryId, slug } = await setupShop('race');
+      const { adminToken, outletId, categoryId, slug } =
+        await setupShop('race');
       const productRes = await request(app.getHttpServer())
         .post('/products')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Race Item', price: 50, thumbnail: 'https://example.com/r.jpg', sku: `RACE-${runId}`, categoryIds: [categoryId] })
+        .send({
+          name: 'Race Item',
+          price: 50,
+          thumbnail: 'https://example.com/r.jpg',
+          sku: `RACE-${runId}`,
+          categoryIds: [categoryId],
+        })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
       const d = await createDiscount(adminToken, { usageLimit: 1 });
@@ -459,15 +580,19 @@ describe('Discounts (e2e)', () => {
       expect(succeeded).toHaveLength(1);
       expect(failed).toHaveLength(CONCURRENCY - 1);
 
-      const finalDiscount = await prisma.discount.findUnique({ where: { id: d.id } });
+      const finalDiscount = await prisma.discount.findUnique({
+        where: { id: d.id },
+      });
       expect(finalDiscount?.timesUsed).toBe(1);
-      const redemptions = await prisma.discountredemption.count({ where: { discountId: d.id } });
+      const redemptions = await prisma.discountredemption.count({
+        where: { discountId: d.id },
+      });
       expect(redemptions).toBe(1);
     });
   });
 
   describe('tenant isolation', () => {
-    it('a discount from shop A is invisible/uneditable from shop B, and validate 404s for it under B\'s slug', async () => {
+    it("a discount from shop A is invisible/uneditable from shop B, and validate 404s for it under B's slug", async () => {
       const shopA = await setupShop('tenant-a');
       const shopB = await setupShop('tenant-b');
       const discountA = await createDiscount(shopA.adminToken);
@@ -487,7 +612,10 @@ describe('Discounts (e2e)', () => {
         .post(`/public/${shopB.slug}/discounts/validate`)
         .send({ code: discountA.code, cartSubtotal: 100 })
         .expect(201);
-      expect(body<ValidateResult>(res)).toMatchObject({ valid: false, reason: 'not_found' });
+      expect(body<ValidateResult>(res)).toMatchObject({
+        valid: false,
+        reason: 'not_found',
+      });
     });
   });
 });

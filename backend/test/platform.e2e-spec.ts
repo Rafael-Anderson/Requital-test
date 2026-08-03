@@ -45,7 +45,11 @@ describe('Platform (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -67,7 +71,10 @@ describe('Platform (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
-    return { adminToken: body<AuthResponse>(signup).accessToken, slug: `${slugPrefix}-${runId}` };
+    return {
+      adminToken: body<AuthResponse>(signup).accessToken,
+      slug: `${slugPrefix}-${runId}`,
+    };
   }
 
   describe('product.description / shortSummary / longSummary column width', () => {
@@ -161,7 +168,9 @@ describe('Platform (e2e)', () => {
       const shop = await setupShop('sitemap-list');
       await publish(shop.adminToken, 'sitemap-list');
 
-      const res = await request(app.getHttpServer()).get('/public/shops/sitemap').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/public/shops/sitemap')
+        .expect(200);
       const shops = body<SitemapShopRow[]>(res);
       const match = shops.find((s) => s.slug === shop.slug);
       expect(match).toBeDefined();
@@ -171,14 +180,18 @@ describe('Platform (e2e)', () => {
     it('exposes only slug and updatedAt — no id, email, or other tenant data', async () => {
       const shop = await setupShop('sitemap-shape');
       await publish(shop.adminToken, 'sitemap-shape');
-      const res = await request(app.getHttpServer()).get('/public/shops/sitemap').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/public/shops/sitemap')
+        .expect(200);
       const shops = body<Record<string, unknown>[]>(res);
       const match = shops.find((s) => s.slug === shop.slug)!;
       expect(Object.keys(match).sort()).toEqual(['slug', 'updatedAt']);
     });
 
     it('is unauthenticated — no bearer token required', async () => {
-      await request(app.getHttpServer()).get('/public/shops/sitemap').expect(200);
+      await request(app.getHttpServer())
+        .get('/public/shops/sitemap')
+        .expect(200);
     });
 
     // shop.published (see migration 20260726100000_shop_published) is now
@@ -186,7 +199,9 @@ describe('Platform (e2e)', () => {
     // shop appeared here, including ones never configured beyond signup).
     it('a freshly-signed-up shop is excluded until explicitly published', async () => {
       const shop = await setupShop('sitemap-unconfigured');
-      const res = await request(app.getHttpServer()).get('/public/shops/sitemap').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/public/shops/sitemap')
+        .expect(200);
       const shops = body<SitemapShopRow[]>(res);
       expect(shops.some((s) => s.slug === shop.slug)).toBe(false);
     });

@@ -12,7 +12,9 @@ export type OptionValueCombo = [number | null, number | null, number | null];
 // with null for unused option positions, matching productvariant's
 // optionValue1Id/2Id/3Id columns directly (1-2 options still produce
 // 3-element tuples with trailing nulls).
-export function generateVariantCombinations(valueIdsByOption: number[][]): OptionValueCombo[] {
+export function generateVariantCombinations(
+  valueIdsByOption: number[][],
+): OptionValueCombo[] {
   if (valueIdsByOption.length === 0) return [];
   let combos: number[][] = [[]];
   for (const values of valueIdsByOption) {
@@ -24,7 +26,11 @@ export function generateVariantCombinations(valueIdsByOption: number[][]): Optio
     }
     combos = next;
   }
-  return combos.map((combo) => [combo[0] ?? null, combo[1] ?? null, combo[2] ?? null]);
+  return combos.map((combo) => [
+    combo[0] ?? null,
+    combo[1] ?? null,
+    combo[2] ?? null,
+  ]);
 }
 
 export function comboKey(combo: OptionValueCombo): string {
@@ -35,7 +41,9 @@ export function comboKey(combo: OptionValueCombo): string {
 // ["Small", "Red", undefined] -> "Small / Red". Shared by ProductsService's
 // admin-facing variant response and order creation's variantLabel snapshot
 // (see resolveOrderItems) so both render the exact same string.
-export function buildVariantLabel(values: (string | null | undefined)[]): string | null {
+export function buildVariantLabel(
+  values: (string | null | undefined)[],
+): string | null {
   const label = values.filter((v): v is string => Boolean(v)).join(' / ');
   return label || null;
 }

@@ -55,7 +55,11 @@ describe('Customers (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -117,10 +121,19 @@ describe('Customers (e2e)', () => {
       .send({ published: true })
       .expect(200);
 
-    return { adminToken, outletId, productId: body<IdRow>(product).id, slug: `${slugPrefix}-${runId}` };
+    return {
+      adminToken,
+      outletId,
+      productId: body<IdRow>(product).id,
+      slug: `${slugPrefix}-${runId}`,
+    };
   }
 
-  function orderPayload(outletId: number, productId: number, overrides: Record<string, unknown> = {}) {
+  function orderPayload(
+    outletId: number,
+    productId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       customerName: 'Ali Hassan',
       customerPhone: '0501234567',
@@ -156,7 +169,9 @@ describe('Customers (e2e)', () => {
         .get('/customers')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const customers = body<CustomerListBody>(list).data.filter((c) => c.phone === '0501234567');
+      const customers = body<CustomerListBody>(list).data.filter(
+        (c) => c.phone === '0501234567',
+      );
       expect(customers).toHaveLength(1);
       expect(customers[0].orderCount).toBe(2);
     });
@@ -167,7 +182,11 @@ describe('Customers (e2e)', () => {
       const adminOrder = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: '0509998888' }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, {
+            customerPhone: '0509998888',
+          }),
+        )
         .expect(201);
 
       const storefrontOrder = await request(app.getHttpServer())
@@ -185,7 +204,8 @@ describe('Customers (e2e)', () => {
         .expect(201);
 
       const adminCustomerId = body<OrderRow>(adminOrder).customerId;
-      const storefrontCustomerId = body<{ order: OrderRow }>(storefrontOrder).order.customerId;
+      const storefrontCustomerId = body<{ order: OrderRow }>(storefrontOrder)
+        .order.customerId;
       expect(adminCustomerId).not.toBeNull();
       expect(adminCustomerId).toBe(storefrontCustomerId);
     });
@@ -195,12 +215,22 @@ describe('Customers (e2e)', () => {
       const order1 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: '0507776666', customerName: 'Old Name' }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, {
+            customerPhone: '0507776666',
+            customerName: 'Old Name',
+          }),
+        )
         .expect(201);
       await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: '0507776666', customerName: 'New Name' }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, {
+            customerPhone: '0507776666',
+            customerName: 'New Name',
+          }),
+        )
         .expect(201);
 
       const customerId = body<OrderRow>(order1).customerId!;
@@ -227,21 +257,29 @@ describe('Customers (e2e)', () => {
           request(app.getHttpServer())
             .post('/orders')
             .set('Authorization', `Bearer ${shop.adminToken}`)
-            .send(orderPayload(shop.outletId, shop.productId, { customerPhone: phone })),
+            .send(
+              orderPayload(shop.outletId, shop.productId, {
+                customerPhone: phone,
+              }),
+            ),
         ),
       );
 
       for (const res of results) {
         expect(res.status).toBe(201);
       }
-      const customerIds = new Set(results.map((r) => body<OrderRow>(r).customerId));
+      const customerIds = new Set(
+        results.map((r) => body<OrderRow>(r).customerId),
+      );
       expect(customerIds.size).toBe(1);
 
       const list = await request(app.getHttpServer())
         .get('/customers')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const matches = body<CustomerListBody>(list).data.filter((c) => c.phone === phone);
+      const matches = body<CustomerListBody>(list).data.filter(
+        (c) => c.phone === phone,
+      );
       expect(matches).toHaveLength(1);
       expect(matches[0].orderCount).toBe(CONCURRENCY);
     });
@@ -256,12 +294,20 @@ describe('Customers (e2e)', () => {
       const orderA = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send(orderPayload(shopA.outletId, shopA.productId, { customerPhone: SHARED_PHONE }))
+        .send(
+          orderPayload(shopA.outletId, shopA.productId, {
+            customerPhone: SHARED_PHONE,
+          }),
+        )
         .expect(201);
       const orderB = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
-        .send(orderPayload(shopB.outletId, shopB.productId, { customerPhone: SHARED_PHONE }))
+        .send(
+          orderPayload(shopB.outletId, shopB.productId, {
+            customerPhone: SHARED_PHONE,
+          }),
+        )
         .expect(201);
 
       const customerAId = body<OrderRow>(orderA).customerId;
@@ -279,7 +325,9 @@ describe('Customers (e2e)', () => {
         .get('/customers')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      const matchesA = body<CustomerListBody>(listA).data.filter((c) => c.phone === SHARED_PHONE);
+      const matchesA = body<CustomerListBody>(listA).data.filter(
+        (c) => c.phone === SHARED_PHONE,
+      );
       expect(matchesA).toHaveLength(1);
       expect(matchesA[0].id).toBe(customerAId);
     });
@@ -293,17 +341,23 @@ describe('Customers (e2e)', () => {
       const o1 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: phone }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, { customerPhone: phone }),
+        )
         .expect(201);
       await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: phone }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, { customerPhone: phone }),
+        )
         .expect(201);
       const o3 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: phone }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, { customerPhone: phone }),
+        )
         .expect(201);
 
       const customerId = body<OrderRow>(o1).customerId!;
@@ -327,7 +381,9 @@ describe('Customers (e2e)', () => {
         .get('/customers')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<CustomerListBody>(list).data.find((c) => c.id === customerId)!;
+      const row = body<CustomerListBody>(list).data.find(
+        (c) => c.id === customerId,
+      )!;
       expect(row.orderCount).toBe(2);
       expect(row.lifetimeValue).toBe(100);
     });
@@ -339,7 +395,11 @@ describe('Customers (e2e)', () => {
       const order = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletId, shop.productId, { customerPhone: '0500001111' }))
+        .send(
+          orderPayload(shop.outletId, shop.productId, {
+            customerPhone: '0500001111',
+          }),
+        )
         .expect(201);
       const customerId = body<OrderRow>(order).customerId!;
 
@@ -355,7 +415,10 @@ describe('Customers (e2e)', () => {
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `perm-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `perm-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 

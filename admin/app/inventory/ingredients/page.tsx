@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeftRight, ChevronDown, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
-import { confirmImportIngredients, deleteIngredient, listIngredients, previewImportIngredients } from "@/lib/api";
-import type { Ingredient } from "@/lib/types";
+import {
+  confirmImportIngredients,
+  deleteIngredient,
+  listIngredientCategories,
+  listIngredients,
+  previewImportIngredients,
+} from "@/lib/api";
+import type { Ingredient, IngredientCategory } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -11,6 +17,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import BackButton from "@/components/ui/BackButton";
@@ -25,6 +32,8 @@ import DropdownMenu from "@/components/ui/DropdownMenu";
 
 export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
+  const [categories, setCategories] = useState<IngredientCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Ingredient | null>(null);
   const [creating, setCreating] = useState(false);
@@ -38,16 +47,22 @@ export default function IngredientsPage() {
 
   const refresh = useCallback(async () => {
     try {
-      setIngredients(await listIngredients(selectedOutletId ?? undefined));
+      setIngredients(await listIngredients(selectedOutletId ?? undefined, categoryFilter ? Number(categoryFilter) : undefined));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ingredients");
     }
-  }, [selectedOutletId]);
+  }, [selectedOutletId, categoryFilter]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    listIngredientCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
 
   function handleDelete(ingredient: Ingredient) {
     deleteWithUndo({
@@ -85,6 +100,19 @@ export default function IngredientsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Ingredients</h1>
         <div className="flex items-center gap-2">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            aria-label="Filter by category"
+            className="h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+          >
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
           <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
             <Checkbox checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} aria-label="Low stock only" />
             Low stock only
@@ -142,6 +170,7 @@ export default function IngredientsPage() {
         <THead>
           <tr>
             <TH>Name</TH>
+            <TH className="w-32">Category</TH>
             <TH className="w-24">Unit</TH>
             <TH className="w-40">Stock</TH>
             <TH className="w-10"></TH>
@@ -153,13 +182,13 @@ export default function IngredientsPage() {
         <TBody>
           {ingredients === null ? (
             <tr>
-              <td colSpan={7}>
-                <TableSkeleton rows={3} cols={7} />
+              <td colSpan={8}>
+                <TableSkeleton rows={3} cols={8} />
               </td>
             </tr>
           ) : visibleIngredients.length === 0 ? (
             <tr>
-              <td colSpan={7}>
+              <td colSpan={8}>
                 <EmptyState
                   title={lowStockOnly ? "Nothing is low on stock" : "No ingredients yet"}
                   description={
@@ -178,7 +207,13 @@ export default function IngredientsPage() {
                 ingredient.stockQuantity <= ingredient.lowStockThreshold;
               return (
                 <TR key={ingredient.id}>
-                  <TD className="font-medium">{ingredient.name}</TD>
+                  <TD className="font-medium">
+                    <div className="flex items-center gap-3">
+                      <Thumbnail src={ingredient.image} size="size-10" />
+                      <span>{ingredient.name}</span>
+                    </div>
+                  </TD>
+                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "—"}</TD>
                   <TD className="text-zinc-500">{ingredient.unit}</TD>
                   <TD>
                     {ingredient.stockQuantity !== null ? (
@@ -244,6 +279,7 @@ export default function IngredientsPage() {
       {(creating || editing) && (
         <IngredientFormModal
           ingredient={editing}
+          categories={categories}
           onClose={() => {
             setCreating(false);
             setEditing(null);

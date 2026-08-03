@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
 const RESULTS_PER_CATEGORY = 5;
 
 @Injectable()
 export class SearchService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly branchRolesService: BranchRolesService,
+  ) {}
 
   // Deliberately its own light queries rather than delegating to
   // Products/Orders/CustomersService.findAll — those return the full,
@@ -46,8 +50,22 @@ export class SearchService {
     return rows.map((p) => ({ ...p, price: p.price.toString() }));
   }
 
-  private async searchOrders(ctx: TenantContext, query: string, searchAsId: number | undefined) {
+  private async searchOrders(
+    ctx: TenantContext,
+    query: string,
+    searchAsId: number | undefined,
+  ) {
     const outletId = resolveOutletFilter(ctx, undefined);
+    // The only outlet-scoped part of search — searchProducts is shop-wide
+    // by design (any role) and searchCustomers' gate below is a pure role
+    // check with no outlet involved, so neither needs this.
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'search.use',
+      );
+    }
     const rows = await this.prisma.order.findMany({
       where: {
         shopId: ctx.shopId,

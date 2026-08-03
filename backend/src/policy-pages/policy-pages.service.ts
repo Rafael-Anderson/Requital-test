@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
-import { POLICY_PAGE_TYPES, type PolicyPageType } from './policy-page-constants';
+import {
+  POLICY_PAGE_TYPES,
+  type PolicyPageType,
+} from './policy-page-constants';
 import { UpsertPolicyPageDto } from './dto/upsert-policy-page.dto';
 
 @Injectable()
@@ -13,11 +16,17 @@ export class PolicyPagesService {
   // consistent 5-row list (written vs. not written) instead of a variable-
   // length one.
   async findAll(ctx: TenantContext) {
-    const rows = await this.prisma.policypage.findMany({ where: { shopId: ctx.shopId } });
+    const rows = await this.prisma.policypage.findMany({
+      where: { shopId: ctx.shopId },
+    });
     const byType = new Map(rows.map((r) => [r.type, r]));
     return POLICY_PAGE_TYPES.map((type) => {
       const row = byType.get(type);
-      return { type, content: row?.content ?? null, updatedAt: row?.updatedAt ?? null };
+      return {
+        type,
+        content: row?.content ?? null,
+        updatedAt: row?.updatedAt ?? null,
+      };
     });
   }
 
@@ -41,7 +50,9 @@ export class PolicyPagesService {
     // so reaching this URL directly should read as "not found," not "found
     // but blank."
     if (!row) {
-      throw new NotFoundException(`No ${type} policy page has been published for this shop`);
+      throw new NotFoundException(
+        `No ${type} policy page has been published for this shop`,
+      );
     }
     return row;
   }

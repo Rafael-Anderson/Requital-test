@@ -6,12 +6,21 @@ function createMockPrisma(currentShop: Record<string, unknown>) {
   return {
     shop: {
       findUniqueOrThrow: jest.fn().mockResolvedValue(currentShop),
-      update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...currentShop, ...data })),
+      update: jest
+        .fn()
+        .mockImplementation(({ data }) =>
+          Promise.resolve({ ...currentShop, ...data }),
+        ),
     },
   } as unknown as PrismaService;
 }
 
-const adminCtx: TenantContext = { userId: 1, shopId: 1, role: 'admin', outletId: null };
+const adminCtx: TenantContext = {
+  userId: 1,
+  shopId: 1,
+  role: 'admin',
+  outletId: null,
+};
 
 // A shop with exactly one payment method on per context — the minimum valid
 // starting state, so tests can flip that one method off and expect a reject.
@@ -37,7 +46,6 @@ describe('ShopService — payment methods require at least one enabled', () => {
     const service = new ShopService(prisma);
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       service.update(adminCtx, { deliveryPaymentCardOnline: false } as any),
     ).rejects.toThrow('At least one delivery payment method must be enabled');
     expect(prisma.shop.update).not.toHaveBeenCalled();
@@ -48,14 +56,16 @@ describe('ShopService — payment methods require at least one enabled', () => {
     const service = new ShopService(prisma);
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       service.update(adminCtx, { pickupPaymentCardOnline: false } as any),
     ).rejects.toThrow('At least one pickup payment method must be enabled');
   });
 
   it('rejects creating an all-false delivery payment state across multiple fields in one request', async () => {
     const prisma = createMockPrisma(
-      baseShop({ deliveryPaymentCardOnline: true, deliveryPaymentCashOnDelivery: true }),
+      baseShop({
+        deliveryPaymentCardOnline: true,
+        deliveryPaymentCashOnDelivery: true,
+      }),
     );
     const service = new ShopService(prisma);
 
@@ -63,7 +73,6 @@ describe('ShopService — payment methods require at least one enabled', () => {
       service.update(adminCtx, {
         deliveryPaymentCardOnline: false,
         deliveryPaymentCashOnDelivery: false,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any),
     ).rejects.toThrow('At least one delivery payment method must be enabled');
   });
@@ -75,8 +84,7 @@ describe('ShopService — payment methods require at least one enabled', () => {
     await service.update(adminCtx, {
       deliveryPaymentCardOnline: false,
       deliveryPaymentCashOnDelivery: true,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    });
 
     expect(prisma.shop.update).toHaveBeenCalled();
   });
@@ -85,21 +93,26 @@ describe('ShopService — payment methods require at least one enabled', () => {
     const prisma = createMockPrisma(baseShop());
     const service = new ShopService(prisma);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await service.update(adminCtx, { name: 'Renamed Shop' } as any);
+    await service.update(adminCtx, { name: 'Renamed Shop' });
 
     expect(prisma.shop.findUniqueOrThrow).not.toHaveBeenCalled();
     expect(prisma.shop.update).toHaveBeenCalled();
   });
 
   it('pickup and delivery payment methods are validated independently — an all-false pickup request does not care about delivery state', async () => {
-    const prisma = createMockPrisma(baseShop({ deliveryPaymentCardOnline: false, deliveryPaymentCashOnDelivery: false, deliveryPaymentCardOnDelivery: false }));
+    const prisma = createMockPrisma(
+      baseShop({
+        deliveryPaymentCardOnline: false,
+        deliveryPaymentCashOnDelivery: false,
+        deliveryPaymentCardOnDelivery: false,
+      }),
+    );
     const service = new ShopService(prisma);
 
     // Delivery is already all-false in the stored row (pre-existing/legacy
     // state) — a request that only touches pickup must still succeed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await service.update(adminCtx, { pickupPaymentCashOnPickup: true } as any);
+
+    await service.update(adminCtx, { pickupPaymentCashOnPickup: true });
     expect(prisma.shop.update).toHaveBeenCalled();
   });
 });
@@ -110,8 +123,7 @@ describe('ShopService — store/delivery/pickup hours are independent records', 
     const service = new ShopService(prisma);
     const newHours = { mon: { open: '10:00', close: '20:00', closed: false } };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await service.update(adminCtx, { deliveryHours: newHours } as any);
+    await service.update(adminCtx, { deliveryHours: newHours });
 
     const { data } = (prisma.shop.update as jest.Mock).mock.calls[0][0];
     expect(data.deliveryHours).toEqual(newHours);
@@ -124,8 +136,7 @@ describe('ShopService — store/delivery/pickup hours are independent records', 
     const service = new ShopService(prisma);
     const newHours = { tue: { open: '11:00', close: '15:00', closed: false } };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await service.update(adminCtx, { pickupHours: newHours } as any);
+    await service.update(adminCtx, { pickupHours: newHours });
 
     const { data } = (prisma.shop.update as jest.Mock).mock.calls[0][0];
     expect(data.pickupHours).toEqual(newHours);
@@ -138,7 +149,6 @@ describe('ShopService — store/delivery/pickup hours are independent records', 
     const service = new ShopService(prisma);
     const newHours = { wed: { open: '08:00', close: '22:00', closed: false } };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await service.update(adminCtx, { businessHours: newHours } as any);
 
     const { data } = (prisma.shop.update as jest.Mock).mock.calls[0][0];

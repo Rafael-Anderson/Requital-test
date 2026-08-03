@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
 // UAE/Gulf merchants run on UTC+4 year-round (no DST) — day boundaries are
 // computed in that offset rather than server-local/UTC time.
@@ -33,7 +34,10 @@ interface TopProductRow {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly branchRolesService: BranchRolesService,
+  ) {}
 
   // Resolves the requested [from, to] into UAE-day-aligned instants, plus the
   // immediately preceding period of equal length for period-over-period
@@ -94,6 +98,17 @@ export class DashboardService {
       toParam,
     );
     const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    // A branch-role override only ever matters when a single concrete
+    // outlet is in view — the "all branches" aggregate (outletId
+    // undefined) is unaffected by design, same as every other list/
+    // aggregate endpoint in this audit.
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'dashboard.view',
+      );
+    }
     const outletWhere = outletId !== undefined ? { outletId } : {};
 
     const [
@@ -257,6 +272,13 @@ export class DashboardService {
   ) {
     const { from, toExclusive } = this.resolveRange(fromParam, toParam);
     const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'dashboard.view',
+      );
+    }
     const outletFilter =
       outletId !== undefined
         ? Prisma.sql`AND outletId = ${outletId}`
@@ -296,6 +318,13 @@ export class DashboardService {
   ) {
     const { from, toExclusive } = this.resolveRange(fromParam, toParam);
     const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'dashboard.view',
+      );
+    }
     const outletFilter =
       outletId !== undefined
         ? Prisma.sql`AND o.outletId = ${outletId}`

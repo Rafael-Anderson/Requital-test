@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { AffiliateService } from './affiliate.service';
 import { CreateAffiliateDto } from './dto/create-affiliate.dto';
 import { UpdateAffiliateDto } from './dto/update-affiliate.dto';
@@ -24,12 +33,18 @@ export class AffiliateController {
   }
 
   @Get()
-  findAllAffiliates(@CurrentUser() ctx: TenantContext, @Query() query: ListQueryDto) {
+  findAllAffiliates(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListQueryDto,
+  ) {
     return this.affiliateService.findAllAffiliates(ctx, query);
   }
 
   @Post()
-  createAffiliate(@CurrentUser() ctx: TenantContext, @Body() dto: CreateAffiliateDto) {
+  createAffiliate(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: CreateAffiliateDto,
+  ) {
     return this.affiliateService.createAffiliate(ctx, dto);
   }
 
@@ -43,12 +58,18 @@ export class AffiliateController {
   }
 
   @Get('codes')
-  findAllCodes(@CurrentUser() ctx: TenantContext, @Query() query: ListQueryDto) {
+  findAllCodes(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListQueryDto,
+  ) {
     return this.affiliateService.findAllCodes(ctx, query);
   }
 
   @Post('codes')
-  createCode(@CurrentUser() ctx: TenantContext, @Body() dto: CreateAffiliateCodeDto) {
+  createCode(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: CreateAffiliateCodeDto,
+  ) {
     return this.affiliateService.createCode(ctx, dto);
   }
 
@@ -62,7 +83,10 @@ export class AffiliateController {
   }
 
   @Get('orders')
-  findAllOrders(@CurrentUser() ctx: TenantContext, @Query() query: ListQueryDto) {
+  findAllOrders(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListQueryDto,
+  ) {
     return this.affiliateService.findAllOrders(ctx, query);
   }
 

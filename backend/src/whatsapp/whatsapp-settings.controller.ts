@@ -12,7 +12,9 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('whatsapp-settings')
 export class WhatsAppSettingsController {
-  constructor(private readonly whatsAppSettingsService: WhatsAppSettingsService) {}
+  constructor(
+    private readonly whatsAppSettingsService: WhatsAppSettingsService,
+  ) {}
 
   @Get()
   find(@CurrentUser() ctx: TenantContext) {

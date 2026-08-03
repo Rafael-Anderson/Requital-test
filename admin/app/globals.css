@@ -72,3 +72,13 @@ body {
 .toast-enter {
   animation: toast-in 0.18s ease-out;
 }
+
+/* Scrollable modal content: keep the scrollbar itself visible (so users know
+   they can scroll) but hide the up/down arrow buttons at the ends of the
+   track. Applied per-modal to the scrollable panel div, not globally. */
+.modal-scroll {
+  scrollbar-button: none;
+}
+.modal-scroll::-webkit-scrollbar-button {
+  display: none;
+}

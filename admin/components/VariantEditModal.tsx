@@ -3,9 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X } from "lucide-react";
-import { listIngredients, resolveImageUrl, updateProduct, updateVariant, uploadProductImage } from "@/lib/api";
+import {
+  listIngredientCategories,
+  listIngredients,
+  resolveImageUrl,
+  updateProduct,
+  updateVariant,
+  uploadProductImage,
+} from "@/lib/api";
 import { commitStockChanges } from "@/lib/stock";
-import type { Ingredient, Product, ProductImage, ProductVariant } from "@/lib/types";
+import type { Ingredient, IngredientCategory, Product, ProductImage, ProductVariant } from "@/lib/types";
 import type { GalleryImage } from "@/components/ProductMediaGallery";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -53,6 +60,7 @@ export default function VariantEditModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stockValues, setStockValues] = useState<Record<number, string>>({});
   const [ingredientsList, setIngredientsList] = useState<Ingredient[]>([]);
+  const [ingredientCategories, setIngredientCategories] = useState<IngredientCategory[]>([]);
   const [recipeRows, setRecipeRows] = useState<RecipeRowDraft[]>(
     variant.ingredientOverrides.map((i) => ({
       ingredientId: i.ingredientId,
@@ -64,6 +72,9 @@ export default function VariantEditModal({
   useEffect(() => {
     listIngredients()
       .then(setIngredientsList)
+      .catch(() => {});
+    listIngredientCategories()
+      .then(setIngredientCategories)
       .catch(() => {});
   }, []);
 
@@ -152,11 +163,11 @@ export default function VariantEditModal({
   // fine as a plain inline div — this is the only one ever mounted inside
   // a page that's itself a <form>.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
       >
         <button
           type="button"
@@ -338,7 +349,12 @@ export default function VariantEditModal({
               Leave empty to use the product&apos;s default recipe for this variant. Add rows here only if this
               variant consumes a different amount (e.g. Large uses more than Small).
             </p>
-            <IngredientRecipeEditor ingredients={ingredientsList} rows={recipeRows} onChange={setRecipeRows} />
+            <IngredientRecipeEditor
+              ingredients={ingredientsList}
+              categories={ingredientCategories}
+              rows={recipeRows}
+              onChange={setRecipeRows}
+            />
           </div>
         </div>
 

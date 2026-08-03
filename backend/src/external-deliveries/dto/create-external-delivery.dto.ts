@@ -1,5 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Min, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { EXTERNAL_DELIVERY_STATUSES } from '../constants';
 import type { ExternalDeliveryStatus } from '../constants';
 

@@ -39,7 +39,10 @@ function body<T>(res: Response): T {
 const HEADERS = ['Name', 'Unit', 'Track Inventory', 'Stock'];
 
 function buildCsv(rows: Record<string, unknown>[]): string {
-  const lines = [HEADERS, ...rows.map((r) => HEADERS.map((h) => String(r[h] ?? '')))];
+  const lines = [
+    HEADERS,
+    ...rows.map((r) => HEADERS.map((h) => String(r[h] ?? ''))),
+  ];
   return lines.map((line) => line.join(',')).join('\r\n');
 }
 
@@ -54,7 +57,11 @@ describe('Ingredients CSV Import/Export (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -90,9 +97,14 @@ describe('Ingredients CSV Import/Export (e2e)', () => {
 
   function confirm(adminToken: string, csv: string, outletId?: number) {
     return request(app.getHttpServer())
-      .post(`/shop/ingredients/import/confirm${outletId ? `?outletId=${outletId}` : ''}`)
+      .post(
+        `/shop/ingredients/import/confirm${outletId ? `?outletId=${outletId}` : ''}`,
+      )
       .set('Authorization', `Bearer ${adminToken}`)
-      .attach('file', Buffer.from(csv), { filename: 'ingredients.csv', contentType: 'text/csv' });
+      .attach('file', Buffer.from(csv), {
+        filename: 'ingredients.csv',
+        contentType: 'text/csv',
+      });
   }
 
   it('round-trips create, then update, and reports a bad row without failing the batch', async () => {
@@ -100,10 +112,17 @@ describe('Ingredients CSV Import/Export (e2e)', () => {
 
     // Row 1 creates; row 2 is malformed and must not block row 1.
     const createCsv = buildCsv([
-      { Name: 'Fresh Roses', Unit: 'stems', 'Track Inventory': 'true', Stock: 50 },
+      {
+        Name: 'Fresh Roses',
+        Unit: 'stems',
+        'Track Inventory': 'true',
+        Stock: 50,
+      },
       { Name: '', Unit: 'kg', Stock: 'oops' },
     ]);
-    const createRes = await confirm(adminToken, createCsv, outletId).expect(201);
+    const createRes = await confirm(adminToken, createCsv, outletId).expect(
+      201,
+    );
     const created = body<ImportConfirmResponse>(createRes);
     expect(created.created).toBe(1);
     expect(created.skipped).toBe(1);
@@ -114,15 +133,21 @@ describe('Ingredients CSV Import/Export (e2e)', () => {
       .get(`/shop/ingredients?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const rose = body<IngredientRow[]>(list).find((i) => i.name === 'Fresh Roses');
+    const rose = body<IngredientRow[]>(list).find(
+      (i) => i.name === 'Fresh Roses',
+    );
     expect(rose).toBeDefined();
     expect(rose!.stockQuantity).toBe(50);
 
     // Re-importing the same name now updates it (matched by name) instead
     // of creating a duplicate — and setting Stock again to the same value
     // is a no-op, satisfying round-trip fidelity.
-    const updateCsv = buildCsv([{ Name: 'Fresh Roses', Unit: 'stems', Stock: 50 }]);
-    const updateRes = await confirm(adminToken, updateCsv, outletId).expect(201);
+    const updateCsv = buildCsv([
+      { Name: 'Fresh Roses', Unit: 'stems', Stock: 50 },
+    ]);
+    const updateRes = await confirm(adminToken, updateCsv, outletId).expect(
+      201,
+    );
     const updated = body<ImportConfirmResponse>(updateRes);
     expect(updated.updated).toBe(1);
     expect(updated.created).toBe(0);
@@ -131,7 +156,9 @@ describe('Ingredients CSV Import/Export (e2e)', () => {
       .get(`/shop/ingredients?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const rosesAfter = body<IngredientRow[]>(listAfter).filter((i) => i.name === 'Fresh Roses');
+    const rosesAfter = body<IngredientRow[]>(listAfter).filter(
+      (i) => i.name === 'Fresh Roses',
+    );
     expect(rosesAfter).toHaveLength(1);
     expect(rosesAfter[0].stockQuantity).toBe(50);
   });
@@ -157,7 +184,9 @@ describe('Ingredients CSV Import/Export (e2e)', () => {
       .get('/shop/ingredients')
       .set('Authorization', `Bearer ${shopA.adminToken}`)
       .expect(200);
-    const shopAIngredient = body<IngredientRow[]>(shopAList).find((i) => i.name === name);
+    const shopAIngredient = body<IngredientRow[]>(shopAList).find(
+      (i) => i.name === name,
+    );
     expect(shopAIngredient?.unit).toBe('kg');
   });
 });

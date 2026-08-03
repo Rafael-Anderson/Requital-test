@@ -38,7 +38,9 @@ export class PaymentSettingsService {
   async findAll(ctx: TenantContext): Promise<ProviderSettingsResponse[]> {
     const [shop, rows] = await Promise.all([
       this.prisma.shop.findUniqueOrThrow({ where: { id: ctx.shopId } }),
-      this.prisma.shoppaymentprovider.findMany({ where: { shopId: ctx.shopId } }),
+      this.prisma.shoppaymentprovider.findMany({
+        where: { shopId: ctx.shopId },
+      }),
     ]);
     const byProvider = new Map(rows.map((r) => [r.provider, r]));
 
@@ -50,7 +52,9 @@ export class PaymentSettingsService {
         enabled,
         isCardProcessor: isCardProcessor(provider),
         hasCredentials: !!row?.credentials,
-        maskedCredentials: row?.credentials ? this.maskCredentials(provider, row.credentials) : null,
+        maskedCredentials: row?.credentials
+          ? this.maskCredentials(provider, row.credentials)
+          : null,
       };
     });
 
@@ -63,7 +67,8 @@ export class PaymentSettingsService {
     // toggling COD *from this page* sets both together.
     const codRow: ProviderSettingsResponse = {
       provider: 'cod',
-      enabled: shop.deliveryPaymentCashOnDelivery || shop.pickupPaymentCashOnPickup,
+      enabled:
+        shop.deliveryPaymentCashOnDelivery || shop.pickupPaymentCashOnPickup,
       isCardProcessor: false,
       hasCredentials: false,
       maskedCredentials: null,
@@ -79,7 +84,9 @@ export class PaymentSettingsService {
   ): Promise<ProviderSettingsResponse[]> {
     if (provider === 'cod') {
       if (dto.enabled === undefined) {
-        throw new BadRequestException('enabled is required to update Cash on Delivery');
+        throw new BadRequestException(
+          'enabled is required to update Cash on Delivery',
+        );
       }
       // Reuses ShopService.update so the existing "at least one delivery/
       // pickup payment method" validation still applies — not a parallel
@@ -100,14 +107,18 @@ export class PaymentSettingsService {
       this.assertValidCredentials(typedProvider, dto.credentials);
     }
 
-    const existingRows = await this.prisma.shoppaymentprovider.findMany({ where: { shopId: ctx.shopId } });
+    const existingRows = await this.prisma.shoppaymentprovider.findMany({
+      where: { shopId: ctx.shopId },
+    });
     const byProvider = new Map(existingRows.map((r) => [r.provider, r]));
 
     if (dto.enabled === true && isCardProcessor(typedProvider)) {
       const other = typedProvider === 'stripe' ? 'nomod' : 'stripe';
       if (this.resolveEnabled(other, byProvider)) {
         const label = (name: string) => name[0].toUpperCase() + name.slice(1);
-        throw new BadRequestException(`Disable ${label(other)} before enabling ${label(typedProvider)}`);
+        throw new BadRequestException(
+          `Disable ${label(other)} before enabling ${label(typedProvider)}`,
+        );
       }
     }
 
@@ -117,11 +128,16 @@ export class PaymentSettingsService {
     // silently flip a card processor that was implicitly on (no row yet,
     // "stripe" is the legacy default) to explicitly off the moment a row
     // gets created. See resolveEnabled/defaultEnabled.
-    const nextEnabled = dto.enabled ?? this.resolveEnabled(typedProvider, byProvider);
-    const encryptedCredentials = dto.credentials ? encrypt(JSON.stringify(dto.credentials)) : undefined;
+    const nextEnabled =
+      dto.enabled ?? this.resolveEnabled(typedProvider, byProvider);
+    const encryptedCredentials = dto.credentials
+      ? encrypt(JSON.stringify(dto.credentials))
+      : undefined;
 
     await this.prisma.shoppaymentprovider.upsert({
-      where: { shopId_provider: { shopId: ctx.shopId, provider: typedProvider } },
+      where: {
+        shopId_provider: { shopId: ctx.shopId, provider: typedProvider },
+      },
       create: {
         shopId: ctx.shopId,
         provider: typedProvider,
@@ -130,7 +146,9 @@ export class PaymentSettingsService {
       },
       update: {
         ...(dto.enabled !== undefined && { enabled: dto.enabled }),
-        ...(encryptedCredentials !== undefined && { credentials: encryptedCredentials }),
+        ...(encryptedCredentials !== undefined && {
+          credentials: encryptedCredentials,
+        }),
       },
     });
 
@@ -139,7 +157,10 @@ export class PaymentSettingsService {
     // processor is now active, so the rest of the existing checkout flow
     // needs no further changes.
     if (dto.enabled === true && isCardProcessor(typedProvider)) {
-      await this.prisma.shop.update({ where: { id: ctx.shopId }, data: { paymentGateway: typedProvider } });
+      await this.prisma.shop.update({
+        where: { id: ctx.shopId },
+        data: { paymentGateway: typedProvider },
+      });
     }
 
     return this.findAll(ctx);
@@ -150,7 +171,10 @@ export class PaymentSettingsService {
   // returned to any client. Returns null when the shop has no row (or no
   // saved credentials) for this provider, so callers fall back to whatever
   // env-var default the provider implementation itself has (Stripe today).
-  async resolveCredentials(shopId: number, provider: string): Promise<Record<string, string> | null> {
+  async resolveCredentials(
+    shopId: number,
+    provider: string,
+  ): Promise<Record<string, string> | null> {
     const row = await this.prisma.shoppaymentprovider.findUnique({
       where: { shopId_provider: { shopId, provider } },
     });
@@ -165,9 +189,15 @@ export class PaymentSettingsService {
   // so what the storefront accepts always matches what the settings page
   // shows as "on".
   async isEnabled(shopId: number, provider: string): Promise<boolean> {
-    if (!(PAYMENT_GATEWAY_PROVIDERS as readonly string[]).includes(provider)) return false;
-    const allRows = await this.prisma.shoppaymentprovider.findMany({ where: { shopId } });
-    return this.resolveEnabled(provider as PaymentGatewayProvider, new Map(allRows.map((r) => [r.provider, r])));
+    if (!(PAYMENT_GATEWAY_PROVIDERS as readonly string[]).includes(provider))
+      return false;
+    const allRows = await this.prisma.shoppaymentprovider.findMany({
+      where: { shopId },
+    });
+    return this.resolveEnabled(
+      provider as PaymentGatewayProvider,
+      new Map(allRows.map((r) => [r.provider, r])),
+    );
   }
 
   // Single source of truth for "is this provider enabled right now": the
@@ -208,11 +238,18 @@ export class PaymentSettingsService {
     return provider === 'stripe';
   }
 
-  private assertValidCredentials(provider: PaymentGatewayProvider, credentials: Record<string, string>) {
-    const validKeys = new Set(PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+  private assertValidCredentials(
+    provider: PaymentGatewayProvider,
+    credentials: Record<string, string>,
+  ) {
+    const validKeys = new Set(
+      PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key),
+    );
     for (const key of Object.keys(credentials)) {
       if (!validKeys.has(key)) {
-        throw new BadRequestException(`Unknown credential field '${key}' for ${provider}`);
+        throw new BadRequestException(
+          `Unknown credential field '${key}' for ${provider}`,
+        );
       }
     }
     for (const field of PROVIDER_CREDENTIAL_FIELDS[provider]) {
@@ -223,11 +260,18 @@ export class PaymentSettingsService {
     }
   }
 
-  private maskCredentials(provider: PaymentGatewayProvider, encryptedCredentials: string): Record<string, string> {
-    const decrypted = JSON.parse(decrypt(encryptedCredentials)) as Record<string, string>;
+  private maskCredentials(
+    provider: PaymentGatewayProvider,
+    encryptedCredentials: string,
+  ): Record<string, string> {
+    const decrypted = JSON.parse(decrypt(encryptedCredentials)) as Record<
+      string,
+      string
+    >;
     const masked: Record<string, string> = {};
     for (const field of PROVIDER_CREDENTIAL_FIELDS[provider]) {
-      if (decrypted[field.key]) masked[field.key] = maskValue(decrypted[field.key]);
+      if (decrypted[field.key])
+        masked[field.key] = maskValue(decrypted[field.key]);
     }
     return masked;
   }

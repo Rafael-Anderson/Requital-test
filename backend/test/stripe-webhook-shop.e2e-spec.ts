@@ -76,7 +76,11 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
     // provided," regardless of whether the signature itself is correct.
     app = moduleFixture.createNestApplication({ rawBody: true });
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -145,7 +149,10 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
     return { adminToken, shopId, orderId };
   }
 
-  async function saveStripeWebhookSecret(adminToken: string, webhookSecret: string) {
+  async function saveStripeWebhookSecret(
+    adminToken: string,
+    webhookSecret: string,
+  ) {
     await request(app.getHttpServer())
       .patch('/payment-settings/stripe')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -208,7 +215,10 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
 
     // Genuinely valid for shop B's URL (signed with B's own real secret) —
     // but the orderId inside the payload belongs to shop A.
-    const payload = stripeEventPayload(`evt_cross_order_${runId}`, shopA.orderId);
+    const payload = stripeEventPayload(
+      `evt_cross_order_${runId}`,
+      shopA.orderId,
+    );
     const signature = signEvent(payload, 'whsec_shop_b_own_secret');
 
     await request(app.getHttpServer())
@@ -224,7 +234,10 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
 
   it('a shop with no stripe webhook secret configured gets a clean rejection, not a crash', async () => {
     const shop = await setupShopWithOrder('wh-unconfigured');
-    const payload = stripeEventPayload(`evt_unconfigured_${runId}`, shop.orderId);
+    const payload = stripeEventPayload(
+      `evt_unconfigured_${runId}`,
+      shop.orderId,
+    );
     const signature = signEvent(payload, 'whsec_whatever');
 
     await request(app.getHttpServer())

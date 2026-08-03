@@ -1,5 +1,9 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import type { EmailProvider, EmailSendResult, SendEmailParams } from '../email-provider.interface';
+import type {
+  EmailProvider,
+  EmailSendResult,
+  SendEmailParams,
+} from '../email-provider.interface';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 // Platform's verified sending domain — see the deliverability report for the
@@ -46,7 +50,9 @@ export class ResendEmailProvider implements EmailProvider {
     });
 
     if (!res.ok) {
-      const errorBody = (await res.json().catch(() => ({}))) as ResendErrorResponse;
+      const errorBody = (await res
+        .json()
+        .catch(() => ({}))) as ResendErrorResponse;
       throw new InternalServerErrorException(
         `Resend API error (${res.status}): ${errorBody.message ?? 'unknown error'}`,
       );

@@ -34,7 +34,7 @@ describe('computeIsOpen', () => {
     expect(computeIsOpen(null, false, null, 'UTC')).toBe(true);
   });
 
-  it('is open in the middle of today\'s window', () => {
+  it("is open in the middle of today's window", () => {
     setSystemTime('2026-01-01T12:00:00Z'); // Thu 12:00 UTC
     expect(computeIsOpen(REGULAR_HOURS, false, null, 'UTC')).toBe(true);
   });
@@ -61,7 +61,10 @@ describe('computeIsOpen', () => {
 
   it('respects a day explicitly marked closed regardless of the time', () => {
     setSystemTime('2026-01-01T12:00:00Z'); // Thu, within 09:00-18:00
-    const hours = { ...REGULAR_HOURS, thu: { open: '09:00', close: '18:00', closed: true } };
+    const hours = {
+      ...REGULAR_HOURS,
+      thu: { open: '09:00', close: '18:00', closed: true },
+    };
     expect(computeIsOpen(hours, false, null, 'UTC')).toBe(false);
   });
 

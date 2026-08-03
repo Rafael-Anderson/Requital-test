@@ -25,14 +25,22 @@ export class LowStockDigestService {
   async sendDueDigests() {
     const candidates = await this.prisma.shop.findMany({
       where: { notifyLowStockDigest: true },
-      select: { id: true, name: true, email: true, lowStockDigestLastSentAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        lowStockDigestLastSentAt: true,
+      },
     });
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
     for (const shop of candidates) {
-      if (shop.lowStockDigestLastSentAt && shop.lowStockDigestLastSentAt >= startOfToday) {
+      if (
+        shop.lowStockDigestLastSentAt &&
+        shop.lowStockDigestLastSentAt >= startOfToday
+      ) {
         continue; // already sent today
       }
       await this.sendForShop(shop.id, shop.name, shop.email, startOfToday);
@@ -43,8 +51,16 @@ export class LowStockDigestService {
   // one shop's digest directly, without waiting for the cron tick — checks
   // the opt-in toggle itself (not just relying on sendDueDigests' own
   // pre-filter) so it's correct no matter how it's called.
-  async sendForShop(shopId: number, shopName: string, shopEmail: string | null, startOfToday: Date) {
-    const shop = await this.prisma.shop.findUnique({ where: { id: shopId }, select: { notifyLowStockDigest: true } });
+  async sendForShop(
+    shopId: number,
+    shopName: string,
+    shopEmail: string | null,
+    startOfToday: Date,
+  ) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+      select: { notifyLowStockDigest: true },
+    });
     if (!shop?.notifyLowStockDigest) return false;
 
     // CAS claim FIRST, before doing any query work — mirrors
@@ -52,7 +68,14 @@ export class LowStockDigestService {
     // triggers for the same shop race, only one updateMany can match
     // (lastSentAt is still before today), the other gets count 0 and skips.
     const claimed = await this.prisma.shop.updateMany({
-      where: { id: shopId, notifyLowStockDigest: true, OR: [{ lowStockDigestLastSentAt: null }, { lowStockDigestLastSentAt: { lt: startOfToday } }] },
+      where: {
+        id: shopId,
+        notifyLowStockDigest: true,
+        OR: [
+          { lowStockDigestLastSentAt: null },
+          { lowStockDigestLastSentAt: { lt: startOfToday } },
+        ],
+      },
       data: { lowStockDigestLastSentAt: new Date() },
     });
     if (claimed.count === 0) return false;
@@ -66,11 +89,19 @@ export class LowStockDigestService {
     const bodyText = [
       `${lines.length} item${lines.length === 1 ? ' is' : 's are'} at or below its reorder threshold:`,
       '',
-      ...lines.map((l) => `- ${l.label} @ ${l.outletName}: ${l.stockQuantity} left (threshold ${l.lowStockThreshold})`),
+      ...lines.map(
+        (l) =>
+          `- ${l.label} @ ${l.outletName}: ${l.stockQuantity} left (threshold ${l.lowStockThreshold})`,
+      ),
     ].join('\n');
-    await sendEmail(recipient, `${shopName}: ${lines.length} low-stock item${lines.length === 1 ? '' : 's'}`, bodyText, {
-      fromName: shopName,
-    });
+    await sendEmail(
+      recipient,
+      `${shopName}: ${lines.length} low-stock item${lines.length === 1 ? '' : 's'}`,
+      bodyText,
+      {
+        fromName: shopName,
+      },
+    );
     return true;
   }
 
@@ -93,7 +124,10 @@ export class LowStockDigestService {
         },
       }),
       this.prisma.outletvariantstock.findMany({
-        where: { lowStockThreshold: { not: null }, variant: { product: { shopId } } },
+        where: {
+          lowStockThreshold: { not: null },
+          variant: { product: { shopId } },
+        },
         select: {
           stockQuantity: true,
           lowStockThreshold: true,
@@ -121,7 +155,10 @@ export class LowStockDigestService {
 
     const lines: LowStockLine[] = [];
     for (const row of products) {
-      if (row.lowStockThreshold !== null && row.stockQuantity <= row.lowStockThreshold) {
+      if (
+        row.lowStockThreshold !== null &&
+        row.stockQuantity <= row.lowStockThreshold
+      ) {
         lines.push({
           label: row.product.name,
           outletName: row.outlet.name,
@@ -131,14 +168,19 @@ export class LowStockDigestService {
       }
     }
     for (const row of variants) {
-      if (row.lowStockThreshold !== null && row.stockQuantity <= row.lowStockThreshold) {
+      if (
+        row.lowStockThreshold !== null &&
+        row.stockQuantity <= row.lowStockThreshold
+      ) {
         const label = buildVariantLabel([
           row.variant.optionValue1?.value,
           row.variant.optionValue2?.value,
           row.variant.optionValue3?.value,
         ]);
         lines.push({
-          label: label ? `${row.variant.product.name} (${label})` : row.variant.product.name,
+          label: label
+            ? `${row.variant.product.name} (${label})`
+            : row.variant.product.name,
           outletName: row.outlet.name,
           stockQuantity: row.stockQuantity,
           lowStockThreshold: row.lowStockThreshold,
@@ -146,7 +188,10 @@ export class LowStockDigestService {
       }
     }
     for (const row of ingredients) {
-      if (row.lowStockThreshold !== null && row.stockQuantity <= row.lowStockThreshold) {
+      if (
+        row.lowStockThreshold !== null &&
+        row.stockQuantity <= row.lowStockThreshold
+      ) {
         lines.push({
           label: row.ingredient.name,
           outletName: row.outlet.name,

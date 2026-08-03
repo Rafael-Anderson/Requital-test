@@ -53,7 +53,11 @@ describe('Draft Orders (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication({ rawBody: true });
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -120,7 +124,11 @@ describe('Draft Orders (e2e)', () => {
     return { adminToken, outletId, categoryId, productId, slug };
   }
 
-  function draftPayload(outletId: number, productId: number, overrides: Record<string, unknown> = {}) {
+  function draftPayload(
+    outletId: number,
+    productId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       outletId,
       customerName: 'Phone Customer',
@@ -133,7 +141,12 @@ describe('Draft Orders (e2e)', () => {
     };
   }
 
-  async function setStock(adminToken: string, outletId: number, productId: number, delta: number) {
+  async function setStock(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+    delta: number,
+  ) {
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -148,7 +161,11 @@ describe('Draft Orders (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/shop/draft-orders')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send(draftPayload(outletId, productId, { items: [{ productId, quantity: 2 }] }))
+        .send(
+          draftPayload(outletId, productId, {
+            items: [{ productId, quantity: 2 }],
+          }),
+        )
         .expect(201);
       const draft = body<DraftOrderRow>(res);
       expect(draft.status).toBe('OPEN');
@@ -160,7 +177,9 @@ describe('Draft Orders (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ notes: 'Call before delivery' })
         .expect(200);
-      expect(body<DraftOrderRow & { notes: string }>(updated).notes).toBe('Call before delivery');
+      expect(body<DraftOrderRow & { notes: string }>(updated).notes).toBe(
+        'Call before delivery',
+      );
 
       await request(app.getHttpServer())
         .post(`/shop/draft-orders/${draft.id}/complete`)
@@ -187,7 +206,9 @@ describe('Draft Orders (e2e)', () => {
         .get('/shop/draft-orders')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<DraftOrderRow[]>(list).some((d) => d.id === draft.id)).toBe(true);
+      expect(body<DraftOrderRow[]>(list).some((d) => d.id === draft.id)).toBe(
+        true,
+      );
 
       await request(app.getHttpServer())
         .get(`/shop/draft-orders/${draft.id}`)
@@ -204,7 +225,11 @@ describe('Draft Orders (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post('/shop/draft-orders')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send(draftPayload(outletId, productId, { items: [{ productId, quantity: 3 }] }))
+        .send(
+          draftPayload(outletId, productId, {
+            items: [{ productId, quantity: 3 }],
+          }),
+        )
         .expect(201);
       const draft = body<DraftOrderRow>(created);
 
@@ -212,11 +237,15 @@ describe('Draft Orders (e2e)', () => {
         .post(`/shop/draft-orders/${draft.id}/complete`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
-      const result = body<DraftOrderRow & { convertedOrderId: number }>(completed);
+      const result = body<DraftOrderRow & { convertedOrderId: number }>(
+        completed,
+      );
       expect(result.status).toBe('COMPLETED');
       expect(result.convertedOrderId).toBeTruthy();
 
-      const order = await prisma.order.findUnique({ where: { id: result.convertedOrderId } });
+      const order = await prisma.order.findUnique({
+        where: { id: result.convertedOrderId },
+      });
       expect(order?.paymentStatus).toBe('paid');
       expect(order?.channel).toBe('draft_order');
 
@@ -227,7 +256,8 @@ describe('Draft Orders (e2e)', () => {
     });
 
     it('rejects completing a draft with no items', async () => {
-      const { adminToken, outletId, productId } = await setupShop('complete-empty');
+      const { adminToken, outletId, productId } =
+        await setupShop('complete-empty');
       const created = await request(app.getHttpServer())
         .post('/shop/draft-orders')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -241,22 +271,31 @@ describe('Draft Orders (e2e)', () => {
       expect(messageContains(res, 'at least one item')).toBe(true);
     });
 
-    it('matches regular checkout\'s atomicity guarantee: only one of two competing completions succeeds when stock is 1', async () => {
-      const { adminToken, outletId, productId } = await setupShop('complete-race');
+    it("matches regular checkout's atomicity guarantee: only one of two competing completions succeeds when stock is 1", async () => {
+      const { adminToken, outletId, productId } =
+        await setupShop('complete-race');
       await setStock(adminToken, outletId, productId, 1);
 
       const draftA = body<DraftOrderRow>(
         await request(app.getHttpServer())
           .post('/shop/draft-orders')
           .set('Authorization', `Bearer ${adminToken}`)
-          .send(draftPayload(outletId, productId, { items: [{ productId, quantity: 1 }] }))
+          .send(
+            draftPayload(outletId, productId, {
+              items: [{ productId, quantity: 1 }],
+            }),
+          )
           .expect(201),
       );
       const draftB = body<DraftOrderRow>(
         await request(app.getHttpServer())
           .post('/shop/draft-orders')
           .set('Authorization', `Bearer ${adminToken}`)
-          .send(draftPayload(outletId, productId, { items: [{ productId, quantity: 1 }] }))
+          .send(
+            draftPayload(outletId, productId, {
+              items: [{ productId, quantity: 1 }],
+            }),
+          )
           .expect(201),
       );
 
@@ -302,7 +341,9 @@ describe('Draft Orders (e2e)', () => {
       expect(draftOrder.convertedOrderId).toBeTruthy();
       expect(paymentLink.url).toContain(paymentLink.token);
 
-      const orderAfterInvoice = await prisma.order.findUnique({ where: { id: draftOrder.convertedOrderId! } });
+      const orderAfterInvoice = await prisma.order.findUnique({
+        where: { id: draftOrder.convertedOrderId! },
+      });
       expect(orderAfterInvoice?.paymentStatus).toBe('unpaid');
       expect(orderAfterInvoice?.paymentLinkToken).toBe(paymentLink.token);
 
@@ -316,17 +357,22 @@ describe('Draft Orders (e2e)', () => {
       expect(result.status).toBe('COMPLETED');
       expect(result.convertedOrderId).toBe(draftOrder.convertedOrderId);
 
-      const finalOrder = await prisma.order.findUnique({ where: { id: draftOrder.convertedOrderId! } });
+      const finalOrder = await prisma.order.findUnique({
+        where: { id: draftOrder.convertedOrderId! },
+      });
       expect(finalOrder?.paymentStatus).toBe('paid');
 
-      const allOrdersForDraft = await prisma.order.count({ where: { draftorder: { id: draft.id } } });
+      const allOrdersForDraft = await prisma.order.count({
+        where: { draftorder: { id: draft.id } },
+      });
       expect(allOrdersForDraft).toBe(1);
     });
   });
 
   describe('cancel()', () => {
     it('cancels an OPEN draft directly', async () => {
-      const { adminToken, outletId, productId } = await setupShop('cancel-open');
+      const { adminToken, outletId, productId } =
+        await setupShop('cancel-open');
       const draft = body<DraftOrderRow>(
         await request(app.getHttpServer())
           .post('/shop/draft-orders')
@@ -342,13 +388,18 @@ describe('Draft Orders (e2e)', () => {
     });
 
     it('cancelling an INVOICE_SENT draft also cancels and restocks the underlying order', async () => {
-      const { adminToken, outletId, productId } = await setupShop('cancel-invoiced');
+      const { adminToken, outletId, productId } =
+        await setupShop('cancel-invoiced');
       await setStock(adminToken, outletId, productId, 5);
       const draft = body<DraftOrderRow>(
         await request(app.getHttpServer())
           .post('/shop/draft-orders')
           .set('Authorization', `Bearer ${adminToken}`)
-          .send(draftPayload(outletId, productId, { items: [{ productId, quantity: 2 }] }))
+          .send(
+            draftPayload(outletId, productId, {
+              items: [{ productId, quantity: 2 }],
+            }),
+          )
           .expect(201),
       );
       const sent = body<{ draftOrder: DraftOrderRow }>(
@@ -387,15 +438,24 @@ describe('Draft Orders (e2e)', () => {
       const discountRes = await request(app.getHttpServer())
         .post('/shop/discounts')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ code: `DRAFT${Math.random().toString(36).slice(2, 6).toUpperCase()}`, type: 'FIXED_AMOUNT', value: 20, usageLimit: 1 })
+        .send({
+          code: `DRAFT${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          type: 'FIXED_AMOUNT',
+          value: 20,
+          usageLimit: 1,
+        })
         .expect(201);
-      const discount = body<{ id: number; code: string; timesUsed: number }>(discountRes);
+      const discount = body<{ id: number; code: string; timesUsed: number }>(
+        discountRes,
+      );
 
       const draft = body<DraftOrderRow>(
         await request(app.getHttpServer())
           .post('/shop/draft-orders')
           .set('Authorization', `Bearer ${adminToken}`)
-          .send(draftPayload(outletId, productId, { discountCode: discount.code }))
+          .send(
+            draftPayload(outletId, productId, { discountCode: discount.code }),
+          )
           .expect(201),
       );
       expect(draft.discountAmount).toBe(20);
@@ -405,13 +465,19 @@ describe('Draft Orders (e2e)', () => {
         .post(`/shop/draft-orders/${draft.id}/complete`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
-      const result = body<DraftOrderRow & { convertedOrderId: number }>(completed);
+      const result = body<DraftOrderRow & { convertedOrderId: number }>(
+        completed,
+      );
 
-      const order = await prisma.order.findUnique({ where: { id: result.convertedOrderId } });
+      const order = await prisma.order.findUnique({
+        where: { id: result.convertedOrderId },
+      });
       expect(order?.discountCode).toBe(discount.code);
       expect(Number(order?.discountAmount)).toBe(20);
 
-      const updatedDiscount = await prisma.discount.findUnique({ where: { id: discount.id } });
+      const updatedDiscount = await prisma.discount.findUnique({
+        where: { id: discount.id },
+      });
       expect(updatedDiscount?.timesUsed).toBe(1);
 
       // A second draft against the same (now-exhausted) code is rejected at
@@ -419,7 +485,9 @@ describe('Draft Orders (e2e)', () => {
       const rejectedRes = await request(app.getHttpServer())
         .post('/shop/draft-orders')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send(draftPayload(outletId, productId, { discountCode: discount.code }))
+        .send(
+          draftPayload(outletId, productId, { discountCode: discount.code }),
+        )
         .expect(400);
       expect(messageContains(rejectedRes, 'usage limit')).toBe(true);
     });

@@ -8,19 +8,33 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { computeIsOpen } from './outlet-status';
-import { geocodeAddress } from '../common/nominatim';
+import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import type { TenantContext } from '../common/tenant-context';
 import type { outlet as OutletModel } from '@prisma/client';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
 @Injectable()
 export class OutletsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly branchRolesService: BranchRolesService,
+  ) {}
 
   // Admin sees every outlet in the shop (for the switcher / management
   // page). A branch user only ever sees their own outlet — same
   // outlet-override rule as everywhere else, applied here so a branch
-  // account can't enumerate its siblings even read-only.
+  // account can't enumerate its siblings even read-only. The permission
+  // check only applies to the branch case: an admin listing every outlet
+  // is inherently an aggregate view (no single outlet in play), same
+  // aggregate-ignores-overrides reasoning as Dashboard.
   async findAll(ctx: TenantContext) {
+    if (ctx.role === 'branch') {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        ctx.outletId!,
+        'outlets.view_own',
+      );
+    }
     const [outlets, shop] = await Promise.all([
       this.prisma.outlet.findMany({
         where: {
@@ -47,6 +61,9 @@ export class OutletsService {
     if (ctx.role === 'branch' && id !== ctx.outletId) {
       throw new NotFoundException(`Outlet ${id} not found`);
     }
+    // Always checked (never skipped) — unlike findAll, this is always a
+    // single concrete outlet, whether the caller is admin or branch.
+    await this.branchRolesService.assertPermission(ctx, id, 'outlets.view_own');
     const [outlet, shop] = await Promise.all([
       this.prisma.outlet.findFirst({ where: { id, shopId: ctx.shopId } }),
       this.prisma.shop.findUniqueOrThrow({
@@ -98,7 +115,9 @@ export class OutletsService {
 
     this.validateDelivery(
       dto.deliveryEnabled ?? current.deliveryEnabled,
-      dto.deliveryRadiusKm !== undefined ? dto.deliveryRadiusKm : current.deliveryRadiusKm,
+      dto.deliveryRadiusKm !== undefined
+        ? dto.deliveryRadiusKm
+        : current.deliveryRadiusKm,
       dto.latitude !== undefined ? dto.latitude : current.latitude,
       dto.longitude !== undefined ? dto.longitude : current.longitude,
     );
@@ -158,6 +177,12 @@ export class OutletsService {
     return geocodeAddress(query);
   }
 
+  // Pin-drag reverse lookup for MapPicker — same manual-trigger rate-limit
+  // reasoning as geocode() above (dragend fires once per drag, not per pixel).
+  async reverseGeocode(lat?: number, lon?: number) {
+    return reverseGeocodeAddress(lat, lon);
+  }
+
   // Admin-only endpoints (create/update/remove are gated by @Roles('admin')
   // at the controller) still only need the shop boundary, never the branch
   // one — an admin manages every outlet in their own shop.
@@ -182,10 +207,21 @@ export class OutletsService {
     longitude: number | null | undefined,
   ) {
     if (!deliveryEnabled) return;
-    if (deliveryRadiusKm === undefined || deliveryRadiusKm === null || deliveryRadiusKm <= 0) {
-      throw new BadRequestException('Delivery radius (km) is required when delivery is enabled');
+    if (
+      deliveryRadiusKm === undefined ||
+      deliveryRadiusKm === null ||
+      deliveryRadiusKm <= 0
+    ) {
+      throw new BadRequestException(
+        'Delivery radius (km) is required when delivery is enabled',
+      );
     }
-    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+    if (
+      latitude === undefined ||
+      latitude === null ||
+      longitude === undefined ||
+      longitude === null
+    ) {
       throw new BadRequestException(
         'Outlet coordinates are required when delivery is enabled',
       );

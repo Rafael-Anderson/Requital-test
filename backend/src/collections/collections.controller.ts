@@ -35,7 +35,9 @@ export class CollectionsController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', createImageUploadOptions('collections')))
+  @UseInterceptors(
+    FileInterceptor('file', createImageUploadOptions('collections')),
+  )
   uploadImage(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -44,7 +46,10 @@ export class CollectionsController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  findOne(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.collectionsService.findOne(ctx, id);
   }
 
@@ -63,7 +68,10 @@ export class CollectionsController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  remove(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.collectionsService.remove(ctx, id);
   }
 

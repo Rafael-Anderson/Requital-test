@@ -43,7 +43,11 @@ describe('Low Stock Alerts (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -84,7 +88,12 @@ describe('Low Stock Alerts (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post('/outlets')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: `Branch ${i}`, active: true, emirate: 'Dubai', pickupEnabled: true })
+        .send({
+          name: `Branch ${i}`,
+          active: true,
+          emirate: 'Dubai',
+          pickupEnabled: true,
+        })
         .expect(201);
       outletIds.push(body<IdRow>(created).id);
     }
@@ -116,7 +125,13 @@ describe('Low Stock Alerts (e2e)', () => {
       .send({ published: true })
       .expect(200);
 
-    return { shopSlug, adminToken, outletIds, outletId: outletIds[0], productId };
+    return {
+      shopSlug,
+      adminToken,
+      outletIds,
+      outletId: outletIds[0],
+      productId,
+    };
   }
 
   it('defaults to no threshold (off) — never flags a freshly created product', async () => {
@@ -131,11 +146,16 @@ describe('Low Stock Alerts (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .query({ outletId })
       .expect(200);
-    expect(body<{ lowStockThreshold: number | null }>(p).lowStockThreshold).toBeNull();
+    expect(
+      body<{ lowStockThreshold: number | null }>(p).lowStockThreshold,
+    ).toBeNull();
   });
 
   it('setting and clearing the threshold works, and is scoped per outlet — not the product total', async () => {
-    const { adminToken, outletIds, productId } = await setupShop('ls-per-outlet', 2);
+    const { adminToken, outletIds, productId } = await setupShop(
+      'ls-per-outlet',
+      2,
+    );
     const [outletA, outletB] = outletIds;
 
     await request(app.getHttpServer())
@@ -164,7 +184,11 @@ describe('Low Stock Alerts (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .query({ outletId: outletA })
       .expect(200);
-    expect(body<{ lowStockThreshold: number | null; stockQuantity: number }>(productA)).toMatchObject({
+    expect(
+      body<{ lowStockThreshold: number | null; stockQuantity: number }>(
+        productA,
+      ),
+    ).toMatchObject({
       lowStockThreshold: 5,
       stockQuantity: 3,
     });
@@ -174,7 +198,11 @@ describe('Low Stock Alerts (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .query({ outletId: outletB })
       .expect(200);
-    expect(body<{ lowStockThreshold: number | null; stockQuantity: number }>(productB)).toMatchObject({
+    expect(
+      body<{ lowStockThreshold: number | null; stockQuantity: number }>(
+        productB,
+      ),
+    ).toMatchObject({
       lowStockThreshold: null,
       stockQuantity: 100,
     });
@@ -190,11 +218,16 @@ describe('Low Stock Alerts (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .query({ outletId: outletA })
       .expect(200);
-    expect(body<{ lowStockThreshold: number | null }>(cleared).lowStockThreshold).toBeNull();
+    expect(
+      body<{ lowStockThreshold: number | null }>(cleared).lowStockThreshold,
+    ).toBeNull();
   });
 
   it('crossing at-or-below the threshold via order placement, a manual adjustment, and a transfer-out all reflect correctly on read (live comparison, not a separate flag to fall out of sync)', async () => {
-    const { shopSlug, adminToken, outletIds, productId } = await setupShop('ls-crossing', 2);
+    const { shopSlug, adminToken, outletIds, productId } = await setupShop(
+      'ls-crossing',
+      2,
+    );
     const [outletA, outletB] = outletIds;
 
     await request(app.getHttpServer())
@@ -214,8 +247,13 @@ describe('Low Stock Alerts (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ outletId: outletA })
         .expect(200);
-      const p = body<{ lowStockThreshold: number | null; stockQuantity: number }>(res);
-      return p.lowStockThreshold !== null && p.stockQuantity <= p.lowStockThreshold;
+      const p = body<{
+        lowStockThreshold: number | null;
+        stockQuantity: number;
+      }>(res);
+      return (
+        p.lowStockThreshold !== null && p.stockQuantity <= p.lowStockThreshold
+      );
     };
 
     expect(await isLow()).toBe(false); // 10 > 2
@@ -248,7 +286,12 @@ describe('Low Stock Alerts (e2e)', () => {
     await request(app.getHttpServer())
       .post('/products/stock/transfer')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 1 })
+      .send({
+        productId,
+        fromOutletId: outletA,
+        toOutletId: outletB,
+        quantity: 1,
+      })
       .expect(201);
     expect(await isLow()).toBe(true);
   });
@@ -264,7 +307,8 @@ describe('Low Stock Alerts (e2e)', () => {
 
   describe('low-stock digest email', () => {
     async function makeLowStockShop(slugPrefix: string) {
-      const { shopSlug, adminToken, outletId, productId } = await setupShop(slugPrefix);
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop(slugPrefix);
       await request(app.getHttpServer())
         .patch('/products/stock/threshold')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -280,10 +324,17 @@ describe('Low Stock Alerts (e2e)', () => {
 
     it('respects the opt-in toggle (off by default)', async () => {
       const { shopSlug } = await makeLowStockShop('ls-digest-toggle');
-      const shop = await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } });
+      const shop = await prisma.shop.findUniqueOrThrow({
+        where: { subdomain: shopSlug },
+      });
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
-      const sent = await lowStockDigestService.sendForShop(shop.id, shop.name, shop.email, startOfToday);
+      const sent = await lowStockDigestService.sendForShop(
+        shop.id,
+        shop.name,
+        shop.email,
+        startOfToday,
+      );
       expect(sent).toBe(false);
     });
 
@@ -295,17 +346,31 @@ describe('Low Stock Alerts (e2e)', () => {
         .send({ notifyLowStockDigest: true })
         .expect(200);
 
-      const shop = await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } });
+      const shop = await prisma.shop.findUniqueOrThrow({
+        where: { subdomain: shopSlug },
+      });
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
 
-      const first = await lowStockDigestService.sendForShop(shop.id, shop.name, shop.email, startOfToday);
+      const first = await lowStockDigestService.sendForShop(
+        shop.id,
+        shop.name,
+        shop.email,
+        startOfToday,
+      );
       expect(first).toBe(true);
 
-      const second = await lowStockDigestService.sendForShop(shop.id, shop.name, shop.email, startOfToday);
+      const second = await lowStockDigestService.sendForShop(
+        shop.id,
+        shop.name,
+        shop.email,
+        startOfToday,
+      );
       expect(second).toBe(false);
 
-      const updated = await prisma.shop.findUniqueOrThrow({ where: { id: shop.id } });
+      const updated = await prisma.shop.findUniqueOrThrow({
+        where: { id: shop.id },
+      });
       expect(updated.lowStockDigestLastSentAt).not.toBeNull();
     });
   });

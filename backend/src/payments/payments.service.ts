@@ -12,6 +12,7 @@ import { resolveOutletFilter } from '../common/outlet-scope';
 import { PaymentProviderRegistry } from './payment-provider.registry';
 import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
 const LINK_EXPIRY_DAYS = 3;
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
@@ -23,6 +24,7 @@ export class PaymentsService {
     private readonly providerRegistry: PaymentProviderRegistry,
     private readonly paymentSettingsService: PaymentSettingsService,
     private readonly affiliateService: AffiliateService,
+    private readonly branchRolesService: BranchRolesService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -37,6 +39,16 @@ export class PaymentsService {
     if (!order) {
       throw new NotFoundException(`Order ${orderId} not found`);
     }
+    // The order's own outletId, not the pre-fetch filter variable above —
+    // for an admin, `outletId` here is undefined (no filter applied to the
+    // query), but the order itself always belongs to a real, single
+    // outlet. A restrictive override at that specific outlet must still
+    // apply to an admin generating a payment link for one of its orders.
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'payments.generate_link',
+    );
     if (order.paymentStatus === 'paid') {
       throw new BadRequestException('Order is already paid');
     }
@@ -107,12 +119,20 @@ export class PaymentsService {
   // entirely on the legacy platform-wide route, which still verifies
   // against the provider's own platform-level fallback (Stripe's
   // STRIPE_WEBHOOK_SECRET) exactly as before.
-  async handleWebhook(gateway: string, rawBody: Buffer, signatureHeader: string, shopId?: number) {
+  async handleWebhook(
+    gateway: string,
+    rawBody: Buffer,
+    signatureHeader: string,
+    shopId?: number,
+  ) {
     const provider = this.providerRegistry.get(gateway);
 
     let webhookSecret: string | undefined;
     if (shopId !== undefined) {
-      const credentials = await this.paymentSettingsService.resolveCredentials(shopId, gateway);
+      const credentials = await this.paymentSettingsService.resolveCredentials(
+        shopId,
+        gateway,
+      );
       webhookSecret = credentials?.webhookSecret;
       if (!webhookSecret) {
         throw new BadRequestException(
@@ -121,7 +141,11 @@ export class PaymentsService {
       }
     }
 
-    const result = provider.parseWebhookEvent(rawBody, signatureHeader, webhookSecret);
+    const result = provider.parseWebhookEvent(
+      rawBody,
+      signatureHeader,
+      webhookSecret,
+    );
     if (!result) {
       return { received: true };
     }
@@ -189,7 +213,9 @@ export class PaymentsService {
     }
 
     if (result.status === 'paid') {
-      await this.affiliateService.syncOrderStatus(order.id, { paymentPaid: true });
+      await this.affiliateService.syncOrderStatus(order.id, {
+        paymentPaid: true,
+      });
     }
 
     return { received: true };

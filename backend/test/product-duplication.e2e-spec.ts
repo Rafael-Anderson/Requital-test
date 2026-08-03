@@ -65,7 +65,11 @@ describe('Product duplication (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -106,7 +110,11 @@ describe('Product duplication (e2e)', () => {
     return { adminToken, outletId, categoryId };
   }
 
-  async function createProduct(adminToken: string, categoryId: number, overrides: Record<string, unknown> = {}) {
+  async function createProduct(
+    adminToken: string,
+    categoryId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     const res = await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -138,7 +146,10 @@ describe('Product duplication (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: original.id, delta: 25 }] })
+        .send({
+          outletId,
+          adjustments: [{ productId: original.id, delta: 25 }],
+        })
         .expect(200);
 
       const res = await request(app.getHttpServer())
@@ -192,7 +203,9 @@ describe('Product duplication (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
 
-      expect(body<ProductRow>(first).sku).not.toBe(body<ProductRow>(second).sku);
+      expect(body<ProductRow>(first).sku).not.toBe(
+        body<ProductRow>(second).sku,
+      );
       expect(body<ProductRow>(first).id).not.toBe(body<ProductRow>(second).id);
     });
   });
@@ -219,8 +232,12 @@ describe('Product duplication (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       const originalProduct = body<ProductRow>(withVariants);
-      const redVariant = originalProduct.variants.find((v) => v.label === 'Red')!;
-      const redImage = originalProduct.images.find((i) => i.url.includes('red'))!;
+      const redVariant = originalProduct.variants.find(
+        (v) => v.label === 'Red',
+      )!;
+      const redImage = originalProduct.images.find((i) =>
+        i.url.includes('red'),
+      )!;
 
       // Point the Red variant at the red image, and give both variants a
       // distinct price, so the copy's fidelity is actually verifiable.
@@ -239,11 +256,17 @@ describe('Product duplication (e2e)', () => {
       expect(copy.hasVariants).toBe(true);
       expect(copy.options).toHaveLength(1);
       expect(copy.options[0].name).toBe('Color');
-      expect(copy.options[0].values.map((v) => v.value).sort()).toEqual(['Blue', 'Red']);
+      expect(copy.options[0].values.map((v) => v.value).sort()).toEqual([
+        'Blue',
+        'Red',
+      ]);
       // New option-value ids, not reused from the original product.
-      expect(copy.options[0].values.every((v) => !originalProduct.options[0].values.some((ov) => ov.id === v.id))).toBe(
-        true,
-      );
+      expect(
+        copy.options[0].values.every(
+          (v) =>
+            !originalProduct.options[0].values.some((ov) => ov.id === v.id),
+        ),
+      ).toBe(true);
 
       expect(copy.variants).toHaveLength(2);
       const copyRed = copy.variants.find((v) => v.label === 'Red')!;
@@ -283,7 +306,12 @@ describe('Product duplication (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Viewer', email: staffEmail, password: 'password123', role: 'viewer' })
+        .send({
+          name: 'Viewer',
+          email: staffEmail,
+          password: 'password123',
+          role: 'viewer',
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')

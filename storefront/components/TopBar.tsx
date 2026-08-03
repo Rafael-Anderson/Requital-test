@@ -46,6 +46,10 @@ function Logo({ shopSlug, shop }: { shopSlug: string; shop: Shop | null }) {
 // theme.cartLayout, never the hook call itself.
 function CartIconButton({ shopSlug, shop, count }: { shopSlug: string; shop: Shop | null; count: number }) {
   const { openDrawer } = useCartDrawer();
+  // Guarded here (the one place every layout's cart icon renders through),
+  // not per call site — see ProductDetailClient.tsx for the matching
+  // PDP-side buy-now/contact-to-order CTA swap.
+  if (shop?.disableStoreCart) return null;
   const iconProps = iconStyleProps(shop?.iconStyle, 1.75);
   const className = "relative flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors";
   const content = (

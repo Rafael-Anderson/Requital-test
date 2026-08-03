@@ -58,7 +58,11 @@ describe('Bio Links (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -136,7 +140,12 @@ describe('Bio Links (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'My Link', url: 'https://example.com', productId: shop.productId })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'My Link',
+          url: 'https://example.com',
+          productId: shop.productId,
+        })
         .expect(400);
       expect(body<ErrorBody>(res).message).toContain(
         "type 'EXTERNAL_URL' requires exactly 'url' to be set, and no other target field (url/productId/categoryId/collectionId/socialPlatform)",
@@ -171,13 +180,17 @@ describe('Bio Links (e2e)', () => {
       expect(body<BioLinkRow>(res).label).toBe('Instagram');
     });
 
-    it('rejects creating a PRODUCT link against another shop\'s product id', async () => {
+    it("rejects creating a PRODUCT link against another shop's product id", async () => {
       const shopA = await setupOrderableShop('bio-cross-product-a');
       const shopB = await setupOrderableShop('bio-cross-product-b');
       await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send({ type: 'PRODUCT', label: 'Not mine', productId: shopB.productId })
+        .send({
+          type: 'PRODUCT',
+          label: 'Not mine',
+          productId: shopB.productId,
+        })
         .expect(404);
     });
   });
@@ -189,7 +202,11 @@ describe('Bio Links (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'My Site', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'My Site',
+          url: 'https://example.com',
+        })
         .expect(201);
       const link = body<BioLinkRow>(created);
       expect(link.url).toBe('https://example.com');
@@ -219,7 +236,9 @@ describe('Bio Links (e2e)', () => {
         .get('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<BioLinkRow[]>(afterDelete).some((l) => l.id === link.id)).toBe(false);
+      expect(
+        body<BioLinkRow[]>(afterDelete).some((l) => l.id === link.id),
+      ).toBe(false);
     });
 
     it('a label-only update does not require resending the target field', async () => {
@@ -227,7 +246,11 @@ describe('Bio Links (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'Old Label', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'Old Label',
+          url: 'https://example.com',
+        })
         .expect(201);
       const linkId = body<BioLinkRow>(created).id;
 
@@ -269,18 +292,26 @@ describe('Bio Links (e2e)', () => {
       expect(body<BioLinkRow[]>(list).map((l) => l.id)).toEqual(reversed);
     });
 
-    it('rejects a reorder whose id set does not exactly match the shop\'s own links', async () => {
+    it("rejects a reorder whose id set does not exactly match the shop's own links", async () => {
       const shopA = await setupOrderableShop('bio-reorder-cross-a');
       const shopB = await setupOrderableShop('bio-reorder-cross-b');
       const linkA = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'A Link', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'A Link',
+          url: 'https://example.com',
+        })
         .expect(201);
       const linkB = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'B Link', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'B Link',
+          url: 'https://example.com',
+        })
         .expect(201);
 
       await request(app.getHttpServer())
@@ -294,19 +325,27 @@ describe('Bio Links (e2e)', () => {
         .get('/shop/bio-links')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      expect(body<BioLinkRow[]>(listB).find((l) => l.id === body<BioLinkRow>(linkB).id)?.order).toBe(0);
+      expect(
+        body<BioLinkRow[]>(listB).find(
+          (l) => l.id === body<BioLinkRow>(linkB).id,
+        )?.order,
+      ).toBe(0);
       void linkA;
     });
   });
 
   describe('tenant isolation', () => {
-    it('shop A cannot read, update, or delete shop B\'s bio link by id', async () => {
+    it("shop A cannot read, update, or delete shop B's bio link by id", async () => {
       const shopA = await setupOrderableShop('bio-tenant-a');
       const shopB = await setupOrderableShop('bio-tenant-b');
       const linkB = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'B Link', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'B Link',
+          url: 'https://example.com',
+        })
         .expect(201);
       const linkBId = body<BioLinkRow>(linkB).id;
 
@@ -314,7 +353,9 @@ describe('Bio Links (e2e)', () => {
         .get('/shop/bio-links')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      expect(body<BioLinkRow[]>(listA).some((l) => l.id === linkBId)).toBe(false);
+      expect(body<BioLinkRow[]>(listA).some((l) => l.id === linkBId)).toBe(
+        false,
+      );
 
       await request(app.getHttpServer())
         .patch(`/shop/bio-links/${linkBId}`)
@@ -332,7 +373,9 @@ describe('Bio Links (e2e)', () => {
         .get('/shop/bio-links')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      expect(body<BioLinkRow[]>(stillThere).find((l) => l.id === linkBId)?.label).toBe('B Link');
+      expect(
+        body<BioLinkRow[]>(stillThere).find((l) => l.id === linkBId)?.label,
+      ).toBe('B Link');
     });
   });
 
@@ -360,13 +403,22 @@ describe('Bio Links (e2e)', () => {
       const activeExternal = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'Active Link', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'Active Link',
+          url: 'https://example.com',
+        })
         .expect(201);
 
       const inactiveLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'Inactive Link', url: 'https://example.com', active: false })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'Inactive Link',
+          url: 'https://example.com',
+          active: false,
+        })
         .expect(201);
 
       // A product that will be deleted after the bio link is created.
@@ -384,7 +436,11 @@ describe('Bio Links (e2e)', () => {
       const doomedProductLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'PRODUCT', label: 'Doomed', productId: body<IdRow>(doomedProduct).id })
+        .send({
+          type: 'PRODUCT',
+          label: 'Doomed',
+          productId: body<IdRow>(doomedProduct).id,
+        })
         .expect(201);
       await request(app.getHttpServer())
         .delete(`/products/${body<IdRow>(doomedProduct).id}`)
@@ -406,7 +462,11 @@ describe('Bio Links (e2e)', () => {
       const unavailableProductLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'PRODUCT', label: 'Unavailable', productId: body<IdRow>(unavailableProduct).id })
+        .send({
+          type: 'PRODUCT',
+          label: 'Unavailable',
+          productId: body<IdRow>(unavailableProduct).id,
+        })
         .expect(201);
       await request(app.getHttpServer())
         .patch(`/products/${body<IdRow>(unavailableProduct).id}/availability`)
@@ -417,10 +477,16 @@ describe('Bio Links (e2e)', () => {
       const categoryLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'CATEGORY', label: 'Shop Flowers', categoryId: shop.categoryId })
+        .send({
+          type: 'CATEGORY',
+          label: 'Shop Flowers',
+          categoryId: shop.categoryId,
+        })
         .expect(201);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}/bio-links`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/bio-links`)
+        .expect(200);
       const publicLinks = body<PublicBioLinkRow[]>(res);
       const ids = publicLinks.map((l) => l.id);
 
@@ -430,7 +496,9 @@ describe('Bio Links (e2e)', () => {
       expect(ids).not.toContain(body<BioLinkRow>(doomedProductLink).id);
       expect(ids).not.toContain(body<BioLinkRow>(unavailableProductLink).id);
 
-      const categoryEntry = publicLinks.find((l) => l.id === body<BioLinkRow>(categoryLink).id);
+      const categoryEntry = publicLinks.find(
+        (l) => l.id === body<BioLinkRow>(categoryLink).id,
+      );
       expect(categoryEntry?.category?.name).toBe('Flowers');
     });
 
@@ -450,21 +518,33 @@ describe('Bio Links (e2e)', () => {
       const activeLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'COLLECTION', label: 'Shop It', collectionId: body<IdRow>(activeCollection).id })
+        .send({
+          type: 'COLLECTION',
+          label: 'Shop It',
+          collectionId: body<IdRow>(activeCollection).id,
+        })
         .expect(201);
       const inactiveLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'COLLECTION', label: 'Hidden', collectionId: body<IdRow>(inactiveCollection).id })
+        .send({
+          type: 'COLLECTION',
+          label: 'Hidden',
+          collectionId: body<IdRow>(inactiveCollection).id,
+        })
         .expect(201);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}/bio-links`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/bio-links`)
+        .expect(200);
       const publicLinks = body<PublicBioLinkRow[]>(res);
       const ids = publicLinks.map((l) => l.id);
       expect(ids).toContain(body<BioLinkRow>(activeLink).id);
       expect(ids).not.toContain(body<BioLinkRow>(inactiveLink).id);
 
-      const entry = publicLinks.find((l) => l.id === body<BioLinkRow>(activeLink).id);
+      const entry = publicLinks.find(
+        (l) => l.id === body<BioLinkRow>(activeLink).id,
+      );
       expect(entry?.collection?.title).toBe('Active Collection');
     });
 
@@ -487,7 +567,9 @@ describe('Bio Links (e2e)', () => {
         .send({ type: 'SOCIAL_ICON', socialPlatform: 'snapchat' })
         .expect(201);
 
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}/bio-links`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/bio-links`)
+        .expect(200);
       const ids = body<PublicBioLinkRow[]>(res).map((l) => l.id);
       expect(ids).toContain(body<BioLinkRow>(configuredLink).id);
       expect(ids).not.toContain(body<BioLinkRow>(unconfiguredLink).id);
@@ -500,14 +582,22 @@ describe('Bio Links (e2e)', () => {
       const link = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'External', url: 'https://example.com/landing' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'External',
+          url: 'https://example.com/landing',
+        })
         .expect(201);
       const linkId = body<BioLinkRow>(link).id;
 
-      const res = await request(app.getHttpServer()).get(`/public/bio-links/${linkId}/click`).expect(302);
+      const res = await request(app.getHttpServer())
+        .get(`/public/bio-links/${linkId}/click`)
+        .expect(302);
       expect(res.headers.location).toBe('https://example.com/landing');
 
-      const row = await prisma.biolink.findUniqueOrThrow({ where: { id: linkId } });
+      const row = await prisma.biolink.findUniqueOrThrow({
+        where: { id: linkId },
+      });
       expect(row.clickCount).toBe(1);
     });
 
@@ -520,7 +610,9 @@ describe('Bio Links (e2e)', () => {
         .expect(201);
       const linkId = body<BioLinkRow>(link).id;
 
-      const res = await request(app.getHttpServer()).get(`/public/bio-links/${linkId}/click`).expect(302);
+      const res = await request(app.getHttpServer())
+        .get(`/public/bio-links/${linkId}/click`)
+        .expect(302);
       expect(res.headers.location).toContain(`/${shop.slug}/products/`);
     });
 
@@ -534,13 +626,19 @@ describe('Bio Links (e2e)', () => {
       const link = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'COLLECTION', label: 'Shop It', collectionId: body<IdRow>(collection).id })
+        .send({
+          type: 'COLLECTION',
+          label: 'Shop It',
+          collectionId: body<IdRow>(collection).id,
+        })
         .expect(201);
 
       const res = await request(app.getHttpServer())
         .get(`/public/bio-links/${body<BioLinkRow>(link).id}/click`)
         .expect(302);
-      expect(res.headers.location).toBe(`http://localhost:3002/${shop.slug}/collections/click-target`);
+      expect(res.headers.location).toBe(
+        `http://localhost:3002/${shop.slug}/collections/click-target`,
+      );
     });
 
     it('rejects a click on an inactive link', async () => {
@@ -548,7 +646,12 @@ describe('Bio Links (e2e)', () => {
       const link = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'Inactive', url: 'https://example.com', active: false })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'Inactive',
+          url: 'https://example.com',
+          active: false,
+        })
         .expect(201);
       await request(app.getHttpServer())
         .get(`/public/bio-links/${body<BioLinkRow>(link).id}/click`)
@@ -570,7 +673,11 @@ describe('Bio Links (e2e)', () => {
       const link = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'Unpub', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'Unpub',
+          url: 'https://example.com',
+        })
         .expect(201);
       await request(app.getHttpServer())
         .get(`/public/bio-links/${body<BioLinkRow>(link).id}/click`)
@@ -582,16 +689,25 @@ describe('Bio Links (e2e)', () => {
       const link = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ type: 'EXTERNAL_URL', label: 'Race', url: 'https://example.com' })
+        .send({
+          type: 'EXTERNAL_URL',
+          label: 'Race',
+          url: 'https://example.com',
+        })
         .expect(201);
       const linkId = body<BioLinkRow>(link).id;
 
-      const attempt = () => request(app.getHttpServer()).get(`/public/bio-links/${linkId}/click`);
+      const attempt = () =>
+        request(app.getHttpServer()).get(`/public/bio-links/${linkId}/click`);
       const CONCURRENCY = 8;
-      const results = await Promise.all(Array.from({ length: CONCURRENCY }, attempt));
+      const results = await Promise.all(
+        Array.from({ length: CONCURRENCY }, attempt),
+      );
       expect(results.every((r) => r.status === 302)).toBe(true);
 
-      const row = await prisma.biolink.findUniqueOrThrow({ where: { id: linkId } });
+      const row = await prisma.biolink.findUniqueOrThrow({
+        where: { id: linkId },
+      });
       expect(row.clickCount).toBe(CONCURRENCY);
     });
   });

@@ -33,7 +33,10 @@ function isOverrideActive(
 ): boolean {
   if (!closedOverride) return false;
   if (!closedOverrideSetAt) return false;
-  return dateKeyInTimezone(closedOverrideSetAt, timezone) === dateKeyInTimezone(new Date(), timezone);
+  return (
+    dateKeyInTimezone(closedOverrideSetAt, timezone) ===
+    dateKeyInTimezone(new Date(), timezone)
+  );
 }
 
 // No schedule configured yet means "open" — a freshly created outlet
@@ -44,7 +47,8 @@ export function computeIsOpen(
   closedOverrideSetAt: Date | null,
   timezone: string,
 ): boolean {
-  if (isOverrideActive(closedOverride, closedOverrideSetAt, timezone)) return false;
+  if (isOverrideActive(closedOverride, closedOverrideSetAt, timezone))
+    return false;
   if (!businessHours || typeof businessHours !== 'object') return true;
 
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -55,7 +59,9 @@ export function computeIsOpen(
     hourCycle: 'h23',
   }).formatToParts(new Date());
 
-  const weekdayShort = parts.find((p) => p.type === 'weekday')?.value.toLowerCase();
+  const weekdayShort = parts
+    .find((p) => p.type === 'weekday')
+    ?.value.toLowerCase();
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
   const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
   const dayKey = WEEKDAYS.find((d) => weekdayShort?.startsWith(d));

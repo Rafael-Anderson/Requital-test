@@ -59,7 +59,10 @@ export class BioLinksController {
   }
 
   @Patch('page-config')
-  updatePageConfig(@CurrentUser() ctx: TenantContext, @Body() dto: UpdateBioPageConfigDto) {
+  updatePageConfig(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: UpdateBioPageConfigDto,
+  ) {
     return this.bioLinksService.updatePageConfig(ctx, dto);
   }
 
@@ -67,7 +70,9 @@ export class BioLinksController {
   // — same pattern as Theme/SEO's own upload endpoints, just a different
   // subdirectory. No new upload machinery.
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', createImageUploadOptions('bio-links')))
+  @UseInterceptors(
+    FileInterceptor('file', createImageUploadOptions('bio-links')),
+  )
   uploadImage(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
@@ -85,7 +90,10 @@ export class BioLinksController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  remove(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.bioLinksService.remove(ctx, id);
   }
 }

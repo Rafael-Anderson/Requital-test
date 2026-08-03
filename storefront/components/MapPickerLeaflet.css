@@ -1,0 +1,11 @@
+/* Leaflet's default attribution control renders at the map's normal text
+   size with a fairly opaque background — required to stay visible per OSM/
+   CARTO's tile usage terms, but shrunk down here so it doesn't visually
+   compete with the pin/tiles it's floating over. Do not remove/hide this
+   control — see MapPickerLeaflet.tsx's TileLayer attribution string. */
+.leaflet-control-attribution {
+  font-size: 9px;
+  line-height: 1.4;
+  padding: 0 4px;
+  background: rgba(255, 255, 255, 0.55);
+}

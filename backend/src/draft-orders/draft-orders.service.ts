@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -14,25 +18,37 @@ const draftOrderInclude = {
   draftorderitem: {
     include: {
       product: { select: { thumbnail: true } },
-      variant: { include: { optionValue1: true, optionValue2: true, optionValue3: true } },
+      variant: {
+        include: { optionValue1: true, optionValue2: true, optionValue3: true },
+      },
     },
   },
   discount: true,
   customer: { select: { id: true, name: true, phone: true } },
   outlet: { select: { id: true, name: true } },
   convertedOrder: {
-    select: { id: true, status: true, paymentStatus: true, total: true, trackingToken: true },
+    select: {
+      id: true,
+      status: true,
+      paymentStatus: true,
+      total: true,
+      trackingToken: true,
+    },
   },
 } satisfies Prisma.draftorderInclude;
 
-type DraftOrderWithRelations = Prisma.draftorderGetPayload<{ include: typeof draftOrderInclude }>;
+type DraftOrderWithRelations = Prisma.draftorderGetPayload<{
+  include: typeof draftOrderInclude;
+}>;
 
 const draftOrderWithItemsInclude = {
   draftorderitem: true,
   discount: { select: { code: true } },
 } satisfies Prisma.draftorderInclude;
 
-type DraftOrderWithItems = Prisma.draftorderGetPayload<{ include: typeof draftOrderWithItemsInclude }>;
+type DraftOrderWithItems = Prisma.draftorderGetPayload<{
+  include: typeof draftOrderWithItemsInclude;
+}>;
 
 interface DraftItemInput {
   productId: number;
@@ -65,7 +81,9 @@ export class DraftOrdersService {
   }
 
   async create(ctx: TenantContext, dto: CreateDraftOrderDto) {
-    const outlet = await this.prisma.outlet.findFirst({ where: { id: dto.outletId, shopId: ctx.shopId } });
+    const outlet = await this.prisma.outlet.findFirst({
+      where: { id: dto.outletId, shopId: ctx.shopId },
+    });
     if (!outlet) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
@@ -81,7 +99,12 @@ export class DraftOrdersService {
     });
 
     const discountId = dto.discountCode
-      ? await this.resolveDiscountOrThrow(ctx.shopId, dto.discountCode, subtotal, existingCustomer?.id)
+      ? await this.resolveDiscountOrThrow(
+          ctx.shopId,
+          dto.discountCode,
+          subtotal,
+          existingCustomer?.id,
+        )
       : undefined;
 
     const draft = await this.prisma.draftorder.create({
@@ -108,10 +131,14 @@ export class DraftOrdersService {
   async update(ctx: TenantContext, id: number, dto: UpdateDraftOrderDto) {
     const draft = await this.findRaw(ctx, id);
     if (draft.status !== 'OPEN') {
-      throw new BadRequestException(`Cannot edit a draft order that is already '${draft.status}'`);
+      throw new BadRequestException(
+        `Cannot edit a draft order that is already '${draft.status}'`,
+      );
     }
     if (dto.outletId !== undefined) {
-      const outlet = await this.prisma.outlet.findFirst({ where: { id: dto.outletId, shopId: ctx.shopId } });
+      const outlet = await this.prisma.outlet.findFirst({
+        where: { id: dto.outletId, shopId: ctx.shopId },
+      });
       if (!outlet) {
         throw new BadRequestException('outletId is invalid for this shop');
       }
@@ -122,7 +149,9 @@ export class DraftOrdersService {
     if (itemsData) {
       subtotal = this.sumItems(itemsData);
     } else {
-      const existingItems = await this.prisma.draftorderitem.findMany({ where: { draftOrderId: id } });
+      const existingItems = await this.prisma.draftorderitem.findMany({
+        where: { draftOrderId: id },
+      });
       subtotal = this.sumItems(existingItems);
     }
 
@@ -134,7 +163,12 @@ export class DraftOrdersService {
       const existingCustomer = await this.prisma.customer.findUnique({
         where: { shopId_phone: { shopId: ctx.shopId, phone } },
       });
-      discountId = await this.resolveDiscountOrThrow(ctx.shopId, dto.discountCode, subtotal, existingCustomer?.id);
+      discountId = await this.resolveDiscountOrThrow(
+        ctx.shopId,
+        dto.discountCode,
+        subtotal,
+        existingCustomer?.id,
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -165,7 +199,9 @@ export class DraftOrdersService {
   async cancel(ctx: TenantContext, id: number) {
     const draft = await this.findRaw(ctx, id);
     if (draft.status === 'COMPLETED' || draft.status === 'CANCELLED') {
-      throw new BadRequestException(`Cannot cancel a draft order that is already '${draft.status}'`);
+      throw new BadRequestException(
+        `Cannot cancel a draft order that is already '${draft.status}'`,
+      );
     }
     if (draft.convertedOrderId) {
       // INVOICE_SENT — a real (unpaid) order already exists; cancel it too
@@ -174,7 +210,10 @@ export class DraftOrdersService {
       // storefront-style cancellation — see OrdersService.cancel).
       await this.ordersService.cancel(ctx, draft.convertedOrderId);
     }
-    await this.prisma.draftorder.update({ where: { id }, data: { status: 'CANCELLED' } });
+    await this.prisma.draftorder.update({
+      where: { id },
+      data: { status: 'CANCELLED' },
+    });
     return this.findOne(ctx, id);
   }
 
@@ -188,7 +227,9 @@ export class DraftOrdersService {
       throw new BadRequestException(`Draft order is already '${draft.status}'`);
     }
     if (draft.draftorderitem.length === 0) {
-      throw new BadRequestException('Add at least one item before completing this draft order');
+      throw new BadRequestException(
+        'Add at least one item before completing this draft order',
+      );
     }
 
     let orderId = draft.convertedOrderId;
@@ -196,7 +237,10 @@ export class DraftOrdersService {
       const order = await this.convertToOrder(ctx, draft);
       orderId = order.id;
     }
-    await this.prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'paid' } });
+    await this.prisma.order.update({
+      where: { id: orderId },
+      data: { paymentStatus: 'paid' },
+    });
     await this.prisma.draftorder.update({
       where: { id },
       data: { status: 'COMPLETED', convertedOrderId: orderId },
@@ -214,10 +258,14 @@ export class DraftOrdersService {
   async sendInvoice(ctx: TenantContext, id: number) {
     const draft = await this.findRawWithItems(ctx, id);
     if (draft.status !== 'OPEN') {
-      throw new BadRequestException('Only an open draft order can have an invoice sent');
+      throw new BadRequestException(
+        'Only an open draft order can have an invoice sent',
+      );
     }
     if (draft.draftorderitem.length === 0) {
-      throw new BadRequestException('Add at least one item before sending an invoice');
+      throw new BadRequestException(
+        'Add at least one item before sending an invoice',
+      );
     }
 
     const order = await this.convertToOrder(ctx, draft);
@@ -263,11 +311,19 @@ export class DraftOrdersService {
     );
   }
 
-  private async buildItemsData(ctx: TenantContext, items: DraftItemInput[] | undefined) {
+  private async buildItemsData(
+    ctx: TenantContext,
+    items: DraftItemInput[] | undefined,
+  ) {
     if (!items) return undefined;
     const resolved = await this.productsService.resolveOrderItems(
       ctx.shopId,
-      items.map((i) => ({ productId: i.productId, quantity: i.quantity, variantId: i.variantId, priceOverride: i.price })),
+      items.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+        variantId: i.variantId,
+        priceOverride: i.price,
+      })),
     );
     return resolved.map(({ product, variant, quantity, price }) => ({
       productId: product.id,
@@ -278,21 +334,35 @@ export class DraftOrdersService {
     }));
   }
 
-  private sumItems(items: { price: Prisma.Decimal | number; quantity: number }[]): number {
+  private sumItems(
+    items: { price: Prisma.Decimal | number; quantity: number }[],
+  ): number {
     return items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0);
   }
 
-  private async resolveDiscountOrThrow(shopId: number, code: string, subtotal: number, customerId?: number) {
+  private async resolveDiscountOrThrow(
+    shopId: number,
+    code: string,
+    subtotal: number,
+    customerId?: number,
+  ) {
     const discount = await this.discountsService.resolveByCode(shopId, code);
-    const result = await this.discountsService.evaluate(discount, { cartSubtotal: subtotal, customerId });
+    const result = await this.discountsService.evaluate(discount, {
+      cartSubtotal: subtotal,
+      customerId,
+    });
     if (!result.valid) {
-      throw new BadRequestException(result.message ?? 'This discount code cannot be applied');
+      throw new BadRequestException(
+        result.message ?? 'This discount code cannot be applied',
+      );
     }
     return result.discountId!;
   }
 
   private async findRaw(ctx: TenantContext, id: number) {
-    const draft = await this.prisma.draftorder.findFirst({ where: { id, shopId: ctx.shopId } });
+    const draft = await this.prisma.draftorder.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!draft) {
       throw new NotFoundException(`Draft order ${id} not found`);
     }
@@ -330,17 +400,25 @@ export class DraftOrdersService {
       thumbnail: i.product.thumbnail,
       variantId: i.variantId,
       variantLabel: i.variant
-        ? buildVariantLabel([i.variant.optionValue1?.value, i.variant.optionValue2?.value, i.variant.optionValue3?.value])
+        ? buildVariantLabel([
+            i.variant.optionValue1?.value,
+            i.variant.optionValue2?.value,
+            i.variant.optionValue3?.value,
+          ])
         : null,
       quantity: i.quantity,
       price: i.price,
     }));
     const subtotal = this.sumItems(items);
-    const discountAmount = discount ? this.discountsService.computeAmount(discount, subtotal) : 0;
+    const discountAmount = discount
+      ? this.discountsService.computeAmount(discount, subtotal)
+      : 0;
     const total = Math.max(0, subtotal - discountAmount);
     return {
       ...rest,
-      discount: discount ? { id: discount.id, code: discount.code, type: discount.type } : null,
+      discount: discount
+        ? { id: discount.id, code: discount.code, type: discount.type }
+        : null,
       items,
       subtotal,
       discountAmount,

@@ -39,7 +39,11 @@ describe('Shop publish state (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -62,7 +66,11 @@ describe('Shop publish state (e2e)', () => {
       })
       .expect(201);
     const res = body<AuthResponse>(signup);
-    return { adminToken: res.accessToken, slug: `${slugPrefix}-${runId}`, shopId: res.user.shopId };
+    return {
+      adminToken: res.accessToken,
+      slug: `${slugPrefix}-${runId}`,
+      shopId: res.user.shopId,
+    };
   }
 
   async function setupOrderableShop(slugPrefix: string) {
@@ -109,7 +117,9 @@ describe('Shop publish state (e2e)', () => {
   describe('new signups default to unpublished', () => {
     it('a fresh shop reads published: false', async () => {
       const shop = await setupShop('pub-default');
-      const res = await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
       expect(body<ShopBody>(res).published).toBe(false);
     });
   });
@@ -149,10 +159,18 @@ describe('Shop publish state (e2e)', () => {
     it('every content-serving endpoint 404s, but getShop itself still resolves (for a "coming soon" page)', async () => {
       const shop = await setupOrderableShop('pub-gated');
 
-      await request(app.getHttpServer()).get(`/public/${shop.slug}`).expect(200);
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/categories`).expect(404);
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/products`).expect(404);
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/outlets`).expect(404);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/categories`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/outlets`)
+        .expect(404);
       await request(app.getHttpServer())
         .get(`/public/${shop.slug}/outlets/${shop.outletId}/delivery-zones`)
         .expect(404);
@@ -185,9 +203,15 @@ describe('Shop publish state (e2e)', () => {
         .send({ published: true })
         .expect(200);
 
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/categories`).expect(200);
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/products`).expect(200);
-      await request(app.getHttpServer()).get(`/public/${shop.slug}/outlets`).expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/categories`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/products`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shop.slug}/outlets`)
+        .expect(200);
       const orderRes = await request(app.getHttpServer())
         .post(`/public/${shop.slug}/orders`)
         .send({
@@ -215,8 +239,12 @@ describe('Shop publish state (e2e)', () => {
       // readiness itself.
       const shop = await setupOrderableShop('pub-sitemap');
 
-      let sitemap = await request(app.getHttpServer()).get('/public/shops/sitemap').expect(200);
-      expect(body<SitemapRow[]>(sitemap).some((s) => s.slug === shop.slug)).toBe(false);
+      let sitemap = await request(app.getHttpServer())
+        .get('/public/shops/sitemap')
+        .expect(200);
+      expect(
+        body<SitemapRow[]>(sitemap).some((s) => s.slug === shop.slug),
+      ).toBe(false);
 
       await request(app.getHttpServer())
         .patch('/shop')
@@ -224,8 +252,12 @@ describe('Shop publish state (e2e)', () => {
         .send({ published: true })
         .expect(200);
 
-      sitemap = await request(app.getHttpServer()).get('/public/shops/sitemap').expect(200);
-      expect(body<SitemapRow[]>(sitemap).some((s) => s.slug === shop.slug)).toBe(true);
+      sitemap = await request(app.getHttpServer())
+        .get('/public/shops/sitemap')
+        .expect(200);
+      expect(
+        body<SitemapRow[]>(sitemap).some((s) => s.slug === shop.slug),
+      ).toBe(true);
     });
   });
 
@@ -255,7 +287,9 @@ describe('Shop publish state (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ published: true })
         .expect(400);
-      expect(body<{ message: string }>(res).message).toContain('Add at least one product');
+      expect(body<{ message: string }>(res).message).toContain(
+        'Add at least one product',
+      );
     });
 
     it('rejects publishing when no outlet has delivery or pickup enabled', async () => {
@@ -286,7 +320,9 @@ describe('Shop publish state (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ published: true })
         .expect(400);
-      expect(body<{ message: string }>(res).message).toContain('Enable delivery or pickup');
+      expect(body<{ message: string }>(res).message).toContain(
+        'Enable delivery or pickup',
+      );
     });
 
     it('succeeds once both conditions are met', async () => {
@@ -305,7 +341,9 @@ describe('Shop publish state (e2e)', () => {
         .get('/shop/publish-readiness')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<{ ready: boolean; missing: string[] }>(res).ready).toBe(false);
+      expect(body<{ ready: boolean; missing: string[] }>(res).ready).toBe(
+        false,
+      );
 
       const ready = await setupOrderableShop('pub-ready-endpoint-ok');
       res = await request(app.getHttpServer())
@@ -313,7 +351,9 @@ describe('Shop publish state (e2e)', () => {
         .set('Authorization', `Bearer ${ready.adminToken}`)
         .expect(200);
       expect(body<{ ready: boolean; missing: string[] }>(res).ready).toBe(true);
-      expect(body<{ ready: boolean; missing: string[] }>(res).missing).toEqual([]);
+      expect(body<{ ready: boolean; missing: string[] }>(res).missing).toEqual(
+        [],
+      );
     });
 
     it('an already-published shop is not retroactively unpublished by an unrelated update, even if it would no longer meet the bar', async () => {

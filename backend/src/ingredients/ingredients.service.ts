@@ -4,13 +4,20 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { UpdateIngredientDto } from './dto/update-ingredient.dto';
 import { parseCsv } from '../common/csv.util';
-import { ImportAction, ImportRowResult, parseImportBoolean, parseImportNumber } from '../products/products-import';
+import {
+  ImportAction,
+  ImportRowResult,
+  parseImportBoolean,
+  parseImportNumber,
+} from '../products/products-import';
 
 function includeFor(outletId: number | undefined) {
   return {
+    category: { select: { id: true, name: true } },
     ...(outletId !== undefined && {
       outletingredientstock: {
         where: { outletId },
@@ -37,12 +44,32 @@ export class IngredientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
+    private readonly branchRolesService: BranchRolesService,
   ) {}
 
-  async findAll(ctx: TenantContext, requestedOutletId?: number) {
+  async findAll(
+    ctx: TenantContext,
+    requestedOutletId?: number,
+    categoryId?: number,
+  ) {
     const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    // Ingredients are shop-wide catalog (like Products) — outletId here is
+    // just which outlet's stock count to attach, not a resource the
+    // ingredient "belongs to." Skipped when undefined (admin viewing
+    // without picking one outlet), same aggregate-ignores-overrides
+    // reasoning as Dashboard.
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'ingredients.view',
+      );
+    }
     const ingredients = await this.prisma.ingredient.findMany({
-      where: { shopId: ctx.shopId },
+      where: {
+        shopId: ctx.shopId,
+        ...(categoryId !== undefined && { categoryId }),
+      },
       include: includeFor(outletId),
       orderBy: { id: 'asc' },
     });
@@ -51,6 +78,13 @@ export class IngredientsService {
 
   async findOne(ctx: TenantContext, id: number, requestedOutletId?: number) {
     const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'ingredients.view',
+      );
+    }
     const ingredient = await this.prisma.ingredient.findFirst({
       where: { id, shopId: ctx.shopId },
       include: includeFor(outletId),
@@ -62,28 +96,64 @@ export class IngredientsService {
   }
 
   async create(ctx: TenantContext, dto: CreateIngredientDto) {
+    if (dto.categoryId !== undefined) {
+      await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
+    }
     const ingredient = await this.prisma.ingredient.create({
       data: {
         shopId: ctx.shopId,
         name: dto.name,
         unit: dto.unit,
         trackInventory: dto.trackInventory ?? true,
+        image: dto.image,
+        description: dto.description,
+        costPerUnit: dto.costPerUnit,
+        supplier: dto.supplier,
+        categoryId: dto.categoryId,
       },
+      include: { category: { select: { id: true, name: true } } },
     });
-    return this.toResponse({ ...ingredient, outletingredientstock: [] }, undefined);
+    return this.toResponse(
+      { ...ingredient, outletingredientstock: [] },
+      undefined,
+    );
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateIngredientDto) {
     await this.assertBelongsToShop(ctx, id);
+    if (dto.categoryId !== undefined && dto.categoryId !== null) {
+      await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
+    }
     const ingredient = await this.prisma.ingredient.update({
       where: { id },
       data: {
         name: dto.name,
         unit: dto.unit,
         trackInventory: dto.trackInventory,
+        image: dto.image,
+        description: dto.description,
+        costPerUnit: dto.costPerUnit,
+        supplier: dto.supplier,
+        categoryId: dto.categoryId,
       },
+      include: { category: { select: { id: true, name: true } } },
     });
-    return this.toResponse({ ...ingredient, outletingredientstock: [] }, undefined);
+    return this.toResponse(
+      { ...ingredient, outletingredientstock: [] },
+      undefined,
+    );
+  }
+
+  private async assertCategoryBelongsToShop(
+    ctx: TenantContext,
+    categoryId: number,
+  ) {
+    const category = await this.prisma.ingredientcategory.findFirst({
+      where: { id: categoryId, shopId: ctx.shopId },
+    });
+    if (!category) {
+      throw new NotFoundException('categoryId is invalid for this shop');
+    }
   }
 
   async remove(ctx: TenantContext, id: number) {
@@ -101,13 +171,20 @@ export class IngredientsService {
   // Same stateless preview/confirm pair and shopId-scoped-name matching
   // convention as ProductsService's CSV import — see the comment there for
   // the full rationale.
-  async previewImportIngredients(ctx: TenantContext, file: Express.Multer.File) {
+  async previewImportIngredients(
+    ctx: TenantContext,
+    file: Express.Multer.File,
+  ) {
     const rawRows = parseCsv(file.buffer.toString('utf-8'));
     const { results } = await this.classifyImportRows(ctx, rawRows);
     return { rows: results };
   }
 
-  async confirmImportIngredients(ctx: TenantContext, file: Express.Multer.File, outletId: number | undefined) {
+  async confirmImportIngredients(
+    ctx: TenantContext,
+    file: Express.Multer.File,
+    outletId: number | undefined,
+  ) {
     const rawRows = parseCsv(file.buffer.toString('utf-8'));
     const { results, groups } = await this.classifyImportRows(ctx, rawRows);
 
@@ -135,7 +212,10 @@ export class IngredientsService {
           ingredientId = group.ingredientId!;
           await tx.ingredient.update({
             where: { id: ingredientId },
-            data: { unit: group.data.unit, trackInventory: group.data.trackInventory },
+            data: {
+              unit: group.data.unit,
+              trackInventory: group.data.trackInventory,
+            },
           });
           updated += 1;
         }
@@ -171,7 +251,12 @@ export class IngredientsService {
       }
     });
 
-    return { rows: results, created, updated, skipped: results.filter((r) => r.action === 'reject').length };
+    return {
+      rows: results,
+      created,
+      updated,
+      skipped: results.filter((r) => r.action === 'reject').length,
+    };
   }
 
   private async classifyImportRows(
@@ -179,7 +264,13 @@ export class IngredientsService {
     rawRows: Record<string, string>[],
   ): Promise<{
     results: ImportRowResult[];
-    groups: { rowNumber: number; action: ImportAction; ingredientId?: number; data: { name: string; unit?: string; trackInventory?: boolean }; stock?: number }[];
+    groups: {
+      rowNumber: number;
+      action: ImportAction;
+      ingredientId?: number;
+      data: { name: string; unit?: string; trackInventory?: boolean };
+      stock?: number;
+    }[];
   }> {
     const results: ImportRowResult[] = [];
     const groups: {
@@ -202,18 +293,24 @@ export class IngredientsService {
       const stock = parseImportNumber(raw['Stock'] ?? '');
 
       if (!name) errors.push('Name is required');
-      if (raw['Track Inventory'] && trackInventory === undefined) errors.push('Track Inventory must be true/false');
-      if (raw['Stock'] && Number.isNaN(stock)) errors.push('Stock is not a number');
+      if (raw['Track Inventory'] && trackInventory === undefined)
+        errors.push('Track Inventory must be true/false');
+      if (raw['Stock'] && Number.isNaN(stock))
+        errors.push('Stock is not a number');
 
       const existing = name
-        ? await this.prisma.ingredient.findFirst({ where: { shopId: ctx.shopId, name }, select: { id: true } })
+        ? await this.prisma.ingredient.findFirst({
+            where: { shopId: ctx.shopId, name },
+            select: { id: true },
+          })
         : null;
       const action: ImportAction = existing ? 'update' : 'create';
 
       if (action === 'create') {
         if (!unit) errors.push('Unit is required to create a new ingredient');
         if (name) {
-          if (usedNewNames.has(name.toLowerCase())) errors.push(`Duplicate name within this file: ${name}`);
+          if (usedNewNames.has(name.toLowerCase()))
+            errors.push(`Duplicate name within this file: ${name}`);
           usedNewNames.add(name.toLowerCase());
         }
       }
@@ -248,13 +345,25 @@ export class IngredientsService {
     return ingredient;
   }
 
-  private toResponse(ingredient: IngredientWithStock, outletId: number | undefined) {
-    const stockRow = outletId !== undefined ? ingredient.outletingredientstock?.[0] : undefined;
+  private toResponse(
+    ingredient: IngredientWithStock,
+    outletId: number | undefined,
+  ) {
+    const stockRow =
+      outletId !== undefined
+        ? ingredient.outletingredientstock?.[0]
+        : undefined;
     return {
       id: ingredient.id,
       name: ingredient.name,
       unit: ingredient.unit,
       trackInventory: ingredient.trackInventory,
+      image: ingredient.image,
+      description: ingredient.description,
+      costPerUnit: ingredient.costPerUnit,
+      supplier: ingredient.supplier,
+      categoryId: ingredient.categoryId,
+      categoryName: ingredient.category?.name ?? null,
       createdAt: ingredient.createdAt,
       stockQuantity: stockRow?.stockQuantity ?? null,
       lowStockThreshold: stockRow?.lowStockThreshold ?? null,

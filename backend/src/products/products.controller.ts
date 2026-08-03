@@ -79,7 +79,10 @@ export class ProductsController {
   // within its own outlet elsewhere in this app).
   @Roles('admin')
   @Post('stock/transfer')
-  transferStock(@CurrentUser() ctx: TenantContext, @Body() dto: TransferStockDto) {
+  transferStock(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: TransferStockDto,
+  ) {
     return this.productsService.transferStock(ctx, dto);
   }
 
@@ -90,7 +93,10 @@ export class ProductsController {
   @Roles('admin')
   @Post('import/preview')
   @UseInterceptors(FileInterceptor('file', csvUploadOptions))
-  previewImport(@CurrentUser() ctx: TenantContext, @UploadedFile() file?: Express.Multer.File) {
+  previewImport(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
@@ -110,20 +116,30 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return this.productsService.confirmImportProducts(ctx, file, query.outletId);
+    return this.productsService.confirmImportProducts(
+      ctx,
+      file,
+      query.outletId,
+    );
   }
 
   // Same access tier as bulk-adjust above — this is its reason-coded
   // replacement, not a separate stricter surface.
   @Roles('admin', 'branch')
   @Post('stock/adjust')
-  adjustStockWithReason(@CurrentUser() ctx: TenantContext, @Body() dto: AdjustStockWithReasonDto) {
+  adjustStockWithReason(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: AdjustStockWithReasonDto,
+  ) {
     return this.productsService.adjustStockWithReason(ctx, dto);
   }
 
   @Roles('admin', 'branch')
   @Get('stock/movements')
-  listStockMovements(@CurrentUser() ctx: TenantContext, @Query() query: ListStockMovementsQueryDto) {
+  listStockMovements(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListStockMovementsQueryDto,
+  ) {
     return this.productsService.listStockMovements(ctx, query);
   }
 
@@ -132,7 +148,10 @@ export class ProductsController {
   // management, not a catalog-structure edit.
   @Roles('admin', 'branch')
   @Patch('stock/threshold')
-  setLowStockThreshold(@CurrentUser() ctx: TenantContext, @Body() dto: SetLowStockThresholdDto) {
+  setLowStockThreshold(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: SetLowStockThresholdDto,
+  ) {
     return this.productsService.setLowStockThreshold(ctx, dto);
   }
 
@@ -142,7 +161,12 @@ export class ProductsController {
     @Param('id', ParseIntPipe) id: number,
     @Query() query: ListProductsQueryDto,
   ) {
-    return this.productsService.findOne(ctx, id, query.outletId, query.allOutlets);
+    return this.productsService.findOne(
+      ctx,
+      id,
+      query.outletId,
+      query.allOutlets,
+    );
   }
 
   @Roles('admin')
@@ -153,7 +177,10 @@ export class ProductsController {
 
   @Roles('admin')
   @Post(':id/duplicate')
-  duplicate(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  duplicate(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.productsService.duplicate(ctx, id);
   }
 
@@ -163,19 +190,28 @@ export class ProductsController {
   // handler. Same reasoning applies to DELETE bulk-delete below.
   @Roles('admin')
   @Patch('bulk-status')
-  bulkUpdateStatus(@CurrentUser() ctx: TenantContext, @Body() dto: BulkUpdateProductStatusDto) {
+  bulkUpdateStatus(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: BulkUpdateProductStatusDto,
+  ) {
     return this.productsService.bulkUpdateStatus(ctx, dto);
   }
 
   @Roles('admin')
   @Delete('bulk-delete')
-  bulkRemove(@CurrentUser() ctx: TenantContext, @Body() dto: BulkProductIdsDto) {
+  bulkRemove(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: BulkProductIdsDto,
+  ) {
     return this.productsService.bulkRemove(ctx, dto);
   }
 
   @Roles('admin')
   @Patch('bulk-price')
-  bulkUpdatePrice(@CurrentUser() ctx: TenantContext, @Body() dto: BulkPriceUpdateDto) {
+  bulkUpdatePrice(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: BulkPriceUpdateDto,
+  ) {
     return this.productsService.bulkUpdatePrice(ctx, dto);
   }
 

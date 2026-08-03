@@ -20,14 +20,21 @@ import type {
 export class PayPalPaymentProvider implements PaymentProvider {
   readonly name = 'paypal';
 
-  createCheckoutSession(_params: CreateCheckoutSessionParams): Promise<CheckoutSession> {
+  createCheckoutSession(
+    _params: CreateCheckoutSessionParams,
+  ): Promise<CheckoutSession> {
     throw new InternalServerErrorException(
       'PayPal integration is a structural stub — no real checkout-session API call is implemented yet',
     );
   }
 
-  parseWebhookEvent(_payload: Buffer, _signatureHeader: string): WebhookResult | null {
-    console.warn('[payments] paypal webhook received but parseWebhookEvent is a stub — ignoring');
+  parseWebhookEvent(
+    _payload: Buffer,
+    _signatureHeader: string,
+  ): WebhookResult | null {
+    console.warn(
+      '[payments] paypal webhook received but parseWebhookEvent is a stub — ignoring',
+    );
     return null;
   }
 }

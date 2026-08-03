@@ -1,5 +1,11 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsPositive, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsPositive,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 class CollectionProductInput {
   @IsInt()

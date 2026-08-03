@@ -16,7 +16,9 @@ export class PaymentProviderRegistry {
   get(name: string): PaymentProvider {
     const provider = this.providers.get(name);
     if (!provider) {
-      throw new NotFoundException(`Unknown or unconfigured payment gateway '${name}'`);
+      throw new NotFoundException(
+        `Unknown or unconfigured payment gateway '${name}'`,
+      );
     }
     return provider;
   }

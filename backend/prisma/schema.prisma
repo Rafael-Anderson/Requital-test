@@ -8,50 +8,50 @@ datasource db {
 }
 
 model order {
-  id                   Int                  @id @default(autoincrement())
-  shopId               Int
-  outletId             Int
+  id                    Int                  @id @default(autoincrement())
+  shopId                Int
+  outletId              Int
   // Nullable: historical orders predating the Customer model, and orders
   // created before customer matching existed, are left null rather than
   // fuzzy-backfilled by guessing at a phone match — see CustomersService.
-  customerId           Int?
-  customerName         String
-  customerPhone        String
-  customerEmail        String?
-  customerAddress      String               @db.Text
-  emirate              String
-  area                 String?
-  deliveryDate         DateTime?
-  deliveryTimeSlot     String?
-  deliveryNotes        String?              @db.Text
-  receiverMessage      String?              @db.Text
-  channel              String?
-  orderType            String?
+  customerId            Int?
+  customerName          String
+  customerPhone         String
+  customerEmail         String?
+  customerAddress       String               @db.Text
+  emirate               String
+  area                  String?
+  deliveryDate          DateTime?
+  deliveryTimeSlot      String?
+  deliveryNotes         String?              @db.Text
+  receiverMessage       String?              @db.Text
+  channel               String?
+  orderType             String?
   // How the customer intends to pay — set by the storefront checkout flow
   // ('card_online' | 'cash_on_delivery' | 'card_on_delivery' |
   // 'cash_on_pickup' | 'card_on_pickup'). Null for orders created before
   // this column existed or entered manually without a payment method.
-  paymentMethod        String?
-  status               String               @default("pending")
-  paymentStatus        String               @default("unpaid")
+  paymentMethod         String?
+  status                String               @default("pending")
+  paymentStatus         String               @default("unpaid")
   // Snapshotted at creation from the request or shop.defaultDeliveryFee at
   // that moment (same principle as orderitem.priceAtPurchase) — a later
   // change to the shop default never retroactively changes this order's
   // total. Null only for orders created before this column existed.
-  deliveryFee          Decimal?
+  deliveryFee           Decimal?
   // Tax amount in currency units, snapshotted at creation from shop.taxRate
   // at that moment (same snapshot principle as deliveryFee) — a later change
   // to the shop's tax rate never retroactively changes this order's total.
   // Null for orders created before this column existed or where tax wasn't
   // computed (e.g. manually entered admin orders).
-  taxAmount            Decimal?
+  taxAmount             Decimal?
   // Snapshotted at redemption time — never null once a code was applied,
   // even if the discount itself is later edited/deactivated/deleted
   // (discountId goes SetNull, but discountCode/discountAmount preserve what
   // actually happened on this order, same principle as priceAtPurchase).
-  discountId           Int?
-  discountCode         String?
-  discountAmount       Decimal?
+  discountId            Int?
+  discountCode          String?
+  discountAmount        Decimal?
   // Same snapshot discipline as discountId/discountCode/discountAmount
   // above — giftCardId goes SetNull if the card is ever deleted (it isn't,
   // today, but the precedent is consistent either way), giftCardCode/
@@ -59,20 +59,20 @@ model order {
   // Exactly one gift card per order (a single code field, same UX shape as
   // discountCode) — amount applied is capped to min(remainingBalance, total)
   // at redemption time, see GiftCardsService.redeem.
-  giftCardId           Int?
-  giftCardCode         String?
-  giftCardAmount       Decimal?
-  total                Decimal
-  createdAt            DateTime             @default(now())
-  paymentLinkToken     String?              @unique(map: "Order_paymentLinkToken_key")
-  paymentLinkExpiresAt DateTime?
+  giftCardId            Int?
+  giftCardCode          String?
+  giftCardAmount        Decimal?
+  total                 Decimal
+  createdAt             DateTime             @default(now())
+  paymentLinkToken      String?              @unique(map: "Order_paymentLinkToken_key")
+  paymentLinkExpiresAt  DateTime?
   // Opaque short code handed to the customer at checkout (order ids are
   // sequential and must never be exposed as a lookup credential on their
   // own) — same plaintext-bearer-token shape as paymentLinkToken, since it's
   // the same threat model: possession of the code is what proves it's your
   // order, not a login. Generated for every order at creation, admin- and
   // storefront-created alike.
-  trackingToken        String?              @unique(map: "Order_trackingToken_key")
+  trackingToken         String?              @unique(map: "Order_trackingToken_key")
   // Bill of Materials — set the moment ProductsService.consumeForOrderItems
   // actually decrements ingredient stock for this order (immediately at
   // creation for storefront/draft-order channels, at the pending->confirmed
@@ -83,22 +83,23 @@ model order {
   // merchant flipping the toggle mid-order-lifecycle can never cause a
   // restock that was never actually deducted, or skip a restock that was.
   ingredientsConsumedAt DateTime?
-  shop                 shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Order_shopId_fkey")
-  outlet               outlet               @relation(fields: [outletId], references: [id], onDelete: Restrict, map: "Order_outletId_fkey")
-  customer             customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull, map: "Order_customerId_fkey")
-  discount             discount?            @relation(fields: [discountId], references: [id], onDelete: SetNull, map: "Order_discountId_fkey")
-  giftcard             giftcard?            @relation("OrderGiftCardPayment", fields: [giftCardId], references: [id], onDelete: SetNull, map: "Order_giftCardId_fkey")
-  orderitem            orderitem[]
-  paymenttransaction   paymenttransaction[]
-  externaldelivery     externaldelivery?
-  affiliateorder       affiliateorder?
-  discountredemption   discountredemption?
-  draftorder           draftorder?
-  ordernote            ordernote[]
-  orderreturn          orderreturn[]
-  giftcardredemption   giftcardredemption[]
-  giftcardissued       giftcard[]           @relation("GiftCardPurchaseOrder")
-  abandonedcart        abandonedcart?
+  shop                  shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Order_shopId_fkey")
+  outlet                outlet               @relation(fields: [outletId], references: [id], onDelete: Restrict, map: "Order_outletId_fkey")
+  customer              customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull, map: "Order_customerId_fkey")
+  discount              discount?            @relation(fields: [discountId], references: [id], onDelete: SetNull, map: "Order_discountId_fkey")
+  giftcard              giftcard?            @relation("OrderGiftCardPayment", fields: [giftCardId], references: [id], onDelete: SetNull, map: "Order_giftCardId_fkey")
+  orderitem             orderitem[]
+  paymenttransaction    paymenttransaction[]
+  externaldelivery      externaldelivery?
+  affiliateorder        affiliateorder?
+  discountredemption    discountredemption?
+  draftorder            draftorder?
+  ordernote             ordernote[]
+  orderreturn           orderreturn[]
+  giftcardredemption    giftcardredemption[]
+  giftcardissued        giftcard[]           @relation("GiftCardPurchaseOrder")
+  abandonedcart         abandonedcart?
+  surveyresponse        surveyresponse?
 
   @@index([shopId], map: "Order_shopId_fkey")
   @@index([discountId], map: "Order_discountId_fkey")
@@ -179,8 +180,31 @@ model externaldelivery {
   order       order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "ExternalDelivery_orderId_fkey")
 }
 
+// Post-purchase survey, fired once when an order transitions to 'delivered'
+// (see OrderNotificationsService.notifySurveyRequest), gated on
+// shop.customerSurveyEnabled. `token` is an opaque plaintext bearer code
+// (same threat model as order.trackingToken — possession proves it's your
+// survey, not a login credential) emailed as a link to a public storefront
+// page. One row per order (@unique orderId) — notifySurveyRequest checks for
+// an existing row before creating one, so a delivered -> other -> delivered
+// transition or a bulkUpdateStatus retry never sends a second email.
+model surveyresponse {
+  id          Int       @id @default(autoincrement())
+  shopId      Int
+  orderId     Int       @unique(map: "SurveyResponse_orderId_key")
+  token       String    @unique(map: "SurveyResponse_token_key")
+  rating      Int?
+  comment     String?   @db.Text
+  respondedAt DateTime?
+  createdAt   DateTime  @default(now())
+  shop        shop      @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "SurveyResponse_shopId_fkey")
+  order       order     @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "SurveyResponse_orderId_fkey")
+
+  @@index([shopId], map: "SurveyResponse_shopId_fkey")
+}
+
 model orderitem {
-  id              Int             @id @default(autoincrement())
+  id              Int               @id @default(autoincrement())
   orderId         Int
   productId       Int
   productName     String
@@ -194,9 +218,13 @@ model orderitem {
   variantLabel    String?
   quantity        Int
   priceAtPurchase Decimal
-  order           order           @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderItem_orderId_fkey")
-  product         product         @relation(fields: [productId], references: [id], onDelete: Restrict, map: "OrderItem_productId_fkey")
-  variant         productvariant? @relation(fields: [variantId], references: [id], onDelete: SetNull, map: "OrderItem_variantId_fkey")
+  // Optional note the customer typed on the product page at add-to-cart
+  // time (e.g. "no card, please" for a florist order) — distinct from
+  // deliveryNotes/ordernote, which are order-level, not per-line-item.
+  note            String?           @db.VarChar(255)
+  order           order             @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderItem_orderId_fkey")
+  product         product           @relation(fields: [productId], references: [id], onDelete: Restrict, map: "OrderItem_productId_fkey")
+  variant         productvariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull, map: "OrderItem_variantId_fkey")
   orderreturnitem orderreturnitem[]
 
   @@index([orderId], map: "OrderItem_orderId_fkey")
@@ -211,15 +239,15 @@ model orderitem {
 // running-total guard inside a transaction" style as the discount-redemption
 // cap elsewhere in this schema).
 model orderreturn {
-  id             Int               @id @default(autoincrement())
-  orderId        Int
-  reason         String
-  refundAmount   Decimal
+  id                      Int               @id @default(autoincrement())
+  orderId                 Int
+  reason                  String
+  refundAmount            Decimal
   // 'provider' (issued through the gateway's refund API) or 'manual' (cash/
   // recorded-only — either because the gateway has no refundPayment support,
   // or because the API call itself failed) — always recorded, per the task's
   // own "always record which happened" requirement.
-  refundMethod   String
+  refundMethod            String
   providerRefundReference String?
   // The portion of refundAmount credited back to order.giftcard's balance
   // rather than sent through the payment provider — proportional to how the
@@ -229,14 +257,14 @@ model orderreturn {
   // refund call for this slice — see ReturnsService.attemptProviderRefund,
   // which is only ever asked to refund refundAmount - giftCardRefundAmount.
   // 0 (not null) for the common case of an order with no gift card involved.
-  giftCardRefundAmount Decimal      @default(0)
-  restocked      Boolean           @default(false)
-  status         String            @default("completed")
-  staffUserId    Int
-  createdAt      DateTime          @default(now())
-  order          order             @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderReturn_orderId_fkey")
-  staff          user              @relation(fields: [staffUserId], references: [id], map: "OrderReturn_staffUserId_fkey")
-  orderreturnitem orderreturnitem[]
+  giftCardRefundAmount    Decimal           @default(0)
+  restocked               Boolean           @default(false)
+  status                  String            @default("completed")
+  staffUserId             Int
+  createdAt               DateTime          @default(now())
+  order                   order             @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "OrderReturn_orderId_fkey")
+  staff                   user              @relation(fields: [staffUserId], references: [id], map: "OrderReturn_staffUserId_fkey")
+  orderreturnitem         orderreturnitem[]
 
   @@index([orderId], map: "OrderReturn_orderId_fkey")
   @@index([staffUserId], map: "OrderReturn_staffUserId_fkey")
@@ -255,50 +283,53 @@ model orderreturnitem {
 }
 
 model paymenttransaction {
-  id               Int      @id @default(autoincrement())
-  orderId          Int
-  gateway          String
-  gatewayReference String
+  id                      Int      @id @default(autoincrement())
+  orderId                 Int
+  gateway                 String
+  gatewayReference        String
   // The charge/payment-intent id (distinct from gatewayReference, which is
   // the webhook event id) — see WebhookResult.chargeReference's own comment.
   // Null for providers that don't report one (pre-existing rows, or
   // providers without refund support).
   providerChargeReference String?
-  amount           Decimal
-  status           String   @default("pending")
-  createdAt        DateTime @default(now())
-  order            order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "PaymentTransaction_orderId_fkey")
+  amount                  Decimal
+  status                  String   @default("pending")
+  createdAt               DateTime @default(now())
+  order                   order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "PaymentTransaction_orderId_fkey")
 
   @@unique([gateway, gatewayReference], map: "PaymentTransaction_gateway_gatewayReference_key")
   @@index([orderId], map: "PaymentTransaction_orderId_fkey")
 }
 
 model product {
-  id                Int               @id @default(autoincrement())
-  shopId            Int
-  name              String
+  id                        Int                 @id @default(autoincrement())
+  shopId                    Int
+  name                      String
   // All three were the default Prisma VARCHAR(191) — a real product
   // description regularly exceeds that (caught by seo.e2e-spec.ts's
   // metadata-fallback test). Widened to TEXT; shortSummary too even though
   // its name suggests brevity — nothing actually enforces a length limit on
   // it (no MaxLength in the DTOs), so it was just as exposed to the same bug.
-  description       String?           @db.Text
-  shortSummary      String?           @db.Text
-  longSummary       String?           @db.Text
-  thumbnail         String
-  price             Decimal
+  description               String?             @db.Text
+  shortSummary              String?             @db.Text
+  longSummary               String?             @db.Text
+  thumbnail                 String
+  price                     Decimal
   // Shown struck-through next to price as a "was" price when set — purely
   // display, never used in order total math (see orderitem.priceAtPurchase).
-  compareAtPrice    Decimal?
-  costPrice         Decimal?
-  sku               String
-  barcode           String?
-  status            String            @default("Available")
-  trackInventory    Boolean           @default(false)
+  compareAtPrice            Decimal?
+  costPrice                 Decimal?
+  sku                       String
+  barcode                   String?
+  status                    String              @default("Available")
+  trackInventory            Boolean             @default(false)
   // Whether checkout still accepts orders once trackInventory'd stock hits
   // zero — mirrors Shopify's "continue selling when out of stock".
-  continueSellingOutOfStock Boolean   @default(false)
-  chargeTax         Boolean           @default(true)
+  continueSellingOutOfStock Boolean             @default(false)
+  chargeTax                 Boolean             @default(true)
+  // When true, offered in the storefront checkout's "would you like to add
+  // any extras?" popup for carts that don't already contain it.
+  isCheckoutAddon           Boolean             @default(false)
   // Gift Cards feature — a product with isGiftCard: true is sold like any
   // other product (same cart/checkout path, own `price` field ignored in
   // favor of whichever denomination/custom amount the shopper picks), but
@@ -308,50 +339,52 @@ model product {
   // than a separate one-row-per-gift-card-product table: three small
   // optional fields don't earn their own model, same reasoning as the
   // shipping/physicalProduct fields above.
-  isGiftCard        Boolean           @default(false)
+  isGiftCard                Boolean             @default(false)
   // Preset amounts a shopper can pick, e.g. [100, 200, 500] — plain number[]
   // JSON, no dedicated table (nothing else ever queries "shops offering a
   // 200 AED gift card").
-  giftCardDenominations Json?
-  giftCardCustomAmountMin Decimal?
-  giftCardCustomAmountMax Decimal?
+  giftCardDenominations     Json?
+  giftCardCustomAmountMin   Decimal?
+  giftCardCustomAmountMax   Decimal?
   // Organization sidebar fields — free text, no dedicated lookup tables
   // (matches how tag/category already work: shop-scoped, no cross-shop
   // sharing). Collections were explicitly out of scope (no such model exists
   // in this schema; task said to flag rather than build one from scratch).
-  vendor            String?
-  productType       String?
+  vendor                    String?
+  productType               String?
   // Shipping — physicalProduct off hides weight/dimensions in the UI; a
   // single free-text dimensions field rather than Shopify's full
   // package-profile system (explicitly descoped in the task).
-  physicalProduct   Boolean           @default(true)
-  weight            Decimal?
-  weightUnit        String            @default("kg")
-  dimensions        String?
-  createdAt         DateTime          @default(now())
+  physicalProduct           Boolean             @default(true)
+  weight                    Decimal?
+  weightUnit                String              @default("kg")
+  dimensions                String?
+  createdAt                 DateTime            @default(now())
   // Storefront product-detail URL segment — auto-derived from name if not
   // explicitly set (see ProductsService.resolveUniqueSlug), editable after.
   // Unlike sku, name collisions are common (two "Chocolate Cake" products),
   // so auto-generation disambiguates with a numeric suffix rather than
   // failing; an explicitly-chosen slug that collides still hard-rejects,
   // same as category slugs.
-  slug              String
-  metaTitle         String?
-  metaDescription   String?           @db.Text
-  shop              shop              @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Product_shopId_fkey")
-  productvariant    productvariant[]
-  productimage      productimage[]
-  productoption     productoption[]
-  productcategory   productcategory[]
-  producttag        producttag[]
-  orderitem         orderitem[]
-  outletstock       outletstock[]
-  biolink           biolink[]
-  discountproduct   discountproduct[]
-  draftorderitem    draftorderitem[]
-  stockmovement     stockmovement[]
-  collectionproduct collectionproduct[]
-  productingredient productingredient[]
+  slug                      String
+  metaTitle                 String?
+  metaDescription           String?             @db.Text
+  shop                      shop                @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Product_shopId_fkey")
+  productvariant            productvariant[]
+  productimage              productimage[]
+  productattribute          productattribute[]
+  productfaq                productfaq[]
+  productoption             productoption[]
+  productcategory           productcategory[]
+  producttag                producttag[]
+  orderitem                 orderitem[]
+  outletstock               outletstock[]
+  biolink                   biolink[]
+  discountproduct           discountproduct[]
+  draftorderitem            draftorderitem[]
+  stockmovement             stockmovement[]
+  collectionproduct         collectionproduct[]
+  productingredient         productingredient[]
 
   @@unique([shopId, sku], map: "Product_shopId_sku_key")
   @@unique([shopId, slug], map: "Product_shopId_slug_key")
@@ -375,6 +408,37 @@ model productimage {
   @@index([productId], map: "ProductImage_productId_fkey")
 }
 
+// Informational, non-purchasable product facts (e.g. Material: Cotton) —
+// deliberately NOT productoption/productoptionvalue, which are purchasable
+// variant axes that generate real productvariant rows with their own
+// price/stock/sku. An attribute never does that — it's a plain ordered list
+// off product, structurally like productimage above, full-replace on
+// product update (see ProductsService).
+model productattribute {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  name      String
+  value     String
+  order     Int     @default(0)
+  product   product @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductAttribute_productId_fkey")
+
+  @@index([productId], map: "ProductAttribute_productId_fkey")
+}
+
+// Per-product FAQ list (question/answer pairs), admin-editable, rendered on
+// the storefront PDP when shop.productFaqsEnabled is on. Same full-replace-
+// on-update convention as productattribute/productimage.
+model productfaq {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  question  String
+  answer    String  @db.Text
+  order     Int     @default(0)
+  product   product @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductFaq_productId_fkey")
+
+  @@index([productId], map: "ProductFaq_productId_fkey")
+}
+
 // A product with zero productoption rows behaves exactly as before this
 // feature existed (single implicit variant — product-level price/sku/
 // outletstock). Options only appear once a merchant explicitly adds one via
@@ -391,31 +455,31 @@ model productoption {
 }
 
 model productoptionvalue {
-  id                            Int             @id @default(autoincrement())
-  optionId                      Int
-  value                         String
-  order                         Int             @default(0)
-  productoption                 productoption   @relation(fields: [optionId], references: [id], onDelete: Cascade, map: "ProductOptionValue_optionId_fkey")
-  variantsAsOption1              productvariant[] @relation("VariantOptionValue1")
-  variantsAsOption2              productvariant[] @relation("VariantOptionValue2")
-  variantsAsOption3              productvariant[] @relation("VariantOptionValue3")
+  id                Int              @id @default(autoincrement())
+  optionId          Int
+  value             String
+  order             Int              @default(0)
+  productoption     productoption    @relation(fields: [optionId], references: [id], onDelete: Cascade, map: "ProductOptionValue_optionId_fkey")
+  variantsAsOption1 productvariant[] @relation("VariantOptionValue1")
+  variantsAsOption2 productvariant[] @relation("VariantOptionValue2")
+  variantsAsOption3 productvariant[] @relation("VariantOptionValue3")
 
   @@index([optionId], map: "ProductOptionValue_optionId_fkey")
 }
 
 model category {
-  id               Int               @id @default(autoincrement())
+  id               Int                @id @default(autoincrement())
   shopId           Int
   name             String
   slug             String
-  displayOrder     Int               @default(0)
+  displayOrder     Int                @default(0)
   image            String?
-  isFeatured       Boolean           @default(false)
+  isFeatured       Boolean            @default(false)
   parentCategoryId Int?
-  createdAt        DateTime          @default(now())
-  shop             shop              @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Category_shopId_fkey")
-  parent           category?         @relation("CategoryToParent", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Category_parentCategoryId_fkey")
-  children         category[]        @relation("CategoryToParent")
+  createdAt        DateTime           @default(now())
+  shop             shop               @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Category_shopId_fkey")
+  parent           category?          @relation("CategoryToParent", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Category_parentCategoryId_fkey")
+  children         category[]         @relation("CategoryToParent")
   productcategory  productcategory[]
   biolink          biolink[]
   discountcategory discountcategory[]
@@ -463,29 +527,29 @@ model producttag {
 // to the parent product's own field" for a newly-generated variant that
 // hasn't been individually edited yet.
 model productvariant {
-  id                Int                  @id @default(autoincrement())
-  productId         Int
-  sku               String?
-  barcode           String?
-  price             Decimal?
-  compareAtPrice    Decimal?
-  weight            Decimal?
-  imageId           Int?
-  order             Int                  @default(0)
-  optionValue1Id    Int?
-  optionValue2Id    Int?
-  optionValue3Id    Int?
-  createdAt         DateTime             @default(now())
-  product           product              @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductVariant_productId_fkey")
-  image             productimage?        @relation(fields: [imageId], references: [id], onDelete: SetNull, map: "ProductVariant_imageId_fkey")
-  optionValue1      productoptionvalue?  @relation("VariantOptionValue1", fields: [optionValue1Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue1Id_fkey")
-  optionValue2      productoptionvalue?  @relation("VariantOptionValue2", fields: [optionValue2Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue2Id_fkey")
-  optionValue3      productoptionvalue?  @relation("VariantOptionValue3", fields: [optionValue3Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue3Id_fkey")
+  id                 Int                  @id @default(autoincrement())
+  productId          Int
+  sku                String?
+  barcode            String?
+  price              Decimal?
+  compareAtPrice     Decimal?
+  weight             Decimal?
+  imageId            Int?
+  order              Int                  @default(0)
+  optionValue1Id     Int?
+  optionValue2Id     Int?
+  optionValue3Id     Int?
+  createdAt          DateTime             @default(now())
+  product            product              @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductVariant_productId_fkey")
+  image              productimage?        @relation(fields: [imageId], references: [id], onDelete: SetNull, map: "ProductVariant_imageId_fkey")
+  optionValue1       productoptionvalue?  @relation("VariantOptionValue1", fields: [optionValue1Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue1Id_fkey")
+  optionValue2       productoptionvalue?  @relation("VariantOptionValue2", fields: [optionValue2Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue2Id_fkey")
+  optionValue3       productoptionvalue?  @relation("VariantOptionValue3", fields: [optionValue3Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue3Id_fkey")
   outletvariantstock outletvariantstock[]
-  orderitem         orderitem[]
-  draftorderitem    draftorderitem[]
-  stockmovement     stockmovement[]
-  productingredient productingredient[]
+  orderitem          orderitem[]
+  draftorderitem     draftorderitem[]
+  stockmovement      stockmovement[]
+  productingredient  productingredient[]
 
   @@unique([productId, optionValue1Id, optionValue2Id, optionValue3Id], map: "ProductVariant_combination_key")
   @@index([productId], map: "ProductVariant_productId_fkey")
@@ -520,36 +584,36 @@ model outletvariantstock {
 }
 
 model shop {
-  id                      Int            @id @default(autoincrement())
-  name                    String
-  subdomain               String         @unique(map: "Shop_subdomain_key")
-  currency                String         @default("AED")
-  createdAt               DateTime       @default(now())
+  id                         Int       @id @default(autoincrement())
+  name                       String
+  subdomain                  String    @unique(map: "Shop_subdomain_key")
+  currency                   String    @default("AED")
+  createdAt                  DateTime  @default(now())
   // Gates storefront visibility (see PublicService/PublicController) and the
   // platform sitemap. Defaults false for new signups — a merchant must take
   // the explicit "Publish your store" action (Settings > Business
   // Information) once they've done minimum setup. Existing shops were
   // backfilled by the migration itself, not left false by this default — see
   // that migration's comment for the exact backfill rule.
-  published               Boolean        @default(false)
+  published                  Boolean   @default(false)
   // Added specifically so the platform sitemap has a real lastmod value
   // (see PublicService.listShopsForSitemap) — reflects when this shop row
   // itself last changed, not a full aggregate over its products/theme/etc.
-  updatedAt               DateTime       @default(now()) @updatedAt
-  displayName             String?
-  legalName               String?
-  trademarkFormat         String         @default("brand")
-  logoUrl                 String?
-  email                   String?
-  whatsappCountryCode     String?
-  whatsappNumber          String?
-  description             String?        @db.Text
-  country                 String?
-  address                 String?        @db.Text
-  timezone                String         @default("Asia/Dubai")
-  notifyWhatsapp          Boolean        @default(false)
-  notifyCustomersWhatsapp Boolean        @default(false)
-  notifyEmail             Boolean        @default(false)
+  updatedAt                  DateTime  @default(now()) @updatedAt
+  displayName                String?
+  legalName                  String?
+  trademarkFormat            String    @default("brand")
+  logoUrl                    String?
+  email                      String?
+  whatsappCountryCode        String?
+  whatsappNumber             String?
+  description                String?   @db.Text
+  country                    String?
+  address                    String?   @db.Text
+  timezone                   String    @default("Asia/Dubai")
+  notifyWhatsapp             Boolean   @default(false)
+  notifyCustomersWhatsapp    Boolean   @default(false)
+  notifyEmail                Boolean   @default(false)
   // Abandoned Cart Recovery — off by default (this emails a potential
   // customer who never completed a purchase, not an existing one, so it
   // gets its own deliberate opt-in rather than riding on notifyEmail).
@@ -563,8 +627,8 @@ model shop {
   // email (see LowStockDigestService). lastSentAt is the send-once-per-day
   // guard, set via the same CAS updateMany discipline as everything else in
   // this schema that must never double-fire.
-  notifyLowStockDigest    Boolean   @default(false)
-  lowStockDigestLastSentAt DateTime?
+  notifyLowStockDigest       Boolean   @default(false)
+  lowStockDigestLastSentAt   DateTime?
   // Bill of Materials (recipe) — gates whether ProductsService.consumeForOrderItems
   // actually touches outletingredientstock at order creation/confirmation, or
   // just leaves the linked recipe data as informational bookkeeping. On by
@@ -573,7 +637,7 @@ model shop {
   // bother linking a recipe at all will want live immediately, not a second
   // opt-in step. See order.ingredientsConsumedAt for how a mid-order-lifecycle
   // flip of this toggle is handled without corrupting ingredient stock.
-  autoDeductIngredientStock Boolean @default(true)
+  autoDeductIngredientStock  Boolean   @default(true)
   // AES-256-GCM encrypted JSON { phoneNumberId, accessToken } for the Meta
   // WhatsApp Cloud API — same encrypt()/decrypt() from common/crypto.ts as
   // payment-gateway credentials (see shoppaymentprovider.credentials), not a
@@ -582,41 +646,56 @@ model shop {
   // there's exactly one pluggable WhatsAppProvider implementation, not a
   // merchant choice among several. Null means "not configured" — see
   // WhatsAppSettingsService/order-notifications.service.ts's stub fallback.
-  whatsappCredentials     String?        @db.Text
+  whatsappCredentials        String?   @db.Text
 
   // --- Store Configuration: functional, actually wired into behavior ---
-  businessType             String?
-  defaultLanguage          String  @default("en")
-  defaultDeliveryFee       Decimal @default(0)
-  taxDisplayText           String?
-  productDisplayOrientation String @default("grid")
-  productImageZoomEnabled  Boolean @default(true)
-  showCategoryMenu         Boolean @default(true)
-  allowPreOrders           Boolean @default(false)
-  customerConfirmationRequired Boolean @default(false)
-  externalDeliveryEnabled  Boolean @default(false)
-  asapDeliveryEnabled      Boolean @default(false)
-  deliveryCalendarEnabled  Boolean @default(false)
+  businessType                  String?
+  defaultLanguage               String  @default("en")
+  defaultDeliveryFee            Decimal @default(0)
+  taxDisplayText                String?
+  productDisplayOrientation     String  @default("grid")
+  productImageZoomEnabled       Boolean @default(true)
+  showCategoryMenu              Boolean @default(true)
+  allowPreOrders                Boolean @default(false)
+  customerConfirmationRequired  Boolean @default(false)
+  externalDeliveryEnabled       Boolean @default(false)
+  asapDeliveryEnabled           Boolean @default(false)
+  deliveryCalendarEnabled       Boolean @default(false)
   // JSON map of day -> { open, close, closed }, e.g. {"mon":{"open":"09:00","close":"18:00","closed":false},...}
-  businessHours            String? @db.Text
+  businessHours                 String? @db.Text
   whatsappFloatingButtonEnabled Boolean @default(false)
-  birthdayDiscountEnabled  Boolean @default(false)
+  birthdayDiscountEnabled       Boolean @default(false)
 
   // Gates the Options/Variants section of the admin product form (see
   // ProductForm.tsx) — previously a placeholder with no feature behind it;
   // now functional. Off by default so existing shops don't suddenly see a
   // new section they didn't ask for.
-  productVariantsEnabled     Boolean @default(true)
+  productVariantsEnabled Boolean @default(true)
+
+  // Gates the Attributes editor on the admin product form + its rendering
+  // on the storefront PDP — see productattribute. Same "off by default"
+  // convention as productVariantsEnabled above.
+  productAttributesEnabled Boolean @default(false)
+  // Gates the FAQs editor on the admin product form + its rendering on the
+  // storefront PDP — see productfaq.
+  productFaqsEnabled       Boolean @default(false)
+  // Gates whether a delivered order triggers the post-purchase survey email
+  // — see OrdersService.updateStatus / OrderNotificationsService.notifySurveyRequest.
+  customerSurveyEnabled    Boolean @default(false)
+  // When true, the storefront cart/checkout is replaced by cartDisabledMode's
+  // flow — see storefront ProductDetailClient.tsx and TopBar.tsx.
+  disableStoreCart         Boolean @default(false)
+  // Only meaningful when disableStoreCart is true. "buy_now": Add to Cart
+  // becomes a single-item Buy Now that skips straight to checkout.
+  // "contact_to_order": Add to Cart is replaced by a WhatsApp/contact CTA and
+  // no checkout path is exposed at all. App-level validated (see
+  // UpdateShopDto's @IsIn) rather than a DB enum — two short string values
+  // don't earn a dedicated enum type.
+  cartDisabledMode         String  @default("buy_now")
 
   // --- Store Configuration: placeholder preferences only — the underlying
-  // feature (attributes, FAQs, surveys, theme builder, storefront
-  // cart/maps) doesn't exist yet, so toggling these has no effect. ---
-  productAttributesEnabled   Boolean @default(false)
-  productFaqsEnabled         Boolean @default(false)
-  customerSurveyEnabled      Boolean @default(false)
+  // feature doesn't exist yet, so toggling has no effect. ---
   dynamicThemeBuilderEnabled Boolean @default(false)
-  disableStoreCart           Boolean @default(false)
-  disableGoogleMaps          Boolean @default(false)
 
   // --- Online Presence ---
   // platform -> URL, e.g. {"instagram":"https://instagram.com/..."}. Only
@@ -649,8 +728,8 @@ model shop {
   deliveryHours Json?
   pickupHours   Json?
 
-  deliveryTimeSlotGapMinutes              Int @default(60)
-  deliveryPreparationTimeMinutes          Int @default(15)
+  deliveryTimeSlotGapMinutes                 Int @default(60)
+  deliveryPreparationTimeMinutes             Int @default(15)
   // Entered independently, not derived from the field above — source data
   // (Dukany reference) shows this as its own input, not a computed sum.
   deliveryPreparationPlusDeliveryTimeMinutes Int @default(45)
@@ -660,9 +739,9 @@ model shop {
   estimatedDeliveryTimeTo   Int    @default(60)
   estimatedDeliveryTimeUnit String @default("minutes")
 
-  pickupTimeSlotGapMinutes           Int @default(30)
-  pickupPreparationTimeMinutes       Int @default(15)
-  pickupPreparationPlusTimeMinutes   Int @default(30)
+  pickupTimeSlotGapMinutes         Int @default(30)
+  pickupPreparationTimeMinutes     Int @default(15)
+  pickupPreparationPlusTimeMinutes Int @default(30)
 
   // --- Order Setting: business-level, shared across every outlet ---
   allowSameDayOrders Boolean @default(true)
@@ -673,34 +752,37 @@ model shop {
   // checkout exists yet to actually apply either rate.
   taxInclusive       Boolean @default(true)
 
-  order                   order[]
-  product                 product[]
-  category                category[]
-  tag                     tag[]
-  themesettings           themesettings?
-  shopseosettings         shopseosettings?
-  user                    user[]
-  outlet                  outlet[]
-  customer                customer[]
-  shoppaymentprovider     shoppaymentprovider[]
-  affiliate               affiliate[]
-  affiliatecode           affiliatecode[]
-  affiliateorder          affiliateorder[]
-  biolink                 biolink[]
-  biolinkpageconfig       biolinkpageconfig?
-  discount                discount[]
-  draftorder              draftorder[]
-  stockmovement           stockmovement[]
-  auditlog                auditlog[]
-  ingredient              ingredient[]
-  collection              collection[]
-  scansettings            scansettings?
-  abandonedcart           abandonedcart[]
-  giftcard                giftcard[]
-  scanbatch               scanbatch[]
-  productingredient       productingredient[]
-  policypage              policypage[]
-  bannerimage             bannerimage[]
+  order               order[]
+  product             product[]
+  category            category[]
+  tag                 tag[]
+  themesettings       themesettings?
+  shopseosettings     shopseosettings?
+  user                user[]
+  outlet              outlet[]
+  customer            customer[]
+  shoppaymentprovider shoppaymentprovider[]
+  affiliate           affiliate[]
+  affiliatecode       affiliatecode[]
+  affiliateorder      affiliateorder[]
+  biolink             biolink[]
+  biolinkpageconfig   biolinkpageconfig?
+  discount            discount[]
+  draftorder          draftorder[]
+  stockmovement       stockmovement[]
+  auditlog            auditlog[]
+  ingredient          ingredient[]
+  ingredientcategory  ingredientcategory[]
+  branchrole          branchrole[]
+  collection          collection[]
+  scansettings        scansettings?
+  abandonedcart       abandonedcart[]
+  giftcard            giftcard[]
+  scanbatch           scanbatch[]
+  productingredient   productingredient[]
+  policypage          policypage[]
+  bannerimage         bannerimage[]
+  surveyresponse      surveyresponse[]
 }
 
 // Legal/policy pages (Terms, Privacy, Refund & Return, Payment, Shipping &
@@ -753,26 +835,26 @@ model bannerimage {
 // plain strings with the union documented in a comment), so this follows
 // that established convention rather than introducing a new one.
 model biolink {
-  id     Int    @id @default(autoincrement())
-  shopId Int
+  id             Int         @id @default(autoincrement())
+  shopId         Int
   // 'EXTERNAL_URL' | 'PRODUCT' | 'CATEGORY' | 'COLLECTION' | 'SOCIAL_ICON'
-  type   String
+  type           String
   // Display text. Not required for SOCIAL_ICON (falls back to the platform's
   // display name at read time — see BioLinksService.resolveDisplayLabel).
-  label  String?
+  label          String?
   // EXTERNAL_URL only.
-  url    String? @db.Text
+  url            String?     @db.Text
   // PRODUCT only. Deliberately SetNull (not Cascade) on product deletion —
   // the bio link row survives so the merchant sees it in the admin list
   // (still 'active', just no longer resolvable), rather than silently
   // vanishing; it's excluded from the public list/click endpoints once
   // productId is null. See the task's own "hide from public, stays active
   // in admin" default.
-  productId Int?
+  productId      Int?
   // CATEGORY only. Same SetNull reasoning as productId.
-  categoryId Int?
+  categoryId     Int?
   // COLLECTION only. Same SetNull reasoning as productId.
-  collectionId Int?
+  collectionId   Int?
   // SOCIAL_ICON only — one of BIO_LINK_SOCIAL_PLATFORMS (bio-link-constants.ts).
   // No URL is stored here: the actual link is resolved at click time from
   // shop.socialLinks[socialPlatform], or from shop.whatsappNumber for the
@@ -783,15 +865,15 @@ model biolink {
   // Position in the storefront list — 0-based, unique-ish per shop but not
   // DB-enforced (PATCH .../reorder rewrites every row's value together in
   // one transaction, so a stale duplicate is never observable in between).
-  order      Int      @default(0)
-  active     Boolean  @default(true)
-  clickCount Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
-  shop       shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BioLink_shopId_fkey")
-  product    product? @relation(fields: [productId], references: [id], onDelete: SetNull, map: "BioLink_productId_fkey")
-  category   category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "BioLink_categoryId_fkey")
-  collection collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "BioLink_collectionId_fkey")
+  order          Int         @default(0)
+  active         Boolean     @default(true)
+  clickCount     Int         @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @default(now()) @updatedAt
+  shop           shop        @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BioLink_shopId_fkey")
+  product        product?    @relation(fields: [productId], references: [id], onDelete: SetNull, map: "BioLink_productId_fkey")
+  category       category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "BioLink_categoryId_fkey")
+  collection     collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "BioLink_collectionId_fkey")
 
   @@index([shopId], map: "BioLink_shopId_fkey")
   @@index([productId], map: "BioLink_productId_fkey")
@@ -840,30 +922,30 @@ model biolinkpageconfig {
 // mixing one-off campaigns into that tree (a "Summer Sale" sibling of
 // "Bouquets") would pollute it for every merchant who doesn't use collections.
 model collection {
-  id           Int      @id @default(autoincrement())
-  shopId       Int
-  title        String
-  slug         String
-  description  String?  @db.Text
-  image        String?
+  id                Int                 @id @default(autoincrement())
+  shopId            Int
+  title             String
+  slug              String
+  description       String?             @db.Text
+  image             String?
   // 'MANUAL' | 'RULE_BASED' — MANUAL membership lives in collectionproduct
   // (with per-product sortOrder); RULE_BASED has no collectionproduct rows
   // at all, membership is computed at read time from `rules` against the
   // live product table (see CollectionsService.resolveProductIds).
-  type         String
+  type              String
   // RULE_BASED only, null for MANUAL. Shape: { categoryId?, tagName?,
   // minPrice?, maxPrice?, createdWithinDays? } — every set field is ANDed.
   // Deliberately this small, fixed shape (not a generic condition-builder)
   // — it's enough to express every example the task named ("Summer Sale" =
   // tagName, "New Arrivals" = createdWithinDays, "Under 50 AED" = maxPrice)
   // without building a rule-DSL nobody asked for.
-  rules        Json?
-  isActive     Boolean  @default(true)
-  displayOrder Int      @default(0)
-  createdAt    DateTime @default(now())
-  shop         shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Collection_shopId_fkey")
+  rules             Json?
+  isActive          Boolean             @default(true)
+  displayOrder      Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  shop              shop                @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Collection_shopId_fkey")
   collectionproduct collectionproduct[]
-  biolink      biolink[]
+  biolink           biolink[]
 
   @@unique([shopId, slug], map: "Collection_shopId_slug_key")
   @@index([shopId], map: "Collection_shopId_fkey")
@@ -971,18 +1053,18 @@ model affiliateorder {
 // are new, opt-in payment methods with no pre-existing default-on behavior
 // to preserve).
 model shoppaymentprovider {
-  id     Int    @id @default(autoincrement())
-  shopId Int
-  provider String
-  enabled  Boolean @default(false)
+  id          Int      @id @default(autoincrement())
+  shopId      Int
+  provider    String
+  enabled     Boolean  @default(false)
   // AES-256-GCM encrypted JSON string of credential fields — shape varies
   // per provider (see payments/provider-credentials.ts). Null until the
   // merchant has saved credentials for this provider at least once. Never
   // returned to the client in decrypted form — see
   // PaymentSettingsService.toMaskedResponse.
-  credentials String? @db.Text
+  credentials String?  @db.Text
   updatedAt   DateTime @default(now()) @updatedAt
-  shop        shop    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "ShopPaymentProvider_shopId_fkey")
+  shop        shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "ShopPaymentProvider_shopId_fkey")
 
   @@unique([shopId, provider], map: "ShopPaymentProvider_shopId_provider_key")
 }
@@ -992,12 +1074,12 @@ model shoppaymentprovider {
 // time. Unique per shop, not globally: the same phone number is a different
 // customer at two unrelated shops.
 model customer {
-  id        Int       @id @default(autoincrement())
-  shopId    Int
-  name      String
-  phone     String
-  email     String?
-  birthday  DateTime?
+  id                   Int                    @id @default(autoincrement())
+  shopId               Int
+  name                 String
+  phone                String
+  email                String?
+  birthday             DateTime?
   // Saved delivery addresses as a plain JSON array rather than a full
   // CustomerAddress relation table — nothing today needs to query/join
   // across addresses independently of their owning customer (no "find every
@@ -1005,8 +1087,8 @@ model customer {
   // emirate, area, latitude, longitude}] — `id` is a short server-generated
   // string (see customer-account.service.ts) so a single entry can be
   // referenced for edit/delete without a real child table.
-  addresses Json?
-  createdAt DateTime  @default(now())
+  addresses            Json?
+  createdAt            DateTime               @default(now())
   // Nullable auth fields directly on customer, not a separate
   // CustomerAuth/StorefrontUser model — mirrors how `user.passwordHash`
   // already lives directly on `user` rather than a split identity/auth
@@ -1015,13 +1097,13 @@ model customer {
   // registration is "claim this existing [shopId, phone] row" (set
   // passwordHash on it), not creating a second linked entity. null
   // passwordHash = guest, never registered.
-  passwordHash  String?
-  emailVerified Boolean   @default(false)
-  registeredAt  DateTime?
-  shop      shop      @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Customer_shopId_fkey")
-  order     order[]
-  discountredemption discountredemption[]
-  draftorder draftorder[]
+  passwordHash         String?
+  emailVerified        Boolean                @default(false)
+  registeredAt         DateTime?
+  shop                 shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Customer_shopId_fkey")
+  order                order[]
+  discountredemption   discountredemption[]
+  draftorder           draftorder[]
   customerrefreshtoken customerrefreshtoken[]
   customerauthtoken    customerauthtoken[]
   giftcard             giftcard[]
@@ -1071,57 +1153,58 @@ model customerauthtoken {
 // A shop's physical branch. Products/categories are NOT outlet-scoped (one
 // shared catalog across branches) — only orders and stock levels are.
 model outlet {
-  id          Int           @id @default(autoincrement())
-  shopId      Int
-  name        String
-  nameAr      String?
+  id                    Int                     @id @default(autoincrement())
+  shopId                Int
+  name                  String
+  nameAr                String?
   // Outlet-level contact details, distinct from Shop's — a branch's own
   // email/WhatsApp, not the shop-wide ones from Business Settings.
-  email       String?
-  whatsapp    String?
+  email                 String?
+  whatsapp              String?
   // Top-level enable/disable switch, independent of the hours-derived
   // open/closed status — an inactive outlet is disabled regardless of what
   // its schedule says. Not wired into computeIsOpen (out of scope for the
   // page-conversion pass that introduced this field).
-  active      Boolean       @default(true)
-  emirate     String?
-  area        String?
-  phone       String?
-  latitude    Float?
-  longitude   Float?
+  active                Boolean                 @default(true)
+  emirate               String?
+  area                  String?
+  phone                 String?
+  latitude              Float?
+  longitude             Float?
   // Per-branch schedule, independent of and not falling back to any
   // shop-level setting. JSON map of day -> { open, close, closed }, same
   // shape as shop.businessHours. Absent (null) means no schedule has been
   // set yet — treated as always-open, not always-closed, so a freshly
   // created outlet doesn't show as broken.
-  businessHours    Json?
+  businessHours         Json?
   // Manual "force closed" switch — always wins over the computed schedule
   // when true (holiday, unplanned closure). Not a dated exception calendar.
   // Auto-expires at the next day rollover (in shop.timezone) — see
   // computeIsOpen's check-on-read logic — but this raw flag itself is only
   // ever changed by an explicit merchant write, never by a read.
-  closedOverride      Boolean   @default(false)
+  closedOverride        Boolean                 @default(false)
   // Server-stamped whenever closedOverride is set true; never client-writable.
-  closedOverrideSetAt DateTime?
-  pickupEnabled    Boolean @default(false)
-  deliveryEnabled  Boolean @default(false)
+  closedOverrideSetAt   DateTime?
+  pickupEnabled         Boolean                 @default(false)
+  deliveryEnabled       Boolean                 @default(false)
   // Required (and validated) whenever deliveryEnabled is true — see
   // OutletsService. Not enforced against anything yet (no checkout exists);
   // captured and displayed only.
-  deliveryRadiusKm Float?
-  createdAt   DateTime      @default(now())
-  shop        shop          @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Outlet_shopId_fkey")
-  order       order[]
-  user        user[]
-  outletstock outletstock[]
-  outletvariantstock outletvariantstock[]
+  deliveryRadiusKm      Float?
+  createdAt             DateTime                @default(now())
+  shop                  shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Outlet_shopId_fkey")
+  order                 order[]
+  user                  user[]
+  outletstock           outletstock[]
+  outletvariantstock    outletvariantstock[]
   outletingredientstock outletingredientstock[]
-  deliveryzone deliveryzone[]
-  draftorder draftorder[]
-  stockmovementFrom stockmovement[] @relation("StockMovementOutlet")
-  stockmovementTo   stockmovement[] @relation("StockMovementToOutlet")
-  abandonedcart     abandonedcart[]
-  scansettings      scansettings[]
+  deliveryzone          deliveryzone[]
+  draftorder            draftorder[]
+  stockmovementFrom     stockmovement[]         @relation("StockMovementOutlet")
+  stockmovementTo       stockmovement[]         @relation("StockMovementToOutlet")
+  abandonedcart         abandonedcart[]
+  scansettings          scansettings[]
+  useroutletrole        useroutletrole[]
 
   @@index([shopId], map: "Outlet_shopId_fkey")
 }
@@ -1170,26 +1253,106 @@ model outletstock {
 // src/public to this table at all (see IngredientsModule; not imported by
 // PublicModule, no route under /public references it).
 model ingredient {
-  id             Int                     @id @default(autoincrement())
-  shopId         Int
-  name           String
+  id                    Int                     @id @default(autoincrement())
+  shopId                Int
+  name                  String
   // Free text (e.g. "stems", "grams", "pieces") rather than a fixed enum —
   // same reasoning as product.productType/vendor: merchant-defined, not a
   // closed set the backend needs to branch on.
-  unit           String
+  unit                  String
   // Kept for consistency with product.trackInventory's shape even though
   // there's no real use case for an untracked ingredient today (the whole
   // point of this model is stock tracking) — IngredientsService can still
   // gate stock-mutation code paths on it exactly like ProductsService does,
   // rather than that logic assuming "ingredient" always implies "tracked".
-  trackInventory Boolean                 @default(true)
-  createdAt      DateTime                @default(now())
-  shop           shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Ingredient_shopId_fkey")
+  trackInventory        Boolean                 @default(true)
+  // Single image, not a productimage-style gallery — ingredients have no
+  // multi-photo/reorder use case anywhere in this app (no storefront
+  // exposure, no variant-level image override to sync). Same "one field is
+  // enough" reasoning category.image already uses.
+  image                 String?
+  description           String?                 @db.Text
+  // Decimal like product.costPrice, not Int like ingredient stock — cost
+  // per unit is money, needs real fractional precision (e.g. 0.75 AED per
+  // gram), unlike stockQuantity/quantityPerUnit which are deliberately
+  // whole numbers (see productingredient's comment on quantityPerUnit).
+  costPerUnit           Decimal?
+  // Free text, not a `supplier` entity/relation — no purchase-order or
+  // multi-supplier-per-ingredient use case exists anywhere in this app to
+  // justify a real table; a name/contact string is what merchants asked for.
+  supplier              String?
+  categoryId            Int?
+  createdAt             DateTime                @default(now())
+  shop                  shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Ingredient_shopId_fkey")
+  category              ingredientcategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "Ingredient_categoryId_fkey")
   outletingredientstock outletingredientstock[]
-  stockmovement  stockmovement[]
-  productingredient productingredient[]
+  stockmovement         stockmovement[]
+  productingredient     productingredient[]
 
   @@index([shopId], map: "Ingredient_shopId_fkey")
+  @@index([categoryId], map: "Ingredient_categoryId_fkey")
+}
+
+// Flat (no parent/tree) unlike `category` — ingredient categories are a
+// purely internal inventory-organization concept with no storefront
+// navigation use case (ingredients themselves are structurally unreachable
+// from /public, see `ingredient`'s own comment), so the unlimited-depth
+// tree/cycle-guard machinery `category` needs for storefront nav menus
+// would be pure overhead here.
+model ingredientcategory {
+  id         Int          @id @default(autoincrement())
+  shopId     Int
+  name       String
+  createdAt  DateTime     @default(now())
+  shop       shop         @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "IngredientCategory_shopId_fkey")
+  ingredient ingredient[]
+
+  @@index([shopId], map: "IngredientCategory_shopId_fkey")
+}
+
+// A named, admin-defined bundle of permissions (see common/permissions.ts
+// for the fixed vocabulary) that can be assigned to a staff member at a
+// specific outlet via useroutletrole — layered on top of, not replacing,
+// the shop-wide 4-tier user.role. `permissions` is a JSON array of keys
+// from that fixed enum rather than a join table: the vocabulary is small
+// and fixed, nothing needs to query "which bundles include permission X",
+// and the app layer validates each string against the enum on write.
+model branchrole {
+  id             Int              @id @default(autoincrement())
+  shopId         Int
+  name           String
+  permissions    Json
+  createdAt      DateTime         @default(now())
+  shop           shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BranchRole_shopId_fkey")
+  useroutletrole useroutletrole[]
+
+  @@unique([shopId, name], map: "BranchRole_shopId_name_key")
+  @@index([shopId], map: "BranchRole_shopId_fkey")
+}
+
+// One row per (user, outlet): "at this outlet, this user's effective
+// permissions come from this branchrole instead of their shop-wide role."
+// Absence of a row for a given (user, outlet) pair means no override —
+// resolveEffectivePermissions falls through to today's ctx.role-based
+// logic entirely unchanged. The actual restrict-only security guarantee
+// (an override can never grant MORE than the user's shop-wide role
+// already permits) is enforced at read time by intersecting this
+// branchrole's permissions with basePermissionsFor(user.role) — not by
+// anything in this table's shape, which is deliberately just a plain
+// pointer. See common/permissions.ts.
+model useroutletrole {
+  id           Int        @id @default(autoincrement())
+  userId       Int
+  outletId     Int
+  branchRoleId Int
+  createdAt    DateTime   @default(now())
+  user         user       @relation(fields: [userId], references: [id], onDelete: Cascade, map: "UserOutletRole_userId_fkey")
+  outlet       outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "UserOutletRole_outletId_fkey")
+  branchrole   branchrole @relation(fields: [branchRoleId], references: [id], onDelete: Cascade, map: "UserOutletRole_branchRoleId_fkey")
+
+  @@unique([userId, outletId], map: "UserOutletRole_userId_outletId_key")
+  @@index([outletId], map: "UserOutletRole_outletId_fkey")
+  @@index([branchRoleId], map: "UserOutletRole_branchRoleId_fkey")
 }
 
 // Per-outlet stock count for an ingredient — parallel to outletstock
@@ -1287,17 +1450,17 @@ model productingredient {
 // and ingredients (same reasoning the original ADJUSTMENT/TRANSFER comment
 // below gives for sharing one table instead of two).
 model stockmovement {
-  id            Int             @id @default(autoincrement())
-  shopId        Int
-  productId     Int?
-  variantId     Int?
-  ingredientId  Int?
-  type          String
-  reason        String?
-  delta         Int
-  outletId      Int
-  toOutletId    Int?
-  note          String?         @db.Text
+  id           Int             @id @default(autoincrement())
+  shopId       Int
+  productId    Int?
+  variantId    Int?
+  ingredientId Int?
+  type         String
+  reason       String?
+  delta        Int
+  outletId     Int
+  toOutletId   Int?
+  note         String?         @db.Text
   // Nullable: every pre-existing movement type is staff-initiated (an admin
   // adjusts/transfers/imports/scans), always with a real ctx.userId. Bill of
   // Materials adds the first genuinely system-triggered type (CONSUMED, from
@@ -1307,20 +1470,20 @@ model stockmovement {
   // cancelling an order, or an admin-entered immediate-reservation order),
   // same as every other type; null only for the genuinely anonymous
   // storefront-checkout case.
-  actorUserId   Int?
-  createdAt     DateTime        @default(now())
+  actorUserId  Int?
+  createdAt    DateTime        @default(now())
   // Set only for type: RECEIVED (Scan to Stock) — groups every movement
   // produced by one confirmed scan commit under the source image, for the
   // audit trail. Null for every other movement type.
-  scanBatchId   Int?
-  shop          shop            @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "StockMovement_shopId_fkey")
-  product       product?        @relation(fields: [productId], references: [id], onDelete: Cascade, map: "StockMovement_productId_fkey")
-  variant       productvariant? @relation(fields: [variantId], references: [id], onDelete: Cascade, map: "StockMovement_variantId_fkey")
-  ingredient    ingredient?     @relation(fields: [ingredientId], references: [id], onDelete: Cascade, map: "StockMovement_ingredientId_fkey")
-  outlet        outlet          @relation("StockMovementOutlet", fields: [outletId], references: [id], onDelete: Cascade, map: "StockMovement_outletId_fkey")
-  toOutlet      outlet?         @relation("StockMovementToOutlet", fields: [toOutletId], references: [id], onDelete: Cascade, map: "StockMovement_toOutletId_fkey")
-  actor         user?           @relation(fields: [actorUserId], references: [id], map: "StockMovement_actorUserId_fkey")
-  scanbatch     scanbatch?      @relation(fields: [scanBatchId], references: [id], onDelete: SetNull, map: "StockMovement_scanBatchId_fkey")
+  scanBatchId  Int?
+  shop         shop            @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "StockMovement_shopId_fkey")
+  product      product?        @relation(fields: [productId], references: [id], onDelete: Cascade, map: "StockMovement_productId_fkey")
+  variant      productvariant? @relation(fields: [variantId], references: [id], onDelete: Cascade, map: "StockMovement_variantId_fkey")
+  ingredient   ingredient?     @relation(fields: [ingredientId], references: [id], onDelete: Cascade, map: "StockMovement_ingredientId_fkey")
+  outlet       outlet          @relation("StockMovementOutlet", fields: [outletId], references: [id], onDelete: Cascade, map: "StockMovement_outletId_fkey")
+  toOutlet     outlet?         @relation("StockMovementToOutlet", fields: [toOutletId], references: [id], onDelete: Cascade, map: "StockMovement_toOutletId_fkey")
+  actor        user?           @relation(fields: [actorUserId], references: [id], map: "StockMovement_actorUserId_fkey")
+  scanbatch    scanbatch?      @relation(fields: [scanBatchId], references: [id], onDelete: SetNull, map: "StockMovement_scanBatchId_fkey")
 
   @@index([shopId, productId], map: "StockMovement_shopId_productId_idx")
   @@index([shopId, createdAt], map: "StockMovement_shopId_createdAt_idx")
@@ -1386,49 +1549,49 @@ model scansettings {
 // new; `templateId` remains an unused placeholder (no template system
 // exists — out of scope here, same as when it was first added).
 model themesettings {
-  id             Int     @id @default(autoincrement())
-  shopId         Int     @unique(map: "ThemeSettings_shopId_key")
-  templateId     Int?
-  logoUrl        String?
-  bannerUrl      String?
-  brandColor     String?
-  secondaryColor String?
-  heroText       String?
-  faviconUrl     String?
+  id                       Int      @id @default(autoincrement())
+  shopId                   Int      @unique(map: "ThemeSettings_shopId_key")
+  templateId               Int?
+  logoUrl                  String?
+  bannerUrl                String?
+  brandColor               String?
+  secondaryColor           String?
+  heroText                 String?
+  faviconUrl               String?
   // One of FONT_CHOICES (see theme/constants.ts) — curated list, not
   // arbitrary font upload, per the task brief.
-  fontFamily     String?
+  fontFamily               String?
   // Now rendered in the storefront footer's brand column (see
   // storefront/components/Footer.tsx) — was saved-but-unrendered before the
   // footer existed.
-  footerLogoUrl  String?
+  footerLogoUrl            String?
   // Merchant-written blurb for the footer's brand column — distinct from
   // shop.description (SEO/meta + Site Title card), which is a business
   // description, not necessarily footer-appropriate copy. Short by
   // convention (enforced client-side only, same as heroText).
-  footerDescription String? @db.Text
+  footerDescription        String?  @db.Text
   // Announcement-bar messages, e.g. ["Free delivery over 100 AED"] — plain
   // string array (the reference's tag-style input), rendered as a slim bar
   // above the storefront header (see ShopLayoutClient.tsx).
-  notificationText Json?
+  notificationText         Json?
   // Off by default — an empty notificationText array already suppresses the
   // bar, but this lets a merchant temporarily hide it without clearing
   // saved text (same "toggle vs. clear the data" reasoning as every other
   // notify*/enabled flag in this schema, e.g. shop.notifyEmail).
-  announcementBarEnabled   Boolean @default(false)
+  announcementBarEnabled   Boolean  @default(false)
   // Static (joined with " • ") vs. a continuously scrolling marquee — pure
   // CSS animation on the storefront (see components/AnnouncementBar.tsx),
   // not JS-driven, so this flag only switches which CSS class renders.
-  announcementBarScrolling Boolean @default(false)
+  announcementBarScrolling Boolean  @default(false)
   // Storefront-facing contact number(s) — distinct from shop.whatsappNumber
   // (a different, WhatsApp-specific concept). String array so "show
   // multiple numbers" is just "the array has more than one entry" rather
   // than a separate boolean that could drift out of sync with it.
-  contactNumbers Json?
+  contactNumbers           Json?
   // Record<key, hex> for the ~22 granular Appearance Color fields — see
   // theme/constants.ts's THEME_COLOR_FIELDS for the full key list, defaults,
   // and which ones actually have a storefront element to apply to.
-  colors         Json?
+  colors                   Json?
   // Advanced tab — one of HOMEPAGE_LAYOUTS (theme/constants.ts): a fixed,
   // Requital-maintained set of homepage layouts, not merchant-composable
   // sections (that's the deferred full drag-and-drop builder — 'custom' is
@@ -1436,7 +1599,7 @@ model themesettings {
   // default: every shop always has SOME layout, "classic" being today's
   // existing (only) behavior, so this ships as a no-op for every shop that
   // never touches the Advanced tab.
-  homepageLayout String  @default("classic")
+  homepageLayout           String   @default("classic")
   // Theme Customizer v2 — curated per-page-type layout presets and global
   // chrome/icon/button styling, all following the exact same "VARCHAR enum
   // string, NOT NULL DEFAULT <current behavior>" shape as homepageLayout
@@ -1446,28 +1609,28 @@ model themesettings {
   // storefront lib/{layout,icon-style,button-style}.ts for what each one
   // actually switches. Not new tables/JSON — each is a single closed enum,
   // same reasoning as homepageLayout: no query/filter need of its own.
-  topBarLayout   String  @default("logo_left")
-  iconStyle      String  @default("outline")
-  buttonRadius   String  @default("rounded")
-  buttonFill     String  @default("solid")
-  pdpLayout      String  @default("gallery_left")
-  cartLayout     String  @default("full_page")
-  checkoutLayout String  @default("single_page")
+  topBarLayout             String   @default("logo_left")
+  iconStyle                String   @default("outline")
+  buttonRadius             String   @default("rounded")
+  buttonFill               String   @default("solid")
+  pdpLayout                String   @default("gallery_left")
+  cartLayout               String   @default("full_page")
+  checkoutLayout           String   @default("single_page")
   // Footer's structural arrangement — 'columns' (brand/links/social+contact
   // side by side, the original/only shape) vs 'centered' (a simpler single
   // stacked column, common minimal-footer alternative). Same "fixed enum,
   // Requital-maintained set" shape as topBarLayout above.
-  footerLayout   String  @default("columns")
+  footerLayout             String   @default("columns")
   // Height/padding only — independent of topBarLayout/footerLayout's
   // structural arrangement, so a merchant can pair any arrangement with any
   // density. 'regular' matches this feature's original (only) padding.
-  headerDensity  String  @default("regular")
-  footerDensity  String  @default("regular")
+  headerDensity            String   @default("regular")
+  footerDensity            String   @default("regular")
   // For the Theme library page's "last saved" timestamp — nothing else in
   // this table needed it before (see shop.updatedAt's identical addition,
   // added the same way for the same reason, in an earlier task).
-  updatedAt      DateTime @default(now()) @updatedAt
-  shop           shop    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "ThemeSettings_shopId_fkey")
+  updatedAt                DateTime @default(now()) @updatedAt
+  shop                     shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "ThemeSettings_shopId_fkey")
 }
 
 // Deliberately its own table rather than more columns on themesettings —
@@ -1490,24 +1653,25 @@ model shopseosettings {
 // (scoped to exactly one outlet — outletId always set). Enforced in
 // application code, not a DB constraint — see auth/roles.guard.ts.
 model user {
-  id            Int      @id @default(autoincrement())
-  shopId        Int
-  outletId      Int?
-  email         String   @unique(map: "User_email_key")
-  name          String
-  passwordHash  String
-  role          String   @default("admin")
-  emailVerified Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  shop          shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "User_shopId_fkey")
-  outlet        outlet?  @relation(fields: [outletId], references: [id], onDelete: SetNull, map: "User_outletId_fkey")
-  refreshtoken  refreshtoken[]
-  authtoken     authtoken[]
-  stockmovement stockmovement[]
-  ordernote     ordernote[]
-  auditlog      auditlog[]
-  orderreturn   orderreturn[]
-  scanbatch     scanbatch[]
+  id             Int              @id @default(autoincrement())
+  shopId         Int
+  outletId       Int?
+  email          String           @unique(map: "User_email_key")
+  name           String
+  passwordHash   String
+  role           String           @default("admin")
+  emailVerified  Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  shop           shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "User_shopId_fkey")
+  outlet         outlet?          @relation(fields: [outletId], references: [id], onDelete: SetNull, map: "User_outletId_fkey")
+  refreshtoken   refreshtoken[]
+  authtoken      authtoken[]
+  stockmovement  stockmovement[]
+  ordernote      ordernote[]
+  auditlog       auditlog[]
+  orderreturn    orderreturn[]
+  scanbatch      scanbatch[]
+  useroutletrole useroutletrole[]
 
   @@index([shopId], map: "User_shopId_fkey")
   @@index([outletId], map: "User_outletId_fkey")
@@ -1520,14 +1684,14 @@ model user {
 // of an already-rotated (revokedAt set) token can revoke the whole chain in
 // one query instead of walking a linked list of "replaced by" pointers.
 model refreshtoken {
-  id         Int       @id @default(autoincrement())
-  userId     Int
-  familyId   String
-  tokenHash  String    @unique(map: "RefreshToken_tokenHash_key")
-  expiresAt  DateTime
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  user       user      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "RefreshToken_userId_fkey")
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  familyId  String
+  tokenHash String    @unique(map: "RefreshToken_tokenHash_key")
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      user      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "RefreshToken_userId_fkey")
 
   @@index([userId], map: "RefreshToken_userId_fkey")
   @@index([familyId], map: "RefreshToken_familyId_idx")
@@ -1614,14 +1778,14 @@ model discountcategory {
 // customer until after redemption is claimed inside the same transaction
 // (see PublicService.createOrder) — orderId is the durable link either way.
 model discountredemption {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   discountId Int
   customerId Int?
-  orderId    Int      @unique(map: "DiscountRedemption_orderId_key")
-  createdAt  DateTime @default(now())
-  discount   discount @relation(fields: [discountId], references: [id], onDelete: Cascade, map: "DiscountRedemption_discountId_fkey")
+  orderId    Int       @unique(map: "DiscountRedemption_orderId_key")
+  createdAt  DateTime  @default(now())
+  discount   discount  @relation(fields: [discountId], references: [id], onDelete: Cascade, map: "DiscountRedemption_discountId_fkey")
   customer   customer? @relation(fields: [customerId], references: [id], onDelete: SetNull, map: "DiscountRedemption_customerId_fkey")
-  order      order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "DiscountRedemption_orderId_fkey")
+  order      order     @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "DiscountRedemption_orderId_fkey")
 
   @@index([discountId, customerId], map: "DiscountRedemption_discountId_customerId_idx")
   @@index([customerId], map: "DiscountRedemption_customerId_fkey")
@@ -1635,32 +1799,32 @@ model discountredemption {
 // Address are captured inline (same free-text shape as Order itself) since a
 // draft's customer is very often new/unregistered until conversion.
 model draftorder {
-  id                   Int              @id @default(autoincrement())
-  shopId               Int
-  outletId             Int
-  status               String           @default("OPEN")
-  customerId           Int?
-  customerName         String
-  customerPhone        String
-  customerEmail        String?
-  customerAddress      String?          @db.Text
-  emirate              String?
-  area                 String?
-  orderType            String?
-  discountId           Int?
-  notes                String?          @db.Text
+  id               Int              @id @default(autoincrement())
+  shopId           Int
+  outletId         Int
+  status           String           @default("OPEN")
+  customerId       Int?
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  customerAddress  String?          @db.Text
+  emirate          String?
+  area             String?
+  orderType        String?
+  discountId       Int?
+  notes            String?          @db.Text
   // Set once either complete() or sendInvoice() converts this into a real
   // Order — see DraftOrdersService. A draft can only ever convert once
   // (both endpoints check this first and no-op/reject otherwise).
-  convertedOrderId     Int?             @unique(map: "DraftOrder_convertedOrderId_key")
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @default(now()) @updatedAt
-  shop                 shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "DraftOrder_shopId_fkey")
-  outlet               outlet           @relation(fields: [outletId], references: [id], onDelete: Restrict, map: "DraftOrder_outletId_fkey")
-  customer             customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull, map: "DraftOrder_customerId_fkey")
-  discount             discount?        @relation(fields: [discountId], references: [id], onDelete: SetNull, map: "DraftOrder_discountId_fkey")
-  convertedOrder       order?           @relation(fields: [convertedOrderId], references: [id], onDelete: SetNull, map: "DraftOrder_convertedOrderId_fkey")
-  draftorderitem       draftorderitem[]
+  convertedOrderId Int?             @unique(map: "DraftOrder_convertedOrderId_key")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @default(now()) @updatedAt
+  shop             shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "DraftOrder_shopId_fkey")
+  outlet           outlet           @relation(fields: [outletId], references: [id], onDelete: Restrict, map: "DraftOrder_outletId_fkey")
+  customer         customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull, map: "DraftOrder_customerId_fkey")
+  discount         discount?        @relation(fields: [discountId], references: [id], onDelete: SetNull, map: "DraftOrder_discountId_fkey")
+  convertedOrder   order?           @relation(fields: [convertedOrderId], references: [id], onDelete: SetNull, map: "DraftOrder_convertedOrderId_fkey")
+  draftorderitem   draftorderitem[]
 
   @@index([shopId], map: "DraftOrder_shopId_fkey")
   @@index([outletId], map: "DraftOrder_outletId_fkey")
@@ -1705,30 +1869,30 @@ model draftorderitem {
 // episode (after a prior one already recovered) resets the row rather than
 // creating a second one — see AbandonedCartsService.capture.
 model abandonedcart {
-  id             Int       @id @default(autoincrement())
-  shopId         Int
-  outletId       Int?
-  customerName   String
-  customerPhone  String
-  customerEmail  String?
+  id                  Int       @id @default(autoincrement())
+  shopId              Int
+  outletId            Int?
+  customerName        String
+  customerPhone       String
+  customerEmail       String?
   // Snapshot at capture time: [{productId, variantId, name, variantLabel,
   // price, quantity, thumbnail}] — enough to render the recovery email and
   // the admin list without joining back through orderitem (there is no
   // order yet). Refreshed on every capture upsert while the episode is
   // still open.
-  cartItems      Json
-  cartValue      Decimal
+  cartItems           Json
+  cartValue           Decimal
   // Kept stable across capture-upsert refreshes within the same open
   // episode (only reset when a fresh episode starts) — this is "when did
   // the customer first show up," what the recovery window is measured from
   // and what the admin list's "time abandoned" column shows.
-  capturedAt     DateTime  @default(now())
-  updatedAt      DateTime  @default(now()) @updatedAt
+  capturedAt          DateTime  @default(now())
+  updatedAt           DateTime  @default(now()) @updatedAt
   // Opaque bearer token for the public, unauthenticated cart-recovery link
   // in the email — same plaintext-token-as-credential shape as
   // order.trackingToken, not the row's own numeric id (which would let the
   // link be guessed/enumerated).
-  recoverToken   String    @unique(map: "AbandonedCart_recoverToken_key")
+  recoverToken        String    @unique(map: "AbandonedCart_recoverToken_key")
   // Set exactly once, via a CAS updateMany (WHERE recoveryEmailSentAt IS
   // NULL) — see AbandonedCartsService.sendDueRecoveryEmails — so this can
   // never double-send even if the scheduled job overlaps itself or reruns.
@@ -1739,10 +1903,10 @@ model abandonedcart {
   // excludes on, so an order completing in the same window as a pending
   // recovery send can never result in a recovery email for a since-
   // completed cart (whichever write lands first wins the row).
-  recoveredOrderId Int?     @unique(map: "AbandonedCart_recoveredOrderId_key")
-  shop           shop      @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "AbandonedCart_shopId_fkey")
-  outlet         outlet?   @relation(fields: [outletId], references: [id], onDelete: SetNull, map: "AbandonedCart_outletId_fkey")
-  recoveredOrder order?    @relation(fields: [recoveredOrderId], references: [id], onDelete: SetNull, map: "AbandonedCart_recoveredOrderId_fkey")
+  recoveredOrderId    Int?      @unique(map: "AbandonedCart_recoveredOrderId_key")
+  shop                shop      @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "AbandonedCart_shopId_fkey")
+  outlet              outlet?   @relation(fields: [outletId], references: [id], onDelete: SetNull, map: "AbandonedCart_outletId_fkey")
+  recoveredOrder      order?    @relation(fields: [recoveredOrderId], references: [id], onDelete: SetNull, map: "AbandonedCart_recoveredOrderId_fkey")
 
   @@unique([shopId, customerPhone], map: "AbandonedCart_shopId_customerPhone_key")
   @@index([shopId], map: "AbandonedCart_shopId_fkey")
@@ -1758,36 +1922,36 @@ model abandonedcart {
 // giftcardredemption rows and topped back up by ReturnsService crediting a
 // partial/full refund back to the card instead of the payment provider.
 model giftcard {
-  id                     Int                  @id @default(autoincrement())
-  shopId                 Int
-  code                   String               @unique(map: "GiftCard_code_key")
-  initialValue           Decimal
-  remainingBalance       Decimal
+  id                    Int                  @id @default(autoincrement())
+  shopId                Int
+  code                  String               @unique(map: "GiftCard_code_key")
+  initialValue          Decimal
+  remainingBalance      Decimal
   // active | redeemed (balance hit 0 through spending) | expired | disabled
   // (merchant-revoked, e.g. fraud) — see GiftCardsService.syncStatus for how
   // active/redeemed transition automatically off remainingBalance; expired/
   // disabled are only ever set explicitly (by expiry check / admin action)
   // and are never auto-overwritten back to active by a refund credit.
-  status                 String               @default("active")
-  expiresAt              DateTime?
+  status                String               @default("active")
+  expiresAt             DateTime?
   // Which customer this card belongs to, if any — set from the purchasing
   // customer for a storefront purchase; left null for an admin-issued card
   // with no specific customer on file yet (the code itself is still fully
   // redeemable by whoever has it, same bearer-credential model as a
   // physical gift card).
-  purchasedByCustomerId  Int?
+  purchasedByCustomerId Int?
   // The order that purchased this card, if sold as a product — null for an
   // admin-issued card. Named relation since order also has an unrelated,
   // opposite-direction relation to giftcard (giftCardId — the card a *given*
   // order was PAID with) — see that field's own comment.
-  purchaseOrderId        Int?
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @default(now()) @updatedAt
-  shop                   shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "GiftCard_shopId_fkey")
-  purchasedByCustomer    customer?            @relation(fields: [purchasedByCustomerId], references: [id], onDelete: SetNull, map: "GiftCard_purchasedByCustomerId_fkey")
-  purchaseOrder          order?               @relation("GiftCardPurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull, map: "GiftCard_purchaseOrderId_fkey")
-  paidOrders             order[]              @relation("OrderGiftCardPayment")
-  giftcardredemption     giftcardredemption[]
+  purchaseOrderId       Int?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @default(now()) @updatedAt
+  shop                  shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "GiftCard_shopId_fkey")
+  purchasedByCustomer   customer?            @relation(fields: [purchasedByCustomerId], references: [id], onDelete: SetNull, map: "GiftCard_purchasedByCustomerId_fkey")
+  purchaseOrder         order?               @relation("GiftCardPurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull, map: "GiftCard_purchaseOrderId_fkey")
+  paidOrders            order[]              @relation("OrderGiftCardPayment")
+  giftcardredemption    giftcardredemption[]
 
   @@index([shopId], map: "GiftCard_shopId_fkey")
   @@index([purchasedByCustomerId], map: "GiftCard_purchasedByCustomerId_fkey")

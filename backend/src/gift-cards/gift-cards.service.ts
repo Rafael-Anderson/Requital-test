@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,7 +10,10 @@ import { sendEmail } from '../common/email';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateGiftCardDto } from './dto/create-gift-card.dto';
 import { UpdateGiftCardDto } from './dto/update-gift-card.dto';
-import { GIFT_CARD_REJECTION_MESSAGES, GiftCardRejectionReason } from './gift-card.constants';
+import {
+  GIFT_CARD_REJECTION_MESSAGES,
+  GiftCardRejectionReason,
+} from './gift-card.constants';
 
 export interface EvaluateGiftCardResult {
   valid: boolean;
@@ -80,12 +87,18 @@ export class GiftCardsService {
   // — same "resolve then evaluate" split as DiscountsService.validate, and
   // deliberately doesn't touch remainingBalance (see redeem() for the
   // atomic claim, which only happens inside the order's own transaction).
-  async validateCode(shopId: number, rawCode: string): Promise<EvaluateGiftCardResult> {
+  async validateCode(
+    shopId: number,
+    rawCode: string,
+  ): Promise<EvaluateGiftCardResult> {
     const code = this.normalizeCode(rawCode);
     const card = await this.prisma.giftcard.findUnique({ where: { code } });
     if (!card || card.shopId !== shopId) return this.reject('not_found');
     if (card.status === 'disabled') return this.reject('disabled');
-    if (card.status === 'expired' || (card.expiresAt && card.expiresAt < new Date())) {
+    if (
+      card.status === 'expired' ||
+      (card.expiresAt && card.expiresAt < new Date())
+    ) {
       return this.reject('expired');
     }
     if (Number(card.remainingBalance) <= 0) return this.reject('no_balance');
@@ -107,15 +120,24 @@ export class GiftCardsService {
   // both validated the same card's balance a moment ago and only one can
   // actually be covered, the loser's CAS fails here and the whole order
   // attempt aborts, exactly like a discount's usage-limit race.
-  async redeem(tx: Prisma.TransactionClient, giftCardId: number, amount: number, orderId: number) {
+  async redeem(
+    tx: Prisma.TransactionClient,
+    giftCardId: number,
+    amount: number,
+    orderId: number,
+  ) {
     const result = await tx.giftcard.updateMany({
       where: { id: giftCardId, remainingBalance: { gte: amount } },
       data: { remainingBalance: { decrement: amount } },
     });
     if (result.count === 0) {
-      throw new ConflictException("This gift card's balance just changed — please try again");
+      throw new ConflictException(
+        "This gift card's balance just changed — please try again",
+      );
     }
-    await tx.giftcardredemption.create({ data: { giftCardId, orderId, amountUsed: amount } });
+    await tx.giftcardredemption.create({
+      data: { giftCardId, orderId, amountUsed: amount },
+    });
     await this.syncStatus(tx, giftCardId);
   }
 
@@ -125,7 +147,11 @@ export class GiftCardsService {
   // but a merchant-revoked or expired card doesn't get silently
   // reactivated by an unrelated refund) — only the automatic active<->
   // redeemed transition (syncStatus) applies here.
-  async creditRefund(tx: Prisma.TransactionClient, giftCardId: number, amount: number) {
+  async creditRefund(
+    tx: Prisma.TransactionClient,
+    giftCardId: number,
+    amount: number,
+  ) {
     await tx.giftcard.update({
       where: { id: giftCardId },
       data: { remainingBalance: { increment: amount } },
@@ -172,30 +198,46 @@ export class GiftCardsService {
         '',
         ...issued.map((g) => `${g.code} — ${g.initialValue}`),
       ];
-      await sendEmail(recipientEmail, `Your ${shopName} gift card`, bodyLines.join('\n'), { fromName: shopName });
+      await sendEmail(
+        recipientEmail,
+        `Your ${shopName} gift card`,
+        bodyLines.join('\n'),
+        { fromName: shopName },
+      );
     }
     return issued;
   }
 
   private async syncStatus(tx: Prisma.TransactionClient, giftCardId: number) {
-    const card = await tx.giftcard.findUnique({ where: { id: giftCardId }, select: { status: true, remainingBalance: true } });
+    const card = await tx.giftcard.findUnique({
+      where: { id: giftCardId },
+      select: { status: true, remainingBalance: true },
+    });
     if (!card) return;
     // Only ever flips between the two auto-managed states — a disabled or
     // expired card stays exactly as an admin/the expiry check left it.
     if (card.status !== 'active' && card.status !== 'redeemed') return;
-    const nextStatus = Number(card.remainingBalance) <= 0 ? 'redeemed' : 'active';
+    const nextStatus =
+      Number(card.remainingBalance) <= 0 ? 'redeemed' : 'active';
     if (nextStatus !== card.status) {
-      await tx.giftcard.update({ where: { id: giftCardId }, data: { status: nextStatus } });
+      await tx.giftcard.update({
+        where: { id: giftCardId },
+        data: { status: nextStatus },
+      });
     }
   }
 
-  private async generateUniqueCode(client: Prisma.TransactionClient | PrismaService = this.prisma): Promise<string> {
+  private async generateUniqueCode(
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const code = generateGiftCardCode();
       const existing = await client.giftcard.findUnique({ where: { code } });
       if (!existing) return code;
     }
-    throw new ConflictException('Could not generate a unique gift card code — please try again');
+    throw new ConflictException(
+      'Could not generate a unique gift card code — please try again',
+    );
   }
 
   private normalizeCode(code: string): string {
@@ -203,11 +245,17 @@ export class GiftCardsService {
   }
 
   private reject(reason: GiftCardRejectionReason): EvaluateGiftCardResult {
-    return { valid: false, reason, message: GIFT_CARD_REJECTION_MESSAGES[reason] };
+    return {
+      valid: false,
+      reason,
+      message: GIFT_CARD_REJECTION_MESSAGES[reason],
+    };
   }
 
   private async findRaw(ctx: TenantContext, id: number) {
-    const card = await this.prisma.giftcard.findFirst({ where: { id, shopId: ctx.shopId } });
+    const card = await this.prisma.giftcard.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!card) {
       throw new NotFoundException(`Gift card ${id} not found`);
     }

@@ -27,7 +27,12 @@ export const PRODUCT_IMPORT_HEADERS = [
   'Stock',
 ] as const;
 
-export const INGREDIENT_IMPORT_HEADERS = ['Name', 'Unit', 'Track Inventory', 'Stock'] as const;
+export const INGREDIENT_IMPORT_HEADERS = [
+  'Name',
+  'Unit',
+  'Track Inventory',
+  'Stock',
+] as const;
 
 export type ImportAction = 'create' | 'update' | 'reject';
 export type ImportRowKind = 'product' | 'variant' | 'ingredient';

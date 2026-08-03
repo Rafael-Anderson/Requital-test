@@ -7,6 +7,7 @@ import { ProductsModule } from '../products/products.module';
 import { DiscountsModule } from '../discounts/discounts.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { OrderNotificationsModule } from './order-notifications.module';
+import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { OrderNotificationsModule } from './order-notifications.module';
     DiscountsModule,
     AuditLogModule,
     OrderNotificationsModule,
+    BranchRolesModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

@@ -10,7 +10,9 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('payment-settings')
 export class PaymentSettingsController {
-  constructor(private readonly paymentSettingsService: PaymentSettingsService) {}
+  constructor(
+    private readonly paymentSettingsService: PaymentSettingsService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() ctx: TenantContext) {

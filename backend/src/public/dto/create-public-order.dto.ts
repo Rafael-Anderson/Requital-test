@@ -13,6 +13,7 @@ import {
   IsPositive,
   IsString,
   Matches,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -46,6 +47,14 @@ class PublicOrderItemInput {
   @IsNumber()
   @Min(0)
   giftCardAmount?: number;
+
+  // Optional note the customer typed on the product page (e.g. "no card,
+  // please") — carried through to orderitem.note verbatim, staff-facing
+  // only, never validated/parsed for content.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  note?: string;
 }
 
 export const PAYMENT_METHODS = [
@@ -82,7 +91,8 @@ export class CreatePublicOrderDto {
   // enforced here too since the client-side strip is a UX nicety, not the
   // actual guarantee.
   @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
-    message: 'customerPhone must contain only digits, spaces, hyphens, and an optional leading +',
+    message:
+      'customerPhone must contain only digits, spaces, hyphens, and an optional leading +',
   })
   customerPhone: string;
 

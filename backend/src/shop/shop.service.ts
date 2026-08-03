@@ -20,17 +20,26 @@ export class ShopService {
   // GET /shop/publish-readiness endpoint (drives the admin Publish toggle's
   // disabled/tooltip state before the merchant even tries) and the write-side
   // check in update() below — the two can never drift apart.
-  async getPublishReadiness(ctx: TenantContext): Promise<{ ready: boolean; missing: string[] }> {
+  async getPublishReadiness(
+    ctx: TenantContext,
+  ): Promise<{ ready: boolean; missing: string[] }> {
     const [hasReadyOutlet, hasProduct] = await Promise.all([
       this.prisma.outlet.findFirst({
-        where: { shopId: ctx.shopId, OR: [{ deliveryEnabled: true }, { pickupEnabled: true }] },
+        where: {
+          shopId: ctx.shopId,
+          OR: [{ deliveryEnabled: true }, { pickupEnabled: true }],
+        },
         select: { id: true },
       }),
-      this.prisma.product.findFirst({ where: { shopId: ctx.shopId }, select: { id: true } }),
+      this.prisma.product.findFirst({
+        where: { shopId: ctx.shopId },
+        select: { id: true },
+      }),
     ]);
     const missing: string[] = [];
     if (!hasProduct) missing.push('Add at least one product');
-    if (!hasReadyOutlet) missing.push('Enable delivery or pickup on at least one outlet');
+    if (!hasReadyOutlet)
+      missing.push('Enable delivery or pickup on at least one outlet');
     return { ready: missing.length === 0, missing };
   }
 
@@ -45,14 +54,18 @@ export class ShopService {
       // whatever) must never get silently unpublished by an unrelated
       // update, and a merchant re-saving {published: true} on an
       // already-live shop shouldn't suddenly hit a readiness error either.
-      const current = await this.prisma.shop.findUniqueOrThrow({ where: { id: ctx.shopId } });
+      const current = await this.prisma.shop.findUniqueOrThrow({
+        where: { id: ctx.shopId },
+      });
       if (!current.published) {
         const readiness = await this.getPublishReadiness(ctx);
         if (!readiness.ready) {
           const sentence = readiness.missing
             .map((m, i) => (i === 0 ? m : m[0].toLowerCase() + m.slice(1)))
             .join(' and ');
-          throw new BadRequestException(`Cannot publish yet — ${sentence} before publishing.`);
+          throw new BadRequestException(
+            `Cannot publish yet — ${sentence} before publishing.`,
+          );
         }
       }
     }
@@ -76,8 +89,10 @@ export class ShopService {
       if (touchesDeliveryPayment) {
         this.assertAtLeastOnePaymentMethod('delivery', [
           dto.deliveryPaymentCardOnline ?? current.deliveryPaymentCardOnline,
-          dto.deliveryPaymentCashOnDelivery ?? current.deliveryPaymentCashOnDelivery,
-          dto.deliveryPaymentCardOnDelivery ?? current.deliveryPaymentCardOnDelivery,
+          dto.deliveryPaymentCashOnDelivery ??
+            current.deliveryPaymentCashOnDelivery,
+          dto.deliveryPaymentCardOnDelivery ??
+            current.deliveryPaymentCardOnDelivery,
         ]);
       }
       if (touchesPickupPayment) {
@@ -105,21 +120,30 @@ export class ShopService {
       try {
         parsed = new URL(url);
       } catch {
-        throw new BadRequestException(`'${url}' is not a valid URL for ${platform}`);
+        throw new BadRequestException(
+          `'${url}' is not a valid URL for ${platform}`,
+        );
       }
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new BadRequestException(`${platform} link must be http(s)`);
       }
       const expectedDomains = SOCIAL_PLATFORM_DOMAINS[platform];
       if (!expectedDomains.some((domain) => parsed.hostname.endsWith(domain))) {
-        throw new BadRequestException(`'${url}' doesn't look like a ${platform} link`);
+        throw new BadRequestException(
+          `'${url}' doesn't look like a ${platform} link`,
+        );
       }
     }
   }
 
-  private assertAtLeastOnePaymentMethod(context: 'delivery' | 'pickup', methods: boolean[]) {
+  private assertAtLeastOnePaymentMethod(
+    context: 'delivery' | 'pickup',
+    methods: boolean[],
+  ) {
     if (!methods.some(Boolean)) {
-      throw new BadRequestException(`At least one ${context} payment method must be enabled`);
+      throw new BadRequestException(
+        `At least one ${context} payment method must be enabled`,
+      );
     }
   }
 }

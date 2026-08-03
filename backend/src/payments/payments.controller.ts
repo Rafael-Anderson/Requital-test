@@ -62,7 +62,11 @@ export class PaymentsWebhookController {
     @Req() request: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature: string,
   ) {
-    return this.paymentsService.handleWebhook('stripe', request.rawBody!, signature);
+    return this.paymentsService.handleWebhook(
+      'stripe',
+      request.rawBody!,
+      signature,
+    );
   }
 
   // Per-shop route: a merchant using their own Stripe account configures
@@ -78,7 +82,12 @@ export class PaymentsWebhookController {
     @Headers('stripe-signature') signature: string,
     @Param('shopId', ParseIntPipe) shopId: number,
   ) {
-    return this.paymentsService.handleWebhook('stripe', request.rawBody!, signature, shopId);
+    return this.paymentsService.handleWebhook(
+      'stripe',
+      request.rawBody!,
+      signature,
+      shopId,
+    );
   }
 
   @Public()
@@ -87,7 +96,11 @@ export class PaymentsWebhookController {
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-telr-signature') signature: string,
   ) {
-    return this.paymentsService.handleWebhook('telr', request.rawBody!, signature ?? '');
+    return this.paymentsService.handleWebhook(
+      'telr',
+      request.rawBody!,
+      signature ?? '',
+    );
   }
 
   @Public()
@@ -96,7 +109,11 @@ export class PaymentsWebhookController {
     @Req() request: RawBodyRequest<Request>,
     @Headers('signature') signature: string,
   ) {
-    return this.paymentsService.handleWebhook('paytabs', request.rawBody!, signature ?? '');
+    return this.paymentsService.handleWebhook(
+      'paytabs',
+      request.rawBody!,
+      signature ?? '',
+    );
   }
 
   @Public()
@@ -105,7 +122,11 @@ export class PaymentsWebhookController {
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-tabby-signature') signature: string,
   ) {
-    return this.paymentsService.handleWebhook('tabby', request.rawBody!, signature ?? '');
+    return this.paymentsService.handleWebhook(
+      'tabby',
+      request.rawBody!,
+      signature ?? '',
+    );
   }
 
   @Public()
@@ -114,6 +135,10 @@ export class PaymentsWebhookController {
     @Req() request: RawBodyRequest<Request>,
     @Headers('x-tamara-signature') signature: string,
   ) {
-    return this.paymentsService.handleWebhook('tamara', request.rawBody!, signature ?? '');
+    return this.paymentsService.handleWebhook(
+      'tamara',
+      request.rawBody!,
+      signature ?? '',
+    );
   }
 }

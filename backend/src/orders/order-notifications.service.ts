@@ -4,8 +4,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { sendEmail as sendEmailReal } from '../common/email';
 import { sendWhatsAppStub } from '../common/whatsapp';
 import { normalizePhoneToE164 } from '../common/phone';
+import { generateSurveyToken } from '../common/token-hash';
 import { WhatsAppSettingsService } from '../whatsapp/whatsapp-settings.service';
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
+
+// Same env-driven storefront base URL every other customer-facing email
+// link uses — see e.g. customer-auth.service.ts's reset-password link.
+const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 interface NotifiableOrder {
   id: number;
@@ -52,7 +57,12 @@ export class OrderNotificationsService {
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
     const bodyText = `Hi ${order.customerName}, we've received your order #${order.id} (total ${order.total} AED). We'll message you again once it's on its way.`;
     await Promise.all([
-      this.sendEmail(shopId, order, `Order confirmation — #${order.id}`, bodyText),
+      this.sendEmail(
+        shopId,
+        order,
+        `Order confirmation — #${order.id}`,
+        bodyText,
+      ),
       this.sendWhatsApp(shopId, order, bodyText),
     ]);
   }
@@ -71,20 +81,72 @@ export class OrderNotificationsService {
     ]);
   }
 
-  private async sendEmail(shopId: number, order: NotifiableOrder, subject: string, bodyText: string) {
+  // Fired once when an order reaches 'delivered' (see OrdersService.updateStatus),
+  // gated on shop.customerSurveyEnabled. Idempotent via surveyresponse's
+  // @unique orderId — a bulkUpdateStatus retry or any repeated call for the
+  // same order is a no-op, so this can never create two rows or send two
+  // emails for one order. The row is created (and never retried later) even
+  // if notifyEmail is off or the order has no customerEmail at that exact
+  // moment — same "gated at the moment it happened, never retroactively
+  // re-evaluated" discipline as ingredientsConsumedAt (see schema.prisma).
+  async notifySurveyRequest(shopId: number, order: NotifiableOrder) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+      select: {
+        customerSurveyEnabled: true,
+        notifyEmail: true,
+        subdomain: true,
+        name: true,
+        displayName: true,
+      },
+    });
+    if (!shop?.customerSurveyEnabled) return;
+
+    const existing = await this.prisma.surveyresponse.findUnique({
+      where: { orderId: order.id },
+    });
+    if (existing) return;
+
+    const token = generateSurveyToken();
+    await this.prisma.surveyresponse.create({
+      data: { shopId, orderId: order.id, token },
+    });
+
+    if (!shop.notifyEmail || !order.customerEmail) return;
+    const link = `${STOREFRONT_URL}/${shop.subdomain}/survey?token=${token}`;
+    await sendEmailReal(
+      order.customerEmail,
+      `How was your order? — #${order.id}`,
+      `Hi ${order.customerName}, we'd love your feedback on order #${order.id}: ${link}`,
+      { fromName: shop.displayName ?? shop.name },
+    );
+  }
+
+  private async sendEmail(
+    shopId: number,
+    order: NotifiableOrder,
+    subject: string,
+    bodyText: string,
+  ) {
     if (!order.customerEmail) return;
     const shop = await this.prisma.shop.findUnique({
       where: { id: shopId },
       select: { notifyEmail: true, name: true, displayName: true },
     });
     if (!shop?.notifyEmail) return;
-    await sendEmailReal(order.customerEmail, subject, bodyText, { fromName: shop.displayName ?? shop.name });
+    await sendEmailReal(order.customerEmail, subject, bodyText, {
+      fromName: shop.displayName ?? shop.name,
+    });
   }
 
   // Never throws — a WhatsApp send failure (network error, bad credentials,
   // Meta API error) must not block the email channel above or the order
   // operation this was called from, same discipline as AuditLogService.log.
-  private async sendWhatsApp(shopId: number, order: NotifiableOrder, bodyText: string) {
+  private async sendWhatsApp(
+    shopId: number,
+    order: NotifiableOrder,
+    bodyText: string,
+  ) {
     try {
       const shop = await this.prisma.shop.findUnique({
         where: { id: shopId },
@@ -100,12 +162,17 @@ export class OrderNotificationsService {
         return;
       }
 
-      const credentials = await this.whatsAppSettingsService.resolveCredentials(shopId);
+      const credentials =
+        await this.whatsAppSettingsService.resolveCredentials(shopId);
       if (!credentials) {
         sendWhatsAppStub(to, bodyText);
         return;
       }
-      await this.metaWhatsAppProvider.sendMessage({ to, body: bodyText, credentials });
+      await this.metaWhatsAppProvider.sendMessage({
+        to,
+        body: bodyText,
+        credentials,
+      });
     } catch (err) {
       console.error(
         `[whatsapp] order #${order.id}: notification failed —`,

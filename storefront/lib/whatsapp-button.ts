@@ -10,7 +10,8 @@ export function shouldShowWhatsAppButton(shop: Pick<Shop, "whatsappFloatingButto
 // Same wa.me URL construction as backend BioLinksService.resolveSocialUrl's
 // whatsapp case (digits-only country code + number) — kept independent
 // here since this runs client-side, not through that backend service.
-export function buildWhatsAppUrl(countryCode: string | null, number: string | null): string | null {
+export function buildWhatsAppUrl(countryCode: string | null, number: string | null, message?: string): string | null {
   const digits = `${countryCode ?? ""}${number ?? ""}`.replace(/[^0-9]/g, "");
-  return digits ? `https://wa.me/${digits}` : null;
+  if (!digits) return null;
+  return message ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}` : `https://wa.me/${digits}`;
 }

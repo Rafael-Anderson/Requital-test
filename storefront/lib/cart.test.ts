@@ -95,6 +95,28 @@ describe("removeItemFromState", () => {
   });
 });
 
+describe("item notes", () => {
+  it("carries a note through on a new line", () => {
+    const withNote = { ...item, note: "No card, please" };
+    const next = addItemToState(empty, withNote, 1, 5);
+    expect(next.items[0].note).toBe("No card, please");
+  });
+
+  it("re-adding the same line with a new note overwrites the old one", () => {
+    const withNote = addItemToState(empty, { ...item, note: "First note" }, 1, 5);
+    const next = addItemToState(withNote, { ...item, note: "Second note" }, 1, 5);
+    expect(next.items).toHaveLength(1);
+    expect(next.items[0].quantity).toBe(2);
+    expect(next.items[0].note).toBe("Second note");
+  });
+
+  it("re-adding the same line with no note keeps the existing one", () => {
+    const withNote = addItemToState(empty, { ...item, note: "Keep me" }, 1, 5);
+    const next = addItemToState(withNote, item, 1, 5);
+    expect(next.items[0].note).toBe("Keep me");
+  });
+});
+
 describe("variant lines", () => {
   const small = { ...item, variantId: 10, variantLabel: "Small" };
   const large = { ...item, variantId: 20, variantLabel: "Large" };

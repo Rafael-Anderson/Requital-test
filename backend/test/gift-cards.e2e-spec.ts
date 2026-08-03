@@ -63,7 +63,11 @@ describe('Gift Cards (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -143,7 +147,10 @@ describe('Gift Cards (e2e)', () => {
     return { shopSlug, adminToken, outletId, productId, giftCardProductId };
   }
 
-  function orderPayload(outletId: number, overrides: Record<string, unknown> = {}) {
+  function orderPayload(
+    outletId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     return {
       outletId,
       orderType: 'pickup',
@@ -158,21 +165,32 @@ describe('Gift Cards (e2e)', () => {
 
   describe('purchase path', () => {
     it('buying a gift-card product creates a real GiftCard with the chosen amount as both initial value and balance', async () => {
-      const { shopSlug, outletId, giftCardProductId } = await setupShop('gc-purchase');
+      const { shopSlug, outletId, giftCardProductId } =
+        await setupShop('gc-purchase');
       const email = `buyer-${runId}@test.com`;
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
         .send(
           orderPayload(outletId, {
             customerEmail: email,
-            items: [{ productId: giftCardProductId, quantity: 1, giftCardAmount: 200 }],
+            items: [
+              {
+                productId: giftCardProductId,
+                quantity: 1,
+                giftCardAmount: 200,
+              },
+            ],
           }),
         )
         .expect(201);
       const orderId = body<OrderCreateResponse>(res).order.id;
 
-      const shop = await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } });
-      const cards = await prisma.giftcard.findMany({ where: { shopId: shop.id, purchaseOrderId: orderId } });
+      const shop = await prisma.shop.findUniqueOrThrow({
+        where: { subdomain: shopSlug },
+      });
+      const cards = await prisma.giftcard.findMany({
+        where: { shopId: shop.id, purchaseOrderId: orderId },
+      });
       expect(cards).toHaveLength(1);
       expect(cards[0].initialValue.toString()).toBe('200');
       expect(cards[0].remainingBalance.toString()).toBe('200');
@@ -181,36 +199,79 @@ describe('Gift Cards (e2e)', () => {
     });
 
     it('quantity > 1 issues that many independent cards, each with its own code and full balance', async () => {
-      const { shopSlug, outletId, giftCardProductId } = await setupShop('gc-purchase-qty');
+      const { shopSlug, outletId, giftCardProductId } =
+        await setupShop('gc-purchase-qty');
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { items: [{ productId: giftCardProductId, quantity: 3, giftCardAmount: 100 }] }))
+        .send(
+          orderPayload(outletId, {
+            items: [
+              {
+                productId: giftCardProductId,
+                quantity: 3,
+                giftCardAmount: 100,
+              },
+            ],
+          }),
+        )
         .expect(201);
       const orderId = body<OrderCreateResponse>(res).order.id;
 
-      const shop = await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } });
-      const cards = await prisma.giftcard.findMany({ where: { shopId: shop.id, purchaseOrderId: orderId } });
+      const shop = await prisma.shop.findUniqueOrThrow({
+        where: { subdomain: shopSlug },
+      });
+      const cards = await prisma.giftcard.findMany({
+        where: { shopId: shop.id, purchaseOrderId: orderId },
+      });
       expect(cards).toHaveLength(3);
       expect(new Set(cards.map((c) => c.code)).size).toBe(3); // all distinct
-      expect(cards.every((c) => c.remainingBalance.toString() === '100')).toBe(true);
+      expect(cards.every((c) => c.remainingBalance.toString() === '100')).toBe(
+        true,
+      );
     });
 
     it('rejects an amount that is neither a configured denomination nor within a custom range', async () => {
-      const { shopSlug, outletId, giftCardProductId } = await setupShop('gc-purchase-bad-amount');
+      const { shopSlug, outletId, giftCardProductId } = await setupShop(
+        'gc-purchase-bad-amount',
+      );
       await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { items: [{ productId: giftCardProductId, quantity: 1, giftCardAmount: 137 }] }))
+        .send(
+          orderPayload(outletId, {
+            items: [
+              {
+                productId: giftCardProductId,
+                quantity: 1,
+                giftCardAmount: 137,
+              },
+            ],
+          }),
+        )
         .expect(400);
     });
 
     it('never decrements any stock row for a gift-card product', async () => {
-      const { shopSlug, outletId, giftCardProductId } = await setupShop('gc-purchase-no-stock');
+      const { shopSlug, outletId, giftCardProductId } = await setupShop(
+        'gc-purchase-no-stock',
+      );
       await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { items: [{ productId: giftCardProductId, quantity: 1, giftCardAmount: 100 }] }))
+        .send(
+          orderPayload(outletId, {
+            items: [
+              {
+                productId: giftCardProductId,
+                quantity: 1,
+                giftCardAmount: 100,
+              },
+            ],
+          }),
+        )
         .expect(201);
       const stockRow = await prisma.outletstock.findUnique({
-        where: { outletId_productId: { outletId, productId: giftCardProductId } },
+        where: {
+          outletId_productId: { outletId, productId: giftCardProductId },
+        },
       });
       expect(stockRow).toBeNull();
     });
@@ -255,29 +316,45 @@ describe('Gift Cards (e2e)', () => {
     }
 
     it('a code that fully covers the order draws down the exact amount, needs no other payment, and marks the order paid', async () => {
-      const { shopSlug, adminToken, outletId, productId } = await setupShop('gc-redeem-full');
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop('gc-redeem-full');
       const card = await issueCard(adminToken, 500); // product is 80 AED
 
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { giftCardCode: card.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            giftCardCode: card.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
       const order = body<OrderCreateResponse>(res).order;
       expect(order.giftCardId).not.toBeNull();
       expect(Number(order.giftCardAmount)).toBe(Number(order.total));
       expect(order.paymentStatus).toBe('paid');
 
-      const updatedCard = await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
-      expect(Number(updatedCard.remainingBalance)).toBe(500 - Number(order.total));
+      const updatedCard = await prisma.giftcard.findUniqueOrThrow({
+        where: { id: card.id },
+      });
+      expect(Number(updatedCard.remainingBalance)).toBe(
+        500 - Number(order.total),
+      );
     });
 
     it('a code with less balance than the order combines with the selected payment method for the remainder', async () => {
-      const { shopSlug, adminToken, outletId, productId } = await setupShop('gc-redeem-partial');
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop('gc-redeem-partial');
       const card = await issueCard(adminToken, 30); // product is 80 AED, gift card only covers part
 
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { giftCardCode: card.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            giftCardCode: card.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
       const order = body<OrderCreateResponse>(res).order;
       expect(Number(order.giftCardAmount)).toBe(30);
@@ -285,7 +362,9 @@ describe('Gift Cards (e2e)', () => {
       // Not fully covered — still needs the selected payment method for the rest.
       expect(order.paymentStatus).not.toBe('paid');
 
-      const updatedCard = await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
+      const updatedCard = await prisma.giftcard.findUniqueOrThrow({
+        where: { id: card.id },
+      });
       expect(Number(updatedCard.remainingBalance)).toBe(0);
       expect(updatedCard.status).toBe('redeemed');
     });
@@ -298,7 +377,10 @@ describe('Gift Cards (e2e)', () => {
         .post(`/public/${shopSlug}/gift-cards/validate`)
         .send({ code: card.code })
         .expect(201);
-      expect(body<ValidateGiftCardResponse>(ok)).toMatchObject({ valid: true, remainingBalance: 75 });
+      expect(body<ValidateGiftCardResponse>(ok)).toMatchObject({
+        valid: true,
+        remainingBalance: 75,
+      });
 
       await request(app.getHttpServer())
         .patch(`/gift-cards/${card.id}`)
@@ -314,13 +396,19 @@ describe('Gift Cards (e2e)', () => {
     });
 
     it('two concurrent orders racing to spend a balance smaller than either order never both succeed in overdrawing it', async () => {
-      const { shopSlug, adminToken, outletId, productId } = await setupShop('gc-redeem-race');
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop('gc-redeem-race');
       const card = await issueCard(adminToken, 80); // exactly one order's worth
 
       const attempt = () =>
         request(app.getHttpServer())
           .post(`/public/${shopSlug}/orders`)
-          .send(orderPayload(outletId, { giftCardCode: card.code, items: [{ productId, quantity: 1 }] }));
+          .send(
+            orderPayload(outletId, {
+              giftCardCode: card.code,
+              items: [{ productId, quantity: 1 }],
+            }),
+          );
 
       const [a, b] = await Promise.all([attempt(), attempt()]);
       const statuses = [a.status, b.status].sort();
@@ -329,7 +417,9 @@ describe('Gift Cards (e2e)', () => {
       // balance must never go negative.
       expect(statuses[0]).toBe(201);
 
-      const updatedCard = await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
+      const updatedCard = await prisma.giftcard.findUniqueOrThrow({
+        where: { id: card.id },
+      });
       expect(Number(updatedCard.remainingBalance)).toBeGreaterThanOrEqual(0);
       expect(Number(updatedCard.remainingBalance)).toBeLessThanOrEqual(80);
     });
@@ -337,7 +427,8 @@ describe('Gift Cards (e2e)', () => {
 
   describe('refund credits back to the gift card, not the payment provider', () => {
     it('a full refund on a fully-gift-card-paid order credits the whole amount back and never calls a provider', async () => {
-      const { shopSlug, adminToken, outletId, productId } = await setupShop('gc-refund-full');
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop('gc-refund-full');
       const issued = await request(app.getHttpServer())
         .post('/gift-cards')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -347,38 +438,59 @@ describe('Gift Cards (e2e)', () => {
 
       const orderRes = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { giftCardCode: card.code, items: [{ productId, quantity: 1 }] }))
+        .send(
+          orderPayload(outletId, {
+            giftCardCode: card.code,
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
         .expect(201);
       const order = body<OrderCreateResponse>(orderRes).order;
 
-      const balanceAfterPurchaseRedemption = await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
+      const balanceAfterPurchaseRedemption =
+        await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
 
       // Deliver then return it in full.
-      await prisma.order.update({ where: { id: order.id }, data: { status: 'delivered' } });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'delivered' },
+      });
       const orderDetail = await request(app.getHttpServer())
         .get(`/orders/${order.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      const orderItemId = (body<{ orderitem: { id: number }[] }>(orderDetail).orderitem)[0].id;
+      const orderItemId = body<{ orderitem: { id: number }[] }>(orderDetail)
+        .orderitem[0].id;
 
       const returnRes = await request(app.getHttpServer())
         .post(`/orders/${order.id}/returns`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ reason: 'changed_mind', items: [{ orderItemId, quantity: 1 }], restock: false })
+        .send({
+          reason: 'changed_mind',
+          items: [{ orderItemId, quantity: 1 }],
+          restock: false,
+        })
         .expect(201);
       const orderReturn = body<OrderReturnResponse>(returnRes);
       expect(orderReturn.refundMethod).toBe('manual'); // nothing charged to a provider
-      expect(Number(orderReturn.giftCardRefundAmount)).toBe(Number(orderReturn.refundAmount));
+      expect(Number(orderReturn.giftCardRefundAmount)).toBe(
+        Number(orderReturn.refundAmount),
+      );
 
-      const finalCard = await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
+      const finalCard = await prisma.giftcard.findUniqueOrThrow({
+        where: { id: card.id },
+      });
       expect(Number(finalCard.remainingBalance)).toBe(
-        Number(balanceAfterPurchaseRedemption.remainingBalance) + Number(orderReturn.giftCardRefundAmount),
+        Number(balanceAfterPurchaseRedemption.remainingBalance) +
+          Number(orderReturn.giftCardRefundAmount),
       );
       expect(finalCard.status).toBe('active'); // back above 0, auto-reactivated
     });
 
     it('does not double-credit on a second, separate partial return — cumulative credits stay within what was actually paid by the card', async () => {
-      const { shopSlug, adminToken, outletId, productId } = await setupShop('gc-refund-partial-twice');
+      const { shopSlug, adminToken, outletId, productId } = await setupShop(
+        'gc-refund-partial-twice',
+      );
       // Two units so there are two separate order items to return separately.
       const issued = await request(app.getHttpServer())
         .post('/gift-cards')
@@ -389,26 +501,44 @@ describe('Gift Cards (e2e)', () => {
 
       const orderRes = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
-        .send(orderPayload(outletId, { giftCardCode: card.code, items: [{ productId, quantity: 2 }] }))
+        .send(
+          orderPayload(outletId, {
+            giftCardCode: card.code,
+            items: [{ productId, quantity: 2 }],
+          }),
+        )
         .expect(201);
       const order = body<OrderCreateResponse>(orderRes).order;
 
-      await prisma.order.update({ where: { id: order.id }, data: { status: 'delivered' } });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'delivered' },
+      });
       const orderDetail = await request(app.getHttpServer())
         .get(`/orders/${order.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      const orderItemId = (body<{ orderitem: { id: number; quantity: number }[] }>(orderDetail).orderitem)[0].id;
+      const orderItemId = body<{
+        orderitem: { id: number; quantity: number }[];
+      }>(orderDetail).orderitem[0].id;
 
       const return1 = await request(app.getHttpServer())
         .post(`/orders/${order.id}/returns`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ reason: 'changed_mind', items: [{ orderItemId, quantity: 1 }], restock: false })
+        .send({
+          reason: 'changed_mind',
+          items: [{ orderItemId, quantity: 1 }],
+          restock: false,
+        })
         .expect(201);
       const return2 = await request(app.getHttpServer())
         .post(`/orders/${order.id}/returns`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ reason: 'other', items: [{ orderItemId, quantity: 1 }], restock: false })
+        .send({
+          reason: 'other',
+          items: [{ orderItemId, quantity: 1 }],
+          restock: false,
+        })
         .expect(201);
 
       const totalGiftCardRefunded =
@@ -417,7 +547,10 @@ describe('Gift Cards (e2e)', () => {
       // The whole order was paid via gift card — cumulative refund-to-card
       // across both returns must equal exactly what was originally charged
       // to it (order.giftCardAmount), never more.
-      expect(totalGiftCardRefunded).toBeCloseTo(Number(order.giftCardAmount), 5);
+      expect(totalGiftCardRefunded).toBeCloseTo(
+        Number(order.giftCardAmount),
+        5,
+      );
     });
   });
 
@@ -436,11 +569,18 @@ describe('Gift Cards (e2e)', () => {
         .post(`/public/${shopB.shopSlug}/gift-cards/validate`)
         .send({ code: card.code })
         .expect(201);
-      expect(body<ValidateGiftCardResponse>(validateAgainstB).valid).toBe(false);
+      expect(body<ValidateGiftCardResponse>(validateAgainstB).valid).toBe(
+        false,
+      );
 
       const orderAgainstB = await request(app.getHttpServer())
         .post(`/public/${shopB.shopSlug}/orders`)
-        .send(orderPayload(shopB.outletId, { giftCardCode: card.code, items: [{ productId: shopB.productId, quantity: 1 }] }));
+        .send(
+          orderPayload(shopB.outletId, {
+            giftCardCode: card.code,
+            items: [{ productId: shopB.productId, quantity: 1 }],
+          }),
+        );
       expect(orderAgainstB.status).toBe(400);
 
       // Shop B never sees shop A's card in its own admin list.
@@ -448,7 +588,9 @@ describe('Gift Cards (e2e)', () => {
         .get('/gift-cards')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      expect(body<GiftCardRow[]>(listB).some((c) => c.code === card.code)).toBe(false);
+      expect(body<GiftCardRow[]>(listB).some((c) => c.code === card.code)).toBe(
+        false,
+      );
 
       // Shop B cannot fetch/update shop A's card by id either.
       await request(app.getHttpServer())

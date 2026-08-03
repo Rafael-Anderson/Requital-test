@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useCheckoutForm } from "@/lib/useCheckoutForm";
+import { useCart } from "@/lib/cart";
 import CheckoutSinglePage from "@/components/checkout/CheckoutSinglePage";
 import CheckoutSteps from "@/components/checkout/CheckoutSteps";
+import AddonPrompt from "@/components/checkout/AddonPrompt";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 // Dispatches on theme.checkoutLayout — both presets share the exact same
@@ -11,6 +14,8 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 // are grouped and paged through. See useCheckoutForm.ts.
 export default function CheckoutPage() {
   const state = useCheckoutForm();
+  const { outletId: cartOutletId } = useCart();
+  const [addonDone, setAddonDone] = useState(false);
 
   if (state.items.length === 0) {
     return (
@@ -23,6 +28,23 @@ export default function CheckoutPage() {
     return (
       <StorefrontPageShell variant="medium">
         <p className="text-red-600">Neither delivery nor pickup is currently available for this shop.</p>
+      </StorefrontPageShell>
+    );
+  }
+
+  // contact_to_order shops never really "check out" via cart — the popup's
+  // upsell is meaningless there (see ProductDetailClient's cartMode gate).
+  const addonPromptEligible = !(state.shop?.disableStoreCart && state.shop.cartDisabledMode === "contact_to_order");
+
+  if (addonPromptEligible && !addonDone) {
+    return (
+      <StorefrontPageShell variant="medium">
+        <AddonPrompt
+          shopSlug={state.shopSlug}
+          outletId={cartOutletId}
+          excludeProductIds={state.items.map((i) => i.productId)}
+          onDone={() => setAddonDone(true)}
+        />
       </StorefrontPageShell>
     );
   }

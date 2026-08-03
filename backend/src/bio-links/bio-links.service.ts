@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -31,9 +35,13 @@ interface TargetFields {
 }
 
 const bioLinkInclude = {
-  product: { select: { id: true, name: true, slug: true, thumbnail: true, status: true } },
+  product: {
+    select: { id: true, name: true, slug: true, thumbnail: true, status: true },
+  },
   category: { select: { id: true, name: true, slug: true, image: true } },
-  collection: { select: { id: true, title: true, slug: true, image: true, isActive: true } },
+  collection: {
+    select: { id: true, title: true, slug: true, image: true, isActive: true },
+  },
 } satisfies Prisma.biolinkInclude;
 
 @Injectable()
@@ -57,9 +65,12 @@ export class BioLinksService {
   async create(ctx: TenantContext, dto: CreateBioLinkDto) {
     this.assertFieldsMatchType(dto.type, dto);
     this.assertLabelPresent(dto.type, dto.label);
-    if (dto.productId) await this.assertProductBelongsToShop(ctx, dto.productId);
-    if (dto.categoryId) await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
-    if (dto.collectionId) await this.assertCollectionBelongsToShop(ctx, dto.collectionId);
+    if (dto.productId)
+      await this.assertProductBelongsToShop(ctx, dto.productId);
+    if (dto.categoryId)
+      await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
+    if (dto.collectionId)
+      await this.assertCollectionBelongsToShop(ctx, dto.collectionId);
 
     const { _max } = await this.prisma.biolink.aggregate({
       where: { shopId: ctx.shopId },
@@ -118,10 +129,20 @@ export class BioLinksService {
           }
         : {
             url: dto.url !== undefined ? dto.url : existing.url,
-            productId: dto.productId !== undefined ? dto.productId : existing.productId,
-            categoryId: dto.categoryId !== undefined ? dto.categoryId : existing.categoryId,
-            collectionId: dto.collectionId !== undefined ? dto.collectionId : existing.collectionId,
-            socialPlatform: dto.socialPlatform !== undefined ? dto.socialPlatform : existing.socialPlatform,
+            productId:
+              dto.productId !== undefined ? dto.productId : existing.productId,
+            categoryId:
+              dto.categoryId !== undefined
+                ? dto.categoryId
+                : existing.categoryId,
+            collectionId:
+              dto.collectionId !== undefined
+                ? dto.collectionId
+                : existing.collectionId,
+            socialPlatform:
+              dto.socialPlatform !== undefined
+                ? dto.socialPlatform
+                : existing.socialPlatform,
           };
       this.assertFieldsMatchType(effectiveType, merged);
       targetData = this.clearedTargetFields(effectiveType, merged);
@@ -130,9 +151,12 @@ export class BioLinksService {
     const effectiveLabel = dto.label !== undefined ? dto.label : existing.label;
     this.assertLabelPresent(effectiveType, effectiveLabel);
 
-    if (targetData.productId) await this.assertProductBelongsToShop(ctx, targetData.productId);
-    if (targetData.categoryId) await this.assertCategoryBelongsToShop(ctx, targetData.categoryId);
-    if (targetData.collectionId) await this.assertCollectionBelongsToShop(ctx, targetData.collectionId);
+    if (targetData.productId)
+      await this.assertProductBelongsToShop(ctx, targetData.productId);
+    if (targetData.categoryId)
+      await this.assertCategoryBelongsToShop(ctx, targetData.categoryId);
+    if (targetData.collectionId)
+      await this.assertCollectionBelongsToShop(ctx, targetData.collectionId);
 
     const updated = await this.prisma.biolink.update({
       where: { id },
@@ -170,8 +194,13 @@ export class BioLinksService {
     });
     const existingIds = new Set(existing.map((l) => l.id));
     const requestedIds = new Set(dto.ids);
-    if (dto.ids.length !== existingIds.size || [...existingIds].some((id) => !requestedIds.has(id))) {
-      throw new BadRequestException('ids must be exactly the full set of this shop\'s bio link ids');
+    if (
+      dto.ids.length !== existingIds.size ||
+      [...existingIds].some((id) => !requestedIds.has(id))
+    ) {
+      throw new BadRequestException(
+        "ids must be exactly the full set of this shop's bio link ids",
+      );
     }
 
     await this.prisma.$transaction(
@@ -185,7 +214,9 @@ export class BioLinksService {
   // ---------- Admin: page-level config (logo/background/description/meta) ----------
 
   async getPageConfig(ctx: TenantContext) {
-    const config = await this.prisma.biolinkpageconfig.findUnique({ where: { shopId: ctx.shopId } });
+    const config = await this.prisma.biolinkpageconfig.findUnique({
+      where: { shopId: ctx.shopId },
+    });
     // No row yet (never customized) is a valid, common state — same
     // "null-shape fallback" convention as ThemeService.findOne/SeoService.findOne,
     // not an error.
@@ -217,7 +248,9 @@ export class BioLinksService {
   // (shop.logoUrl, shop.bannerUrl, shop.metaTitle, ...) rather than
   // duplicating that resolution in a second place.
   async getPublicPageConfig(shopId: number) {
-    const config = await this.prisma.biolinkpageconfig.findUnique({ where: { shopId } });
+    const config = await this.prisma.biolinkpageconfig.findUnique({
+      where: { shopId },
+    });
     return {
       logoUrl: config?.logoUrl ?? null,
       backgroundUrl: config?.backgroundUrl ?? null,
@@ -231,7 +264,12 @@ export class BioLinksService {
   // product/category that's been deleted or made unavailable is silently
   // excluded rather than surfaced broken (see the task's own default: hide
   // from the public response, but the row stays active/visible in admin).
-  async listPublic(shop: { id: number; socialLinks: unknown; whatsappCountryCode: string | null; whatsappNumber: string | null }) {
+  async listPublic(shop: {
+    id: number;
+    socialLinks: unknown;
+    whatsappCountryCode: string | null;
+    whatsappNumber: string | null;
+  }) {
     const links = await this.prisma.biolink.findMany({
       where: { shopId: shop.id, active: true },
       include: bioLinkInclude,
@@ -255,7 +293,11 @@ export class BioLinksService {
           id: link.id,
           type: link.type,
           label: link.label ?? link.product.name,
-          product: { name: link.product.name, slug: link.product.slug, thumbnail: link.product.thumbnail },
+          product: {
+            name: link.product.name,
+            slug: link.product.slug,
+            thumbnail: link.product.thumbnail,
+          },
         });
       } else if (link.type === 'CATEGORY') {
         if (!link.category) continue;
@@ -263,7 +305,11 @@ export class BioLinksService {
           id: link.id,
           type: link.type,
           label: link.label ?? link.category.name,
-          category: { name: link.category.name, slug: link.category.slug, image: link.category.image },
+          category: {
+            name: link.category.name,
+            slug: link.category.slug,
+            image: link.category.image,
+          },
         });
       } else if (link.type === 'COLLECTION') {
         if (!link.collection || !link.collection.isActive) continue;
@@ -271,14 +317,22 @@ export class BioLinksService {
           id: link.id,
           type: link.type,
           label: link.label ?? link.collection.title,
-          collection: { title: link.collection.title, slug: link.collection.slug, image: link.collection.image },
+          collection: {
+            title: link.collection.title,
+            slug: link.collection.slug,
+            image: link.collection.image,
+          },
         });
       } else if (link.type === 'SOCIAL_ICON') {
         if (!this.resolveSocialUrl(shop, link.socialPlatform)) continue;
         result.push({
           id: link.id,
           type: link.type,
-          label: this.resolveDisplayLabel(link.type, link.label, link.socialPlatform),
+          label: this.resolveDisplayLabel(
+            link.type,
+            link.label,
+            link.socialPlatform,
+          ),
           socialPlatform: link.socialPlatform,
         });
       } else {
@@ -342,22 +396,35 @@ export class BioLinksService {
   // already configured on Online Presence rather than storing/asking for the
   // same URL twice on the bio link itself.
   private resolveSocialUrl(
-    shop: { socialLinks: unknown; whatsappCountryCode: string | null; whatsappNumber: string | null },
+    shop: {
+      socialLinks: unknown;
+      whatsappCountryCode: string | null;
+      whatsappNumber: string | null;
+    },
     platform: string | null,
   ): string | null {
     if (!platform) return null;
     if (platform === 'whatsapp') {
       if (!shop.whatsappNumber) return null;
-      const digits = `${shop.whatsappCountryCode ?? ''}${shop.whatsappNumber}`.replace(/[^0-9]/g, '');
+      const digits =
+        `${shop.whatsappCountryCode ?? ''}${shop.whatsappNumber}`.replace(
+          /[^0-9]/g,
+          '',
+        );
       return digits ? `https://wa.me/${digits}` : null;
     }
     const links = (shop.socialLinks as Record<string, string> | null) ?? {};
     return links[platform] ?? null;
   }
 
-  private resolveDisplayLabel(type: string, label: string | null, socialPlatform: string | null): string {
+  private resolveDisplayLabel(
+    type: string,
+    label: string | null,
+    socialPlatform: string | null,
+  ): string {
     if (label?.trim()) return label;
-    if (type === 'SOCIAL_ICON' && socialPlatform) return PLATFORM_LABELS[socialPlatform] ?? socialPlatform;
+    if (type === 'SOCIAL_ICON' && socialPlatform)
+      return PLATFORM_LABELS[socialPlatform] ?? socialPlatform;
     return '';
   }
 
@@ -367,7 +434,11 @@ export class BioLinksService {
     return {
       id: link.id,
       type: link.type,
-      label: this.resolveDisplayLabel(link.type, link.label, link.socialPlatform),
+      label: this.resolveDisplayLabel(
+        link.type,
+        link.label,
+        link.socialPlatform,
+      ),
       url: link.url,
       productId: link.productId,
       productName: link.product?.name ?? null,
@@ -406,7 +477,10 @@ export class BioLinksService {
     }
   }
 
-  private assertLabelPresent(type: BioLinkType, label: string | null | undefined) {
+  private assertLabelPresent(
+    type: BioLinkType,
+    label: string | null | undefined,
+  ) {
     if (type !== 'SOCIAL_ICON' && !label?.trim()) {
       throw new BadRequestException(`label is required for type '${type}'`);
     }
@@ -420,35 +494,54 @@ export class BioLinksService {
       url: type === 'EXTERNAL_URL' ? (fields.url ?? null) : null,
       productId: type === 'PRODUCT' ? (fields.productId ?? null) : null,
       categoryId: type === 'CATEGORY' ? (fields.categoryId ?? null) : null,
-      collectionId: type === 'COLLECTION' ? (fields.collectionId ?? null) : null,
-      socialPlatform: type === 'SOCIAL_ICON' ? (fields.socialPlatform ?? null) : null,
+      collectionId:
+        type === 'COLLECTION' ? (fields.collectionId ?? null) : null,
+      socialPlatform:
+        type === 'SOCIAL_ICON' ? (fields.socialPlatform ?? null) : null,
     };
   }
 
   private async assertBelongsToShop(ctx: TenantContext, id: number) {
-    const link = await this.prisma.biolink.findFirst({ where: { id, shopId: ctx.shopId } });
+    const link = await this.prisma.biolink.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!link) {
       throw new NotFoundException(`Bio link ${id} not found`);
     }
     return link;
   }
 
-  private async assertProductBelongsToShop(ctx: TenantContext, productId: number) {
-    const product = await this.prisma.product.findFirst({ where: { id: productId, shopId: ctx.shopId } });
+  private async assertProductBelongsToShop(
+    ctx: TenantContext,
+    productId: number,
+  ) {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, shopId: ctx.shopId },
+    });
     if (!product) {
       throw new NotFoundException(`Product ${productId} not found`);
     }
   }
 
-  private async assertCategoryBelongsToShop(ctx: TenantContext, categoryId: number) {
-    const category = await this.prisma.category.findFirst({ where: { id: categoryId, shopId: ctx.shopId } });
+  private async assertCategoryBelongsToShop(
+    ctx: TenantContext,
+    categoryId: number,
+  ) {
+    const category = await this.prisma.category.findFirst({
+      where: { id: categoryId, shopId: ctx.shopId },
+    });
     if (!category) {
       throw new NotFoundException(`Category ${categoryId} not found`);
     }
   }
 
-  private async assertCollectionBelongsToShop(ctx: TenantContext, collectionId: number) {
-    const collection = await this.prisma.collection.findFirst({ where: { id: collectionId, shopId: ctx.shopId } });
+  private async assertCollectionBelongsToShop(
+    ctx: TenantContext,
+    collectionId: number,
+  ) {
+    const collection = await this.prisma.collection.findFirst({
+      where: { id: collectionId, shopId: ctx.shopId },
+    });
     if (!collection) {
       throw new NotFoundException(`Collection ${collectionId} not found`);
     }

@@ -51,7 +51,8 @@ export class CaptureAbandonedCartDto {
   customerName: string;
 
   @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
-    message: 'customerPhone must contain only digits, spaces, hyphens, and an optional leading +',
+    message:
+      'customerPhone must contain only digits, spaces, hyphens, and an optional leading +',
   })
   customerPhone: string;
 

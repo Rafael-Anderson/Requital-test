@@ -45,6 +45,9 @@ export interface OrderItem {
   variantLabel?: string | null;
   quantity: number;
   priceAtPurchase: string;
+  // Optional note the customer typed on the storefront PDP at add-to-cart
+  // time — staff-facing display only, distinct from any merchant note.
+  note?: string | null;
   // Only populated on the single-order detail fetch (GET /orders/:id).
   product?: { thumbnail: string } | null;
 }
@@ -91,6 +94,29 @@ export interface Order {
   // Only populated on the single-order detail fetch — staff-only, never
   // present on anything the storefront/public tracking page reads.
   ordernote?: OrderNote[];
+  // Only populated on the single-order detail fetch — null until the
+  // customer actually submits the survey (or the order never reached
+  // 'delivered' with the toggle on, in which case no row exists at all).
+  // Read-only here — responses are customer-submitted only, see
+  // PublicSurveyController.
+  surveyresponse?: SurveyResponse | null;
+}
+
+export interface SurveyResponse {
+  id: number;
+  rating: number | null;
+  comment: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+}
+
+// One entry per real status transition (plus a synthesized "pending" entry
+// for order creation, which is never itself a logged transition) — backs
+// the order detail modal's timeline. See backend OrdersService.getHistory.
+export interface OrderHistoryEntry {
+  status: OrderStatus | null;
+  timestamp: string;
+  actorName: string | null;
 }
 
 export interface OrderReturnItem {
@@ -352,6 +378,20 @@ export interface ProductImage {
   order: number;
 }
 
+export interface ProductAttribute {
+  id: number;
+  name: string;
+  value: string;
+  order: number;
+}
+
+export interface ProductFaq {
+  id: number;
+  question: string;
+  answer: string;
+  order: number;
+}
+
 export interface ProductOptionValue {
   id: number;
   value: string;
@@ -432,6 +472,7 @@ export interface ProductInput {
   compareAtPrice?: number;
   barcode?: string;
   chargeTax?: boolean;
+  isCheckoutAddon?: boolean;
   continueSellingOutOfStock?: boolean;
   vendor?: string;
   productType?: string;
@@ -447,6 +488,12 @@ export interface ProductInput {
   // becomes the canonical thumbnail server-side. Omitted leaves the
   // existing gallery/thumbnail untouched on update.
   images?: { url: string; order?: number }[];
+  // Informational, non-purchasable attributes (e.g. Material: Cotton) —
+  // distinct from options/variants. Replaces the full list when provided,
+  // same convention as images. See ProductAttribute.
+  attributes?: { name: string; value: string; order?: number }[];
+  // Per-product FAQ list. Same "replaces the full set" convention. See ProductFaq.
+  faqs?: { question: string; answer: string; order?: number }[];
   // Storefront SEO — all optional, sensible fallbacks computed server-side
   // (see backend PublicService) when left unset. slug is auto-generated
   // from name on create if omitted; editing it after publish is a deliberate
@@ -487,6 +534,7 @@ export interface Product {
   trackInventory: boolean;
   continueSellingOutOfStock: boolean;
   chargeTax: boolean;
+  isCheckoutAddon: boolean;
   vendor: string | null;
   productType: string | null;
   physicalProduct: boolean;
@@ -509,6 +557,8 @@ export interface Product {
   totalSold: number;
   thumbnail: string;
   images: ProductImage[];
+  attributes: ProductAttribute[];
+  faqs: ProductFaq[];
   hasVariants: boolean;
   options: ProductOption[];
   variants: ProductVariant[];
@@ -620,6 +670,62 @@ export interface AuthUser {
   shopName?: string;
 }
 
+// Fixed vocabulary — mirrors backend/src/common/permissions.ts exactly.
+// Kept as a plain union (not admin-extensible) so every value here is
+// guaranteed to correspond to a real enforcement point.
+export const ALL_PERMISSIONS = [
+  "orders.view",
+  "orders.manage",
+  "dashboard.view",
+  "products.view",
+  "products.manage_stock",
+  "ingredients.view",
+  "search.use",
+  "outlets.view_own",
+  "delivery_zones.view",
+  "payments.generate_link",
+] as const;
+export type Permission = (typeof ALL_PERMISSIONS)[number];
+
+export const PERMISSION_LABELS: Record<Permission, string> = {
+  "orders.view": "View orders",
+  "orders.manage": "Manage orders (create, update status, cancel, notes)",
+  "dashboard.view": "View dashboard",
+  "products.view": "View product catalog",
+  "products.manage_stock": "Manage stock (adjust, transfer, thresholds)",
+  "ingredients.view": "View ingredients",
+  "search.use": "Use search",
+  "outlets.view_own": "View own outlet details",
+  "delivery_zones.view": "View delivery zones",
+  "payments.generate_link": "Generate payment links",
+};
+
+// A named, admin-defined bundle of permissions that can be assigned to a
+// staff member at a specific outlet — layered on top of (never replacing)
+// the shop-wide role above. See BranchRoleAssignment.
+export interface BranchRole {
+  id: number;
+  shopId: number;
+  name: string;
+  permissions: Permission[];
+  createdAt: string;
+}
+
+// One row per (user, outlet): "at this outlet, this user's effective
+// permissions come from this branch role instead of their shop-wide role."
+// Restrict-only — can never grant more than the user's shop-wide role
+// already permits (enforced server-side by intersection, not by this
+// shape or the UI).
+export interface BranchRoleAssignment {
+  id: number;
+  userId: number;
+  outletId: number;
+  branchRoleId: number;
+  user: { id: number; name: string; email: string; role: UserRole };
+  outlet: { id: number; name: string };
+  branchrole: { id: number; name: string; permissions: Permission[] };
+}
+
 export interface Outlet {
   id: number;
   shopId: number;
@@ -702,14 +808,16 @@ export interface Shop {
   whatsappFloatingButtonEnabled: boolean;
   birthdayDiscountEnabled: boolean;
 
-  // Store Configuration — placeholder preferences (no feature behind them yet)
+  // Store Configuration — functional
   productVariantsEnabled: boolean;
   productAttributesEnabled: boolean;
   productFaqsEnabled: boolean;
   customerSurveyEnabled: boolean;
-  dynamicThemeBuilderEnabled: boolean;
   disableStoreCart: boolean;
-  disableGoogleMaps: boolean;
+  cartDisabledMode: "buy_now" | "contact_to_order";
+
+  // Store Configuration — placeholder preference (no feature behind it yet)
+  dynamicThemeBuilderEnabled: boolean;
 
   // Online Presence — platform -> URL, only toggled-on platforms have a key.
   // No storefront exists yet to render these into.
@@ -1463,20 +1571,35 @@ export interface StockMovement {
   createdAt: string;
 }
 
-// Deliberately a much lighter shape than Product — no price/sku-for-sale/
+// Deliberately a much lighter shape than Product — no sku-for-sale/
 // variants/SEO/publishing fields exist on this model at all (see backend
-// schema.prisma's comment on `ingredient`).
+// schema.prisma's comment on `ingredient`). image/description/costPerUnit/
+// supplier/category bring it closer to Product's own level of detail
+// without copying fields that genuinely don't apply (no price, no SEO).
 export interface Ingredient {
   id: number;
   name: string;
   unit: string;
   trackInventory: boolean;
+  image: string | null;
+  description: string | null;
+  costPerUnit: string | null;
+  supplier: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
   createdAt: string;
   // Only populated when the request specified an outletId (list/detail
   // fetch scoped to one outlet) — null otherwise, same convention as
   // Product's own per-outlet stock fields.
   stockQuantity: number | null;
   lowStockThreshold: number | null;
+}
+
+// Flat — no parent/tree, unlike Category (see backend
+// ingredientcategory's schema comment for why).
+export interface IngredientCategory {
+  id: number;
+  name: string;
 }
 
 export interface AuditLogEntry {

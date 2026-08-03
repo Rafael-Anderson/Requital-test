@@ -17,6 +17,10 @@ export interface Shop {
   whatsappCountryCode: string | null;
   whatsappNumber: string | null;
   whatsappFloatingButtonEnabled: boolean;
+  productAttributesEnabled: boolean;
+  productFaqsEnabled: boolean;
+  disableStoreCart: boolean;
+  cartDisabledMode: "buy_now" | "contact_to_order";
   socialLinks: Record<string, string> | null;
   productDisplayOrientation: "grid" | "list";
   productImageZoomEnabled: boolean;
@@ -185,6 +189,20 @@ export interface ProductImage {
   order: number;
 }
 
+export interface ProductAttribute {
+  id: number;
+  name: string;
+  value: string;
+  order: number;
+}
+
+export interface ProductFaq {
+  id: number;
+  question: string;
+  answer: string;
+  order: number;
+}
+
 export interface ProductOptionValue {
   id: number;
   value: string;
@@ -231,6 +249,8 @@ export interface Product {
   categories: { id: number; name: string }[];
   stockQuantity: number | null; // null = unlimited/unknown (no outlet context or not tracked)
   images: ProductImage[];
+  attributes: ProductAttribute[];
+  faqs: ProductFaq[];
   hasVariants: boolean;
   options: ProductOption[];
   variants: ProductVariant[];
@@ -245,6 +265,9 @@ export interface Product {
   giftCardDenominations: number[] | null;
   giftCardCustomAmountMin: string | null;
   giftCardCustomAmountMax: string | null;
+  // Offered in the checkout add-ons popup for carts that don't already
+  // contain this product.
+  isCheckoutAddon: boolean;
 }
 
 export interface Outlet {
@@ -312,7 +335,7 @@ export interface CreateOrderPayload {
   // discountCode — applies up to min(remainingBalance, order total),
   // combines with whichever paymentMethod covers any remainder.
   giftCardCode?: string;
-  items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number }[];
+  items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number; note?: string }[];
 }
 
 export interface OrderResult {
@@ -359,6 +382,13 @@ export interface OrderLookupResult {
   // in. Drives the light "sign in to see all your orders" prompt on the
   // tracking page for a guest visitor holding the link.
   hasAccount: boolean;
+}
+
+export interface SurveyLookupResult {
+  shopName: string;
+  rating: number | null;
+  comment: string | null;
+  respondedAt: string | null;
 }
 
 // Mirrors backend/src/bio-links/bio-link-constants.ts by hand.

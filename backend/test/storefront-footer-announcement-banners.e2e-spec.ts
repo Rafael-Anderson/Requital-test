@@ -25,7 +25,13 @@ describe('Footer/announcement/banners (e2e)', () => {
       imports: [AppModule],
     }).compile();
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
     prisma = app.get(PrismaService);
   });
@@ -73,7 +79,9 @@ describe('Footer/announcement/banners (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       const afterRows = body<{ type: string; content: string | null }[]>(after);
-      expect(afterRows.find((r) => r.type === 'TERMS')?.content).toBe('<p>Our terms.</p>');
+      expect(afterRows.find((r) => r.type === 'TERMS')?.content).toBe(
+        '<p>Our terms.</p>',
+      );
       expect(afterRows.find((r) => r.type === 'PRIVACY')?.content).toBeNull();
     });
 
@@ -89,7 +97,9 @@ describe('Footer/announcement/banners (e2e)', () => {
     it('public GET 404s for a type with no content, 200s once written', async () => {
       const { adminToken, slug } = await signup('policy-public');
 
-      await request(app.getHttpServer()).get(`/public/${slug}/policy-pages/PRIVACY`).expect(404);
+      await request(app.getHttpServer())
+        .get(`/public/${slug}/policy-pages/PRIVACY`)
+        .expect(404);
 
       await request(app.getHttpServer())
         .patch('/shop/policy-pages/PRIVACY')
@@ -97,8 +107,12 @@ describe('Footer/announcement/banners (e2e)', () => {
         .send({ content: '<p>We respect your privacy.</p>' })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get(`/public/${slug}/policy-pages/PRIVACY`).expect(200);
-      expect(body<{ content: string }>(res).content).toBe('<p>We respect your privacy.</p>');
+      const res = await request(app.getHttpServer())
+        .get(`/public/${slug}/policy-pages/PRIVACY`)
+        .expect(200);
+      expect(body<{ content: string }>(res).content).toBe(
+        '<p>We respect your privacy.</p>',
+      );
     });
 
     it('tenant isolation: shop A writing a policy page never appears under shop B, even for the same type', async () => {
@@ -112,22 +126,30 @@ describe('Footer/announcement/banners (e2e)', () => {
         .expect(200);
 
       // Shop B never wrote a REFUND policy — must 404, not see shop A's content.
-      await request(app.getHttpServer()).get(`/public/${shopB.slug}/policy-pages/REFUND`).expect(404);
+      await request(app.getHttpServer())
+        .get(`/public/${shopB.slug}/policy-pages/REFUND`)
+        .expect(404);
 
       // Shop A's admin list must not somehow be affected by shop B's (empty) state either.
       const listA = await request(app.getHttpServer())
         .get('/shop/policy-pages')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      expect(body<{ type: string; content: string | null }[]>(listA).find((r) => r.type === 'REFUND')?.content).toBe(
-        "<p>Shop A's refund policy.</p>",
-      );
+      expect(
+        body<{ type: string; content: string | null }[]>(listA).find(
+          (r) => r.type === 'REFUND',
+        )?.content,
+      ).toBe("<p>Shop A's refund policy.</p>");
 
       const listB = await request(app.getHttpServer())
         .get('/shop/policy-pages')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      expect(body<{ type: string; content: string | null }[]>(listB).find((r) => r.type === 'REFUND')?.content).toBeNull();
+      expect(
+        body<{ type: string; content: string | null }[]>(listB).find(
+          (r) => r.type === 'REFUND',
+        )?.content,
+      ).toBeNull();
     });
   });
 
@@ -138,26 +160,48 @@ describe('Footer/announcement/banners (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ images: [{ url: '/uploads/theme/a.jpg' }, { url: '/uploads/theme/b.jpg' }] })
+        .send({
+          images: [
+            { url: '/uploads/theme/a.jpg' },
+            { url: '/uploads/theme/b.jpg' },
+          ],
+        })
         .expect(200);
 
-      const afterAdd = await request(app.getHttpServer()).get('/theme').set('Authorization', `Bearer ${adminToken}`).expect(200);
-      const imagesAfterAdd = body<{ images: { url: string; order: number }[] }>(afterAdd).images;
-      expect(imagesAfterAdd.map((i) => i.url)).toEqual(['/uploads/theme/a.jpg', '/uploads/theme/b.jpg']);
+      const afterAdd = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const imagesAfterAdd = body<{ images: { url: string; order: number }[] }>(
+        afterAdd,
+      ).images;
+      expect(imagesAfterAdd.map((i) => i.url)).toEqual([
+        '/uploads/theme/a.jpg',
+        '/uploads/theme/b.jpg',
+      ]);
       expect(imagesAfterAdd.map((i) => i.order)).toEqual([0, 1]);
 
       // Reorder (swap) — full replace, not a patch/move operation.
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ images: [{ url: '/uploads/theme/b.jpg' }, { url: '/uploads/theme/a.jpg' }] })
+        .send({
+          images: [
+            { url: '/uploads/theme/b.jpg' },
+            { url: '/uploads/theme/a.jpg' },
+          ],
+        })
         .expect(200);
 
-      const afterReorder = await request(app.getHttpServer()).get('/theme').set('Authorization', `Bearer ${adminToken}`).expect(200);
-      expect(body<{ images: { url: string }[] }>(afterReorder).images.map((i) => i.url)).toEqual([
-        '/uploads/theme/b.jpg',
-        '/uploads/theme/a.jpg',
-      ]);
+      const afterReorder = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(
+        body<{ images: { url: string }[] }>(afterReorder).images.map(
+          (i) => i.url,
+        ),
+      ).toEqual(['/uploads/theme/b.jpg', '/uploads/theme/a.jpg']);
 
       // Remove one.
       await request(app.getHttpServer())
@@ -166,8 +210,13 @@ describe('Footer/announcement/banners (e2e)', () => {
         .send({ images: [{ url: '/uploads/theme/b.jpg' }] })
         .expect(200);
 
-      const afterRemove = await request(app.getHttpServer()).get('/theme').set('Authorization', `Bearer ${adminToken}`).expect(200);
-      expect(body<{ images: { url: string }[] }>(afterRemove).images).toHaveLength(1);
+      const afterRemove = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(
+        body<{ images: { url: string }[] }>(afterRemove).images,
+      ).toHaveLength(1);
     });
 
     it('a slide can carry its own optional link', async () => {
@@ -175,11 +224,20 @@ describe('Footer/announcement/banners (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/theme')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ images: [{ url: '/uploads/theme/promo.jpg', linkUrl: '/collections/sale' }] })
+        .send({
+          images: [
+            { url: '/uploads/theme/promo.jpg', linkUrl: '/collections/sale' },
+          ],
+        })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get('/theme').set('Authorization', `Bearer ${adminToken}`).expect(200);
-      expect(body<{ images: { linkUrl: string | null }[] }>(res).images[0].linkUrl).toBe('/collections/sale');
+      const res = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(
+        body<{ images: { linkUrl: string | null }[] }>(res).images[0].linkUrl,
+      ).toBe('/collections/sale');
     });
 
     it('tenant isolation: shop A saving banners never appears in shop B', async () => {
@@ -192,11 +250,16 @@ describe('Footer/announcement/banners (e2e)', () => {
         .send({ images: [{ url: '/uploads/theme/shopA-only.jpg' }] })
         .expect(200);
 
-      const resB = await request(app.getHttpServer()).get('/theme').set('Authorization', `Bearer ${shopB.adminToken}`).expect(200);
+      const resB = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${shopB.adminToken}`)
+        .expect(200);
       expect(body<{ images: unknown[] }>(resB).images).toEqual([]);
 
       // And the public-facing shape agrees.
-      const publicB = await request(app.getHttpServer()).get(`/public/${shopB.slug}`).expect(200);
+      const publicB = await request(app.getHttpServer())
+        .get(`/public/${shopB.slug}`)
+        .expect(200);
       expect(body<{ banners: unknown[] }>(publicB).banners).toEqual([]);
     });
   });
@@ -213,7 +276,10 @@ describe('Footer/announcement/banners (e2e)', () => {
           announcementBarEnabled: true,
           announcementBarScrolling: true,
           notificationText: ['Free delivery over 100 AED'],
-          images: [{ url: '/uploads/theme/hero1.jpg' }, { url: '/uploads/theme/hero2.jpg' }],
+          images: [
+            { url: '/uploads/theme/hero1.jpg' },
+            { url: '/uploads/theme/hero2.jpg' },
+          ],
         })
         .expect(200);
 
@@ -223,7 +289,9 @@ describe('Footer/announcement/banners (e2e)', () => {
         .send({ content: '<p>We ship across the UAE.</p>' })
         .expect(200);
 
-      const res = await request(app.getHttpServer()).get(`/public/${slug}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${slug}`)
+        .expect(200);
       const shop = body<{
         footerDescription: string | null;
         announcementBarEnabled: boolean;
@@ -235,10 +303,15 @@ describe('Footer/announcement/banners (e2e)', () => {
         trademarkFormat: string;
       }>(res);
 
-      expect(shop.footerDescription).toBe('Same-day flower delivery across Dubai.');
+      expect(shop.footerDescription).toBe(
+        'Same-day flower delivery across Dubai.',
+      );
       expect(shop.announcementBarEnabled).toBe(true);
       expect(shop.announcementBarScrolling).toBe(true);
-      expect(shop.banners.map((b) => b.url)).toEqual(['/uploads/theme/hero1.jpg', '/uploads/theme/hero2.jpg']);
+      expect(shop.banners.map((b) => b.url)).toEqual([
+        '/uploads/theme/hero1.jpg',
+        '/uploads/theme/hero2.jpg',
+      ]);
       expect(shop.policyPageTypes).toEqual(['SHIPPING']);
       expect(shop.trademarkFormat).toBe('brand');
     });

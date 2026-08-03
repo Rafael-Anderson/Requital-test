@@ -1,4 +1,12 @@
-import { IsDateString, IsIn, IsNumber, IsOptional, IsString, Min, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { AFFILIATE_CODE_STATUSES, COMMISSION_TYPES } from '../constants';
 
 export class UpdateAffiliateCodeDto {

@@ -7,6 +7,7 @@ import {
   duplicateProduct,
   getShop,
   listCategories,
+  listIngredientCategories,
   listIngredients,
   listOutlets,
   resolveImageUrl,
@@ -19,6 +20,7 @@ import {
   WEIGHT_UNITS,
   type Category,
   type Ingredient,
+  type IngredientCategory,
   type Product,
   type StockByOutlet,
   type WeightUnit,
@@ -33,6 +35,8 @@ import OutletQuantityTable from "@/components/ui/OutletQuantityTable";
 import CategoryCheckboxTree from "@/components/CategoryCheckboxTree";
 import ProductMediaGallery, { type GalleryImage } from "@/components/ProductMediaGallery";
 import VariantsSection from "@/components/VariantsSection";
+import AttributesSection, { type AttributeDraft } from "@/components/AttributesSection";
+import FaqsSection, { type FaqDraft } from "@/components/FaqsSection";
 import IngredientRecipeEditor, { type RecipeRowDraft } from "@/components/IngredientRecipeEditor";
 import { useToast } from "@/components/ui/Toast";
 
@@ -59,6 +63,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
   const [compareAtPrice, setCompareAtPrice] = useState(product?.compareAtPrice ?? "");
   const [costPrice, setCostPrice] = useState("");
   const [chargeTax, setChargeTax] = useState(product?.chargeTax ?? true);
+  const [isCheckoutAddon, setIsCheckoutAddon] = useState(product?.isCheckoutAddon ?? false);
 
   const [trackInventory, setTrackInventory] = useState(product?.trackInventory ?? false);
   const [continueSellingOutOfStock, setContinueSellingOutOfStock] = useState(
@@ -86,9 +91,18 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
 
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [shopVariantsEnabled, setShopVariantsEnabled] = useState(false);
+  const [shopAttributesEnabled, setShopAttributesEnabled] = useState(false);
+  const [shopFaqsEnabled, setShopFaqsEnabled] = useState(false);
+  const [attributes, setAttributes] = useState<AttributeDraft[]>(
+    product?.attributes.map((a) => ({ name: a.name, value: a.value, order: a.order })) ?? [],
+  );
+  const [faqs, setFaqs] = useState<FaqDraft[]>(
+    product?.faqs.map((f) => ({ question: f.question, answer: f.answer, order: f.order })) ?? [],
+  );
   const [stockRows, setStockRows] = useState<StockByOutlet[]>([]);
   const [stockValues, setStockValues] = useState<Record<number, string>>({});
   const [ingredientsList, setIngredientsList] = useState<Ingredient[]>([]);
+  const [ingredientCategories, setIngredientCategories] = useState<IngredientCategory[]>([]);
   const [recipeRows, setRecipeRows] = useState<RecipeRowDraft[]>(
     product?.ingredients.map((i) => ({ ingredientId: i.ingredientId, quantityPerUnit: String(i.quantityPerUnit) })) ??
       [],
@@ -103,10 +117,17 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
       .then(setCategories)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"));
     getShop()
-      .then((s) => setShopVariantsEnabled(s.productVariantsEnabled))
+      .then((s) => {
+        setShopVariantsEnabled(s.productVariantsEnabled);
+        setShopAttributesEnabled(s.productAttributesEnabled);
+        setShopFaqsEnabled(s.productFaqsEnabled);
+      })
       .catch(() => {});
     listIngredients()
       .then(setIngredientsList)
+      .catch(() => {});
+    listIngredientCategories()
+      .then(setIngredientCategories)
       .catch(() => {});
     listOutlets()
       .then((outlets) => {
@@ -162,8 +183,15 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
         compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
         costPrice: costPrice ? Number(costPrice) : undefined,
         chargeTax,
+        isCheckoutAddon,
         thumbnail: sortedImages[0].url,
         images: sortedImages,
+        attributes: attributes
+          .filter((a) => a.name.trim() && a.value.trim())
+          .map((a, i) => ({ name: a.name.trim(), value: a.value.trim(), order: i })),
+        faqs: faqs
+          .filter((f) => f.question.trim() && f.answer.trim())
+          .map((f, i) => ({ question: f.question.trim(), answer: f.answer.trim(), order: i })),
         trackInventory,
         continueSellingOutOfStock,
         physicalProduct,
@@ -352,6 +380,10 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
                   <Toggle checked={chargeTax} onChange={setChargeTax} />
                   <span className="text-sm">Charge tax on this product</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Toggle checked={isCheckoutAddon} onChange={setIsCheckoutAddon} />
+                  <span className="text-sm">Add-on at checkout</span>
+                </div>
               </Card>
 
               <Card className="space-y-4">
@@ -406,7 +438,12 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
                 this product doesn&apos;t consume tracked ingredients.
               </p>
             </div>
-            <IngredientRecipeEditor ingredients={ingredientsList} rows={recipeRows} onChange={setRecipeRows} />
+            <IngredientRecipeEditor
+              ingredients={ingredientsList}
+              categories={ingredientCategories}
+              rows={recipeRows}
+              onChange={setRecipeRows}
+            />
           </Card>
 
           <Card className="space-y-4">
@@ -461,6 +498,14 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
             images={images}
             onImagesChange={setImages}
           />
+
+          <AttributesSection
+            attributes={attributes}
+            onChange={setAttributes}
+            shopAttributesEnabled={shopAttributesEnabled}
+          />
+
+          <FaqsSection faqs={faqs} onChange={setFaqs} shopFaqsEnabled={shopFaqsEnabled} />
 
           <Card>
             <details>

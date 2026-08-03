@@ -17,6 +17,7 @@ import { PayPalPaymentProvider } from './providers/paypal-payment.provider';
 import { PaymentSettingsController } from './payment-settings.controller';
 import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateModule } from '../affiliate/affiliate.module';
+import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 
 // Every implemented gateway is registered up front — which one a given shop
 // actually uses is a per-shop runtime choice (shop.paymentGateway for the
@@ -41,7 +42,7 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
 }
 
 @Module({
-  imports: [ShopModule, AffiliateModule],
+  imports: [ShopModule, AffiliateModule, BranchRolesModule],
   controllers: [
     PaymentLinkController,
     PayController,
@@ -51,7 +52,10 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
   providers: [
     PaymentsService,
     PaymentSettingsService,
-    { provide: PaymentProviderRegistry, useFactory: paymentProviderRegistryFactory },
+    {
+      provide: PaymentProviderRegistry,
+      useFactory: paymentProviderRegistryFactory,
+    },
   ],
   // PublicModule (storefront checkout) needs the same registry to create a
   // gateway checkout session directly from order creation, without going

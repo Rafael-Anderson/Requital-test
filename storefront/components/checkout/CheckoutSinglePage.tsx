@@ -5,7 +5,8 @@ import { EMIRATES } from "@/lib/types";
 import { storeButtonClassName } from "@/lib/button-style";
 import PromoCodeField from "@/components/PromoCodeField";
 import GiftCardCodeField from "@/components/GiftCardCodeField";
-import { FIELD_CLASS, COMPACT_FIELD_CLASS, TEXTAREA_CLASS, BUTTON_OUTLINE_CLASS, PAYMENT_LABELS } from "./checkout-field-styles";
+import DeliveryAddressFields from "./DeliveryAddressFields";
+import { FIELD_CLASS, TEXTAREA_CLASS, PAYMENT_LABELS } from "./checkout-field-styles";
 
 // The original checkout layout — every field on one long scroll. Kept as
 // its own component (not inlined in the page) so it sits side by side with
@@ -32,19 +33,8 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
     setCustomerPhone,
     customerEmail,
     setCustomerEmail,
-    customerAddress,
-    setCustomerAddress,
     emirate,
     setEmirate,
-    area,
-    setArea,
-    coords,
-    locating,
-    useMyLocation,
-    addressQuery,
-    setAddressQuery,
-    searching,
-    searchAddress,
     deliveryNotes,
     setDeliveryNotes,
     deliveryDate,
@@ -56,8 +46,6 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
     availablePaymentMethods,
     submitting,
     error,
-    savedAddresses,
-    applySavedAddress,
     handleSubmit,
     minDate,
     timeSlots,
@@ -143,79 +131,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
         <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} className={FIELD_CLASS} />
       </div>
 
-      {orderType === "delivery" && (
-        <div className="space-y-3 rounded-lg border border-black/10 dark:border-white/10 p-4">
-          <p className="text-sm font-medium">Delivery address</p>
-          {savedAddresses.length > 0 && (
-            <div>
-              <label className="text-sm font-medium block mb-1">Use a saved address</label>
-              <select
-                defaultValue=""
-                onChange={(e) => {
-                  const selected = savedAddresses.find((a) => a.id === e.target.value);
-                  if (selected) applySavedAddress(selected);
-                }}
-                className={FIELD_CLASS}
-              >
-                <option value="">— Choose a saved address —</option>
-                {savedAddresses.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label ? `${a.label} — ` : ""}
-                    {a.address}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={useMyLocation}
-              disabled={locating}
-              className={`h-9 px-3 rounded-lg text-sm cursor-pointer disabled:opacity-50 ${BUTTON_OUTLINE_CLASS}`}
-            >
-              {locating ? "Locating…" : "📍 Use my location"}
-            </button>
-            {coords && <span className="text-xs text-zinc-500 self-center">Location captured</span>}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={addressQuery}
-              onChange={(e) => setAddressQuery(e.target.value)}
-              placeholder="Or search your address"
-              className={COMPACT_FIELD_CLASS}
-            />
-            <button
-              type="button"
-              onClick={searchAddress}
-              disabled={searching}
-              className={`h-9 px-3 rounded-lg text-sm cursor-pointer disabled:opacity-50 ${BUTTON_OUTLINE_CLASS}`}
-            >
-              {searching ? "Searching…" : "Search"}
-            </button>
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1">Full address</label>
-            <textarea required value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} rows={2} className={TEXTAREA_CLASS} />
-          </div>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium block mb-1">Emirate</label>
-              <select value={emirate} onChange={(e) => setEmirate(e.target.value)} className={FIELD_CLASS}>
-                {EMIRATES.map((e) => (
-                  <option key={e} value={e}>
-                    {e}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-1">Area (optional)</label>
-              <input value={area} onChange={(e) => setArea(e.target.value)} className={FIELD_CLASS} />
-            </div>
-          </div>
-        </div>
-      )}
+      {orderType === "delivery" && <DeliveryAddressFields state={state} />}
       {orderType === "pickup" && (
         <div>
           <label className="text-sm font-medium block mb-1">Emirate</label>

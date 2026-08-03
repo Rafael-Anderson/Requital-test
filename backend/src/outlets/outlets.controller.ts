@@ -33,6 +33,16 @@ export class OutletsController {
     return this.outletsService.geocode(query);
   }
 
+  // Registered before ':id' for the same reason as 'geocode' above.
+  @Roles('admin')
+  @Get('reverse-geocode')
+  reverseGeocode(@Query('lat') lat?: string, @Query('lon') lon?: string) {
+    return this.outletsService.reverseGeocode(
+      lat !== undefined ? Number(lat) : undefined,
+      lon !== undefined ? Number(lon) : undefined,
+    );
+  }
+
   @Get(':id')
   findOne(
     @CurrentUser() ctx: TenantContext,

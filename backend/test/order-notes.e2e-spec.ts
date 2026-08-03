@@ -46,7 +46,11 @@ describe('Order internal notes (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -143,7 +147,13 @@ describe('Order internal notes (e2e)', () => {
     await request(app.getHttpServer())
       .post('/auth/branch-users')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Branch Staffer', email: staffEmail, password: 'password123', role: 'branch', outletId })
+      .send({
+        name: 'Branch Staffer',
+        email: staffEmail,
+        password: 'password123',
+        role: 'branch',
+        outletId,
+      })
       .expect(201);
     const login = await request(app.getHttpServer())
       .post('/auth/login')
@@ -188,7 +198,10 @@ describe('Order internal notes (e2e)', () => {
       .get(`/orders/${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const raw = await prisma.order.findUnique({ where: { id: order.id }, select: { trackingToken: true } });
+    const raw = await prisma.order.findUnique({
+      where: { id: order.id },
+      select: { trackingToken: true },
+    });
 
     const publicRes = await request(app.getHttpServer())
       .get(`/public/orders/lookup?token=${raw!.trackingToken}`)
@@ -210,7 +223,12 @@ describe('Order internal notes (e2e)', () => {
     await request(app.getHttpServer())
       .post('/auth/branch-users')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Viewer', email: staffEmail, password: 'password123', role: 'viewer' })
+      .send({
+        name: 'Viewer',
+        email: staffEmail,
+        password: 'password123',
+        role: 'viewer',
+      })
       .expect(201);
     const login = await request(app.getHttpServer())
       .post('/auth/login')

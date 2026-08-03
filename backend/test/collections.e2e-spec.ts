@@ -54,7 +54,11 @@ describe('Collections (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -131,7 +135,9 @@ describe('Collections (e2e)', () => {
         .get('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<CollectionRow[]>(list).some((c) => c.id === collection.id)).toBe(true);
+      expect(
+        body<CollectionRow[]>(list).some((c) => c.id === collection.id),
+      ).toBe(true);
 
       await request(app.getHttpServer())
         .patch(`/collections/${collection.id}`)
@@ -168,7 +174,12 @@ describe('Collections (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch Staff', email: branchEmail, password: 'password123', outletId })
+        .send({
+          name: 'Branch Staff',
+          email: branchEmail,
+          password: 'password123',
+          outletId,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -207,14 +218,20 @@ describe('Collections (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ title: 'Manual With Rules', type: 'MANUAL', rules: { maxPrice: 50 } })
+        .send({
+          title: 'Manual With Rules',
+          type: 'MANUAL',
+          rules: { maxPrice: 50 },
+        })
         .expect(400);
-      expect(messageContains(res, "only be set when type is 'RULE_BASED'")).toBe(true);
+      expect(
+        messageContains(res, "only be set when type is 'RULE_BASED'"),
+      ).toBe(true);
     });
   });
 
   describe('tenant isolation', () => {
-    it('cannot read, update, delete, or set products on another shop\'s collection by spoofing its id', async () => {
+    it("cannot read, update, delete, or set products on another shop's collection by spoofing its id", async () => {
       const shopA = await setupShop('iso-a');
       const shopB = await setupShop('iso-b');
       const created = await request(app.getHttpServer())
@@ -266,7 +283,8 @@ describe('Collections (e2e)', () => {
 
   describe('MANUAL collections', () => {
     it('setProducts is a full replace and manual order persists through the public endpoint', async () => {
-      const { adminToken, slug, outletId, categoryId } = await setupShop('manual-order');
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('manual-order');
       const p1 = await createProduct(adminToken, categoryId, { name: 'Alpha' });
       const p2 = await createProduct(adminToken, categoryId, { name: 'Beta' });
       const p3 = await createProduct(adminToken, categoryId, { name: 'Gamma' });
@@ -305,7 +323,9 @@ describe('Collections (e2e)', () => {
       const publicRes = await request(app.getHttpServer())
         .get(`/public/${slug}/collections/ordered`)
         .expect(200);
-      const names = body<{ products: { name: string }[] }>(publicRes).products.map((p) => p.name);
+      const names = body<{ products: { name: string }[] }>(
+        publicRes,
+      ).products.map((p) => p.name);
       expect(names).toEqual(['Gamma', 'Alpha', 'Beta']);
 
       // Full-replace: dropping p2 and re-saving must remove it, not merge.
@@ -317,7 +337,11 @@ describe('Collections (e2e)', () => {
       const afterReplace = await request(app.getHttpServer())
         .get(`/public/${slug}/collections/ordered`)
         .expect(200);
-      expect(body<{ products: { name: string }[] }>(afterReplace).products.map((p) => p.name)).toEqual(['Alpha']);
+      expect(
+        body<{ products: { name: string }[] }>(afterReplace).products.map(
+          (p) => p.name,
+        ),
+      ).toEqual(['Alpha']);
     });
   });
 
@@ -336,41 +360,65 @@ describe('Collections (e2e)', () => {
     }
 
     it('auto-includes products by price range (maxPrice)', async () => {
-      const { adminToken, slug, outletId, categoryId } = await setupShop('rule-price');
-      const cheap = await createProduct(adminToken, categoryId, { name: 'Cheap', price: 20 });
-      await createProduct(adminToken, categoryId, { name: 'Expensive', price: 500 });
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('rule-price');
+      const cheap = await createProduct(adminToken, categoryId, {
+        name: 'Cheap',
+        price: 20,
+      });
+      await createProduct(adminToken, categoryId, {
+        name: 'Expensive',
+        price: 500,
+      });
       await publishShop(adminToken, outletId);
 
       const created = await request(app.getHttpServer())
         .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ title: 'Under 50 AED', type: 'RULE_BASED', rules: { maxPrice: 50 }, isActive: true })
+        .send({
+          title: 'Under 50 AED',
+          type: 'RULE_BASED',
+          rules: { maxPrice: 50 },
+          isActive: true,
+        })
         .expect(201);
       expect(body<CollectionRow>(created).productCount).toBe(1);
 
       const publicRes = await request(app.getHttpServer())
         .get(`/public/${slug}/collections/under-50-aed`)
         .expect(200);
-      const names = body<{ products: { id: number; name: string }[] }>(publicRes).products;
+      const names = body<{ products: { id: number; name: string }[] }>(
+        publicRes,
+      ).products;
       expect(names).toHaveLength(1);
       expect(names[0].id).toBe(cheap.id);
     });
 
     it('auto-includes products by category', async () => {
-      const { adminToken, slug, outletId, categoryId } = await setupShop('rule-category');
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('rule-category');
       const other = await request(app.getHttpServer())
         .post('/categories')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Other' })
         .expect(201);
-      const inCat = await createProduct(adminToken, categoryId, { name: 'In Category' });
-      await createProduct(adminToken, body<IdRow>(other).id, { name: 'Other Category' });
+      const inCat = await createProduct(adminToken, categoryId, {
+        name: 'In Category',
+      });
+      await createProduct(adminToken, body<IdRow>(other).id, {
+        name: 'Other Category',
+      });
       await publishShop(adminToken, outletId);
 
       await request(app.getHttpServer())
         .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ title: 'Category Rule', type: 'RULE_BASED', rules: { categoryId }, isActive: true })
+        .send({
+          title: 'Category Rule',
+          type: 'RULE_BASED',
+          rules: { categoryId },
+          isActive: true,
+        })
         .expect(201);
 
       const publicRes = await request(app.getHttpServer())
@@ -381,17 +429,28 @@ describe('Collections (e2e)', () => {
     });
 
     it('membership updates live when a product changes, without touching the collection', async () => {
-      const { adminToken, slug, outletId, categoryId } = await setupShop('rule-live');
-      const p = await createProduct(adminToken, categoryId, { name: 'Movable', price: 100 });
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('rule-live');
+      const p = await createProduct(adminToken, categoryId, {
+        name: 'Movable',
+        price: 100,
+      });
       await publishShop(adminToken, outletId);
 
       await request(app.getHttpServer())
         .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ title: 'Cheap Stuff', type: 'RULE_BASED', rules: { maxPrice: 50 }, isActive: true })
+        .send({
+          title: 'Cheap Stuff',
+          type: 'RULE_BASED',
+          rules: { maxPrice: 50 },
+          isActive: true,
+        })
         .expect(201);
 
-      const before = await request(app.getHttpServer()).get(`/public/${slug}/collections/cheap-stuff`).expect(200);
+      const before = await request(app.getHttpServer())
+        .get(`/public/${slug}/collections/cheap-stuff`)
+        .expect(200);
       expect(body<{ products: unknown[] }>(before).products).toHaveLength(0);
 
       await request(app.getHttpServer())
@@ -400,37 +459,58 @@ describe('Collections (e2e)', () => {
         .send({ price: 30 })
         .expect(200);
 
-      const after = await request(app.getHttpServer()).get(`/public/${slug}/collections/cheap-stuff`).expect(200);
-      expect(body<{ products: { id: number }[] }>(after).products.map((x) => x.id)).toEqual([p.id]);
+      const after = await request(app.getHttpServer())
+        .get(`/public/${slug}/collections/cheap-stuff`)
+        .expect(200);
+      expect(
+        body<{ products: { id: number }[] }>(after).products.map((x) => x.id),
+      ).toEqual([p.id]);
     });
   });
 
   describe('public endpoints', () => {
     it('lists only active collections and 404s for an inactive/nonexistent one', async () => {
-      const { adminToken, slug, outletId, categoryId } = await setupShop('public-active');
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('public-active');
       await createProduct(adminToken, categoryId);
       await publishShopHelper(adminToken, outletId);
 
       await request(app.getHttpServer())
         .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ title: 'Visible', type: 'RULE_BASED', rules: { maxPrice: 999999 }, isActive: true })
+        .send({
+          title: 'Visible',
+          type: 'RULE_BASED',
+          rules: { maxPrice: 999999 },
+          isActive: true,
+        })
         .expect(201);
       const inactive = await request(app.getHttpServer())
         .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ title: 'Hidden', type: 'RULE_BASED', rules: { maxPrice: 999999 }, isActive: false })
+        .send({
+          title: 'Hidden',
+          type: 'RULE_BASED',
+          rules: { maxPrice: 999999 },
+          isActive: false,
+        })
         .expect(201);
 
-      const list = await request(app.getHttpServer()).get(`/public/${slug}/collections`).expect(200);
+      const list = await request(app.getHttpServer())
+        .get(`/public/${slug}/collections`)
+        .expect(200);
       const titles = body<{ title: string }[]>(list).map((c) => c.title);
       expect(titles).toContain('Visible');
       expect(titles).not.toContain('Hidden');
 
       await request(app.getHttpServer())
-        .get(`/public/${slug}/collections/${body<CollectionRow>(inactive).slug}`)
+        .get(
+          `/public/${slug}/collections/${body<CollectionRow>(inactive).slug}`,
+        )
         .expect(404);
-      await request(app.getHttpServer()).get(`/public/${slug}/collections/does-not-exist`).expect(404);
+      await request(app.getHttpServer())
+        .get(`/public/${slug}/collections/does-not-exist`)
+        .expect(404);
     });
 
     async function publishShopHelper(adminToken: string, outletId: number) {

@@ -7,7 +7,9 @@ import type { CustomerContext } from '../customer-context';
 // always defined wherever this is injected (mirrors CurrentUser/TenantContext).
 export const CurrentCustomer = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): CustomerContext => {
-    const request = ctx.switchToHttp().getRequest<Request & { customer: CustomerContext }>();
+    const request = ctx
+      .switchToHttp()
+      .getRequest<Request & { customer: CustomerContext }>();
     return request.customer;
   },
 );

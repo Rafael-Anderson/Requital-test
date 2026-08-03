@@ -17,6 +17,7 @@ import type {
   PolicyPage,
   Product,
   Shop,
+  SurveyLookupResult,
   ValidateDiscountResult,
   ValidateGiftCardResult,
 } from "./types";
@@ -115,10 +116,16 @@ function resolveProductImage(p: Product): Product {
   };
 }
 
-export async function listProducts(shopSlug: string, outletId?: number, categoryId?: number) {
+export async function listProducts(
+  shopSlug: string,
+  outletId?: number,
+  categoryId?: number,
+  isCheckoutAddon?: boolean,
+) {
   const params = new URLSearchParams();
   if (outletId !== undefined) params.set("outletId", String(outletId));
   if (categoryId !== undefined) params.set("categoryId", String(categoryId));
+  if (isCheckoutAddon !== undefined) params.set("isCheckoutAddon", String(isCheckoutAddon));
   const qs = params.toString();
   const products = await get<Product[]>(`/public/${shopSlug}/products${qs ? `?${qs}` : ""}`);
   return products.map(resolveProductImage);
@@ -151,6 +158,11 @@ export function geocode(shopSlug: string, query: string) {
   return get<{ latitude: number; longitude: number; displayName: string }>(
     `/public/${shopSlug}/geocode?q=${encodeURIComponent(query)}`,
   );
+}
+
+// MapPicker's pin-drag flow — lat/lng -> address.
+export function reverseGeocode(shopSlug: string, latitude: number, longitude: number) {
+  return get<{ displayName: string }>(`/public/${shopSlug}/reverse-geocode?lat=${latitude}&lon=${longitude}`);
 }
 
 export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
@@ -197,6 +209,16 @@ export function recoverAbandonedCart(token: string) {
 // directly rather than /public/:shopSlug/....
 export function lookupOrder(token: string) {
   return get<OrderLookupResult>(`/public/orders/lookup?token=${encodeURIComponent(token)}`);
+}
+
+// Not shop-scoped — same reasoning as lookupOrder above (the token alone is
+// globally unique and self-sufficient, see backend PublicSurveyController).
+export function lookupSurvey(token: string) {
+  return get<SurveyLookupResult>(`/public/surveys/lookup?token=${encodeURIComponent(token)}`);
+}
+
+export function submitSurvey(token: string, data: { rating: number; comment?: string }) {
+  return post<{ success: boolean }>(`/public/surveys/submit?token=${encodeURIComponent(token)}`, data);
 }
 
 // --- Customer accounts ---

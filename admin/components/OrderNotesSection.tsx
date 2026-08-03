@@ -46,6 +46,7 @@ export default function OrderNotesSection({
 
       <div className="flex gap-2 mb-3">
         <Textarea
+          label="Note"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Leave a note for other staff…"

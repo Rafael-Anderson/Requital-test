@@ -68,7 +68,10 @@ export class CreateOutletDto {
   // Shape: { mon: { open: "09:00", close: "18:00", closed: false }, ... }
   @IsOptional()
   @IsObject()
-  businessHours?: Record<string, { open: string; close: string; closed: boolean }>;
+  businessHours?: Record<
+    string,
+    { open: string; close: string; closed: boolean }
+  >;
 
   @IsOptional()
   @IsBoolean()

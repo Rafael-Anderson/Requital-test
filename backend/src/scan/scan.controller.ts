@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Patch, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ScanService } from './scan.service';
 import { ScanSettingsService } from './scan-settings.service';
@@ -30,7 +39,10 @@ export class ScanController {
   }
 
   @Patch('settings')
-  updateSettings(@CurrentUser() ctx: TenantContext, @Body() dto: UpdateScanSettingsDto) {
+  updateSettings(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: UpdateScanSettingsDto,
+  ) {
     return this.scanSettingsService.upsert(ctx, dto);
   }
 
@@ -40,7 +52,10 @@ export class ScanController {
   // audit row if the merchant confirms.
   @Post('preview')
   @UseInterceptors(FileInterceptor('file', createImageUploadOptions('scans')))
-  preview(@CurrentUser() ctx: TenantContext, @UploadedFile() file?: Express.Multer.File) {
+  preview(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }

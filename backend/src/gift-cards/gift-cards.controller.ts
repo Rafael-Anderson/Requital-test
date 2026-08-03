@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { GiftCardsService } from './gift-cards.service';
 import { CreateGiftCardDto } from './dto/create-gift-card.dto';
 import { UpdateGiftCardDto } from './dto/update-gift-card.dto';
@@ -19,7 +27,10 @@ export class GiftCardsController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  findOne(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.giftCardsService.findOne(ctx, id);
   }
 
@@ -29,7 +40,11 @@ export class GiftCardsController {
   }
 
   @Patch(':id')
-  update(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGiftCardDto) {
+  update(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateGiftCardDto,
+  ) {
     return this.giftCardsService.update(ctx, id, dto);
   }
 }

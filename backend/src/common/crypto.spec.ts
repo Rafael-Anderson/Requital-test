@@ -12,7 +12,10 @@ describe('crypto (credential encryption)', () => {
   });
 
   it('round-trips a plaintext value', () => {
-    const plaintext = JSON.stringify({ secretKey: 'sk_live_abc123', webhookSecret: 'whsec_xyz' });
+    const plaintext = JSON.stringify({
+      secretKey: 'sk_live_abc123',
+      webhookSecret: 'whsec_xyz',
+    });
     const encrypted = encrypt(plaintext);
     expect(decrypt(encrypted)).toBe(plaintext);
   });

@@ -53,7 +53,11 @@ describe('Audit log (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -95,7 +99,11 @@ describe('Audit log (e2e)', () => {
     return { adminToken, adminEmail, outletId, categoryId };
   }
 
-  async function createProduct(adminToken: string, categoryId: number, price = 50) {
+  async function createProduct(
+    adminToken: string,
+    categoryId: number,
+    price = 50,
+  ) {
     const res = await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -121,7 +129,9 @@ describe('Audit log (e2e)', () => {
       .get('/audit-log?entityType=auth')
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    expect(body<AuditLogList>(logs).data.some((l) => l.action === 'auth.login')).toBe(true);
+    expect(
+      body<AuditLogList>(logs).data.some((l) => l.action === 'auth.login'),
+    ).toBe(true);
   });
 
   it('logs a product price change with before/after', async () => {
@@ -160,7 +170,11 @@ describe('Audit log (e2e)', () => {
       .get(`/audit-log?entityType=product`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    expect(body<AuditLogList>(logs).data.some((l) => l.action === 'product.price_changed')).toBe(false);
+    expect(
+      body<AuditLogList>(logs).data.some(
+        (l) => l.action === 'product.price_changed',
+      ),
+    ).toBe(false);
   });
 
   it('logs a product delete and a product status change', async () => {
@@ -181,7 +195,9 @@ describe('Audit log (e2e)', () => {
       .get(`/audit-log?entityType=product`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const actions = body<AuditLogList>(logs).data.filter((l) => l.entityId === product.id).map((l) => l.action);
+    const actions = body<AuditLogList>(logs)
+      .data.filter((l) => l.entityId === product.id)
+      .map((l) => l.action);
     expect(actions).toContain('product.status_changed');
     expect(actions).toContain('product.deleted');
   });
@@ -200,7 +216,12 @@ describe('Audit log (e2e)', () => {
     await request(app.getHttpServer())
       .patch('/products/bulk-price')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productIds: [p1.id, p2.id], field: 'price', mode: 'percentage', value: 10 })
+      .send({
+        productIds: [p1.id, p2.id],
+        field: 'price',
+        mode: 'percentage',
+        value: 10,
+      })
       .expect(200);
     await request(app.getHttpServer())
       .delete('/products/bulk-delete')
@@ -213,17 +234,26 @@ describe('Audit log (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     const data = body<AuditLogList>(logs).data;
-    const bulkStatusEntries = data.filter((l) => l.action === 'product.bulk_status_changed');
-    const bulkPriceEntries = data.filter((l) => l.action === 'product.bulk_price_changed');
-    const deleteEntries = data.filter((l) => l.action === 'product.deleted' && l.entityId === p3.id);
+    const bulkStatusEntries = data.filter(
+      (l) => l.action === 'product.bulk_status_changed',
+    );
+    const bulkPriceEntries = data.filter(
+      (l) => l.action === 'product.bulk_price_changed',
+    );
+    const deleteEntries = data.filter(
+      (l) => l.action === 'product.deleted' && l.entityId === p3.id,
+    );
     expect(bulkStatusEntries).toHaveLength(1); // ONE summary row, not one per product
     expect(bulkPriceEntries).toHaveLength(1);
     expect(deleteEntries).toHaveLength(1); // bulkRemove logs via remove() per item
-    expect((bulkStatusEntries[0].metadata as { productIds: number[] }).productIds).toEqual([p1.id, p2.id]);
+    expect(
+      (bulkStatusEntries[0].metadata as { productIds: number[] }).productIds,
+    ).toEqual([p1.id, p2.id]);
   });
 
   it('logs an order status change', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('audit-order-status');
+    const { adminToken, categoryId, outletId } =
+      await setupShop('audit-order-status');
     const product = await createProduct(adminToken, categoryId);
     const order = await request(app.getHttpServer())
       .post('/orders')
@@ -250,7 +280,9 @@ describe('Audit log (e2e)', () => {
       .get(`/audit-log?entityType=order`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const entry = body<AuditLogList>(logs).data.find((l) => l.entityId === orderId);
+    const entry = body<AuditLogList>(logs).data.find(
+      (l) => l.entityId === orderId,
+    );
     expect(entry?.action).toBe('order.status_changed');
   });
 
@@ -273,7 +305,12 @@ describe('Audit log (e2e)', () => {
     const discount = await request(app.getHttpServer())
       .post('/shop/discounts')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ code: `AUDIT${runId}`, type: 'PERCENTAGE', value: 10, appliesTo: 'ALL_PRODUCTS' })
+      .send({
+        code: `AUDIT${runId}`,
+        type: 'PERCENTAGE',
+        value: 10,
+        appliesTo: 'ALL_PRODUCTS',
+      })
       .expect(201);
     await request(app.getHttpServer())
       .delete(`/shop/discounts/${body<IdRow>(discount).id}`)
@@ -284,7 +321,11 @@ describe('Audit log (e2e)', () => {
     const bioLink = await request(app.getHttpServer())
       .post('/shop/bio-links')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ type: 'EXTERNAL_URL', label: 'Audit Link', url: 'https://example.com' })
+      .send({
+        type: 'EXTERNAL_URL',
+        label: 'Audit Link',
+        url: 'https://example.com',
+      })
       .expect(201);
     await request(app.getHttpServer())
       .delete(`/shop/bio-links/${body<IdRow>(bioLink).id}`)
@@ -341,7 +382,11 @@ describe('Audit log (e2e)', () => {
         .get('/audit-log')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      expect(body<AuditLogList>(res).data.some((l) => l.action === 'product.deleted')).toBe(false);
+      expect(
+        body<AuditLogList>(res).data.some(
+          (l) => l.action === 'product.deleted',
+        ),
+      ).toBe(false);
     });
 
     it('branch and order_manager cannot view the audit log', async () => {
@@ -351,7 +396,13 @@ describe('Audit log (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch', email: branchEmail, password: 'password123', role: 'branch', outletId })
+        .send({
+          name: 'Branch',
+          email: branchEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId,
+        })
         .expect(201);
       const branchLogin = await request(app.getHttpServer())
         .post('/auth/login')
@@ -359,14 +410,22 @@ describe('Audit log (e2e)', () => {
         .expect(201);
       await request(app.getHttpServer())
         .get('/audit-log')
-        .set('Authorization', `Bearer ${body<AuthResponse>(branchLogin).accessToken}`)
+        .set(
+          'Authorization',
+          `Bearer ${body<AuthResponse>(branchLogin).accessToken}`,
+        )
         .expect(403);
 
       const omEmail = `audit-role-gate-om-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'OM', email: omEmail, password: 'password123', role: 'order_manager' })
+        .send({
+          name: 'OM',
+          email: omEmail,
+          password: 'password123',
+          role: 'order_manager',
+        })
         .expect(201);
       const omLogin = await request(app.getHttpServer())
         .post('/auth/login')
@@ -374,7 +433,10 @@ describe('Audit log (e2e)', () => {
         .expect(201);
       await request(app.getHttpServer())
         .get('/audit-log')
-        .set('Authorization', `Bearer ${body<AuthResponse>(omLogin).accessToken}`)
+        .set(
+          'Authorization',
+          `Bearer ${body<AuthResponse>(omLogin).accessToken}`,
+        )
         .expect(403);
     });
 
@@ -384,7 +446,12 @@ describe('Audit log (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Viewer', email: viewerEmail, password: 'password123', role: 'viewer' })
+        .send({
+          name: 'Viewer',
+          email: viewerEmail,
+          password: 'password123',
+          role: 'viewer',
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')

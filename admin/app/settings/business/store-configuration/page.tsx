@@ -46,8 +46,7 @@ export default function StoreConfigurationPage() {
   const [defaultLanguage, setDefaultLanguage] = useState<ShopLanguage>("en");
   const [defaultDeliveryFee, setDefaultDeliveryFee] = useState("0");
   const [taxDisplayText, setTaxDisplayText] = useState("");
-  const [productDisplayOrientation, setProductDisplayOrientation] =
-    useState<ProductDisplayOrientation>("grid");
+  const [productDisplayOrientation, setProductDisplayOrientation] = useState<ProductDisplayOrientation>("grid");
   const [productImageZoomEnabled, setProductImageZoomEnabled] = useState(true);
   const [showCategoryMenu, setShowCategoryMenu] = useState(true);
   const [allowPreOrders, setAllowPreOrders] = useState(false);
@@ -64,7 +63,7 @@ export default function StoreConfigurationPage() {
   const [customerSurveyEnabled, setCustomerSurveyEnabled] = useState(false);
   const [dynamicThemeBuilderEnabled, setDynamicThemeBuilderEnabled] = useState(false);
   const [disableStoreCart, setDisableStoreCart] = useState(false);
-  const [disableGoogleMaps, setDisableGoogleMaps] = useState(false);
+  const [cartDisabledMode, setCartDisabledMode] = useState<"buy_now" | "contact_to_order">("buy_now");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -93,7 +92,7 @@ export default function StoreConfigurationPage() {
       setCustomerSurveyEnabled(s.customerSurveyEnabled);
       setDynamicThemeBuilderEnabled(s.dynamicThemeBuilderEnabled);
       setDisableStoreCart(s.disableStoreCart);
-      setDisableGoogleMaps(s.disableGoogleMaps);
+      setCartDisabledMode(s.cartDisabledMode);
     });
   }, []);
 
@@ -123,7 +122,7 @@ export default function StoreConfigurationPage() {
         customerSurveyEnabled,
         dynamicThemeBuilderEnabled,
         disableStoreCart,
-        disableGoogleMaps,
+        cartDisabledMode,
       });
       toast("Store configuration saved");
     } catch (err) {
@@ -138,218 +137,253 @@ export default function StoreConfigurationPage() {
   return (
     <PageShell>
       <div className="space-y-4">
-      <Section title="General">
-        <Field label="Business Type">
-          <select
-            value={businessType}
-            onChange={(e) => setBusinessType(e.target.value)}
-            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-          >
-            {BUSINESS_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <Section title="General">
+          <Field label="Business Type">
+            <select
+              value={businessType}
+              onChange={(e) => setBusinessType(e.target.value)}
+              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            >
+              {BUSINESS_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="Currency">
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </Field>
+          <Field label="Currency">
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-        <Field label="Default Language">
-          <SegmentedToggle
-            value={defaultLanguage}
-            onChange={setDefaultLanguage}
-            options={[
-              { value: "en", label: "English" },
-              { value: "ar", label: "Arabic" },
-            ]}
-          />
-        </Field>
+          <Field label="Default Language">
+            <SegmentedToggle
+              value={defaultLanguage}
+              onChange={setDefaultLanguage}
+              options={[
+                { value: "en", label: "English" },
+                { value: "ar", label: "Arabic" },
+              ]}
+            />
+          </Field>
 
-        <div>
+          <div>
+            <Input
+              label="Default Delivery Fee"
+              type="number"
+              min="0"
+              step="0.01"
+              value={defaultDeliveryFee}
+              onChange={(e) => setDefaultDeliveryFee(e.target.value)}
+            />
+            <p className="text-xs text-zinc-400 mt-1.5">
+              Added to every order&apos;s total automatically — orders don&apos;t set their own fee yet.
+            </p>
+          </div>
+
           <Input
-            label="Default Delivery Fee"
-            type="number"
-            min="0"
-            step="0.01"
-            value={defaultDeliveryFee}
-            onChange={(e) => setDefaultDeliveryFee(e.target.value)}
+            label="Tax Display Text"
+            placeholder="e.g. Including VAT"
+            value={taxDisplayText}
+            onChange={(e) => setTaxDisplayText(e.target.value)}
           />
-          <p className="text-xs text-zinc-400 mt-1.5">
-            Added to every order&apos;s total automatically — orders don&apos;t set their own fee yet.
-          </p>
-        </div>
+        </Section>
 
-        <Input
-          label="Tax Display Text"
-          placeholder="e.g. Including VAT"
-          value={taxDisplayText}
-          onChange={(e) => setTaxDisplayText(e.target.value)}
-        />
-      </Section>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-        <Card>
-          <h3 className="text-sm font-semibold mb-3">Storefront Display</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <div className="space-y-4">
-            <div>
-              <Field label="Product Display Orientation">
-                <SegmentedToggle
-                  value={productDisplayOrientation}
-                  onChange={setProductDisplayOrientation}
-                  options={[
-                    { value: "grid", label: "Grid" },
-                    { value: "list", label: "List" },
-                  ]}
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Storefront Display</h3>
+              <div className="space-y-4">
+                <div>
+                  <Field label="Product Display Orientation">
+                    <SegmentedToggle
+                      value={productDisplayOrientation}
+                      onChange={setProductDisplayOrientation}
+                      options={[
+                        { value: "grid", label: "Grid" },
+                        { value: "list", label: "List" },
+                      ]}
+                    />
+                  </Field>
+                  <p className="text-xs text-zinc-400 mt-1.5">
+                    Saved as a preference only — no storefront exists yet to apply it to.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Checkbox
+                    label="Product image zoom on detail view"
+                    checked={productImageZoomEnabled}
+                    onChange={(e) => setProductImageZoomEnabled(e.target.checked)}
+                  />
+                  <Checkbox
+                    label="Show category menu"
+                    checked={showCategoryMenu}
+                    onChange={(e) => setShowCategoryMenu(e.target.checked)}
+                  />
+                  <Checkbox
+                    label="Allow pre-orders"
+                    checked={allowPreOrders}
+                    onChange={(e) => setAllowPreOrders(e.target.checked)}
+                  />
+                  <Checkbox
+                    label="Customer confirmation required for order"
+                    checked={customerConfirmationRequired}
+                    onChange={(e) => setCustomerConfirmationRequired(e.target.checked)}
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Business Hours</p>
+              <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
+            </Card>
+
+            <Button variant="primary" onClick={handleSave} disabled={saving} className="w-fit">
+              <Check className="size-4 inline -mt-0.5 mr-1" />
+              Save changes
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Delivery & Fulfillment</h3>
+              <div className="space-y-2">
+                <Checkbox
+                  label="External delivery enabled"
+                  checked={externalDeliveryEnabled}
+                  onChange={(e) => setExternalDeliveryEnabled(e.target.checked)}
                 />
-              </Field>
-              <p className="text-xs text-zinc-400 mt-1.5">
-                Saved as a preference only — no storefront exists yet to apply it to.
+                <Checkbox
+                  label='"As soon as possible" delivery option enabled'
+                  checked={asapDeliveryEnabled}
+                  onChange={(e) => setAsapDeliveryEnabled(e.target.checked)}
+                />
+                <Checkbox
+                  label="Enable delivery calendar / timeslots"
+                  checked={deliveryCalendarEnabled}
+                  onChange={(e) => setDeliveryCalendarEnabled(e.target.checked)}
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Engagement</h3>
+              <div className="space-y-2">
+                <Checkbox
+                  label="WhatsApp floating button enabled"
+                  checked={whatsappFloatingButtonEnabled}
+                  onChange={(e) => setWhatsappFloatingButtonEnabled(e.target.checked)}
+                />
+                <Checkbox
+                  label="Birthday discount enabled"
+                  checked={birthdayDiscountEnabled}
+                  onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
+                />
+              </div>
+              <p className="text-xs text-zinc-400 mt-3">
+                UI toggles only — no WhatsApp integration or discount engine is connected yet.
               </p>
-            </div>
+            </Card>
 
-            <div className="space-y-2">
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Catalog</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Toggle checked={productVariantsEnabled} onChange={setProductVariantsEnabled} />
+                  <span className="text-sm">Product variants enabled</span>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Shows the Options/Variants section on the Add/Edit Product page — e.g. Size, Color.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Toggle checked={productAttributesEnabled} onChange={setProductAttributesEnabled} />
+                  <span className="text-sm">Product attributes enabled</span>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Shows an Attributes section on the Add/Edit Product page and on the storefront product page — e.g.
+                  Material, Origin. Informational only, distinct from Options/Variants above.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Toggle checked={productFaqsEnabled} onChange={setProductFaqsEnabled} />
+                  <span className="text-sm">Product FAQs enabled</span>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Shows a FAQs section on the Add/Edit Product page and on the storefront product page.
+                </p>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Cart & Checkout</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Toggle checked={disableStoreCart} onChange={setDisableStoreCart} />
+                  <span className="text-sm">Disable store cart</span>
+                </div>
+                {disableStoreCart && (
+                  <div className="pl-1">
+                    <Field label="When cart is disabled, customers should">
+                      <SegmentedToggle
+                        value={cartDisabledMode}
+                        onChange={setCartDisabledMode}
+                        options={[
+                          { value: "buy_now", label: "Buy now (skip cart)" },
+                          { value: "contact_to_order", label: "Contact to order" },
+                        ]}
+                      />
+                    </Field>
+                    {cartDisabledMode === "contact_to_order" && !shop.whatsappNumber && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">
+                        Set a WhatsApp number in Business Information for the &quot;Contact to order&quot; button to work.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-zinc-400 mt-3">
+                &quot;Buy now&quot; skips the cart page — Add to Cart on a product takes the customer straight to
+                checkout with just that item. &quot;Contact to order&quot; removes checkout entirely and shows a
+                WhatsApp button instead.
+              </p>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-semibold mb-3">Post-Purchase</h3>
+              <div className="flex items-center gap-2">
+                <Toggle checked={customerSurveyEnabled} onChange={setCustomerSurveyEnabled} />
+                <span className="text-sm">Customer survey for order enabled</span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-3">
+                Emails the customer a short rating + comment survey once their order is marked delivered.
+              </p>
+            </Card>
+
+            <Card>
+              <h3 className="text-sm font-semibold mb-1">Coming Soon</h3>
+              <p className="text-xs text-zinc-400 mb-3">
+                Saves a preference now, but the feature behind it doesn&apos;t exist yet — toggling has no effect
+                until it&apos;s built.
+              </p>
               <Checkbox
-                label="Product image zoom on detail view"
-                checked={productImageZoomEnabled}
-                onChange={(e) => setProductImageZoomEnabled(e.target.checked)}
+                label="Dynamic theme builder enabled"
+                checked={dynamicThemeBuilderEnabled}
+                onChange={(e) => setDynamicThemeBuilderEnabled(e.target.checked)}
               />
-              <Checkbox
-                label="Show category menu"
-                checked={showCategoryMenu}
-                onChange={(e) => setShowCategoryMenu(e.target.checked)}
-              />
-              <Checkbox
-                label="Allow pre-orders"
-                checked={allowPreOrders}
-                onChange={(e) => setAllowPreOrders(e.target.checked)}
-              />
-              <Checkbox
-                label="Customer confirmation required for order"
-                checked={customerConfirmationRequired}
-                onChange={(e) => setCustomerConfirmationRequired(e.target.checked)}
-              />
-            </div>
+            </Card>
           </div>
-        </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <h3 className="text-sm font-semibold mb-3">Delivery & Fulfillment</h3>
-            <div className="space-y-2">
-              <Checkbox
-                label="External delivery enabled"
-                checked={externalDeliveryEnabled}
-                onChange={(e) => setExternalDeliveryEnabled(e.target.checked)}
-              />
-              <Checkbox
-                label='"As soon as possible" delivery option enabled'
-                checked={asapDeliveryEnabled}
-                onChange={(e) => setAsapDeliveryEnabled(e.target.checked)}
-              />
-              <Checkbox
-                label="Enable delivery calendar / timeslots"
-                checked={deliveryCalendarEnabled}
-                onChange={(e) => setDeliveryCalendarEnabled(e.target.checked)}
-              />
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="text-sm font-semibold mb-3">Engagement</h3>
-            <div className="space-y-2">
-              <Checkbox
-                label="WhatsApp floating button enabled"
-                checked={whatsappFloatingButtonEnabled}
-                onChange={(e) => setWhatsappFloatingButtonEnabled(e.target.checked)}
-              />
-              <Checkbox
-                label="Birthday discount enabled"
-                checked={birthdayDiscountEnabled}
-                onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
-              />
-            </div>
-            <p className="text-xs text-zinc-400 mt-3">
-              UI toggles only — no WhatsApp integration or discount engine is connected yet.
-            </p>
-          </Card>
-
-          <Card>
-            <h3 className="text-sm font-semibold mb-3">Catalog</h3>
-            <div className="flex items-center gap-2">
-              <Toggle checked={productVariantsEnabled} onChange={setProductVariantsEnabled} />
-              <span className="text-sm">Product variants enabled</span>
-            </div>
-            <p className="text-xs text-zinc-400 mt-3">
-              Shows the Options/Variants section on the Add/Edit Product page — e.g. Size, Color.
-            </p>
-          </Card>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-        <Card>
-          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Business Hours</p>
-          <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
-        </Card>
-
-        <Card>
-          <h3 className="text-sm font-semibold mb-1">Coming Soon</h3>
-          <p className="text-xs text-zinc-400 mb-3">
-            These save a preference now, but the feature behind them doesn&apos;t exist yet — toggling
-            has no effect until it&apos;s built.
-          </p>
-          <div className="space-y-2">
-            <Checkbox
-              label="Product attributes enabled"
-              checked={productAttributesEnabled}
-              onChange={(e) => setProductAttributesEnabled(e.target.checked)}
-            />
-            <Checkbox
-              label="Product FAQs enabled"
-              checked={productFaqsEnabled}
-              onChange={(e) => setProductFaqsEnabled(e.target.checked)}
-            />
-            <Checkbox
-              label="Customer survey for order enabled"
-              checked={customerSurveyEnabled}
-              onChange={(e) => setCustomerSurveyEnabled(e.target.checked)}
-            />
-            <Checkbox
-              label="Dynamic theme builder enabled"
-              checked={dynamicThemeBuilderEnabled}
-              onChange={(e) => setDynamicThemeBuilderEnabled(e.target.checked)}
-            />
-            <Checkbox
-              label="Disable store cart"
-              checked={disableStoreCart}
-              onChange={(e) => setDisableStoreCart(e.target.checked)}
-            />
-            <Checkbox
-              label="Disable Google Maps"
-              checked={disableGoogleMaps}
-              onChange={(e) => setDisableGoogleMaps(e.target.checked)}
-            />
-          </div>
-        </Card>
-      </div>
-
-      <Button variant="primary" onClick={handleSave} disabled={saving}>
-        <Check className="size-4 inline -mt-0.5 mr-1" />
-        Save changes
-      </Button>
       </div>
     </PageShell>
   );

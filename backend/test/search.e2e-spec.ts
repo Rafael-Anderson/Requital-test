@@ -37,7 +37,11 @@ describe('Global search (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -78,7 +82,11 @@ describe('Global search (e2e)', () => {
     return { adminToken, outletId, categoryId };
   }
 
-  async function createProduct(adminToken: string, categoryId: number, name: string) {
+  async function createProduct(
+    adminToken: string,
+    categoryId: number,
+    name: string,
+  ) {
     const res = await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -93,7 +101,12 @@ describe('Global search (e2e)', () => {
     return body<IdRow>(res);
   }
 
-  async function createOrder(adminToken: string, outletId: number, productId: number, customerName: string) {
+  async function createOrder(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+    customerName: string,
+  ) {
     const res = await request(app.getHttpServer())
       .post('/orders')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -111,10 +124,20 @@ describe('Global search (e2e)', () => {
   }
 
   it('finds products by name and by SKU, orders by customer name, customers by name/phone', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('search-basic');
+    const { adminToken, categoryId, outletId } =
+      await setupShop('search-basic');
     const uniqueTag = `Zephyr${runId}`;
-    const product = await createProduct(adminToken, categoryId, `${uniqueTag} Widget`);
-    await createOrder(adminToken, outletId, product.id, `${uniqueTag} Customer`);
+    const product = await createProduct(
+      adminToken,
+      categoryId,
+      `${uniqueTag} Widget`,
+    );
+    await createOrder(
+      adminToken,
+      outletId,
+      product.id,
+      `${uniqueTag} Customer`,
+    );
 
     const byName = await request(app.getHttpServer())
       .get(`/search?q=${uniqueTag}`)
@@ -122,20 +145,34 @@ describe('Global search (e2e)', () => {
       .expect(200);
     const result = body<SearchResult>(byName);
     expect(result.products.some((p) => p.name.includes(uniqueTag))).toBe(true);
-    expect(result.orders.some((o) => o.customerName.includes(uniqueTag))).toBe(true);
+    expect(result.orders.some((o) => o.customerName.includes(uniqueTag))).toBe(
+      true,
+    );
     expect(result.customers.some((c) => c.name.includes(uniqueTag))).toBe(true);
   });
 
   it('finds an order by its numeric id', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('search-by-id');
-    const product = await createProduct(adminToken, categoryId, 'Search Order ID Item');
-    const order = await createOrder(adminToken, outletId, product.id, 'Numeric Search Customer');
+    const { adminToken, categoryId, outletId } =
+      await setupShop('search-by-id');
+    const product = await createProduct(
+      adminToken,
+      categoryId,
+      'Search Order ID Item',
+    );
+    const order = await createOrder(
+      adminToken,
+      outletId,
+      product.id,
+      'Numeric Search Customer',
+    );
 
     const res = await request(app.getHttpServer())
       .get(`/search?q=${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    expect(body<SearchResult>(res).orders.some((o) => o.id === order.id)).toBe(true);
+    expect(body<SearchResult>(res).orders.some((o) => o.id === order.id)).toBe(
+      true,
+    );
   });
 
   it('caps each category at 5 results', async () => {
@@ -166,7 +203,11 @@ describe('Global search (e2e)', () => {
       const shopA = await setupShop('search-tenant-a');
       const shopB = await setupShop('search-tenant-b');
       const sharedTag = `Shared${runId}`;
-      await createProduct(shopA.adminToken, shopA.categoryId, `${sharedTag} Product`);
+      await createProduct(
+        shopA.adminToken,
+        shopA.categoryId,
+        `${sharedTag} Product`,
+      );
 
       const res = await request(app.getHttpServer())
         .get(`/search?q=${sharedTag}`)
@@ -176,16 +217,28 @@ describe('Global search (e2e)', () => {
     });
 
     it('branch/order_manager never see customers in search results, even with a matching name', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('search-role-customers');
+      const { adminToken, categoryId, outletId } = await setupShop(
+        'search-role-customers',
+      );
       const tag = `RoleCust${runId}`;
-      const product = await createProduct(adminToken, categoryId, `${tag} Item`);
+      const product = await createProduct(
+        adminToken,
+        categoryId,
+        `${tag} Item`,
+      );
       await createOrder(adminToken, outletId, product.id, `${tag} Customer`);
 
       const branchEmail = `search-role-branch-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch', email: branchEmail, password: 'password123', role: 'branch', outletId })
+        .send({
+          name: 'Branch',
+          email: branchEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId,
+        })
         .expect(201);
       const branchLogin = await request(app.getHttpServer())
         .post('/auth/login')
@@ -204,7 +257,9 @@ describe('Global search (e2e)', () => {
     });
 
     it("a branch user's order search is pinned to their own outlet", async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('search-branch-outlet');
+      const { adminToken, categoryId, outletId } = await setupShop(
+        'search-branch-outlet',
+      );
       const secondOutlet = await request(app.getHttpServer())
         .post('/outlets')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -213,14 +268,29 @@ describe('Global search (e2e)', () => {
       const outletId2 = body<IdRow>(secondOutlet).id;
 
       const tag = `OutletScope${runId}`;
-      const product = await createProduct(adminToken, categoryId, `${tag} Item`);
-      await createOrder(adminToken, outletId2, product.id, `${tag} Customer Elsewhere`);
+      const product = await createProduct(
+        adminToken,
+        categoryId,
+        `${tag} Item`,
+      );
+      await createOrder(
+        adminToken,
+        outletId2,
+        product.id,
+        `${tag} Customer Elsewhere`,
+      );
 
       const branchEmail = `search-branch-outlet-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch', email: branchEmail, password: 'password123', role: 'branch', outletId })
+        .send({
+          name: 'Branch',
+          email: branchEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')

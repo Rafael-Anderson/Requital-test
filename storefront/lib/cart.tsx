@@ -18,6 +18,10 @@ export interface CartItem {
   // this line's giftCardAmount rather than leaving it off the payload — see
   // useCheckoutForm.ts's items mapping.
   isGiftCard?: boolean;
+  // Optional note the customer typed on the product page ("no card,
+  // please") — carried through to order placement as this line's
+  // orderitem.note, staff-facing display only.
+  note?: string;
 }
 
 export interface CartState {
@@ -100,7 +104,9 @@ export function addItemToState(
     return {
       ...state,
       outletId,
-      items: items.map((i) => (sameLine(i, item.productId, item.variantId) ? { ...i, quantity: nextQty } : i)),
+      items: items.map((i) =>
+        sameLine(i, item.productId, item.variantId) ? { ...i, quantity: nextQty, note: item.note ?? i.note } : i,
+      ),
     };
   }
   return { ...state, outletId, items: [...items, { ...item, quantity: Math.min(quantity, cap) }] };

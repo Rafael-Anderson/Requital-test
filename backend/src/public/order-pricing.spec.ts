@@ -8,11 +8,15 @@ describe('matchDeliveryZone', () => {
   ];
 
   it('matches by area first, case-insensitively', () => {
-    expect(matchDeliveryZone(zones, 'downtown', 'Dubai')?.name).toBe('Downtown');
+    expect(matchDeliveryZone(zones, 'downtown', 'Dubai')?.name).toBe(
+      'Downtown',
+    );
   });
 
   it('falls back to emirate when area does not match any zone', () => {
-    expect(matchDeliveryZone(zones, 'Some Random Area', 'Dubai')?.name).toBe('Dubai');
+    expect(matchDeliveryZone(zones, 'Some Random Area', 'Dubai')?.name).toBe(
+      'Dubai',
+    );
   });
 
   it('falls back to emirate when area is omitted', () => {
@@ -52,7 +56,21 @@ describe('computeOrderTotals', () => {
   });
 
   it('zero tax rate yields zero tax regardless of inclusive/exclusive', () => {
-    expect(computeOrderTotals({ subtotal: 100, deliveryFee: 0, taxRate: 0, taxInclusive: true }).taxAmount).toBe(0);
-    expect(computeOrderTotals({ subtotal: 100, deliveryFee: 0, taxRate: 0, taxInclusive: false }).taxAmount).toBe(0);
+    expect(
+      computeOrderTotals({
+        subtotal: 100,
+        deliveryFee: 0,
+        taxRate: 0,
+        taxInclusive: true,
+      }).taxAmount,
+    ).toBe(0);
+    expect(
+      computeOrderTotals({
+        subtotal: 100,
+        deliveryFee: 0,
+        taxRate: 0,
+        taxInclusive: false,
+      }).taxAmount,
+    ).toBe(0);
   });
 });

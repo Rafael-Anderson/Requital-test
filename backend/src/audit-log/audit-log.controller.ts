@@ -14,7 +14,10 @@ export class AuditLogController {
   constructor(private readonly auditLogService: AuditLogService) {}
 
   @Get()
-  list(@CurrentUser() ctx: TenantContext, @Query() query: ListAuditLogQueryDto) {
+  list(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListAuditLogQueryDto,
+  ) {
     return this.auditLogService.list(ctx, query);
   }
 

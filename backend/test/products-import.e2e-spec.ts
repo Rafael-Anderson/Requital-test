@@ -83,7 +83,10 @@ const PRODUCT_HEADERS = [
 ];
 
 function buildCsv(rows: Record<string, unknown>[]): string {
-  const lines = [PRODUCT_HEADERS, ...rows.map((r) => PRODUCT_HEADERS.map((h) => csvCell(r[h] ?? '')))];
+  const lines = [
+    PRODUCT_HEADERS,
+    ...rows.map((r) => PRODUCT_HEADERS.map((h) => csvCell(r[h] ?? ''))),
+  ];
   return lines.map((line) => line.join(',')).join('\r\n');
 }
 
@@ -98,7 +101,11 @@ describe('Products CSV Import/Export (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -143,14 +150,22 @@ describe('Products CSV Import/Export (e2e)', () => {
     return request(app.getHttpServer())
       .post('/products/import/preview')
       .set('Authorization', `Bearer ${adminToken}`)
-      .attach('file', Buffer.from(csv), { filename: 'products.csv', contentType: 'text/csv' });
+      .attach('file', Buffer.from(csv), {
+        filename: 'products.csv',
+        contentType: 'text/csv',
+      });
   }
 
   function confirm(adminToken: string, csv: string, outletId?: number) {
     return request(app.getHttpServer())
-      .post(`/products/import/confirm${outletId ? `?outletId=${outletId}` : ''}`)
+      .post(
+        `/products/import/confirm${outletId ? `?outletId=${outletId}` : ''}`,
+      )
       .set('Authorization', `Bearer ${adminToken}`)
-      .attach('file', Buffer.from(csv), { filename: 'products.csv', contentType: 'text/csv' });
+      .attach('file', Buffer.from(csv), {
+        filename: 'products.csv',
+        contentType: 'text/csv',
+      });
   }
 
   it('creates a new product from a CSV row', async () => {
@@ -261,7 +276,9 @@ describe('Products CSV Import/Export (e2e)', () => {
     expect(previewed.rows).toHaveLength(3);
     expect(previewed.rows[0].action).toBe('create');
     expect(previewed.rows[1].action).toBe('reject');
-    expect(previewed.rows[1].errors.some((e) => e.includes('Price'))).toBe(true);
+    expect(previewed.rows[1].errors.some((e) => e.includes('Price'))).toBe(
+      true,
+    );
     expect(previewed.rows[2].action).toBe('reject');
     expect(previewed.rows[2].errors.some((e) => e.includes('Name'))).toBe(true);
 
@@ -281,7 +298,9 @@ describe('Products CSV Import/Export (e2e)', () => {
   });
 
   it('distinguishes create vs update within the same batch', async () => {
-    const { adminToken, categoryId } = await setupShop('import-create-vs-update');
+    const { adminToken, categoryId } = await setupShop(
+      'import-create-vs-update',
+    );
     const existing = await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -392,7 +411,9 @@ describe('Products CSV Import/Export (e2e)', () => {
       .get(`/products?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const created = body<ProductRow[]>(list).find((p) => p.sku === `STOCK-${runId}`);
+    const created = body<ProductRow[]>(list).find(
+      (p) => p.sku === `STOCK-${runId}`,
+    );
     expect(created?.stockQuantity).toBe(25);
   });
 });

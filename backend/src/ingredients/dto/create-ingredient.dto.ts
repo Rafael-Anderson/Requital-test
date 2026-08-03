@@ -1,4 +1,14 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateIngredientDto {
   @IsString()
@@ -16,4 +26,27 @@ export class CreateIngredientDto {
   @IsOptional()
   @IsBoolean()
   trackInventory?: boolean;
+
+  @IsOptional()
+  @IsString()
+  image?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costPerUnit?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  supplier?: string;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  categoryId?: number;
 }

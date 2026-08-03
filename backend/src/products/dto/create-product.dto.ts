@@ -38,6 +38,40 @@ export class ProductImageInput {
   order?: number;
 }
 
+export class ProductAttributeInput {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  value: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  order?: number;
+}
+
+export class ProductFaqInput {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  question: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  answer: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  order?: number;
+}
+
 export class CreateProductDto {
   @IsString()
   @IsNotEmpty()
@@ -92,6 +126,12 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   chargeTax?: boolean;
+
+  // Offered in the storefront checkout's "would you like to add any
+  // extras?" popup for carts that don't already contain this product.
+  @IsOptional()
+  @IsBoolean()
+  isCheckoutAddon?: boolean;
 
   // "Continue selling when out of stock" — only meaningful alongside
   // trackInventory; ignored otherwise (untracked products never block on
@@ -199,6 +239,23 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductImageInput)
   images?: ProductImageInput[];
+
+  // Informational, non-purchasable facts (e.g. Material: Cotton) — distinct
+  // from options/variants, see ProductAttributeInput's own comment. Omitted
+  // leaves it empty; full-replace on update, same convention as images.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductAttributeInput)
+  attributes?: ProductAttributeInput[];
+
+  // Per-product FAQ list, admin-editable, rendered on the storefront PDP
+  // when shop.productFaqsEnabled is on. Same convention as attributes above.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductFaqInput)
+  faqs?: ProductFaqInput[];
 
   // At least one category is required (SRS FR-4.2).
   @IsArray()

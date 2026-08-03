@@ -25,7 +25,11 @@ export class ScanService {
   async preview(ctx: TenantContext, file: Express.Multer.File) {
     const settings = await this.scanSettingsService.findOne(ctx);
     const rawText = await this.ocrService.recognize(file.path);
-    const parsedLines = parseInvoiceText(rawText, settings.excludeKeywords, settings.includeKeywords);
+    const parsedLines = parseInvoiceText(
+      rawText,
+      settings.excludeKeywords,
+      settings.includeKeywords,
+    );
 
     const [products, ingredients] = await Promise.all([
       this.prisma.product.findMany({
@@ -38,8 +42,16 @@ export class ScanService {
       }),
     ]);
     const candidates: MatchCandidate[] = [
-      ...products.map((p) => ({ id: p.id, type: 'product' as const, name: p.name })),
-      ...ingredients.map((i) => ({ id: i.id, type: 'ingredient' as const, name: i.name })),
+      ...products.map((p) => ({
+        id: p.id,
+        type: 'product' as const,
+        name: p.name,
+      })),
+      ...ingredients.map((i) => ({
+        id: i.id,
+        type: 'ingredient' as const,
+        name: i.name,
+      })),
     ];
 
     const items = parsedLines.map((line) => ({
@@ -76,7 +88,9 @@ export class ScanService {
       select: { id: true },
     });
     if (outlets.length !== outletIds.length) {
-      throw new BadRequestException('One or more outletId values are invalid for this shop');
+      throw new BadRequestException(
+        'One or more outletId values are invalid for this shop',
+      );
     }
 
     const matchedProductIds = dto.items
@@ -87,10 +101,16 @@ export class ScanService {
       .map((i) => i.matchedId!);
     const [ownedProducts, ownedIngredients] = await Promise.all([
       matchedProductIds.length
-        ? this.prisma.product.findMany({ where: { id: { in: matchedProductIds }, shopId: ctx.shopId }, select: { id: true } })
+        ? this.prisma.product.findMany({
+            where: { id: { in: matchedProductIds }, shopId: ctx.shopId },
+            select: { id: true },
+          })
         : [],
       matchedIngredientIds.length
-        ? this.prisma.ingredient.findMany({ where: { id: { in: matchedIngredientIds }, shopId: ctx.shopId }, select: { id: true } })
+        ? this.prisma.ingredient.findMany({
+            where: { id: { in: matchedIngredientIds }, shopId: ctx.shopId },
+            select: { id: true },
+          })
         : [],
     ]);
     const ownedProductIds = new Set(ownedProducts.map((p) => p.id));
@@ -99,29 +119,51 @@ export class ScanService {
     const newCategoryIds = [
       ...new Set(
         dto.items
-          .filter((i) => !i.matchedId && i.targetType === 'product' && i.createNew?.categoryId)
+          .filter(
+            (i) =>
+              !i.matchedId &&
+              i.targetType === 'product' &&
+              i.createNew?.categoryId,
+          )
           .map((i) => i.createNew!.categoryId!),
       ),
     ];
     if (newCategoryIds.length > 0) {
-      const owned = await this.prisma.category.count({ where: { id: { in: newCategoryIds }, shopId: ctx.shopId } });
+      const owned = await this.prisma.category.count({
+        where: { id: { in: newCategoryIds }, shopId: ctx.shopId },
+      });
       if (owned !== newCategoryIds.length) {
-        throw new BadRequestException('One or more categoryId values are invalid for this shop');
+        throw new BadRequestException(
+          'One or more categoryId values are invalid for this shop',
+        );
       }
     }
 
     for (const item of dto.items) {
       if (item.matchedId) {
-        const ownedSet = item.targetType === 'product' ? ownedProductIds : ownedIngredientIds;
+        const ownedSet =
+          item.targetType === 'product' ? ownedProductIds : ownedIngredientIds;
         if (!ownedSet.has(item.matchedId)) {
-          throw new BadRequestException(`matchedId ${item.matchedId} is invalid for this shop`);
+          throw new BadRequestException(
+            `matchedId ${item.matchedId} is invalid for this shop`,
+          );
         }
       } else if (!item.createNew) {
-        throw new BadRequestException('Each item needs either matchedId or createNew');
-      } else if (item.targetType === 'product' && (item.createNew.price === undefined || item.createNew.categoryId === undefined)) {
-        throw new BadRequestException('Creating a new product requires price and categoryId');
+        throw new BadRequestException(
+          'Each item needs either matchedId or createNew',
+        );
+      } else if (
+        item.targetType === 'product' &&
+        (item.createNew.price === undefined ||
+          item.createNew.categoryId === undefined)
+      ) {
+        throw new BadRequestException(
+          'Creating a new product requires price and categoryId',
+        );
       } else if (item.targetType === 'ingredient' && !item.createNew.unit) {
-        throw new BadRequestException('Creating a new ingredient requires a unit');
+        throw new BadRequestException(
+          'Creating a new ingredient requires a unit',
+        );
       }
     }
 
@@ -131,7 +173,11 @@ export class ScanService {
 
     const batch = await this.prisma.$transaction(async (tx) => {
       const scanBatch = await tx.scanbatch.create({
-        data: { shopId: ctx.shopId, imageUrl: dto.imageUrl, actorUserId: ctx.userId },
+        data: {
+          shopId: ctx.shopId,
+          imageUrl: dto.imageUrl,
+          actorUserId: ctx.userId,
+        },
       });
 
       for (const item of dto.items) {
@@ -146,7 +192,10 @@ export class ScanService {
           let suffix = 2;
           while (
             usedSlugsThisBatch.has(slug) ||
-            (await tx.product.findFirst({ where: { shopId: ctx.shopId, slug }, select: { id: true } }))
+            (await tx.product.findFirst({
+              where: { shopId: ctx.shopId, slug },
+              select: { id: true },
+            }))
           ) {
             slug = `${root}-${suffix}`;
             suffix += 1;
@@ -170,7 +219,9 @@ export class ScanService {
               // storefront before the merchant has reviewed it.
               status: 'Unavailable',
               trackInventory: true,
-              productcategory: { create: [{ categoryId: item.createNew!.categoryId! }] },
+              productcategory: {
+                create: [{ categoryId: item.createNew!.categoryId! }],
+              },
             },
             select: { id: true },
           });
@@ -195,15 +246,33 @@ export class ScanService {
         // now the total count".
         if (item.targetType === 'product') {
           await tx.outletstock.upsert({
-            where: { outletId_productId: { outletId: item.outletId, productId: targetId } },
+            where: {
+              outletId_productId: {
+                outletId: item.outletId,
+                productId: targetId,
+              },
+            },
             update: { stockQuantity: { increment: item.quantity } },
-            create: { outletId: item.outletId, productId: targetId, stockQuantity: item.quantity },
+            create: {
+              outletId: item.outletId,
+              productId: targetId,
+              stockQuantity: item.quantity,
+            },
           });
         } else {
           await tx.outletingredientstock.upsert({
-            where: { outletId_ingredientId: { outletId: item.outletId, ingredientId: targetId } },
+            where: {
+              outletId_ingredientId: {
+                outletId: item.outletId,
+                ingredientId: targetId,
+              },
+            },
             update: { stockQuantity: { increment: item.quantity } },
-            create: { outletId: item.outletId, ingredientId: targetId, stockQuantity: item.quantity },
+            create: {
+              outletId: item.outletId,
+              ingredientId: targetId,
+              stockQuantity: item.quantity,
+            },
           });
         }
 

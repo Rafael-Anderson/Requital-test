@@ -16,7 +16,7 @@ describe('ResendEmailProvider', () => {
     fetchSpy.mockResolvedValue({
       ok: true,
       json: async () => ({ id: 're_fake123' }),
-    } as unknown as Response);
+    });
 
     const provider = new ResendEmailProvider();
     const result = await provider.sendEmail({
@@ -47,7 +47,10 @@ describe('ResendEmailProvider', () => {
 
   it('uses EMAIL_FROM_ADDRESS when set, keeping the caller-supplied display name', async () => {
     process.env.EMAIL_FROM_ADDRESS = 'orders@verified-domain.com';
-    fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ id: 're_2' }) } as unknown as Response);
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 're_2' }),
+    });
 
     const provider = new ResendEmailProvider();
     await provider.sendEmail({
@@ -83,7 +86,7 @@ describe('ResendEmailProvider', () => {
       ok: false,
       status: 401,
       json: async () => ({ message: 'Invalid API key' }),
-    } as unknown as Response);
+    });
 
     const provider = new ResendEmailProvider();
     await expect(

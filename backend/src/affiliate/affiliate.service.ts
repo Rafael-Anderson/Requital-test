@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -18,22 +23,37 @@ export class AffiliateService {
   // ---------- Affiliate tab ----------
 
   async getSummary(ctx: TenantContext) {
-    const [totalCode, totalAffiliate, activeAffiliate, codesByStatus, pendingOrders, approvedOrders] =
-      await Promise.all([
-        this.prisma.affiliatecode.count({ where: { shopId: ctx.shopId } }),
-        this.prisma.affiliate.count({ where: { shopId: ctx.shopId } }),
-        this.prisma.affiliate.count({ where: { shopId: ctx.shopId, status: 'active' } }),
-        this.prisma.affiliatecode.groupBy({ by: ['status'], where: { shopId: ctx.shopId }, _count: true }),
-        this.prisma.affiliateorder.count({ where: { shopId: ctx.shopId, status: 'pending' } }),
-        this.prisma.affiliateorder.findMany({
-          where: { shopId: ctx.shopId, status: 'approved' },
-          select: { order: { select: { total: true } } },
-        }),
-      ]);
+    const [
+      totalCode,
+      totalAffiliate,
+      activeAffiliate,
+      codesByStatus,
+      pendingOrders,
+      approvedOrders,
+    ] = await Promise.all([
+      this.prisma.affiliatecode.count({ where: { shopId: ctx.shopId } }),
+      this.prisma.affiliate.count({ where: { shopId: ctx.shopId } }),
+      this.prisma.affiliate.count({
+        where: { shopId: ctx.shopId, status: 'active' },
+      }),
+      this.prisma.affiliatecode.groupBy({
+        by: ['status'],
+        where: { shopId: ctx.shopId },
+        _count: true,
+      }),
+      this.prisma.affiliateorder.count({
+        where: { shopId: ctx.shopId, status: 'pending' },
+      }),
+      this.prisma.affiliateorder.findMany({
+        where: { shopId: ctx.shopId, status: 'approved' },
+        select: { order: { select: { total: true } } },
+      }),
+    ]);
 
     const codeStatus = { approved: 0, pending: 0, blocked: 0 };
     for (const row of codesByStatus) {
-      if (row.status in codeStatus) codeStatus[row.status as keyof typeof codeStatus] = row._count;
+      if (row.status in codeStatus)
+        codeStatus[row.status as keyof typeof codeStatus] = row._count;
     }
 
     return {
@@ -44,7 +64,10 @@ export class AffiliateService {
       // Revenue driven through approved affiliate orders (order totals, not
       // commission payable — the per-order commission owed is shown on the
       // Affiliate Orders tab instead).
-      approvedOrderRevenue: approvedOrders.reduce((sum, r) => sum + Number(r.order.total), 0),
+      approvedOrderRevenue: approvedOrders.reduce(
+        (sum, r) => sum + Number(r.order.total),
+        0,
+      ),
       codeStatus,
     };
   }
@@ -55,13 +78,19 @@ export class AffiliateService {
     const search = query.search?.trim();
     const where: Prisma.affiliateWhereInput = {
       shopId: ctx.shopId,
-      ...(search && { OR: [{ name: { contains: search } }, { mobile: { contains: search } }] }),
+      ...(search && {
+        OR: [{ name: { contains: search } }, { mobile: { contains: search } }],
+      }),
     };
 
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.affiliate.findMany({
         where,
-        include: { affiliatecode: { include: { _count: { select: { affiliateorder: true } } } } },
+        include: {
+          affiliatecode: {
+            include: { _count: { select: { affiliateorder: true } } },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -77,7 +106,10 @@ export class AffiliateService {
         status: a.status,
         createdAt: a.createdAt,
         codesCount: a.affiliatecode.length,
-        ordersCount: a.affiliatecode.reduce((sum, c) => sum + c._count.affiliateorder, 0),
+        ordersCount: a.affiliatecode.reduce(
+          (sum, c) => sum + c._count.affiliateorder,
+          0,
+        ),
       })),
       page,
       pageSize,
@@ -91,7 +123,11 @@ export class AffiliateService {
     });
   }
 
-  async updateAffiliate(ctx: TenantContext, id: number, dto: UpdateAffiliateDto) {
+  async updateAffiliate(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateAffiliateDto,
+  ) {
     await this.assertAffiliateBelongsToShop(ctx, id);
     return this.prisma.affiliate.update({
       where: { id },
@@ -107,7 +143,12 @@ export class AffiliateService {
     const search = query.search?.trim();
     const where: Prisma.affiliatecodeWhereInput = {
       shopId: ctx.shopId,
-      ...(search && { OR: [{ code: { contains: search } }, { promotionFor: { contains: search } }] }),
+      ...(search && {
+        OR: [
+          { code: { contains: search } },
+          { promotionFor: { contains: search } },
+        ],
+      }),
     };
 
     const shop = await this.prisma.shop.findUniqueOrThrow({
@@ -117,7 +158,10 @@ export class AffiliateService {
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.affiliatecode.findMany({
         where,
-        include: { affiliate: { select: { name: true } }, _count: { select: { affiliateorder: true } } },
+        include: {
+          affiliate: { select: { name: true } },
+          _count: { select: { affiliateorder: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -154,7 +198,11 @@ export class AffiliateService {
     if (!affiliate) {
       throw new NotFoundException(`Affiliate ${dto.affiliateId} not found`);
     }
-    if (dto.validFrom && dto.validUntil && new Date(dto.validFrom) > new Date(dto.validUntil)) {
+    if (
+      dto.validFrom &&
+      dto.validUntil &&
+      new Date(dto.validFrom) > new Date(dto.validUntil)
+    ) {
       throw new BadRequestException('validFrom must be before validUntil');
     }
 
@@ -172,14 +220,23 @@ export class AffiliateService {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException(`Code '${dto.code}' already exists for this shop`);
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Code '${dto.code}' already exists for this shop`,
+        );
       }
       throw error;
     }
   }
 
-  async updateCode(ctx: TenantContext, id: number, dto: UpdateAffiliateCodeDto) {
+  async updateCode(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateAffiliateCodeDto,
+  ) {
     await this.assertCodeBelongsToShop(ctx, id);
     return this.prisma.affiliatecode.update({
       where: { id },
@@ -205,7 +262,9 @@ export class AffiliateService {
         where: { shopId: ctx.shopId },
         include: {
           order: { select: { id: true, customerName: true, total: true } },
-          affiliatecode: { select: { code: true, affiliate: { select: { name: true } } } },
+          affiliatecode: {
+            select: { code: true, affiliate: { select: { name: true } } },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -236,15 +295,26 @@ export class AffiliateService {
   // 'pending', matching the task's "approve/block a pending commission"
   // framing. Once approved/blocked (whether by this or by the automatic
   // order-lifecycle sync below), it's final.
-  async updateOrderStatus(ctx: TenantContext, id: number, dto: UpdateAffiliateOrderStatusDto) {
-    const row = await this.prisma.affiliateorder.findFirst({ where: { id, shopId: ctx.shopId } });
+  async updateOrderStatus(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateAffiliateOrderStatusDto,
+  ) {
+    const row = await this.prisma.affiliateorder.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!row) {
       throw new NotFoundException(`Affiliate order ${id} not found`);
     }
     if (row.status !== 'pending') {
-      throw new BadRequestException(`Cannot change status — commission is already '${row.status}'`);
+      throw new BadRequestException(
+        `Cannot change status — commission is already '${row.status}'`,
+      );
     }
-    return this.prisma.affiliateorder.update({ where: { id }, data: { status: dto.status } });
+    return this.prisma.affiliateorder.update({
+      where: { id },
+      data: { status: dto.status },
+    });
   }
 
   // ---------- Referral attribution (called from order-creation flows) ----------
@@ -303,7 +373,10 @@ export class AffiliateService {
   // never re-derives or reverses a status once set, so a merchant's own
   // manual approve/block (or an earlier auto-sync) is never clobbered by a
   // later lifecycle event.
-  async syncOrderStatus(orderId: number, next: { orderStatus?: string; paymentPaid?: boolean }) {
+  async syncOrderStatus(
+    orderId: number,
+    next: { orderStatus?: string; paymentPaid?: boolean },
+  ) {
     const nextStatus =
       next.orderStatus === 'cancelled'
         ? 'blocked'
@@ -318,7 +391,9 @@ export class AffiliateService {
   }
 
   private async assertAffiliateBelongsToShop(ctx: TenantContext, id: number) {
-    const affiliate = await this.prisma.affiliate.findFirst({ where: { id, shopId: ctx.shopId } });
+    const affiliate = await this.prisma.affiliate.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!affiliate) {
       throw new NotFoundException(`Affiliate ${id} not found`);
     }
@@ -326,7 +401,9 @@ export class AffiliateService {
   }
 
   private async assertCodeBelongsToShop(ctx: TenantContext, id: number) {
-    const code = await this.prisma.affiliatecode.findFirst({ where: { id, shopId: ctx.shopId } });
+    const code = await this.prisma.affiliatecode.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!code) {
       throw new NotFoundException(`Affiliate code ${id} not found`);
     }

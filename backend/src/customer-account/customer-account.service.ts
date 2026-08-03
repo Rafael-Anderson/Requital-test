@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +22,14 @@ export interface CustomerAddress {
 }
 
 const orderInclude = {
-  orderitem: { select: { productName: true, variantLabel: true, quantity: true, priceAtPurchase: true } },
+  orderitem: {
+    select: {
+      productName: true,
+      variantLabel: true,
+      quantity: true,
+      priceAtPurchase: true,
+    },
+  },
   outlet: { select: { name: true } },
 } satisfies Prisma.orderInclude;
 
@@ -27,7 +38,9 @@ export class CustomerAccountService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getProfile(ctx: CustomerContext) {
-    const customer = await this.prisma.customer.findUniqueOrThrow({ where: { id: ctx.customerId } });
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: ctx.customerId },
+    });
     return this.toProfileResponse(customer);
   }
 
@@ -39,8 +52,13 @@ export class CustomerAccountService {
       });
       return this.toProfileResponse(customer);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Another account with this phone number already exists');
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Another account with this phone number already exists',
+        );
       }
       throw error;
     }
@@ -74,21 +92,32 @@ export class CustomerAccountService {
   }
 
   async listAddresses(ctx: CustomerContext): Promise<CustomerAddress[]> {
-    const customer = await this.prisma.customer.findUniqueOrThrow({ where: { id: ctx.customerId } });
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: ctx.customerId },
+    });
     return (customer.addresses as CustomerAddress[] | null) ?? [];
   }
 
-  async createAddress(ctx: CustomerContext, dto: SaveAddressDto): Promise<CustomerAddress> {
+  async createAddress(
+    ctx: CustomerContext,
+    dto: SaveAddressDto,
+  ): Promise<CustomerAddress> {
     const addresses = await this.listAddresses(ctx);
     const address: CustomerAddress = { id: randomUUID().slice(0, 8), ...dto };
     await this.prisma.customer.update({
       where: { id: ctx.customerId },
-      data: { addresses: [...addresses, address] as unknown as Prisma.InputJsonValue },
+      data: {
+        addresses: [...addresses, address] as unknown as Prisma.InputJsonValue,
+      },
     });
     return address;
   }
 
-  async updateAddress(ctx: CustomerContext, addressId: string, dto: UpdateAddressDto): Promise<CustomerAddress> {
+  async updateAddress(
+    ctx: CustomerContext,
+    addressId: string,
+    dto: UpdateAddressDto,
+  ): Promise<CustomerAddress> {
     const addresses = await this.listAddresses(ctx);
     const index = addresses.findIndex((a) => a.id === addressId);
     if (index === -1) {
@@ -116,9 +145,36 @@ export class CustomerAccountService {
     return { id: addressId, deleted: true };
   }
 
-  private toProfileResponse(customer: { id: number; shopId: number; name: string; phone: string; email: string | null; emailVerified: boolean; registeredAt: Date | null; createdAt: Date }) {
-    const { id, shopId, name, phone, email, emailVerified, registeredAt, createdAt } = customer;
-    return { id, shopId, name, phone, email, emailVerified, registeredAt, createdAt };
+  private toProfileResponse(customer: {
+    id: number;
+    shopId: number;
+    name: string;
+    phone: string;
+    email: string | null;
+    emailVerified: boolean;
+    registeredAt: Date | null;
+    createdAt: Date;
+  }) {
+    const {
+      id,
+      shopId,
+      name,
+      phone,
+      email,
+      emailVerified,
+      registeredAt,
+      createdAt,
+    } = customer;
+    return {
+      id,
+      shopId,
+      name,
+      phone,
+      email,
+      emailVerified,
+      registeredAt,
+      createdAt,
+    };
   }
 
   private toOrderSummary(

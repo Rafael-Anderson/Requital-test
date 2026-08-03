@@ -1,4 +1,10 @@
-export const BIO_LINK_TYPES = ['EXTERNAL_URL', 'PRODUCT', 'CATEGORY', 'COLLECTION', 'SOCIAL_ICON'] as const;
+export const BIO_LINK_TYPES = [
+  'EXTERNAL_URL',
+  'PRODUCT',
+  'CATEGORY',
+  'COLLECTION',
+  'SOCIAL_ICON',
+] as const;
 export type BioLinkType = (typeof BIO_LINK_TYPES)[number];
 
 // Which discriminator field each type expects — exactly one of these must be

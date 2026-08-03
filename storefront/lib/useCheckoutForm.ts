@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
-import { captureAbandonedCart, createOrder, geocode, listMyAddresses } from "@/lib/api";
+import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
 import { generateTimeSlots, isDateBlocked } from "@/lib/slots";
 import { resolvePaymentMethods } from "@/lib/payment-methods";
 import { getStoredReferralCode } from "@/lib/referral";
@@ -69,8 +69,6 @@ export function useCheckoutForm() {
   const [area, setArea] = useState("");
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
-  const [addressQuery, setAddressQuery] = useState("");
-  const [searching, setSearching] = useState(false);
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
@@ -147,21 +145,6 @@ export function useCheckoutForm() {
     );
   }
 
-  async function searchAddress() {
-    if (!addressQuery.trim()) return;
-    setSearching(true);
-    setError(null);
-    try {
-      const result = await geocode(shopSlug, addressQuery);
-      setCoords({ latitude: result.latitude, longitude: result.longitude });
-      setCustomerAddress(result.displayName);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Address search failed");
-    } finally {
-      setSearching(false);
-    }
-  }
-
   // Fired on phone-field blur (see the two checkout presentational
   // components) once name+phone are both filled in — the "customer has
   // provided enough identity to be reachable" trigger point the Abandoned
@@ -217,6 +200,7 @@ export function useCheckoutForm() {
           variantId: i.variantId,
           quantity: i.quantity,
           giftCardAmount: i.isGiftCard ? i.price : undefined,
+          note: i.note,
         })),
         giftCardCode: giftCardCode || undefined,
       });
@@ -268,12 +252,9 @@ export function useCheckoutForm() {
     area,
     setArea,
     coords,
+    setCoords,
     locating,
     useMyLocation,
-    addressQuery,
-    setAddressQuery,
-    searching,
-    searchAddress,
     deliveryNotes,
     setDeliveryNotes,
     deliveryDate,

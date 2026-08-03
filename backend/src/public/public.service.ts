@@ -7,7 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
-import { geocodeAddress } from '../common/nominatim';
+import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import { haversineDistanceKm } from '../common/geo';
 import { generateTrackingCode } from '../common/token-hash';
 import { computeOrderTotals, matchDeliveryZone } from './order-pricing';
@@ -27,8 +27,12 @@ import type { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto
 import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandoned-cart.dto';
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
+import { SubmitSurveyDto } from './dto/submit-survey.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
-import { POLICY_PAGE_TYPES, type PolicyPageType } from '../policy-pages/policy-page-constants';
+import {
+  POLICY_PAGE_TYPES,
+  type PolicyPageType,
+} from '../policy-pages/policy-page-constants';
 
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
@@ -120,16 +124,29 @@ export class PublicService {
     // deliveryPaymentCardOnline/pickupPaymentCardOnline booleans, so a shop
     // that's explicitly disabled both processors doesn't show a "Pay
     // online" option that would 500 at checkout.
-    const [enabledPaymentProviders, cardProcessorEnabled, banners, publishedPolicyPages] = await Promise.all([
+    const [
+      enabledPaymentProviders,
+      cardProcessorEnabled,
+      banners,
+      publishedPolicyPages,
+    ] = await Promise.all([
       Promise.all(
         INDEPENDENT_ONLINE_PROVIDERS.map(async (p) => ({
           provider: p,
           enabled: await this.paymentSettingsService.isEnabled(shop.id, p),
         })),
-      ).then((results) => results.filter((r) => r.enabled).map((r) => r.provider)),
+      ).then((results) =>
+        results.filter((r) => r.enabled).map((r) => r.provider),
+      ),
       this.paymentSettingsService.isEnabled(shop.id, shop.paymentGateway),
-      this.prisma.bannerimage.findMany({ where: { shopId: shop.id }, orderBy: { order: 'asc' } }),
-      this.prisma.policypage.findMany({ where: { shopId: shop.id }, select: { type: true } }),
+      this.prisma.bannerimage.findMany({
+        where: { shopId: shop.id },
+        orderBy: { order: 'asc' },
+      }),
+      this.prisma.policypage.findMany({
+        where: { shopId: shop.id },
+        select: { type: true },
+      }),
     ]);
     // Only the types a merchant has actually written content for — the
     // footer never links to a policy type with no content (see
@@ -169,6 +186,10 @@ export class PublicService {
       whatsappCountryCode: shop.whatsappCountryCode,
       whatsappNumber: shop.whatsappNumber,
       whatsappFloatingButtonEnabled: shop.whatsappFloatingButtonEnabled,
+      productAttributesEnabled: shop.productAttributesEnabled,
+      productFaqsEnabled: shop.productFaqsEnabled,
+      disableStoreCart: shop.disableStoreCart,
+      cartDisabledMode: shop.cartDisabledMode,
       socialLinks: shop.socialLinks,
       productDisplayOrientation: shop.productDisplayOrientation,
       productImageZoomEnabled: shop.productImageZoomEnabled,
@@ -213,7 +234,12 @@ export class PublicService {
       // single-image stand-in below (kept for backward compat / non-
       // slideshow layouts that only ever wanted one image; see
       // ClassicHero, which still reads bannerUrl directly).
-      banners: banners.map((b) => ({ id: b.id, url: b.url, linkUrl: b.linkUrl, order: b.order })),
+      banners: banners.map((b) => ({
+        id: b.id,
+        url: b.url,
+        linkUrl: b.linkUrl,
+        order: b.order,
+      })),
       policyPageTypes,
       // Raw per-key overrides, unresolved — the storefront applies its own
       // per-key defaults client-side (see shop-context.tsx's applyTheme),
@@ -239,7 +265,12 @@ export class PublicService {
       // business logo — a merchant who's set up Theme but not SEO
       // specifically still gets a real image in shared link previews
       // instead of nothing.
-      ogImage: seo?.ogImage ?? theme?.bannerUrl ?? theme?.logoUrl ?? shop.logoUrl ?? null,
+      ogImage:
+        seo?.ogImage ??
+        theme?.bannerUrl ??
+        theme?.logoUrl ??
+        shop.logoUrl ??
+        null,
       keywords: seo?.keywords ?? null,
     };
   }
@@ -298,7 +329,10 @@ export class PublicService {
   async getCollection(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const resolved = await this.collectionsService.getPublicBySlug(shop.id, slug);
+    const resolved = await this.collectionsService.getPublicBySlug(
+      shop.id,
+      slug,
+    );
     if (!resolved) {
       throw new NotFoundException(`Collection '${slug}' not found`);
     }
@@ -309,7 +343,9 @@ export class PublicService {
       include: this.publicProductInclude(outletId),
     });
     const byId = new Map(products.map((p) => [p.id, p]));
-    const ordered = productIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+    const ordered = productIds
+      .map((id) => byId.get(id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
 
     return {
       id: summary.id,
@@ -321,7 +357,12 @@ export class PublicService {
     };
   }
 
-  async listProducts(shopSlug: string, outletId?: number, categoryId?: number) {
+  async listProducts(
+    shopSlug: string,
+    outletId?: number,
+    categoryId?: number,
+    isCheckoutAddon?: boolean,
+  ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     const products = await this.prisma.product.findMany({
@@ -331,6 +372,7 @@ export class PublicService {
         ...(categoryId !== undefined && {
           productcategory: { some: { categoryId } },
         }),
+        ...(isCheckoutAddon !== undefined && { isCheckoutAddon }),
       },
       include: this.publicProductInclude(outletId),
       orderBy: { id: 'asc' },
@@ -372,6 +414,8 @@ export class PublicService {
     return {
       productcategory: { include: { category: true } },
       productimage: { orderBy: { order: 'asc' as const } },
+      productattribute: { orderBy: { order: 'asc' as const } },
+      productfaq: { orderBy: { order: 'asc' as const } },
       productoption: {
         orderBy: { order: 'asc' as const },
         include: { productoptionvalue: { orderBy: { order: 'asc' as const } } },
@@ -384,7 +428,10 @@ export class PublicService {
           optionValue2: true,
           optionValue3: true,
           ...(outletId !== undefined && {
-            outletvariantstock: { where: { outletId }, select: { stockQuantity: true } },
+            outletvariantstock: {
+              where: { outletId },
+              select: { stockQuantity: true },
+            },
           }),
         },
       },
@@ -441,6 +488,10 @@ export class PublicService {
     return geocodeAddress(query);
   }
 
+  reverseGeocode(lat?: number, lon?: number) {
+    return reverseGeocodeAddress(lat, lon);
+  }
+
   // Not shop-scoped by design — trackingToken is globally unique, so the
   // token alone is sufficient (and the only thing) that identifies the
   // order; no shopSlug needed in the URL. Deliberately excludes
@@ -454,7 +505,14 @@ export class PublicService {
     const order = await this.prisma.order.findUnique({
       where: { trackingToken: token },
       include: {
-        orderitem: { select: { productName: true, variantLabel: true, quantity: true, priceAtPurchase: true } },
+        orderitem: {
+          select: {
+            productName: true,
+            variantLabel: true,
+            quantity: true,
+            priceAtPurchase: true,
+          },
+        },
         shop: {
           select: {
             name: true,
@@ -511,6 +569,52 @@ export class PublicService {
     };
   }
 
+  // Not shop-scoped, same reasoning as lookupOrder above — a survey token is
+  // globally unique and self-sufficient. Deliberately excludes anything
+  // order-identifying beyond the shop's own display name.
+  async lookupSurvey(token?: string) {
+    if (!token?.trim()) {
+      throw new BadRequestException('A survey token is required');
+    }
+    const survey = await this.prisma.surveyresponse.findUnique({
+      where: { token },
+      include: { shop: { select: { name: true, displayName: true } } },
+    });
+    if (!survey) {
+      throw new NotFoundException('No survey found for that token');
+    }
+    return {
+      shopName: survey.shop.displayName ?? survey.shop.name,
+      rating: survey.rating,
+      comment: survey.comment,
+      respondedAt: survey.respondedAt,
+    };
+  }
+
+  async submitSurvey(token: string | undefined, dto: SubmitSurveyDto) {
+    if (!token?.trim()) {
+      throw new BadRequestException('A survey token is required');
+    }
+    const survey = await this.prisma.surveyresponse.findUnique({
+      where: { token },
+    });
+    if (!survey) {
+      throw new NotFoundException('No survey found for that token');
+    }
+    if (survey.respondedAt) {
+      throw new BadRequestException('This survey has already been submitted');
+    }
+    await this.prisma.surveyresponse.update({
+      where: { token },
+      data: {
+        rating: dto.rating,
+        comment: dto.comment ?? null,
+        respondedAt: new Date(),
+      },
+    });
+    return { success: true };
+  }
+
   async validateDiscount(shopSlug: string, dto: ValidateDiscountDto) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
@@ -533,7 +637,11 @@ export class PublicService {
     if (dto.orderType === 'pickup' && !outlet.pickupEnabled) {
       throw new BadRequestException('This outlet does not offer pickup');
     }
-    await this.assertPaymentMethodAvailable(shop, dto.orderType, dto.paymentMethod);
+    await this.assertPaymentMethodAvailable(
+      shop,
+      dto.orderType,
+      dto.paymentMethod,
+    );
     this.assertFulfillmentOpen(shop, outlet, dto.orderType);
     if (dto.deliveryDate) {
       this.assertWithinAcceptanceWindow(shop, dto.deliveryDate);
@@ -550,22 +658,27 @@ export class PublicService {
     );
     for (const { product } of resolvedItems) {
       if (product.status !== 'Available') {
-        throw new BadRequestException(`${product.name} is not currently available`);
+        throw new BadRequestException(
+          `${product.name} is not currently available`,
+        );
       }
     }
 
     let subtotal = new Prisma.Decimal(0);
-    const itemsData = resolvedItems.map(({ product, variant, quantity, price, variantLabel }) => {
-      subtotal = subtotal.add(price.mul(quantity));
-      return {
-        productId: product.id,
-        productName: product.name,
-        variantId: variant?.id,
-        variantLabel: variantLabel ?? undefined,
-        quantity,
-        priceAtPurchase: price,
-      };
-    });
+    const itemsData = resolvedItems.map(
+      ({ product, variant, quantity, price, variantLabel }, idx) => {
+        subtotal = subtotal.add(price.mul(quantity));
+        return {
+          productId: product.id,
+          productName: product.name,
+          variantId: variant?.id,
+          variantLabel: variantLabel ?? undefined,
+          quantity,
+          priceAtPurchase: price,
+          note: dto.items[idx].note || undefined,
+        };
+      },
+    );
 
     let deliveryFee =
       dto.orderType === 'pickup'
@@ -582,10 +695,17 @@ export class PublicService {
     let discountAmount = new Prisma.Decimal(0);
     let discountCodeSnapshot: string | undefined;
     if (dto.discountCode) {
-      const resolved = await this.discountsService.resolveByCode(shop.id, dto.discountCode);
-      const evaluated = await this.discountsService.evaluate(resolved, { cartSubtotal: Number(subtotal) });
+      const resolved = await this.discountsService.resolveByCode(
+        shop.id,
+        dto.discountCode,
+      );
+      const evaluated = await this.discountsService.evaluate(resolved, {
+        cartSubtotal: Number(subtotal),
+      });
       if (!evaluated.valid) {
-        throw new BadRequestException(evaluated.message ?? 'This discount code cannot be applied');
+        throw new BadRequestException(
+          evaluated.message ?? 'This discount code cannot be applied',
+        );
       }
       discount = resolved!;
       discountAmount = new Prisma.Decimal(evaluated.discountAmount ?? 0);
@@ -597,7 +717,10 @@ export class PublicService {
     // Discount reduces the taxable base, same as a merchant discounting the
     // goods themselves — tax is computed on what the customer actually pays
     // for the products, not the pre-discount list price.
-    const discountedSubtotal = Prisma.Decimal.max(0, subtotal.sub(discountAmount));
+    const discountedSubtotal = Prisma.Decimal.max(
+      0,
+      subtotal.sub(discountAmount),
+    );
 
     const { taxAmount, total } = computeOrderTotals({
       subtotal: Number(discountedSubtotal),
@@ -615,9 +738,14 @@ export class PublicService {
     let giftCard: { id: number; code: string } | null = null;
     let giftCardAmountApplied = new Prisma.Decimal(0);
     if (dto.giftCardCode) {
-      const evaluated = await this.giftCardsService.validateCode(shop.id, dto.giftCardCode);
+      const evaluated = await this.giftCardsService.validateCode(
+        shop.id,
+        dto.giftCardCode,
+      );
       if (!evaluated.valid) {
-        throw new BadRequestException(evaluated.message ?? 'This gift card cannot be applied');
+        throw new BadRequestException(
+          evaluated.message ?? 'This gift card cannot be applied',
+        );
       }
       giftCard = { id: evaluated.giftCardId!, code: evaluated.code! };
       giftCardAmountApplied = Prisma.Decimal.min(
@@ -672,26 +800,52 @@ export class PublicService {
         if (product.continueSellingOutOfStock) {
           if (variant) {
             await tx.outletvariantstock.upsert({
-              where: { outletId_variantId: { outletId: outlet.id, variantId: variant.id } },
+              where: {
+                outletId_variantId: {
+                  outletId: outlet.id,
+                  variantId: variant.id,
+                },
+              },
               update: { stockQuantity: { decrement: quantity } },
-              create: { outletId: outlet.id, variantId: variant.id, stockQuantity: -quantity },
+              create: {
+                outletId: outlet.id,
+                variantId: variant.id,
+                stockQuantity: -quantity,
+              },
             });
           } else {
             await tx.outletstock.upsert({
-              where: { outletId_productId: { outletId: outlet.id, productId: product.id } },
+              where: {
+                outletId_productId: {
+                  outletId: outlet.id,
+                  productId: product.id,
+                },
+              },
               update: { stockQuantity: { decrement: quantity } },
-              create: { outletId: outlet.id, productId: product.id, stockQuantity: -quantity },
+              create: {
+                outletId: outlet.id,
+                productId: product.id,
+                stockQuantity: -quantity,
+              },
             });
           }
           continue;
         }
         const result = variant
           ? await tx.outletvariantstock.updateMany({
-              where: { outletId: outlet.id, variantId: variant.id, stockQuantity: { gte: quantity } },
+              where: {
+                outletId: outlet.id,
+                variantId: variant.id,
+                stockQuantity: { gte: quantity },
+              },
               data: { stockQuantity: { decrement: quantity } },
             })
           : await tx.outletstock.updateMany({
-              where: { outletId: outlet.id, productId: product.id, stockQuantity: { gte: quantity } },
+              where: {
+                outletId: outlet.id,
+                productId: product.id,
+                stockQuantity: { gte: quantity },
+              },
               data: { stockQuantity: { decrement: quantity } },
             });
         if (result.count === 0) {
@@ -708,20 +862,21 @@ export class PublicService {
       // actorUserId: null — no authenticated staff user exists on this
       // anonymous storefront path (see stockmovement.actorUserId's schema
       // comment).
-      const ingredientsConsumed = await this.productsService.consumeForOrderItems(
-        tx,
-        shop.id,
-        outlet.id,
-        resolvedItems
-          .filter(({ product }) => !product.isGiftCard)
-          .map(({ product, variant, quantity }) => ({
-            productId: product.id,
-            variantId: variant?.id ?? null,
-            quantity,
-          })),
-        -1,
-        { throwOnInsufficientStock: true, actorUserId: null },
-      );
+      const ingredientsConsumed =
+        await this.productsService.consumeForOrderItems(
+          tx,
+          shop.id,
+          outlet.id,
+          resolvedItems
+            .filter(({ product }) => !product.isGiftCard)
+            .map(({ product, variant, quantity }) => ({
+              productId: product.id,
+              variantId: variant?.id ?? null,
+              quantity,
+            })),
+          -1,
+          { throwOnInsufficientStock: true, actorUserId: null },
+        );
 
       const created = await tx.order.create({
         data: {
@@ -735,7 +890,9 @@ export class PublicService {
           customerAddress: dto.customerAddress,
           emirate: dto.emirate,
           area: dto.area,
-          deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
+          deliveryDate: dto.deliveryDate
+            ? new Date(dto.deliveryDate)
+            : undefined,
           deliveryTimeSlot: dto.deliveryTimeSlot,
           deliveryNotes: dto.deliveryNotes,
           receiverMessage: dto.receiverMessage,
@@ -756,7 +913,9 @@ export class PublicService {
           // creation rather than left 'unpaid' waiting for a payment event
           // that was never going to happen (no online-payment session is
           // created for a zero remainder either, see below).
-          paymentStatus: remainderTotal.lessThanOrEqualTo(0) ? 'paid' : undefined,
+          paymentStatus: remainderTotal.lessThanOrEqualTo(0)
+            ? 'paid'
+            : undefined,
           trackingToken: generateTrackingCode(),
           orderitem: { create: itemsData },
         },
@@ -764,15 +923,30 @@ export class PublicService {
       });
 
       if (discount) {
-        await this.discountsService.redeem(tx, discount, created.id, customer.id);
+        await this.discountsService.redeem(
+          tx,
+          discount,
+          created.id,
+          customer.id,
+        );
       }
 
       if (giftCard && giftCardAmountApplied.greaterThan(0)) {
-        await this.giftCardsService.redeem(tx, giftCard.id, Number(giftCardAmountApplied), created.id);
+        await this.giftCardsService.redeem(
+          tx,
+          giftCard.id,
+          Number(giftCardAmountApplied),
+          created.id,
+        );
       }
 
       if (attribution) {
-        await this.affiliateService.recordAttribution(tx, shop.id, created.id, attribution);
+        await this.affiliateService.recordAttribution(
+          tx,
+          shop.id,
+          created.id,
+          attribution,
+        );
       }
 
       // Gift Cards: any line item(s) that WERE themselves gift-card
@@ -802,7 +976,12 @@ export class PublicService {
       // what makes the "recovery job racing a same-window completion"
       // scenario safe — see AbandonedCartsService.markRecovered's own
       // comment on the CAS claim this performs.
-      await this.abandonedCartsService.markRecovered(tx, shop.id, dto.customerPhone, created.id);
+      await this.abandonedCartsService.markRecovered(
+        tx,
+        shop.id,
+        dto.customerPhone,
+        created.id,
+      );
 
       return created;
     });
@@ -822,7 +1001,9 @@ export class PublicService {
     const gatewayName =
       dto.paymentMethod === 'card_online'
         ? shop.paymentGateway
-        : (INDEPENDENT_ONLINE_PROVIDERS as readonly string[]).includes(dto.paymentMethod)
+        : (INDEPENDENT_ONLINE_PROVIDERS as readonly string[]).includes(
+              dto.paymentMethod,
+            )
           ? dto.paymentMethod
           : null;
     // A gift card covering the order in full leaves nothing to charge — no
@@ -830,7 +1011,10 @@ export class PublicService {
     // was selected (order was already marked 'paid' at creation above).
     if (gatewayName && remainderTotal.greaterThan(0)) {
       const provider = this.providerRegistry.get(gatewayName);
-      const credentials = await this.paymentSettingsService.resolveCredentials(shop.id, gatewayName);
+      const credentials = await this.paymentSettingsService.resolveCredentials(
+        shop.id,
+        gatewayName,
+      );
       const session = await provider.createCheckoutSession({
         orderId: order.id,
         amount: Number(remainderTotal),
@@ -846,7 +1030,12 @@ export class PublicService {
 
   private async resolveDeliveryFee(
     shop: { id: number; defaultDeliveryFee: Prisma.Decimal },
-    outlet: { id: number; latitude: number | null; longitude: number | null; deliveryRadiusKm: number | null },
+    outlet: {
+      id: number;
+      latitude: number | null;
+      longitude: number | null;
+      deliveryRadiusKm: number | null;
+    },
     dto: CreatePublicOrderDto,
     subtotal: number,
   ): Promise<Prisma.Decimal> {
@@ -914,17 +1103,27 @@ export class PublicService {
     orderType: 'delivery' | 'pickup',
     paymentMethod: string,
   ) {
-    if ((INDEPENDENT_ONLINE_PROVIDERS as readonly string[]).includes(paymentMethod)) {
+    if (
+      (INDEPENDENT_ONLINE_PROVIDERS as readonly string[]).includes(
+        paymentMethod,
+      )
+    ) {
       // Not delivery/pickup-scoped — a single enabled flag gates both, same
       // as the Payment Gateways settings page's "visibility toggle" framing.
-      const enabled = await this.paymentSettingsService.isEnabled(shop.id, paymentMethod);
+      const enabled = await this.paymentSettingsService.isEnabled(
+        shop.id,
+        paymentMethod,
+      );
       if (!enabled) {
-        throw new BadRequestException(`'${paymentMethod}' is not an available payment method`);
+        throw new BadRequestException(
+          `'${paymentMethod}' is not an available payment method`,
+        );
       }
       return;
     }
 
-    const flags = orderType === 'delivery' ? DELIVERY_PAYMENT_FLAGS : PICKUP_PAYMENT_FLAGS;
+    const flags =
+      orderType === 'delivery' ? DELIVERY_PAYMENT_FLAGS : PICKUP_PAYMENT_FLAGS;
     const flagKey = (flags as Record<string, string>)[paymentMethod];
     if (!flagKey || !shop[flagKey]) {
       throw new BadRequestException(
@@ -938,9 +1137,14 @@ export class PublicService {
       // online" client-side (see storefront's cardProcessorEnabled AND),
       // but a direct API call needs the same real check the settings page
       // enforces, not just a client-side hint.
-      const processorEnabled = await this.paymentSettingsService.isEnabled(shop.id, shop.paymentGateway);
+      const processorEnabled = await this.paymentSettingsService.isEnabled(
+        shop.id,
+        shop.paymentGateway,
+      );
       if (!processorEnabled) {
-        throw new BadRequestException('Online card payment is not currently available');
+        throw new BadRequestException(
+          'Online card payment is not currently available',
+        );
       }
     }
   }
@@ -963,38 +1167,62 @@ export class PublicService {
     if (!outletOpen) {
       throw new BadRequestException('This outlet is currently closed');
     }
-    const fulfillmentHours = orderType === 'delivery' ? shop.deliveryHours : shop.pickupHours;
+    const fulfillmentHours =
+      orderType === 'delivery' ? shop.deliveryHours : shop.pickupHours;
     // No override at the shop-hours level — closedOverride is an outlet-only
     // concept (already checked above); a null fulfillmentHours record means
     // "always open" for that fulfillment type, same convention as outlet
     // hours.
-    const fulfillmentOpen = computeIsOpen(fulfillmentHours, false, null, shop.timezone);
+    const fulfillmentOpen = computeIsOpen(
+      fulfillmentHours,
+      false,
+      null,
+      shop.timezone,
+    );
     if (!fulfillmentOpen) {
-      throw new BadRequestException(`${orderType === 'delivery' ? 'Delivery' : 'Pickup'} is not available right now`);
+      throw new BadRequestException(
+        `${orderType === 'delivery' ? 'Delivery' : 'Pickup'} is not available right now`,
+      );
     }
   }
 
   private assertWithinAcceptanceWindow(
-    shop: { timezone: string; allowSameDayOrders: boolean; allowNextDayOrders: boolean },
+    shop: {
+      timezone: string;
+      allowSameDayOrders: boolean;
+      allowNextDayOrders: boolean;
+    },
     deliveryDate: string,
   ) {
-    const requestedKey = dateKeyInTimezone(new Date(deliveryDate), shop.timezone);
+    const requestedKey = dateKeyInTimezone(
+      new Date(deliveryDate),
+      shop.timezone,
+    );
     const todayKey = dateKeyInTimezone(new Date(), shop.timezone);
-    const tomorrowKey = dateKeyInTimezone(new Date(Date.now() + 24 * 60 * 60 * 1000), shop.timezone);
+    const tomorrowKey = dateKeyInTimezone(
+      new Date(Date.now() + 24 * 60 * 60 * 1000),
+      shop.timezone,
+    );
 
     if (requestedKey < todayKey) {
       throw new BadRequestException('The selected date has already passed');
     }
     if (requestedKey === todayKey && !shop.allowSameDayOrders) {
-      throw new BadRequestException('Same-day orders are not available right now');
+      throw new BadRequestException(
+        'Same-day orders are not available right now',
+      );
     }
     if (requestedKey === tomorrowKey && !shop.allowNextDayOrders) {
-      throw new BadRequestException('Next-day orders are not available right now');
+      throw new BadRequestException(
+        'Next-day orders are not available right now',
+      );
     }
   }
 
   private async resolveShop(shopSlug: string) {
-    const shop = await this.prisma.shop.findUnique({ where: { subdomain: shopSlug } });
+    const shop = await this.prisma.shop.findUnique({
+      where: { subdomain: shopSlug },
+    });
     if (!shop) {
       throw new NotFoundException(`Shop '${shopSlug}' not found`);
     }
@@ -1017,26 +1245,59 @@ export class PublicService {
   }
 
   private async assertOutletBelongsToShop(shopId: number, outletId: number) {
-    const outlet = await this.prisma.outlet.findFirst({ where: { id: outletId, shopId } });
+    const outlet = await this.prisma.outlet.findFirst({
+      where: { id: outletId, shopId },
+    });
     if (!outlet) {
       throw new NotFoundException(`Outlet ${outletId} not found`);
     }
   }
 
   private toProductResponse(product: PublicProductRow) {
-    const { productcategory, productimage, productoption, productvariant, outletstock, metaTitle, metaDescription, description, ...rest } =
-      product;
+    const {
+      productcategory,
+      productimage,
+      productattribute,
+      productfaq,
+      productoption,
+      productvariant,
+      outletstock,
+      metaTitle,
+      metaDescription,
+      description,
+      ...rest
+    } = product;
     return {
       ...rest,
       description,
       categories: productcategory.map((pc) => pc.category),
-      images: productimage.map((i) => ({ id: i.id, url: i.url, order: i.order })),
+      images: productimage.map((i) => ({
+        id: i.id,
+        url: i.url,
+        order: i.order,
+      })),
+      attributes: productattribute.map((a) => ({
+        id: a.id,
+        name: a.name,
+        value: a.value,
+        order: a.order,
+      })),
+      faqs: productfaq.map((f) => ({
+        id: f.id,
+        question: f.question,
+        answer: f.answer,
+        order: f.order,
+      })),
       hasVariants: productoption.length > 0,
       options: productoption.map((o) => ({
         id: o.id,
         name: o.name,
         order: o.order,
-        values: o.productoptionvalue.map((v) => ({ id: v.id, value: v.value, order: v.order })),
+        values: o.productoptionvalue.map((v) => ({
+          id: v.id,
+          value: v.value,
+          order: v.order,
+        })),
       })),
       // Sku/barcode included for parity with the admin shape even though
       // the storefront UI itself never displays them to shoppers.
@@ -1050,7 +1311,11 @@ export class PublicService {
         optionValue1Id: v.optionValue1Id,
         optionValue2Id: v.optionValue2Id,
         optionValue3Id: v.optionValue3Id,
-        label: buildVariantLabel([v.optionValue1?.value, v.optionValue2?.value, v.optionValue3?.value]),
+        label: buildVariantLabel([
+          v.optionValue1?.value,
+          v.optionValue2?.value,
+          v.optionValue3?.value,
+        ]),
         stockQuantity: v.outletvariantstock?.[0]?.stockQuantity ?? null,
       })),
       // Same convention as the admin ProductsService: null when no outlet
@@ -1072,14 +1337,28 @@ type PublicProductRow = Omit<
     include: {
       productcategory: { include: { category: true } };
       productimage: true;
+      productattribute: true;
+      productfaq: true;
       productoption: { include: { productoptionvalue: true } };
-      productvariant: { include: { image: true; optionValue1: true; optionValue2: true; optionValue3: true } };
+      productvariant: {
+        include: {
+          image: true;
+          optionValue1: true;
+          optionValue2: true;
+          optionValue3: true;
+        };
+      };
     };
   }>,
   'productvariant'
 > & {
   outletstock?: { stockQuantity: number }[];
   productvariant: (Prisma.productvariantGetPayload<{
-    include: { image: true; optionValue1: true; optionValue2: true; optionValue3: true };
+    include: {
+      image: true;
+      optionValue1: true;
+      optionValue2: true;
+      optionValue3: true;
+    };
   }> & { outletvariantstock?: { stockQuantity: number }[] })[];
 };

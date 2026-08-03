@@ -1,8 +1,18 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
+import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -100,5 +110,24 @@ export class AuthController {
   @Get('users')
   listUsers(@CurrentUser() ctx: TenantContext) {
     return this.authService.listUsers(ctx);
+  }
+
+  @Roles('admin')
+  @Patch('users/:id')
+  updateStaffUser(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateStaffUserDto,
+  ) {
+    return this.authService.updateStaffUser(ctx, id, dto);
+  }
+
+  @Roles('admin')
+  @Delete('users/:id')
+  deleteStaffUser(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.authService.deleteStaffUser(ctx, id);
   }
 }

@@ -1,3 +1,6 @@
+# Local MCP config (may contain API keys)
+.mcp.json
+
 # Logs
 logs
 *.log

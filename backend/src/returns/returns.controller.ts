@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+} from '@nestjs/common';
 import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -11,7 +18,10 @@ export class ReturnsController {
 
   @Roles('admin', 'branch', 'order_manager', 'viewer')
   @Get()
-  findAll(@CurrentUser() ctx: TenantContext, @Param('orderId', ParseIntPipe) orderId: number) {
+  findAll(
+    @CurrentUser() ctx: TenantContext,
+    @Param('orderId', ParseIntPipe) orderId: number,
+  ) {
     return this.returnsService.findAllForOrder(ctx, orderId);
   }
 

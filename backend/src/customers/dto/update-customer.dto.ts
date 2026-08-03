@@ -1,4 +1,11 @@
-import { IsDateString, IsEmail, IsOptional, IsString, MaxLength, Matches } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Matches,
+} from 'class-validator';
 
 export class UpdateCustomerDto {
   @IsOptional()
@@ -10,7 +17,8 @@ export class UpdateCustomerDto {
   // hyphens, optional leading +) — kept in sync by hand.
   @IsOptional()
   @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
-    message: 'phone must contain only digits, spaces, hyphens, and an optional leading +',
+    message:
+      'phone must contain only digits, spaces, hyphens, and an optional leading +',
   })
   phone?: string;
 

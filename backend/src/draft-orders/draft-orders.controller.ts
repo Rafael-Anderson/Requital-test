@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { DraftOrdersService } from './draft-orders.service';
 import { CreateDraftOrderDto } from './dto/create-draft-order.dto';
 import { UpdateDraftOrderDto } from './dto/update-draft-order.dto';
@@ -27,7 +35,10 @@ export class DraftOrdersController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  findOne(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.draftOrdersService.findOne(ctx, id);
   }
 
@@ -41,17 +52,26 @@ export class DraftOrdersController {
   }
 
   @Patch(':id/cancel')
-  cancel(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  cancel(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.draftOrdersService.cancel(ctx, id);
   }
 
   @Post(':id/complete')
-  complete(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  complete(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.draftOrdersService.complete(ctx, id);
   }
 
   @Post(':id/send-invoice')
-  sendInvoice(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  sendInvoice(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.draftOrdersService.sendInvoice(ctx, id);
   }
 }

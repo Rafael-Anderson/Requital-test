@@ -1,5 +1,18 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
-import { BIO_LINK_SOCIAL_PLATFORMS, BIO_LINK_TYPES, type BioLinkSocialPlatform, type BioLinkType } from '../bio-link-constants';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import {
+  BIO_LINK_SOCIAL_PLATFORMS,
+  BIO_LINK_TYPES,
+  type BioLinkSocialPlatform,
+  type BioLinkType,
+} from '../bio-link-constants';
 
 export class UpdateBioLinkDto {
   @IsOptional()

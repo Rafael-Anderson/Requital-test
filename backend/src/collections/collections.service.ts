@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -51,7 +55,10 @@ export class CollectionsService {
   async findOne(ctx: TenantContext, id: number) {
     const collection = await this.assertBelongsToShop(ctx, id);
     const productIds = await this.resolveProductIds(ctx.shopId, collection);
-    return { ...this.toAdminResponse(collection, productIds.length), productIds };
+    return {
+      ...this.toAdminResponse(collection, productIds.length),
+      productIds,
+    };
   }
 
   async create(ctx: TenantContext, dto: CreateCollectionDto) {
@@ -66,7 +73,10 @@ export class CollectionsService {
           description: dto.description,
           image: dto.image,
           type: dto.type,
-          rules: dto.type === 'RULE_BASED' ? (dto.rules as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+          rules:
+            dto.type === 'RULE_BASED'
+              ? (dto.rules as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
           isActive: dto.isActive ?? true,
           displayOrder: dto.displayOrder ?? 0,
         },
@@ -81,11 +91,15 @@ export class CollectionsService {
 
   async update(ctx: TenantContext, id: number, dto: UpdateCollectionDto) {
     const existing = await this.assertBelongsToShop(ctx, id);
-    const effectiveType = dto.type ?? (existing.type as 'MANUAL' | 'RULE_BASED');
+    const effectiveType =
+      dto.type ?? (existing.type as 'MANUAL' | 'RULE_BASED');
     // Rules are only re-validated when this request actually touches type or
     // rules — a plain title/description edit shouldn't need to resend rules.
     if (dto.type !== undefined || dto.rules !== undefined) {
-      this.assertRulesMatchType(effectiveType, dto.rules ?? (existing.rules as CollectionRulesDto | null) ?? undefined);
+      this.assertRulesMatchType(
+        effectiveType,
+        dto.rules ?? (existing.rules as CollectionRulesDto | null) ?? undefined,
+      );
     }
 
     try {
@@ -98,7 +112,10 @@ export class CollectionsService {
           ...(dto.image !== undefined && { image: dto.image }),
           type: dto.type,
           ...((dto.type !== undefined || dto.rules !== undefined) && {
-            rules: effectiveType === 'RULE_BASED' ? (dto.rules as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
+            rules:
+              effectiveType === 'RULE_BASED'
+                ? (dto.rules as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
           }),
           isActive: dto.isActive,
           displayOrder: dto.displayOrder,
@@ -126,19 +143,29 @@ export class CollectionsService {
   // the complete desired state" convention as reorderBioLinks. Every
   // productId must belong to this shop, checked up front so a bad id
   // rejects the whole request rather than partially saving.
-  async setProducts(ctx: TenantContext, id: number, dto: SetCollectionProductsDto) {
+  async setProducts(
+    ctx: TenantContext,
+    id: number,
+    dto: SetCollectionProductsDto,
+  ) {
     const collection = await this.assertBelongsToShop(ctx, id);
     if (collection.type !== 'MANUAL') {
-      throw new BadRequestException('Only a MANUAL collection has an explicit product list to set');
+      throw new BadRequestException(
+        'Only a MANUAL collection has an explicit product list to set',
+      );
     }
     const productIds = dto.products.map((p) => p.productId);
     if (new Set(productIds).size !== productIds.length) {
       throw new BadRequestException('productId must not repeat');
     }
     if (productIds.length > 0) {
-      const count = await this.prisma.product.count({ where: { id: { in: productIds }, shopId: ctx.shopId } });
+      const count = await this.prisma.product.count({
+        where: { id: { in: productIds }, shopId: ctx.shopId },
+      });
       if (count !== productIds.length) {
-        throw new BadRequestException('One or more productIds are invalid for this shop');
+        throw new BadRequestException(
+          'One or more productIds are invalid for this shop',
+        );
       }
     }
 
@@ -146,7 +173,11 @@ export class CollectionsService {
       this.prisma.collectionproduct.deleteMany({ where: { collectionId: id } }),
       ...dto.products.map((p) =>
         this.prisma.collectionproduct.create({
-          data: { collectionId: id, productId: p.productId, sortOrder: p.sortOrder },
+          data: {
+            collectionId: id,
+            productId: p.productId,
+            sortOrder: p.sortOrder,
+          },
         }),
       ),
     ]);
@@ -159,7 +190,14 @@ export class CollectionsService {
     const collections = await this.prisma.collection.findMany({
       where: { shopId, isActive: true },
       orderBy: [{ displayOrder: 'asc' }, { title: 'asc' }],
-      select: { id: true, title: true, slug: true, description: true, image: true, type: true },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        image: true,
+        type: true,
+      },
     });
     return collections;
   }
@@ -213,7 +251,11 @@ export class CollectionsService {
         },
       }),
       ...(rules.createdWithinDays !== undefined && {
-        createdAt: { gte: new Date(Date.now() - rules.createdWithinDays * 24 * 60 * 60 * 1000) },
+        createdAt: {
+          gte: new Date(
+            Date.now() - rules.createdWithinDays * 24 * 60 * 60 * 1000,
+          ),
+        },
       }),
     };
     const rows = await this.prisma.product.findMany({
@@ -226,7 +268,10 @@ export class CollectionsService {
 
   // ---------- shared helpers ----------
 
-  private assertRulesMatchType(type: 'MANUAL' | 'RULE_BASED', rules: CollectionRulesDto | undefined) {
+  private assertRulesMatchType(
+    type: 'MANUAL' | 'RULE_BASED',
+    rules: CollectionRulesDto | undefined,
+  ) {
     if (type === 'RULE_BASED') {
       const hasAnyRule =
         rules &&
@@ -236,22 +281,31 @@ export class CollectionsService {
           rules.maxPrice !== undefined ||
           rules.createdWithinDays !== undefined);
       if (!hasAnyRule) {
-        throw new BadRequestException('A RULE_BASED collection needs at least one rule condition set');
+        throw new BadRequestException(
+          'A RULE_BASED collection needs at least one rule condition set',
+        );
       }
     } else if (rules !== undefined) {
-      throw new BadRequestException("rules can only be set when type is 'RULE_BASED'");
+      throw new BadRequestException(
+        "rules can only be set when type is 'RULE_BASED'",
+      );
     }
   }
 
   private async assertBelongsToShop(ctx: TenantContext, id: number) {
-    const collection = await this.prisma.collection.findFirst({ where: { id, shopId: ctx.shopId } });
+    const collection = await this.prisma.collection.findFirst({
+      where: { id, shopId: ctx.shopId },
+    });
     if (!collection) {
       throw new NotFoundException(`Collection ${id} not found`);
     }
     return collection;
   }
 
-  private toAdminResponse(collection: Prisma.collectionGetPayload<object>, productCount: number) {
+  private toAdminResponse(
+    collection: Prisma.collectionGetPayload<object>,
+    productCount: number,
+  ) {
     return {
       id: collection.id,
       title: collection.title,
@@ -268,8 +322,13 @@ export class CollectionsService {
   }
 
   private handlePrismaError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new BadRequestException('A collection with this slug already exists');
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new BadRequestException(
+        'A collection with this slug already exists',
+      );
     }
     throw error;
   }

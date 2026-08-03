@@ -116,7 +116,7 @@ export default function ThemeAdvancedPage() {
   return (
     <PageShell variant="wide">
       <div className="space-y-4">
-      {/* 2 columns at lg+, same "grid + items-start" pattern as Site
+        {/* 2 columns at lg+, same "grid + items-start" pattern as Site
           Settings' Logos & Icons split — these eight cards vary in height
           (Homepage layout's 4 options wrap to two thumbnail rows, most
           others are one row), so items-start keeps each card at its own
@@ -125,83 +125,146 @@ export default function ThemeAdvancedPage() {
           page to max-w-3xl and every card sat in a single column straight
           down the page — the same "narrow page, wasted horizontal space"
           bug fixed elsewhere (Draft Orders, Store Configuration). */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <Card>
-          <Section title="Homepage layout" hint="A small set of layouts Requital builds and maintains — not a section-by-section builder. Pick the one closest to what you want.">
-            <PresetPicker options={HOMEPAGE_LAYOUT_OPTIONS} value={homepageLayout} onChange={setHomepageLayout} renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />} />
-          </Section>
-        </Card>
+        <div className="columns-1 gap-4 lg:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
+          <Card>
+            <Section
+              title="Homepage layout"
+              hint="A small set of layouts Requital builds and maintains — not a section-by-section builder. Pick the one closest to what you want."
+            >
+              <PresetPicker
+                options={HOMEPAGE_LAYOUT_OPTIONS}
+                value={homepageLayout}
+                onChange={setHomepageLayout}
+                renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Top bar layout" hint="How the header is arranged — logo, navigation icons, and cart.">
-            <PresetPicker options={TOP_BAR_LAYOUT_OPTIONS} value={topBarLayout} onChange={setTopBarLayout} renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section title="Top bar layout" hint="How the header is arranged — logo, navigation icons, and cart.">
+              <PresetPicker
+                options={TOP_BAR_LAYOUT_OPTIONS}
+                value={topBarLayout}
+                onChange={setTopBarLayout}
+                renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Header size" hint="Height/padding only — independent of the arrangement above, pairs with any of them.">
-            <PresetPicker options={HEADER_DENSITY_OPTIONS} value={headerDensity} onChange={setHeaderDensity} renderThumbnail={(key) => <DensityThumbnail density={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section
+              title="Header size"
+              hint="Height/padding only — independent of the arrangement above, pairs with any of them."
+            >
+              <PresetPicker
+                options={HEADER_DENSITY_OPTIONS}
+                value={headerDensity}
+                onChange={setHeaderDensity}
+                renderThumbnail={(key) => <DensityThumbnail density={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Footer layout" hint="How the footer is arranged — brand, links, and contact.">
-            <PresetPicker options={FOOTER_LAYOUT_OPTIONS} value={footerLayout} onChange={setFooterLayout} renderThumbnail={(key) => <FooterLayoutThumbnail layout={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section title="Footer layout" hint="How the footer is arranged — brand, links, and contact.">
+              <PresetPicker
+                options={FOOTER_LAYOUT_OPTIONS}
+                value={footerLayout}
+                onChange={setFooterLayout}
+                renderThumbnail={(key) => <FooterLayoutThumbnail layout={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Footer size" hint="Height/padding only — independent of the arrangement above, pairs with any of them.">
-            <PresetPicker options={FOOTER_DENSITY_OPTIONS} value={footerDensity} onChange={setFooterDensity} renderThumbnail={(key) => <DensityThumbnail density={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section
+              title="Footer size"
+              hint="Height/padding only — independent of the arrangement above, pairs with any of them."
+            >
+              <PresetPicker
+                options={FOOTER_DENSITY_OPTIONS}
+                value={footerDensity}
+                onChange={setFooterDensity}
+                renderThumbnail={(key) => <DensityThumbnail density={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Product page layout" hint="How the image gallery and product details are arranged.">
-            <PresetPicker options={PDP_LAYOUT_OPTIONS} value={pdpLayout} onChange={setPdpLayout} renderThumbnail={(key) => <PdpLayoutThumbnail layout={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section title="Product page layout" hint="How the image gallery and product details are arranged.">
+              <PresetPicker
+                options={PDP_LAYOUT_OPTIONS}
+                value={pdpLayout}
+                onChange={setPdpLayout}
+                renderThumbnail={(key) => <PdpLayoutThumbnail layout={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Cart layout" hint="What happens when a shopper clicks the cart icon.">
-            <PresetPicker options={CART_LAYOUT_OPTIONS} value={cartLayout} onChange={setCartLayout} renderThumbnail={(key) => <CartLayoutThumbnail layout={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section title="Cart layout" hint="What happens when a shopper clicks the cart icon.">
+              <PresetPicker
+                options={CART_LAYOUT_OPTIONS}
+                value={cartLayout}
+                onChange={setCartLayout}
+                renderThumbnail={(key) => <CartLayoutThumbnail layout={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Checkout layout" hint="Every field is the same either way — this only changes how they're grouped.">
-            <PresetPicker options={CHECKOUT_LAYOUT_OPTIONS} value={checkoutLayout} onChange={setCheckoutLayout} renderThumbnail={(key) => <CheckoutLayoutThumbnail layout={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section
+              title="Checkout layout"
+              hint="Every field is the same either way — this only changes how they're grouped."
+            >
+              <PresetPicker
+                options={CHECKOUT_LAYOUT_OPTIONS}
+                value={checkoutLayout}
+                onChange={setCheckoutLayout}
+                renderThumbnail={(key) => <CheckoutLayoutThumbnail layout={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Icon style" hint="Applies everywhere icons appear on the storefront — cart, nav, and trust badges.">
-            <PresetPicker options={ICON_STYLE_OPTIONS} value={iconStyle} onChange={setIconStyle} renderThumbnail={(key) => <IconStyleThumbnail style={key} />} />
-          </Section>
-        </Card>
+          <Card>
+            <Section
+              title="Icon style"
+              hint="Applies everywhere icons appear on the storefront — cart, nav, and trust badges."
+            >
+              <PresetPicker
+                options={ICON_STYLE_OPTIONS}
+                value={iconStyle}
+                onChange={setIconStyle}
+                renderThumbnail={(key) => <IconStyleThumbnail style={key} />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Button shape" hint="Applies to every primary button on the storefront — one choice, not per-button.">
-            <PresetPicker
-              options={BUTTON_RADIUS_OPTIONS}
-              value={buttonRadius}
-              onChange={setButtonRadius}
-              renderThumbnail={(key) => <ButtonStyleThumbnail radius={key} fill="solid" />}
-            />
-          </Section>
-        </Card>
+          <Card>
+            <Section
+              title="Button shape"
+              hint="Applies to every primary button on the storefront — one choice, not per-button."
+            >
+              <PresetPicker
+                options={BUTTON_RADIUS_OPTIONS}
+                value={buttonRadius}
+                onChange={setButtonRadius}
+                renderThumbnail={(key) => <ButtonStyleThumbnail radius={key} fill="solid" />}
+              />
+            </Section>
+          </Card>
 
-        <Card>
-          <Section title="Button fill" hint="Solid or outlined — applies everywhere the button shape above applies.">
-            <PresetPicker
-              options={BUTTON_FILL_OPTIONS}
-              value={buttonFill}
-              onChange={setButtonFill}
-              renderThumbnail={(key) => <ButtonStyleThumbnail radius="rounded" fill={key} />}
-            />
-          </Section>
-        </Card>
-      </div>
+          <Card>
+            <Section title="Button fill" hint="Solid or outlined — applies everywhere the button shape above applies.">
+              <PresetPicker
+                options={BUTTON_FILL_OPTIONS}
+                value={buttonFill}
+                onChange={setButtonFill}
+                renderThumbnail={(key) => <ButtonStyleThumbnail radius="rounded" fill={key} />}
+              />
+            </Section>
+          </Card>
+        </div>
 
         <div className="flex justify-end">
           <Button variant="primary" onClick={handleSave} disabled={saving}>

@@ -42,11 +42,15 @@ export class ReturnsService {
 
     const itemIds = dto.items.map((i) => i.orderItemId);
     if (new Set(itemIds).size !== itemIds.length) {
-      throw new BadRequestException('orderItemId must not repeat within a single return');
+      throw new BadRequestException(
+        'orderItemId must not repeat within a single return',
+      );
     }
     const orderItems = order.orderitem.filter((oi) => itemIds.includes(oi.id));
     if (orderItems.length !== itemIds.length) {
-      throw new BadRequestException('One or more orderItemId are invalid for this order');
+      throw new BadRequestException(
+        'One or more orderItemId are invalid for this order',
+      );
     }
 
     // Per-line-item cap: can't return more units than (original - already returned).
@@ -55,18 +59,23 @@ export class ReturnsService {
       where: { orderItemId: { in: itemIds } },
       _sum: { quantity: true },
     });
-    const alreadyReturnedByItem = new Map(alreadyReturned.map((r) => [r.orderItemId, r._sum.quantity ?? 0]));
+    const alreadyReturnedByItem = new Map(
+      alreadyReturned.map((r) => [r.orderItemId, r._sum.quantity ?? 0]),
+    );
 
     let computedRefund = new Prisma.Decimal(0);
     for (const line of dto.items) {
       const orderItem = orderItems.find((oi) => oi.id === line.orderItemId)!;
-      const alreadyReturnedQty = alreadyReturnedByItem.get(line.orderItemId) ?? 0;
+      const alreadyReturnedQty =
+        alreadyReturnedByItem.get(line.orderItemId) ?? 0;
       if (line.quantity + alreadyReturnedQty > orderItem.quantity) {
         throw new BadRequestException(
           `Cannot return ${line.quantity} of order item ${line.orderItemId} — only ${orderItem.quantity - alreadyReturnedQty} remaining unreturned`,
         );
       }
-      computedRefund = computedRefund.add(orderItem.priceAtPurchase.mul(line.quantity));
+      computedRefund = computedRefund.add(
+        orderItem.priceAtPurchase.mul(line.quantity),
+      );
     }
 
     const refundAmount = new Prisma.Decimal(dto.refundAmount ?? computedRefund);
@@ -77,7 +86,8 @@ export class ReturnsService {
       where: { orderId },
       _sum: { refundAmount: true },
     });
-    const alreadyRefunded = priorReturns._sum.refundAmount ?? new Prisma.Decimal(0);
+    const alreadyRefunded =
+      priorReturns._sum.refundAmount ?? new Prisma.Decimal(0);
     if (alreadyRefunded.add(refundAmount).greaterThan(order.total)) {
       throw new BadRequestException(
         `Refund amount would exceed the order total — ${alreadyRefunded.toString()} already refunded of ${order.total.toString()}`,
@@ -92,7 +102,9 @@ export class ReturnsService {
     // order, this can never exceed the original giftCardAmount, since total
     // refunds across all returns are already capped at order.total above.
     const giftCardRefundAmount =
-      order.giftCardId && order.giftCardAmount && order.giftCardAmount.greaterThan(0)
+      order.giftCardId &&
+      order.giftCardAmount &&
+      order.giftCardAmount.greaterThan(0)
         ? refundAmount.mul(order.giftCardAmount).div(order.total)
         : new Prisma.Decimal(0);
     const providerRefundPortion = refundAmount.sub(giftCardRefundAmount);
@@ -102,11 +114,12 @@ export class ReturnsService {
     // at all (providerRefundPortion is 0, attemptProviderRefund short-
     // circuits to 'manual' with no reference, since there's nothing to
     // charge/refund through a gateway for zero amount).
-    const { refundMethod, providerRefundReference } = await this.attemptProviderRefund(
-      order.id,
-      order.shopId,
-      providerRefundPortion,
-    );
+    const { refundMethod, providerRefundReference } =
+      await this.attemptProviderRefund(
+        order.id,
+        order.shopId,
+        providerRefundPortion,
+      );
 
     const restock = dto.restock ?? true;
     const productIds = [...new Set(orderItems.map((oi) => oi.productId))];
@@ -116,7 +129,9 @@ export class ReturnsService {
           select: { id: true, trackInventory: true },
         })
       : [];
-    const trackInventoryByProduct = new Map(products.map((p) => [p.id, p.trackInventory]));
+    const trackInventoryByProduct = new Map(
+      products.map((p) => [p.id, p.trackInventory]),
+    );
 
     const created = await this.prisma.$transaction(async (tx) => {
       const orderReturn = await tx.orderreturn.create({
@@ -133,27 +148,53 @@ export class ReturnsService {
       });
 
       if (order.giftCardId && giftCardRefundAmount.greaterThan(0)) {
-        await this.giftCardsService.creditRefund(tx, order.giftCardId, Number(giftCardRefundAmount));
+        await this.giftCardsService.creditRefund(
+          tx,
+          order.giftCardId,
+          Number(giftCardRefundAmount),
+        );
       }
 
       for (const line of dto.items) {
         const orderItem = orderItems.find((oi) => oi.id === line.orderItemId)!;
         await tx.orderreturnitem.create({
-          data: { orderReturnId: orderReturn.id, orderItemId: line.orderItemId, quantity: line.quantity },
+          data: {
+            orderReturnId: orderReturn.id,
+            orderItemId: line.orderItemId,
+            quantity: line.quantity,
+          },
         });
 
         if (restock && trackInventoryByProduct.get(orderItem.productId)) {
           if (orderItem.variantId) {
             await tx.outletvariantstock.upsert({
-              where: { outletId_variantId: { outletId: order.outletId, variantId: orderItem.variantId } },
+              where: {
+                outletId_variantId: {
+                  outletId: order.outletId,
+                  variantId: orderItem.variantId,
+                },
+              },
               update: { stockQuantity: { increment: line.quantity } },
-              create: { outletId: order.outletId, variantId: orderItem.variantId, stockQuantity: line.quantity },
+              create: {
+                outletId: order.outletId,
+                variantId: orderItem.variantId,
+                stockQuantity: line.quantity,
+              },
             });
           } else {
             await tx.outletstock.upsert({
-              where: { outletId_productId: { outletId: order.outletId, productId: orderItem.productId } },
+              where: {
+                outletId_productId: {
+                  outletId: order.outletId,
+                  productId: orderItem.productId,
+                },
+              },
               update: { stockQuantity: { increment: line.quantity } },
-              create: { outletId: order.outletId, productId: orderItem.productId, stockQuantity: line.quantity },
+              create: {
+                outletId: order.outletId,
+                productId: orderItem.productId,
+                stockQuantity: line.quantity,
+              },
             });
           }
           await tx.stockmovement.create({
@@ -177,17 +218,29 @@ export class ReturnsService {
 
     const cumulativeRefunded = alreadyRefunded.add(refundAmount);
     if (cumulativeRefunded.greaterThanOrEqualTo(order.total)) {
-      await this.prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'refunded' } });
+      await this.prisma.order.update({
+        where: { id: order.id },
+        data: { paymentStatus: 'refunded' },
+      });
     }
 
     await this.auditLogService.logCtx(ctx, {
       action: 'order.return.created',
       entityType: 'orderreturn',
       entityId: created.id,
-      after: { orderId, reason: dto.reason, refundAmount: refundAmount.toString(), refundMethod, restocked: restock },
+      after: {
+        orderId,
+        reason: dto.reason,
+        refundAmount: refundAmount.toString(),
+        refundMethod,
+        restocked: restock,
+      },
     });
 
-    return this.prisma.orderreturn.findUnique({ where: { id: created.id }, include: returnInclude });
+    return this.prisma.orderreturn.findUnique({
+      where: { id: created.id },
+      include: returnInclude,
+    });
   }
 
   // Tries the order's most recent successful paid transaction's provider
@@ -200,7 +253,10 @@ export class ReturnsService {
     orderId: number,
     shopId: number,
     amount: Prisma.Decimal,
-  ): Promise<{ refundMethod: 'provider' | 'manual'; providerRefundReference: string | null }> {
+  ): Promise<{
+    refundMethod: 'provider' | 'manual';
+    providerRefundReference: string | null;
+  }> {
     // A refund fully (or, for this call, entirely-for-its-portion) covered
     // by gift-card credit has nothing left for a provider to refund —
     // never call out to a gateway for zero amount.
@@ -208,7 +264,11 @@ export class ReturnsService {
       return { refundMethod: 'manual', providerRefundReference: null };
     }
     const paidTransaction = await this.prisma.paymenttransaction.findFirst({
-      where: { orderId, status: 'paid', providerChargeReference: { not: null } },
+      where: {
+        orderId,
+        status: 'paid',
+        providerChargeReference: { not: null },
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (!paidTransaction?.providerChargeReference) {
@@ -220,15 +280,24 @@ export class ReturnsService {
       if (!provider.refundPayment) {
         return { refundMethod: 'manual', providerRefundReference: null };
       }
-      const credentials = await this.paymentSettingsService.resolveCredentials(shopId, paidTransaction.gateway);
+      const credentials = await this.paymentSettingsService.resolveCredentials(
+        shopId,
+        paidTransaction.gateway,
+      );
       const result = await provider.refundPayment({
         chargeReference: paidTransaction.providerChargeReference,
         amount: Number(amount),
         credentials,
       });
-      return { refundMethod: 'provider', providerRefundReference: result.providerReference };
+      return {
+        refundMethod: 'provider',
+        providerRefundReference: result.providerReference,
+      };
     } catch (error) {
-      console.warn(`[returns] provider refund failed for order ${orderId}, falling back to manual:`, error);
+      console.warn(
+        `[returns] provider refund failed for order ${orderId}, falling back to manual:`,
+        error,
+      );
       return { refundMethod: 'manual', providerRefundReference: null };
     }
   }

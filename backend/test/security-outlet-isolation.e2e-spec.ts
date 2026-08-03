@@ -483,7 +483,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         .expect(403);
     });
 
-    it("PATCH /outlets/:A2/delivery-zones/:zoneA2 is rejected for a branch user (403 role guard, not 404) and does not mutate the zone", async () => {
+    it('PATCH /outlets/:A2/delivery-zones/:zoneA2 is rejected for a branch user (403 role guard, not 404) and does not mutate the zone', async () => {
       await request(app.getHttpServer())
         .patch(`/outlets/${outletA2Id}/delivery-zones/${outletA2ZoneId}`)
         .set('Authorization', `Bearer ${shopABranchToken}`)
@@ -503,7 +503,9 @@ describe('Outlet & shop isolation (e2e)', () => {
         .expect(403);
 
       await expect(
-        prisma.deliveryzone.findUniqueOrThrow({ where: { id: outletA1ZoneId } }),
+        prisma.deliveryzone.findUniqueOrThrow({
+          where: { id: outletA1ZoneId },
+        }),
       ).resolves.toBeTruthy();
     });
   });
@@ -717,7 +719,9 @@ describe('Outlet & shop isolation (e2e)', () => {
         .expect(404);
 
       await expect(
-        prisma.deliveryzone.findUniqueOrThrow({ where: { id: outletB1ZoneId } }),
+        prisma.deliveryzone.findUniqueOrThrow({
+          where: { id: outletB1ZoneId },
+        }),
       ).resolves.toBeTruthy();
     });
   });
@@ -776,7 +780,11 @@ describe('Outlet & shop isolation (e2e)', () => {
       // link before exercising the actual current-password check.
       await request(app.getHttpServer())
         .post('/auth/verify-email')
-        .send({ token: tokenFromDevLink(body<SignupResponse>(signup).devVerificationLink!) })
+        .send({
+          token: tokenFromDevLink(
+            body<SignupResponse>(signup).devVerificationLink!,
+          ),
+        })
         .expect(201);
 
       const login = await request(app.getHttpServer())
@@ -788,7 +796,10 @@ describe('Outlet & shop isolation (e2e)', () => {
       await request(app.getHttpServer())
         .post('/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
-        .send({ currentPassword: 'wrong-password', newPassword: 'newpassword123' })
+        .send({
+          currentPassword: 'wrong-password',
+          newPassword: 'newpassword123',
+        })
         .expect(401);
 
       await request(app.getHttpServer())
@@ -811,7 +822,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .expect(201);
       await request(app.getHttpServer())
         .post('/auth/verify-email')
-        .send({ token: tokenFromDevLink(body<SignupResponse>(signup).devVerificationLink!) })
+        .send({
+          token: tokenFromDevLink(
+            body<SignupResponse>(signup).devVerificationLink!,
+          ),
+        })
         .expect(201);
 
       const login = await request(app.getHttpServer())

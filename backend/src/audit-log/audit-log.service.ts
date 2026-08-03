@@ -89,6 +89,34 @@ export class AuditLogService {
     };
   }
 
+  // Ascending (oldest first) — unlike list() above, this backs a timeline
+  // (OrdersService.getHistory), not a most-recent-first activity feed.
+  async listForEntity(
+    ctx: TenantContext,
+    entityType: string,
+    entityId: number,
+    action?: string,
+  ) {
+    const rows = await this.prisma.auditlog.findMany({
+      where: {
+        shopId: ctx.shopId,
+        entityType,
+        entityId,
+        ...(action && { action }),
+      },
+      orderBy: { createdAt: 'asc' },
+      include: { actor: { select: { id: true, name: true } } },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      before: r.before,
+      after: r.after,
+      actorName: r.actor.name,
+      createdAt: r.createdAt,
+    }));
+  }
+
   // For filter dropdowns — every distinct staff member who has at least one
   // logged action in this shop.
   async listActors(ctx: TenantContext) {
@@ -103,5 +131,7 @@ export class AuditLogService {
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue | undefined {
-  return value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue);
+  return value === undefined
+    ? undefined
+    : (JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue);
 }

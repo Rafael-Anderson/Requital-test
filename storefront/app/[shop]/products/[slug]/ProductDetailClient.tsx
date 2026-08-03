@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ShieldCheck, Truck, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
@@ -9,6 +9,7 @@ import { getProductBySlug } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { iconStyleProps } from "@/lib/icon-style";
 import { storeButtonClassName } from "@/lib/button-style";
+import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
@@ -46,14 +47,16 @@ function formatDeliveryEstimate(shop: Shop): string | null {
 
 export default function ProductDetailClient() {
   const params = useParams<{ shop: string; slug: string }>();
+  const router = useRouter();
   const { shopSlug, shop, outlets } = useShop();
-  const { addItem } = useCart();
+  const { addItem, clear } = useCart();
   const defaultOutletId = outlets[0]?.id;
 
   const [product, setProduct] = useState<Product | null>(null);
   const [selection, setSelection] = useState<Selection>([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [note, setNote] = useState("");
   const [added, setAdded] = useState(false);
   // Gift Cards — the denomination/custom amount the shopper picked. null
   // until they've actually chosen one, even if a default gets pre-selected
@@ -128,24 +131,44 @@ export default function ProductDetailClient() {
 
   const primaryCategoryId = product.categories[0]?.id ?? null;
 
+  // "cart" (default): normal Add to Cart. "buy_now": Add to Cart becomes a
+  // single-item Buy Now that skips straight to checkout. "contact": no cart
+  // interaction at all — a WhatsApp/contact CTA replaces it entirely. See
+  // TopBar.tsx's CartIconButton for the matching nav-icon gate.
+  const cartMode: "cart" | "buy_now" | "contact" = !shop?.disableStoreCart
+    ? "cart"
+    : shop.cartDisabledMode === "contact_to_order"
+      ? "contact"
+      : "buy_now";
+  const contactWhatsAppUrl =
+    cartMode === "contact"
+      ? buildWhatsAppUrl(shop?.whatsappCountryCode ?? null, shop?.whatsappNumber ?? null, `Hi, I'm interested in ${product.name}`)
+      : null;
+
   function handleAddToCart() {
     if (!product || defaultOutletId === undefined) return;
     if (product.hasVariants && !selectedVariant) return;
     if (product.isGiftCard && !giftCardAmountValid) return;
-    addItem(
-      {
-        productId: product.id,
-        variantId: selectedVariant?.id,
-        variantLabel: selectedVariant?.label ?? undefined,
-        name: product.name,
-        price: Number(displayPrice),
-        thumbnail: galleryImages[0] ?? product.thumbnail,
-        maxStock: displayStock,
-        isGiftCard: product.isGiftCard || undefined,
-      },
-      quantity,
-      defaultOutletId,
-    );
+    const item = {
+      productId: product.id,
+      variantId: selectedVariant?.id,
+      variantLabel: selectedVariant?.label ?? undefined,
+      name: product.name,
+      price: Number(displayPrice),
+      thumbnail: galleryImages[0] ?? product.thumbnail,
+      maxStock: displayStock,
+      isGiftCard: product.isGiftCard || undefined,
+      note: note.trim() || undefined,
+    };
+    if (cartMode === "buy_now") {
+      // Replaces whatever's already in the cart, not merges — "buy now" is a
+      // single-item purchase, not a continuation of prior browsing.
+      clear();
+      addItem(item, quantity, defaultOutletId);
+      router.push(`/${shopSlug}/checkout`);
+      return;
+    }
+    addItem(item, quantity, defaultOutletId);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   }
@@ -156,8 +179,47 @@ export default function ProductDetailClient() {
       ? "Choose an amount"
       : outOfStock
         ? "Out of stock"
-        : "Add to cart";
+        : cartMode === "buy_now"
+          ? "Buy Now"
+          : "Add to cart";
   const pdpLayout = shop?.pdpLayout ?? "gallery_left";
+
+  // Shared between the main CTA and the sticky mobile duplicate below — one
+  // branch to keep in sync, not two. contact_to_order mode: WhatsApp link, or
+  // a disabled-looking static button if the shop has no whatsappNumber
+  // configured yet (a merchant config gap, not a shopper-facing error to
+  // handle richly).
+  function primaryCtaElement(className: string) {
+    if (cartMode === "contact") {
+      if (contactWhatsAppUrl) {
+        return (
+          <a
+            href={contactWhatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`inline-flex items-center justify-center ${className} ${storeButtonClassName(shop, "add-to-cart")}`}
+          >
+            Contact to order
+          </a>
+        );
+      }
+      return (
+        <span className={`inline-flex items-center justify-center opacity-50 cursor-not-allowed ${className} ${storeButtonClassName(shop, "add-to-cart")}`}>
+          Contact us to order
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        onClick={handleAddToCart}
+        disabled={defaultOutletId === undefined || outOfStock || !giftCardAmountValid}
+        className={`${className} ${storeButtonClassName(shop, "add-to-cart")}`}
+      >
+        {addToCartLabel}
+      </button>
+    );
+  }
 
   const galleryEl = (
     <ProductGallery
@@ -302,36 +364,42 @@ export default function ProductDetailClient() {
           )}
 
           <div ref={ctaRef} className="mt-5 flex items-center gap-3">
-            <div className="flex items-center border border-stroke rounded-lg shrink-0">
-              <button
-                type="button"
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                disabled={outOfStock}
-                className="px-3 py-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Decrease quantity"
-              >
-                −
-              </button>
-              <span className="px-3 min-w-8 text-center">{quantity}</span>
-              <button
-                type="button"
-                onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
-                disabled={outOfStock}
-                className="px-3 py-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                aria-label="Increase quantity"
-              >
-                +
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={handleAddToCart}
-              disabled={defaultOutletId === undefined || outOfStock || !giftCardAmountValid}
-              className={`flex-1 h-12 font-semibold text-[15px] shadow-sm shadow-black/10 ${storeButtonClassName(shop, "add-to-cart")}`}
-            >
-              {addToCartLabel}
-            </button>
+            {cartMode !== "contact" && (
+              <div className="flex items-center border border-stroke rounded-lg shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  disabled={outOfStock}
+                  className="px-3 py-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <span className="px-3 min-w-8 text-center">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
+                  disabled={outOfStock}
+                  className="px-3 py-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            )}
+            {primaryCtaElement("flex-1 h-12 font-semibold text-[15px] shadow-sm shadow-black/10")}
           </div>
+
+          {cartMode !== "contact" && (
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={200}
+              placeholder="Add a note for this item (optional)"
+              className="mt-3 w-full rounded-lg border border-stroke px-3 py-2 text-sm placeholder:text-zinc-400"
+            />
+          )}
 
           {/* Trust row — secure checkout is a factual claim about how
               checkout works, not shop-specific policy copy; the delivery
@@ -375,6 +443,34 @@ export default function ProductDetailClient() {
               dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(product.description) }}
             />
           )}
+
+          {shop?.productAttributesEnabled && product.attributes.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-stroke">
+              <h2 className="text-base font-semibold text-product-name mb-2">Details</h2>
+              <dl className="text-sm divide-y divide-stroke">
+                {product.attributes.map((attr) => (
+                  <div key={attr.id} className="flex justify-between gap-4 py-1.5">
+                    <dt className="text-zinc-500">{attr.name}</dt>
+                    <dd className="text-right">{attr.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
+          {shop?.productFaqsEnabled && product.faqs.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-stroke">
+              <h2 className="text-base font-semibold text-product-name mb-2">FAQs</h2>
+              <div className="space-y-1">
+                {product.faqs.map((faq) => (
+                  <details key={faq.id} className="text-sm py-1.5">
+                    <summary className="font-medium cursor-pointer select-none">{faq.question}</summary>
+                    <p className="mt-1.5 text-zinc-600">{faq.answer}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
   );
 
@@ -408,14 +504,7 @@ export default function ProductDetailClient() {
               {displayPrice} <span className="text-xs font-normal text-price-main">{shop?.currency}</span>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleAddToCart}
-            disabled={defaultOutletId === undefined || outOfStock || !giftCardAmountValid}
-            className={`flex-1 h-11 font-semibold text-sm ${storeButtonClassName(shop, "add-to-cart")}`}
-          >
-            {addToCartLabel}
-          </button>
+          {primaryCtaElement("flex-1 h-11 font-semibold text-sm")}
         </div>
       )}
     </StorefrontPageShell>

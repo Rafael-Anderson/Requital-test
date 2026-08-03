@@ -20,7 +20,8 @@ export class UpdateDiscountDto {
   @IsOptional()
   @IsString()
   @Matches(/^[A-Za-z0-9_-]{3,32}$/, {
-    message: 'code must be 3-32 characters: letters, numbers, hyphens, or underscores',
+    message:
+      'code must be 3-32 characters: letters, numbers, hyphens, or underscores',
   })
   code?: string;
 

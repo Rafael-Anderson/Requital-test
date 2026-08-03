@@ -8,7 +8,10 @@ import { haversineDistanceKm } from './geo';
 // pi*R ≈ 20015km.
 describe('haversineDistanceKm', () => {
   it('returns 0 for the same point', () => {
-    expect(haversineDistanceKm(25.2048, 55.2708, 25.2048, 55.2708)).toBeCloseTo(0, 6);
+    expect(haversineDistanceKm(25.2048, 55.2708, 25.2048, 55.2708)).toBeCloseTo(
+      0,
+      6,
+    );
   });
 
   it('1 degree of longitude at the equator is ~111.19km', () => {

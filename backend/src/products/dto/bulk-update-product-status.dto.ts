@@ -1,4 +1,11 @@
-import { ArrayNotEmpty, ArrayMaxSize, IsArray, IsIn, IsInt, IsPositive } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsPositive,
+} from 'class-validator';
 import { PRODUCT_STATUSES } from './create-product.dto';
 import type { ProductStatus } from './create-product.dto';
 

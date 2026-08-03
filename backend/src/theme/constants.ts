@@ -1,7 +1,12 @@
 // Curated list, not arbitrary font upload/free text — matches the task
 // brief. Each value is also the Google Fonts family name the storefront's
 // root layout preloads via next/font/google — keep the two in sync by hand.
-export const FONT_CHOICES = ['inter', 'poppins', 'playfair-display', 'roboto'] as const;
+export const FONT_CHOICES = [
+  'inter',
+  'poppins',
+  'playfair-display',
+  'roboto',
+] as const;
 export type FontChoice = (typeof FONT_CHOICES)[number];
 
 // Advanced tab — a fixed set of pre-built homepage layouts, not a
@@ -15,9 +20,20 @@ export type FontChoice = (typeof FONT_CHOICES)[number];
 // task) — products immediately, minimal hero. Slots in as a normal
 // selectable layout alongside the three that already existed; 'custom'
 // remains reserved/unselectable for the still-deferred drag-and-drop builder.
-export const HOMEPAGE_LAYOUTS = ['classic', 'slideshow', 'featured_grid', 'grid_first', 'custom'] as const;
+export const HOMEPAGE_LAYOUTS = [
+  'classic',
+  'slideshow',
+  'featured_grid',
+  'grid_first',
+  'custom',
+] as const;
 export type HomepageLayout = (typeof HOMEPAGE_LAYOUTS)[number];
-export const SELECTABLE_HOMEPAGE_LAYOUTS = ['classic', 'slideshow', 'featured_grid', 'grid_first'] as const;
+export const SELECTABLE_HOMEPAGE_LAYOUTS = [
+  'classic',
+  'slideshow',
+  'featured_grid',
+  'grid_first',
+] as const;
 
 // Granular color palette (Appearance Color tab) — stored as one themesettings.colors
 // JSON blob (Record<key, hex>) rather than ~22 individual columns, since these are
@@ -62,48 +78,158 @@ export interface ThemeColorFieldDef {
 
 export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
   // --- UI/Button Colors ---
-  { key: 'mouseOverColor', label: 'Mouse Over Color', group: 'ui_button_colors', wired: true },
-  { key: 'mouseSelectionColor', label: 'Mouse Selection Color', group: 'ui_button_colors', wired: true },
-  { key: 'buttonColor', label: 'Button Color', group: 'ui_button_colors', wired: true },
-  { key: 'addToCartTextColor', label: 'Add to Cart Text', group: 'ui_button_colors', wired: true },
-  { key: 'addToCartButtonColor', label: 'Add to Cart Button Color', group: 'ui_button_colors', wired: true },
-  { key: 'strokeColor', label: 'Stroke Color', group: 'ui_button_colors', wired: true },
+  {
+    key: 'mouseOverColor',
+    label: 'Mouse Over Color',
+    group: 'ui_button_colors',
+    wired: true,
+  },
+  {
+    key: 'mouseSelectionColor',
+    label: 'Mouse Selection Color',
+    group: 'ui_button_colors',
+    wired: true,
+  },
+  {
+    key: 'buttonColor',
+    label: 'Button Color',
+    group: 'ui_button_colors',
+    wired: true,
+  },
+  {
+    key: 'addToCartTextColor',
+    label: 'Add to Cart Text',
+    group: 'ui_button_colors',
+    wired: true,
+  },
+  {
+    key: 'addToCartButtonColor',
+    label: 'Add to Cart Button Color',
+    group: 'ui_button_colors',
+    wired: true,
+  },
+  {
+    key: 'strokeColor',
+    label: 'Stroke Color',
+    group: 'ui_button_colors',
+    wired: true,
+  },
   // --- Background/Header Colors ---
-  { key: 'homepageInfoBackgroundColor', label: 'Homepage Info Background Color', group: 'background_header_colors', wired: true },
+  {
+    key: 'homepageInfoBackgroundColor',
+    label: 'Homepage Info Background Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
   // Wired for the storefront dark-mode-mismatch bug fix — the page canvas
   // previously had no merchant-facing color source at all, just a hardcoded
   // light default an unconditional OS prefers-color-scheme media query
   // silently overrode to near-black. See storefront/lib/theme-colors.ts and
   // globals.css.
-  { key: 'pageBackgroundColor', label: 'Page Background Color', group: 'background_header_colors', wired: true },
-  { key: 'headerBackgroundColor', label: 'Header Background Color', group: 'background_header_colors', wired: true },
-  { key: 'headerTextColor', label: 'Header Text Color', group: 'background_header_colors', wired: true },
+  {
+    key: 'pageBackgroundColor',
+    label: 'Page Background Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
+  {
+    key: 'headerBackgroundColor',
+    label: 'Header Background Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
+  {
+    key: 'headerTextColor',
+    label: 'Header Text Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
   // Re-added (see the removal note above) now that a real footer exists —
   // components/Footer.tsx. Not merged into headerBackgroundColor/
   // headerTextColor: a footer is conventionally a different (often darker)
   // tone than the header, so this needs its own pair, not a shared one.
-  { key: 'footerBackgroundColor', label: 'Footer Background Color', group: 'background_header_colors', wired: true },
-  { key: 'footerTextColor', label: 'Footer Text Color', group: 'background_header_colors', wired: true },
+  {
+    key: 'footerBackgroundColor',
+    label: 'Footer Background Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
+  {
+    key: 'footerTextColor',
+    label: 'Footer Text Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
   // Wired as of the Advanced/homepageLayout task — the "Featured Grid"
   // layout's category-tile section background. Was inert (no Featured
   // section existed) before that layout was built.
-  { key: 'featuredBackgroundColor', label: 'Featured Background Color', group: 'background_header_colors', wired: true },
+  {
+    key: 'featuredBackgroundColor',
+    label: 'Featured Background Color',
+    group: 'background_header_colors',
+    wired: true,
+  },
   // --- Product/Category Colors ---
-  { key: 'productNameColor', label: 'Product Name Color', group: 'product_category_colors', wired: true },
-  { key: 'priceMainColor', label: 'Price Main Color', group: 'product_category_colors', wired: true },
+  {
+    key: 'productNameColor',
+    label: 'Product Name Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
+  {
+    key: 'priceMainColor',
+    label: 'Price Main Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
   // Wired for the storefront layout/dead-settings pass — PDP's compare-at-
   // price line, CategoryNav's mobile scroll-nudge arrows, and FeaturedGrid's
   // tile label respectively. See storefront/lib/theme-colors.ts.
-  { key: 'priceSecondaryColor', label: 'Price Secondary Color', group: 'product_category_colors', wired: true },
-  { key: 'categorySliderArrowColor', label: 'Category Slider Arrow Color (mobile view)', group: 'product_category_colors', wired: true },
-  { key: 'categorySliderArrowActiveColor', label: 'Category Slider Arrow Active Color (mobile view)', group: 'product_category_colors', wired: true },
-  { key: 'featuredProductTextColor', label: 'Featured Product Text Color', group: 'product_category_colors', wired: true },
-  { key: 'brandBackgroundColor', label: 'Brand Background Color', group: 'product_category_colors', wired: true },
+  {
+    key: 'priceSecondaryColor',
+    label: 'Price Secondary Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
+  {
+    key: 'categorySliderArrowColor',
+    label: 'Category Slider Arrow Color (mobile view)',
+    group: 'product_category_colors',
+    wired: true,
+  },
+  {
+    key: 'categorySliderArrowActiveColor',
+    label: 'Category Slider Arrow Active Color (mobile view)',
+    group: 'product_category_colors',
+    wired: true,
+  },
+  {
+    key: 'featuredProductTextColor',
+    label: 'Featured Product Text Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
+  {
+    key: 'brandBackgroundColor',
+    label: 'Brand Background Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
   // Wired as of the Advanced/homepageLayout task — the "Slideshow" layout's
   // dot-indicator chrome. Was inert (no slider existed) before that layout
   // was built.
-  { key: 'homeSliderBackgroundColor', label: 'Home Slider Background Color', group: 'product_category_colors', wired: true },
-  { key: 'homeSliderColor', label: 'Home Slider Color', group: 'product_category_colors', wired: true },
+  {
+    key: 'homeSliderBackgroundColor',
+    label: 'Home Slider Background Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
+  {
+    key: 'homeSliderColor',
+    label: 'Home Slider Color',
+    group: 'product_category_colors',
+    wired: true,
+  },
 ];
 
 export const THEME_COLOR_KEYS = THEME_COLOR_FIELDS.map((f) => f.key);

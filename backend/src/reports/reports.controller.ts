@@ -22,32 +22,50 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('general/summary')
-  getGeneralSummary(@CurrentUser() ctx: TenantContext, @Query() query: ReportsFilterQueryDto) {
+  getGeneralSummary(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ReportsFilterQueryDto,
+  ) {
     return this.reportsService.getGeneralSummary(ctx, query);
   }
 
   @Get('general/orders')
-  listGeneralOrders(@CurrentUser() ctx: TenantContext, @Query() query: ListGeneralReportQueryDto) {
+  listGeneralOrders(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListGeneralReportQueryDto,
+  ) {
     return this.reportsService.listGeneralOrders(ctx, query);
   }
 
   @Get('monthly/summary')
-  getMonthlySummary(@CurrentUser() ctx: TenantContext, @Query() query: MonthlyReportFilterDto) {
+  getMonthlySummary(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: MonthlyReportFilterDto,
+  ) {
     return this.reportsService.getMonthlySummary(ctx, query);
   }
 
   @Get('monthly/orders')
-  listMonthlyOrders(@CurrentUser() ctx: TenantContext, @Query() query: ListMonthlyReportQueryDto) {
+  listMonthlyOrders(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListMonthlyReportQueryDto,
+  ) {
     return this.reportsService.listMonthlyOrders(ctx, query);
   }
 
   @Get('product-sales')
-  listProductSales(@CurrentUser() ctx: TenantContext, @Query() query: ListProductSalesQueryDto) {
+  listProductSales(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListProductSalesQueryDto,
+  ) {
     return this.reportsService.listProductSales(ctx, query);
   }
 
   @Get('external-delivery')
-  listExternalDeliveries(@CurrentUser() ctx: TenantContext, @Query() query: ListGeneralReportQueryDto) {
+  listExternalDeliveries(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ListGeneralReportQueryDto,
+  ) {
     return this.reportsService.listExternalDeliveries(ctx, query);
   }
 }

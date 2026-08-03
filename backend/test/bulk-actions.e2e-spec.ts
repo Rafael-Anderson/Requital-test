@@ -23,7 +23,14 @@ interface ProductRow {
   compareAtPrice: string | null;
 }
 interface BulkPriceResult {
-  results: { id: number; name: string; oldPrice: string | null; newPrice?: string; success: boolean; error?: string }[];
+  results: {
+    id: number;
+    name: string;
+    oldPrice: string | null;
+    newPrice?: string;
+    success: boolean;
+    error?: string;
+  }[];
   succeeded: number;
 }
 interface OrderRow {
@@ -31,7 +38,12 @@ interface OrderRow {
   status: string;
 }
 interface BulkResult {
-  results: { id?: number; orderId?: number; success: boolean; error?: string }[];
+  results: {
+    id?: number;
+    orderId?: number;
+    success: boolean;
+    error?: string;
+  }[];
   succeeded: number;
 }
 
@@ -50,7 +62,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -91,7 +107,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
     return { adminToken, outletId, categoryId, slug };
   }
 
-  async function createProduct(adminToken: string, categoryId: number, overrides: Record<string, unknown> = {}) {
+  async function createProduct(
+    adminToken: string,
+    categoryId: number,
+    overrides: Record<string, unknown> = {},
+  ) {
     const res = await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -108,7 +128,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
     return body<ProductRow>(res);
   }
 
-  async function createOrder(adminToken: string, outletId: number, productId: number) {
+  async function createOrder(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+  ) {
     const res = await request(app.getHttpServer())
       .post('/orders')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -154,13 +178,22 @@ describe('Bulk actions: products + orders (e2e)', () => {
     it('adversarial: a spoofed id from another shop is silently excluded, never processed', async () => {
       const shopA = await setupShop('bulk-status-a');
       const shopB = await setupShop('bulk-status-b');
-      const ownProduct = await createProduct(shopA.adminToken, shopA.categoryId);
-      const foreignProduct = await createProduct(shopB.adminToken, shopB.categoryId);
+      const ownProduct = await createProduct(
+        shopA.adminToken,
+        shopA.categoryId,
+      );
+      const foreignProduct = await createProduct(
+        shopB.adminToken,
+        shopB.categoryId,
+      );
 
       const res = await request(app.getHttpServer())
         .patch('/products/bulk-status')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send({ productIds: [ownProduct.id, foreignProduct.id], status: 'Unavailable' })
+        .send({
+          productIds: [ownProduct.id, foreignProduct.id],
+          status: 'Unavailable',
+        })
         .expect(200);
       // Only the shop-owned id actually matched — the foreign id contributed
       // nothing to the count, and critically didn't error/leak either.
@@ -174,13 +207,20 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('is admin-only — branch and viewer are rejected', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('bulk-status-role');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('bulk-status-role');
       const p1 = await createProduct(adminToken, categoryId);
       const staffEmail = `bulk-status-role-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch', email: staffEmail, password: 'password123', role: 'branch', outletId })
+        .send({
+          name: 'Branch',
+          email: staffEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -218,7 +258,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('a product with order history fails individually without blocking the rest of the batch', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('bulk-delete-partial');
+      const { adminToken, categoryId, outletId } = await setupShop(
+        'bulk-delete-partial',
+      );
       const ordered = await createProduct(adminToken, categoryId);
       const clean = await createProduct(adminToken, categoryId);
       await createOrder(adminToken, outletId, ordered.id);
@@ -249,7 +291,10 @@ describe('Bulk actions: products + orders (e2e)', () => {
     it('adversarial: cannot bulk-delete a product belonging to another shop', async () => {
       const shopA = await setupShop('bulk-delete-a');
       const shopB = await setupShop('bulk-delete-b');
-      const foreignProduct = await createProduct(shopB.adminToken, shopB.categoryId);
+      const foreignProduct = await createProduct(
+        shopB.adminToken,
+        shopB.categoryId,
+      );
 
       const res = await request(app.getHttpServer())
         .delete('/products/bulk-delete')
@@ -270,7 +315,8 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
   describe('orders: bulk status', () => {
     it('advances multiple orders through a valid transition in one call', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('bulk-order-status');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('bulk-order-status');
       const product = await createProduct(adminToken, categoryId);
       const o1 = await createOrder(adminToken, outletId, product.id);
       const o2 = await createOrder(adminToken, outletId, product.id);
@@ -285,7 +331,8 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('skips orders where the transition is invalid rather than forcing it (no skipping required steps)', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('bulk-order-invalid');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('bulk-order-invalid');
       const product = await createProduct(adminToken, categoryId);
       const pending = await createOrder(adminToken, outletId, product.id);
       const confirmed = await createOrder(adminToken, outletId, product.id);
@@ -306,7 +353,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
         .expect(200);
       const result = body<BulkResult>(res);
       expect(result.succeeded).toBe(1);
-      const pendingResult = result.results.find((r) => r.orderId === pending.id)!;
+      const pendingResult = result.results.find(
+        (r) => r.orderId === pending.id,
+      )!;
       expect(pendingResult.success).toBe(false);
 
       const pendingCheck = await request(app.getHttpServer())
@@ -320,7 +369,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
       const shopA = await setupShop('bulk-order-a');
       const shopB = await setupShop('bulk-order-b');
       const productB = await createProduct(shopB.adminToken, shopB.categoryId);
-      const orderB = await createOrder(shopB.adminToken, shopB.outletId, productB.id);
+      const orderB = await createOrder(
+        shopB.adminToken,
+        shopB.outletId,
+        productB.id,
+      );
 
       const res = await request(app.getHttpServer())
         .patch('/orders/bulk-status')
@@ -337,14 +390,20 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('viewer cannot bulk-update order status', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('bulk-order-viewer');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('bulk-order-viewer');
       const product = await createProduct(adminToken, categoryId);
       const order = await createOrder(adminToken, outletId, product.id);
       const staffEmail = `bulk-order-viewer-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Viewer', email: staffEmail, password: 'password123', role: 'viewer' })
+        .send({
+          name: 'Viewer',
+          email: staffEmail,
+          password: 'password123',
+          role: 'viewer',
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -369,7 +428,12 @@ describe('Bulk actions: products + orders (e2e)', () => {
       const res = await request(app.getHttpServer())
         .patch('/products/bulk-price')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productIds: [p1.id, p2.id], field: 'price', mode: 'percentage', value: 10 })
+        .send({
+          productIds: [p1.id, p2.id],
+          field: 'price',
+          mode: 'percentage',
+          value: 10,
+        })
         .expect(200);
       const result = body<BulkPriceResult>(res);
       expect(result.succeeded).toBe(2);
@@ -388,12 +452,20 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
     it('applies a fixed-amount decrease to compareAtPrice', async () => {
       const { adminToken, categoryId } = await setupShop('bulk-price-fixed');
-      const p1 = await createProduct(adminToken, categoryId, { price: 40, compareAtPrice: 60 });
+      const p1 = await createProduct(adminToken, categoryId, {
+        price: 40,
+        compareAtPrice: 60,
+      });
 
       await request(app.getHttpServer())
         .patch('/products/bulk-price')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productIds: [p1.id], field: 'compareAtPrice', mode: 'fixed', value: -5 })
+        .send({
+          productIds: [p1.id],
+          field: 'compareAtPrice',
+          mode: 'fixed',
+          value: -5,
+        })
         .expect(200);
 
       const check = await request(app.getHttpServer())
@@ -405,21 +477,37 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
     it('skips (does not clamp) a product whose compareAtPrice is unset, and one that would go below zero', async () => {
       const { adminToken, categoryId } = await setupShop('bulk-price-skip');
-      const noCompareAt = await createProduct(adminToken, categoryId, { price: 20 });
-      const wouldGoNegative = await createProduct(adminToken, categoryId, { price: 10 });
+      const noCompareAt = await createProduct(adminToken, categoryId, {
+        price: 20,
+      });
+      const wouldGoNegative = await createProduct(adminToken, categoryId, {
+        price: 10,
+      });
 
       const res = await request(app.getHttpServer())
         .patch('/products/bulk-price')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productIds: [noCompareAt.id], field: 'compareAtPrice', mode: 'fixed', value: 5 })
+        .send({
+          productIds: [noCompareAt.id],
+          field: 'compareAtPrice',
+          mode: 'fixed',
+          value: 5,
+        })
         .expect(200);
       expect(body<BulkPriceResult>(res).succeeded).toBe(0);
-      expect(body<BulkPriceResult>(res).results[0].error).toMatch(/compare-at price/i);
+      expect(body<BulkPriceResult>(res).results[0].error).toMatch(
+        /compare-at price/i,
+      );
 
       const res2 = await request(app.getHttpServer())
         .patch('/products/bulk-price')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productIds: [wouldGoNegative.id], field: 'price', mode: 'fixed', value: -50 })
+        .send({
+          productIds: [wouldGoNegative.id],
+          field: 'price',
+          mode: 'fixed',
+          value: -50,
+        })
         .expect(200);
       expect(body<BulkPriceResult>(res2).succeeded).toBe(0);
 
@@ -440,19 +528,34 @@ describe('Bulk actions: products + orders (e2e)', () => {
         // newPrice: 1 is not a real field on the DTO — whitelist validation
         // strips it; the server must still derive the result purely from
         // value/mode/field, not from anything else in the body.
-        .send({ productIds: [p1.id], field: 'price', mode: 'fixed', value: 10, newPrice: 1 })
+        .send({
+          productIds: [p1.id],
+          field: 'price',
+          mode: 'fixed',
+          value: 10,
+          newPrice: 1,
+        })
         .expect(400); // forbidNonWhitelisted rejects the unknown property outright
     });
 
-    it("adversarial: cannot bulk-price a product belonging to another shop", async () => {
+    it('adversarial: cannot bulk-price a product belonging to another shop', async () => {
       const shopA = await setupShop('bulk-price-a');
       const shopB = await setupShop('bulk-price-b');
-      const foreignProduct = await createProduct(shopB.adminToken, shopB.categoryId, { price: 100 });
+      const foreignProduct = await createProduct(
+        shopB.adminToken,
+        shopB.categoryId,
+        { price: 100 },
+      );
 
       const res = await request(app.getHttpServer())
         .patch('/products/bulk-price')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
-        .send({ productIds: [foreignProduct.id], field: 'price', mode: 'percentage', value: 50 })
+        .send({
+          productIds: [foreignProduct.id],
+          field: 'price',
+          mode: 'percentage',
+          value: 50,
+        })
         .expect(200);
       expect(body<BulkPriceResult>(res).succeeded).toBe(0);
 
@@ -464,13 +567,20 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('is admin-only', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('bulk-price-role');
+      const { adminToken, categoryId, outletId } =
+        await setupShop('bulk-price-role');
       const p1 = await createProduct(adminToken, categoryId, { price: 100 });
       const staffEmail = `bulk-price-role-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch', email: staffEmail, password: 'password123', role: 'branch', outletId })
+        .send({
+          name: 'Branch',
+          email: staffEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')

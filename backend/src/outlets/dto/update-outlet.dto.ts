@@ -68,7 +68,10 @@ export class UpdateOutletDto {
 
   @IsOptional()
   @IsObject()
-  businessHours?: Record<string, { open: string; close: string; closed: boolean }>;
+  businessHours?: Record<
+    string,
+    { open: string; close: string; closed: boolean }
+  >;
 
   @IsOptional()
   @IsBoolean()

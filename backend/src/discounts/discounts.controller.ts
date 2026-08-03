@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { DiscountsService } from './discounts.service';
 import { CreateDiscountDto } from './dto/create-discount.dto';
 import { UpdateDiscountDto } from './dto/update-discount.dto';
@@ -25,7 +34,10 @@ export class DiscountsController {
   // Registered before ':id' — see BioLinksController for why a literal
   // segment must be declared ahead of a same-shape ':id' route.
   @Post('validate')
-  validate(@CurrentUser() ctx: TenantContext, @Body() dto: ValidateDiscountDto) {
+  validate(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: ValidateDiscountDto,
+  ) {
     return this.discountsService.validate(ctx.shopId, dto);
   }
 
@@ -35,7 +47,10 @@ export class DiscountsController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  findOne(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.discountsService.findOne(ctx, id);
   }
 
@@ -49,7 +64,10 @@ export class DiscountsController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  remove(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.discountsService.remove(ctx, id);
   }
 }

@@ -1,5 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, IsPositive, IsString, Min, MaxLength } from 'class-validator';
+import {
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Min,
+  MaxLength,
+} from 'class-validator';
 
 // RULE_BASED collections only — every set field is ANDed together at
 // evaluation time (see CollectionsService.resolveProductIds). Deliberately

@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CustomerAccountService } from './customer-account.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
@@ -16,7 +26,9 @@ import type { CustomerContext } from '../customer-auth/customer-context';
 @UseGuards(CustomerAuthGuard)
 @Controller('public/:shopSlug/account')
 export class CustomerAccountController {
-  constructor(private readonly customerAccountService: CustomerAccountService) {}
+  constructor(
+    private readonly customerAccountService: CustomerAccountService,
+  ) {}
 
   @Get('profile')
   getProfile(@CurrentCustomer() ctx: CustomerContext) {
@@ -24,7 +36,10 @@ export class CustomerAccountController {
   }
 
   @Patch('profile')
-  updateProfile(@CurrentCustomer() ctx: CustomerContext, @Body() dto: UpdateProfileDto) {
+  updateProfile(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Body() dto: UpdateProfileDto,
+  ) {
     return this.customerAccountService.updateProfile(ctx, dto);
   }
 
@@ -34,7 +49,10 @@ export class CustomerAccountController {
   }
 
   @Get('orders/:id')
-  getOrder(@CurrentCustomer() ctx: CustomerContext, @Param('id', ParseIntPipe) id: number) {
+  getOrder(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.customerAccountService.getOrder(ctx, id);
   }
 
@@ -44,7 +62,10 @@ export class CustomerAccountController {
   }
 
   @Post('addresses')
-  createAddress(@CurrentCustomer() ctx: CustomerContext, @Body() dto: SaveAddressDto) {
+  createAddress(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Body() dto: SaveAddressDto,
+  ) {
     return this.customerAccountService.createAddress(ctx, dto);
   }
 
@@ -58,7 +79,10 @@ export class CustomerAccountController {
   }
 
   @Delete('addresses/:addressId')
-  deleteAddress(@CurrentCustomer() ctx: CustomerContext, @Param('addressId') addressId: string) {
+  deleteAddress(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Param('addressId') addressId: string,
+  ) {
     return this.customerAccountService.deleteAddress(ctx, addressId);
   }
 }

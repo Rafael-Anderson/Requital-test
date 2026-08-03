@@ -19,7 +19,13 @@ interface OutletRow {
 interface CustomerAuthResponse {
   accessToken: string;
   refreshToken: string;
-  customer: { id: number; shopId: number; name: string; phone: string; email: string | null };
+  customer: {
+    id: number;
+    shopId: number;
+    name: string;
+    phone: string;
+    email: string | null;
+  };
 }
 interface OrderCreateResponse {
   order: { id: number; trackingToken: string | null };
@@ -55,7 +61,11 @@ describe('Customer storefront accounts (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -169,17 +179,36 @@ describe('Customer storefront accounts (e2e)', () => {
     const { shopSlug, outletId, productId } = await setupShop('acct-claim');
     const phone = '0502222222';
 
-    await guestCheckout(shopSlug, outletId, productId, { customerPhone: phone });
-    const guestCountBefore = await prisma.customer.count({ where: { shopId: (await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } })).id } });
+    await guestCheckout(shopSlug, outletId, productId, {
+      customerPhone: phone,
+    });
+    const guestCountBefore = await prisma.customer.count({
+      where: {
+        shopId: (
+          await prisma.shop.findUniqueOrThrow({
+            where: { subdomain: shopSlug },
+          })
+        ).id,
+      },
+    });
     expect(guestCountBefore).toBe(1);
 
-    const res = await register(shopSlug, { phone, name: 'Now Registered' }).expect(201);
+    const res = await register(shopSlug, {
+      phone,
+      name: 'Now Registered',
+    }).expect(201);
     const registered = body<CustomerAuthResponse>(res);
 
-    const shop = await prisma.shop.findUniqueOrThrow({ where: { subdomain: shopSlug } });
-    const countAfter = await prisma.customer.count({ where: { shopId: shop.id } });
+    const shop = await prisma.shop.findUniqueOrThrow({
+      where: { subdomain: shopSlug },
+    });
+    const countAfter = await prisma.customer.count({
+      where: { shopId: shop.id },
+    });
     expect(countAfter).toBe(1); // still one row — claimed, not duplicated
-    const dbCustomer = await prisma.customer.findUniqueOrThrow({ where: { shopId_phone: { shopId: shop.id, phone } } });
+    const dbCustomer = await prisma.customer.findUniqueOrThrow({
+      where: { shopId_phone: { shopId: shop.id, phone } },
+    });
     expect(dbCustomer.id).toBe(registered.customer.id);
     expect(dbCustomer.passwordHash).not.toBeNull();
 
@@ -189,9 +218,12 @@ describe('Customer storefront accounts (e2e)', () => {
   });
 
   it("the order placed as a guest before registering shows up in the claimed account's order history", async () => {
-    const { shopSlug, outletId, productId } = await setupShop('acct-claim-history');
+    const { shopSlug, outletId, productId } =
+      await setupShop('acct-claim-history');
     const phone = '0503333333';
-    const created = await guestCheckout(shopSlug, outletId, productId, { customerPhone: phone });
+    const created = await guestCheckout(shopSlug, outletId, productId, {
+      customerPhone: phone,
+    });
     const guestOrderId = body<OrderCreateResponse>(created).order.id;
 
     const registered = await register(shopSlug, { phone }).expect(201);
@@ -201,30 +233,46 @@ describe('Customer storefront accounts (e2e)', () => {
       .get(`/public/${shopSlug}/account/orders`)
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
-    expect(body<OrderSummary[]>(orders).map((o) => o.id)).toContain(guestOrderId);
+    expect(body<OrderSummary[]>(orders).map((o) => o.id)).toContain(
+      guestOrderId,
+    );
   });
 
   it('guest checkout still works fully unaffected (no auth, no registration required)', async () => {
-    const { shopSlug, outletId, productId } = await setupShop('acct-guest-unaffected');
-    const res = await guestCheckout(shopSlug, outletId, productId, { customerPhone: '0504444444' });
+    const { shopSlug, outletId, productId } = await setupShop(
+      'acct-guest-unaffected',
+    );
+    const res = await guestCheckout(shopSlug, outletId, productId, {
+      customerPhone: '0504444444',
+    });
     expect(body<OrderCreateResponse>(res).order.id).toBeGreaterThan(0);
   });
 
   it("order history is isolated per customer within the same shop — one customer can't see or fetch another's order", async () => {
     const { shopSlug, outletId, productId } = await setupShop('acct-isolation');
-    const regA = await register(shopSlug, { phone: '0505555551', name: 'Customer A' }).expect(201);
-    const regB = await register(shopSlug, { phone: '0505555552', name: 'Customer B' }).expect(201);
+    const regA = await register(shopSlug, {
+      phone: '0505555551',
+      name: 'Customer A',
+    }).expect(201);
+    const regB = await register(shopSlug, {
+      phone: '0505555552',
+      name: 'Customer B',
+    }).expect(201);
     const tokenA = body<CustomerAuthResponse>(regA).accessToken;
     const tokenB = body<CustomerAuthResponse>(regB).accessToken;
 
-    const orderA = await guestCheckout(shopSlug, outletId, productId, { customerPhone: '0505555551' });
+    const orderA = await guestCheckout(shopSlug, outletId, productId, {
+      customerPhone: '0505555551',
+    });
     const orderAId = body<OrderCreateResponse>(orderA).order.id;
 
     const listB = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/orders`)
       .set('Authorization', `Bearer ${tokenB}`)
       .expect(200);
-    expect(body<OrderSummary[]>(listB).map((o) => o.id)).not.toContain(orderAId);
+    expect(body<OrderSummary[]>(listB).map((o) => o.id)).not.toContain(
+      orderAId,
+    );
 
     // Adversarial: B tries to fetch A's order directly by (guessed/known) id.
     const detailAttempt = await request(app.getHttpServer())
@@ -245,8 +293,14 @@ describe('Customer storefront accounts (e2e)', () => {
     const shopB = await setupShop('acct-crossshop-b');
     const phone = '0506666666';
 
-    const regA = await register(shopA.shopSlug, { phone, password: 'passwordAAA' }).expect(201);
-    const regB = await register(shopB.shopSlug, { phone, password: 'passwordBBB' }).expect(201);
+    const regA = await register(shopA.shopSlug, {
+      phone,
+      password: 'passwordAAA',
+    }).expect(201);
+    const regB = await register(shopB.shopSlug, {
+      phone,
+      password: 'passwordBBB',
+    }).expect(201);
     const custA = body<CustomerAuthResponse>(regA).customer;
     const custB = body<CustomerAuthResponse>(regB).customer;
     expect(custA.id).not.toBe(custB.id);
@@ -272,7 +326,9 @@ describe('Customer storefront accounts (e2e)', () => {
   it("a customer session token for Shop A is rejected on Shop B's account endpoints", async () => {
     const shopA = await setupShop('acct-tokenxshop-a');
     const shopB = await setupShop('acct-tokenxshop-b');
-    const regA = await register(shopA.shopSlug, { phone: '0507777777' }).expect(201);
+    const regA = await register(shopA.shopSlug, { phone: '0507777777' }).expect(
+      201,
+    );
     const tokenA = body<CustomerAuthResponse>(regA).accessToken;
 
     const attempt = await request(app.getHttpServer())
@@ -290,7 +346,11 @@ describe('Customer storefront accounts (e2e)', () => {
   it('password reset works end-to-end', async () => {
     const { shopSlug } = await setupShop('acct-reset');
     const email = `reset-${runId}@test.com`;
-    await register(shopSlug, { phone: '0508888888', email, password: 'oldPassword1' }).expect(201);
+    await register(shopSlug, {
+      phone: '0508888888',
+      email,
+      password: 'oldPassword1',
+    }).expect(201);
 
     const forgot = await request(app.getHttpServer())
       .post(`/public/${shopSlug}/auth/forgot-password`)
@@ -378,26 +438,38 @@ describe('Customer storefront accounts (e2e)', () => {
 
   describe('order tracking lookup reflects account status (hasAccount)', () => {
     it('a guest order with no matching account shows hasAccount: false', async () => {
-      const { shopSlug, outletId, productId } = await setupShop('acct-track-guest');
-      const created = await guestCheckout(shopSlug, outletId, productId, { customerPhone: '0509111111' });
+      const { shopSlug, outletId, productId } =
+        await setupShop('acct-track-guest');
+      const created = await guestCheckout(shopSlug, outletId, productId, {
+        customerPhone: '0509111111',
+      });
       const token = body<OrderCreateResponse>(created).order.trackingToken;
 
-      const res = await request(app.getHttpServer()).get(`/public/orders/lookup?token=${token}`).expect(200);
+      const res = await request(app.getHttpServer())
+        .get(`/public/orders/lookup?token=${token}`)
+        .expect(200);
       expect(body<OrderLookupResponse>(res).hasAccount).toBe(false);
     });
 
     it('the same order flips to hasAccount: true once its phone number registers an account — no new order, no re-lookup by identity, same tracking token', async () => {
-      const { shopSlug, outletId, productId } = await setupShop('acct-track-claim');
+      const { shopSlug, outletId, productId } =
+        await setupShop('acct-track-claim');
       const phone = '0509222222';
-      const created = await guestCheckout(shopSlug, outletId, productId, { customerPhone: phone });
+      const created = await guestCheckout(shopSlug, outletId, productId, {
+        customerPhone: phone,
+      });
       const token = body<OrderCreateResponse>(created).order.trackingToken;
 
-      const before = await request(app.getHttpServer()).get(`/public/orders/lookup?token=${token}`).expect(200);
+      const before = await request(app.getHttpServer())
+        .get(`/public/orders/lookup?token=${token}`)
+        .expect(200);
       expect(body<OrderLookupResponse>(before).hasAccount).toBe(false);
 
       await register(shopSlug, { phone }).expect(201);
 
-      const after = await request(app.getHttpServer()).get(`/public/orders/lookup?token=${token}`).expect(200);
+      const after = await request(app.getHttpServer())
+        .get(`/public/orders/lookup?token=${token}`)
+        .expect(200);
       expect(body<OrderLookupResponse>(after).hasAccount).toBe(true);
     });
 
@@ -406,12 +478,19 @@ describe('Customer storefront accounts (e2e)', () => {
       const shopB = await setupShop('acct-track-crossshop-b');
       const phone = '0509333333';
 
-      const orderB = await guestCheckout(shopB.shopSlug, shopB.outletId, shopB.productId, { customerPhone: phone });
+      const orderB = await guestCheckout(
+        shopB.shopSlug,
+        shopB.outletId,
+        shopB.productId,
+        { customerPhone: phone },
+      );
       const tokenB = body<OrderCreateResponse>(orderB).order.trackingToken;
 
       await register(shopA.shopSlug, { phone }).expect(201);
 
-      const lookupB = await request(app.getHttpServer()).get(`/public/orders/lookup?token=${tokenB}`).expect(200);
+      const lookupB = await request(app.getHttpServer())
+        .get(`/public/orders/lookup?token=${tokenB}`)
+        .expect(200);
       expect(body<OrderLookupResponse>(lookupB).hasAccount).toBe(false);
     });
   });

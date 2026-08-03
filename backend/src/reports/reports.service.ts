@@ -16,10 +16,16 @@ import { ListMonthlyReportQueryDto } from './dto/list-monthly-report-query.dto';
 // include instants up to July 31st 00:00 — i.e. almost none of July 31st.
 // Using the first day of August instead correctly captures the entire
 // month (every instant in July is < August 1st 00:00).
-function resolveMonthRange(month: string): { dateFrom: string; dateTo: string } {
+function resolveMonthRange(month: string): {
+  dateFrom: string;
+  dateTo: string;
+} {
   const [year, m] = month.split('-').map(Number);
   const dateFrom = `${month}-01`;
-  const nextMonth = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, '0')}-01`;
+  const nextMonth =
+    m === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(m + 1).padStart(2, '0')}-01`;
   return { dateFrom, dateTo: nextMonth };
 }
 
@@ -53,7 +59,10 @@ export class ReportsService {
   // cancellation totals, or leaves status unset to see everything. Baking
   // in an implicit exclusion here would make the stat cards disagree with
   // "Order status: All" in a way that isn't visible anywhere in the UI.
-  private buildOrderWhere(ctx: TenantContext, filters: ReportsFilterQueryDto): Prisma.orderWhereInput {
+  private buildOrderWhere(
+    ctx: TenantContext,
+    filters: ReportsFilterQueryDto,
+  ): Prisma.orderWhereInput {
     return {
       shopId: ctx.shopId,
       ...(filters.outletId !== undefined && { outletId: filters.outletId }),
@@ -87,11 +96,15 @@ export class ReportsService {
     };
   }
 
-  async listGeneralOrders(ctx: TenantContext, query: ListGeneralReportQueryDto) {
+  async listGeneralOrders(
+    ctx: TenantContext,
+    query: ListGeneralReportQueryDto,
+  ) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
-    const searchAsId = search && /^\d+$/.test(search) ? Number(search) : undefined;
+    const searchAsId =
+      search && /^\d+$/.test(search) ? Number(search) : undefined;
     const where: Prisma.orderWhereInput = {
       ...this.buildOrderWhere(ctx, query),
       ...(search && {
@@ -142,12 +155,21 @@ export class ReportsService {
   // logic, just a thin call-through into the exact same methods above.
   async getMonthlySummary(ctx: TenantContext, filters: MonthlyReportFilterDto) {
     const { month, ...rest } = filters;
-    return this.getGeneralSummary(ctx, { ...rest, ...resolveMonthRange(month) });
+    return this.getGeneralSummary(ctx, {
+      ...rest,
+      ...resolveMonthRange(month),
+    });
   }
 
-  async listMonthlyOrders(ctx: TenantContext, query: ListMonthlyReportQueryDto) {
+  async listMonthlyOrders(
+    ctx: TenantContext,
+    query: ListMonthlyReportQueryDto,
+  ) {
     const { month, ...rest } = query;
-    return this.listGeneralOrders(ctx, { ...rest, ...resolveMonthRange(month) });
+    return this.listGeneralOrders(ctx, {
+      ...rest,
+      ...resolveMonthRange(month),
+    });
   }
 
   // Same filter set as General Report's order list (reuses
@@ -157,11 +179,15 @@ export class ReportsService {
   // on this shared bar. The delivery's own status is shown in the table but
   // isn't filterable through this bar, to avoid overloading one `status`
   // param with two different meanings.
-  async listExternalDeliveries(ctx: TenantContext, query: ListGeneralReportQueryDto) {
+  async listExternalDeliveries(
+    ctx: TenantContext,
+    query: ListGeneralReportQueryDto,
+  ) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
-    const searchAsId = search && /^\d+$/.test(search) ? Number(search) : undefined;
+    const searchAsId =
+      search && /^\d+$/.test(search) ? Number(search) : undefined;
 
     const where: Prisma.externaldeliveryWhereInput = {
       order: this.buildOrderWhere(ctx, query),
@@ -222,8 +248,10 @@ export class ReportsService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
-    const sortColumn = PRODUCT_SALES_SORT_COLUMN[query.sortBy ?? 'totalSalePrice'];
-    const sortDir = query.sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const sortColumn =
+      PRODUCT_SALES_SORT_COLUMN[query.sortBy ?? 'totalSalePrice'];
+    const sortDir =
+      query.sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
 
     const filterSql = Prisma.sql`
       o.shopId = ${ctx.shopId} AND o.status != 'cancelled'
@@ -235,7 +263,9 @@ export class ReportsService {
       ${query.dateFrom ? Prisma.sql`AND o.createdAt >= ${new Date(query.dateFrom)}` : Prisma.empty}
       ${query.dateTo ? Prisma.sql`AND o.createdAt <= ${new Date(query.dateTo)}` : Prisma.empty}
     `;
-    const searchSql = search ? Prisma.sql`AND p.name LIKE ${`%${search}%`}` : Prisma.empty;
+    const searchSql = search
+      ? Prisma.sql`AND p.name LIKE ${`%${search}%`}`
+      : Prisma.empty;
 
     const rows = await this.prisma.$queryRaw<ProductSalesRow[]>`
       SELECT p.id AS productId, p.name AS name, p.thumbnail AS thumbnail, p.price AS currentPrice,

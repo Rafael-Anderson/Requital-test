@@ -1,4 +1,12 @@
-import { ArrayNotEmpty, ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsPositive } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsPositive,
+} from 'class-validator';
 
 export class BulkPriceUpdateDto {
   @IsArray()

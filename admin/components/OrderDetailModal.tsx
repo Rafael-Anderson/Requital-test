@@ -22,6 +22,7 @@ import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
+import OrderStatusTimeline from "@/components/OrderStatusTimeline";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
@@ -52,6 +53,7 @@ export default function OrderDetailModal({
   const [destination, setDestination] = useState("");
   const [savingDelivery, setSavingDelivery] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const toast = useToast();
 
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function OrderDetailModal({
   async function refetch() {
     try {
       setOrder(await getOrder(orderId!));
+      setHistoryRefreshKey((k) => k + 1);
       onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to refresh order", "error");
@@ -181,12 +184,9 @@ export default function OrderDetailModal({
   const latestTxn = order?.paymenttransaction?.[0];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
+        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -221,6 +221,8 @@ export default function OrderDetailModal({
               )}
             </div>
 
+            <OrderStatusTimeline orderId={order.id} refreshKey={historyRefreshKey} />
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2 space-y-4">
                 <section className="border rounded-lg p-4 dark:border-white/10">
@@ -244,6 +246,9 @@ export default function OrderDetailModal({
                           <div className="text-xs text-zinc-500">
                             {item.quantity} × {item.priceAtPurchase} AED
                           </div>
+                          {item.note && (
+                            <div className="text-xs italic text-zinc-500 mt-0.5">Customer: {item.note}</div>
+                          )}
                         </div>
                         <div className="text-sm font-medium">
                           {(Number(item.priceAtPurchase) * item.quantity).toFixed(2)} AED
@@ -332,6 +337,16 @@ export default function OrderDetailModal({
                   <section className="border rounded-lg p-4 dark:border-white/10">
                     <h3 className="font-medium mb-2">Receiver / greeting message</h3>
                     <p className="text-sm whitespace-pre-wrap">{order.receiverMessage}</p>
+                  </section>
+                )}
+
+                {order.surveyresponse?.respondedAt && (
+                  <section className="border rounded-lg p-4 dark:border-white/10">
+                    <h3 className="font-medium mb-2">Customer survey</h3>
+                    <p className="text-sm">Rating: {order.surveyresponse.rating}/5</p>
+                    {order.surveyresponse.comment && (
+                      <p className="text-sm text-zinc-500 mt-1 whitespace-pre-wrap">{order.surveyresponse.comment}</p>
+                    )}
                   </section>
                 )}
 

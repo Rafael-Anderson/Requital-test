@@ -82,97 +82,106 @@ export default function ThemeAppearanceColorPage() {
   return (
     <PageShell>
       <div className="space-y-6">
-      <Card>
-        <h3 className="text-sm font-semibold text-accent-text dark:text-accent mb-1">Brand Colors</h3>
-        <p className="text-xs text-zinc-400 mb-3">
-          Your primary color drives the storefront's buttons and accents everywhere below that isn't overridden individually.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm">Primary color</p>
-              <p className="text-xs text-zinc-400">Any color — not a locked palette.</p>
+        <Card>
+          <h3 className="text-sm font-semibold text-accent-text dark:text-accent mb-1">Brand Colors</h3>
+          <p className="text-xs text-zinc-400 mb-3">
+            Your primary color drives the storefront's buttons and accents everywhere below that isn't overridden
+            individually.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm">Primary color</p>
+                <p className="text-xs text-zinc-400">Any color — not a locked palette.</p>
+              </div>
+              <ColorInput value={brandColor} onChange={(e) => setBrandColor(e.target.value)} />
             </div>
-            <ColorInput value={brandColor} onChange={(e) => setBrandColor(e.target.value)} />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm">Secondary color</p>
-              <p className="text-xs text-zinc-400">Optional — derived from primary if unset.</p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm">Secondary color</p>
+                <p className="text-xs text-zinc-400">Optional — derived from primary if unset.</p>
+              </div>
+              <ColorInput value={secondaryColor || brandColor} onChange={(e) => setSecondaryColor(e.target.value)} />
             </div>
-            <ColorInput value={secondaryColor || brandColor} onChange={(e) => setSecondaryColor(e.target.value)} />
           </div>
-        </div>
-        {brandContrastWarning && <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">{brandContrastWarning}</p>}
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-zinc-400">Button text auto-picks for contrast:</span>
-          <span className="inline-flex items-center h-6 px-2 rounded text-xs font-medium" style={{ background: brandColor, color: brandTextColor }}>
-            Sample
-          </span>
-        </div>
-      </Card>
+          {brandContrastWarning && (
+            <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">{brandContrastWarning}</p>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-zinc-400">Button text auto-picks for contrast:</span>
+            <span
+              className="inline-flex items-center h-6 px-2 rounded text-xs font-medium"
+              style={{ background: brandColor, color: brandTextColor }}
+            >
+              Sample
+            </span>
+          </div>
+        </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        {THEME_COLOR_GROUPS.map((group) => (
-          <Card key={group.key}>
-            <h3 className="text-sm font-semibold text-accent-text dark:text-accent mb-1">{group.label}</h3>
-            <div className="divide-y divide-black/5 dark:divide-white/5">
-              {THEME_COLOR_FIELDS.filter((f) => f.group === group.key).map((field) => (
-                <div key={field.key} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm truncate">{field.label}</p>
-                    {!field.wired && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">Not yet visible on your storefront</p>
-                    )}
+        <div className="columns-1 gap-4 lg:columns-3 [&>*]:mb-4 [&>*]:break-inside-avoid">
+          {THEME_COLOR_GROUPS.map((group) => (
+            <Card key={group.key}>
+              <h3 className="text-sm font-semibold text-accent-text dark:text-accent mb-1">{group.label}</h3>
+              <div className="divide-y divide-black/5 dark:divide-white/5">
+                {THEME_COLOR_FIELDS.filter((f) => f.group === group.key).map((field) => (
+                  <div key={field.key} className="flex items-center justify-between gap-3 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm truncate">{field.label}</p>
+                      {!field.wired && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">Not yet visible on your storefront</p>
+                      )}
+                    </div>
+                    <ColorInput
+                      value={colors[field.key] ?? THEME_COLOR_DEFAULTS[field.key]}
+                      onChange={(e) => setColor(field.key, e.target.value)}
+                    />
                   </div>
-                  <ColorInput
-                    value={colors[field.key] ?? THEME_COLOR_DEFAULTS[field.key]}
-                    onChange={(e) => setColor(field.key, e.target.value)}
-                  />
-                </div>
-              ))}
-            </div>
-          </Card>
-        ))}
-      </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
 
-      {/* Right after the color-editing Cards, not after Live Preview below —
+        {/* Right after the color-editing Cards, not after Live Preview below —
           this is the actual editing area a merchant just finished using;
           Live Preview is reference material for the change they're about to
           save, not a reason to make them scroll further to save it. */}
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
 
-      <div>
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Live preview</p>
-        <div className="max-w-sm rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3" style={{ background: headerBg, color: headerFg }}>
-            <span className="font-semibold">Your Shop</span>
-            <ShoppingCart className="size-4" />
-          </div>
-          <div className="p-4 bg-white">
-            <div className="rounded-lg border border-black/10 p-3 max-w-[180px]">
-              <div className="aspect-square rounded-md bg-black/5 mb-2" />
-              <p className="text-sm font-medium" style={{ color: nameColor }}>
-                Sample Product
-              </p>
-              <p className="text-xs mb-2" style={{ color: priceColor }}>
-                49.00 AED
-              </p>
-              <button
-                type="button"
-                className="w-full h-8 rounded-md text-xs font-medium"
-                style={{ background: addToCartBg, color: addToCartFg }}
-              >
-                Add to cart
-              </button>
+        <div>
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Live preview</p>
+          <div className="max-w-sm rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+            <div
+              className="flex items-center justify-between px-4 py-3"
+              style={{ background: headerBg, color: headerFg }}
+            >
+              <span className="font-semibold">Your Shop</span>
+              <ShoppingCart className="size-4" />
+            </div>
+            <div className="p-4 bg-white">
+              <div className="rounded-lg border border-black/10 p-3 max-w-[180px]">
+                <div className="aspect-square rounded-md bg-black/5 mb-2" />
+                <p className="text-sm font-medium" style={{ color: nameColor }}>
+                  Sample Product
+                </p>
+                <p className="text-xs mb-2" style={{ color: priceColor }}>
+                  49.00 AED
+                </p>
+                <button
+                  type="button"
+                  className="w-full h-8 rounded-md text-xs font-medium"
+                  style={{ background: addToCartBg, color: addToCartFg }}
+                >
+                  Add to cart
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       </div>
     </PageShell>
   );

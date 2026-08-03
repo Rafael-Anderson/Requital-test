@@ -1,4 +1,11 @@
-import { Body, Controller, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ExternalDeliveriesService } from './external-deliveries.service';
 import { CreateExternalDeliveryDto } from './dto/create-external-delivery.dto';
 import { UpdateExternalDeliveryDto } from './dto/update-external-delivery.dto';
@@ -13,7 +20,9 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('orders/:orderId/external-delivery')
 export class ExternalDeliveriesController {
-  constructor(private readonly externalDeliveriesService: ExternalDeliveriesService) {}
+  constructor(
+    private readonly externalDeliveriesService: ExternalDeliveriesService,
+  ) {}
 
   @Post()
   create(

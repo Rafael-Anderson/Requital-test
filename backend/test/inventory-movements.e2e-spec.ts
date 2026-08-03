@@ -53,7 +53,11 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -115,7 +119,12 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     return { adminToken, outletA, outletB, categoryId, productId, slug };
   }
 
-  async function seedStock(adminToken: string, outletId: number, productId: number, qty: number) {
+  async function seedStock(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+    qty: number,
+  ) {
     await request(app.getHttpServer())
       .post('/products/stock/adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -123,7 +132,11 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
       .expect(201);
   }
 
-  async function stockAt(adminToken: string, outletId: number, productId: number): Promise<number> {
+  async function stockAt(
+    adminToken: string,
+    outletId: number,
+    productId: number,
+  ): Promise<number> {
     const res = await request(app.getHttpServer())
       .get(`/products/${productId}?outletId=${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -133,16 +146,25 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
 
   describe('transfer', () => {
     it('moves stock atomically from one outlet to another and logs a TRANSFER movement', async () => {
-      const { adminToken, outletA, outletB, productId } = await setupShop('transfer-basic');
+      const { adminToken, outletA, outletB, productId } =
+        await setupShop('transfer-basic');
       await seedStock(adminToken, outletA, productId, 50);
 
       const res = await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 20, note: 'rebalancing' })
+        .send({
+          productId,
+          fromOutletId: outletA,
+          toOutletId: outletB,
+          quantity: 20,
+          note: 'rebalancing',
+        })
         .expect(201);
       const snapshot = body<StockSnapshot>(res);
-      const byOutlet = new Map(snapshot.products!.map((p) => [p.outletId, p.stockQuantity]));
+      const byOutlet = new Map(
+        snapshot.products!.map((p) => [p.outletId, p.stockQuantity]),
+      );
       expect(byOutlet.get(outletA)).toBe(30);
       expect(byOutlet.get(outletB)).toBe(20);
 
@@ -163,13 +185,20 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     });
 
     it('rejects a transfer that exceeds available stock (409) and mutates nothing', async () => {
-      const { adminToken, outletA, outletB, productId } = await setupShop('transfer-insufficient');
+      const { adminToken, outletA, outletB, productId } = await setupShop(
+        'transfer-insufficient',
+      );
       await seedStock(adminToken, outletA, productId, 5);
 
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 999 })
+        .send({
+          productId,
+          fromOutletId: outletA,
+          toOutletId: outletB,
+          quantity: 999,
+        })
         .expect(409);
 
       expect(await stockAt(adminToken, outletA, productId)).toBe(5);
@@ -177,28 +206,42 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     });
 
     it('rejects fromOutletId === toOutletId', async () => {
-      const { adminToken, outletA, productId } = await setupShop('transfer-same');
+      const { adminToken, outletA, productId } =
+        await setupShop('transfer-same');
       await seedStock(adminToken, outletA, productId, 10);
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productId, fromOutletId: outletA, toOutletId: outletA, quantity: 1 })
+        .send({
+          productId,
+          fromOutletId: outletA,
+          toOutletId: outletA,
+          quantity: 1,
+        })
         .expect(400);
     });
 
     it('race: two concurrent transfers of 30 units each from an outlet with only 40 units — exactly one succeeds', async () => {
-      const { adminToken, outletA, outletB, productId } = await setupShop('transfer-race');
+      const { adminToken, outletA, outletB, productId } =
+        await setupShop('transfer-race');
       await seedStock(adminToken, outletA, productId, 40);
 
       const attempt = () =>
         request(app.getHttpServer())
           .post('/products/stock/transfer')
           .set('Authorization', `Bearer ${adminToken}`)
-          .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 30 });
+          .send({
+            productId,
+            fromOutletId: outletA,
+            toOutletId: outletB,
+            quantity: 30,
+          });
 
       const results = await Promise.all([attempt(), attempt()]);
       const succeeded = results.filter((r) => r.status === 201);
-      const failed = results.filter((r) => r.status === 409 || r.status === 500);
+      const failed = results.filter(
+        (r) => r.status === 409 || r.status === 500,
+      );
       expect(succeeded).toHaveLength(1);
       expect(failed).toHaveLength(1);
 
@@ -211,11 +254,18 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
 
   describe('reason-coded adjustment', () => {
     it('applies a positive adjustment and logs the reason', async () => {
-      const { adminToken, outletA, productId } = await setupShop('adjust-received');
+      const { adminToken, outletA, productId } =
+        await setupShop('adjust-received');
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productId, outletId: outletA, delta: 15, reason: 'received', note: 'PO #4471' })
+        .send({
+          productId,
+          outletId: outletA,
+          delta: 15,
+          reason: 'received',
+          note: 'PO #4471',
+        })
         .expect(201);
       expect(await stockAt(adminToken, outletA, productId)).toBe(15);
 
@@ -230,7 +280,8 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     });
 
     it('applies a negative adjustment (damaged) and rejects one that would go below zero', async () => {
-      const { adminToken, outletA, productId } = await setupShop('adjust-damaged');
+      const { adminToken, outletA, productId } =
+        await setupShop('adjust-damaged');
       await seedStock(adminToken, outletA, productId, 10);
 
       await request(app.getHttpServer())
@@ -249,11 +300,17 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     });
 
     it('rejects an invalid reason value', async () => {
-      const { adminToken, outletA, productId } = await setupShop('adjust-bad-reason');
+      const { adminToken, outletA, productId } =
+        await setupShop('adjust-bad-reason');
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productId, outletId: outletA, delta: 5, reason: 'because I said so' })
+        .send({
+          productId,
+          outletId: outletA,
+          delta: 5,
+          reason: 'because I said so',
+        })
         .expect(400);
     });
   });
@@ -267,28 +324,47 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
-        .send({ productId: shopA.productId, fromOutletId: shopA.outletA, toOutletId: shopA.outletB, quantity: 1 })
+        .send({
+          productId: shopA.productId,
+          fromOutletId: shopA.outletA,
+          toOutletId: shopA.outletB,
+          quantity: 1,
+        })
         .expect(400);
 
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
-        .send({ productId: shopA.productId, outletId: shopA.outletA, delta: 5, reason: 'received' })
+        .send({
+          productId: shopA.productId,
+          outletId: shopA.outletA,
+          delta: 5,
+          reason: 'received',
+        })
         .expect(400);
 
       // Stock at shop A's outlet must be completely untouched by shop B's attempt.
-      expect(await stockAt(shopA.adminToken, shopA.outletA, shopA.productId)).toBe(50);
+      expect(
+        await stockAt(shopA.adminToken, shopA.outletA, shopA.productId),
+      ).toBe(50);
     });
 
     it('branch cannot transfer (admin-only) but can adjust with reason at their own outlet', async () => {
-      const { adminToken, outletA, outletB, productId } = await setupShop('branch-scope');
+      const { adminToken, outletA, outletB, productId } =
+        await setupShop('branch-scope');
       await seedStock(adminToken, outletA, productId, 20);
 
       const staffEmail = `branch-scope-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch', email: staffEmail, password: 'password123', role: 'branch', outletId: outletA })
+        .send({
+          name: 'Branch',
+          email: staffEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId: outletA,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -299,7 +375,12 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${branchToken}`)
-        .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 1 })
+        .send({
+          productId,
+          fromOutletId: outletA,
+          toOutletId: outletB,
+          quantity: 1,
+        })
         .expect(403);
 
       // Adjust ignores any outletId the branch user sends — always forced
@@ -314,12 +395,18 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     });
 
     it('viewer cannot transfer or adjust', async () => {
-      const { adminToken, outletA, outletB, productId } = await setupShop('viewer-scope-mv');
+      const { adminToken, outletA, outletB, productId } =
+        await setupShop('viewer-scope-mv');
       const staffEmail = `viewer-scope-mv-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Viewer', email: staffEmail, password: 'password123', role: 'viewer' })
+        .send({
+          name: 'Viewer',
+          email: staffEmail,
+          password: 'password123',
+          role: 'viewer',
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')
@@ -330,7 +417,12 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${viewerToken}`)
-        .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 1 })
+        .send({
+          productId,
+          fromOutletId: outletA,
+          toOutletId: outletB,
+          quantity: 1,
+        })
         .expect(403);
       await request(app.getHttpServer())
         .post('/products/stock/adjust')
@@ -340,19 +432,31 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
     });
 
     it("a branch user's movement history only ever shows their own outlet's side of things", async () => {
-      const { adminToken, outletA, outletB, productId } = await setupShop('branch-history');
+      const { adminToken, outletA, outletB, productId } =
+        await setupShop('branch-history');
       await seedStock(adminToken, outletA, productId, 30);
       await request(app.getHttpServer())
         .post('/products/stock/transfer')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ productId, fromOutletId: outletA, toOutletId: outletB, quantity: 10 })
+        .send({
+          productId,
+          fromOutletId: outletA,
+          toOutletId: outletB,
+          quantity: 10,
+        })
         .expect(201);
 
       const staffEmail = `branch-history-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Branch B', email: staffEmail, password: 'password123', role: 'branch', outletId: outletB })
+        .send({
+          name: 'Branch B',
+          email: staffEmail,
+          password: 'password123',
+          role: 'branch',
+          outletId: outletB,
+        })
         .expect(201);
       const login = await request(app.getHttpServer())
         .post('/auth/login')

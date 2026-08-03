@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { PublicService } from './public.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
@@ -52,7 +60,11 @@ export class PublicController {
     @Param('slug') slug: string,
     @Query('outletId') outletId?: string,
   ) {
-    return this.publicService.getCollection(shopSlug, slug, outletId ? Number(outletId) : undefined);
+    return this.publicService.getCollection(
+      shopSlug,
+      slug,
+      outletId ? Number(outletId) : undefined,
+    );
   }
 
   @Public()
@@ -61,11 +73,13 @@ export class PublicController {
     @Param('shopSlug') shopSlug: string,
     @Query('outletId') outletId?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('isCheckoutAddon') isCheckoutAddon?: string,
   ) {
     return this.publicService.listProducts(
       shopSlug,
       outletId ? Number(outletId) : undefined,
       categoryId ? Number(categoryId) : undefined,
+      isCheckoutAddon !== undefined ? isCheckoutAddon === 'true' : undefined,
     );
   }
 
@@ -97,7 +111,11 @@ export class PublicController {
     @Param('slug') slug: string,
     @Query('outletId') outletId?: string,
   ) {
-    return this.publicService.getProductBySlug(shopSlug, slug, outletId ? Number(outletId) : undefined);
+    return this.publicService.getProductBySlug(
+      shopSlug,
+      slug,
+      outletId ? Number(outletId) : undefined,
+    );
   }
 
   // Kept working (not replaced) so links shared before slug routing existed
@@ -110,7 +128,11 @@ export class PublicController {
     @Param('id', ParseIntPipe) id: number,
     @Query('outletId') outletId?: string,
   ) {
-    return this.publicService.getProduct(shopSlug, id, outletId ? Number(outletId) : undefined);
+    return this.publicService.getProduct(
+      shopSlug,
+      id,
+      outletId ? Number(outletId) : undefined,
+    );
   }
 
   @Public()
@@ -120,8 +142,20 @@ export class PublicController {
   }
 
   @Public()
+  @Get('reverse-geocode')
+  reverseGeocode(@Query('lat') lat?: string, @Query('lon') lon?: string) {
+    return this.publicService.reverseGeocode(
+      lat !== undefined ? Number(lat) : undefined,
+      lon !== undefined ? Number(lon) : undefined,
+    );
+  }
+
+  @Public()
   @Get('policy-pages/:type')
-  getPolicyPage(@Param('shopSlug') shopSlug: string, @Param('type') type: string) {
+  getPolicyPage(
+    @Param('shopSlug') shopSlug: string,
+    @Param('type') type: string,
+  ) {
     return this.publicService.getPolicyPage(shopSlug, type);
   }
 
@@ -133,7 +167,10 @@ export class PublicController {
   // endpoint never touches usage counters.
   @Public()
   @Post('discounts/validate')
-  validateDiscount(@Param('shopSlug') shopSlug: string, @Body() dto: ValidateDiscountDto) {
+  validateDiscount(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: ValidateDiscountDto,
+  ) {
     return this.publicService.validateDiscount(shopSlug, dto);
   }
 
@@ -152,7 +189,10 @@ export class PublicController {
   // perspective; the storefront fires this and ignores the response.
   @Public()
   @Post('abandoned-carts')
-  captureAbandonedCart(@Param('shopSlug') shopSlug: string, @Body() dto: CaptureAbandonedCartDto) {
+  captureAbandonedCart(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: CaptureAbandonedCartDto,
+  ) {
     return this.publicService.captureAbandonedCart(shopSlug, dto);
   }
 
@@ -161,7 +201,10 @@ export class PublicController {
   // re-validates and atomically claims the balance itself either way.
   @Public()
   @Post('gift-cards/validate')
-  validateGiftCard(@Param('shopSlug') shopSlug: string, @Body() dto: ValidateGiftCardDto) {
+  validateGiftCard(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: ValidateGiftCardDto,
+  ) {
     return this.publicService.validateGiftCard(shopSlug, dto);
   }
 }

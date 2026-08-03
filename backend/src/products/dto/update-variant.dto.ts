@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsNumber, IsOptional, IsPositive, IsString, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { ProductIngredientInput } from './product-ingredient-input.dto';
 
 // The row-level "fuller field set" edit for a single generated variant — sku/

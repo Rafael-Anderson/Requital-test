@@ -1,4 +1,11 @@
-import { IsArray, IsIn, IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+} from 'class-validator';
 
 export const UNMATCHED_BEHAVIORS = ['ask', 'create'] as const;
 export type UnmatchedBehavior = (typeof UNMATCHED_BEHAVIORS)[number];

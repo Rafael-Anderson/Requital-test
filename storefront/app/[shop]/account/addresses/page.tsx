@@ -10,15 +10,18 @@ import { EMIRATES } from "@/lib/types";
 import type { CustomerAddress } from "@/lib/types";
 import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/form-styles";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import MapPicker from "@/components/MapPicker";
 
 interface AddressFormState {
   label: string;
   address: string;
   emirate: string;
   area: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
-const EMPTY_FORM: AddressFormState = { label: "", address: "", emirate: EMIRATES[1], area: "" };
+const EMPTY_FORM: AddressFormState = { label: "", address: "", emirate: EMIRATES[1], area: "", latitude: null, longitude: null };
 
 export default function AddressesPage() {
   const router = useRouter();
@@ -52,7 +55,14 @@ export default function AddressesPage() {
   }
 
   function startEdit(address: CustomerAddress) {
-    setForm({ label: address.label ?? "", address: address.address, emirate: address.emirate, area: address.area ?? "" });
+    setForm({
+      label: address.label ?? "",
+      address: address.address,
+      emirate: address.emirate,
+      area: address.area ?? "",
+      latitude: address.latitude ?? null,
+      longitude: address.longitude ?? null,
+    });
     setEditingId(address.id);
   }
 
@@ -61,7 +71,14 @@ export default function AddressesPage() {
     setSaving(true);
     setError(null);
     try {
-      const payload = { label: form.label || undefined, address: form.address, emirate: form.emirate, area: form.area || undefined };
+      const payload = {
+        label: form.label || undefined,
+        address: form.address,
+        emirate: form.emirate,
+        area: form.area || undefined,
+        latitude: form.latitude ?? undefined,
+        longitude: form.longitude ?? undefined,
+      };
       if (editingId === "new") {
         await createMyAddress(shopSlug, payload);
       } else if (editingId) {
@@ -116,6 +133,19 @@ export default function AddressesPage() {
               className={FIELD_CLASS}
             />
           </div>
+          <MapPicker
+            shopSlug={shopSlug}
+            latitude={form.latitude}
+            longitude={form.longitude}
+            onPick={(coords, address) =>
+              setForm((f) => ({
+                ...f,
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                address: address ?? f.address,
+              }))
+            }
+          />
           <div>
             <label className="text-sm font-medium block mb-1">Address</label>
             <textarea

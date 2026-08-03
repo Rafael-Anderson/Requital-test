@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsPositive,
+  IsString,
+} from 'class-validator';
 import { ORDER_STATUSES } from '../../orders/constants';
 import type { OrderStatus } from '../../orders/constants';
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PublicController } from './public.controller';
 import { PublicOrderLookupController } from './public-order-lookup.controller';
+import { PublicSurveyController } from './public-survey.controller';
 import { PublicShopsController } from './public-shops.controller';
 import { PublicAbandonedCartRecoveryController } from './public-abandoned-cart-recovery.controller';
 import { PublicService } from './public.service';
@@ -33,6 +34,7 @@ import { PolicyPagesModule } from '../policy-pages/policy-pages.module';
   controllers: [
     PublicController,
     PublicOrderLookupController,
+    PublicSurveyController,
     PublicShopsController,
     PublicAbandonedCartRecoveryController,
   ],

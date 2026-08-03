@@ -18,7 +18,12 @@ import type { UserRole } from '../../common/tenant-context';
 // staff member. Defaults to 'branch' (the field's original, only behavior)
 // when omitted, so every existing caller of this endpoint keeps working
 // unchanged.
-const CREATABLE_ROLES: UserRole[] = ['admin', 'branch', 'order_manager', 'viewer'];
+const CREATABLE_ROLES: UserRole[] = [
+  'admin',
+  'branch',
+  'order_manager',
+  'viewer',
+];
 
 export class CreateBranchUserDto {
   @IsString()

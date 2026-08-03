@@ -73,7 +73,11 @@ describe('Affiliate (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     prisma = app.get(PrismaService);
@@ -95,7 +99,10 @@ describe('Affiliate (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
-    return { adminToken: body<AuthResponse>(signup).accessToken, slug: `${slugPrefix}-${runId}` };
+    return {
+      adminToken: body<AuthResponse>(signup).accessToken,
+      slug: `${slugPrefix}-${runId}`,
+    };
   }
 
   async function setupOrderableShop(slugPrefix: string) {
@@ -170,7 +177,8 @@ describe('Affiliate (e2e)', () => {
       validUntil: string;
     }> = {},
   ) {
-    const code = overrides.code ?? `REF${runId}${Math.floor(Math.random() * 100000)}`;
+    const code =
+      overrides.code ?? `REF${runId}${Math.floor(Math.random() * 100000)}`;
     const res = await request(app.getHttpServer())
       .post('/affiliates/codes')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -220,16 +228,22 @@ describe('Affiliate (e2e)', () => {
     it('a valid percentage code creates a correctly-linked, correctly-priced AffiliateOrder', async () => {
       const shop = await setupOrderableShop('aff-pct');
       const affiliateId = await createAffiliate(shop.adminToken);
-      const code = await createCode(shop.adminToken, affiliateId, { commissionType: 'percentage', commissionValue: 10 });
+      const code = await createCode(shop.adminToken, affiliateId, {
+        commissionType: 'percentage',
+        commissionValue: 10,
+      });
 
       const orderRes = await placeOrder(shop.slug, shop, code.code).expect(201);
-      const orderId = body<{ order: { id: number; total: string } }>(orderRes).order.id;
+      const orderId = body<{ order: { id: number; total: string } }>(orderRes)
+        .order.id;
 
       const orders = await request(app.getHttpServer())
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find((r) => r.orderId === orderId);
+      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find(
+        (r) => r.orderId === orderId,
+      );
       expect(row).toBeTruthy();
       expect(row!.code).toBe(code.code);
       expect(row!.orderTotal).toBe(50);
@@ -240,7 +254,10 @@ describe('Affiliate (e2e)', () => {
     it('a valid fixed-amount code computes a flat commission regardless of order total', async () => {
       const shop = await setupOrderableShop('aff-fixed');
       const affiliateId = await createAffiliate(shop.adminToken);
-      const code = await createCode(shop.adminToken, affiliateId, { commissionType: 'fixed', commissionValue: 7.5 });
+      const code = await createCode(shop.adminToken, affiliateId, {
+        commissionType: 'fixed',
+        commissionValue: 7.5,
+      });
 
       await placeOrder(shop.slug, shop, code.code).expect(201);
 
@@ -248,7 +265,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find((r) => r.code === code.code);
+      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find(
+        (r) => r.code === code.code,
+      );
       expect(row!.commissionAmount).toBe(7.5);
     });
   });
@@ -274,7 +293,9 @@ describe('Affiliate (e2e)', () => {
     it('a blocked code: order succeeds, no attribution created', async () => {
       const shop = await setupOrderableShop('aff-blocked');
       const affiliateId = await createAffiliate(shop.adminToken);
-      const code = await createCode(shop.adminToken, affiliateId, { status: 'blocked' });
+      const code = await createCode(shop.adminToken, affiliateId, {
+        status: 'blocked',
+      });
 
       const orderRes = await placeOrder(shop.slug, shop, code.code).expect(201);
       const orderId = body<{ order: { id: number } }>(orderRes).order.id;
@@ -283,13 +304,19 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<Paginated<AffiliateOrderRow>>(orders).data.some((r) => r.orderId === orderId)).toBe(false);
+      expect(
+        body<Paginated<AffiliateOrderRow>>(orders).data.some(
+          (r) => r.orderId === orderId,
+        ),
+      ).toBe(false);
     });
 
     it('an expired code (validUntil in the past): order succeeds, no attribution created', async () => {
       const shop = await setupOrderableShop('aff-expired');
       const affiliateId = await createAffiliate(shop.adminToken);
-      const code = await createCode(shop.adminToken, affiliateId, { validUntil: '2020-01-01' });
+      const code = await createCode(shop.adminToken, affiliateId, {
+        validUntil: '2020-01-01',
+      });
 
       const orderRes = await placeOrder(shop.slug, shop, code.code).expect(201);
       const orderId = body<{ order: { id: number } }>(orderRes).order.id;
@@ -298,7 +325,11 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<Paginated<AffiliateOrderRow>>(orders).data.some((r) => r.orderId === orderId)).toBe(false);
+      expect(
+        body<Paginated<AffiliateOrderRow>>(orders).data.some(
+          (r) => r.orderId === orderId,
+        ),
+      ).toBe(false);
     });
   });
 
@@ -310,7 +341,12 @@ describe('Affiliate (e2e)', () => {
       const orderRes = await placeOrder(shop.slug, shop, code.code).expect(201);
       const orderId = body<{ order: { id: number } }>(orderRes).order.id;
 
-      for (const status of ['confirmed', 'preparing', 'out_for_delivery', 'delivered']) {
+      for (const status of [
+        'confirmed',
+        'preparing',
+        'out_for_delivery',
+        'delivered',
+      ]) {
         await request(app.getHttpServer())
           .patch(`/orders/${orderId}/status`)
           .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -322,7 +358,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find((r) => r.orderId === orderId);
+      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find(
+        (r) => r.orderId === orderId,
+      );
       expect(row!.status).toBe('approved');
     });
 
@@ -342,7 +380,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find((r) => r.orderId === orderId);
+      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find(
+        (r) => r.orderId === orderId,
+      );
       expect(row!.status).toBe('blocked');
     });
 
@@ -357,9 +397,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const affiliateOrderId = body<Paginated<AffiliateOrderRow>>(orders).data.find(
-        (r) => r.orderId === orderId,
-      )!.id;
+      const affiliateOrderId = body<Paginated<AffiliateOrderRow>>(
+        orders,
+      ).data.find((r) => r.orderId === orderId)!.id;
 
       await request(app.getHttpServer())
         .patch(`/affiliates/orders/${affiliateOrderId}/status`)
@@ -367,7 +407,12 @@ describe('Affiliate (e2e)', () => {
         .send({ status: 'blocked' })
         .expect(200);
 
-      for (const status of ['confirmed', 'preparing', 'out_for_delivery', 'delivered']) {
+      for (const status of [
+        'confirmed',
+        'preparing',
+        'out_for_delivery',
+        'delivered',
+      ]) {
         await request(app.getHttpServer())
           .patch(`/orders/${orderId}/status`)
           .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -379,7 +424,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<Paginated<AffiliateOrderRow>>(after).data.find((r) => r.id === affiliateOrderId);
+      const row = body<Paginated<AffiliateOrderRow>>(after).data.find(
+        (r) => r.id === affiliateOrderId,
+      );
       expect(row!.status).toBe('blocked');
     });
 
@@ -393,9 +440,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const affiliateOrderId = body<Paginated<AffiliateOrderRow>>(orders).data.find(
-        (r) => r.orderId === orderId,
-      )!.id;
+      const affiliateOrderId = body<Paginated<AffiliateOrderRow>>(
+        orders,
+      ).data.find((r) => r.orderId === orderId)!.id;
 
       await request(app.getHttpServer())
         .patch(`/affiliates/orders/${affiliateOrderId}/status`)
@@ -412,20 +459,25 @@ describe('Affiliate (e2e)', () => {
   });
 
   describe('multi-tenant isolation', () => {
-    it('shop A cannot see or update shop B\'s affiliate, code, or affiliate order', async () => {
+    it("shop A cannot see or update shop B's affiliate, code, or affiliate order", async () => {
       const shopA = await setupOrderableShop('aff-tenant-a');
       const shopB = await setupOrderableShop('aff-tenant-b');
-      const affiliateIdB = await createAffiliate(shopB.adminToken, 'B Referrer');
+      const affiliateIdB = await createAffiliate(
+        shopB.adminToken,
+        'B Referrer',
+      );
       const codeB = await createCode(shopB.adminToken, affiliateIdB);
-      const orderRes = await placeOrder(shopB.slug, shopB, codeB.code).expect(201);
+      const orderRes = await placeOrder(shopB.slug, shopB, codeB.code).expect(
+        201,
+      );
       const orderIdB = body<{ order: { id: number } }>(orderRes).order.id;
       const ordersB = await request(app.getHttpServer())
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shopB.adminToken}`)
         .expect(200);
-      const affiliateOrderIdB = body<Paginated<AffiliateOrderRow>>(ordersB).data.find(
-        (r) => r.orderId === orderIdB,
-      )!.id;
+      const affiliateOrderIdB = body<Paginated<AffiliateOrderRow>>(
+        ordersB,
+      ).data.find((r) => r.orderId === orderIdB)!.id;
 
       // A's lists never contain B's rows.
       const affiliatesA = await request(app.getHttpServer())
@@ -433,16 +485,20 @@ describe('Affiliate (e2e)', () => {
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
       expect(
-        body<Paginated<AffiliateRow>>(affiliatesA).data.some((r) => r.name === 'B Referrer'),
+        body<Paginated<AffiliateRow>>(affiliatesA).data.some(
+          (r) => r.name === 'B Referrer',
+        ),
       ).toBe(false);
 
       const codesA = await request(app.getHttpServer())
         .get('/affiliates/codes')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      expect(body<Paginated<AffiliateCodeRow>>(codesA).data.some((r) => r.code === codeB.code)).toBe(
-        false,
-      );
+      expect(
+        body<Paginated<AffiliateCodeRow>>(codesA).data.some(
+          (r) => r.code === codeB.code,
+        ),
+      ).toBe(false);
 
       // A can't reach into B's rows by id even with a valid A token.
       await request(app.getHttpServer())
@@ -466,15 +522,20 @@ describe('Affiliate (e2e)', () => {
       // (shopId, code), not code alone.
       const affiliateIdA = await createAffiliate(shopA.adminToken);
       await createCode(shopA.adminToken, affiliateIdA, { code: codeB.code });
-      const crossOrderRes = await placeOrder(shopA.slug, shopA, codeB.code).expect(201);
-      const crossOrderId = body<{ order: { id: number } }>(crossOrderRes).order.id;
+      const crossOrderRes = await placeOrder(
+        shopA.slug,
+        shopA,
+        codeB.code,
+      ).expect(201);
+      const crossOrderId = body<{ order: { id: number } }>(crossOrderRes).order
+        .id;
       const ordersAfterA = await request(app.getHttpServer())
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(200);
-      const attributed = body<Paginated<AffiliateOrderRow>>(ordersAfterA).data.find(
-        (r) => r.orderId === crossOrderId,
-      );
+      const attributed = body<Paginated<AffiliateOrderRow>>(
+        ordersAfterA,
+      ).data.find((r) => r.orderId === crossOrderId);
       expect(attributed).toBeTruthy();
       expect(attributed!.affiliateName).not.toBe('B Referrer');
     });
@@ -483,18 +544,29 @@ describe('Affiliate (e2e)', () => {
   describe('stat card totals', () => {
     it('summary totals match seeded data', async () => {
       const shop = await setupOrderableShop('aff-stats');
-      const affiliate1 = await createAffiliate(shop.adminToken, 'Affiliate One');
-      const affiliate2 = await createAffiliate(shop.adminToken, 'Affiliate Two');
+      const affiliate1 = await createAffiliate(
+        shop.adminToken,
+        'Affiliate One',
+      );
+      const affiliate2 = await createAffiliate(
+        shop.adminToken,
+        'Affiliate Two',
+      );
       await request(app.getHttpServer())
         .patch(`/affiliates/${affiliate2}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ status: 'inactive' })
         .expect(200);
 
-      const code1 = await createCode(shop.adminToken, affiliate1, { commissionType: 'fixed', commissionValue: 5 });
+      const code1 = await createCode(shop.adminToken, affiliate1, {
+        commissionType: 'fixed',
+        commissionValue: 5,
+      });
       await createCode(shop.adminToken, affiliate2, { status: 'blocked' });
 
-      const orderRes = await placeOrder(shop.slug, shop, code1.code).expect(201);
+      const orderRes = await placeOrder(shop.slug, shop, code1.code).expect(
+        201,
+      );
       const orderId = body<{ order: { id: number } }>(orderRes).order.id;
       await request(app.getHttpServer())
         .patch(`/orders/${orderId}/status`)
@@ -546,7 +618,10 @@ describe('Affiliate (e2e)', () => {
         .expect(201);
       const branchLogin = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({ email: `aff-branch-${runId}@test.com`, password: 'password123' })
+        .send({
+          email: `aff-branch-${runId}@test.com`,
+          password: 'password123',
+        })
         .expect(201);
       const branchToken = body<AuthResponse>(branchLogin).accessToken;
 
@@ -561,7 +636,10 @@ describe('Affiliate (e2e)', () => {
     it('an admin-created order with a referralCode creates the same attribution', async () => {
       const shop = await setupOrderableShop('aff-admin-order');
       const affiliateId = await createAffiliate(shop.adminToken);
-      const code = await createCode(shop.adminToken, affiliateId, { commissionType: 'fixed', commissionValue: 3 });
+      const code = await createCode(shop.adminToken, affiliateId, {
+        commissionType: 'fixed',
+        commissionValue: 3,
+      });
 
       const orderRes = await request(app.getHttpServer())
         .post('/orders')
@@ -582,7 +660,9 @@ describe('Affiliate (e2e)', () => {
         .get('/affiliates/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find((r) => r.orderId === orderId);
+      const row = body<Paginated<AffiliateOrderRow>>(orders).data.find(
+        (r) => r.orderId === orderId,
+      );
       expect(row).toBeTruthy();
       expect(row!.commissionAmount).toBe(3);
     });

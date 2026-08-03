@@ -31,4 +31,12 @@ describe("buildWhatsAppUrl", () => {
   it("returns null when there are no digits at all", () => {
     expect(buildWhatsAppUrl(null, null)).toBeNull();
   });
+
+  it("returns null with a message but no digits, rather than a broken wa.me link", () => {
+    expect(buildWhatsAppUrl(null, null, "Hi, I'm interested")).toBeNull();
+  });
+
+  it("appends an encoded ?text= param when a message is given", () => {
+    expect(buildWhatsAppUrl("+971", "501234567", "Hi there")).toBe("https://wa.me/971501234567?text=Hi%20there");
+  });
 });
