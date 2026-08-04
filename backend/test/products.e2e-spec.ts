@@ -614,6 +614,46 @@ describe('Products / variants (e2e)', () => {
     });
   });
 
+  describe('per-product Variants/Attributes/FAQs opt-in (showVariants/showAttributes/showFaqs)', () => {
+    it('defaults all three to false, and round-trips explicit values on create and update', async () => {
+      const { adminToken, categoryId } = await setupShop('feature-toggles');
+      const product = await createProduct(adminToken, categoryId, {});
+      expect(product).toEqual(
+        expect.objectContaining({
+          showVariants: false,
+          showAttributes: false,
+          showFaqs: false,
+        }),
+      );
+
+      const withToggles = await createProduct(adminToken, categoryId, {
+        showVariants: true,
+        showAttributes: true,
+        showFaqs: true,
+      });
+      expect(withToggles).toEqual(
+        expect.objectContaining({
+          showVariants: true,
+          showAttributes: true,
+          showFaqs: true,
+        }),
+      );
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/products/${withToggles.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ showVariants: false })
+        .expect(200);
+      expect(body<ProductRow>(updated)).toEqual(
+        expect.objectContaining({
+          showVariants: false,
+          showAttributes: true,
+          showFaqs: true,
+        }),
+      );
+    });
+  });
+
   describe('order creation resolves the specific variant', () => {
     it("requires a variantId for a variant-bearing product and resolves its price/sku/stock, not the parent product's", async () => {
       const { adminToken, outletId, categoryId, slug } =

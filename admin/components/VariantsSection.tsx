@@ -1,17 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Pencil, Plus, X } from "lucide-react";
 import { resolveImageUrl, updateProductOptions } from "@/lib/api";
 import type { Product, ProductVariant } from "@/lib/types";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import VariantEditModal from "@/components/VariantEditModal";
+import ProductFeatureSection from "@/components/ProductFeatureSection";
 import type { GalleryImage } from "@/components/ProductMediaGallery";
 
 interface OptionDraft {
@@ -26,18 +25,25 @@ function fromProduct(product: Product): OptionDraft[] {
 }
 
 // Options only exist against a real product id (PUT /products/:id/options),
-// so this section is edit-mode only — a new, unsaved product shows a note
-// instead. Also gated behind shop.productVariantsEnabled (Settings > Store
-// Configuration), previously a placeholder with no feature behind it.
+// so the real editor is edit-mode only — a new, unsaved product shows a note
+// instead once this section is enabled. `enabled` is this product's own
+// showVariants flag (see useProductForm) — a per-product opt-in that
+// replaced the old shop-wide productVariantsEnabled toggle.
 export default function VariantsSection({
   product,
-  shopVariantsEnabled,
+  enabled,
+  defaultOpen,
+  onEnable,
+  onDisable,
   onProductUpdate,
   images,
   onImagesChange,
 }: {
   product: Product | null;
-  shopVariantsEnabled: boolean;
+  enabled: boolean;
+  defaultOpen: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
   onProductUpdate: (product: Product) => void;
   // The live Media gallery being edited above, not product.images — a
   // newly-added image is real (already uploaded, has a url) as soon as it's
@@ -55,27 +61,18 @@ export default function VariantsSection({
   const [saving, setSaving] = useState(false);
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
 
-  if (!product) {
+  if (!enabled || !product) {
     return (
-      <Card>
-        <h3 className="text-sm font-semibold mb-1">Variants</h3>
+      <ProductFeatureSection
+        title="Variants"
+        addLabel="Add variants"
+        enabled={enabled}
+        defaultOpen={defaultOpen}
+        onEnable={onEnable}
+        onDisable={onDisable}
+      >
         <p className="text-sm text-zinc-500">Save the product first to add options like size or color.</p>
-      </Card>
-    );
-  }
-
-  if (!shopVariantsEnabled) {
-    return (
-      <Card>
-        <h3 className="text-sm font-semibold mb-1">Variants</h3>
-        <p className="text-sm text-zinc-500">
-          Enable product variants in{" "}
-          <Link href="/settings/business/store-configuration" className="text-accent-text hover:underline">
-            Settings &gt; Store Configuration
-          </Link>{" "}
-          to add options like size or color.
-        </p>
-      </Card>
+      </ProductFeatureSection>
     );
   }
 
@@ -141,7 +138,14 @@ export default function VariantsSection({
   const totalVariants = options.reduce((n, o) => n * Math.max(o.values.length, 1), options.length > 0 ? 1 : 0);
 
   return (
-    <Card className="space-y-4">
+    <ProductFeatureSection
+      title="Variants"
+      addLabel="Add variants"
+      enabled
+      defaultOpen={defaultOpen}
+      onEnable={onEnable}
+      onDisable={onDisable}
+    >
       <div>
         <h3 className="text-sm font-semibold mb-1">Options</h3>
         <p className="text-xs text-zinc-400 mb-3">
@@ -212,7 +216,7 @@ export default function VariantsSection({
             Add option
           </Button>
           {options.length > 0 && (
-            <Button type="button" variant="primary" size="sm" onClick={handleSaveOptions} disabled={saving}>
+            <Button type="button" variant="primary" size="sm" onClick={handleSaveOptions} disabled={saving} loading={saving}>
               Save options
             </Button>
           )}
@@ -276,6 +280,6 @@ export default function VariantsSection({
           }
         />
       )}
-    </Card>
+    </ProductFeatureSection>
   );
 }

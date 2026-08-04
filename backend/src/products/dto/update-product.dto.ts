@@ -89,6 +89,20 @@ export class UpdateProductDto {
   @IsBoolean()
   isCheckoutAddon?: boolean;
 
+  // Per-product opt-in for the Variants/Attributes/FAQs sections — see
+  // CreateProductDto's own comment.
+  @IsOptional()
+  @IsBoolean()
+  showVariants?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showAttributes?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showFaqs?: boolean;
+
   @IsOptional()
   @IsBoolean()
   continueSellingOutOfStock?: boolean;

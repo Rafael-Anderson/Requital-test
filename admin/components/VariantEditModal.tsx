@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   listIngredientCategories,
   listIngredients,
@@ -18,6 +18,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import OutletQuantityTable from "@/components/ui/OutletQuantityTable";
 import IngredientRecipeEditor, { type RecipeRowDraft } from "@/components/IngredientRecipeEditor";
+import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
 export default function VariantEditModal({
@@ -163,23 +164,9 @@ export default function VariantEditModal({
   // fine as a plain inline div — this is the only one ever mounted inside
   // a page that's itself a <form>.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md max-h-[90vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">{variant.label ?? "Variant"}</h2>
-
+    <Modal onClose={onClose} size="sm" title={variant.label ?? "Variant"}>
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <div className="relative">
             <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Image</label>
@@ -358,16 +345,17 @@ export default function VariantEditModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             Save changes
           </Button>
         </div>
       </form>
-    </div>,
+      )}
+    </Modal>,
     document.body,
   );
 }

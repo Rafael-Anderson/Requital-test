@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Plus, X } from "lucide-react";
-import Card from "@/components/ui/Card";
+import ProductFeatureSection from "@/components/ProductFeatureSection";
 
 const FIELD_CLASS =
   "w-full border rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors";
@@ -14,31 +13,24 @@ export interface FaqDraft {
 }
 
 // Same lifted-state, no-own-save-endpoint shape as AttributesSection — see
-// that component's comment.
+// that component's comment. `enabled` is this product's own showFaqs flag
+// (see useProductForm) — a per-product opt-in that replaced the old
+// shop-wide productFaqsEnabled toggle.
 export default function FaqsSection({
   faqs,
   onChange,
-  shopFaqsEnabled,
+  enabled,
+  defaultOpen,
+  onEnable,
+  onDisable,
 }: {
   faqs: FaqDraft[];
   onChange: (faqs: FaqDraft[]) => void;
-  shopFaqsEnabled: boolean;
+  enabled: boolean;
+  defaultOpen: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
 }) {
-  if (!shopFaqsEnabled) {
-    return (
-      <Card>
-        <h3 className="text-sm font-semibold mb-1">FAQs</h3>
-        <p className="text-sm text-zinc-500">
-          Enable product FAQs in{" "}
-          <Link href="/settings/business/store-configuration" className="text-accent-text hover:underline">
-            Settings &gt; Store Configuration
-          </Link>{" "}
-          to add question/answer pairs to this product.
-        </p>
-      </Card>
-    );
-  }
-
   function update(index: number, patch: Partial<FaqDraft>) {
     onChange(faqs.map((f, i) => (i === index ? { ...f, ...patch } : f)));
   }
@@ -52,13 +44,20 @@ export default function FaqsSection({
   }
 
   return (
-    <Card className="space-y-3">
+    <ProductFeatureSection
+      title="FAQs"
+      addLabel="Add FAQs"
+      enabled={enabled}
+      defaultOpen={defaultOpen}
+      onEnable={onEnable}
+      onDisable={onDisable}
+    >
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">FAQs</h3>
+        <p className="text-xs text-zinc-400">Question/answer pairs shown on the product page.</p>
         <button
           type="button"
           onClick={addRow}
-          className="flex items-center gap-1 text-sm text-accent-text hover:underline cursor-pointer"
+          className="flex items-center gap-1 text-sm text-accent-text hover:underline cursor-pointer shrink-0 ml-3"
         >
           <Plus className="size-4" /> Add FAQ
         </button>
@@ -96,6 +95,6 @@ export default function FaqsSection({
           ))}
         </div>
       )}
-    </Card>
+    </ProductFeatureSection>
   );
 }

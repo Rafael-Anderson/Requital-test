@@ -57,9 +57,6 @@ export default function StoreConfigurationPage() {
   const [businessHours, setBusinessHours] = useState<BusinessHours>(defaultBusinessHours());
   const [whatsappFloatingButtonEnabled, setWhatsappFloatingButtonEnabled] = useState(false);
   const [birthdayDiscountEnabled, setBirthdayDiscountEnabled] = useState(false);
-  const [productVariantsEnabled, setProductVariantsEnabled] = useState(false);
-  const [productAttributesEnabled, setProductAttributesEnabled] = useState(false);
-  const [productFaqsEnabled, setProductFaqsEnabled] = useState(false);
   const [customerSurveyEnabled, setCustomerSurveyEnabled] = useState(false);
   const [dynamicThemeBuilderEnabled, setDynamicThemeBuilderEnabled] = useState(false);
   const [disableStoreCart, setDisableStoreCart] = useState(false);
@@ -86,9 +83,6 @@ export default function StoreConfigurationPage() {
       setBusinessHours(mergeBusinessHours(s.businessHours));
       setWhatsappFloatingButtonEnabled(s.whatsappFloatingButtonEnabled);
       setBirthdayDiscountEnabled(s.birthdayDiscountEnabled);
-      setProductVariantsEnabled(s.productVariantsEnabled);
-      setProductAttributesEnabled(s.productAttributesEnabled);
-      setProductFaqsEnabled(s.productFaqsEnabled);
       setCustomerSurveyEnabled(s.customerSurveyEnabled);
       setDynamicThemeBuilderEnabled(s.dynamicThemeBuilderEnabled);
       setDisableStoreCart(s.disableStoreCart);
@@ -116,9 +110,6 @@ export default function StoreConfigurationPage() {
         businessHours: JSON.stringify(businessHours),
         whatsappFloatingButtonEnabled,
         birthdayDiscountEnabled,
-        productVariantsEnabled,
-        productAttributesEnabled,
-        productFaqsEnabled,
         customerSurveyEnabled,
         dynamicThemeBuilderEnabled,
         disableStoreCart,
@@ -250,7 +241,7 @@ export default function StoreConfigurationPage() {
               <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
             </Card>
 
-            <Button variant="primary" onClick={handleSave} disabled={saving} className="w-fit">
+            <Button variant="primary" onClick={handleSave} disabled={saving} className="w-fit" loading={saving}>
               <Check className="size-4 inline -mt-0.5 mr-1" />
               Save changes
             </Button>
@@ -295,34 +286,6 @@ export default function StoreConfigurationPage() {
               <p className="text-xs text-zinc-400 mt-3">
                 UI toggles only — no WhatsApp integration or discount engine is connected yet.
               </p>
-            </Card>
-
-            <Card>
-              <h3 className="text-sm font-semibold mb-3">Catalog</h3>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Toggle checked={productVariantsEnabled} onChange={setProductVariantsEnabled} />
-                  <span className="text-sm">Product variants enabled</span>
-                </div>
-                <p className="text-xs text-zinc-400">
-                  Shows the Options/Variants section on the Add/Edit Product page — e.g. Size, Color.
-                </p>
-                <div className="flex items-center gap-2">
-                  <Toggle checked={productAttributesEnabled} onChange={setProductAttributesEnabled} />
-                  <span className="text-sm">Product attributes enabled</span>
-                </div>
-                <p className="text-xs text-zinc-400">
-                  Shows an Attributes section on the Add/Edit Product page and on the storefront product page — e.g.
-                  Material, Origin. Informational only, distinct from Options/Variants above.
-                </p>
-                <div className="flex items-center gap-2">
-                  <Toggle checked={productFaqsEnabled} onChange={setProductFaqsEnabled} />
-                  <span className="text-sm">Product FAQs enabled</span>
-                </div>
-                <p className="text-xs text-zinc-400">
-                  Shows a FAQs section on the Add/Edit Product page and on the storefront product page.
-                </p>
-              </div>
             </Card>
 
             <Card>

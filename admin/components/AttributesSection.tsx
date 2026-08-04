@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Plus, X } from "lucide-react";
-import Card from "@/components/ui/Card";
+import ProductFeatureSection from "@/components/ProductFeatureSection";
 
 // Raw input, not components/ui/Input — that component always renders a
 // visible label, which would repeat "Name"/"Value" on every row of a
@@ -22,31 +21,24 @@ export interface AttributeDraft {
 // the draft list here is lifted into ProductForm's state and saved as part
 // of the normal create/update payload (same as the media gallery), so this
 // works in both create and edit mode, unlike VariantsSection which needs a
-// real product id first.
+// real product id first. `enabled` is this product's own showAttributes
+// flag (see useProductForm) — a per-product opt-in that replaced the old
+// shop-wide productAttributesEnabled toggle.
 export default function AttributesSection({
   attributes,
   onChange,
-  shopAttributesEnabled,
+  enabled,
+  defaultOpen,
+  onEnable,
+  onDisable,
 }: {
   attributes: AttributeDraft[];
   onChange: (attributes: AttributeDraft[]) => void;
-  shopAttributesEnabled: boolean;
+  enabled: boolean;
+  defaultOpen: boolean;
+  onEnable: () => void;
+  onDisable: () => void;
 }) {
-  if (!shopAttributesEnabled) {
-    return (
-      <Card>
-        <h3 className="text-sm font-semibold mb-1">Attributes</h3>
-        <p className="text-sm text-zinc-500">
-          Enable product attributes in{" "}
-          <Link href="/settings/business/store-configuration" className="text-accent-text hover:underline">
-            Settings &gt; Store Configuration
-          </Link>{" "}
-          to add informational facts like Material or Origin.
-        </p>
-      </Card>
-    );
-  }
-
   function update(index: number, patch: Partial<AttributeDraft>) {
     onChange(attributes.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   }
@@ -60,20 +52,26 @@ export default function AttributesSection({
   }
 
   return (
-    <Card className="space-y-3">
+    <ProductFeatureSection
+      title="Attributes"
+      addLabel="Add attributes"
+      enabled={enabled}
+      defaultOpen={defaultOpen}
+      onEnable={onEnable}
+      onDisable={onDisable}
+    >
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Attributes</h3>
+        <p className="text-xs text-zinc-400">
+          Informational facts shown on the product page — not purchasable options like Size/Color.
+        </p>
         <button
           type="button"
           onClick={addRow}
-          className="flex items-center gap-1 text-sm text-accent-text hover:underline cursor-pointer"
+          className="flex items-center gap-1 text-sm text-accent-text hover:underline cursor-pointer shrink-0 ml-3"
         >
           <Plus className="size-4" /> Add attribute
         </button>
       </div>
-      <p className="text-xs text-zinc-400">
-        Informational facts shown on the product page — not purchasable options like Size/Color.
-      </p>
       {attributes.length > 0 && (
         <div className="space-y-2">
           <div className="flex gap-2 text-xs font-medium text-zinc-500">
@@ -109,6 +107,6 @@ export default function AttributesSection({
           ))}
         </div>
       )}
-    </Card>
+    </ProductFeatureSection>
   );
 }

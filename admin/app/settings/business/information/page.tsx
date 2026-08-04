@@ -20,6 +20,7 @@ import Textarea from "@/components/ui/Textarea";
 import Checkbox from "@/components/ui/Checkbox";
 import Card from "@/components/ui/Card";
 import ImageDropzone from "@/components/ui/ImageDropzone";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
@@ -115,7 +116,7 @@ function WhatsAppCredentialsCard() {
               Remove
             </Button>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={saving}>
+          <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
             {saving ? "Saving…" : "Save WhatsApp credentials"}
           </Button>
         </div>
@@ -259,6 +260,7 @@ export default function BusinessInformationPage() {
   const [abandonedCartWindowMinutes, setAbandonedCartWindowMinutes] = useState(60);
   const [notifyLowStockDigest, setNotifyLowStockDigest] = useState(false);
   const [autoDeductIngredientStock, setAutoDeductIngredientStock] = useState(true);
+  const [productEditorMode, setProductEditorMode] = useState<"simple" | "advanced">("simple");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -285,6 +287,7 @@ export default function BusinessInformationPage() {
       setAbandonedCartWindowMinutes(s.abandonedCartWindowMinutes);
       setNotifyLowStockDigest(s.notifyLowStockDigest);
       setAutoDeductIngredientStock(s.autoDeductIngredientStock);
+      setProductEditorMode(s.productEditorMode);
     });
   }, []);
 
@@ -328,6 +331,7 @@ export default function BusinessInformationPage() {
         abandonedCartWindowMinutes,
         notifyLowStockDigest,
         autoDeductIngredientStock,
+        productEditorMode,
       });
       toast("Business settings saved");
     } catch (err) {
@@ -520,9 +524,25 @@ export default function BusinessInformationPage() {
         </p>
       </Card>
 
+      <Card>
+        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Product Editor</p>
+        <p className="text-xs text-zinc-400 mb-3">
+          Simple starts with a focused form — variants and extras are off by default but available on any product.
+          Advanced shows everything expanded from the start.
+        </p>
+        <SegmentedToggle
+          value={productEditorMode}
+          onChange={setProductEditorMode}
+          options={[
+            { value: "simple", label: "Simple" },
+            { value: "advanced", label: "Advanced" },
+          ]}
+        />
+      </Card>
+
       <WhatsAppCredentialsCard />
 
-      <Button variant="primary" onClick={handleSave} disabled={saving}>
+      <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
         <Check className="size-4 inline -mt-0.5 mr-1" />
         Save changes
       </Button>

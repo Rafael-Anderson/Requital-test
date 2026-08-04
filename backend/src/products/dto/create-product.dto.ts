@@ -133,6 +133,20 @@ export class CreateProductDto {
   @IsBoolean()
   isCheckoutAddon?: boolean;
 
+  // Per-product opt-in for the Variants/Attributes/FAQs sections of the
+  // admin product form — see schema.prisma's comment on product.showVariants.
+  @IsOptional()
+  @IsBoolean()
+  showVariants?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showAttributes?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showFaqs?: boolean;
+
   // "Continue selling when out of stock" — only meaningful alongside
   // trackInventory; ignored otherwise (untracked products never block on
   // stock regardless).
@@ -250,7 +264,7 @@ export class CreateProductDto {
   attributes?: ProductAttributeInput[];
 
   // Per-product FAQ list, admin-editable, rendered on the storefront PDP
-  // when shop.productFaqsEnabled is on. Same convention as attributes above.
+  // when this product's own showFaqs is on. Same convention as attributes above.
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
