@@ -35,6 +35,14 @@ function emailStubCalls(spy: jest.SpyInstance, to: string): string[] {
     );
 }
 
+// Same reasoning as order-notifications.e2e-spec.ts's own helper of this
+// name: notifySurveyRequest is fire-and-forget as of the checkout-latency
+// fix, so a status-transition request can return before the survey row/
+// email it triggers has actually been created/sent.
+function flushNotifications() {
+  return new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 // Most tests here drive an order through 4 sequential status transitions —
 // when RESEND_API_KEY is configured in this environment, several of those
 // attempt a real network round-trip to the Resend API before falling back
@@ -146,6 +154,7 @@ describe('Post-purchase survey (e2e)', () => {
         ...overrides,
       })
       .expect(201);
+    await flushNotifications();
     return body<OrderRow>(res);
   }
 
@@ -162,6 +171,7 @@ describe('Post-purchase survey (e2e)', () => {
         .send({ status })
         .expect(200);
     }
+    await flushNotifications();
   }
 
   // Longer timeout: signup + 4 status transitions, and (when RESEND_API_KEY

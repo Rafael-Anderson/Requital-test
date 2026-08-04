@@ -988,7 +988,21 @@ export class PublicService {
     // received your order" rather than a payment receipt. Consistent for
     // every payment method (COD included), so this doesn't wait on the
     // card_online branch below.
-    await this.orderNotificationsService.notifyOrderConfirmed(shop.id, order);
+    //
+    // Not awaited, deliberately: a slow or down email/WhatsApp provider must
+    // never delay (or, if it throws, fail) checkout for a real customer —
+    // same fire-and-forget/.catch()-guarded discipline as
+    // NotifySubscriptionsService.triggerForProduct. The order has already
+    // committed by this point; a notification failure is logged, not
+    // surfaced to the response.
+    this.orderNotificationsService
+      .notifyOrderConfirmed(shop.id, order)
+      .catch((err: unknown) => {
+        console.error(
+          `[order-notifications] order #${order.id}: notifyOrderConfirmed failed —`,
+          err instanceof Error ? err.message : err,
+        );
+      });
 
     // card_online routes to whichever card processor (Nomod/Stripe) is
     // currently active; the independent providers route to themselves

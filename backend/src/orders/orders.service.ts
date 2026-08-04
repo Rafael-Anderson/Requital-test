@@ -404,10 +404,18 @@ export class OrdersService {
       );
     }
 
-    await this.orderNotificationsService.notifyOrderConfirmed(
-      ctx.shopId,
-      order,
-    );
+    // Not awaited, deliberately — see the matching comment on the storefront
+    // checkout path (PublicService.createOrder) for why: a slow or down
+    // email/WhatsApp provider must never delay or fail an already-committed
+    // order.
+    this.orderNotificationsService
+      .notifyOrderConfirmed(ctx.shopId, order)
+      .catch((err: unknown) => {
+        console.error(
+          `[order-notifications] order #${order.id}: notifyOrderConfirmed failed —`,
+          err instanceof Error ? err.message : err,
+        );
+      });
 
     return order;
   }
@@ -529,17 +537,28 @@ export class OrdersService {
       before: { status: order.status },
       after: { status: dto.status },
     });
+    // Not awaited, deliberately — same reasoning as notifyOrderConfirmed's
+    // call sites above: a slow or down email/WhatsApp provider must never
+    // delay or fail an already-committed status change.
     if (dto.status === 'out_for_delivery') {
-      await this.orderNotificationsService.notifyOutForDelivery(
-        ctx.shopId,
-        updated,
-      );
+      this.orderNotificationsService
+        .notifyOutForDelivery(ctx.shopId, updated)
+        .catch((err: unknown) => {
+          console.error(
+            `[order-notifications] order #${id}: notifyOutForDelivery failed —`,
+            err instanceof Error ? err.message : err,
+          );
+        });
     }
     if (dto.status === 'delivered') {
-      await this.orderNotificationsService.notifySurveyRequest(
-        ctx.shopId,
-        updated,
-      );
+      this.orderNotificationsService
+        .notifySurveyRequest(ctx.shopId, updated)
+        .catch((err: unknown) => {
+          console.error(
+            `[order-notifications] order #${id}: notifySurveyRequest failed —`,
+            err instanceof Error ? err.message : err,
+          );
+        });
     }
     return updated;
   }

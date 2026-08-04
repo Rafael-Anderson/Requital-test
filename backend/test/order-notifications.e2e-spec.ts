@@ -6,6 +6,7 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { OrderNotificationsService } from '../src/orders/order-notifications.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -46,6 +47,18 @@ function whatsAppStubCalls(spy: jest.SpyInstance, to: string): string[] {
     .filter(
       (line) => line.startsWith('[whatsapp:stub]') && line.includes(`to=${to}`),
     );
+}
+
+// notifyOrderConfirmed/notifyOutForDelivery/notifySurveyRequest are
+// fire-and-forget as of the checkout-latency fix (OrdersService/
+// PublicService no longer `await` them) — the triggering HTTP request can
+// return before the notification's own async work (even against these
+// in-memory stubs) has actually run. A short drain after the triggering
+// request gives that scheduled work a chance to complete before asserting
+// on it, which is what every test below needs now that "the request
+// resolved" no longer implies "the notification already fired."
+function flushNotifications() {
+  return new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 describe('Order status customer email notifications (e2e)', () => {
@@ -153,6 +166,7 @@ describe('Order status customer email notifications (e2e)', () => {
         ...overrides,
       })
       .expect(201);
+    await flushNotifications();
     return body<OrderRow>(res);
   }
 
@@ -216,6 +230,7 @@ describe('Order status customer email notifications (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status })
         .expect(200);
+      await flushNotifications();
       // No email at any of these intermediate transitions.
       expect(emailStubCalls(logSpy, email).length).toBe(0);
     }
@@ -225,6 +240,7 @@ describe('Order status customer email notifications (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'out_for_delivery' })
       .expect(200);
+    await flushNotifications();
 
     const calls = emailStubCalls(logSpy, email);
     expect(calls.length).toBe(1);
@@ -259,6 +275,7 @@ describe('Order status customer email notifications (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'out_for_delivery' })
       .expect(200);
+    await flushNotifications();
 
     const calls = emailStubCalls(logSpy, email);
     expect(calls.length).toBe(1);
@@ -336,6 +353,7 @@ describe('Order status customer email notifications (e2e)', () => {
         items: [{ productId: body<IdRow>(product).id, quantity: 1 }],
       })
       .expect(201);
+    await flushNotifications();
 
     const calls = emailStubCalls(logSpy, email);
     expect(calls.length).toBe(1);
@@ -562,5 +580,154 @@ describe('Order status customer email notifications (e2e)', () => {
 
       expect(emailStubCalls(logSpy, email).length).toBe(1);
     });
+  });
+});
+
+// Regression coverage for a real finding: checkout used to `await` the
+// email+WhatsApp notification inline before returning — a slow or down
+// provider would delay (and a throw would fail) an already-committed order.
+// notifyOrderConfirmed/notifyOutForDelivery/notifySurveyRequest are now
+// fire-and-forget (.catch()-guarded, never awaited) at every call site
+// (PublicService.createOrder, OrdersService.create/updateStatus). This
+// suite overrides OrderNotificationsService itself (a real provider
+// substitution, not a spy) so it can simulate a hang/throw at the exact
+// seam the fix changed, rather than only the "never throws internally"
+// behavior the describe blocks above already cover one layer down.
+describe('Order creation is non-blocking against a hanging or throwing notification provider (e2e)', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  const runId = Date.now();
+
+  async function buildApp(
+    notifyOrderConfirmed: () => Promise<void>,
+  ): Promise<INestApplication<App>> {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(OrderNotificationsService)
+      .useValue({
+        notifyOrderConfirmed,
+        notifyOutForDelivery: jest.fn().mockResolvedValue(undefined),
+        notifySurveyRequest: jest.fn().mockResolvedValue(undefined),
+      })
+      .compile();
+    const testApp: INestApplication<App> =
+      moduleFixture.createNestApplication();
+    testApp.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    await testApp.init();
+    return testApp;
+  }
+
+  afterEach(async () => {
+    await prisma?.$disconnect();
+    await app?.close();
+  });
+
+  async function setupPublishedShop(slugPrefix: string) {
+    const slug = `${slugPrefix}-${runId}`;
+    const signup = await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send({
+        name: 'Nonblocking Admin',
+        email: `${slug}@test.com`,
+        password: 'password123',
+        shopName: `${slug} Shop`,
+        subdomain: slug,
+      })
+      .expect(201);
+    const adminToken = body<AuthResponse>(signup).accessToken;
+
+    const outlets = await request(app.getHttpServer())
+      .get('/outlets')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    const outletId = body<OutletRow[]>(outlets)[0].id;
+    await request(app.getHttpServer())
+      .patch(`/outlets/${outletId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ pickupEnabled: true })
+      .expect(200);
+
+    const category = await request(app.getHttpServer())
+      .post('/categories')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Nonblocking category' })
+      .expect(201);
+    const product = await request(app.getHttpServer())
+      .post('/products')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Nonblocking Product',
+        price: 15,
+        thumbnail: 'https://example.com/x.jpg',
+        sku: `NONBLOCK-${slug}`,
+        status: 'Available',
+        categoryIds: [body<IdRow>(category).id],
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch('/shop')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ published: true })
+      .expect(200);
+
+    return { slug, outletId, productId: body<IdRow>(product).id };
+  }
+
+  it('a notification provider that hangs indefinitely does not delay the checkout response', async () => {
+    // Never resolves — if the call site still awaited this, the request
+    // itself would time out; asserting a fast response is the whole point.
+    app = await buildApp(() => new Promise<void>(() => {}));
+    prisma = app.get(PrismaService);
+    const { slug, outletId, productId } =
+      await setupPublishedShop('notify-hang');
+
+    const start = Date.now();
+    await request(app.getHttpServer())
+      .post(`/public/${slug}/orders`)
+      .send({
+        customerName: 'Hang Customer',
+        customerPhone: '0500000004',
+        customerAddress: '3 Nonblocking Rd',
+        emirate: 'Dubai',
+        outletId,
+        orderType: 'pickup',
+        paymentMethod: 'cash_on_pickup',
+        items: [{ productId, quantity: 1 }],
+      })
+      .expect(201);
+    // A hanging provider that actually blocked the response would take far
+    // longer than this; a generous bound avoids flaking on a slow CI box
+    // while still failing loudly if the fire-and-forget wiring regresses.
+    expect(Date.now() - start).toBeLessThan(5000);
+  });
+
+  it('a notification provider that throws does not fail order creation', async () => {
+    app = await buildApp(() => Promise.reject(new Error('provider down')));
+    prisma = app.get(PrismaService);
+    const { slug, outletId, productId } =
+      await setupPublishedShop('notify-throw');
+
+    const res = await request(app.getHttpServer())
+      .post(`/public/${slug}/orders`)
+      .send({
+        customerName: 'Throw Customer',
+        customerPhone: '0500000005',
+        customerAddress: '4 Nonblocking Rd',
+        emirate: 'Dubai',
+        outletId,
+        orderType: 'pickup',
+        paymentMethod: 'cash_on_pickup',
+        items: [{ productId, quantity: 1 }],
+      })
+      .expect(201);
+    expect(body<{ order: OrderRow }>(res).order.status).toBe('pending');
   });
 });
