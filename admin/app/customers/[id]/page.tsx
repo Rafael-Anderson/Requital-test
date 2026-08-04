@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Wallet, ClipboardList, Calendar, CalendarClock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useShopMode } from "@/lib/useShopMode";
 import { getCustomer, updateCustomer } from "@/lib/api";
 import type { CustomerDetail } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -25,6 +26,8 @@ export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
   const customerId = Number(params.id);
   const toast = useToast();
+  const mode = useShopMode();
+  const isSimple = mode === "simple";
 
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,25 +97,27 @@ export default function CustomerDetailPage() {
         </div>
       ) : customer ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Orders" value={String(customer.orderCount)} icon={<ClipboardList className="size-4" />} />
-            <StatCard
-              label="Lifetime Value"
-              value={`${customer.lifetimeValue.toFixed(2)} AED`}
-              icon={<Wallet className="size-4" />}
-              subtext="Excludes cancelled orders"
-            />
-            <StatCard
-              label="First Order"
-              value={customer.firstOrderDate ? new Date(customer.firstOrderDate).toLocaleDateString() : "—"}
-              icon={<Calendar className="size-4" />}
-            />
-            <StatCard
-              label="Last Order"
-              value={customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "—"}
-              icon={<CalendarClock className="size-4" />}
-            />
-          </div>
+          {!isSimple && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label="Orders" value={String(customer.orderCount)} icon={<ClipboardList className="size-4" />} />
+              <StatCard
+                label="Lifetime Value"
+                value={`${customer.lifetimeValue.toFixed(2)} AED`}
+                icon={<Wallet className="size-4" />}
+                subtext="Excludes cancelled orders"
+              />
+              <StatCard
+                label="First Order"
+                value={customer.firstOrderDate ? new Date(customer.firstOrderDate).toLocaleDateString() : "—"}
+                icon={<Calendar className="size-4" />}
+              />
+              <StatCard
+                label="Last Order"
+                value={customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "—"}
+                icon={<CalendarClock className="size-4" />}
+              />
+            </div>
+          )}
 
           <Card>
             <h2 className="font-medium mb-4">Contact info</h2>
@@ -120,15 +125,17 @@ export default function CustomerDetailPage() {
               <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
               <Input label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
               <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <Input
-                label="Birthday"
-                type="date"
-                value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
-              />
+              {!isSimple && (
+                <Input
+                  label="Birthday"
+                  type="date"
+                  value={birthday}
+                  onChange={(e) => setBirthday(e.target.value)}
+                />
+              )}
             </div>
             <div className="flex justify-end mt-4">
-              <Button variant="primary" onClick={handleSave} disabled={saving}>
+              <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>

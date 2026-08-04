@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useShopMode } from "@/lib/useShopMode";
 import { listCustomers, type ListCustomersParams } from "@/lib/api";
 import type { CustomerListItem } from "@/lib/types";
 import { useRowSelection } from "@/lib/useRowSelection";
@@ -37,6 +38,8 @@ const COLUMNS: { field: SortField; label: string }[] = [
 export default function CustomersPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const mode = useShopMode();
+  const isSimple = mode === "simple";
 
   const [customers, setCustomers] = useState<CustomerListItem[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -90,6 +93,10 @@ export default function CustomersPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Simple mode swaps in an Email column (already returned by the list
+  // endpoint, just unrendered today) for the selection checkbox column it
+  // drops along with the bulk action bar — same total column count either way.
+  const colCount = COLUMNS.length + 1;
 
   // Export only — bulk tag assignment (also asked for in the task) was
   // checked and skipped: the customer model has no tags field at all today
@@ -124,22 +131,26 @@ export default function CustomersPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-      <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>
-        <Button size="sm" variant="secondary" onClick={handleBulkExport}>
-          Export CSV
-        </Button>
-      </BulkActionBar>
+      {!isSimple && (
+        <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>
+          <Button size="sm" variant="secondary" onClick={handleBulkExport}>
+            Export CSV
+          </Button>
+        </BulkActionBar>
+      )}
 
       <Table>
         <THead>
           <tr>
-            <TH className="w-8">
-              <Checkbox
-                checked={selection.allSelected}
-                onChange={selection.toggleAll}
-                aria-label="Select all customers"
-              />
-            </TH>
+            {!isSimple && (
+              <TH className="w-8">
+                <Checkbox
+                  checked={selection.allSelected}
+                  onChange={selection.toggleAll}
+                  aria-label="Select all customers"
+                />
+              </TH>
+            )}
             {COLUMNS.map(({ field, label }) => (
               <TH key={field}>
                 <button
@@ -152,18 +163,19 @@ export default function CustomersPage() {
                 </button>
               </TH>
             ))}
+            {isSimple && <TH>Email</TH>}
           </tr>
         </THead>
         <TBody>
           {customers === null ? (
             <tr>
-              <td colSpan={COLUMNS.length + 1}>
-                <TableSkeleton rows={8} cols={COLUMNS.length + 1} />
+              <td colSpan={colCount}>
+                <TableSkeleton rows={8} cols={colCount} />
               </td>
             </tr>
           ) : customers.length === 0 && !error ? (
             <tr>
-              <td colSpan={COLUMNS.length + 1}>
+              <td colSpan={colCount}>
                 <EmptyState
                   title={search ? "No matching customers" : "No customers yet"}
                   description={
@@ -181,13 +193,15 @@ export default function CustomersPage() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/customers/${c.id}`)}
               >
-                <TD onClick={(e) => e.stopPropagation()}>
-                  <Checkbox
-                    checked={selection.selected.has(c.id)}
-                    onChange={() => selection.toggle(c.id)}
-                    aria-label={`Select ${c.name}`}
-                  />
-                </TD>
+                {!isSimple && (
+                  <TD onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selection.selected.has(c.id)}
+                      onChange={() => selection.toggle(c.id)}
+                      aria-label={`Select ${c.name}`}
+                    />
+                  </TD>
+                )}
                 <TD className="font-medium">{c.name}</TD>
                 <TD className="text-zinc-500">{c.phone}</TD>
                 <TD>{c.orderCount}</TD>
@@ -195,6 +209,7 @@ export default function CustomersPage() {
                 <TD className="text-xs text-zinc-500">
                   {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "—"}
                 </TD>
+                {isSimple && <TD className="text-zinc-500">{c.email ?? "—"}</TD>}
               </TR>
             ))
           )}
