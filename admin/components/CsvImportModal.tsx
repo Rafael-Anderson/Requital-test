@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import type { ImportConfirmResult, ImportPreviewResult, ImportRowResult } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
 const ACTION_STYLES: Record<ImportRowResult["action"], string> = {
@@ -70,22 +70,28 @@ export default function CsvImportModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl max-h-[85vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-1">{title}</h2>
-        <p className="text-sm text-zinc-500 mb-4">
+    <Modal
+      onClose={onClose}
+      size="md"
+      title={title}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          {!preview ? (
+            <Button type="button" variant="primary" onClick={handlePreview} disabled={!file || busy} loading={busy}>
+              {busy ? "Reading…" : "Preview"}
+            </Button>
+          ) : (
+            <Button type="button" variant="primary" onClick={handleConfirm} disabled={busy || importable === 0} loading={busy}>
+              {busy ? "Importing…" : `Confirm import (${importable})`}
+            </Button>
+          )}
+        </>
+      )}
+    >
+        <p className="text-sm text-zinc-500 -mt-2 mb-4">
           Nothing is saved until you review the preview below and confirm.
         </p>
 
@@ -131,22 +137,6 @@ export default function CsvImportModal({
             </div>
           </div>
         )}
-
-        <div className="flex justify-end gap-2 mt-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          {!preview ? (
-            <Button type="button" variant="primary" onClick={handlePreview} disabled={!file || busy}>
-              {busy ? "Reading…" : "Preview"}
-            </Button>
-          ) : (
-            <Button type="button" variant="primary" onClick={handleConfirm} disabled={busy || importable === 0}>
-              {busy ? "Importing…" : `Confirm import (${importable})`}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

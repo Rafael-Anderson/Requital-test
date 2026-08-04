@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
 import { createIngredient, resolveImageUrl, updateIngredient, uploadIngredientImage } from "@/lib/api";
 import type { Ingredient, IngredientCategory } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import ImageDropzone from "@/components/ui/ImageDropzone";
+import Modal from "@/components/ui/Modal";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
 // Closer to ProductForm's level of detail than the original "name + unit
@@ -78,23 +79,9 @@ export default function IngredientFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative max-h-[90vh] overflow-y-auto modal-scroll"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">{ingredient ? "Edit ingredient" : "New ingredient"}</h2>
-
+    <Modal onClose={onClose} size="sm" title={ingredient ? "Edit ingredient" : "New ingredient"}>
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <ImageDropzone preview={imagePreview} onFileSelected={handleFileSelected} />
 
@@ -109,21 +96,16 @@ export default function IngredientFormModal({
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Category</label>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-            >
-              <option value="">— None —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="Category"
+            value={categoryId}
+            onChange={setCategoryId}
+            placeholder="— None —"
+            options={[
+              { value: "", label: "— None —" },
+              ...categories.map((c) => ({ value: String(c.id), label: c.name })),
+            ]}
+          />
 
           <Textarea
             label="Description (optional)"
@@ -149,15 +131,16 @@ export default function IngredientFormModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             {saving ? "Saving…" : ingredient ? "Save changes" : "Add ingredient"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

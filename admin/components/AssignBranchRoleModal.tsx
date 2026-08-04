@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
 import { assignBranchRole } from "@/lib/api";
 import type { AuthUser, BranchRole, Outlet } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 // Upsert on the backend — picking a (user, outlet) pair that already has an
 // assignment just re-points it at the newly selected branch role instead of
@@ -53,84 +52,58 @@ export default function AssignBranchRoleModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-1">Assign branch role</h2>
-        <p className="text-sm text-zinc-500 mb-4">
+    <Modal onClose={onClose} size="sm" title="Assign branch role">
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
+        <p className="text-sm text-zinc-500 -mt-2 mb-4">
           Overrides this staff member&apos;s access at one specific outlet only — their access at every
           other outlet is unaffected.
         </p>
 
         <div className="space-y-3.5">
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
-              Staff member
-            </label>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)} className={SELECT_CLASS} required>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.email})
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="Staff member"
+            value={userId}
+            onChange={setUserId}
+            options={users.map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` }))}
+          />
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Outlet</label>
-            <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className={SELECT_CLASS} required>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="Outlet"
+            value={outletId}
+            onChange={setOutletId}
+            options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
+          />
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
-              Branch role
-            </label>
-            <select
-              value={branchRoleId}
-              onChange={(e) => setBranchRoleId(e.target.value)}
-              className={SELECT_CLASS}
-              required
-            >
-              {branchRoles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Branch role"
+            value={branchRoleId}
+            onChange={(e) => setBranchRoleId(e.target.value)}
+            required
+          >
+            {branchRoles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </Select>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
           <Button
             type="submit"
             variant="primary"
             disabled={saving || !users.length || !outlets.length || !branchRoles.length}
+            loading={saving}
           >
             {saving ? "Saving…" : "Assign"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
 import {
   createCategory,
   resolveImageUrl,
@@ -19,6 +18,8 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import ImageDropzone from "@/components/ui/ImageDropzone";
+import Modal from "@/components/ui/Modal";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
 function slugify(input: string): string {
@@ -112,25 +113,9 @@ export default function CategoryFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">
-          {category ? `Edit "${category.name}"` : "New category"}
-        </h2>
-
+    <Modal onClose={onClose} size="sm" title={category ? `Edit "${category.name}"` : "New category"}>
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
 
@@ -144,24 +129,19 @@ export default function CategoryFormModal({
             required
           />
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
-              Parent category
-            </label>
-            <select
-              value={parentCategoryId}
-              onChange={(e) => setParentCategoryId(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-            >
-              <option value="">— None (top level) —</option>
-              {parentOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {"— ".repeat(c.depth)}
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="Parent category"
+            value={parentCategoryId}
+            onChange={setParentCategoryId}
+            placeholder="— None (top level) —"
+            options={[
+              { value: "", label: "— None (top level) —" },
+              ...parentOptions.map((c) => ({
+                value: String(c.id),
+                label: `${"— ".repeat(c.depth)}${c.name}`,
+              })),
+            ]}
+          />
 
           <Input
             label="Display order"
@@ -178,15 +158,16 @@ export default function CategoryFormModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             {category ? "Save changes" : "Create category"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

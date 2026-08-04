@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { listProducts, updateOrderItems } from "@/lib/api";
 import type { Order, Product } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
 interface WorkingItem {
@@ -14,9 +17,6 @@ interface WorkingItem {
   productName: string;
   quantity: number;
 }
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 const lineKey = (productId: number, variantId?: number | null) => `${productId}:${variantId ?? ""}`;
 
@@ -125,24 +125,22 @@ export default function EditOrderItemsModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+    <Modal
+      onClose={onClose}
+      size="md"
+      title="Edit items"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </>
+      )}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-1">Edit items</h2>
-        <p className="text-sm text-zinc-500 mb-4">Order #{order.id}</p>
+        <p className="text-sm text-zinc-500 -mt-2 mb-4">Order #{order.id}</p>
 
         <Table>
           <THead>
@@ -182,34 +180,26 @@ export default function EditOrderItemsModal({
 
         <div className="flex flex-wrap items-end gap-2 mt-4">
           <div className="flex-1 min-w-40">
-            <label className="text-sm font-medium block mb-1">Add product</label>
-            <select
+            <Combobox
+              label="Add product"
               value={addProductId}
-              onChange={(e) => {
-                setAddProductId(e.target.value);
+              onChange={(value) => {
+                setAddProductId(value);
                 setAddVariantId("");
               }}
-              className={SELECT_CLASS}
-            >
-              <option value="">Select a product…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              options={products.map((p) => ({ value: String(p.id), label: p.name }))}
+            />
           </div>
           {selectedAddProduct?.hasVariants && (
             <div className="flex-1 min-w-32">
-              <label className="text-sm font-medium block mb-1">Option</label>
-              <select value={addVariantId} onChange={(e) => setAddVariantId(e.target.value)} className={SELECT_CLASS}>
+              <Select label="Option" value={addVariantId} onChange={(e) => setAddVariantId(e.target.value)}>
                 <option value="">Select…</option>
                 {selectedAddProduct.variants.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
           <div className="w-20">
@@ -227,16 +217,6 @@ export default function EditOrderItemsModal({
             Add
           </Button>
         </div>
-
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

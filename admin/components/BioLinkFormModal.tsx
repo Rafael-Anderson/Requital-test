@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import { createBioLink, updateBioLink, type BioLinkInput } from "@/lib/api";
 import {
   BIO_LINK_SOCIAL_PLATFORMS,
@@ -18,17 +17,14 @@ import {
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
-
-// Product/category pickers are plain <select> dropdowns, matching
-// CategoryFormModal's own parent-category select exactly — there's no
-// searchable/modal picker component anywhere else in this app to reuse
-// instead (confirmed before building this). Flag if the catalog ever grows
-// large enough that a flat dropdown becomes unusable — that would be new UI,
-// not reuse of anything existing.
+// Product/category/collection pickers use the shared Combobox
+// (components/ui/Combobox.tsx) rather than a plain <select> — searchable,
+// so a long catalog stays usable.
 export default function BioLinkFormModal({
   bioLink,
   products,
@@ -100,33 +96,18 @@ export default function BioLinkFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">{bioLink ? "Edit link" : "Add link"}</h2>
-
+    <Modal onClose={onClose} size="sm" title={bioLink ? "Edit link" : "Add link"}>
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value as BioLinkType)} className={SELECT_CLASS}>
+            <Select label="Type" value={type} onChange={(e) => setType(e.target.value as BioLinkType)}>
               {BIO_LINK_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {BIO_LINK_TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Input
@@ -142,61 +123,48 @@ export default function BioLinkFormModal({
           )}
 
           {type === "PRODUCT" && (
-            <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Product</label>
-              <select value={productId} onChange={(e) => setProductId(e.target.value)} className={SELECT_CLASS} required>
-                <option value="">Select a product…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Combobox
+              label="Product"
+              value={productId}
+              onChange={setProductId}
+              placeholder="Select a product…"
+              options={products.map((p) => ({ value: String(p.id), label: p.name }))}
+            />
           )}
 
           {type === "CATEGORY" && (
-            <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Category</label>
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={SELECT_CLASS} required>
-                <option value="">Select a category…</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Combobox
+              label="Category"
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder="Select a category…"
+              options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+            />
           )}
 
           {type === "COLLECTION" && (
-            <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Collection</label>
-              <select value={collectionId} onChange={(e) => setCollectionId(e.target.value)} className={SELECT_CLASS} required>
-                <option value="">Select a collection…</option>
-                {collections.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Combobox
+              label="Collection"
+              value={collectionId}
+              onChange={setCollectionId}
+              placeholder="Select a collection…"
+              options={collections.map((c) => ({ value: String(c.id), label: c.title }))}
+            />
           )}
 
           {type === "SOCIAL_ICON" && (
             <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Platform</label>
-              <select
+              <Select
+                label="Platform"
                 value={socialPlatform}
                 onChange={(e) => setSocialPlatform(e.target.value as BioLinkSocialPlatform)}
-                className={SELECT_CLASS}
               >
                 {BIO_LINK_SOCIAL_PLATFORMS.map((p) => (
                   <option key={p} value={p}>
                     {BIO_LINK_SOCIAL_PLATFORM_LABELS[p]}
                   </option>
                 ))}
-              </select>
+              </Select>
               <p className="text-xs text-zinc-400 mt-1.5">
                 Uses the URL already set for this platform on Online Presence (or your WhatsApp number for
                 WhatsApp) — nothing more to enter here. The icon won&apos;t appear on your bio page until that&apos;s
@@ -213,15 +181,16 @@ export default function BioLinkFormModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             {bioLink ? "Save changes" : "Add link"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

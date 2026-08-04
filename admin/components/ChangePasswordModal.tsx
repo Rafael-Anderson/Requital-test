@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { X } from "lucide-react";
 import { changePassword, resendVerification } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
 export default function ChangePasswordModal({ onClose }: { onClose: () => void }) {
@@ -57,23 +57,9 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">Change password</h2>
-
+    <Modal onClose={onClose} size="sm" title="Change password">
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         {user && !user.emailVerified ? (
           <div className="space-y-3">
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -126,17 +112,18 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
           </>
         )}
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             {user && !user.emailVerified ? "Close" : "Cancel"}
           </Button>
           {(!user || user.emailVerified) && (
-            <Button type="submit" variant="primary" disabled={saving}>
+            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
               {saving ? "Saving…" : "Change password"}
             </Button>
           )}
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

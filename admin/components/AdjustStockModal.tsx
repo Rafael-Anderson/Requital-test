@@ -1,16 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
 import { adjustStockWithReason, setLowStockThreshold } from "@/lib/api";
 import { ADJUSTMENT_REASON_LABELS, ADJUSTMENT_REASONS, type AdjustmentReason, type Ingredient, type Product } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 // Discriminated the same way TransferStockModal.tsx's TransferTarget is —
 // one modal for both Products (which may have variants) and Ingredients
@@ -109,62 +107,47 @@ export default function AdjustStockModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
+    <Modal
+      onClose={onClose}
+      size="sm"
+      title="Adjust stock"
+      footer={(requestClose) => (
+        <Button type="button" variant="secondary" onClick={requestClose}>
+          Close
+        </Button>
+      )}
+    >
+      <p className="text-sm text-zinc-500 -mt-2 mb-4">
+        {name} · {outletName}
+      </p>
 
-        <h2 className="text-lg font-semibold mb-1">Adjust stock</h2>
-        <p className="text-sm text-zinc-500 mb-4">
-          {name} · {outletName}
-        </p>
-
-        <form onSubmit={handleAdjust} className="space-y-3.5">
+      <form onSubmit={handleAdjust} className="space-y-3.5">
           {target.kind === "product" && target.product.hasVariants && (
-            <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Variant</label>
-              <select value={variantId} onChange={(e) => setVariantId(e.target.value)} className={SELECT_CLASS} required>
-                <option value="">Select a variant…</option>
-                {target.product.variants.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select label="Variant" value={variantId} onChange={(e) => setVariantId(e.target.value)} required>
+              <option value="">Select a variant…</option>
+              {target.product.variants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </Select>
           )}
 
           <Input label="Quantity (± to add or remove)" type="number" placeholder="e.g. 10 or -5" value={delta} onChange={(e) => setDelta(e.target.value)} />
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Reason</label>
-            <select
-              value={reason}
-              onChange={(e) => setReason(e.target.value as AdjustmentReason)}
-              className={SELECT_CLASS}
-            >
-              <option value="">Select a reason…</option>
-              {ADJUSTMENT_REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {ADJUSTMENT_REASON_LABELS[r]}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select label="Reason" value={reason} onChange={(e) => setReason(e.target.value as AdjustmentReason)}>
+            <option value="">Select a reason…</option>
+            {ADJUSTMENT_REASONS.map((r) => (
+              <option key={r} value={r}>
+                {ADJUSTMENT_REASON_LABELS[r]}
+              </option>
+            ))}
+          </Select>
 
           <Textarea label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
 
           <div className="flex justify-end">
-            <Button type="submit" variant="primary" disabled={adjusting}>
+            <Button type="submit" variant="primary" disabled={adjusting} loading={adjusting}>
               {adjusting ? "Applying…" : "Apply adjustment"}
             </Button>
           </div>
@@ -187,13 +170,6 @@ export default function AdjustStockModal({
           </div>
           <p className="mt-1.5 text-xs text-zinc-400">Flags this item as low stock once it drops to or below this number. Leave blank to turn off.</p>
         </div>
-
-        <div className="flex justify-end mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

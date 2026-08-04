@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
 import { listOutlets, transferStock } from "@/lib/api";
 import type { Ingredient, Outlet, Product } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 // Discriminated so the same modal serves both Products (which may have
 // variants) and Ingredients (which never do) without either branch leaking
@@ -81,60 +80,41 @@ export default function TransferStockModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-1">Transfer stock</h2>
-        <p className="text-sm text-zinc-500 mb-4">{name}</p>
+    <Modal onClose={onClose} size="sm" title="Transfer stock">
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
+        <p className="text-sm text-zinc-500 -mt-2 mb-4">{name}</p>
 
         <div className="space-y-3.5">
           {target.kind === "product" && target.product.hasVariants && (
-            <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Variant</label>
-              <select value={variantId} onChange={(e) => setVariantId(e.target.value)} className={SELECT_CLASS} required>
-                <option value="">Select a variant…</option>
-                {target.product.variants.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Variant"
+              value={variantId}
+              onChange={(e) => setVariantId(e.target.value)}
+              required
+            >
+              <option value="">Select a variant…</option>
+              {target.product.variants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </Select>
           )}
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">From branch</label>
-            <select value={fromOutletId} onChange={(e) => setFromOutletId(e.target.value)} className={SELECT_CLASS}>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="From branch"
+            value={fromOutletId}
+            onChange={setFromOutletId}
+            options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
+          />
 
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">To branch</label>
-            <select value={toOutletId} onChange={(e) => setToOutletId(e.target.value)} className={SELECT_CLASS}>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="To branch"
+            value={toOutletId}
+            onChange={setToOutletId}
+            options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
+          />
 
           <Input
             label="Quantity"
@@ -147,15 +127,16 @@ export default function TransferStockModal({
           <Textarea label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             {saving ? "Transferring…" : "Transfer"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Shuffle } from "lucide-react";
+import { Shuffle } from "lucide-react";
 import { createDiscount, updateDiscount } from "@/lib/api";
 import {
   DISCOUNT_APPLIES_TO,
@@ -17,10 +17,9 @@ import {
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 function randomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I
@@ -107,23 +106,9 @@ export default function DiscountFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative max-h-[90vh] overflow-y-auto modal-scroll"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">{discount ? `Edit "${discount.code}"` : "New discount"}</h2>
-
+    <Modal onClose={onClose} size="sm" title={discount ? `Edit "${discount.code}"` : "New discount"}>
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <div className="flex items-end gap-2">
             <div className="flex-1">
@@ -134,16 +119,13 @@ export default function DiscountFormModal({
             </Button>
           </div>
 
-          <div>
-            <label className="text-sm font-medium block mb-1">Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value as DiscountType)} className={SELECT_CLASS}>
-              {DISCOUNT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {DISCOUNT_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select label="Type" value={type} onChange={(e) => setType(e.target.value as DiscountType)}>
+            {DISCOUNT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {DISCOUNT_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </Select>
 
           {type !== "FREE_SHIPPING" && (
             <Input
@@ -166,55 +148,48 @@ export default function DiscountFormModal({
             onChange={(e) => setMinPurchaseAmount(e.target.value)}
           />
 
-          <div>
-            <label className="text-sm font-medium block mb-1">Applies to</label>
-            <select
-              value={appliesTo}
-              onChange={(e) => setAppliesTo(e.target.value as DiscountAppliesTo)}
-              className={SELECT_CLASS}
-            >
-              {DISCOUNT_APPLIES_TO.map((a) => (
-                <option key={a} value={a}>
-                  {DISCOUNT_APPLIES_TO_LABELS[a]}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Applies to"
+            value={appliesTo}
+            onChange={(e) => setAppliesTo(e.target.value as DiscountAppliesTo)}
+          >
+            {DISCOUNT_APPLIES_TO.map((a) => (
+              <option key={a} value={a}>
+                {DISCOUNT_APPLIES_TO_LABELS[a]}
+              </option>
+            ))}
+          </Select>
 
           {appliesTo === "SPECIFIC_PRODUCTS" && (
-            <div>
-              <label className="text-sm font-medium block mb-1">Products (ctrl/cmd-click to select multiple)</label>
-              <select
-                multiple
-                value={[...productIds].map(String)}
-                onChange={(e) => setProductIds(new Set(selectedOptions(e)))}
-                className={`${SELECT_CLASS} h-32`}
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Products (ctrl/cmd-click to select multiple)"
+              multiple
+              value={[...productIds].map(String)}
+              onChange={(e) => setProductIds(new Set(selectedOptions(e)))}
+              className="h-32"
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
           )}
 
           {appliesTo === "SPECIFIC_CATEGORIES" && (
-            <div>
-              <label className="text-sm font-medium block mb-1">Categories (ctrl/cmd-click to select multiple)</label>
-              <select
-                multiple
-                value={[...categoryIds].map(String)}
-                onChange={(e) => setCategoryIds(new Set(selectedOptions(e)))}
-                className={`${SELECT_CLASS} h-32`}
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Categories (ctrl/cmd-click to select multiple)"
+              multiple
+              value={[...categoryIds].map(String)}
+              onChange={(e) => setCategoryIds(new Set(selectedOptions(e)))}
+              className="h-32"
+            >
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
           )}
 
           <div className="grid grid-cols-2 gap-3">
@@ -247,15 +222,16 @@ export default function DiscountFormModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             {discount ? "Save changes" : "Create discount"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }

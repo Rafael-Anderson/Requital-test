@@ -1,15 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X } from "lucide-react";
 import { bulkUpdateProductPrice } from "@/lib/api";
 import type { Product } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 type Field = "price" | "compareAtPrice";
 type Mode = "percentage" | "fixed";
@@ -84,38 +82,32 @@ export default function BulkPriceUpdateModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-1">Bulk price update</h2>
-        <p className="text-sm text-zinc-500 mb-4">{products.length} product(s) selected</p>
+    <Modal
+      onClose={onClose}
+      size="md"
+      title="Bulk price update"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" onClick={handleApply} disabled={saving || !hasValue} loading={saving}>
+            {saving ? "Applying…" : "Apply"}
+          </Button>
+        </>
+      )}
+    >
+        <p className="text-sm text-zinc-500 -mt-2 mb-4">{products.length} product(s) selected</p>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Field</label>
-            <select value={field} onChange={(e) => setField(e.target.value as Field)} className={SELECT_CLASS}>
-              <option value="price">Price</option>
-              <option value="compareAtPrice">Compare-at price</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Adjustment</label>
-            <select value={mode} onChange={(e) => setMode(e.target.value as Mode)} className={SELECT_CLASS}>
-              <option value="percentage">Percentage</option>
-              <option value="fixed">Fixed amount (AED)</option>
-            </select>
-          </div>
+          <Select label="Field" value={field} onChange={(e) => setField(e.target.value as Field)}>
+            <option value="price">Price</option>
+            <option value="compareAtPrice">Compare-at price</option>
+          </Select>
+          <Select label="Adjustment" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+            <option value="percentage">Percentage</option>
+            <option value="fixed">Fixed amount (AED)</option>
+          </Select>
         </div>
 
         <Input
@@ -146,16 +138,6 @@ export default function BulkPriceUpdateModal({
             ))}
           </div>
         </div>
-
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="primary" onClick={handleApply} disabled={saving || !hasValue}>
-            {saving ? "Applying…" : "Apply"}
-          </Button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

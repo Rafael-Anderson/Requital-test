@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { X } from "lucide-react";
 import { createAffiliateCode, listAffiliates, updateAffiliateCode } from "@/lib/api";
 import {
   AFFILIATE_CODE_STATUSES,
@@ -13,10 +12,9 @@ import {
 } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-
-const FIELD_CLASS =
-  "w-full h-10 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 // "Promotion For" is deliberately free text ("All Products" default, or
 // whatever the merchant types) rather than a real product/category link —
@@ -85,61 +83,41 @@ export default function AffiliateCodeFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <form
-        onSubmit={handleSubmit}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative max-h-[90vh] overflow-y-auto modal-scroll"
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
-        <h2 className="text-lg font-semibold mb-4">{affiliateCode ? `Edit "${affiliateCode.code}"` : "Add Referral"}</h2>
-
+    <Modal onClose={onClose} size="sm" title={affiliateCode ? `Edit "${affiliateCode.code}"` : "Add Referral"}>
+      {(requestClose) => (
+      <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           {!affiliateCode && (
-            <div>
-              <label className="text-sm font-medium block mb-1">Affiliate</label>
-              <select
-                value={affiliateId}
-                onChange={(e) => setAffiliateId(e.target.value ? Number(e.target.value) : "")}
-                className={FIELD_CLASS}
-                required
-              >
-                <option value="">Select an affiliate…</option>
-                {affiliates?.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Affiliate"
+              value={affiliateId}
+              onChange={(e) => setAffiliateId(e.target.value ? Number(e.target.value) : "")}
+              required
+            >
+              <option value="">Select an affiliate…</option>
+              {affiliates?.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
           )}
           {!affiliateCode && (
             <Input label="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
           )}
           <Input label="Promotion For" value={promotionFor} onChange={(e) => setPromotionFor(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium block mb-1">Commission Type</label>
-              <select
-                value={commissionType}
-                onChange={(e) => setCommissionType(e.target.value as CommissionType)}
-                className={FIELD_CLASS}
-              >
-                {COMMISSION_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t === "percentage" ? "Percentage" : "Fixed amount"}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Commission Type"
+              value={commissionType}
+              onChange={(e) => setCommissionType(e.target.value as CommissionType)}
+            >
+              {COMMISSION_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t === "percentage" ? "Percentage" : "Fixed amount"}
+                </option>
+              ))}
+            </Select>
             <Input
               label="Commission Value"
               type="number"
@@ -164,32 +142,26 @@ export default function AffiliateCodeFormModal({
             />
           </div>
           {affiliateCode && (
-            <div>
-              <label className="text-sm font-medium block mb-1">Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as AffiliateCodeStatus)}
-                className={FIELD_CLASS}
-              >
-                {AFFILIATE_CODE_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s[0].toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Select label="Status" value={status} onChange={(e) => setStatus(e.target.value as AffiliateCodeStatus)}>
+              {AFFILIATE_CODE_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s[0].toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </Select>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5">
-          <Button type="button" variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
             {affiliateCode ? "Save changes" : "Create"}
           </Button>
         </div>
       </form>
-    </div>
+      )}
+    </Modal>
   );
 }
