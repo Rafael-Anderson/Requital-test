@@ -41,6 +41,24 @@ function isOverrideActive(
 
 // No schedule configured yet means "open" — a freshly created outlet
 // shouldn't look broken just because its hours haven't been set.
+//
+// Priority vs. outlet.active (documented here since the two fields are easy
+// to assume compete with each other, but don't): `active` and
+// `closedOverride` are orthogonal axes, not a priority stack.
+//   - active=false: the outlet is invisible to the storefront entirely —
+//     every public query filters `WHERE active = true` before this function
+//     is ever called (PublicService.listOutlets/createOrder). computeIsOpen
+//     is never even invoked for an inactive outlet, so closedOverride's
+//     value on an inactive outlet is inert either way.
+//   - active=true, closedOverride=true: the outlet IS visible, and this
+//     function returns false ("closed") regardless of businessHours —
+//     closedOverride always wins over the schedule for a visible outlet.
+//   - active=true, closedOverride=false: falls through to the
+//     businessHours-derived schedule below (or "open" if none is set).
+// In short: active gates visibility; closedOverride (through this function)
+// gates the open/closed status of whatever is visible. Never combine them
+// into a single "is this outlet usable" boolean — callers that need
+// visibility must still filter on `active` themselves.
 export function computeIsOpen(
   businessHours: unknown,
   closedOverride: boolean,

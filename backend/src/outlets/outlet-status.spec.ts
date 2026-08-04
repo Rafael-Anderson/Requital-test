@@ -135,3 +135,54 @@ describe('computeIsOpen', () => {
     });
   });
 });
+
+// Documents and locks in the combined active/closedOverride resolution
+// described in computeIsOpen's own "Priority vs. outlet.active" comment —
+// mirrors exactly the two-step logic PublicService.listOutlets/createOrder
+// use (filter on active, then compute isOpen only for what's visible), all
+// 4 combinations of the two independent toggles.
+function resolveVisibilityAndOpenState(
+  active: boolean,
+  closedOverride: boolean,
+): { visible: boolean; isOpen: boolean | null } {
+  if (!active) return { visible: false, isOpen: null };
+  return {
+    visible: true,
+    isOpen: computeIsOpen(REGULAR_HOURS, closedOverride, new Date(), 'UTC'),
+  };
+}
+
+describe('active/closedOverride combined resolution', () => {
+  beforeEach(() => {
+    // Inside REGULAR_HOURS' 09:00-18:00 window every day.
+    setSystemTime('2026-01-01T12:00:00Z');
+  });
+
+  it('active=true, closedOverride=false -> visible and open', () => {
+    expect(resolveVisibilityAndOpenState(true, false)).toEqual({
+      visible: true,
+      isOpen: true,
+    });
+  });
+
+  it('active=true, closedOverride=true -> visible but closed (override wins over the schedule)', () => {
+    expect(resolveVisibilityAndOpenState(true, true)).toEqual({
+      visible: true,
+      isOpen: false,
+    });
+  });
+
+  it('active=false, closedOverride=false -> invisible, isOpen not resolved', () => {
+    expect(resolveVisibilityAndOpenState(false, false)).toEqual({
+      visible: false,
+      isOpen: null,
+    });
+  });
+
+  it('active=false, closedOverride=true -> invisible regardless of the override (coexistence is harmless)', () => {
+    expect(resolveVisibilityAndOpenState(false, true)).toEqual({
+      visible: false,
+      isOpen: null,
+    });
+  });
+});
