@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -46,6 +47,23 @@ import { StorefrontSearchModule } from './storefront-search/storefront-search.mo
     // one registration for the whole app, same as every other *Module.forRoot()
     // singleton (PrismaModule, etc.).
     ScheduleModule.forRoot(),
+    // Global per-IP default — generous enough not to affect normal admin/
+    // storefront polling (orders list polls every 20s, per admin/AGENTS.md).
+    // Individual auth/checkout endpoints override this with a much tighter
+    // limit via @Throttle(...) — see auth.controller.ts, customer-auth.
+    // controller.ts, and public.controller.ts.
+    //
+    // skipIf disables enforcement under Jest (NODE_ENV=test, set
+    // automatically by Jest itself — confirmed, not assumed) rather than in
+    // production: dozens of existing e2e specs legitimately call
+    // /auth/signup or /auth/login many times in quick succession from the
+    // same in-process supertest client, which the 5/min auth limits below
+    // would otherwise reject with 429s that have nothing to do with the
+    // behavior those tests are actually checking.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
+      skipIf: () => process.env.NODE_ENV === 'test',
+    }),
     PrismaModule,
     AuthModule,
     OutletsModule,

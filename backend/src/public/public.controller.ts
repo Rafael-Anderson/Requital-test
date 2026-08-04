@@ -7,6 +7,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PublicService } from './public.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
@@ -165,6 +166,10 @@ export class PublicController {
   // authenticated ctx.shopId. The actual order-creation call below
   // re-validates and atomically claims the code itself either way — this
   // endpoint never touches usage counters.
+  // Enumeration-sensitive (guessing a valid code) — tighter than the
+  // global default, but loose enough for a shopper retyping a code a few
+  // times.
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Public()
   @Post('discounts/validate')
   validateDiscount(
@@ -174,6 +179,11 @@ export class PublicController {
     return this.publicService.validateDiscount(shopSlug, dto);
   }
 
+  // No account/password exists on this path to lock out, but unthrottled
+  // order creation is still a real abuse surface (scripted fake-order spam,
+  // stock/discount-claim exhaustion) — 20/min/IP is generous for a genuine
+  // shopper retrying a failed payment or COD submission.
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Public()
   @Post('orders')
   createOrder(
@@ -187,6 +197,9 @@ export class PublicController {
   // AbandonedCartsService.capture for the upsert/reset semantics. Never
   // blocks or errors the checkout flow itself from the caller's
   // perspective; the storefront fires this and ignores the response.
+  // Higher limit than its siblings — legitimately re-fires as address/
+  // outlet fields change while the customer is still filling out checkout.
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Public()
   @Post('abandoned-carts')
   captureAbandonedCart(
@@ -199,6 +212,7 @@ export class PublicController {
   // Guest-facing live validation as the shopper types a gift card code at
   // checkout — mirrors discounts/validate above exactly. Order creation
   // re-validates and atomically claims the balance itself either way.
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Public()
   @Post('gift-cards/validate')
   validateGiftCard(

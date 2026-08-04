@@ -1,4 +1,5 @@
 import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CustomerAuthService } from './customer-auth.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
@@ -17,6 +18,9 @@ import { Public } from '../auth/decorators/public.decorator';
 export class CustomerAuthController {
   constructor(private readonly customerAuthService: CustomerAuthService) {}
 
+  // Same rationale as auth.controller.ts's staff endpoints — 5/min/IP on
+  // every credential/token-issuing or enumeration-sensitive route here.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('register')
   register(
     @Param('shopSlug') shopSlug: string,
@@ -25,11 +29,13 @@ export class CustomerAuthController {
     return this.customerAuthService.register(shopSlug, dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   login(@Param('shopSlug') shopSlug: string, @Body() dto: LoginCustomerDto) {
     return this.customerAuthService.login(shopSlug, dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('refresh')
   refresh(
     @Param('shopSlug') shopSlug: string,
@@ -43,6 +49,7 @@ export class CustomerAuthController {
     return this.customerAuthService.logout(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('forgot-password')
   forgotPassword(
     @Param('shopSlug') shopSlug: string,
@@ -51,6 +58,7 @@ export class CustomerAuthController {
     return this.customerAuthService.forgotPassword(shopSlug, dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
   resetPassword(@Body() dto: ResetCustomerPasswordDto) {
     return this.customerAuthService.resetPassword(dto);

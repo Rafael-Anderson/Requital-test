@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PublicService } from './public.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { SubmitSurveyDto } from './dto/submit-survey.dto';
@@ -16,6 +17,7 @@ export class PublicSurveyController {
     return this.publicService.lookupSurvey(token);
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Public()
   @Post('submit')
   submit(
