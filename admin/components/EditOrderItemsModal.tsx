@@ -108,7 +108,11 @@ export default function EditOrderItemsModal({
       );
       if (updated.discountDropped) {
         toast("Saved — the applied discount no longer qualified and was removed", "error");
-      } else {
+      }
+      if (updated.ingredientStockWarnings.length > 0) {
+        toast(`Saved — ${updated.ingredientStockWarnings.join(", ")} stock is now below zero at this outlet`, "error");
+      }
+      if (!updated.discountDropped && updated.ingredientStockWarnings.length === 0) {
         toast("Order items updated");
       }
       onSaved(updated);

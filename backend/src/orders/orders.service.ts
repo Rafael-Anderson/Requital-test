@@ -677,6 +677,7 @@ export class OrdersService {
     let total = new Prisma.Decimal(totalBeforeDiscount).sub(discountAmount);
     if (total.isNegative()) total = new Prisma.Decimal(0);
 
+    let ingredientStockWarnings: string[] = [];
     const updated = await this.prisma.$transaction(async (tx) => {
       if (stockReserved) {
         const oldItems = await tx.orderitem.findMany({ where: { orderId } });
@@ -763,6 +764,70 @@ export class OrdersService {
             });
           }
         }
+
+        // BOM ingredient stock — only for an order that's actually reached
+        // 'confirmed' and already consumed ingredients once (see
+        // order.ingredientsConsumedAt). A still-pending order (even one
+        // whose product stock is already reserved via
+        // IMMEDIATE_STOCK_RESERVATION_CHANNELS) has never run
+        // consumeForOrderItems yet — that only happens at the
+        // pending->confirmed transition, see adjustStockForOrder — so it has
+        // nothing to adjust by delta here; the eventual confirm will consume
+        // ingredients for whatever the (now-edited) item list says.
+        // Adjusted by delta (not recomputed from scratch) to avoid
+        // double-deducting what confirm already took.
+        if (order.status === 'confirmed' && order.ingredientsConsumedAt !== null) {
+          const increasedItems: {
+            productId: number;
+            variantId: number | null;
+            quantity: number;
+          }[] = [];
+          const decreasedItems: {
+            productId: number;
+            variantId: number | null;
+            quantity: number;
+          }[] = [];
+          for (const k of allKeys) {
+            const [productIdStr, variantIdStr] = k.split(':');
+            const productId = Number(productIdStr);
+            const variantId = variantIdStr ? Number(variantIdStr) : null;
+            const delta =
+              (newQtyByKey.get(k) ?? 0) - (oldQtyByKey.get(k) ?? 0);
+            if (delta > 0) increasedItems.push({ productId, variantId, quantity: delta });
+            else if (delta < 0) decreasedItems.push({ productId, variantId, quantity: -delta });
+          }
+
+          if (increasedItems.length > 0) {
+            // throwOnInsufficientStock: false — a quantity increase must
+            // never block the save; going negative is surfaced as a warning
+            // instead (see findNegativeIngredientStock below), matching the
+            // "allow the save, don't silently allow negative, don't
+            // silently block" requirement.
+            await this.productsService.consumeForOrderItems(
+              tx,
+              ctx.shopId,
+              order.outletId,
+              increasedItems,
+              -1,
+              { throwOnInsufficientStock: false, actorUserId: ctx.userId },
+            );
+            ingredientStockWarnings = await this.findNegativeIngredientStock(
+              tx,
+              order.outletId,
+              increasedItems.map((i) => i.productId),
+            );
+          }
+          if (decreasedItems.length > 0) {
+            await this.productsService.consumeForOrderItems(
+              tx,
+              ctx.shopId,
+              order.outletId,
+              decreasedItems,
+              1,
+              { throwOnInsufficientStock: false, actorUserId: ctx.userId },
+            );
+          }
+        }
       }
 
       await tx.orderitem.deleteMany({ where: { orderId } });
@@ -794,7 +859,33 @@ export class OrdersService {
       metadata: discountDropped ? { discountDropped: true } : undefined,
     });
 
-    return { ...updated, discountDropped };
+    return { ...updated, discountDropped, ingredientStockWarnings };
+  }
+
+  // Ingredients whose stock is negative at this outlet, restricted to the
+  // recipe ingredients of the given products — called right after an
+  // increase-direction consumeForOrderItems (throwOnInsufficientStock:
+  // false, so it never blocks) to build the merchant-facing warning list.
+  private async findNegativeIngredientStock(
+    tx: Prisma.TransactionClient,
+    outletId: number,
+    productIds: number[],
+  ): Promise<string[]> {
+    const recipeRows = await tx.productingredient.findMany({
+      where: { productId: { in: productIds } },
+      select: { ingredientId: true },
+    });
+    const ingredientIds = [...new Set(recipeRows.map((r) => r.ingredientId))];
+    if (ingredientIds.length === 0) return [];
+    const negative = await tx.outletingredientstock.findMany({
+      where: {
+        outletId,
+        ingredientId: { in: ingredientIds },
+        stockQuantity: { lt: 0 },
+      },
+      include: { ingredient: { select: { name: true } } },
+    });
+    return negative.map((r) => r.ingredient.name);
   }
 
   async cancel(ctx: TenantContext, id: number) {

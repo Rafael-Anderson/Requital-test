@@ -644,11 +644,14 @@ export function bulkUpdateOrderStatus(orderIds: number[], status: OrderStatus) {
 // Full desired item list, not a patch — see UpdateOrderItemsDto on the
 // backend. `discountDropped` on the response means an attached discount no
 // longer qualified against the edited items/subtotal and was removed.
+// `ingredientStockWarnings` lists BOM ingredient names whose outlet stock
+// went negative from this edit's quantity increase — the save still
+// succeeds (never blocked), this is warning-only.
 export function updateOrderItems(
   id: number,
   items: { productId: number; variantId?: number; quantity: number }[],
 ) {
-  return apiFetch<Order & { discountDropped: boolean }>(`/orders/${id}/items`, {
+  return apiFetch<Order & { discountDropped: boolean; ingredientStockWarnings: string[] }>(`/orders/${id}/items`, {
     method: "PATCH",
     body: JSON.stringify({ items }),
   });
