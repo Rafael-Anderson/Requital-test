@@ -16,6 +16,7 @@ import type {
   Outlet,
   PolicyPage,
   Product,
+  SearchResponse,
   Shop,
   SurveyLookupResult,
   ValidateDiscountResult,
@@ -75,6 +76,12 @@ export function subscribeNotifyMe(productId: number, email: string, variantId?: 
     variantId,
     email,
   });
+}
+
+export function searchProducts(shopSlug: string, query: string, cursor?: string) {
+  const qs = new URLSearchParams({ q: query });
+  if (cursor) qs.set("cursor", cursor);
+  return get<SearchResponse>(`/public/${shopSlug}/search?${qs.toString()}`);
 }
 
 export async function unsubscribeNotifyMe(email: string, productId: number) {

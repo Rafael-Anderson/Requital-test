@@ -6,6 +6,7 @@ import { Menu, Phone, PackageSearch, ShoppingCart, User, X } from "lucide-react"
 import { resolveImageUrl } from "@/lib/api";
 import { iconStyleProps } from "@/lib/icon-style";
 import { useCartDrawer } from "@/lib/cart-drawer";
+import SearchBar from "@/components/SearchBar";
 import type { Customer, Density, Shop } from "@/lib/types";
 
 // Height/padding only — independent of which of the 3 layout variants below
@@ -99,6 +100,7 @@ function NavIcons({ shopSlug, shop, customer, count, showPhone = true, showAccou
           {customer && <span className="hidden sm:inline text-sm max-w-24 truncate">{customer.name}</span>}
         </Link>
       )}
+      <SearchBar />
       <CartIconButton shopSlug={shopSlug} shop={shop} count={count} />
     </div>
   );
@@ -151,7 +153,10 @@ function TopBarMinimal(props: TopBarProps) {
           {menuOpen ? <X className="size-5" {...iconProps} /> : <Menu className="size-5" {...iconProps} />}
         </button>
         <Logo shopSlug={props.shopSlug} shop={props.shop} />
-        <CartIconButton shopSlug={props.shopSlug} shop={props.shop} count={props.count} />
+        <div className="flex items-center gap-1">
+          <SearchBar />
+          <CartIconButton shopSlug={props.shopSlug} shop={props.shop} count={props.count} />
+        </div>
       </div>
       {menuOpen && (
         <div className="flex flex-col gap-1 pt-2 mt-2 border-t border-stroke">

@@ -38,6 +38,7 @@ import { PolicyPagesModule } from './policy-pages/policy-pages.module';
 import { BranchRolesModule } from './branch-roles/branch-roles.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { NotifySubscriptionsModule } from './notify-subscriptions/notify-subscriptions.module';
+import { StorefrontSearchModule } from './storefront-search/storefront-search.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { NotifySubscriptionsModule } from './notify-subscriptions/notify-subscri
     PolicyPagesModule,
     InvoicesModule,
     NotifySubscriptionsModule,
+    StorefrontSearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

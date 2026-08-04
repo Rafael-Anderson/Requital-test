@@ -533,6 +533,21 @@ export const POLICY_PAGE_LABELS: Record<PolicyPageType, string> = {
   PAYMENT: "Payment Policy",
   SHIPPING: "Shipping & Delivery Policy",
 };
+export interface SearchResultItem {
+  id: number;
+  name: string;
+  slug: string;
+  thumbnail: string;
+  price: string;
+}
+
+export interface SearchResponse {
+  results: SearchResultItem[];
+  nextCursor: string | null;
+  matchType: "exact" | "fuzzy" | "none";
+  suggestion: string | null;
+}
+
 export interface PolicyPage {
   type: PolicyPageType;
   content: string;
