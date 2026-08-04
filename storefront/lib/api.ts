@@ -67,6 +67,25 @@ export function getPolicyPage(shopSlug: string, type: string) {
   return get<PolicyPage>(`/public/${shopSlug}/policy-pages/${type}`);
 }
 
+// Back-in-stock notify-me — not shop-slug-scoped (the backend derives shopId
+// from productId itself), same as its own route shape.
+export function subscribeNotifyMe(productId: number, email: string, variantId?: number) {
+  return post<{ alreadySubscribed: boolean }>(`/notify-subscriptions`, {
+    productId,
+    variantId,
+    email,
+  });
+}
+
+export async function unsubscribeNotifyMe(email: string, productId: number) {
+  const res = await fetch(
+    `${API_URL}/notify-subscriptions?email=${encodeURIComponent(email)}&productId=${productId}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json() as Promise<{ success: boolean }>;
+}
+
 // Backs the platform-wide sitemap (app/sitemap.xml/route.ts) — not
 // shop-scoped, so it doesn't go through /public/:shopSlug/....
 export function listShopsForSitemap() {

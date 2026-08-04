@@ -24,6 +24,7 @@ import { BulkPriceUpdateDto } from './dto/bulk-price-update.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { ProductIngredientInput } from './dto/product-ingredient-input.dto';
 import {
@@ -171,6 +172,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
     private readonly branchRolesService: BranchRolesService,
+    private readonly notifySubscriptionsService: NotifySubscriptionsService,
   ) {}
 
   async findAll(ctx: TenantContext, requestedOutletId?: number) {
@@ -1050,6 +1052,33 @@ export class ProductsService {
       ),
     ]);
 
+    // Back-in-stock notify — fire (not awaited) for every product/variant
+    // whose stock just crossed 0 -> positive at this outlet. Not awaited so
+    // a slow/failing email batch never delays the stock-adjustment response.
+    const variantProductById = new Map(
+      variantAdjustments.map((a) => [a.variantId!, a.productId]),
+    );
+    for (const { productId, delta } of productLevel) {
+      const before = currentByProduct.get(productId) ?? 0;
+      if (before <= 0 && before + delta > 0) {
+        this.notifySubscriptionsService
+          .triggerForProduct(ctx.shopId, productId)
+          .catch(() => {});
+      }
+    }
+    for (const { variantId, delta } of variantAdjustments) {
+      const before = currentByVariant.get(variantId!) ?? 0;
+      if (before <= 0 && before + delta > 0) {
+        this.notifySubscriptionsService
+          .triggerForProduct(
+            ctx.shopId,
+            variantProductById.get(variantId!)!,
+            variantId!,
+          )
+          .catch(() => {});
+      }
+    }
+
     return {
       products: await this.prisma.outletstock.findMany({
         where: {
@@ -1118,6 +1147,34 @@ export class ProductsService {
         }
       }
     }
+
+    // Read for the back-in-stock notify check below — a plain read before
+    // the transaction is fine here (unlike the CAS decrement/increment
+    // itself): worst case under true concurrency is a missed or extra
+    // notify trigger, never an incorrect stock quantity.
+    const destinationBefore = dto.ingredientId
+      ? null
+      : dto.variantId
+        ? (
+            await this.prisma.outletvariantstock.findUnique({
+              where: {
+                outletId_variantId: {
+                  outletId: dto.toOutletId,
+                  variantId: dto.variantId,
+                },
+              },
+            })
+          )?.stockQuantity ?? 0
+        : (
+            await this.prisma.outletstock.findUnique({
+              where: {
+                outletId_productId: {
+                  outletId: dto.toOutletId,
+                  productId: dto.productId!,
+                },
+              },
+            })
+          )?.stockQuantity ?? 0;
 
     await this.prisma.$transaction(async (tx) => {
       const decremented = dto.ingredientId
@@ -1217,6 +1274,12 @@ export class ProductsService {
         },
       });
     });
+
+    if (destinationBefore !== null && destinationBefore <= 0) {
+      this.notifySubscriptionsService
+        .triggerForProduct(ctx.shopId, dto.productId!, dto.variantId)
+        .catch(() => {});
+    }
 
     return this.getStockSnapshot(
       {

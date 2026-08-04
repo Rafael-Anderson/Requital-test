@@ -8,6 +8,7 @@ import { DiscountsModule } from '../discounts/discounts.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { OrderNotificationsModule } from './order-notifications.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
+import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { BranchRolesModule } from '../branch-roles/branch-roles.module';
     AuditLogModule,
     OrderNotificationsModule,
     BranchRolesModule,
+    NotifySubscriptionsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

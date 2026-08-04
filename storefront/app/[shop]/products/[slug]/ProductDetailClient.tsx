@@ -12,6 +12,7 @@ import { storeButtonClassName } from "@/lib/button-style";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
+import NotifyMeForm from "@/components/NotifyMeForm";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import type { Product, ProductVariant, Shop } from "@/lib/types";
 
@@ -399,6 +400,10 @@ export default function ProductDetailClient() {
               placeholder="Add a note for this item (optional)"
               className="mt-3 w-full rounded-lg border border-stroke px-3 py-2 text-sm placeholder:text-zinc-400"
             />
+          )}
+
+          {!product.isGiftCard && outOfStock && (
+            <NotifyMeForm productId={product.id} variantId={selectedVariant?.id} />
           )}
 
           {/* Trust row — secure checkout is a factual claim about how

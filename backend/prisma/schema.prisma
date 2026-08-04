@@ -442,9 +442,39 @@ model product {
   stockmovement             stockmovement[]
   collectionproduct         collectionproduct[]
   productingredient         productingredient[]
+  notifysubscription        notifysubscription[]
 
   @@unique([shopId, sku], map: "Product_shopId_sku_key")
   @@unique([shopId, slug], map: "Product_shopId_slug_key")
+}
+
+// Back-in-stock "notify me" subscriptions, storefront-facing (no auth — any
+// shopper can subscribe with just an email). variantId is null for a
+// product-level subscription (no variants, or "notify for any variant") and
+// set for a specific out-of-stock variant. notifiedAt stays null until
+// NotifySubscriptionsService.triggerForProduct actually sends the restock
+// email — re-triggering (e.g. stock flaps 0->1->0->1) never re-notifies a
+// row that's already been notified once.
+model notifysubscription {
+  id         Int              @id @default(autoincrement())
+  shopId     Int
+  productId  Int
+  variantId  Int?
+  email      String
+  createdAt  DateTime         @default(now())
+  notifiedAt DateTime?
+  shop       shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "NotifySubscription_shopId_fkey")
+  product    product          @relation(fields: [productId], references: [id], onDelete: Cascade, map: "NotifySubscription_productId_fkey")
+  variant    productvariant?  @relation(fields: [variantId], references: [id], onDelete: Cascade, map: "NotifySubscription_variantId_fkey")
+
+  // MySQL treats NULL as distinct in a unique index, so two subscriptions
+  // for the same (shopId, productId, email) with variantId both NULL are
+  // still correctly deduped; two different variants of the same product for
+  // the same email are correctly allowed as separate rows.
+  @@unique([shopId, productId, variantId, email], map: "NotifySubscription_unique")
+  @@index([shopId, email, createdAt], map: "NotifySubscription_rateLimit_idx")
+  @@index([productId], map: "NotifySubscription_productId_fkey")
+  @@index([variantId], map: "NotifySubscription_variantId_fkey")
 }
 
 // Media gallery. product.thumbnail stays the source of truth for every
@@ -607,6 +637,7 @@ model productvariant {
   draftorderitem     draftorderitem[]
   stockmovement      stockmovement[]
   productingredient  productingredient[]
+  notifysubscription notifysubscription[]
 
   @@unique([productId, optionValue1Id, optionValue2Id, optionValue3Id], map: "ProductVariant_combination_key")
   @@index([productId], map: "ProductVariant_productId_fkey")
@@ -848,6 +879,7 @@ model shop {
   surveyresponse      surveyresponse[]
   invoice             invoice[]
   invoicecounter      invoicecounter[]
+  notifysubscription  notifysubscription[]
 }
 
 // Legal/policy pages (Terms, Privacy, Refund & Return, Payment, Shipping &

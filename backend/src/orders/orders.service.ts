@@ -30,6 +30,7 @@ import {
 } from './constants';
 import { computeOrderTotals } from '../public/order-pricing';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 
 const orderInclude = {
   orderitem: true,
@@ -70,6 +71,7 @@ export class OrdersService {
     private readonly auditLogService: AuditLogService,
     private readonly orderNotificationsService: OrderNotificationsService,
     private readonly branchRolesService: BranchRolesService,
+    private readonly notifySubscriptionsService: NotifySubscriptionsService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -941,6 +943,12 @@ export class OrdersService {
       where: { orderId },
       include: { product: { select: { trackInventory: true } } },
     });
+    // Only a restock (direction 1, i.e. cancellation) can ever cross stock
+    // from 0 up to positive — collected here and fired (not awaited, see
+    // below) after the loop so a slow email batch never delays the
+    // transaction this runs inside.
+    const restockNotifyTargets: { productId: number; variantId: number | null }[] =
+      [];
     for (const item of items) {
       if (!item.product.trackInventory) continue;
       // Stock is per-outlet-per-product now, not shop-wide — upsert because
@@ -950,6 +958,19 @@ export class OrdersService {
       // instead (see schema.prisma) — the parent product's outletstock
       // stays untouched once a product has variants.
       if (item.variantId) {
+        if (direction === 1) {
+          const before = await tx.outletvariantstock.findUnique({
+            where: {
+              outletId_variantId: { outletId, variantId: item.variantId },
+            },
+          });
+          if ((before?.stockQuantity ?? 0) <= 0) {
+            restockNotifyTargets.push({
+              productId: item.productId,
+              variantId: item.variantId,
+            });
+          }
+        }
         await tx.outletvariantstock.upsert({
           where: {
             outletId_variantId: { outletId, variantId: item.variantId },
@@ -963,6 +984,14 @@ export class OrdersService {
         });
         continue;
       }
+      if (direction === 1) {
+        const before = await tx.outletstock.findUnique({
+          where: { outletId_productId: { outletId, productId: item.productId } },
+        });
+        if ((before?.stockQuantity ?? 0) <= 0) {
+          restockNotifyTargets.push({ productId: item.productId, variantId: null });
+        }
+      }
       await tx.outletstock.upsert({
         where: { outletId_productId: { outletId, productId: item.productId } },
         update: { stockQuantity: { increment: direction * item.quantity } },
@@ -972,6 +1001,11 @@ export class OrdersService {
           stockQuantity: direction * item.quantity,
         },
       });
+    }
+    for (const target of restockNotifyTargets) {
+      this.notifySubscriptionsService
+        .triggerForProduct(ctx.shopId, target.productId, target.variantId)
+        .catch(() => {});
     }
 
     // Bill of Materials — same trigger point as the product-stock loop just

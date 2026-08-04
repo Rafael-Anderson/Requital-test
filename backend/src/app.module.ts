@@ -37,6 +37,7 @@ import { GiftCardsModule } from './gift-cards/gift-cards.module';
 import { PolicyPagesModule } from './policy-pages/policy-pages.module';
 import { BranchRolesModule } from './branch-roles/branch-roles.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { NotifySubscriptionsModule } from './notify-subscriptions/notify-subscriptions.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { InvoicesModule } from './invoices/invoices.module';
     GiftCardsModule,
     PolicyPagesModule,
     InvoicesModule,
+    NotifySubscriptionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
