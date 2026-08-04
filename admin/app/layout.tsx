@@ -6,6 +6,7 @@ import { OutletFilterProvider } from "@/lib/outlet-context";
 import RequireAuth from "@/components/RequireAuth";
 import TopBar from "@/components/TopBar";
 import CommandPalette from "@/components/CommandPalette";
+import NavigationProgress from "@/components/ui/NavigationProgress";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,17 +25,19 @@ export const metadata: Metadata = {
 };
 
 // Runs before paint (blocking, in <head>) so the page never flashes the
-// wrong theme — reads the stored preference (falling back to the OS
-// preference on a first visit) and applies the .dark class immediately,
-// well before React hydrates. Keep the "requital_theme" key in sync with
-// lib/theme.ts — this can't import that constant since it has to ship as a
-// literal inline script, not a bundled module.
+// wrong theme — reads the stored preference and applies the .dark class
+// immediately, well before React hydrates. Keep the "requital_theme" key in
+// sync with lib/theme.ts — this can't import that constant since it has to
+// ship as a literal inline script, not a bundled module.
+// Light is the hard default: with no stored preference, this never
+// consults window.matchMedia("(prefers-color-scheme: dark)") — dark mode
+// only ever activates via the explicit toggle (lib/theme.ts's setTheme),
+// never from the OS preference alone.
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
     var stored = localStorage.getItem("requital_theme");
-    var isDark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (isDark) document.documentElement.classList.add("dark");
+    if (stored === "dark") document.documentElement.classList.add("dark");
   } catch (e) {}
 })();
 `;
@@ -54,6 +57,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full">
+        <NavigationProgress />
         <ToastProvider>
           <AuthProvider>
             <OutletFilterProvider>

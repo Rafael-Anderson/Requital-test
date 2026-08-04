@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "nprogress/nprogress.css";
 
 /* Manual light/dark toggle (profile menu) needs `dark:` to follow a class,
    not just the OS preference — this is Tailwind v4's documented way to swap
@@ -43,6 +44,18 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* NProgress (components/ui/NavigationProgress.tsx) — override the library's
+   default 2px/#29d bar to match the brand accent and sit above everything
+   else in the app (modals included, z-50). */
+#nprogress .bar {
+  background: var(--color-accent);
+  height: 3px;
+  z-index: 9999;
+}
+#nprogress .peg {
+  box-shadow: 0 0 10px var(--color-accent), 0 0 5px var(--color-accent);
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -54,23 +67,128 @@ body {
   }
 }
 
-.page-transition {
-  animation: fade-in 0.15s ease-out;
-}
-
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(0.5rem) scale(0.95);
+    transform: translateX(1rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(0);
   }
 }
 
-.toast-enter {
-  animation: toast-in 0.18s ease-out;
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(1rem);
+  }
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes modal-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Product wizard step transitions (ProductForm.tsx): the entering step
+   slides in from the direction navigation is heading — forward from the
+   right (Next), backward from the left (Back/stepper click) — mirroring
+   modal-in/out's fade+scale treatment but directional instead. */
+@keyframes step-enter-forward {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes step-enter-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Every keyframe-driven entrance/exit in this app is gated behind
+   prefers-reduced-motion so motion-sensitive users get an instant state
+   change instead — per-class opacity/transform still apply (so content
+   isn't invisible), only the animation itself is skipped. */
+@media (prefers-reduced-motion: no-preference) {
+  .page-transition {
+    animation: fade-in 0.15s ease-out;
+  }
+  .toast-enter {
+    animation: toast-in 0.18s ease-out;
+  }
+  .toast-exit {
+    animation: toast-out 0.15s ease-in;
+  }
+  .popover-in {
+    animation: popover-in 0.15s ease-out;
+  }
+  .modal-in {
+    animation: modal-in 0.2s ease-out;
+  }
+  .modal-out {
+    animation: modal-out 0.15s ease-in;
+  }
+  .backdrop-in {
+    animation: backdrop-in 0.2s ease-out;
+  }
+  .step-enter-forward {
+    animation: step-enter-forward 0.2s ease-out;
+  }
+  .step-enter-backward {
+    animation: step-enter-backward 0.2s ease-out;
+  }
 }
 
 /* Scrollable modal content: keep the scrollbar itself visible (so users know

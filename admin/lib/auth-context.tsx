@@ -17,6 +17,14 @@ interface AuthContextValue {
     password: string;
     shopName: string;
     subdomain: string;
+    phone?: string;
+    businessType?: string;
+    trn?: string;
+    websiteUrl?: string;
+    address?: string;
+    operatingModel?: string[];
+    branchCount?: string;
+    productEditorMode?: "simple" | "advanced";
   }) => Promise<{ devVerificationLink?: string }>;
   acceptInvite: (data: { token: string; password: string }) => Promise<void>;
   logout: () => void;
@@ -52,7 +60,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signup = useCallback(
-    async (data: { name: string; email: string; password: string; shopName: string; subdomain: string }) => {
+    async (data: {
+      name: string;
+      email: string;
+      password: string;
+      shopName: string;
+      subdomain: string;
+      phone?: string;
+      businessType?: string;
+      trn?: string;
+      websiteUrl?: string;
+      address?: string;
+      operatingModel?: string[];
+      branchCount?: string;
+    }) => {
       const result = await api.signup(data);
       api.setTokens(result);
       setUser(result.user);

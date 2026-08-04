@@ -73,7 +73,17 @@ export class AuthService {
     try {
       user = await this.prisma.$transaction(async (tx) => {
         const shop = await tx.shop.create({
-          data: { name: dto.shopName, subdomain: dto.subdomain },
+          data: {
+            name: dto.shopName,
+            subdomain: dto.subdomain,
+            businessType: dto.businessType,
+            trn: dto.trn,
+            websiteUrl: dto.websiteUrl,
+            address: dto.address,
+            operatingModel: dto.operatingModel?.join(','),
+            branchCount: dto.branchCount,
+            productEditorMode: dto.productEditorMode,
+          },
         });
         // Every shop starts with one outlet so orders/inventory (both
         // outlet-scoped) are usable immediately after signup, without
@@ -86,6 +96,7 @@ export class AuthService {
             shopId: shop.id,
             name: dto.name,
             email: dto.email,
+            phone: dto.phone,
             passwordHash,
             role: 'admin',
           },

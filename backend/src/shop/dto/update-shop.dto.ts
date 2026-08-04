@@ -185,17 +185,11 @@ export class UpdateShopDto {
   @IsBoolean()
   birthdayDiscountEnabled?: boolean;
 
+  // Which admin product-form experience this shop's merchants get — see
+  // schema.prisma's comment on shop.productEditorMode.
   @IsOptional()
-  @IsBoolean()
-  productVariantsEnabled?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  productAttributesEnabled?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  productFaqsEnabled?: boolean;
+  @IsIn(['simple', 'advanced'])
+  productEditorMode?: string;
 
   @IsOptional()
   @IsBoolean()

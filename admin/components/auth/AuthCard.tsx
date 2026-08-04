@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 // touches the storefront, via a completely separate CSS variable set — see
 // storefront/lib/shop-context.tsx). One shared component so the background/
 // glow/card treatment updates everywhere at once, same reasoning as
-// PageShell/ColorInput.
+// PageShell/ColorPicker.
 //
 // No image assets: the glow behind the card is a plain positioned div with
 // a radial-gradient background, blurred and set to a low opacity — nothing
@@ -48,10 +48,23 @@ interface AuthCardProps {
   // wordmark rather than inventing a new graphic mark, per the redesign
   // report's stated gap.
   hideWordmark?: boolean;
+  // Every screen but the Account Setup wizard is a handful of stacked
+  // fields, well served by the original max-w-sm. The wizard's Business/
+  // Location steps use the same settings-page grid convention (2-3 columns
+  // of short fields, see CLAUDE.md's "Settings/config page layout
+  // convention") which needs real width to not just wrap to one column
+  // anyway — so it opts into a wider card instead of a second component.
+  maxWidthClassName?: string;
   children: ReactNode;
 }
 
-export default function AuthCard({ heading, subtitle, hideWordmark, children }: AuthCardProps) {
+export default function AuthCard({
+  heading,
+  subtitle,
+  hideWordmark,
+  maxWidthClassName = "max-w-sm",
+  children,
+}: AuthCardProps) {
   return (
     // A single `fixed inset-0` layer, not a normal-flow wrapper — this page
     // renders inside <main className="p-6"> (app/layout.tsx), so a
@@ -69,7 +82,9 @@ export default function AuthCard({ heading, subtitle, hideWordmark, children }: 
         style={{ background: "radial-gradient(circle, #069494 0%, transparent 70%)" }}
       />
       <div className="relative flex min-h-full items-center justify-center px-4 py-12">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-[0_4px_10px_rgba(0,0,0,0.05),0_24px_56px_-12px_rgba(0,0,0,0.20)] dark:bg-white/[0.045] dark:shadow-none dark:backdrop-blur-xl">
+        <div
+          className={`w-full ${maxWidthClassName} rounded-2xl bg-white p-8 shadow-[0_4px_10px_rgba(0,0,0,0.05),0_24px_56px_-12px_rgba(0,0,0,0.20)] dark:bg-white/[0.045] dark:shadow-none dark:backdrop-blur-xl`}
+        >
           <div className="text-center mb-6">
             {!hideWordmark && (
               <p className="text-xs font-semibold tracking-widest uppercase text-zinc-500 dark:text-zinc-400 mb-3">
