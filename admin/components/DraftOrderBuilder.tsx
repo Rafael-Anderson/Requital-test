@@ -18,14 +18,12 @@ import Textarea from "@/components/ui/Textarea";
 import PageShell from "@/components/ui/PageShell";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
+import Combobox from "@/components/ui/Combobox";
 
 // Mirrors backend/src/orders/constants.ts EMIRATES by hand — no shared
 // package between admin/backend, same tradeoff as every other mirrored
 // constant in this codebase (e.g. admin's PAYMENT_GATEWAY_PROVIDERS).
 const EMIRATES = ["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "Umm Al Quwain", "Ras Al Khaimah", "Fujairah"] as const;
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 interface WorkingItem {
   productId: number;
@@ -36,9 +34,9 @@ interface WorkingItem {
 }
 
 // Shared by /draft-orders/new and /draft-orders/[id] (edit) — same "product
-// prop optional = create vs edit" pattern as ProductForm. Product/outlet
-// pickers are plain <select> dropdowns (same reasoning as Bio Links/
-// Discounts — no searchable picker exists anywhere in this app).
+// prop optional = create vs edit" pattern as ProductForm. Product/outlet/
+// emirate/order-type pickers are Combobox.tsx, same as every other picker
+// in this app.
 export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
   const router = useRouter();
   const toast = useToast();
@@ -258,16 +256,12 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
           <Input label="Address" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} required />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium block mb-1">Emirate</label>
-            <select value={emirate} onChange={(e) => setEmirate(e.target.value)} className={SELECT_CLASS}>
-              {EMIRATES.map((em) => (
-                <option key={em} value={em}>
-                  {em}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="Emirate"
+            value={emirate}
+            onChange={setEmirate}
+            options={EMIRATES.map((em) => ({ value: em, label: em }))}
+          />
           <Input label="Area (optional)" value={area} onChange={(e) => setArea(e.target.value)} />
         </div>
       </Card>
@@ -275,23 +269,21 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       <Card className="space-y-4">
         <h3 className="text-sm font-semibold">Fulfillment</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium block mb-1">Branch</label>
-            <select value={outletId} onChange={(e) => setOutletId(Number(e.target.value))} className={SELECT_CLASS}>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-sm font-medium block mb-1">Order type</label>
-            <select value={orderType} onChange={(e) => setOrderType(e.target.value)} className={SELECT_CLASS}>
-              <option value="delivery">Delivery</option>
-              <option value="pickup">Pickup</option>
-            </select>
-          </div>
+          <Combobox
+            label="Branch"
+            value={String(outletId)}
+            onChange={(v) => setOutletId(Number(v))}
+            options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
+          />
+          <Combobox
+            label="Order type"
+            value={orderType}
+            onChange={setOrderType}
+            options={[
+              { value: "delivery", label: "Delivery" },
+              { value: "pickup", label: "Pickup" },
+            ]}
+          />
         </div>
       </Card>
 
@@ -299,34 +291,26 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
         <h3 className="text-sm font-semibold">Items</h3>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-40">
-            <label className="text-sm font-medium block mb-1">Product</label>
-            <select
+            <Combobox
+              label="Product"
               value={addProductId}
-              onChange={(e) => {
-                setAddProductId(e.target.value);
+              onChange={(v) => {
+                setAddProductId(v);
                 setAddVariantId("");
               }}
-              className={SELECT_CLASS}
-            >
-              <option value="">Select a product…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Select a product…"
+              options={products.map((p) => ({ value: String(p.id), label: p.name }))}
+            />
           </div>
           {selectedAddProduct?.hasVariants && (
             <div className="flex-1 min-w-32">
-              <label className="text-sm font-medium block mb-1">Option</label>
-              <select value={addVariantId} onChange={(e) => setAddVariantId(e.target.value)} className={SELECT_CLASS}>
-                <option value="">Select…</option>
-                {selectedAddProduct.variants.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                label="Option"
+                value={addVariantId}
+                onChange={setAddVariantId}
+                placeholder="Select…"
+                options={selectedAddProduct.variants.map((v) => ({ value: String(v.id), label: v.label ?? "" }))}
+              />
             </div>
           )}
           <div className="w-20">

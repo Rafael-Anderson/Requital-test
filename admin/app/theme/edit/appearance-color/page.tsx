@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import ColorInput from "@/components/ui/ColorInput";
+import ColorPicker from "@/components/ui/ColorPicker";
 
 export default function ThemeAppearanceColorPage() {
   const toast = useToast();
@@ -94,14 +94,14 @@ export default function ThemeAppearanceColorPage() {
                 <p className="text-sm">Primary color</p>
                 <p className="text-xs text-zinc-400">Any color — not a locked palette.</p>
               </div>
-              <ColorInput value={brandColor} onChange={(e) => setBrandColor(e.target.value)} />
+              <ColorPicker value={brandColor} onChange={setBrandColor} />
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm">Secondary color</p>
                 <p className="text-xs text-zinc-400">Optional — derived from primary if unset.</p>
               </div>
-              <ColorInput value={secondaryColor || brandColor} onChange={(e) => setSecondaryColor(e.target.value)} />
+              <ColorPicker value={secondaryColor || brandColor} onChange={setSecondaryColor} />
             </div>
           </div>
           {brandContrastWarning && (
@@ -131,9 +131,9 @@ export default function ThemeAppearanceColorPage() {
                         <p className="text-xs text-amber-600 dark:text-amber-400">Not yet visible on your storefront</p>
                       )}
                     </div>
-                    <ColorInput
+                    <ColorPicker
                       value={colors[field.key] ?? THEME_COLOR_DEFAULTS[field.key]}
-                      onChange={(e) => setColor(field.key, e.target.value)}
+                      onChange={(hex) => setColor(field.key, hex)}
                     />
                   </div>
                 ))}

@@ -31,9 +31,7 @@ import BackButton from "@/components/ui/BackButton";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
-
-const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
+import Combobox from "@/components/ui/Combobox";
 
 function slugify(input: string): string {
   return input
@@ -254,16 +252,12 @@ export default function CollectionForm({ collection: initial }: { collection?: C
 
         <Card className="space-y-3.5">
           <h3 className="text-sm font-semibold">Membership</h3>
-          <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value as CollectionType)} className={SELECT_CLASS}>
-              {COLLECTION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {COLLECTION_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </div>
+          <Combobox
+            label="Type"
+            value={type}
+            onChange={(v) => setType(v as CollectionType)}
+            options={COLLECTION_TYPES.map((t) => ({ value: t, label: COLLECTION_TYPE_LABELS[t] }))}
+          />
 
           {type === "RULE_BASED" ? (
             <div className="space-y-3.5">
@@ -271,17 +265,16 @@ export default function CollectionForm({ collection: initial }: { collection?: C
                 Products matching every condition set below are included automatically — leave a condition blank to
                 ignore it.
               </p>
-              <div>
-                <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Category</label>
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={SELECT_CLASS}>
-                  <option value="">Any category</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Combobox
+                label="Category"
+                value={categoryId}
+                onChange={setCategoryId}
+                placeholder="Any category"
+                options={[
+                  { value: "", label: "Any category" },
+                  ...categories.map((c) => ({ value: String(c.id), label: c.name })),
+                ]}
+              />
               <Input label="Tag (optional)" value={tagName} onChange={(e) => setTagName(e.target.value)} />
               <div className="grid grid-cols-2 gap-3">
                 <Input label="Min price (optional)" type="number" min="0" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
@@ -344,15 +337,13 @@ export default function CollectionForm({ collection: initial }: { collection?: C
               </Table>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Add product</label>
-                  <select value={addProductId} onChange={(e) => setAddProductId(e.target.value)} className={SELECT_CLASS}>
-                    <option value="">Select a product…</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Combobox
+                    label="Add product"
+                    value={addProductId}
+                    onChange={setAddProductId}
+                    placeholder="Select a product…"
+                    options={products.map((p) => ({ value: String(p.id), label: p.name }))}
+                  />
                 </div>
                 <Button type="button" variant="secondary" onClick={handleAddMember} disabled={!addProductId}>
                   <Plus className="size-4 inline -mt-0.5 mr-1" />
