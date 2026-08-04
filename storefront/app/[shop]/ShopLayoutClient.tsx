@@ -13,6 +13,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import Footer from "@/components/Footer";
 import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
+import CookieConsentBanner from "@/components/CookieConsentBanner";
 import type { Shop } from "@/lib/types";
 
 function Header() {
@@ -80,6 +81,7 @@ function Body({ children }: { children: React.ReactNode }) {
       <main>{children}</main>
       <Footer />
       <WhatsAppFloatingButton />
+      <CookieConsentBanner />
     </>
   );
 }
