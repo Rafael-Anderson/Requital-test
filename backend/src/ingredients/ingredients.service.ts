@@ -156,6 +156,18 @@ export class IngredientsService {
     }
   }
 
+  private async assertOutletBelongsToShop(
+    ctx: TenantContext,
+    outletId: number,
+  ) {
+    const outlet = await this.prisma.outlet.findFirst({
+      where: { id: outletId, shopId: ctx.shopId },
+    });
+    if (!outlet) {
+      throw new NotFoundException('outletId is invalid for this shop');
+    }
+  }
+
   async remove(ctx: TenantContext, id: number) {
     const ingredient = await this.assertBelongsToShop(ctx, id);
     await this.prisma.ingredient.delete({ where: { id } });
@@ -185,6 +197,9 @@ export class IngredientsService {
     file: Express.Multer.File,
     outletId: number | undefined,
   ) {
+    if (outletId !== undefined) {
+      await this.assertOutletBelongsToShop(ctx, outletId);
+    }
     const rawRows = parseCsv(file.buffer.toString('utf-8'));
     const { results, groups } = await this.classifyImportRows(ctx, rawRows);
 

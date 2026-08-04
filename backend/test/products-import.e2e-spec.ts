@@ -416,4 +416,48 @@ describe('Products CSV Import/Export (e2e)', () => {
     );
     expect(created?.stockQuantity).toBe(25);
   });
+
+  // Regression test for a real bug: confirmImportProducts used to trust the
+  // outletId query param directly for stock writes with no ownership check,
+  // letting Shop A's admin write stock/movement rows into Shop B's outlet
+  // just by knowing/guessing its id.
+  it("rejects a CSV import confirm targeting another shop's outletId, and writes nothing", async () => {
+    const shopA = await setupShop('import-spoof-a');
+    const shopB = await setupShop('import-spoof-b');
+    const sku = `SPOOF-${runId}`;
+
+    const csv = buildCsv([
+      {
+        Name: 'Spoof Target',
+        SKU: sku,
+        Price: 10,
+        'Thumbnail URL': 'https://example.com/s.jpg',
+        Categories: 'General',
+        'Track Inventory': 'true',
+        Stock: 99,
+      },
+    ]);
+    await confirm(shopA.adminToken, csv, shopB.outletId).expect(400);
+
+    const shopAList = await request(app.getHttpServer())
+      .get('/products')
+      .set('Authorization', `Bearer ${shopA.adminToken}`)
+      .expect(200);
+    expect(body<ProductRow[]>(shopAList).some((p) => p.sku === sku)).toBe(
+      false,
+    );
+
+    const shopBList = await request(app.getHttpServer())
+      .get(`/products?outletId=${shopB.outletId}`)
+      .set('Authorization', `Bearer ${shopB.adminToken}`)
+      .expect(200);
+    expect(body<ProductRow[]>(shopBList).some((p) => p.sku === sku)).toBe(
+      false,
+    );
+
+    const shopBStockMovements = await prisma.stockmovement.findMany({
+      where: { outletId: shopB.outletId },
+    });
+    expect(shopBStockMovements).toHaveLength(0);
+  });
 });

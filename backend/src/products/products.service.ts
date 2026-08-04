@@ -1925,6 +1925,14 @@ export class ProductsService {
     file: Express.Multer.File,
     outletId: number | undefined,
   ) {
+    if (outletId !== undefined) {
+      const outlet = await this.prisma.outlet.findFirst({
+        where: { id: outletId, shopId: ctx.shopId },
+      });
+      if (!outlet) {
+        throw new BadRequestException('outletId is invalid for this shop');
+      }
+    }
     const rawRows = parseCsv(file.buffer.toString('utf-8'));
     const { results, groups } = await this.classifyImportRows(ctx, rawRows);
 
