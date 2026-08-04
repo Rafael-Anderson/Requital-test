@@ -345,6 +345,42 @@ export function getMyOrder(shopSlug: string, id: number) {
   return authedFetch<CustomerOrderSummary>(shopSlug, `/public/${shopSlug}/account/orders/${id}`);
 }
 
+// UAE PDPL: full export of the shopper's own data on this shop (profile,
+// addresses, orders) as a plain object — the caller (Privacy card) turns
+// this into a downloadable file client-side, same reasoning as
+// getMyInvoiceHtml not just navigating the browser to the URL directly:
+// the endpoint needs the customer's bearer token attached, which a plain
+// `<a href>`/browser navigation can't do.
+export function exportMyData(shopSlug: string) {
+  return authedFetch<Record<string, unknown>>(shopSlug, `/public/${shopSlug}/account/export`);
+}
+
+export interface RequestDeletionResult {
+  alreadyDeleted: boolean;
+  confirmationToken?: string;
+  expiresInMinutes?: number;
+}
+
+// Step 1 of 2 — see backend CustomerAccountService.requestDeletion. The
+// returned confirmationToken is only ever held in memory for the few
+// seconds between this call and confirmMyAccountDeletion below, both fired
+// back-to-back from the same confirmation-modal click — never persisted,
+// never shown to the user as a value they'd need to copy/paste.
+export function requestMyAccountDeletion(shopSlug: string) {
+  return authedFetch<RequestDeletionResult>(shopSlug, `/public/${shopSlug}/account/me`, {
+    method: "DELETE",
+  });
+}
+
+// Step 2 of 2 — executes the anonymisation.
+export function confirmMyAccountDeletion(shopSlug: string, token: string) {
+  return authedFetch<{ success: boolean }>(
+    shopSlug,
+    `/public/${shopSlug}/account/me/confirm?token=${encodeURIComponent(token)}`,
+    { method: "DELETE" },
+  );
+}
+
 // Text-returning twin of authedFetch above — the invoice endpoint responds
 // with text/html (a printable document), not JSON, so it can't go through
 // authedFetch's always-JSON-parse response handling. Same

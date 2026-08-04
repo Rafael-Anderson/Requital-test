@@ -1165,6 +1165,9 @@ model customer {
   passwordHash         String?
   emailVerified        Boolean                @default(false)
   registeredAt         DateTime?
+  // UAE PDPL data-export rate limit (max once per 24h) — see
+  // CustomerAccountService.exportData. Null until the first export.
+  lastDataExportAt     DateTime?
   shop                 shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Customer_shopId_fkey")
   order                order[]
   discountredemption   discountredemption[]

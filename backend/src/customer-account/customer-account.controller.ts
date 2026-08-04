@@ -1,13 +1,16 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   Header,
+  HttpCode,
   Param,
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { CustomerAccountService } from './customer-account.service';
@@ -99,5 +102,36 @@ export class CustomerAccountController {
     @Param('addressId') addressId: string,
   ) {
     return this.customerAccountService.deleteAddress(ctx, addressId);
+  }
+
+  // UAE PDPL data export/deletion — mounted under this controller (not the
+  // literal /customers/me path) so CustomerAuthGuard's usual
+  // shopSlug-in-token-vs-shopSlug-in-URL check applies the same as every
+  // other customer-account route; see getInvoice's own comment above for
+  // why a customer-facing route can't live under a staff-guarded prefix.
+  @Get('export')
+  @Header('Content-Type', 'application/json')
+  @Header('Content-Disposition', 'attachment; filename="my-data.json"')
+  exportData(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.exportData(ctx);
+  }
+
+  // Step 1 of 2 — see CustomerAccountService.requestDeletion.
+  @Delete('me')
+  @HttpCode(202)
+  requestDeletion(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.requestDeletion(ctx);
+  }
+
+  // Step 2 of 2 — see CustomerAccountService.confirmDeletion.
+  @Delete('me/confirm')
+  confirmDeletion(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Query('token') token: string,
+  ) {
+    if (!token) {
+      throw new BadRequestException('token is required');
+    }
+    return this.customerAccountService.confirmDeletion(ctx, token);
   }
 }

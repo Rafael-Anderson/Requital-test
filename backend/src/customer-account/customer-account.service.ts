@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -11,6 +12,17 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { InvoicesService } from '../invoices/invoices.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { generateOpaqueToken, hashToken } from '../common/token-hash';
+
+// UAE PDPL: max one data-export request per customer per rolling 24h
+// window — a courtesy/anti-abuse rate limit, not a hard security boundary,
+// so a plain read-then-write check (not a CAS) is enough; the worst case
+// under a race is two exports going out within the same narrow window.
+const EXPORT_RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
+// Two-step delete (see requestDeletion/confirmDeletion): short-lived so a
+// confirmationToken issued but never acted on can't be replayed much later.
+const DELETION_TOKEN_LIFETIME_MINUTES = 10;
 
 export interface CustomerAddress {
   id: string;
@@ -39,6 +51,7 @@ export class CustomerAccountService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invoicesService: InvoicesService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -74,6 +87,209 @@ export class CustomerAccountService {
       }
       throw error;
     }
+  }
+
+  // UAE PDPL data export — every piece of PII this shop holds for the
+  // requesting customer, strictly scoped to (ctx.customerId, ctx.shopId):
+  // the same phone/email on a different shop is a genuinely different
+  // customer row (see the [shopId, phone] unique index), never included
+  // here. Read-only — never generates or changes anything the customer
+  // couldn't already see via the other account endpoints, just bundles it
+  // into one downloadable file.
+  async exportData(ctx: CustomerContext) {
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: ctx.customerId },
+    });
+    if (
+      customer.lastDataExportAt &&
+      Date.now() - customer.lastDataExportAt.getTime() < EXPORT_RATE_LIMIT_MS
+    ) {
+      const retryAt = new Date(
+        customer.lastDataExportAt.getTime() + EXPORT_RATE_LIMIT_MS,
+      );
+      throw new BadRequestException(
+        `You can request your data once every 24 hours — try again after ${retryAt.toISOString()}`,
+      );
+    }
+
+    const orders = await this.prisma.order.findMany({
+      where: { customerId: ctx.customerId, shopId: ctx.shopId },
+      include: orderInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    await this.prisma.customer.update({
+      where: { id: ctx.customerId },
+      data: { lastDataExportAt: new Date() },
+    });
+    await this.logCustomerAction(
+      ctx.shopId,
+      ctx.customerId,
+      'CUSTOMER_DATA_EXPORT',
+    );
+
+    return {
+      exportedAt: new Date().toISOString(),
+      profile: this.toProfileResponse(customer),
+      addresses: (customer.addresses as CustomerAddress[] | null) ?? [],
+      orders: orders.map((o) => this.toOrderSummary(o, false)),
+    };
+  }
+
+  // Step 1 of 2 — issues a short-lived confirmationToken rather than
+  // deleting immediately, so a single stray/CSRF'd DELETE call can't
+  // anonymise an account outright; the caller must present this same token
+  // back to confirmDeletion within DELETION_TOKEN_LIFETIME_MINUTES. Reuses
+  // `customerauthtoken` (same opaque-token + hash-at-rest + single-use-CAS
+  // shape as password-reset) with its own 'account_deletion' purpose,
+  // rather than a new table.
+  async requestDeletion(ctx: CustomerContext) {
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: ctx.customerId },
+    });
+    if (this.isAnonymised(customer)) {
+      return { alreadyDeleted: true as const };
+    }
+
+    const raw = generateOpaqueToken();
+    await this.prisma.customerauthtoken.create({
+      data: {
+        customerId: ctx.customerId,
+        purpose: 'account_deletion',
+        tokenHash: hashToken(raw),
+        expiresAt: new Date(
+          Date.now() + DELETION_TOKEN_LIFETIME_MINUTES * 60 * 1000,
+        ),
+      },
+    });
+    return {
+      alreadyDeleted: false as const,
+      confirmationToken: raw,
+      expiresInMinutes: DELETION_TOKEN_LIFETIME_MINUTES,
+    };
+  }
+
+  // Step 2 of 2 — executes the anonymisation. Idempotent: calling this
+  // again on an already-anonymised customer (a second confirm click, a
+  // retried request) is a no-op success rather than an error — in practice
+  // this is also enforced one layer up by CustomerAuthGuard itself, since
+  // anonymisation clears passwordHash and every bearer token for this
+  // customer stops authenticating immediately (see anonymiseCustomer's own
+  // comment), but this check keeps the service safe to call directly too.
+  async confirmDeletion(ctx: CustomerContext, token: string) {
+    const customer = await this.prisma.customer.findUniqueOrThrow({
+      where: { id: ctx.customerId },
+    });
+    if (this.isAnonymised(customer)) {
+      return { success: true as const };
+    }
+
+    const stored = await this.prisma.customerauthtoken.findUnique({
+      where: { tokenHash: hashToken(token) },
+    });
+    if (
+      !stored ||
+      stored.purpose !== 'account_deletion' ||
+      stored.customerId !== ctx.customerId ||
+      stored.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This confirmation link is invalid or has expired',
+      );
+    }
+    // Single-use CAS, same pattern as CustomerAuthService.resetPassword —
+    // a second delivery of the same token (double-click, retry) can't
+    // re-run the anonymisation twice.
+    const claimed = await this.prisma.customerauthtoken.updateMany({
+      where: { id: stored.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      throw new BadRequestException(
+        'This confirmation link has already been used',
+      );
+    }
+
+    await this.anonymiseCustomer(ctx.shopId, ctx.customerId);
+    return { success: true as const };
+  }
+
+  private isAnonymised(customer: { email: string | null }): boolean {
+    return customer.email?.endsWith('@deleted.requital') ?? false;
+  }
+
+  // Anonymises, not hard-deletes — orders/draftorder/giftcard/
+  // discountredemption rows keep their real customerId FK pointing at this
+  // now-scrubbed row (merchant order-history records are explicitly out of
+  // scope for this deletion, per the task), only the customer's own PII is
+  // scrubbed.
+  private async anonymiseCustomer(shopId: number, customerId: number) {
+    await this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        name: 'Deleted User',
+        email: `deleted-${randomUUID()}@deleted.requital`,
+        // `phone` is NOT NULL and part of the @@unique([shopId, phone])
+        // index — a literal null isn't possible without widening the
+        // column (a real schema change, out of proportion for this task).
+        // A unique anonymized placeholder removes the real PII just as
+        // effectively while still satisfying both constraints.
+        phone: `deleted-${randomUUID()}`,
+        birthday: null,
+        addresses: Prisma.JsonNull,
+        // Clearing this is what actually revokes every outstanding access
+        // token immediately, not just future logins — CustomerAuthGuard
+        // re-reads the customer row on every request and already rejects
+        // any bearer token when passwordHash is null ("Account no longer
+        // exists"), so this alone covers "invalidate all active JWT
+        // sessions" for access tokens; the refresh-token revocation below
+        // covers the other half (silent background refresh).
+        passwordHash: null,
+      },
+    });
+    await this.prisma.customerrefreshtoken.updateMany({
+      where: { customerId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    // Any outstanding password-reset/deletion-confirmation tokens for this
+    // customer are dead the moment the account is gone.
+    await this.prisma.customerauthtoken.updateMany({
+      where: { customerId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    await this.logCustomerAction(
+      shopId,
+      customerId,
+      'CUSTOMER_DATA_DELETION',
+    );
+  }
+
+  // AuditLog.actorUserId is a required FK to `user` (staff) — there's no
+  // actor-is-a-customer shape in that schema, so a customer-triggered
+  // action is attributed to the shop's own admin (every shop always has at
+  // least one — the last remaining admin can never be demoted/deleted),
+  // same synthesized-system-actor pattern as
+  // PaymentsService.applyAdvanceOrderStatus. metadata makes clear in the
+  // audit trail that the admin didn't personally do this.
+  private async logCustomerAction(
+    shopId: number,
+    customerId: number,
+    action: 'CUSTOMER_DATA_EXPORT' | 'CUSTOMER_DATA_DELETION',
+  ) {
+    const admin = await this.prisma.user.findFirst({
+      where: { shopId, role: 'admin' },
+      orderBy: { id: 'asc' },
+    });
+    if (!admin) return;
+    await this.auditLogService.log(
+      { shopId, actorUserId: admin.id },
+      {
+        action,
+        entityType: 'customer',
+        entityId: customerId,
+        metadata: { triggeredBy: 'customer-self-service' },
+      },
+    );
   }
 
   // Not outlet-scoped — a customer's order history spans every branch of

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
-import { updateMyProfile } from "@/lib/api";
+import { exportMyData, updateMyProfile } from "@/lib/api";
 import { sanitizePhoneInput } from "@/lib/phone";
 import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/form-styles";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import DeleteAccountModal from "@/components/DeleteAccountModal";
 
 export default function AccountDashboardPage() {
   const router = useRouter();
@@ -25,6 +26,9 @@ export default function AccountDashboardPage() {
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   function startEditing() {
     if (!customer) return;
@@ -51,6 +55,34 @@ export default function AccountDashboardPage() {
   }
 
   async function handleLogout() {
+    await logout();
+    router.push(`/${shopSlug}`);
+  }
+
+  // Fetched via an authenticated JS fetch (not a plain <a href>, which
+  // can't attach the bearer token) then turned into a Blob download
+  // client-side — same pattern as OrderDetailPage's invoice download.
+  async function handleDownloadData() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const data = await exportMyData(shopSlug);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "my-data.json";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Failed to download your data");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleAccountDeleted() {
+    setShowDeleteModal(false);
     await logout();
     router.push(`/${shopSlug}`);
   }
@@ -144,6 +176,39 @@ export default function AccountDashboardPage() {
           <p className="text-sm text-zinc-500">Manage delivery addresses</p>
         </Link>
       </div>
+
+      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-3">
+        <div>
+          <p className="font-medium">Privacy</p>
+          <p className="text-sm text-zinc-500">Download or delete the personal data we hold about you.</p>
+        </div>
+        {exportError && <p className="text-sm text-red-600">{exportError}</p>}
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadData}
+            disabled={exporting}
+            className={`h-9 px-3 rounded-lg text-sm cursor-pointer disabled:opacity-50 ${BUTTON_OUTLINE_CLASS}`}
+          >
+            {exporting ? "Preparing…" : "Download my data"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="h-9 px-3 rounded-lg text-sm cursor-pointer text-red-600 border border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+          >
+            Delete my account
+          </button>
+        </div>
+      </div>
+
+      {showDeleteModal && (
+        <DeleteAccountModal
+          shopSlug={shopSlug}
+          onClose={() => setShowDeleteModal(false)}
+          onDeleted={handleAccountDeleted}
+        />
+      )}
     </StorefrontPageShell>
   );
 }
