@@ -20,8 +20,8 @@ export class NotifySubscriptionsController {
     @Query('email') email?: string,
     @Query('productId') productId?: string,
   ) {
-    if (!email || !productId) {
-      throw new BadRequestException('email and productId are required');
+    if (!email || !productId || !/^\d+$/.test(productId)) {
+      throw new BadRequestException('email and a numeric productId are required');
     }
     return this.notifySubscriptionsService.unsubscribe(email, Number(productId));
   }
