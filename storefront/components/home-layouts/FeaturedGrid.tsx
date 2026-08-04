@@ -14,6 +14,26 @@ export function selectTiles(categories: Category[]): Category[] {
     .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || a.displayOrder - b.displayOrder);
 }
 
+// Explicit column count per tile count rather than auto-fit/auto-fill — an
+// earlier attempt at auto-fit fought the grid's own sizing algorithm and
+// collapsed to a single stacked column instead of shrinking cleanly (see the
+// removed KNOWN GAP comment this replaced). 4+ keeps the original
+// grid-cols-2 sm:grid-cols-4 behavior unchanged; 1-3 get a layout that fills
+// the tinted band exactly instead of leaving dead space beside fewer tiles.
+export function gridClassName(count: number): string {
+  if (count <= 1) return "grid grid-cols-1 gap-3";
+  if (count === 2) return "grid grid-cols-2 gap-3";
+  if (count === 3) return "grid grid-cols-2 gap-3";
+  return "grid grid-cols-2 sm:grid-cols-4 gap-3";
+}
+
+// With exactly 3 tiles, the third spans both columns to form a full-width
+// bottom row under the two top tiles — a balanced layout rather than an
+// uneven 2-then-1-narrow row.
+export function tileClassName(count: number, index: number): string {
+  return count === 3 && index === 2 ? "col-span-2" : "";
+}
+
 // "Featured Grid" layout — the same banner/heroText top strip as Classic,
 // plus a prominent grid of category tiles above the product listing.
 export default function FeaturedGrid({
@@ -33,21 +53,13 @@ export default function FeaturedGrid({
     <>
       <ClassicHero bannerUrl={bannerUrl} heroText={heroText} />
       {topLevel.length > 0 && (
-        // KNOWN GAP (storefront layout audit): with only 1-2 categories,
-        // this tinted band still shows dead space next to the tiles at
-        // sm:grid-cols-4 — same root cause CategoryShowcase.tsx's own tiles
-        // had, but auto-fit/w-fit tricks here fought the grid's own sizing
-        // algorithm (columns collapsed to a single stacked column instead
-        // of shrinking cleanly). Left as the stable, previously-shipped
-        // behavior rather than risk a worse-looking regression; flagged as
-        // a follow-up rather than fixed under this task.
         <div className="mb-6 rounded-lg bg-featured-bg p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {topLevel.map((c) => (
+          <div className={gridClassName(topLevel.length)}>
+            {topLevel.map((c, i) => (
               <Link
                 key={c.id}
                 href={`/${shopSlug}?category=${c.id}`}
-                className="group rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-stroke"
+                className={`group rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-stroke ${tileClassName(topLevel.length, i)}`}
               >
                 <div className="aspect-square bg-black/5 overflow-hidden">
                   {c.image ? (

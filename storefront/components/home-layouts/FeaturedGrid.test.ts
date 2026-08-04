@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectTiles } from "./FeaturedGrid";
+import { gridClassName, selectTiles, tileClassName } from "./FeaturedGrid";
 import type { Category } from "@/lib/types";
 
 function category(overrides: Partial<Category>): Category {
@@ -40,5 +40,39 @@ describe("selectTiles", () => {
 
   it("returns an empty array for a shop with no categories yet", () => {
     expect(selectTiles([])).toEqual([]);
+  });
+});
+
+describe("gridClassName", () => {
+  it("uses a single column for 0 or 1 tiles", () => {
+    expect(gridClassName(0)).toContain("grid-cols-1");
+    expect(gridClassName(1)).toContain("grid-cols-1");
+  });
+
+  it("uses two equal columns for 2 tiles", () => {
+    expect(gridClassName(2)).toBe("grid grid-cols-2 gap-3");
+  });
+
+  it("uses two columns for 3 tiles (third tile spans full width via tileClassName)", () => {
+    expect(gridClassName(3)).toBe("grid grid-cols-2 gap-3");
+  });
+
+  it("keeps the original 2x4 responsive grid unchanged for 4+ tiles", () => {
+    expect(gridClassName(4)).toBe("grid grid-cols-2 sm:grid-cols-4 gap-3");
+    expect(gridClassName(5)).toBe("grid grid-cols-2 sm:grid-cols-4 gap-3");
+  });
+});
+
+describe("tileClassName", () => {
+  it("spans the third tile across both columns only when there are exactly 3 tiles", () => {
+    expect(tileClassName(3, 2)).toBe("col-span-2");
+    expect(tileClassName(3, 0)).toBe("");
+    expect(tileClassName(3, 1)).toBe("");
+  });
+
+  it("never spans for counts other than 3", () => {
+    expect(tileClassName(4, 2)).toBe("");
+    expect(tileClassName(2, 1)).toBe("");
+    expect(tileClassName(1, 0)).toBe("");
   });
 });
