@@ -334,6 +334,92 @@ describe('Invoices & packing slips (e2e)', () => {
     });
   });
 
+  // Regression coverage for a real bug: InvoicesService.findOne only
+  // checked shopId, not outlet — a branch user pinned to one outlet could
+  // read (and download the PDF of) an invoice belonging to a sibling
+  // outlet's order in the same shop, even though they're blocked from the
+  // order itself via /orders/:id.
+  describe('cross-outlet isolation within a shop', () => {
+    it("a branch user pinned to outlet A cannot fetch (JSON or PDF) an invoice belonging to outlet B's order in the same shop", async () => {
+      const shop = await setupShop('inv-outlet-iso');
+
+      const outletBRes = await request(app.getHttpServer())
+        .post('/outlets')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ name: 'Outlet B' })
+        .expect(201);
+      const outletBId = body<IdRow>(outletBRes).id;
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletBId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+        .expect(200);
+
+      const branchEmail = `inv-branch-${runId}@test.com`;
+      const branchRes = await request(app.getHttpServer())
+        .post('/auth/branch-users')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({
+          name: 'Branch A',
+          email: branchEmail,
+          password: 'password123',
+          outletId: shop.outletId,
+        })
+        .expect(201);
+      expect(body<{ outletId: number }>(branchRes).outletId).toBe(
+        shop.outletId,
+      );
+      const branchLogin = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: branchEmail, password: 'password123' })
+        .expect(201);
+      const branchToken = body<AdminAuthResponse>(branchLogin).accessToken;
+
+      const orderB = body<OrderCreateResponse>(
+        await createOrder(shop.shopSlug, outletBId, shop.productId),
+      ).order;
+      const invoiceB = body<InvoiceRow>(
+        await request(app.getHttpServer())
+          .post('/invoices')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ orderId: orderB.id, type: 'INVOICE' })
+          .expect(201),
+      );
+
+      const jsonRes = await request(app.getHttpServer())
+        .get(`/invoices/${invoiceB.id}`)
+        .set('Authorization', `Bearer ${branchToken}`)
+        .expect(404);
+      expect(JSON.stringify(jsonRes.body)).not.toContain(
+        invoiceB.invoiceNumber,
+      );
+
+      const pdfRes = await request(app.getHttpServer())
+        .get(`/invoices/${invoiceB.id}/pdf`)
+        .set('Authorization', `Bearer ${branchToken}`)
+        .expect(404);
+      expect(pdfRes.text).not.toContain(invoiceB.invoiceNumber);
+
+      // The same branch user's own outlet's invoice still works normally —
+      // this isn't a blanket regression on invoice access.
+      const orderA = body<OrderCreateResponse>(
+        await createOrder(shop.shopSlug, shop.outletId, shop.productId),
+      ).order;
+      const invoiceA = body<InvoiceRow>(
+        await request(app.getHttpServer())
+          .post('/invoices')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ orderId: orderA.id, type: 'INVOICE' })
+          .expect(201),
+      );
+      const ownRes = await request(app.getHttpServer())
+        .get(`/invoices/${invoiceA.id}`)
+        .set('Authorization', `Bearer ${branchToken}`)
+        .expect(200);
+      expect(body<InvoiceRow>(ownRes).id).toBe(invoiceA.id);
+    });
+  });
+
   describe('PDF/HTML endpoint', () => {
     it('returns a styled HTML document (no PDF library installed, so text/html is the real content type)', async () => {
       const { shopSlug, adminToken, outletId, productId } =

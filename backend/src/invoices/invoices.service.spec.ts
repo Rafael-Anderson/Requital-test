@@ -185,9 +185,22 @@ describe('InvoicesService.findOne — tenant isolation', () => {
     const prisma = createMockPrisma();
     const invoice = { id: 99, orderId: 5, shopId: 1, type: 'INVOICE', invoiceNumber: 'INV-0001' };
     prisma.invoice.findFirst = jest.fn().mockResolvedValue(invoice);
-    const ordersService = {} as OrdersService;
+    const findOne = jest.fn().mockResolvedValue({ id: 5 });
+    const ordersService = { findOne } as unknown as OrdersService;
     const service = new InvoicesService(prisma, ordersService);
 
     await expect(service.findOne(ctxFor(1), 99)).resolves.toBe(invoice);
+    expect(findOne).toHaveBeenCalledWith(ctxFor(1), 5);
+  });
+
+  it("also checks the underlying order's own outlet scope, not just shopId — a branch user blocked from the order is blocked from its invoice too", async () => {
+    const prisma = createMockPrisma();
+    const invoice = { id: 99, orderId: 5, shopId: 1, type: 'INVOICE', invoiceNumber: 'INV-0001' };
+    prisma.invoice.findFirst = jest.fn().mockResolvedValue(invoice);
+    const findOne = jest.fn().mockRejectedValue(new NotFoundException());
+    const ordersService = { findOne } as unknown as OrdersService;
+    const service = new InvoicesService(prisma, ordersService);
+
+    await expect(service.findOne(ctxFor(1), 99)).rejects.toThrow(NotFoundException);
   });
 });

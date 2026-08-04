@@ -86,6 +86,11 @@ export class InvoicesService {
     if (!invoice) {
       throw new NotFoundException(`Invoice ${id} not found`);
     }
+    // Outlet scope check, not just shopId — a branch user must be equally
+    // blocked from an invoice belonging to a sibling outlet's order as they
+    // are from the order itself. Reuses OrdersService.findOne's own
+    // outlet-scoping/permission logic rather than duplicating it here.
+    await this.ordersService.findOne(ctx, invoice.orderId);
     return invoice;
   }
 
