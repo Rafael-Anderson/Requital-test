@@ -173,12 +173,15 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
     const result = await service.confirmDeletion(ctx, raw);
 
     expect(result).toEqual({ success: true });
+    // Exact values, not just a pattern match — derived deterministically
+    // from ctx.customerId (1), not a fresh random value per call. See the
+    // "anonymise twice" test below for why that determinism matters.
     expect(prisma.customer.update).toHaveBeenCalledWith({
       where: { id: ctx.customerId },
       data: expect.objectContaining({
         name: 'Deleted User',
-        email: expect.stringMatching(/^deleted-.+@deleted\.requital$/),
-        phone: expect.stringMatching(/^deleted-/),
+        email: 'deleted-1@deleted.requital',
+        phone: 'DELETED-1',
         birthday: null,
         passwordHash: null,
       }),
@@ -244,5 +247,55 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
     const confirmResult = await service.confirmDeletion(ctx, 'whatever-token');
     expect(confirmResult).toEqual({ success: true });
     expect(prisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('anonymising the same customer twice is idempotent — the second call writes nothing, and the values from the first call are unchanged', async () => {
+    const raw = 'd'.repeat(64);
+    // A stateful mock (not a static mockResolvedValue) so the second
+    // confirmDeletion call actually observes the row left behind by the
+    // first — the whole point of this test is proving the *sequence*
+    // behaves correctly, which a fresh mock per call can't demonstrate.
+    let customerState = baseCustomer();
+    const prisma = {
+      customer: {
+        findUniqueOrThrow: jest.fn(() => Promise.resolve(customerState)),
+        update: jest.fn((args: { data: Record<string, unknown> }) => {
+          customerState = { ...customerState, ...args.data } as typeof customerState;
+          return Promise.resolve(customerState);
+        }),
+      },
+      customerauthtoken: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 1,
+          customerId: ctx.customerId,
+          purpose: 'account_deletion',
+          tokenHash: hashToken(raw),
+          usedAt: null,
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      customerrefreshtoken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      user: { findFirst: jest.fn().mockResolvedValue({ id: 99 }) },
+    } as unknown as PrismaService;
+    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+
+    const first = await service.confirmDeletion(ctx, raw);
+    expect(first).toEqual({ success: true });
+    expect(prisma.customer.update).toHaveBeenCalledTimes(1);
+    const emailAfterFirstCall = customerState.email;
+    const phoneAfterFirstCall = customerState.phone;
+    expect(emailAfterFirstCall).toBe('deleted-1@deleted.requital');
+    expect(phoneAfterFirstCall).toBe('DELETED-1');
+
+    // Second confirm for the same customer — a retried request, or a
+    // second outstanding confirmationToken from another tab. isAnonymised()
+    // now sees the state the first call left behind and short-circuits
+    // before writing anything a second time.
+    const second = await service.confirmDeletion(ctx, raw);
+    expect(second).toEqual({ success: true });
+    expect(prisma.customer.update).toHaveBeenCalledTimes(1); // still just once
+    expect(customerState.email).toBe(emailAfterFirstCall);
+    expect(customerState.phone).toBe(phoneAfterFirstCall);
   });
 });

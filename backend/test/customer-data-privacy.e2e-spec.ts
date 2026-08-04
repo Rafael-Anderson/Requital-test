@@ -247,8 +247,11 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         where: { id: registered.customer.id },
       });
       expect(customer.name).toBe('Deleted User');
-      expect(customer.email).toMatch(/^deleted-.+@deleted\.requital$/);
-      expect(customer.phone).toMatch(/^deleted-/);
+      // Deterministic, id-derived values (not a fresh random value per
+      // call) — see CustomerAccountService.anonymiseCustomer's own comment
+      // on why that matters for idempotency.
+      expect(customer.email).toBe(`deleted-${registered.customer.id}@deleted.requital`);
+      expect(customer.phone).toBe(`DELETED-${registered.customer.id}`);
       expect(customer.passwordHash).toBeNull();
       expect(customer.addresses).toBeNull();
 

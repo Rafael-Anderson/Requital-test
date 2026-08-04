@@ -228,13 +228,26 @@ export class CustomerAccountService {
       where: { id: customerId },
       data: {
         name: 'Deleted User',
-        email: `deleted-${randomUUID()}@deleted.requital`,
+        // Derived from the customer's own (globally unique) id, not a
+        // fresh randomUUID() per call — this is what makes anonymisation
+        // itself idempotent. confirmDeletion already guards against a
+        // normal second call via isAnonymised(), but a random value here
+        // would still mean two genuinely concurrent writes (e.g. two
+        // outstanding confirmationTokens for the same customer, both
+        // confirmed around the same moment, both passing the pre-write
+        // isAnonymised() check before either has written yet) leave the
+        // row in a different final state depending on write order, and
+        // double the audit-log entries. A stable, id-derived value means
+        // every call — racing or retried — converges on the exact same
+        // result.
+        email: `deleted-${customerId}@deleted.requital`,
         // `phone` is NOT NULL and part of the @@unique([shopId, phone])
         // index — a literal null isn't possible without widening the
         // column (a real schema change, out of proportion for this task).
-        // A unique anonymized placeholder removes the real PII just as
-        // effectively while still satisfying both constraints.
-        phone: `deleted-${randomUUID()}`,
+        // customerId is a global autoincrement id (not scoped per shop),
+        // so this is guaranteed unique across every shop's [shopId, phone]
+        // rows too, same reasoning as the email above.
+        phone: `DELETED-${customerId}`,
         birthday: null,
         addresses: Prisma.JsonNull,
         // Clearing this is what actually revokes every outstanding access

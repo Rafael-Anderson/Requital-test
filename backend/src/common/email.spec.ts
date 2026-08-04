@@ -33,6 +33,19 @@ describe('sendEmail', () => {
     );
   });
 
+  it("falls back to the stub, without touching the network, when RESEND_API_KEY is the reserved 'test' sentinel", async () => {
+    process.env.RESEND_API_KEY = 'test';
+
+    await sendEmail('a@example.com', 'Subject', 'Body text');
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[email:stub] to=a@example.com subject="Subject"',
+      ),
+    );
+  });
+
   it('calls the real Resend provider (not the stub) when RESEND_API_KEY is configured', async () => {
     process.env.RESEND_API_KEY = 'real-key';
     fetchSpy.mockResolvedValue({

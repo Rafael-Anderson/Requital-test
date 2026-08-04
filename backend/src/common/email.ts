@@ -69,7 +69,17 @@ export async function sendEmail(
   options: SendEmailOptions = {},
 ): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
+  // 'test' is a reserved sentinel, not a real key format (real Resend keys
+  // are always 're_...') — set RESEND_API_KEY=test in a dev/e2e .env to
+  // short-circuit straight to the stub, same "network-independent test
+  // gateway" reasoning as the payment providers'
+  // PaymentProviderNotConfiguredException fallback. Without this, every
+  // e2e spec that signs up a shop (which fires a real verification email)
+  // makes a real network call to Resend that reliably fails in this sandbox
+  // anyway (Resend only delivers to the account owner's own address) —
+  // that real round-trip, multiplied across dozens of specs, is what was
+  // making the e2e suite flaky under load.
+  if (!apiKey || apiKey === 'test') {
     sendEmailStub(to, subject, bodyText);
     return;
   }

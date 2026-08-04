@@ -39,6 +39,12 @@ function body<T>(res: Response): T {
   return res.body as T;
 }
 
+// 9 separate setupShop() calls across this file's tests — same reasoning
+// as scan.e2e-spec.ts's own jest.setTimeout(30000): under full-suite
+// parallel load this can occasionally exceed Jest's default 5000ms per-test
+// timeout on DB contention alone, unrelated to any real bug.
+jest.setTimeout(30000);
+
 describe('Order item editing after placement (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;

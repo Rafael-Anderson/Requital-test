@@ -289,15 +289,25 @@ describe('Invoices & packing slips (e2e)', () => {
           .expect(201),
       );
 
-      await request(app.getHttpServer())
+      const jsonRes = await request(app.getHttpServer())
         .get(`/invoices/${invoiceB.id}`)
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(404);
+      // The 404 body itself must never carry any of shop B's real invoice
+      // data — just the generic NotFoundException shape.
+      expect(JSON.stringify(jsonRes.body)).not.toContain(invoiceB.invoiceNumber);
+      expect(jsonRes.body).not.toHaveProperty('invoiceNumber');
+      expect(jsonRes.body).not.toHaveProperty('subtotal');
+      expect(jsonRes.body).not.toHaveProperty('total');
 
-      await request(app.getHttpServer())
+      const pdfRes = await request(app.getHttpServer())
         .get(`/invoices/${invoiceB.id}/pdf`)
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .expect(404);
+      // Same check against the /pdf route's own response — even though its
+      // success shape is text/html, an unauthorized 404 must not fall back
+      // to rendering (any part of) the real document.
+      expect(pdfRes.text).not.toContain(invoiceB.invoiceNumber);
     });
 
     it("cannot generate an invoice against another shop's orderId — the order simply isn't found in this shop's scope", async () => {
@@ -428,10 +438,15 @@ describe('Invoices & packing slips (e2e)', () => {
       // Shop B's own customer-account route can't even resolve shop A's
       // order id — CustomerAuthGuard ties the token to shop B via
       // :shopSlug, and the lookup is additionally scoped by shopId.
-      await request(app.getHttpServer())
+      const crossShopRes = await request(app.getHttpServer())
         .get(`/public/${shopB.shopSlug}/account/orders/${orderA.id}/invoice`)
         .set('Authorization', `Bearer ${customerBToken}`)
         .expect(404);
+      // No fragment of shop A's real invoice HTML leaks into the 404 body
+      // — a real success response is a full HTML document containing the
+      // invoice number, neither of which should appear here.
+      expect(crossShopRes.text).not.toContain('INV-');
+      expect(crossShopRes.text).not.toContain('<html');
 
       // A staff (merchant) token is a different token type entirely — the
       // customer-account routes require typ: 'customer'.
