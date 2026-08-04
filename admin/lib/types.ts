@@ -153,6 +153,22 @@ export interface PaginatedOrders {
   total: number;
 }
 
+export const INVOICE_TYPES = ["INVOICE", "PACKING_SLIP"] as const;
+export type InvoiceType = (typeof INVOICE_TYPES)[number];
+
+export interface Invoice {
+  id: number;
+  orderId: number;
+  shopId: number;
+  type: InvoiceType;
+  invoiceNumber: string;
+  issuedAt: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  notes: string | null;
+}
+
 export interface ReportsFilters {
   dateFrom?: string;
   dateTo?: string;
@@ -473,6 +489,10 @@ export interface ProductInput {
   barcode?: string;
   chargeTax?: boolean;
   isCheckoutAddon?: boolean;
+  // Per-product opt-in for the Variants/Attributes/FAQs sections — see Product.
+  showVariants?: boolean;
+  showAttributes?: boolean;
+  showFaqs?: boolean;
   continueSellingOutOfStock?: boolean;
   vendor?: string;
   productType?: string;
@@ -535,6 +555,12 @@ export interface Product {
   continueSellingOutOfStock: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
+  // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
+  // product form (ProductForm.tsx) — replaces the old shop-wide
+  // productVariantsEnabled/productAttributesEnabled/productFaqsEnabled toggles.
+  showVariants: boolean;
+  showAttributes: boolean;
+  showFaqs: boolean;
   vendor: string | null;
   productType: string | null;
   physicalProduct: boolean;
@@ -808,10 +834,13 @@ export interface Shop {
   whatsappFloatingButtonEnabled: boolean;
   birthdayDiscountEnabled: boolean;
 
-  // Store Configuration — functional
-  productVariantsEnabled: boolean;
-  productAttributesEnabled: boolean;
-  productFaqsEnabled: boolean;
+  // Which admin product-form experience this shop's merchants get — set on
+  // the Account Setup wizard's Review step, editable in Settings > Business
+  // Information. Only controls the product form's starting state — see
+  // Product.showVariants/showAttributes/showFaqs for the actual per-product
+  // opt-in this replaced (the old shop-wide productVariantsEnabled/
+  // productAttributesEnabled/productFaqsEnabled toggles).
+  productEditorMode: "simple" | "advanced";
   customerSurveyEnabled: boolean;
   disableStoreCart: boolean;
   cartDisabledMode: "buy_now" | "contact_to_order";

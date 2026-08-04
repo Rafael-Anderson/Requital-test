@@ -37,6 +37,8 @@ import type {
   ImportConfirmResult,
   ImportPreviewResult,
   Ingredient,
+  Invoice,
+  InvoiceType,
   IngredientCategory,
   MonthlyReportFilters,
   Order,
@@ -211,6 +213,31 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+// Twin of apiFetch above for the one endpoint that returns text/html rather
+// than JSON (the invoice HTML preview) — same auth-header/401-refresh-retry
+// contract, just without the JSON parse apiFetch always does on its
+// response body.
+async function apiFetchText(path: string, isRetry = false): Promise<string> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    if (res.status === 401 && !isRetry) {
+      try {
+        await refreshAccessToken();
+        return apiFetchText(path, true);
+      } catch {
+        clearTokens();
+      }
+    } else if (res.status === 401) {
+      clearTokens();
+    }
+    throw new ApiError(`Request failed (${res.status})`, res.status);
+  }
+  return res.text();
+}
+
 export function login(email: string, password: string) {
   return apiFetch<TokenPair & { user: AuthUser }>("/auth/login", {
     method: "POST",
@@ -218,7 +245,21 @@ export function login(email: string, password: string) {
   });
 }
 
-export function signup(data: { name: string; email: string; password: string; shopName: string; subdomain: string }) {
+export function signup(data: {
+  name: string;
+  email: string;
+  password: string;
+  shopName: string;
+  subdomain: string;
+  phone?: string;
+  businessType?: string;
+  trn?: string;
+  websiteUrl?: string;
+  address?: string;
+  operatingModel?: string[];
+  branchCount?: string;
+  productEditorMode?: "simple" | "advanced";
+}) {
   return apiFetch<TokenPair & { user: AuthUser; devVerificationLink?: string }>("/auth/signup", {
     method: "POST",
     body: JSON.stringify(data),
@@ -648,6 +689,21 @@ export function createOrderReturn(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function listInvoicesForOrder(orderId: number) {
+  return apiFetch<Invoice[]>(`/invoices?orderId=${orderId}`);
+}
+
+export function generateInvoice(orderId: number, type: InvoiceType) {
+  return apiFetch<Invoice>("/invoices", {
+    method: "POST",
+    body: JSON.stringify({ orderId, type }),
+  });
+}
+
+export function getInvoiceHtml(id: number) {
+  return apiFetchText(`/invoices/${id}/pdf`);
 }
 
 export function generatePaymentLink(orderId: number) {

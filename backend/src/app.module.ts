@@ -36,6 +36,7 @@ import { AbandonedCartsModule } from './abandoned-carts/abandoned-carts.module';
 import { GiftCardsModule } from './gift-cards/gift-cards.module';
 import { PolicyPagesModule } from './policy-pages/policy-pages.module';
 import { BranchRolesModule } from './branch-roles/branch-roles.module';
+import { InvoicesModule } from './invoices/invoices.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { BranchRolesModule } from './branch-roles/branch-roles.module';
     AbandonedCartsModule,
     GiftCardsModule,
     PolicyPagesModule,
+    InvoicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

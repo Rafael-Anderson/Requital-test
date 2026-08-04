@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -54,6 +55,20 @@ export class CustomerAccountController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.customerAccountService.getOrder(ctx, id);
+  }
+
+  // Read-only from the customer's side — never generates, only downloads an
+  // invoice the merchant already generated from the admin Invoice tab (see
+  // CustomerAccountService.getInvoiceHtml / hasInvoice on the order summary,
+  // which the storefront uses to decide whether to render this link at
+  // all).
+  @Get('orders/:id/invoice')
+  @Header('Content-Type', 'text/html')
+  getInvoice(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.customerAccountService.getInvoiceHtml(ctx, id);
   }
 
   @Get('addresses')

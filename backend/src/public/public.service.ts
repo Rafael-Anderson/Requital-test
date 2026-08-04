@@ -186,8 +186,6 @@ export class PublicService {
       whatsappCountryCode: shop.whatsappCountryCode,
       whatsappNumber: shop.whatsappNumber,
       whatsappFloatingButtonEnabled: shop.whatsappFloatingButtonEnabled,
-      productAttributesEnabled: shop.productAttributesEnabled,
-      productFaqsEnabled: shop.productFaqsEnabled,
       disableStoreCart: shop.disableStoreCart,
       cartDisabledMode: shop.cartDisabledMode,
       socialLinks: shop.socialLinks,

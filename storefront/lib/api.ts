@@ -345,6 +345,37 @@ export function getMyOrder(shopSlug: string, id: number) {
   return authedFetch<CustomerOrderSummary>(shopSlug, `/public/${shopSlug}/account/orders/${id}`);
 }
 
+// Text-returning twin of authedFetch above — the invoice endpoint responds
+// with text/html (a printable document), not JSON, so it can't go through
+// authedFetch's always-JSON-parse response handling. Same
+// bearer-header/401-refresh-retry contract otherwise.
+async function authedFetchText(shopSlug: string, path: string, isRetry = false): Promise<string> {
+  const stored = getStoredAuth(shopSlug);
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: stored ? { Authorization: `Bearer ${stored.accessToken}` } : {},
+  });
+  if (res.status === 401 && stored && !isRetry) {
+    try {
+      const refreshed = await post<CustomerAuthResult>(`/public/${shopSlug}/auth/refresh`, {
+        refreshToken: stored.refreshToken,
+      });
+      setStoredAuth(shopSlug, refreshed);
+      return authedFetchText(shopSlug, path, true);
+    } catch {
+      setStoredAuth(shopSlug, null);
+      throw new Error("Your session has expired — please log in again");
+    }
+  }
+  if (!res.ok) {
+    throw new Error(`Request failed (${res.status})`);
+  }
+  return res.text();
+}
+
+export function getMyInvoiceHtml(shopSlug: string, orderId: number) {
+  return authedFetchText(shopSlug, `/public/${shopSlug}/account/orders/${orderId}/invoice`);
+}
+
 export function listMyAddresses(shopSlug: string) {
   return authedFetch<CustomerAddress[]>(shopSlug, `/public/${shopSlug}/account/addresses`);
 }

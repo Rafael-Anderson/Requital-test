@@ -17,8 +17,6 @@ export interface Shop {
   whatsappCountryCode: string | null;
   whatsappNumber: string | null;
   whatsappFloatingButtonEnabled: boolean;
-  productAttributesEnabled: boolean;
-  productFaqsEnabled: boolean;
   disableStoreCart: boolean;
   cartDisabledMode: "buy_now" | "contact_to_order";
   socialLinks: Record<string, string> | null;
@@ -251,6 +249,11 @@ export interface Product {
   images: ProductImage[];
   attributes: ProductAttribute[];
   faqs: ProductFaq[];
+  // Per-product opt-in gating whether the Attributes/FAQs sections below
+  // render on the PDP at all — replaces the old shop-wide
+  // productAttributesEnabled/productFaqsEnabled toggles. See ProductDetailClient.
+  showAttributes: boolean;
+  showFaqs: boolean;
   hasVariants: boolean;
   options: ProductOption[];
   variants: ProductVariant[];
@@ -513,6 +516,11 @@ export interface CustomerOrderSummary {
   total: string;
   trackingToken: string | null;
   createdAt: string;
+  // True once the merchant has generated a real (INVOICE-type) invoice for
+  // this order from the admin Order detail modal's Invoice tab — the
+  // storefront never generates one itself, only downloads an already-issued
+  // one, so this is what gates whether "Download Invoice" renders at all.
+  hasInvoice: boolean;
 }
 
 // Mirrors backend/src/policy-pages/policy-page-constants.ts by hand.

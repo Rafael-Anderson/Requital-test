@@ -96,6 +96,7 @@ model order {
   draftorder            draftorder?
   ordernote             ordernote[]
   orderreturn           orderreturn[]
+  invoice               invoice[]
   giftcardredemption    giftcardredemption[]
   giftcardissued        giftcard[]           @relation("GiftCardPurchaseOrder")
   abandonedcart         abandonedcart?
@@ -282,6 +283,50 @@ model orderreturnitem {
   @@index([orderItemId], map: "OrderReturnItem_orderItemId_fkey")
 }
 
+// One row per (order, type) — an order can have both an INVOICE and a
+// PACKING_SLIP generated independently, never two of the same type
+// (@@unique enforces the idempotent-generate contract InvoicesService relies
+// on). subtotal/taxAmount/total are snapshotted at generation time from the
+// order's own totals, same "never retroactively changes" discipline as
+// orderitem.priceAtPurchase — a later change to the order (a return, a price
+// edit) doesn't rewrite an already-issued invoice.
+model invoice {
+  id            Int      @id @default(autoincrement())
+  orderId       Int
+  shopId        Int
+  // 'INVOICE' | 'PACKING_SLIP' — plain string, not a Prisma enum, matching
+  // every other small-fixed-set field in this schema (validated with
+  // @IsIn at the DTO layer instead).
+  type          String
+  invoiceNumber String
+  issuedAt      DateTime @default(now())
+  subtotal      Decimal
+  taxAmount     Decimal
+  total         Decimal
+  notes         String?  @db.Text
+  order         order    @relation(fields: [orderId], references: [id], onDelete: Cascade, map: "Invoice_orderId_fkey")
+  shop          shop     @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Invoice_shopId_fkey")
+
+  @@unique([orderId, type], map: "Invoice_orderId_type_key")
+  @@index([shopId], map: "Invoice_shopId_fkey")
+}
+
+// Backing counter for invoiceNumber, one row per (shop, type) so a shop's
+// INVOICE and PACKING_SLIP sequences run independently and never collide
+// with another shop's. Incremented via a raw `INSERT ... ON DUPLICATE KEY
+// UPDATE ... LAST_INSERT_ID(...)` (see InvoicesService.nextInvoiceNumber) —
+// that statement is atomic in MySQL (the row lock it takes serializes
+// concurrent callers), which a Prisma-level upsert-then-read is not
+// guaranteed to be.
+model invoicecounter {
+  shopId     Int
+  type       String
+  lastNumber Int    @default(0)
+  shop       shop   @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "InvoiceCounter_shopId_fkey")
+
+  @@id([shopId, type])
+}
+
 model paymenttransaction {
   id                      Int      @id @default(autoincrement())
   orderId                 Int
@@ -330,6 +375,18 @@ model product {
   // When true, offered in the storefront checkout's "would you like to add
   // any extras?" popup for carts that don't already contain it.
   isCheckoutAddon           Boolean             @default(false)
+  // Per-product opt-in for the Variants/Attributes/FAQs sections of the
+  // admin product form (see VariantsSection/AttributesSection/FaqsSection) —
+  // replaces the old shop-wide productVariantsEnabled/productAttributesEnabled/
+  // productFaqsEnabled toggles. A new product defaults these to whatever
+  // shop.productEditorMode implies client-side (false for 'simple', true for
+  // 'advanced'); once saved, the merchant's per-product choice is what
+  // persists here regardless of the shop's current mode. showAttributes/
+  // showFaqs also gate whether the storefront PDP renders those sections at
+  // all — see ProductDetailClient.tsx.
+  showVariants              Boolean             @default(false)
+  showAttributes            Boolean             @default(false)
+  showFaqs                  Boolean             @default(false)
   // Gift Cards feature — a product with isGiftCard: true is sold like any
   // other product (same cart/checkout path, own `price` field ignored in
   // favor of whichever denomination/custom amount the shopper picks), but
@@ -648,6 +705,14 @@ model shop {
   // WhatsAppSettingsService/order-notifications.service.ts's stub fallback.
   whatsappCredentials        String?   @db.Text
 
+  // Collected on the merchant Account Setup wizard's Business/Location steps
+  // (admin/lib/useAccountSetupForm.ts) — businessType and address (above)
+  // are also editable later via Business Settings, these three are wizard-only.
+  trn                        String?
+  websiteUrl                 String?
+  operatingModel             String?
+  branchCount                String?
+
   // --- Store Configuration: functional, actually wired into behavior ---
   businessType                  String?
   defaultLanguage               String  @default("en")
@@ -666,19 +731,17 @@ model shop {
   whatsappFloatingButtonEnabled Boolean @default(false)
   birthdayDiscountEnabled       Boolean @default(false)
 
-  // Gates the Options/Variants section of the admin product form (see
-  // ProductForm.tsx) — previously a placeholder with no feature behind it;
-  // now functional. Off by default so existing shops don't suddenly see a
-  // new section they didn't ask for.
-  productVariantsEnabled Boolean @default(true)
-
-  // Gates the Attributes editor on the admin product form + its rendering
-  // on the storefront PDP — see productattribute. Same "off by default"
-  // convention as productVariantsEnabled above.
-  productAttributesEnabled Boolean @default(false)
-  // Gates the FAQs editor on the admin product form + its rendering on the
-  // storefront PDP — see productfaq.
-  productFaqsEnabled       Boolean @default(false)
+  // Which admin product-form experience this shop's merchants get — 'simple'
+  // (3-step wizard, Variants/Attributes/FAQs opt-in per product via
+  // ProductForm.tsx) or 'advanced' (single scrollable page, those same three
+  // sections visible-but-collapsed by default). Set on the Account Setup
+  // wizard's Review step, editable later in Settings > Business Information.
+  // Only controls the product form's *starting* state client-side — see
+  // product.showVariants/showAttributes/showFaqs below for the actual
+  // per-product opt-in this used to be a shop-wide toggle for. Plain String
+  // ('simple' | 'advanced'), not a Prisma enum — this schema has no Prisma
+  // enums anywhere (see the biolink model's own comment on this convention).
+  productEditorMode String @default("simple")
   // Gates whether a delivered order triggers the post-purchase survey email
   // — see OrdersService.updateStatus / OrderNotificationsService.notifySurveyRequest.
   customerSurveyEnabled    Boolean @default(false)
@@ -783,6 +846,8 @@ model shop {
   policypage          policypage[]
   bannerimage         bannerimage[]
   surveyresponse      surveyresponse[]
+  invoice             invoice[]
+  invoicecounter      invoicecounter[]
 }
 
 // Legal/policy pages (Terms, Privacy, Refund & Return, Payment, Shipping &
@@ -1659,6 +1724,10 @@ model user {
   email          String           @unique(map: "User_email_key")
   name           String
   passwordHash   String
+  // Personal contact number collected on the Account Setup wizard's
+  // Personal Info step — distinct from shop.whatsappNumber (the shop's own
+  // WhatsApp Business number, set later in Settings).
+  phone          String?
   role           String           @default("admin")
   emailVerified  Boolean          @default(false)
   createdAt      DateTime         @default(now())

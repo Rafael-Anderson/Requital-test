@@ -10,6 +10,7 @@ import type { CustomerContext } from '../customer-auth/customer-context';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
+import { InvoicesService } from '../invoices/invoices.service';
 
 export interface CustomerAddress {
   id: string;
@@ -35,7 +36,18 @@ const orderInclude = {
 
 @Injectable()
 export class CustomerAccountService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly invoicesService: InvoicesService,
+  ) {}
+
+  getInvoiceHtml(ctx: CustomerContext, orderId: number) {
+    return this.invoicesService.renderHtmlForCustomerOrder(
+      ctx.shopId,
+      ctx.customerId,
+      orderId,
+    );
+  }
 
   async getProfile(ctx: CustomerContext) {
     const customer = await this.prisma.customer.findUniqueOrThrow({
@@ -73,7 +85,13 @@ export class CustomerAccountService {
       include: orderInclude,
       orderBy: { createdAt: 'desc' },
     });
-    return orders.map((o) => this.toOrderSummary(o));
+    // One query for every order's invoice existence rather than N+1 —
+    // "Download Invoice" only ever renders for the storefront-facing
+    // INVOICE type, never PACKING_SLIP (that stays admin/courier-only).
+    const invoicedOrderIds = await this.invoicedOrderIds(
+      orders.map((o) => o.id),
+    );
+    return orders.map((o) => this.toOrderSummary(o, invoicedOrderIds.has(o.id)));
   }
 
   // customerId AND shopId both in the WHERE — an id belonging to another
@@ -88,7 +106,17 @@ export class CustomerAccountService {
     if (!order) {
       throw new NotFoundException(`Order ${id} not found`);
     }
-    return this.toOrderSummary(order);
+    const invoicedOrderIds = await this.invoicedOrderIds([order.id]);
+    return this.toOrderSummary(order, invoicedOrderIds.has(order.id));
+  }
+
+  private async invoicedOrderIds(orderIds: number[]): Promise<Set<number>> {
+    if (orderIds.length === 0) return new Set();
+    const rows = await this.prisma.invoice.findMany({
+      where: { orderId: { in: orderIds }, type: 'INVOICE' },
+      select: { orderId: true },
+    });
+    return new Set(rows.map((r) => r.orderId));
   }
 
   async listAddresses(ctx: CustomerContext): Promise<CustomerAddress[]> {
@@ -179,6 +207,7 @@ export class CustomerAccountService {
 
   private toOrderSummary(
     order: Prisma.orderGetPayload<{ include: typeof orderInclude }>,
+    hasInvoice: boolean,
   ) {
     return {
       id: order.id,
@@ -197,6 +226,7 @@ export class CustomerAccountService {
       total: order.total,
       trackingToken: order.trackingToken,
       createdAt: order.createdAt,
+      hasInvoice,
     };
   }
 }

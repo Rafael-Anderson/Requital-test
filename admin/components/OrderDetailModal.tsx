@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 import {
   cancelOrder,
   createExternalDelivery,
@@ -23,7 +23,10 @@ import { useToast } from "@/components/ui/Toast";
 import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import OrderStatusTimeline from "@/components/OrderStatusTimeline";
+import OrderInvoiceTab from "@/components/OrderInvoiceTab";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
+import Modal from "@/components/ui/Modal";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
 // Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
@@ -54,12 +57,14 @@ export default function OrderDetailModal({
   const [savingDelivery, setSavingDelivery] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [tab, setTab] = useState<"details" | "invoice">("details");
   const toast = useToast();
 
   useEffect(() => {
     if (orderId === null) return;
     setOrder(null);
     setError(null);
+    setTab("details");
     getOrder(orderId)
       .then(setOrder)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load order"));
@@ -72,17 +77,6 @@ export default function OrderDetailModal({
       .then((s) => setTaxDisplayText(s.taxDisplayText))
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (orderId === null) return;
-    const onKeyDown = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKeyDown);
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [orderId, onClose]);
 
   if (orderId === null) return null;
 
@@ -184,33 +178,49 @@ export default function OrderDetailModal({
   const latestTxn = order?.paymenttransaction?.[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto modal-scroll rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 p-6 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-          aria-label="Close"
-        >
-          <X className="size-5" />
-        </button>
-
+    <>
+    <Modal
+      onClose={onClose}
+      size="lg"
+      title={
+        order ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>Order #{order.id}</span>
+            <StatusBadge status={order.status} />
+          </div>
+        ) : (
+          "Order details"
+        )
+      }
+      footer={
+        order && (nextAction || canCancel)
+          ? () => (
+              <>
+                {canCancel && (
+                  <Button variant="danger" onClick={handleCancel}>
+                    Cancel order
+                  </Button>
+                )}
+                {nextAction && (
+                  <Button variant="primary" onClick={handleAdvance}>
+                    {nextAction.label}
+                  </Button>
+                )}
+              </>
+            )
+          : undefined
+      }
+    >
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
         {!order ? (
-          <div className="space-y-4">
+          <div className="space-y-4 pb-6">
             <Skeleton className="h-6 w-40" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-32 w-full" />
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 flex-wrap mb-1 pr-8">
-              <h2 className="text-xl font-semibold">Order #{order.id}</h2>
-              <StatusBadge status={order.status} />
-            </div>
             <div className="flex items-center gap-4 flex-wrap text-sm text-zinc-500 mb-6">
               <span>Placed {relativeTime(order.createdAt)}</span>
               {order.deliveryDate && (
@@ -223,9 +233,23 @@ export default function OrderDetailModal({
 
             <OrderStatusTimeline orderId={order.id} refreshKey={historyRefreshKey} />
 
+            <div className="mb-4">
+              <SegmentedToggle
+                value={tab}
+                onChange={setTab}
+                options={[
+                  { value: "details", label: "Details" },
+                  { value: "invoice", label: "Invoice" },
+                ]}
+              />
+            </div>
+
+            {tab === "invoice" ? (
+              <OrderInvoiceTab orderId={order.id} />
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2 space-y-4">
-                <section className="border rounded-lg p-4 dark:border-white/10">
+                <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-medium">Order items</h3>
                     {EDITABLE_ITEM_STATUSES.includes(order.status) && (
@@ -258,7 +282,7 @@ export default function OrderDetailModal({
                   </div>
                 </section>
 
-                <section className="border rounded-lg p-4 dark:border-white/10">
+                <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-3">Order summary</h3>
                   {(() => {
                     const subtotal = order.orderitem.reduce(
@@ -334,14 +358,14 @@ export default function OrderDetailModal({
                 </section>
 
                 {order.receiverMessage && (
-                  <section className="border rounded-lg p-4 dark:border-white/10">
+                  <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                     <h3 className="font-medium mb-2">Receiver / greeting message</h3>
                     <p className="text-sm whitespace-pre-wrap">{order.receiverMessage}</p>
                   </section>
                 )}
 
                 {order.surveyresponse?.respondedAt && (
-                  <section className="border rounded-lg p-4 dark:border-white/10">
+                  <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                     <h3 className="font-medium mb-2">Customer survey</h3>
                     <p className="text-sm">Rating: {order.surveyresponse.rating}/5</p>
                     {order.surveyresponse.comment && (
@@ -360,7 +384,7 @@ export default function OrderDetailModal({
               </div>
 
               <div className="space-y-4">
-                <section className="border rounded-lg p-4 dark:border-white/10">
+                <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-3">Order info</h3>
                   <div className="space-y-2">
                     {order.orderType && (
@@ -389,7 +413,7 @@ export default function OrderDetailModal({
                   </div>
                 </section>
 
-                <section className="border rounded-lg p-4 dark:border-white/10">
+                <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-2">Customer</h3>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{order.customerName}</span>
@@ -406,7 +430,7 @@ export default function OrderDetailModal({
                   )}
                 </section>
 
-                <section className="border rounded-lg p-4 dark:border-white/10">
+                <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-2">Delivery address</h3>
                   <p className="text-sm">{order.customerAddress}</p>
                   <p className="text-sm text-zinc-500">
@@ -421,7 +445,7 @@ export default function OrderDetailModal({
                   )}
                 </section>
 
-                <section className="border rounded-lg p-4 dark:border-white/10">
+                <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-2">External delivery</h3>
                   {order.externaldelivery ? (
                     <div className="space-y-1.5">
@@ -484,7 +508,7 @@ export default function OrderDetailModal({
                           <Button variant="secondary" size="sm" onClick={() => setLoggingDelivery(false)}>
                             Cancel
                           </Button>
-                          <Button variant="primary" size="sm" onClick={handleLogDelivery} disabled={savingDelivery}>
+                          <Button variant="primary" size="sm" onClick={handleLogDelivery} disabled={savingDelivery} loading={savingDelivery}>
                             {savingDelivery ? "Saving…" : "Save"}
                           </Button>
                         </div>
@@ -500,24 +524,10 @@ export default function OrderDetailModal({
                 </section>
               </div>
             </div>
-
-            {(nextAction || canCancel) && (
-              <div className="flex gap-2 mt-4">
-                {canCancel && (
-                  <Button variant="danger" onClick={handleCancel}>
-                    Cancel order
-                  </Button>
-                )}
-                {nextAction && (
-                  <Button variant="primary" onClick={handleAdvance}>
-                    {nextAction.label}
-                  </Button>
-                )}
-              </div>
             )}
           </>
         )}
-      </div>
+    </Modal>
 
       {editingItems && order && (
         <EditOrderItemsModal
@@ -529,6 +539,6 @@ export default function OrderDetailModal({
           }}
         />
       )}
-    </div>
+    </>
   );
 }

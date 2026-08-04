@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
-import { getMyOrder } from "@/lib/api";
+import { getMyInvoiceHtml, getMyOrder } from "@/lib/api";
 import type { CustomerOrderSummary } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 
@@ -18,6 +18,7 @@ export default function OrderDetailPage() {
 
   const [order, setOrder] = useState<CustomerOrderSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !customer) router.replace(`/${shopSlug}/account/login`);
@@ -32,6 +33,26 @@ export default function OrderDetailPage() {
 
   if (authLoading || !customer) {
     return <p className="text-zinc-500">Loading…</p>;
+  }
+
+  // Opens the invoice as a real HTML document in a new tab (via a Blob URL)
+  // rather than a plain <a href> — the endpoint needs the customer's bearer
+  // token attached (see lib/api.ts's authedFetchText), which a static link
+  // can't do. From there the browser's own Print > Save as PDF covers
+  // "download as PDF" without this app carrying a PDF-generation dependency.
+  async function handleDownloadInvoice() {
+    setDownloadingInvoice(true);
+    try {
+      const html = await getMyInvoiceHtml(shopSlug, orderId);
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load invoice");
+    } finally {
+      setDownloadingInvoice(false);
+    }
   }
 
   return (
@@ -129,14 +150,26 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {order.trackingToken && (
-            <Link
-              href={`/${shopSlug}/orders/track?token=${order.trackingToken}`}
-              className="text-sm text-accent hover:underline"
-            >
-              Track this order
-            </Link>
-          )}
+          <div className="flex items-center gap-4">
+            {order.trackingToken && (
+              <Link
+                href={`/${shopSlug}/orders/track?token=${order.trackingToken}`}
+                className="text-sm text-accent hover:underline"
+              >
+                Track this order
+              </Link>
+            )}
+            {order.hasInvoice && (
+              <button
+                type="button"
+                onClick={handleDownloadInvoice}
+                disabled={downloadingInvoice}
+                className="text-sm text-accent hover:underline disabled:opacity-50 cursor-pointer"
+              >
+                {downloadingInvoice ? "Loading…" : "Download Invoice"}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </StorefrontPageShell>

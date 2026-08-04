@@ -444,7 +444,7 @@ export default function ProductDetailClient() {
             />
           )}
 
-          {shop?.productAttributesEnabled && product.attributes.length > 0 && (
+          {product.showAttributes && product.attributes.length > 0 && (
             <div className="mt-6 pt-6 border-t border-stroke">
               <h2 className="text-base font-semibold text-product-name mb-2">Details</h2>
               <dl className="text-sm divide-y divide-stroke">
@@ -458,7 +458,7 @@ export default function ProductDetailClient() {
             </div>
           )}
 
-          {shop?.productFaqsEnabled && product.faqs.length > 0 && (
+          {product.showFaqs && product.faqs.length > 0 && (
             <div className="mt-6 pt-6 border-t border-stroke">
               <h2 className="text-base font-semibold text-product-name mb-2">FAQs</h2>
               <div className="space-y-1">
