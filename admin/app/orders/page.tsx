@@ -5,6 +5,7 @@ import { cancelOrder, listOrders, updateOrderStatus } from "@/lib/api";
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 import { useOutletFilter } from "@/lib/outlet-context";
+import { useShopMode } from "@/lib/useShopMode";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
@@ -13,6 +14,7 @@ import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
+import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 
 const POLL_INTERVAL_MS = 20_000;
@@ -42,6 +44,8 @@ export default function OrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const toast = useToast();
   const { selectedOutletId } = useOutletFilter();
+  const mode = useShopMode();
+  const isSimple = mode === "simple";
 
   const refresh = useCallback(async () => {
     try {
@@ -117,7 +121,7 @@ export default function OrdersPage() {
       <BackButton href="/" />
       <BranchBar />
       <h1 className="text-2xl font-semibold mb-1">Orders</h1>
-      <OrdersTabs />
+      {!isSimple && <OrdersTabs />}
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
@@ -131,7 +135,7 @@ export default function OrdersPage() {
           : columns.map((col) => (
               <div
                 key={col.key}
-                className="flex-1 min-w-64 border rounded-lg dark:border-white/10 bg-black/[0.015] dark:bg-white/[0.02] p-3"
+                className="flex-1 min-w-64 border border-gray-200 rounded-lg dark:border-white/10 bg-black/[0.015] dark:bg-white/[0.02] p-3"
               >
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="font-medium text-sm">{col.title}</h2>
@@ -151,7 +155,7 @@ export default function OrdersPage() {
                       <div
                         key={order.id}
                         onClick={() => setSelectedOrderId(order.id)}
-                        className="cursor-pointer rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-3 hover:border-black/30 dark:hover:border-white/30 transition-colors"
+                        className="cursor-pointer rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-3 hover:border-gray-300 dark:hover:border-white/30 hover:shadow-md transition-[border-color,box-shadow] duration-150"
                       >
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="font-medium text-sm">#{order.id}</span>
@@ -159,16 +163,18 @@ export default function OrdersPage() {
                         </div>
                         <div className="text-sm">{order.customerName}</div>
                         <div className="text-sm font-medium">{order.total} AED</div>
-                        {order.deliveryDate && (
+                        {!isSimple && order.deliveryDate && (
                           <div className="text-xs text-zinc-500 mt-1">
                             {new Date(order.deliveryDate).toLocaleDateString()}
                             {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}
                           </div>
                         )}
-                        <div className="text-xs text-zinc-400 mt-1">
-                          Ordered {relativeTime(order.createdAt)}
-                        </div>
-                        {order.orderitem.some((item) => item.note) && (
+                        {!isSimple && (
+                          <div className="text-xs text-zinc-400 mt-1">
+                            Ordered {relativeTime(order.createdAt)}
+                          </div>
+                        )}
+                        {!isSimple && order.orderitem.some((item) => item.note) && (
                           <div className="mt-1.5 space-y-0.5">
                             {order.orderitem
                               .filter((item) => item.note)
@@ -198,11 +204,19 @@ export default function OrdersPage() {
             ))}
       </div>
 
-      <OrderDetailModal
-        orderId={selectedOrderId}
-        onClose={() => setSelectedOrderId(null)}
-        onChanged={refresh}
-      />
+      {isSimple ? (
+        <SimpleOrderDetailModal
+          orderId={selectedOrderId}
+          onClose={() => setSelectedOrderId(null)}
+          onChanged={refresh}
+        />
+      ) : (
+        <OrderDetailModal
+          orderId={selectedOrderId}
+          onClose={() => setSelectedOrderId(null)}
+          onChanged={refresh}
+        />
+      )}
     </PageShell>
   );
 }
