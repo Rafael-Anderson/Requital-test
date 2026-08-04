@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { LayoutDashboard, ClipboardList, Package, Settings, Users, BarChart3, Palette, Share2, Link2, Percent, ClipboardEdit, History, Layers, MailWarning, Gift } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useShopMode } from "@/lib/useShopMode";
 import PageShell from "@/components/ui/PageShell";
 
 // Categories moved under Inventory as a tab (see InventoryTabs) rather than
@@ -35,6 +36,8 @@ const ADMIN_SECTIONS = [
 
 export default function HomePage() {
   const { user } = useAuth();
+  const mode = useShopMode();
+  const isSimple = mode === "simple";
   const sections = user?.role === "admin" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
 
   return (
@@ -62,18 +65,39 @@ export default function HomePage() {
             cramped/too close together at 12px, crowding out the breathing
             room the rest of the page already has. */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 max-w-4xl mx-auto">
-          {sections.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              <span className="flex items-center justify-center size-14 rounded-2xl bg-accent/10">
-                <Icon className="size-6 text-accent-text dark:text-accent" strokeWidth={1.75} />
-              </span>
-              <span className="text-sm font-medium">{label}</span>
-            </Link>
-          ))}
+          {sections.map(({ href, label, icon: Icon }) => {
+            // Reports isn't disabled outright in simple mode — it's still a
+            // real, working page — just greyed and unclickable here to keep
+            // the home grid's emphasis on the focused simple-mode workflow.
+            const greyed = isSimple && href === "/reports";
+            if (greyed) {
+              return (
+                <div
+                  key={href}
+                  aria-disabled="true"
+                  title="Switch to Advanced in Business Information to use Reports"
+                  className="aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 opacity-40 cursor-not-allowed"
+                >
+                  <span className="flex items-center justify-center size-14 rounded-2xl bg-accent/10">
+                    <Icon className="size-6 text-accent-text dark:text-accent" strokeWidth={1.75} />
+                  </span>
+                  <span className="text-sm font-medium">{label}</span>
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={href}
+                href={href}
+                className="aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <span className="flex items-center justify-center size-14 rounded-2xl bg-accent/10">
+                  <Icon className="size-6 text-accent-text dark:text-accent" strokeWidth={1.75} />
+                </span>
+                <span className="text-sm font-medium">{label}</span>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </PageShell>
