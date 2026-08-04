@@ -5,6 +5,7 @@ import { createOrderReturn, getOrderReturns } from "@/lib/api";
 import type { Order, OrderReturn } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
 const RETURN_REASONS: { value: OrderReturn["reason"]; label: string }[] = [
@@ -163,20 +164,16 @@ export default function OrderReturnsSection({
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <label className="text-sm text-zinc-500">
-              Reason
-              <select
-                value={reason}
-                onChange={(e) => setReason(e.target.value as OrderReturn["reason"])}
-                className="ml-2 h-8 rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm outline-none cursor-pointer focus:border-accent"
-              >
-                {RETURN_REASONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-zinc-500 shrink-0">Reason</span>
+              <div className="w-44">
+                <Combobox
+                  value={reason}
+                  onChange={(value) => setReason(value as OrderReturn["reason"])}
+                  options={RETURN_REASONS}
+                />
+              </div>
+            </div>
             <Checkbox
               label="Restock returned items"
               checked={restock}

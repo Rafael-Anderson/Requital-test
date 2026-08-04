@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Combobox from "@/components/ui/Combobox";
 import Skeleton from "@/components/ui/Skeleton";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
@@ -470,17 +471,13 @@ export default function OrderDetailModal({
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-zinc-500">Status</span>
                         {user?.role === "admin" ? (
-                          <select
-                            value={order.externaldelivery.status}
-                            onChange={(e) => handleUpdateDeliveryStatus(e.target.value as ExternalDelivery["status"])}
-                            className="h-7 rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-1.5 text-xs outline-none cursor-pointer focus:border-accent capitalize"
-                          >
-                            {EXTERNAL_DELIVERY_STATUSES.map((s) => (
-                              <option key={s} value={s} className="capitalize">
-                                {s.replace(/_/g, " ")}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="w-36">
+                            <Combobox
+                              value={order.externaldelivery.status}
+                              onChange={(value) => handleUpdateDeliveryStatus(value as ExternalDelivery["status"])}
+                              options={EXTERNAL_DELIVERY_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+                            />
+                          </div>
                         ) : (
                           <StatusBadge status={order.externaldelivery.status} />
                         )}

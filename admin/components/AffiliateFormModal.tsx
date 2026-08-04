@@ -6,6 +6,7 @@ import { createAffiliate, updateAffiliate } from "@/lib/api";
 import { AFFILIATE_STATUSES, type AffiliateListItem, type AffiliateStatus } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
 export default function AffiliateFormModal({
@@ -66,20 +67,12 @@ export default function AffiliateFormModal({
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
           <Input label="Mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} required />
           {affiliate && (
-            <div>
-              <label className="text-sm font-medium block mb-1">Status</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as AffiliateStatus)}
-                className="w-full h-10 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-              >
-                {AFFILIATE_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s[0].toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Combobox
+              label="Status"
+              value={status}
+              onChange={(value) => setStatus(value as AffiliateStatus)}
+              options={AFFILIATE_STATUSES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))}
+            />
           )}
         </div>
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { Ingredient, IngredientCategory } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import Combobox from "@/components/ui/Combobox";
 
 export interface RecipeRowDraft {
   ingredientId: number;
@@ -66,19 +67,14 @@ export default function IngredientRecipeEditor({
   return (
     <div className="space-y-2">
       {categories.length > 0 && (
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          aria-label="Filter ingredients by category"
-          className="h-8 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 text-xs outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-        >
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="w-48">
+          <Combobox
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            placeholder="All categories"
+            options={[{ value: "", label: "All categories" }, ...categories.map((c) => ({ value: String(c.id), label: c.name }))]}
+          />
+        </div>
       )}
       {rows.map((row, index) => {
         // A row's already-selected ingredient always stays in its own
@@ -92,17 +88,13 @@ export default function IngredientRecipeEditor({
             : filteredIngredients;
         return (
         <div key={index} className="flex items-center gap-2">
-          <select
-            value={row.ingredientId}
-            onChange={(e) => updateRow(index, { ingredientId: Number(e.target.value) })}
-            className="flex-1 h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-          >
-            {options.map((ing) => (
-              <option key={ing.id} value={ing.id}>
-                {ing.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex-1">
+            <Combobox
+              value={String(row.ingredientId)}
+              onChange={(value) => updateRow(index, { ingredientId: Number(value) })}
+              options={options.map((ing) => ({ value: String(ing.id), label: ing.name }))}
+            />
+          </div>
           <input
             type="number"
             min={1}

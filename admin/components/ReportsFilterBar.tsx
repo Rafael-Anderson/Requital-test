@@ -4,6 +4,7 @@ import { Calendar } from "lucide-react";
 import type { ReactNode } from "react";
 import { ORDER_STATUSES, type Outlet, type ReportsFilters } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import Combobox from "@/components/ui/Combobox";
 
 const PAYMENT_MODES = [
   { value: "card_online", label: "Card (Online)" },
@@ -71,54 +72,44 @@ export default function ReportsFilterBar({
     <div className="flex flex-wrap items-center gap-2">
       {dateControl ?? <DefaultDateRangeControl value={value} onChange={onChange} />}
 
-      <select
-        value={value.outletId ?? ""}
-        onChange={(e) => onChange({ ...value, outletId: e.target.value ? Number(e.target.value) : undefined })}
-        className={selectClass}
-      >
-        <option value="">Select outlet</option>
-        {outlets.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name}
-          </option>
-        ))}
-      </select>
+      <div className="w-40">
+        <Combobox
+          value={value.outletId !== undefined ? String(value.outletId) : ""}
+          onChange={(v) => onChange({ ...value, outletId: v ? Number(v) : undefined })}
+          placeholder="Select outlet"
+          options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
+        />
+      </div>
 
-      <select
-        value={value.orderType ?? ""}
-        onChange={(e) => onChange({ ...value, orderType: e.target.value || undefined })}
-        className={selectClass}
-      >
-        <option value="">Select order type</option>
-        <option value="delivery">Delivery</option>
-        <option value="pickup">Pickup</option>
-      </select>
+      <div className="w-40">
+        <Combobox
+          value={value.orderType ?? ""}
+          onChange={(v) => onChange({ ...value, orderType: v || undefined })}
+          placeholder="Select order type"
+          options={[
+            { value: "delivery", label: "Delivery" },
+            { value: "pickup", label: "Pickup" },
+          ]}
+        />
+      </div>
 
-      <select
-        value={value.status ?? ""}
-        onChange={(e) => onChange({ ...value, status: (e.target.value || undefined) as ReportsFilters["status"] })}
-        className={selectClass}
-      >
-        <option value="">Select order status</option>
-        {ORDER_STATUSES.map((s) => (
-          <option key={s} value={s} className="capitalize">
-            {s.replace(/_/g, " ")}
-          </option>
-        ))}
-      </select>
+      <div className="w-44">
+        <Combobox
+          value={value.status ?? ""}
+          onChange={(v) => onChange({ ...value, status: (v || undefined) as ReportsFilters["status"] })}
+          placeholder="Select order status"
+          options={ORDER_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+        />
+      </div>
 
-      <select
-        value={value.paymentMode ?? ""}
-        onChange={(e) => onChange({ ...value, paymentMode: e.target.value || undefined })}
-        className={selectClass}
-      >
-        <option value="">Select payment mode</option>
-        {PAYMENT_MODES.map((p) => (
-          <option key={p.value} value={p.value}>
-            {p.label}
-          </option>
-        ))}
-      </select>
+      <div className="w-48">
+        <Combobox
+          value={value.paymentMode ?? ""}
+          onChange={(v) => onChange({ ...value, paymentMode: v || undefined })}
+          placeholder="Select payment mode"
+          options={PAYMENT_MODES}
+        />
+      </div>
 
       <input
         value={value.channel ?? ""}

@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import Card from "@/components/ui/Card";
+import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
 import { useToast } from "@/components/ui/Toast";
@@ -21,15 +22,6 @@ const TIME_SLOT_PRESETS = [
   { minutes: 90, label: "1.5 hours" },
   { minutes: 120, label: "2 hours" },
 ];
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">{label}</label>
-      {children}
-    </div>
-  );
-}
 
 export default function OutletPickupTab({
   outlet,
@@ -148,19 +140,12 @@ export default function OutletPickupTab({
             <Card>
               <h3 className="text-sm font-semibold mb-3">Preparation Time Settings</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Time Slot Gap">
-                  <select
-                    value={timeSlotGapMinutes}
-                    onChange={(e) => setTimeSlotGapMinutes(Number(e.target.value))}
-                    className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-                  >
-                    {TIME_SLOT_PRESETS.map((p) => (
-                      <option key={p.minutes} value={p.minutes}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                <Combobox
+                  label="Time Slot Gap"
+                  value={String(timeSlotGapMinutes)}
+                  onChange={(value) => setTimeSlotGapMinutes(Number(value))}
+                  options={TIME_SLOT_PRESETS.map((p) => ({ value: String(p.minutes), label: p.label }))}
+                />
                 <Input
                   label="Preparation Time (minutes)"
                   type="number"
