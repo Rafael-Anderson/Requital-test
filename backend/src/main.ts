@@ -3,12 +3,46 @@ import { join } from 'path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
+  // Enforcing, not report-only — this is a JSON API plus one HTML surface
+  // (invoices/invoice-html.ts's styled text/html document). That template's
+  // one <style> block is static (no interpolated data inside it — all
+  // per-invoice values are elsewhere in the body), so 'unsafe-inline' is
+  // scoped to style-src only; script-src stays strict since nothing here
+  // has a legitimate reason to run an inline script. defaultSrc/objectSrc
+  // 'none'/'self' blocks the classic plugin/object-embed vector; frameSrc
+  // 'none' plus X-Frame-Options (via frameguard, on by default in helmet)
+  // stops this API from ever being framed.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:'],
+          objectSrc: ["'none'"],
+          frameSrc: ["'none'"],
+        },
+      },
+      hsts: { maxAge: 63072000, includeSubDomains: true, preload: true },
+      // /uploads/* product/theme images are deliberately loaded cross-origin
+      // — admin (:3001) and storefront (:3002) render them straight from
+      // this API's own origin, not proxied through their own server. The
+      // default same-origin CORP would silently block every image in both
+      // frontends; cross-origin is the correct policy for a media host, not
+      // a relaxation done for convenience.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
   // Merchant auth landed — tighten from the prior wide-open CORS to an
   // explicit allowlist. Bearer tokens go in a header, not a cookie, so
   // `credentials: true` isn't needed here. Storefront (:3002) calls the
