@@ -34,8 +34,12 @@ export interface CredentialFieldDef {
 // - stripe: matches the real implementation's two existing env vars
 //   (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) exactly, now sourceable
 //   per-shop instead of only from the platform env var.
-// - tabby/tamara: match the env var placeholders already reserved for them
-//   from the earlier structural-stub task (TABBY_SECRET_KEY, TAMARA_API_TOKEN).
+// - tabby/tamara: now real integrations (see providers/tabby-payment.provider.ts
+//   / tamara-payment.provider.ts) — publicKey/secretKey/webhookSecret and
+//   apiUrl/apiToken/notificationToken respectively, matching those
+//   providers' own env var fallbacks (TABBY_PUBLIC_KEY/TABBY_SECRET_KEY/
+//   TABBY_WEBHOOK_SECRET, TAMARA_API_URL/TAMARA_TOKEN/TAMARA_NOTIFICATION_TOKEN).
+//   Was a single-field placeholder from the earlier structural-stub task.
 // - paypal: standard PayPal REST API OAuth2 client-credentials shape — a
 //   reasonable, well-known field shape even though createCheckoutSession
 //   itself is a structural stub (see providers/paypal-payment.provider.ts).
@@ -59,6 +63,14 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<
     { key: 'clientId', label: 'Client ID' },
     { key: 'clientSecret', label: 'Client Secret' },
   ],
-  tabby: [{ key: 'secretKey', label: 'Secret Key' }],
-  tamara: [{ key: 'apiToken', label: 'API Token' }],
+  tabby: [
+    { key: 'publicKey', label: 'Public Key' },
+    { key: 'secretKey', label: 'Secret Key' },
+    { key: 'webhookSecret', label: 'Webhook Secret' },
+  ],
+  tamara: [
+    { key: 'apiUrl', label: 'API URL' },
+    { key: 'apiToken', label: 'API Token' },
+    { key: 'notificationToken', label: 'Notification Token' },
+  ],
 };

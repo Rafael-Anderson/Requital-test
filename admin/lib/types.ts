@@ -1238,8 +1238,16 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, Credenti
     { key: "clientId", label: "Client ID" },
     { key: "clientSecret", label: "Client Secret" },
   ],
-  tabby: [{ key: "secretKey", label: "Secret Key" }],
-  tamara: [{ key: "apiToken", label: "API Token" }],
+  tabby: [
+    { key: "publicKey", label: "Public Key" },
+    { key: "secretKey", label: "Secret Key" },
+    { key: "webhookSecret", label: "Webhook Secret" },
+  ],
+  tamara: [
+    { key: "apiUrl", label: "API URL" },
+    { key: "apiToken", label: "API Token" },
+    { key: "notificationToken", label: "Notification Token" },
+  ],
 };
 
 export const PAYMENT_PROVIDER_LABELS: Record<string, string> = {

@@ -18,6 +18,7 @@ import { PaymentSettingsController } from './payment-settings.controller';
 import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateModule } from '../affiliate/affiliate.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
+import { OrdersModule } from '../orders/orders.module';
 
 // Every implemented gateway is registered up front — which one a given shop
 // actually uses is a per-shop runtime choice (shop.paymentGateway for the
@@ -42,7 +43,7 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
 }
 
 @Module({
-  imports: [ShopModule, AffiliateModule, BranchRolesModule],
+  imports: [ShopModule, AffiliateModule, BranchRolesModule, OrdersModule],
   controllers: [
     PaymentLinkController,
     PayController,

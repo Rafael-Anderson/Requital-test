@@ -30,6 +30,18 @@ export interface WebhookResult {
   // Refund API takes a payment_intent or charge id, not an event id).
   // Undefined for providers that don't support refunds at all.
   chargeReference?: string;
+  // BNPL-specific (Tabby/Tamara): when set, PaymentsService.handleWebhook
+  // additionally drives the order's own status through the existing CAS
+  // state machine (OrdersService.updateStatus/cancel) after recording the
+  // payment event itself. 'confirmed'/'cancelled' are both only ever
+  // applied if the order is still 'pending' at that moment — a provider's
+  // approval/expiry signal arriving after a merchant already moved the
+  // order forward (or already cancelled it) is stale and silently ignored,
+  // never forced through. Undefined for every provider that doesn't need
+  // this (Stripe's payment success has never implied order confirmation
+  // here — that stays a manual merchant action, deliberately untouched by
+  // this addition).
+  advanceOrderStatus?: 'confirmed' | 'cancelled';
 }
 
 export interface RefundPaymentParams {

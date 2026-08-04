@@ -13,6 +13,7 @@ import { PaymentProviderRegistry } from './payment-provider.registry';
 import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import { OrdersService } from '../orders/orders.service';
 
 const LINK_EXPIRY_DAYS = 3;
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
@@ -25,6 +26,7 @@ export class PaymentsService {
     private readonly paymentSettingsService: PaymentSettingsService,
     private readonly affiliateService: AffiliateService,
     private readonly branchRolesService: BranchRolesService,
+    private readonly ordersService: OrdersService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -218,6 +220,70 @@ export class PaymentsService {
       });
     }
 
+    if (result.advanceOrderStatus) {
+      await this.applyAdvanceOrderStatus(
+        order.id,
+        order.shopId,
+        result.advanceOrderStatus,
+      );
+    }
+
     return { received: true };
+  }
+
+  // BNPL-specific (Tabby/Tamara — see WebhookResult.advanceOrderStatus).
+  // Runs the same CAS state machine OrdersController's own status/cancel
+  // endpoints use, just under a synthetic system context instead of a real
+  // staff session — every shop always has at least one admin (signup
+  // creates one, and the last remaining admin can never be demoted/deleted,
+  // see AuthService/branch-roles), so this always resolves one to attribute
+  // the resulting audit-log/stock-movement rows to. Only ever applied while
+  // the order is still 'pending': a provider's approval/expiry signal
+  // arriving after a merchant already moved the order forward (or already
+  // cancelled it) is stale and is silently ignored rather than forced
+  // through — updateStatus/cancel's own exceptions on an invalid or
+  // already-superseded transition are swallowed here for exactly that
+  // reason, never allowed to fail the webhook response itself.
+  private async applyAdvanceOrderStatus(
+    orderId: number,
+    shopId: number,
+    action: 'confirmed' | 'cancelled',
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+    if (!order || order.status !== 'pending') {
+      return;
+    }
+    const admin = await this.prisma.user.findFirst({
+      where: { shopId, role: 'admin' },
+      orderBy: { id: 'asc' },
+    });
+    if (!admin) {
+      console.warn(
+        `[payments] webhook-driven order ${action} for order ${orderId} skipped — shop ${shopId} has no admin user to attribute it to`,
+      );
+      return;
+    }
+    const ctx: TenantContext = {
+      userId: admin.id,
+      shopId,
+      role: 'admin',
+      outletId: null,
+    };
+    try {
+      if (action === 'confirmed') {
+        await this.ordersService.updateStatus(ctx, orderId, {
+          status: 'confirmed',
+        });
+      } else {
+        await this.ordersService.cancel(ctx, orderId);
+      }
+    } catch (error) {
+      console.warn(
+        `[payments] webhook-driven order ${action} for order ${orderId} failed:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 }
