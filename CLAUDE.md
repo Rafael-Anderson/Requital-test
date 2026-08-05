@@ -12,6 +12,10 @@ Requital — a multi-tenant e-commerce "shop manager" SaaS (Salla/Zid/Dukan-styl
 
 **Spec docs**: `BUILD_BRIEF.md` at the repo root is the original entry point and points to `REQUITAL_SRS.md` as the full source-of-truth spec (Section 6 has the data model). The SRS is not currently present in the working tree — if it's missing, note that rather than guessing at requirements from memory. Per the build brief, the SRS also specifies things not yet built: i18n + Arabic/RTL and multi-currency (single-currency AED throughout today) — the current implementation is a simpler, shipped-first version of that spec, not a divergence to "fix." Multi-outlet, the Kanban order pipeline, unlimited-depth attributes/variations, and a Customers module, all listed in the SRS as future/Phase-2+ work, **have since been built**. The SRS's separate-top-level-domain-per-merchant plan for the storefront was also **not** what got built — tenant resolution is a `/[shop]/...` slug segment instead (see "Storefront frontend"). Don't treat any of the above as still-pending.
 
+## Git workflow — branch protection is on
+
+As of the Phase 2 CI pipeline merging to `main` (2026-08-05), `main` has branch protection enabled: PRs are required, and the four CI jobs (`backend`, `admin`, `storefront`, `guardrails` — see `.github/workflows/ci.yml`) are required status checks. **Direct pushes to `main` no longer work at all** — they will be rejected by GitHub, not just discouraged by convention. Every phase of work from here on is: branch off `main` → open a PR → get the four required checks green → the user merges it themselves. Do not attempt to push directly to `main` in any session; do not merge PRs yourself even once CI is green — merging is the user's call.
+
 ## Tenant isolation and outlet scoping
 
 Every tenant-owned table carries `shopId`, and every query against one is scoped by it at the data-access layer — no code path may return one shop's data to another. This is no longer a hardcoded constant: real merchant auth exists, and every request derives `shopId` (and, for outlet-scoped resources, `outletId`) from the authenticated user, re-read from the DB on every request.
