@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { OutletFilterProvider } from "@/lib/outlet-context";
 import RequireAuth from "@/components/RequireAuth";
 import TopBar from "@/components/TopBar";
+import EmailVerificationBanner from "@/components/EmailVerificationBanner";
 import CommandPalette from "@/components/CommandPalette";
 import NavigationProgress from "@/components/ui/NavigationProgress";
 import "./globals.css";
@@ -63,6 +64,7 @@ export default function RootLayout({
             <OutletFilterProvider>
               <RequireAuth>
                 <TopBar />
+                <EmailVerificationBanner />
                 <CommandPalette />
                 <main className="p-6">{children}</main>
               </RequireAuth>

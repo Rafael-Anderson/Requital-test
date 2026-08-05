@@ -10,6 +10,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 interface AuthResponse {
   accessToken: string;
   user: { shopId: number };
+  devVerificationLink?: string;
 }
 interface IdRow {
   id: number;
@@ -54,7 +55,12 @@ describe('Shop publish state (e2e)', () => {
     await app.close();
   });
 
-  async function setupShop(slugPrefix: string) {
+  // Email verification is now also part of the publish-readiness bar (see
+  // ShopService.getPublishReadiness) — verified by default so every existing
+  // caller of this helper keeps testing exactly the product/outlet
+  // conditions it already asserts on, without the new gate interfering.
+  // Pass verifyEmail: false for tests that specifically exercise that gate.
+  async function setupShop(slugPrefix: string, options?: { verifyEmail?: boolean }) {
     const signup = await request(app.getHttpServer())
       .post('/auth/signup')
       .send({
@@ -66,6 +72,13 @@ describe('Shop publish state (e2e)', () => {
       })
       .expect(201);
     const res = body<AuthResponse>(signup);
+    if (options?.verifyEmail !== false) {
+      const token = new URL(res.devVerificationLink!).searchParams.get('token');
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token })
+        .expect(201);
+    }
     return {
       adminToken: res.accessToken,
       slug: `${slugPrefix}-${runId}`,
@@ -73,8 +86,11 @@ describe('Shop publish state (e2e)', () => {
     };
   }
 
-  async function setupOrderableShop(slugPrefix: string) {
-    const shop = await setupShop(slugPrefix);
+  async function setupOrderableShop(
+    slugPrefix: string,
+    options?: { verifyEmail?: boolean },
+  ) {
+    const shop = await setupShop(slugPrefix, options);
     const outlets = await request(app.getHttpServer())
       .get('/outlets')
       .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -372,6 +388,100 @@ describe('Shop publish state (e2e)', () => {
         .patch('/shop')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ published: true, description: 'Updated description' })
+        .expect(200);
+      expect(body<ShopBody>(res).published).toBe(true);
+    });
+
+    it('rejects publishing when the acting admin has not verified their email, even with product+outlet ready', async () => {
+      const shop = await setupOrderableShop('pub-ready-unverified', {
+        verifyEmail: false,
+      });
+      const res = await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ published: true })
+        .expect(400);
+      expect(body<{ message: string }>(res).message).toContain(
+        'Verify your account email',
+      );
+
+      const readiness = await request(app.getHttpServer())
+        .get('/shop/publish-readiness')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(
+        body<{ ready: boolean; missing: string[] }>(readiness).missing,
+      ).toContain('Verify your account email');
+    });
+
+    it('succeeds once the email is verified afterward, with nothing else changed', async () => {
+      const signup = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({
+          name: 'Publish Admin',
+          email: `pub-verify-then-publish-${runId}@test.com`,
+          password: 'password123',
+          shopName: 'pub-verify-then-publish Shop',
+          subdomain: `pub-verify-then-publish-${runId}`,
+        })
+        .expect(201);
+      const signupBody = body<AuthResponse>(signup);
+      const adminToken = signupBody.accessToken;
+
+      const outlets = await request(app.getHttpServer())
+        .get('/outlets')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const outletId = body<OutletRow[]>(outlets)[0].id;
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          active: true,
+          emirate: 'Dubai',
+          deliveryEnabled: true,
+          pickupEnabled: true,
+          latitude: 25.2048,
+          longitude: 55.2708,
+          deliveryRadiusKm: 5,
+        })
+        .expect(200);
+      const category = await request(app.getHttpServer())
+        .post('/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Flowers' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Rose',
+          price: 50,
+          thumbnail: 'https://example.com/rose.jpg',
+          sku: `PUB-VERIFY-${runId}`,
+          categoryIds: [body<IdRow>(category).id],
+        })
+        .expect(201);
+
+      // Ready on product+outlet, but email still unverified.
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ published: true })
+        .expect(400);
+
+      const token = new URL(signupBody.devVerificationLink!).searchParams.get(
+        'token',
+      );
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({ token })
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ published: true })
         .expect(200);
       expect(body<ShopBody>(res).published).toBe(true);
     });

@@ -6,9 +6,11 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
+  devVerificationLink?: string;
 }
 interface IdRow {
   id: number;
@@ -99,6 +101,7 @@ describe('Affiliate (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(signup).devVerificationLink);
     return {
       adminToken: body<AuthResponse>(signup).accessToken,
       slug: `${slugPrefix}-${runId}`,

@@ -1765,6 +1765,13 @@ model user {
   phone          String?
   role           String           @default("admin")
   emailVerified  Boolean          @default(false)
+  // Progressive login-delay tracking (see AuthService.login's own comment) —
+  // not a hard lockout: failedLoginAttempts resets to 0 on any successful
+  // login, and a correct password always succeeds once the computed delay
+  // since lastFailedLoginAt has elapsed. Deliberately not a `lockedUntil`
+  // column that could deny a real user access outright.
+  failedLoginAttempts Int          @default(0)
+  lastFailedLoginAt   DateTime?
   createdAt      DateTime         @default(now())
   shop           shop             @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "User_shopId_fkey")
   outlet         outlet?          @relation(fields: [outletId], references: [id], onDelete: SetNull, map: "User_outletId_fkey")

@@ -6,9 +6,11 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
+  devVerificationLink?: string;
 }
 interface IdRow {
   id: number;
@@ -90,6 +92,7 @@ describe('SEO (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
+    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(signup).devVerificationLink);
 
     // Publishing requires meeting the readiness bar (an outlet with
     // delivery or pickup enabled, and at least one product — see
