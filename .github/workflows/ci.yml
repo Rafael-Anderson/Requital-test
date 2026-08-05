@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (tsc, unit, e2e)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: shop_manager
+          MYSQL_USER: shop_app
+          MYSQL_PASSWORD: shop_app_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Keep in sync with engines.node in backend/package.json.
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      # Dummy-value env file, committed — no repo secrets, no real network
+      # calls. See backend/.env.ci's own header comment.
+      - name: Set up CI env
+        run: cp .env.ci .env
+
+      - run: npx prisma generate
+
+      # migrate deploy (not migrate dev) applies the hand-authored migrations
+      # in prisma/migrations/ as-is against a clean database — no shadow DB
+      # involved, matching CLAUDE.md's "never pass DATABASE_URL as
+      # --shadow-database-url" rule (that flag isn't used here at all).
+      - name: Apply migrations to a clean database
+        run: npx prisma migrate deploy
+
+      - run: npx tsc --noEmit
+
+      - run: npm test -- --ci
+
+      - run: npm run test:e2e -- --ci --maxWorkers=2
+
+      # Backend lint has pre-existing @typescript-eslint debt (see CLAUDE.md's
+      # "Known pre-existing lint gap") — this only fails on a count increase
+      # from the committed baseline (backend/lint-baseline.txt), never on
+      # pre-existing debt. See tools/check-lint-baseline.js's own header.
+      - name: Lint (baseline-pinned — fails only on new errors)
+        run: node ../tools/check-lint-baseline.js backend
+
+      - name: npm audit (visible, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  admin:
+    name: admin (tsc, lint, vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Keep in sync with engines.node in admin/package.json.
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - run: npm ci
+
+      - run: npx tsc --noEmit
+
+      # admin lint has pre-existing react-hooks/set-state-in-effect debt (see
+      # CLAUDE.md's admin section) — baseline-pinned the same way as backend,
+      # see tools/check-lint-baseline.js's header for the full rationale.
+      - name: Lint (baseline-pinned — fails only on new errors)
+        run: node ../tools/check-lint-baseline.js admin
+
+      - run: npm test -- --run
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            admin/.next/cache
+          key: ${{ runner.os }}-nextjs-admin-${{ hashFiles('admin/package-lock.json') }}-${{ hashFiles('admin/**/*.js', 'admin/**/*.jsx', 'admin/**/*.ts', 'admin/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-admin-${{ hashFiles('admin/package-lock.json') }}-
+
+      - run: npm run build
+
+      - name: npm audit (visible, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  storefront:
+    name: storefront (tsc, lint, vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: storefront
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Keep in sync with engines.node in storefront/package.json.
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: storefront/package-lock.json
+
+      - run: npm ci
+
+      - run: npx tsc --noEmit
+
+      # storefront lint has the same class of pre-existing debt as admin
+      # (react-hooks/set-state-in-effect, plus a handful of
+      # react/no-unescaped-entities and exhaustive-deps findings) —
+      # baseline-pinned identically. See tools/check-lint-baseline.js.
+      - name: Lint (baseline-pinned — fails only on new errors)
+        run: node ../tools/check-lint-baseline.js storefront
+
+      - run: npm test -- --run
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            storefront/.next/cache
+          key: ${{ runner.os }}-nextjs-storefront-${{ hashFiles('storefront/package-lock.json') }}-${{ hashFiles('storefront/**/*.js', 'storefront/**/*.jsx', 'storefront/**/*.ts', 'storefront/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-storefront-${{ hashFiles('storefront/package-lock.json') }}-
+
+      - run: npm run build
+
+      - name: npm audit (visible, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  guardrails:
+    name: guardrails (outlet-scoping, page-width, sendEmail)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # Only backend's node_modules are needed: check-outlet-scoping.js and
+      # check-page-width.js are dependency-free fs/grep scripts (they scan
+      # admin/storefront source as plain text, no install required there),
+      # and the sendEmailStub guard is a backend Jest spec.
+      - working-directory: backend
+        run: npm ci
+
+      - name: Outlet-scoping guardrail (tenant-isolation)
+        run: node tools/check-outlet-scoping.js
+
+      - name: Page-width guardrail
+        run: node tools/check-page-width.js
+
+      - name: sendEmailStub bypass guardrail
+        working-directory: backend
+        run: npm test -- email-callsites --ci
