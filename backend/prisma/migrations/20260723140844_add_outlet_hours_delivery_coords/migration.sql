@@ -1,8 +1,14 @@
--- AlterTable
-ALTER TABLE `outlet` ADD COLUMN `businessHours` JSON NULL,
-    ADD COLUMN `closedOverride` BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN `deliveryEnabled` BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN `deliveryRadiusKm` DOUBLE NULL,
-    ADD COLUMN `latitude` DOUBLE NULL,
-    ADD COLUMN `longitude` DOUBLE NULL,
-    ADD COLUMN `pickupEnabled` BOOLEAN NOT NULL DEFAULT false;
+-- Emptied 2026-08-05 (CI Phase 2 verification): this migration's original
+-- ALTER TABLE `outlet` ... ran before `20260723150000_merchant_auth_and_outlets`
+-- (the migration that actually CREATE TABLE `outlet`s) in filename/timestamp
+-- order — a migration-ordering bug invisible against an already-populated
+-- dev database (which had these columns from some other path) but fatal
+-- (P3018, "Table 'outlet' doesn't exist") against a genuinely clean
+-- `prisma migrate deploy`, which CI's fresh database now exercises for the
+-- first time. The real ALTER TABLE content moved verbatim to
+-- `20260723150001_outlet_hours_delivery_coords`, timestamped to run right
+-- after outlet's own CREATE TABLE. This file is left as an intentional
+-- no-op rather than deleted — it's already recorded as applied in every
+-- existing database's `_prisma_migrations` table, and Prisma tracks
+-- migrations by folder name, not content, so removing the folder would
+-- break `migrate deploy` against any of those databases.
