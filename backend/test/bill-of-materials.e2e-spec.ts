@@ -115,7 +115,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')

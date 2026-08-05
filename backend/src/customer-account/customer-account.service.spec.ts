@@ -37,7 +37,9 @@ function createMockPrisma(opts: {
 }) {
   return {
     customer: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue(opts.customer ?? baseCustomer()),
+      findUniqueOrThrow: jest
+        .fn()
+        .mockResolvedValue(opts.customer ?? baseCustomer()),
       update: jest.fn().mockResolvedValue({}),
     },
     order: {
@@ -60,7 +62,9 @@ function createMockPrisma(opts: {
 const mockInvoicesService = {} as InvoicesService;
 
 function createMockAuditLog() {
-  return { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditLogService;
+  return {
+    log: jest.fn().mockResolvedValue(undefined),
+  } as unknown as AuditLogService;
 }
 
 describe('CustomerAccountService.exportData', () => {
@@ -88,7 +92,11 @@ describe('CustomerAccountService.exportData', () => {
       ],
     });
     const auditLog = createMockAuditLog();
-    const service = new CustomerAccountService(prisma, mockInvoicesService, auditLog);
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      auditLog,
+    );
 
     const result = await service.exportData(ctx);
 
@@ -97,8 +105,14 @@ describe('CustomerAccountService.exportData', () => {
         where: { customerId: ctx.customerId, shopId: ctx.shopId },
       }),
     );
-    expect(result.profile).toMatchObject({ id: 1, name: 'Jane Shopper', phone: '0501234567' });
-    expect(result.addresses).toEqual([{ id: 'a1', address: '1 Main St', emirate: 'Dubai' }]);
+    expect(result.profile).toMatchObject({
+      id: 1,
+      name: 'Jane Shopper',
+      phone: '0501234567',
+    });
+    expect(result.addresses).toEqual([
+      { id: 'a1', address: '1 Main St', emirate: 'Dubai' },
+    ]);
     expect(result.orders).toHaveLength(1);
     expect(prisma.customer.update).toHaveBeenCalledWith({
       where: { id: ctx.customerId },
@@ -106,7 +120,10 @@ describe('CustomerAccountService.exportData', () => {
     });
     expect(auditLog.log).toHaveBeenCalledWith(
       { shopId: ctx.shopId, actorUserId: 99 },
-      expect.objectContaining({ action: 'CUSTOMER_DATA_EXPORT', entityId: ctx.customerId }),
+      expect.objectContaining({
+        action: 'CUSTOMER_DATA_EXPORT',
+        entityId: ctx.customerId,
+      }),
     );
   });
 
@@ -115,7 +132,11 @@ describe('CustomerAccountService.exportData', () => {
     const prisma = createMockPrisma({
       customer: baseCustomer({ lastDataExportAt: recentExport }),
     });
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
     expect(prisma.order.findMany).not.toHaveBeenCalled();
@@ -127,7 +148,11 @@ describe('CustomerAccountService.exportData', () => {
     const prisma = createMockPrisma({
       customer: baseCustomer({ lastDataExportAt: oldExport }),
     });
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
     expect(prisma.customer.update).toHaveBeenCalled();
@@ -137,7 +162,11 @@ describe('CustomerAccountService.exportData', () => {
 describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
   it('requestDeletion issues a hashed, 10-minute confirmationToken', async () => {
     const prisma = createMockPrisma({});
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
     const result = await service.requestDeletion(ctx);
 
@@ -168,7 +197,11 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         expiresAt: new Date(Date.now() + 5 * 60 * 1000),
       },
     });
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
     const result = await service.confirmDeletion(ctx, raw);
 
@@ -208,9 +241,15 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         expiresAt: new Date(Date.now() - 60 * 1000), // expired 1 min ago
       },
     });
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
-    await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(BadRequestException);
+    await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
+      BadRequestException,
+    );
     expect(prisma.customer.update).not.toHaveBeenCalled();
   });
 
@@ -227,10 +266,18 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       },
     });
     // Simulates losing the CAS — some other request already claimed it.
-    prisma.customerauthtoken.updateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    prisma.customerauthtoken.updateMany = jest
+      .fn()
+      .mockResolvedValue({ count: 0 });
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
-    await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(BadRequestException);
+    await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
+      BadRequestException,
+    );
     expect(prisma.customer.update).not.toHaveBeenCalled();
   });
 
@@ -238,7 +285,11 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
     const prisma = createMockPrisma({
       customer: baseCustomer({ email: 'deleted-abc123@deleted.requital' }),
     });
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
     const requestResult = await service.requestDeletion(ctx);
     expect(requestResult).toEqual({ alreadyDeleted: true });
@@ -260,7 +311,10 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       customer: {
         findUniqueOrThrow: jest.fn(() => Promise.resolve(customerState)),
         update: jest.fn((args: { data: Record<string, unknown> }) => {
-          customerState = { ...customerState, ...args.data } as typeof customerState;
+          customerState = {
+            ...customerState,
+            ...args.data,
+          };
           return Promise.resolve(customerState);
         }),
       },
@@ -275,10 +329,16 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      customerrefreshtoken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      customerrefreshtoken: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       user: { findFirst: jest.fn().mockResolvedValue({ id: 99 }) },
     } as unknown as PrismaService;
-    const service = new CustomerAccountService(prisma, mockInvoicesService, createMockAuditLog());
+    const service = new CustomerAccountService(
+      prisma,
+      mockInvoicesService,
+      createMockAuditLog(),
+    );
 
     const first = await service.confirmDeletion(ctx, raw);
     expect(first).toEqual({ success: true });

@@ -297,7 +297,10 @@ describe('Order status customer email notifications (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
     await request(app.getHttpServer())
       .patch('/shop')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -645,7 +648,10 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')

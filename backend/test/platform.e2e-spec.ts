@@ -73,7 +73,10 @@ describe('Platform (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
-    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
     return {
       adminToken: body<AuthResponse>(signup).accessToken,
       slug: `${slugPrefix}-${runId}`,

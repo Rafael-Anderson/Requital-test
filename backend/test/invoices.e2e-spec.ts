@@ -83,7 +83,10 @@ describe('Invoices & packing slips (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AdminAuthResponse>(signup).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AdminAuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AdminAuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')
@@ -298,7 +301,9 @@ describe('Invoices & packing slips (e2e)', () => {
         .expect(404);
       // The 404 body itself must never carry any of shop B's real invoice
       // data — just the generic NotFoundException shape.
-      expect(JSON.stringify(jsonRes.body)).not.toContain(invoiceB.invoiceNumber);
+      expect(JSON.stringify(jsonRes.body)).not.toContain(
+        invoiceB.invoiceNumber,
+      );
       expect(jsonRes.body).not.toHaveProperty('invoiceNumber');
       expect(jsonRes.body).not.toHaveProperty('subtotal');
       expect(jsonRes.body).not.toHaveProperty('total');

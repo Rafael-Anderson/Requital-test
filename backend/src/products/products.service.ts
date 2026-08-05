@@ -1082,7 +1082,7 @@ export class ProductsService {
           .triggerForProduct(
             ctx.shopId,
             variantProductById.get(variantId!)!,
-            variantId!,
+            variantId,
           )
           .catch(() => {});
       }
@@ -1164,7 +1164,7 @@ export class ProductsService {
     const destinationBefore = dto.ingredientId
       ? null
       : dto.variantId
-        ? (
+        ? ((
             await this.prisma.outletvariantstock.findUnique({
               where: {
                 outletId_variantId: {
@@ -1173,8 +1173,8 @@ export class ProductsService {
                 },
               },
             })
-          )?.stockQuantity ?? 0
-        : (
+          )?.stockQuantity ?? 0)
+        : ((
             await this.prisma.outletstock.findUnique({
               where: {
                 outletId_productId: {
@@ -1183,7 +1183,7 @@ export class ProductsService {
                 },
               },
             })
-          )?.stockQuantity ?? 0;
+          )?.stockQuantity ?? 0);
 
     await this.prisma.$transaction(async (tx) => {
       const decremented = dto.ingredientId

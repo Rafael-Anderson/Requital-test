@@ -71,17 +71,26 @@ function createMockJwt() {
 }
 
 function createMockAuditLog() {
-  return { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditLogService;
+  return {
+    log: jest.fn().mockResolvedValue(undefined),
+  } as unknown as AuditLogService;
 }
 
 describe('AuthService.login — progressive lockout', () => {
   it('a correct password succeeds and resets the failed-attempt counter', async () => {
-    const user = fakeUser({ failedLoginAttempts: 2, lastFailedLoginAt: new Date() });
+    const user = fakeUser({
+      failedLoginAttempts: 2,
+      lastFailedLoginAt: new Date(),
+    });
     const prisma = createMockPrisma();
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
     mockCompare.mockResolvedValue(true);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await service.login({ email: user.email, password: 'correct' });
 
     expect(prisma.user.update).toHaveBeenCalledWith({
@@ -96,7 +105,11 @@ describe('AuthService.login — progressive lockout', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
     mockCompare.mockResolvedValue(false);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await expect(
       service.login({ email: user.email, password: 'wrong' }),
     ).rejects.toThrow(UnauthorizedException);
@@ -117,7 +130,11 @@ describe('AuthService.login — progressive lockout', () => {
     const compareSpy = mockCompare;
     compareSpy.mockClear();
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await expect(
       service.login({ email: 'nobody@nowhere.test', password: 'whatever' }),
     ).rejects.toThrow(UnauthorizedException);
@@ -136,9 +153,13 @@ describe('AuthService.login — progressive lockout', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
     const compareSpy = mockCompare;
     compareSpy.mockClear();
-    compareSpy.mockResolvedValue(true as never); // even the "right" password
+    compareSpy.mockResolvedValue(true); // even the "right" password
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await expect(
       service.login({ email: user.email, password: 'correct' }),
     ).rejects.toThrow(UnauthorizedException);
@@ -160,7 +181,11 @@ describe('AuthService.login — progressive lockout', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
     mockCompare.mockResolvedValue(true);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await service.login({ email: user.email, password: 'correct' });
 
     expect(bcrypt.compare).toHaveBeenCalled();
@@ -178,7 +203,11 @@ describe('AuthService.login — progressive lockout', () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
     mockCompare.mockResolvedValue(true);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await service.login({ email: user.email, password: 'correct' });
 
     expect(bcrypt.compare).toHaveBeenCalled();
@@ -191,7 +220,11 @@ describe('AuthService — token supersession and invalidation', () => {
     const prisma = createMockPrisma();
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await service.forgotPassword({ email: user.email });
 
     expect(prisma.authtoken.updateMany).toHaveBeenCalledWith({
@@ -211,7 +244,11 @@ describe('AuthService — token supersession and invalidation', () => {
     const prisma = createMockPrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(user);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await service.resendVerification({
       userId: user.id,
       shopId: user.shopId,
@@ -232,7 +269,11 @@ describe('AuthService — token supersession and invalidation', () => {
     mockCompare.mockResolvedValue(true);
     mockHash.mockResolvedValue('new-hash');
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await service.changePassword(
       { userId: user.id, shopId: user.shopId, role: 'admin', outletId: null },
       { currentPassword: 'old', newPassword: 'newpassword123' },
@@ -255,9 +296,16 @@ describe('AuthService — token supersession and invalidation', () => {
     });
     (prisma.authtoken.updateMany as jest.Mock).mockResolvedValue({ count: 0 }); // CAS lost — already used
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await expect(
-      service.resetPassword({ token: 'sometoken', newPassword: 'newpassword123' }),
+      service.resetPassword({
+        token: 'sometoken',
+        newPassword: 'newpassword123',
+      }),
     ).rejects.toThrow('This reset link has already been used');
   });
 
@@ -271,9 +319,16 @@ describe('AuthService — token supersession and invalidation', () => {
       usedAt: null,
     });
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await expect(
-      service.resetPassword({ token: 'sometoken', newPassword: 'newpassword123' }),
+      service.resetPassword({
+        token: 'sometoken',
+        newPassword: 'newpassword123',
+      }),
     ).rejects.toThrow('invalid or has expired');
   });
 
@@ -287,9 +342,16 @@ describe('AuthService — token supersession and invalidation', () => {
       usedAt: null,
     });
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
+    );
     await expect(
-      service.resetPassword({ token: 'sometoken', newPassword: 'newpassword123' }),
+      service.resetPassword({
+        token: 'sometoken',
+        newPassword: 'newpassword123',
+      }),
     ).rejects.toThrow('invalid or has expired');
   });
 
@@ -297,9 +359,13 @@ describe('AuthService — token supersession and invalidation', () => {
     const prisma = createMockPrisma();
     (prisma.authtoken.findUnique as jest.Mock).mockResolvedValue(null);
 
-    const service = new AuthService(prisma, createMockJwt(), createMockAuditLog());
-    await expect(service.verifyEmail({ token: 'not-a-real-token' })).rejects.toThrow(
-      'invalid or has expired',
+    const service = new AuthService(
+      prisma,
+      createMockJwt(),
+      createMockAuditLog(),
     );
+    await expect(
+      service.verifyEmail({ token: 'not-a-real-token' }),
+    ).rejects.toThrow('invalid or has expired');
   });
 });

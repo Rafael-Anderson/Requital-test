@@ -84,7 +84,10 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       })
       .expect(201);
     const adminToken = body<AdminAuthResponse>(signup).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AdminAuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AdminAuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')
@@ -126,7 +129,12 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
     return { shopSlug, adminToken, outletId, productId };
   }
 
-  function guestOrder(shopSlug: string, outletId: number, productId: number, phone: string) {
+  function guestOrder(
+    shopSlug: string,
+    outletId: number,
+    productId: number,
+    phone: string,
+  ) {
     return request(app.getHttpServer())
       .post(`/public/${shopSlug}/orders`)
       .send({
@@ -157,7 +165,12 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       const email = `priv-export-${runId}@test.com`;
 
       const orderA = body<OrderCreateResponse>(
-        await guestOrder(shopA.shopSlug, shopA.outletId, shopA.productId, phone),
+        await guestOrder(
+          shopA.shopSlug,
+          shopA.outletId,
+          shopA.productId,
+          phone,
+        ),
       ).order;
       // Same phone AND same email placed as a guest order in shop B too —
       // findOrCreateForOrder creates a *separate* customer row there (the
@@ -176,7 +189,9 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
 
       expect(data.profile.phone).toBe(phone);
       expect(data.orders.map((o) => o.id)).toEqual([orderA.id]); // only shop A's order
-      expect(exportRes.headers['content-disposition']).toContain('my-data.json');
+      expect(exportRes.headers['content-disposition']).toContain(
+        'my-data.json',
+      );
     });
 
     it('rejects a second export within 24h', async () => {
@@ -253,14 +268,18 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       // Deterministic, id-derived values (not a fresh random value per
       // call) — see CustomerAccountService.anonymiseCustomer's own comment
       // on why that matters for idempotency.
-      expect(customer.email).toBe(`deleted-${registered.customer.id}@deleted.requital`);
+      expect(customer.email).toBe(
+        `deleted-${registered.customer.id}@deleted.requital`,
+      );
       expect(customer.phone).toBe(`DELETED-${registered.customer.id}`);
       expect(customer.passwordHash).toBeNull();
       expect(customer.addresses).toBeNull();
 
       // The order itself still exists, still pointing at the (now
       // anonymised) customer — merchant records are preserved.
-      const stillExists = await prisma.order.findUnique({ where: { id: order.id } });
+      const stillExists = await prisma.order.findUnique({
+        where: { id: order.id },
+      });
       expect(stillExists).not.toBeNull();
       expect(stillExists!.customerId).toBe(registered.customer.id);
 
@@ -325,12 +344,17 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       // simulates waiting out the real 10-minute TTL without the test
       // actually sleeping that long.
       await prisma.customerauthtoken.updateMany({
-        where: { customerId: registered.customer.id, purpose: 'account_deletion' },
+        where: {
+          customerId: registered.customer.id,
+          purpose: 'account_deletion',
+        },
         data: { expiresAt: new Date(Date.now() - 60 * 1000) },
       });
 
       await request(app.getHttpServer())
-        .delete(`/public/${shop.shopSlug}/account/me/confirm?token=${requested.confirmationToken}`)
+        .delete(
+          `/public/${shop.shopSlug}/account/me/confirm?token=${requested.confirmationToken}`,
+        )
         .set('Authorization', `Bearer ${registered.accessToken}`)
         .expect(400);
     });
@@ -349,10 +373,18 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       const phoneA = '0507770013';
       const phoneB = '0507770014';
       const registeredA = body<CustomerAuthResponse>(
-        await register(shopA.shopSlug, phoneA, `priv-iso-del-a-${runId}@test.com`),
+        await register(
+          shopA.shopSlug,
+          phoneA,
+          `priv-iso-del-a-${runId}@test.com`,
+        ),
       );
       const registeredB = body<CustomerAuthResponse>(
-        await register(shopB.shopSlug, phoneB, `priv-iso-del-b-${runId}@test.com`),
+        await register(
+          shopB.shopSlug,
+          phoneB,
+          `priv-iso-del-b-${runId}@test.com`,
+        ),
       );
 
       // Shop B's token can't even reach shop A's account routes.

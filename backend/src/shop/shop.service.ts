@@ -52,8 +52,7 @@ export class ShopService {
     if (!hasProduct) missing.push('Add at least one product');
     if (!hasReadyOutlet)
       missing.push('Enable delivery or pickup on at least one outlet');
-    if (!actingUser.emailVerified)
-      missing.push('Verify your account email');
+    if (!actingUser.emailVerified) missing.push('Verify your account email');
     return { ready: missing.length === 0, missing };
   }
 

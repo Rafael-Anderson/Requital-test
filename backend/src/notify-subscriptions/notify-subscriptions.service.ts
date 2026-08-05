@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { sendEmail } from '../common/email';
 import { SubscribeDto } from './dto/subscribe.dto';
@@ -107,7 +111,13 @@ export class NotifySubscriptionsService {
   ) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { id: true, name: true, thumbnail: true, slug: true, shop: { select: { subdomain: true, name: true } } },
+      select: {
+        id: true,
+        name: true,
+        thumbnail: true,
+        slug: true,
+        shop: { select: { subdomain: true, name: true } },
+      },
     });
     if (!product) return;
 

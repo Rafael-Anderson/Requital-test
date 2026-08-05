@@ -60,7 +60,10 @@ describe('Shop publish state (e2e)', () => {
   // caller of this helper keeps testing exactly the product/outlet
   // conditions it already asserts on, without the new gate interfering.
   // Pass verifyEmail: false for tests that specifically exercise that gate.
-  async function setupShop(slugPrefix: string, options?: { verifyEmail?: boolean }) {
+  async function setupShop(
+    slugPrefix: string,
+    options?: { verifyEmail?: boolean },
+  ) {
     const signup = await request(app.getHttpServer())
       .post('/auth/signup')
       .send({

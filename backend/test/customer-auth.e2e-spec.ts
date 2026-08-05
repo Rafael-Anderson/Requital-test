@@ -94,7 +94,10 @@ describe('Customer storefront accounts (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AdminAuthResponse>(signup).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AdminAuthResponse>(signup).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AdminAuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')

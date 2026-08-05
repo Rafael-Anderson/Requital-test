@@ -56,7 +56,9 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   const itemRows = data.order.orderitem
     .map((item) => {
       const name = escapeHtml(
-        item.variantLabel ? `${item.productName} — ${item.variantLabel}` : item.productName,
+        item.variantLabel
+          ? `${item.productName} — ${item.variantLabel}`
+          : item.productName,
       );
       const priceCell = showMoney
         ? `<td class="num">${money(item.priceAtPurchase, data.currency)}</td><td class="num">${money(item.priceAtPurchase.mul(item.quantity), data.currency)}</td>`

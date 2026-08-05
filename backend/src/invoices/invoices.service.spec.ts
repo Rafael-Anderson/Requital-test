@@ -22,9 +22,7 @@ function fakeOrder(overrides: Partial<{ id: number; shopId: number }> = {}) {
     shopId: overrides.shopId ?? 1,
     total: new Prisma.Decimal(21),
     taxAmount: new Prisma.Decimal(1),
-    orderitem: [
-      { priceAtPurchase: new Prisma.Decimal(10), quantity: 2 },
-    ],
+    orderitem: [{ priceAtPurchase: new Prisma.Decimal(10), quantity: 2 }],
   };
 }
 
@@ -38,13 +36,15 @@ function createMockPrisma() {
   const counters = new Map<string, number>();
   let lastKey = '';
   const tx = {
-    $executeRaw: jest.fn((_strings: TemplateStringsArray, ...values: unknown[]) => {
-      const [shopId, type] = values as [number, string];
-      const key = `${shopId}:${type}`;
-      lastKey = key;
-      counters.set(key, (counters.get(key) ?? 0) + 1);
-      return Promise.resolve(1);
-    }),
+    $executeRaw: jest.fn(
+      (_strings: TemplateStringsArray, ...values: unknown[]) => {
+        const [shopId, type] = values as [number, string];
+        const key = `${shopId}:${type}`;
+        lastKey = key;
+        counters.set(key, (counters.get(key) ?? 0) + 1);
+        return Promise.resolve(1);
+      },
+    ),
     $queryRaw: jest.fn(() =>
       Promise.resolve([{ seq: BigInt(counters.get(lastKey) ?? 0) }]),
     ),
@@ -70,7 +70,9 @@ describe('InvoicesService.generateForOrder', () => {
       findOne: jest.fn().mockResolvedValue(order),
     } as unknown as OrdersService;
     prisma.invoice.findUnique = jest.fn().mockResolvedValue(null);
-    (prisma as unknown as { __tx: { invoice: { create: jest.Mock } } }).__tx.invoice.create.mockImplementation(
+    (
+      prisma as unknown as { __tx: { invoice: { create: jest.Mock } } }
+    ).__tx.invoice.create.mockImplementation(
       (args: { data: Record<string, unknown> }) => ({ id: 100, ...args.data }),
     );
 
@@ -89,7 +91,9 @@ describe('InvoicesService.generateForOrder', () => {
       subtotal: expect.any(Prisma.Decimal),
       total: order.total,
     });
-    expect((result as { subtotal: Prisma.Decimal }).subtotal.toNumber()).toBe(20);
+    expect((result as { subtotal: Prisma.Decimal }).subtotal.toNumber()).toBe(
+      20,
+    );
   });
 
   it('is idempotent: a second call for the same (orderId, type) returns the existing invoice without creating a new one', async () => {
@@ -98,7 +102,12 @@ describe('InvoicesService.generateForOrder', () => {
     const ordersService = {
       findOne: jest.fn().mockResolvedValue(order),
     } as unknown as OrdersService;
-    const existing = { id: 42, orderId: 5, type: 'INVOICE', invoiceNumber: 'INV-0001' };
+    const existing = {
+      id: 42,
+      orderId: 5,
+      type: 'INVOICE',
+      invoiceNumber: 'INV-0001',
+    };
     prisma.invoice.findUnique = jest.fn().mockResolvedValue(existing);
 
     const service = new InvoicesService(prisma, ordersService);
@@ -114,8 +123,13 @@ describe('InvoicesService.generateForOrder', () => {
   it('invoiceNumber increments independently per shop — shop A and shop B each start at INV-0001', async () => {
     const prisma = createMockPrisma();
     prisma.invoice.findUnique = jest.fn().mockResolvedValue(null);
-    (prisma as unknown as { __tx: { invoice: { create: jest.Mock } } }).__tx.invoice.create.mockImplementation(
-      (args: { data: Record<string, unknown> }) => ({ id: Math.random(), ...args.data }),
+    (
+      prisma as unknown as { __tx: { invoice: { create: jest.Mock } } }
+    ).__tx.invoice.create.mockImplementation(
+      (args: { data: Record<string, unknown> }) => ({
+        id: Math.random(),
+        ...args.data,
+      }),
     );
     const ordersService = {
       findOne: jest.fn((_ctx: TenantContext, orderId: number) =>
@@ -137,9 +151,15 @@ describe('InvoicesService.generateForOrder', () => {
       type: 'INVOICE',
     });
 
-    expect((shopAFirst as { invoiceNumber: string }).invoiceNumber).toBe('INV-0001');
-    expect((shopASecond as { invoiceNumber: string }).invoiceNumber).toBe('INV-0002');
-    expect((shopBFirst as { invoiceNumber: string }).invoiceNumber).toBe('INV-0001');
+    expect((shopAFirst as { invoiceNumber: string }).invoiceNumber).toBe(
+      'INV-0001',
+    );
+    expect((shopASecond as { invoiceNumber: string }).invoiceNumber).toBe(
+      'INV-0002',
+    );
+    expect((shopBFirst as { invoiceNumber: string }).invoiceNumber).toBe(
+      'INV-0001',
+    );
   });
 
   it('a lost race (P2002 on the concurrent create) reads back the winner instead of throwing or duplicating', async () => {
@@ -153,10 +173,15 @@ describe('InvoicesService.generateForOrder', () => {
       // First check inside generateForOrder: no existing invoice yet.
       .mockResolvedValueOnce(null)
       // Re-check after losing the race: the concurrent winner's row.
-      .mockResolvedValueOnce({ id: 7, orderId: 5, type: 'INVOICE', invoiceNumber: 'INV-0001' });
-    (prisma as unknown as { __tx: { invoice: { create: jest.Mock } } }).__tx.invoice.create.mockRejectedValue(
-      p2002(),
-    );
+      .mockResolvedValueOnce({
+        id: 7,
+        orderId: 5,
+        type: 'INVOICE',
+        invoiceNumber: 'INV-0001',
+      });
+    (
+      prisma as unknown as { __tx: { invoice: { create: jest.Mock } } }
+    ).__tx.invoice.create.mockRejectedValue(p2002());
 
     const service = new InvoicesService(prisma, ordersService);
     const result = await service.generateForOrder(ctxFor(1), {
@@ -164,26 +189,39 @@ describe('InvoicesService.generateForOrder', () => {
       type: 'INVOICE',
     });
 
-    expect(result).toEqual({ id: 7, orderId: 5, type: 'INVOICE', invoiceNumber: 'INV-0001' });
+    expect(result).toEqual({
+      id: 7,
+      orderId: 5,
+      type: 'INVOICE',
+      invoiceNumber: 'INV-0001',
+    });
   });
 });
 
 describe('InvoicesService.findOne — tenant isolation', () => {
-  it('never returns another shop\'s invoice — a mismatched shopId is a 404, not the row', async () => {
+  it("never returns another shop's invoice — a mismatched shopId is a 404, not the row", async () => {
     const prisma = createMockPrisma();
     prisma.invoice.findFirst = jest.fn().mockResolvedValue(null);
     const ordersService = {} as OrdersService;
     const service = new InvoicesService(prisma, ordersService);
 
-    await expect(service.findOne(ctxFor(2), 99)).rejects.toThrow(NotFoundException);
+    await expect(service.findOne(ctxFor(2), 99)).rejects.toThrow(
+      NotFoundException,
+    );
     expect(prisma.invoice.findFirst).toHaveBeenCalledWith({
       where: { id: 99, shopId: 2 },
     });
   });
 
-  it('returns the invoice when it does belong to the caller\'s shop', async () => {
+  it("returns the invoice when it does belong to the caller's shop", async () => {
     const prisma = createMockPrisma();
-    const invoice = { id: 99, orderId: 5, shopId: 1, type: 'INVOICE', invoiceNumber: 'INV-0001' };
+    const invoice = {
+      id: 99,
+      orderId: 5,
+      shopId: 1,
+      type: 'INVOICE',
+      invoiceNumber: 'INV-0001',
+    };
     prisma.invoice.findFirst = jest.fn().mockResolvedValue(invoice);
     const findOne = jest.fn().mockResolvedValue({ id: 5 });
     const ordersService = { findOne } as unknown as OrdersService;
@@ -195,12 +233,20 @@ describe('InvoicesService.findOne — tenant isolation', () => {
 
   it("also checks the underlying order's own outlet scope, not just shopId — a branch user blocked from the order is blocked from its invoice too", async () => {
     const prisma = createMockPrisma();
-    const invoice = { id: 99, orderId: 5, shopId: 1, type: 'INVOICE', invoiceNumber: 'INV-0001' };
+    const invoice = {
+      id: 99,
+      orderId: 5,
+      shopId: 1,
+      type: 'INVOICE',
+      invoiceNumber: 'INV-0001',
+    };
     prisma.invoice.findFirst = jest.fn().mockResolvedValue(invoice);
     const findOne = jest.fn().mockRejectedValue(new NotFoundException());
     const ordersService = { findOne } as unknown as OrdersService;
     const service = new InvoicesService(prisma, ordersService);
 
-    await expect(service.findOne(ctxFor(1), 99)).rejects.toThrow(NotFoundException);
+    await expect(service.findOne(ctxFor(1), 99)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

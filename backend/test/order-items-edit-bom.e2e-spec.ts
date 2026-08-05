@@ -183,7 +183,12 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       .send({ outletId, adjustments: [{ productId, delta: 50 }] })
       .expect(200);
 
-    const orderId = await createAndConfirmOrder(adminToken, outletId, productId, 2);
+    const orderId = await createAndConfirmOrder(
+      adminToken,
+      outletId,
+      productId,
+      2,
+    );
     expect(await roseStockOf(outletId, rose)).toBe(1000 - 6 * 2);
 
     await request(app.getHttpServer())
@@ -208,7 +213,12 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       .send({ outletId, adjustments: [{ productId, delta: 50 }] })
       .expect(200);
 
-    const orderId = await createAndConfirmOrder(adminToken, outletId, productId, 5);
+    const orderId = await createAndConfirmOrder(
+      adminToken,
+      outletId,
+      productId,
+      5,
+    );
     expect(await roseStockOf(outletId, rose)).toBe(1000 - 6 * 5);
 
     await request(app.getHttpServer())
@@ -221,7 +231,8 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('cancelling after an edit returns exactly the currently-reserved ingredient stock, not the original amount', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('cancel-after-edit');
+    const { adminToken, categoryId, outletId } =
+      await setupShop('cancel-after-edit');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
     const productId = await createProduct(adminToken, categoryId, rose, 6);
@@ -231,7 +242,12 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       .send({ outletId, adjustments: [{ productId, delta: 50 }] })
       .expect(200);
 
-    const orderId = await createAndConfirmOrder(adminToken, outletId, productId, 2);
+    const orderId = await createAndConfirmOrder(
+      adminToken,
+      outletId,
+      productId,
+      2,
+    );
     await request(app.getHttpServer())
       .patch(`/orders/${orderId}/items`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -248,7 +264,8 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('editing a still-pending order does not touch ingredient stock at all', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('pending-edit');
+    const { adminToken, categoryId, outletId } =
+      await setupShop('pending-edit');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
     const productId = await createProduct(adminToken, categoryId, rose, 6);
@@ -284,7 +301,8 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('a quantity increase that would take ingredient stock negative warns but still saves', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('negative-warn');
+    const { adminToken, categoryId, outletId } =
+      await setupShop('negative-warn');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 10); // exactly one unit's worth
     const productId = await createProduct(adminToken, categoryId, rose, 10);
@@ -294,7 +312,12 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       .send({ outletId, adjustments: [{ productId, delta: 50 }] })
       .expect(200);
 
-    const orderId = await createAndConfirmOrder(adminToken, outletId, productId, 1);
+    const orderId = await createAndConfirmOrder(
+      adminToken,
+      outletId,
+      productId,
+      1,
+    );
     expect(await roseStockOf(outletId, rose)).toBe(0);
 
     const res = await request(app.getHttpServer())
@@ -307,19 +330,32 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     expect(await roseStockOf(outletId, rose)).toBe(-10);
   });
 
-  it('editing an order from another shop is rejected and never touches the correct shop\'s ingredient stock', async () => {
+  it("editing an order from another shop is rejected and never touches the correct shop's ingredient stock", async () => {
     const shopA = await setupShop('victim');
     const shopB = await setupShop('attacker');
     const rose = await createIngredient(shopA.adminToken, 'Rose');
     await setIngredientStock(shopA.adminToken, rose, shopA.outletId, 1000);
-    const productId = await createProduct(shopA.adminToken, shopA.categoryId, rose, 6);
+    const productId = await createProduct(
+      shopA.adminToken,
+      shopA.categoryId,
+      rose,
+      6,
+    );
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${shopA.adminToken}`)
-      .send({ outletId: shopA.outletId, adjustments: [{ productId, delta: 50 }] })
+      .send({
+        outletId: shopA.outletId,
+        adjustments: [{ productId, delta: 50 }],
+      })
       .expect(200);
 
-    const orderId = await createAndConfirmOrder(shopA.adminToken, shopA.outletId, productId, 2);
+    const orderId = await createAndConfirmOrder(
+      shopA.adminToken,
+      shopA.outletId,
+      productId,
+      2,
+    );
     expect(await roseStockOf(shopA.outletId, rose)).toBe(1000 - 12);
 
     await request(app.getHttpServer())

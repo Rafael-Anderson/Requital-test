@@ -9,7 +9,15 @@ import { renderInvoiceHtml } from './invoice-html';
 
 const orderForInvoiceInclude = {
   orderitem: true,
-  shop: { select: { name: true, displayName: true, address: true, email: true, currency: true } },
+  shop: {
+    select: {
+      name: true,
+      displayName: true,
+      address: true,
+      email: true,
+      currency: true,
+    },
+  },
 } satisfies Prisma.orderInclude;
 
 @Injectable()

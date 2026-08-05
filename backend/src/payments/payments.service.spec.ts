@@ -30,14 +30,12 @@ const mockAffiliateServicePaid = {
 } as unknown as AffiliateService;
 
 function createMockPrisma(opts: {
-  order?:
-    | {
-        id: number;
-        total: Prisma.Decimal | number;
-        shopId?: number;
-        status?: string;
-      }
-    | null;
+  order?: {
+    id: number;
+    total: Prisma.Decimal | number;
+    shopId?: number;
+    status?: string;
+  } | null;
   createRejectsWith?: unknown;
   adminUser?: { id: number } | null;
 }) {
@@ -48,9 +46,7 @@ function createMockPrisma(opts: {
       update: jest.fn().mockResolvedValue({}),
     },
     user: {
-      findFirst: jest
-        .fn()
-        .mockResolvedValue(opts.adminUser ?? { id: 1 }),
+      findFirst: jest.fn().mockResolvedValue(opts.adminUser ?? { id: 1 }),
     },
     paymenttransaction: {
       create: jest.fn(() =>

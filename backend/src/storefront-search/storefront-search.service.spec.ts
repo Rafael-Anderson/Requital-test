@@ -37,14 +37,24 @@ describe('StorefrontSearchService.search', () => {
 
     const result = await service.search('test-shop', '   ');
 
-    expect(result).toEqual({ results: [], nextCursor: null, matchType: 'none', suggestion: null });
+    expect(result).toEqual({
+      results: [],
+      nextCursor: null,
+      matchType: 'none',
+      suggestion: null,
+    });
     expect((prisma as any).shop.findUnique).not.toHaveBeenCalled();
   });
 
   it('returns exact matches when the query substring-matches a product name', async () => {
     const prisma = createMockPrisma([
       fakeProduct({ id: 1, name: 'Rose Bouquet' }),
-      fakeProduct({ id: 2, name: 'Tulip Bouquet', sku: 'TULIP-1', description: 'Bright and cheerful' }),
+      fakeProduct({
+        id: 2,
+        name: 'Tulip Bouquet',
+        sku: 'TULIP-1',
+        description: 'Bright and cheerful',
+      }),
     ]);
     const service = new StorefrontSearchService(prisma);
 
@@ -56,7 +66,14 @@ describe('StorefrontSearchService.search', () => {
   });
 
   it('falls back to fuzzy matching a single-character typo when exact match finds nothing', async () => {
-    const prisma = createMockPrisma([fakeProduct({ id: 1, name: 'Rose Bouquet', sku: 'ROSE-1', description: '' })]);
+    const prisma = createMockPrisma([
+      fakeProduct({
+        id: 1,
+        name: 'Rose Bouquet',
+        sku: 'ROSE-1',
+        description: '',
+      }),
+    ]);
     const service = new StorefrontSearchService(prisma);
 
     const result = await service.search('test-shop', 'roes');
@@ -67,7 +84,12 @@ describe('StorefrontSearchService.search', () => {
 
   it('fuzzy-matches a typo in a longer word ("choclate" -> "chocolate")', async () => {
     const prisma = createMockPrisma([
-      fakeProduct({ id: 1, name: 'Chocolate Box', sku: 'CHOC-1', description: '' }),
+      fakeProduct({
+        id: 1,
+        name: 'Chocolate Box',
+        sku: 'CHOC-1',
+        description: '',
+      }),
     ]);
     const service = new StorefrontSearchService(prisma);
 
@@ -78,7 +100,14 @@ describe('StorefrontSearchService.search', () => {
   });
 
   it('returns matchType "none" when even fuzzy matching finds nothing', async () => {
-    const prisma = createMockPrisma([fakeProduct({ id: 1, name: 'Rose Bouquet', sku: 'ROSE-1', description: '' })]);
+    const prisma = createMockPrisma([
+      fakeProduct({
+        id: 1,
+        name: 'Rose Bouquet',
+        sku: 'ROSE-1',
+        description: '',
+      }),
+    ]);
     const service = new StorefrontSearchService(prisma);
 
     const result = await service.search('test-shop', 'zzzzzzzzzzzzzzz');
@@ -87,14 +116,18 @@ describe('StorefrontSearchService.search', () => {
     expect(result.results).toEqual([]);
   });
 
-  it('never returns another shop\'s products — query is always scoped to the resolved shopId', async () => {
-    const prisma = createMockPrisma([fakeProduct({ id: 1, name: 'Rose Bouquet' })]);
+  it("never returns another shop's products — query is always scoped to the resolved shopId", async () => {
+    const prisma = createMockPrisma([
+      fakeProduct({ id: 1, name: 'Rose Bouquet' }),
+    ]);
     const service = new StorefrontSearchService(prisma);
 
     await service.search('test-shop', 'rose');
 
     expect((prisma as any).product.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ shopId: 10 }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ shopId: 10 }),
+      }),
     );
   });
 
@@ -103,11 +136,15 @@ describe('StorefrontSearchService.search', () => {
     (prisma as any).shop.findUnique = jest.fn().mockResolvedValue(null);
     const service = new StorefrontSearchService(prisma);
 
-    await expect(service.search('nonexistent', 'rose')).rejects.toThrow(NotFoundException);
+    await expect(service.search('nonexistent', 'rose')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('caches identical (shop, query) results — a second call does not re-query the database', async () => {
-    const prisma = createMockPrisma([fakeProduct({ id: 1, name: 'Rose Bouquet' })]);
+    const prisma = createMockPrisma([
+      fakeProduct({ id: 1, name: 'Rose Bouquet' }),
+    ]);
     const service = new StorefrontSearchService(prisma);
 
     await service.search('test-shop', 'rose');
@@ -117,7 +154,9 @@ describe('StorefrontSearchService.search', () => {
   });
 
   it('paginates results with a limit of 20 and a cursor for the next page', async () => {
-    const products = Array.from({ length: 25 }, (_, i) => fakeProduct({ id: i + 1, name: 'Rose Bouquet' }));
+    const products = Array.from({ length: 25 }, (_, i) =>
+      fakeProduct({ id: i + 1, name: 'Rose Bouquet' }),
+    );
     const prisma = createMockPrisma(products);
     const service = new StorefrontSearchService(prisma);
 

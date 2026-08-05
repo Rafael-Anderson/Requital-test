@@ -279,7 +279,8 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
       const validToken = tokenFromDevLink(
         body<{ devResetLink: string }>(forgot).devResetLink,
       );
-      const tampered = validToken.slice(0, -1) + (validToken.endsWith('a') ? 'b' : 'a');
+      const tampered =
+        validToken.slice(0, -1) + (validToken.endsWith('a') ? 'b' : 'a');
 
       const res = await request(app.getHttpServer())
         .post('/auth/reset-password')
@@ -306,7 +307,7 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
       expect(messageOf(res)).toContain('invalid or has expired');
     });
 
-    it('a reset token generated for one shop\'s admin cannot affect a different shop\'s admin account', async () => {
+    it("a reset token generated for one shop's admin cannot affect a different shop's admin account", async () => {
       // There's no shopId/userId parameter in the reset request at all — the
       // token itself is the only identifier, resolved via a hashed lookup
       // straight to one authtoken row's userId. This test locks in that the
