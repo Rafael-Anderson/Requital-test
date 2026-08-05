@@ -19,6 +19,9 @@ import { BulkUpdateOrderStatusDto } from './dto/bulk-update-order-status.dto';
 import { CreateOrderNoteDto } from './dto/create-order-note.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { OrderNotificationsService } from './order-notifications.service';
+import { createLogger } from '../common/logging/logger';
+
+const logger = createLogger('OrdersService');
 import { UpdateDeliveryFeeDto } from './dto/update-delivery-fee.dto';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { UpdateOrderItemsDto } from './dto/update-order-items.dto';
@@ -411,10 +414,11 @@ export class OrdersService {
     this.orderNotificationsService
       .notifyOrderConfirmed(ctx.shopId, order)
       .catch((err: unknown) => {
-        console.error(
-          `[order-notifications] order #${order.id}: notifyOrderConfirmed failed —`,
-          err instanceof Error ? err.message : err,
-        );
+        logger.error(`order #${order.id}: notifyOrderConfirmed failed`, {
+          orderId: order.id,
+          shopId: ctx.shopId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
 
     return order;
@@ -544,20 +548,22 @@ export class OrdersService {
       this.orderNotificationsService
         .notifyOutForDelivery(ctx.shopId, updated)
         .catch((err: unknown) => {
-          console.error(
-            `[order-notifications] order #${id}: notifyOutForDelivery failed —`,
-            err instanceof Error ? err.message : err,
-          );
+          logger.error(`order #${id}: notifyOutForDelivery failed`, {
+            orderId: id,
+            shopId: ctx.shopId,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
     }
     if (dto.status === 'delivered') {
       this.orderNotificationsService
         .notifySurveyRequest(ctx.shopId, updated)
         .catch((err: unknown) => {
-          console.error(
-            `[order-notifications] order #${id}: notifySurveyRequest failed —`,
-            err instanceof Error ? err.message : err,
-          );
+          logger.error(`order #${id}: notifySurveyRequest failed`, {
+            orderId: id,
+            shopId: ctx.shopId,
+            error: err instanceof Error ? err.message : String(err),
+          });
         });
     }
     return updated;

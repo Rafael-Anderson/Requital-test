@@ -8,6 +8,9 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
+import { createLogger } from '../common/logging/logger';
+
+const logger = createLogger('PublicService');
 import { haversineDistanceKm } from '../common/geo';
 import { generateTrackingCode } from '../common/token-hash';
 import { computeOrderTotals, matchDeliveryZone } from './order-pricing';
@@ -998,10 +1001,11 @@ export class PublicService {
     this.orderNotificationsService
       .notifyOrderConfirmed(shop.id, order)
       .catch((err: unknown) => {
-        console.error(
-          `[order-notifications] order #${order.id}: notifyOrderConfirmed failed —`,
-          err instanceof Error ? err.message : err,
-        );
+        logger.error(`order #${order.id}: notifyOrderConfirmed failed`, {
+          orderId: order.id,
+          shopId: shop.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
 
     // card_online routes to whichever card processor (Nomod/Stripe) is
@@ -1102,8 +1106,9 @@ export class PublicService {
           'Delivery is not available to this address — it did not match any configured delivery zone',
         );
       }
-      console.warn(
-        `[delivery] outlet ${outlet.id}: address (area=${JSON.stringify(dto.area ?? null)}, emirate=${JSON.stringify(dto.emirate)}) matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility. Check for a zone-name mismatch.`,
+      logger.warn(
+        'address matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
+        { outletId: outlet.id, area: dto.area ?? null, emirate: dto.emirate },
       );
     }
 

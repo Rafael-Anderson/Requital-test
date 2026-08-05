@@ -5,6 +5,9 @@ import type {
   PaymentProvider,
   WebhookResult,
 } from '../payment-provider.interface';
+import { createLogger } from '../../common/logging/logger';
+
+const logger = createLogger('PaypalPaymentProvider');
 
 // STRUCTURAL STUB — not a real integration. Also a genuinely new provider
 // for this task. PayPal's REST Orders v2 API shape is well-documented in
@@ -32,9 +35,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
     _payload: Buffer,
     _signatureHeader: string,
   ): WebhookResult | null {
-    console.warn(
-      '[payments] paypal webhook received but parseWebhookEvent is a stub — ignoring',
-    );
+    logger.warn('webhook received but parseWebhookEvent is a stub — ignoring');
     return null;
   }
 }

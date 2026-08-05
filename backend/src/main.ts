@@ -5,10 +5,23 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { StructuredLoggerService } from './common/logging/structured-logger.service';
+import { validateEnv } from './common/env-validation';
+
+// Constructed standalone (no Nest DI needed yet) so even the fail-fast
+// validation error itself goes out as a structured JSON line, not a raw
+// console.error — this runs before NestFactory.create() has a chance to
+// wire the same logger in as the app's own.
+const bootLogger = new StructuredLoggerService();
+validateEnv(bootLogger);
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
+    // Every Logger instance app-wide (new Logger(X), Nest's own internal
+    // bootstrap logging, everything) is routed through this one JSON
+    // formatter — see structured-logger.service.ts's own comment.
+    logger: bootLogger,
   });
   // Enforcing, not report-only — this is a JSON API plus one HTML surface
   // (invoices/invoice-html.ts's styled text/html document). That template's

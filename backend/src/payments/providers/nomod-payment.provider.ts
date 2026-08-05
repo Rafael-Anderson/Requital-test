@@ -5,6 +5,9 @@ import type {
   PaymentProvider,
   WebhookResult,
 } from '../payment-provider.interface';
+import { createLogger } from '../../common/logging/logger';
+
+const logger = createLogger('NomodPaymentProvider');
 
 // STRUCTURAL STUB — not a real integration. Nomod is a genuinely new
 // provider for this task (not touched by any earlier stub pass); no
@@ -31,9 +34,7 @@ export class NomodPaymentProvider implements PaymentProvider {
     _payload: Buffer,
     _signatureHeader: string,
   ): WebhookResult | null {
-    console.warn(
-      '[payments] nomod webhook received but parseWebhookEvent is a stub — ignoring',
-    );
+    logger.warn('webhook received but parseWebhookEvent is a stub — ignoring');
     return null;
   }
 }

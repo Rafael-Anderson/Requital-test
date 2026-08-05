@@ -5,6 +5,9 @@ import type {
   PaymentProvider,
   WebhookResult,
 } from '../payment-provider.interface';
+import { createLogger } from '../../common/logging/logger';
+
+const logger = createLogger('TelrPaymentProvider');
 
 // STRUCTURAL STUB — not a real integration. Telr's actual Hosted Payment
 // Page order-creation and webhook payload shapes weren't guessed at here
@@ -30,9 +33,7 @@ export class TelrPaymentProvider implements PaymentProvider {
     // Safe no-op, not a throw: an unrecognized/test webhook delivery should
     // 200 as "received, nothing to do" (same as Stripe's unhandled-event
     // branch) rather than 500 the caller's retry loop.
-    console.warn(
-      '[payments] telr webhook received but parseWebhookEvent is a stub — ignoring',
-    );
+    logger.warn('webhook received but parseWebhookEvent is a stub — ignoring');
     return null;
   }
 }

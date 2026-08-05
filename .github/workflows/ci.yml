@@ -163,6 +163,12 @@ jobs:
         continue-on-error: true
 
   guardrails:
+    # Job name is a pinned branch-protection required-status-check context
+    # string (see branch protection rules on main) — do not rename this even
+    # though it no longer lists every guardrail step; renaming it changes
+    # the check context GitHub reports, which the branch protection rule
+    # wouldn't recognize, leaving a PR stuck "pending" on a check name that
+    # never reports anymore.
     name: guardrails (outlet-scoping, page-width, sendEmail)
     runs-on: ubuntu-latest
     steps:
@@ -186,6 +192,9 @@ jobs:
 
       - name: Page-width guardrail
         run: node tools/check-page-width.js
+
+      - name: No-console-log guardrail (structured logging)
+        run: node tools/check-no-console-log.js
 
       - name: sendEmailStub bypass guardrail
         working-directory: backend
