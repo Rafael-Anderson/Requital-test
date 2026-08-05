@@ -1200,6 +1200,13 @@ model customer {
   // UAE PDPL data-export rate limit (max once per 24h) — see
   // CustomerAccountService.exportData. Null until the first export.
   lastDataExportAt     DateTime?
+  // Progressive login-delay tracking, same shape and reasoning as
+  // user.failedLoginAttempts/lastFailedLoginAt (see AuthService.login's own
+  // comment) — not a hard lockout: resets to 0 on any successful login, and
+  // a correct password always succeeds once the computed delay since
+  // lastFailedLoginAt has elapsed.
+  failedLoginAttempts  Int                    @default(0)
+  lastFailedLoginAt    DateTime?
   shop                 shop                   @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Customer_shopId_fkey")
   order                order[]
   discountredemption   discountredemption[]

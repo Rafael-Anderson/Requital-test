@@ -23,6 +23,16 @@ const ACCESS_TOKEN_LIFETIME = '15m';
 const ACCESS_TOKEN_LIFETIME_SECONDS = 15 * 60;
 const REFRESH_TOKEN_LIFETIME_DAYS = 30;
 const RESET_TOKEN_LIFETIME_MINUTES = 30;
+// Progressive login delay — mirrors AuthService's own constants exactly
+// (see that file's login()/isWithinLoginCooldown() comments for the full
+// reasoning). Duplicated rather than shared: this module is already a
+// deliberately fully-separate stack from staff auth (own tokens, own
+// guard, own rotation — see this file's own top-of-module convention), so
+// a shared lockout helper would couple two modules the codebase keeps
+// independent on purpose. The two constants sets are kept in sync by hand.
+const LOGIN_LOCKOUT_THRESHOLD = 5;
+const LOGIN_LOCKOUT_BASE_DELAY_SECONDS = 2;
+const LOGIN_LOCKOUT_MAX_DELAY_SECONDS = 60;
 // Where the reset link points — the storefront app, not this API. Same
 // pattern as AuthService's ADMIN_URL, just the other frontend.
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
@@ -102,6 +112,12 @@ export class CustomerAuthService {
     return this.issueTokenPair(customer);
   }
 
+  // Per-account progressive login delay, mirroring AuthService.login's own
+  // mechanism (see its comment for the full DoS-safety reasoning — it
+  // applies identically here). A guest-only row (no passwordHash yet) is
+  // never tracked: there's no valid credential to eventually succeed with,
+  // so it's treated exactly like "no such account" always was, with no
+  // counter to maintain.
   async login(shopSlug: string, dto: LoginCustomerDto) {
     const shop = await this.resolveShop(shopSlug);
     const customer = await this.prisma.customer.findFirst({
@@ -110,13 +126,53 @@ export class CustomerAuthService {
         OR: [{ phone: dto.identifier }, { email: dto.identifier }],
       },
     });
+
+    if (customer?.passwordHash && this.isWithinLoginCooldown(customer)) {
+      throw new UnauthorizedException('Invalid phone/email or password');
+    }
+
     if (
       !customer?.passwordHash ||
       !(await bcrypt.compare(dto.password, customer.passwordHash))
     ) {
+      if (customer?.passwordHash) {
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: {
+            failedLoginAttempts: { increment: 1 },
+            lastFailedLoginAt: new Date(),
+          },
+        });
+      }
       throw new UnauthorizedException('Invalid phone/email or password');
     }
+
+    if (customer.failedLoginAttempts > 0) {
+      await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: { failedLoginAttempts: 0, lastFailedLoginAt: null },
+      });
+    }
     return this.issueTokenPair(customer);
+  }
+
+  private isWithinLoginCooldown(customer: {
+    failedLoginAttempts: number;
+    lastFailedLoginAt: Date | null;
+  }): boolean {
+    if (
+      customer.failedLoginAttempts < LOGIN_LOCKOUT_THRESHOLD ||
+      !customer.lastFailedLoginAt
+    ) {
+      return false;
+    }
+    const delaySeconds = Math.min(
+      LOGIN_LOCKOUT_MAX_DELAY_SECONDS,
+      LOGIN_LOCKOUT_BASE_DELAY_SECONDS **
+        (customer.failedLoginAttempts - LOGIN_LOCKOUT_THRESHOLD + 1),
+    );
+    const elapsedMs = Date.now() - customer.lastFailedLoginAt.getTime();
+    return elapsedMs < delaySeconds * 1000;
   }
 
   async refresh(shopSlug: string, dto: RefreshCustomerTokenDto) {
