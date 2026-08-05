@@ -500,4 +500,117 @@ describe('Customer storefront accounts (e2e)', () => {
       expect(body<OrderLookupResponse>(lookupB).hasAccount).toBe(false);
     });
   });
+
+  // This whole file runs under Jest (NODE_ENV=test), where the
+  // ThrottlerGuard is globally skipIf'd (see app.module.ts) — so the per-IP
+  // 5/min limit on /auth/login never interferes with the many-requests-in-
+  // a-row tests below, same reasoning as auth-lifecycle.e2e-spec.ts.
+  describe('progressive login lockout (per-account, not per-IP)', () => {
+    function customerLogin(shopSlug: string, identifier: string, password: string) {
+      return request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/login`)
+        .send({ identifier, password });
+    }
+
+    it('5 wrong passwords in a row trigger a cooldown that rejects even the CORRECT password immediately after', async () => {
+      const { shopSlug } = await setupShop('cust-lockout-basic');
+      const phone = '0505550001';
+      await register(shopSlug, { phone, password: 'password123' }).expect(201);
+
+      for (let i = 0; i < 5; i++) {
+        await customerLogin(shopSlug, phone, 'totally-wrong').expect(401);
+      }
+
+      const res = await customerLogin(shopSlug, phone, 'password123').expect(
+        401,
+      );
+      expect(body<{ message: string }>(res).message).toBe(
+        'Invalid phone/email or password',
+      );
+    });
+
+    it('once the cooldown window has elapsed, the correct password succeeds and the counter resets', async () => {
+      const { shopSlug } = await setupShop('cust-lockout-recovers');
+      const phone = '0505550002';
+      const reg = await register(shopSlug, {
+        phone,
+        password: 'password123',
+      }).expect(201);
+      const customerId = body<CustomerAuthResponse>(reg).customer.id;
+
+      for (let i = 0; i < 5; i++) {
+        await customerLogin(shopSlug, phone, 'totally-wrong').expect(401);
+      }
+
+      // Simulate the cooldown having elapsed — same backdating technique
+      // auth-lifecycle.e2e-spec.ts uses for the merchant-lockout equivalent.
+      await prisma.customer.updateMany({
+        where: { id: customerId },
+        data: { lastFailedLoginAt: new Date(Date.now() - 3000) },
+      });
+
+      await customerLogin(shopSlug, phone, 'password123').expect(201);
+
+      const customer = await prisma.customer.findUniqueOrThrow({
+        where: { id: customerId },
+      });
+      expect(customer.failedLoginAttempts).toBe(0);
+    });
+
+    it('an attacker who only knows the customer\'s email cannot deny them service — the correct password always eventually works, and a nonexistent account behaves identically', async () => {
+      const { shopSlug } = await setupShop('cust-lockout-dos-safe');
+      const phone = '0505550003';
+      const email = `cust-dos-safe-${runId}@test.com`;
+      await register(shopSlug, { phone, email, password: 'password123' }).expect(
+        201,
+      );
+      const fakeEmail = `no-such-customer-${runId}@test.com`;
+
+      for (let i = 0; i < 8; i++) {
+        const realRes = await customerLogin(shopSlug, email, 'wrong').expect(
+          401,
+        );
+        const fakeRes = await customerLogin(
+          shopSlug,
+          fakeEmail,
+          'wrong',
+        ).expect(401);
+        expect(body<{ message: string }>(realRes).message).toBe(
+          body<{ message: string }>(fakeRes).message,
+        );
+      }
+
+      // Even after 8 straight failures, the account is not permanently
+      // locked — backdating past the capped 60s ceiling always lets the
+      // correct password back in.
+      await prisma.customer.updateMany({
+        where: { email },
+        data: { lastFailedLoginAt: new Date(Date.now() - 61_000) },
+      });
+      await customerLogin(shopSlug, email, 'password123').expect(201);
+    });
+
+    it("failed attempts against Customer A never affect Customer B's own cooldown (cross-account isolation)", async () => {
+      const { shopSlug } = await setupShop('cust-lockout-isolation');
+      const phoneA = '0505550004';
+      const phoneB = '0505550005';
+      await register(shopSlug, { phone: phoneA, password: 'passwordAAA' }).expect(
+        201,
+      );
+      await register(shopSlug, { phone: phoneB, password: 'passwordBBB' }).expect(
+        201,
+      );
+
+      // Hammer A into its cooldown window.
+      for (let i = 0; i < 5; i++) {
+        await customerLogin(shopSlug, phoneA, 'totally-wrong').expect(401);
+      }
+      // A is now cooling down — even its own correct password is rejected.
+      await customerLogin(shopSlug, phoneA, 'passwordAAA').expect(401);
+
+      // B was never touched — its correct password succeeds immediately,
+      // with no cooldown at all.
+      await customerLogin(shopSlug, phoneB, 'passwordBBB').expect(201);
+    });
+  });
 });
