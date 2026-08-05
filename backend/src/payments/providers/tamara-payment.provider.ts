@@ -22,10 +22,7 @@ interface TamaraWebhookPayload {
   order_id: string;
   order_reference_id: string;
   event_type:
-    | 'order_expired'
-    | 'order_approved'
-    | 'order_declined'
-    | 'order_canceled';
+    'order_expired' | 'order_approved' | 'order_declined' | 'order_canceled';
 }
 
 // Real BNPL integration against Tamara's Checkout API. Credentials:
@@ -67,7 +64,10 @@ export class TamaraPaymentProvider implements PaymentProvider {
       },
       body: JSON.stringify({
         order_reference_id: String(params.orderId),
-        total_amount: { amount: params.amount.toFixed(2), currency: params.currency },
+        total_amount: {
+          amount: params.amount.toFixed(2),
+          currency: params.currency,
+        },
         merchant_url: {
           success: params.successUrl,
           failure: params.cancelUrl,
@@ -87,7 +87,10 @@ export class TamaraPaymentProvider implements PaymentProvider {
         'Tamara did not return a checkout URL',
       );
     }
-    return { providerReference: data.checkout_id, checkoutUrl: data.checkout_url };
+    return {
+      providerReference: data.checkout_id,
+      checkoutUrl: data.checkout_url,
+    };
   }
 
   parseWebhookEvent(
@@ -118,7 +121,10 @@ export class TamaraPaymentProvider implements PaymentProvider {
         advanceOrderStatus: 'confirmed',
       };
     }
-    if (event.event_type === 'order_declined' || event.event_type === 'order_expired') {
+    if (
+      event.event_type === 'order_declined' ||
+      event.event_type === 'order_expired'
+    ) {
       return {
         providerReference: event.order_id,
         orderId,

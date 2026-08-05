@@ -23,7 +23,7 @@ export class ShopService {
   async getPublishReadiness(
     ctx: TenantContext,
   ): Promise<{ ready: boolean; missing: string[] }> {
-    const [hasReadyOutlet, hasProduct] = await Promise.all([
+    const [hasReadyOutlet, hasProduct, actingUser] = await Promise.all([
       this.prisma.outlet.findFirst({
         where: {
           shopId: ctx.shopId,
@@ -35,11 +35,24 @@ export class ShopService {
         where: { shopId: ctx.shopId },
         select: { id: true },
       }),
+      // Conservative enforcement point for "email verification blocks
+      // nothing" (docs/audit-2026-08.md §1.1): rather than blocking login
+      // (which would lock a legitimate merchant out of their own account
+      // over an unrelated inbox problem), an unverified account can use the
+      // admin panel freely but can't take the shop live. Checked against the
+      // acting user specifically, not "any admin on the shop" — the person
+      // publishing is the one who needs to have proven control of their own
+      // login email.
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.userId },
+        select: { emailVerified: true },
+      }),
     ]);
     const missing: string[] = [];
     if (!hasProduct) missing.push('Add at least one product');
     if (!hasReadyOutlet)
       missing.push('Enable delivery or pickup on at least one outlet');
+    if (!actingUser.emailVerified) missing.push('Verify your account email');
     return { ready: missing.length === 0, missing };
   }
 

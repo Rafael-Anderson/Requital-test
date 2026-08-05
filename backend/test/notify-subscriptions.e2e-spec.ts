@@ -91,13 +91,17 @@ describe('Notify subscriptions (e2e)', () => {
       .post('/notify-subscriptions')
       .send({ productId, email })
       .expect(201);
-    expect(body<{ alreadySubscribed: boolean }>(first).alreadySubscribed).toBe(false);
+    expect(body<{ alreadySubscribed: boolean }>(first).alreadySubscribed).toBe(
+      false,
+    );
 
     const second = await request(app.getHttpServer())
       .post('/notify-subscriptions')
       .send({ productId, email })
       .expect(201);
-    expect(body<{ alreadySubscribed: boolean }>(second).alreadySubscribed).toBe(true);
+    expect(body<{ alreadySubscribed: boolean }>(second).alreadySubscribed).toBe(
+      true,
+    );
 
     await request(app.getHttpServer())
       .delete('/notify-subscriptions')
@@ -124,7 +128,7 @@ describe('Notify subscriptions (e2e)', () => {
       .expect(400);
   });
 
-  it('a product from shop B cannot be used to enumerate or delete shop A\'s subscription', async () => {
+  it("a product from shop B cannot be used to enumerate or delete shop A's subscription", async () => {
     const shopA = await setupShopWithProduct('e2e-notify-a');
     const shopB = await setupShopWithProduct('e2e-notify-b');
     const email = `shopper-${runId}@example.com`;

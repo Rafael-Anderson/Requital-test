@@ -7,9 +7,11 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AdminAuthResponse {
   accessToken: string;
+  devVerificationLink?: string;
 }
 interface IdRow {
   id: number;
@@ -82,6 +84,10 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AdminAuthResponse>(signup).accessToken;
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AdminAuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')
@@ -129,7 +135,11 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
   // cash-on-pickup order stands in for "a pending order this shop is
   // waiting on payment for" without needing to also wire up BNPL's
   // storefront checkout-method selection (out of this task's scope).
-  function createPendingOrder(shopSlug: string, outletId: number, productId: number) {
+  function createPendingOrder(
+    shopSlug: string,
+    outletId: number,
+    productId: number,
+  ) {
     return request(app.getHttpServer())
       .post(`/public/${shopSlug}/orders`)
       .send({
@@ -146,16 +156,24 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
   }
 
   describe('Tabby', () => {
-    function tabbyPayload(event: string, orderId: number, eventId = `evt_${Math.random()}`) {
+    function tabbyPayload(
+      event: string,
+      orderId: number,
+      eventId = `evt_${Math.random()}`,
+    ) {
       return JSON.stringify({
         id: eventId,
         event,
-        payment: { id: `pay_${orderId}`, order: { reference_id: String(orderId) } },
+        payment: {
+          id: `pay_${orderId}`,
+          order: { reference_id: String(orderId) },
+        },
       });
     }
 
     it('a validly-signed payment.approved event confirms the order via the existing CAS state machine', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tabby-approve');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tabby-approve');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -178,7 +196,8 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     });
 
     it('payment.expired cancels a still-pending order', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tabby-expire');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tabby-expire');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -199,7 +218,8 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     });
 
     it('a tampered signature is rejected — the order is never touched', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tabby-tamper');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tabby-tamper');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -216,14 +236,17 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
         .get(`/orders/${order.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<{ status: string; paymentStatus: string }>(detail)).toMatchObject({
+      expect(
+        body<{ status: string; paymentStatus: string }>(detail),
+      ).toMatchObject({
         status: 'pending',
         paymentStatus: 'unpaid',
       });
     });
 
     it('the same event id delivered twice is idempotent — confirmed exactly once, one paymenttransaction row', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tabby-idempotent');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tabby-idempotent');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -233,7 +256,11 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
       // string would collide with a prior run's row against this same
       // persistent dev database and cause a false P2002 on the *first*
       // delivery here, not just the intended second one.
-      const payload = tabbyPayload('payment.approved', order.id, `evt_fixed_${runId}`);
+      const payload = tabbyPayload(
+        'payment.approved',
+        order.id,
+        `evt_fixed_${runId}`,
+      );
       const signature = sign(payload, TABBY_SECRET);
       await request(app.getHttpServer())
         .post('/payments/webhook/tabby')
@@ -260,14 +287,22 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
       expect(body<{ status: string }>(detail).status).toBe('confirmed');
     });
 
-    it('does not affect a different shop\'s order — webhook resolution is scoped by the order\'s own real shopId, never a claimed one', async () => {
+    it("does not affect a different shop's order — webhook resolution is scoped by the order's own real shopId, never a claimed one", async () => {
       const shopA = await setupShop('tabby-iso-a');
       const shopB = await setupShop('tabby-iso-b');
       const orderA = body<OrderCreateResponse>(
-        await createPendingOrder(shopA.shopSlug, shopA.outletId, shopA.productId),
+        await createPendingOrder(
+          shopA.shopSlug,
+          shopA.outletId,
+          shopA.productId,
+        ),
       ).order;
       const orderB = body<OrderCreateResponse>(
-        await createPendingOrder(shopB.shopSlug, shopB.outletId, shopB.productId),
+        await createPendingOrder(
+          shopB.shopSlug,
+          shopB.outletId,
+          shopB.productId,
+        ),
       ).order;
 
       const payload = tabbyPayload('payment.approved', orderA.id);
@@ -292,7 +327,8 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     });
 
     it('a stale approval on an order the merchant already moved past pending is ignored, not forced through', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tabby-stale');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tabby-stale');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -333,7 +369,8 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     }
 
     it('a validly-signed order_approved event confirms the order', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tamara-approve');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tamara-approve');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -356,7 +393,8 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     });
 
     it('order_declined cancels a still-pending order', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tamara-decline');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tamara-decline');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -377,7 +415,8 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     });
 
     it('a tampered signature is rejected — the order is never touched', async () => {
-      const { shopSlug, outletId, productId, adminToken } = await setupShop('tamara-tamper');
+      const { shopSlug, outletId, productId, adminToken } =
+        await setupShop('tamara-tamper');
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;
@@ -398,7 +437,9 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
     });
 
     it('missing webhook secret configuration throws PaymentProviderNotConfiguredException (surfaced as a 500)', async () => {
-      const { shopSlug, outletId, productId } = await setupShop('tamara-unconfigured');
+      const { shopSlug, outletId, productId } = await setupShop(
+        'tamara-unconfigured',
+      );
       const order = body<OrderCreateResponse>(
         await createPendingOrder(shopSlug, outletId, productId),
       ).order;

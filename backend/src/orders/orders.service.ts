@@ -795,7 +795,10 @@ export class OrdersService {
         // ingredients for whatever the (now-edited) item list says.
         // Adjusted by delta (not recomputed from scratch) to avoid
         // double-deducting what confirm already took.
-        if (order.status === 'confirmed' && order.ingredientsConsumedAt !== null) {
+        if (
+          order.status === 'confirmed' &&
+          order.ingredientsConsumedAt !== null
+        ) {
           const increasedItems: {
             productId: number;
             variantId: number | null;
@@ -810,10 +813,11 @@ export class OrdersService {
             const [productIdStr, variantIdStr] = k.split(':');
             const productId = Number(productIdStr);
             const variantId = variantIdStr ? Number(variantIdStr) : null;
-            const delta =
-              (newQtyByKey.get(k) ?? 0) - (oldQtyByKey.get(k) ?? 0);
-            if (delta > 0) increasedItems.push({ productId, variantId, quantity: delta });
-            else if (delta < 0) decreasedItems.push({ productId, variantId, quantity: -delta });
+            const delta = (newQtyByKey.get(k) ?? 0) - (oldQtyByKey.get(k) ?? 0);
+            if (delta > 0)
+              increasedItems.push({ productId, variantId, quantity: delta });
+            else if (delta < 0)
+              decreasedItems.push({ productId, variantId, quantity: -delta });
           }
 
           if (increasedItems.length > 0) {
@@ -1057,8 +1061,10 @@ export class OrdersService {
     // from 0 up to positive — collected here and fired (not awaited, see
     // below) after the loop so a slow email batch never delays the
     // transaction this runs inside.
-    const restockNotifyTargets: { productId: number; variantId: number | null }[] =
-      [];
+    const restockNotifyTargets: {
+      productId: number;
+      variantId: number | null;
+    }[] = [];
     for (const item of items) {
       if (!item.product.trackInventory) continue;
       // Stock is per-outlet-per-product now, not shop-wide — upsert because
@@ -1096,10 +1102,15 @@ export class OrdersService {
       }
       if (direction === 1) {
         const before = await tx.outletstock.findUnique({
-          where: { outletId_productId: { outletId, productId: item.productId } },
+          where: {
+            outletId_productId: { outletId, productId: item.productId },
+          },
         });
         if ((before?.stockQuantity ?? 0) <= 0) {
-          restockNotifyTargets.push({ productId: item.productId, variantId: null });
+          restockNotifyTargets.push({
+            productId: item.productId,
+            variantId: null,
+          });
         }
       }
       await tx.outletstock.upsert({

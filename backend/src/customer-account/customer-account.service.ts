@@ -270,11 +270,7 @@ export class CustomerAccountService {
       where: { customerId, usedAt: null },
       data: { usedAt: new Date() },
     });
-    await this.logCustomerAction(
-      shopId,
-      customerId,
-      'CUSTOMER_DATA_DELETION',
-    );
+    await this.logCustomerAction(shopId, customerId, 'CUSTOMER_DATA_DELETION');
   }
 
   // AuditLog.actorUserId is a required FK to `user` (staff) — there's no
@@ -320,7 +316,9 @@ export class CustomerAccountService {
     const invoicedOrderIds = await this.invoicedOrderIds(
       orders.map((o) => o.id),
     );
-    return orders.map((o) => this.toOrderSummary(o, invoicedOrderIds.has(o.id)));
+    return orders.map((o) =>
+      this.toOrderSummary(o, invoicedOrderIds.has(o.id)),
+    );
   }
 
   // customerId AND shopId both in the WHERE — an id belonging to another

@@ -6,9 +6,11 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
+  devVerificationLink?: string;
 }
 interface IdRow {
   id: number;
@@ -67,6 +69,10 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')
@@ -101,7 +107,12 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
       .expect(200);
   }
 
-  async function createProduct(adminToken: string, categoryId: number, name: string, sku: string) {
+  async function createProduct(
+    adminToken: string,
+    categoryId: number,
+    name: string,
+    sku: string,
+  ) {
     await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -117,8 +128,14 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
   }
 
   it('returns exact matches by product name', async () => {
-    const { adminToken, categoryId, slug } = await setupPublishedShop('search-exact');
-    await createProduct(adminToken, categoryId, 'Rose Bouquet', `SRCH-${runId}-1`);
+    const { adminToken, categoryId, slug } =
+      await setupPublishedShop('search-exact');
+    await createProduct(
+      adminToken,
+      categoryId,
+      'Rose Bouquet',
+      `SRCH-${runId}-1`,
+    );
     await publishShop(adminToken);
 
     const res = await request(app.getHttpServer())
@@ -132,8 +149,14 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
   });
 
   it('falls back to a typo-tolerant fuzzy match when the exact query has zero hits', async () => {
-    const { adminToken, categoryId, slug } = await setupPublishedShop('search-fuzzy');
-    await createProduct(adminToken, categoryId, 'Rose Bouquet', `SRCH-${runId}-2`);
+    const { adminToken, categoryId, slug } =
+      await setupPublishedShop('search-fuzzy');
+    await createProduct(
+      adminToken,
+      categoryId,
+      'Rose Bouquet',
+      `SRCH-${runId}-2`,
+    );
     await publishShop(adminToken);
 
     const res = await request(app.getHttpServer())
@@ -160,9 +183,19 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
   it("never returns another shop's products for the same query text", async () => {
     const shopA = await setupPublishedShop('search-isolation-a');
     const shopB = await setupPublishedShop('search-isolation-b');
-    await createProduct(shopA.adminToken, shopA.categoryId, 'Rose Bouquet', `SRCH-${runId}-3`);
+    await createProduct(
+      shopA.adminToken,
+      shopA.categoryId,
+      'Rose Bouquet',
+      `SRCH-${runId}-3`,
+    );
     await publishShop(shopA.adminToken);
-    await createProduct(shopB.adminToken, shopB.categoryId, 'Tulip Bouquet', `SRCH-${runId}-4`);
+    await createProduct(
+      shopB.adminToken,
+      shopB.categoryId,
+      'Tulip Bouquet',
+      `SRCH-${runId}-4`,
+    );
     await publishShop(shopB.adminToken);
 
     const res = await request(app.getHttpServer())

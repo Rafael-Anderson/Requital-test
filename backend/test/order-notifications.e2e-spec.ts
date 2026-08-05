@@ -7,9 +7,11 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
+  devVerificationLink?: string;
 }
 interface IdRow {
   id: number;
@@ -295,6 +297,10 @@ describe('Order status customer email notifications (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
     await request(app.getHttpServer())
       .patch('/shop')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -642,6 +648,10 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')

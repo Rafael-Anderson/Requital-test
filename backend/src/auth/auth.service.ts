@@ -33,6 +33,12 @@ const REFRESH_TOKEN_LIFETIME_DAYS = 30;
 const RESET_TOKEN_LIFETIME_MINUTES = 30;
 const VERIFICATION_TOKEN_LIFETIME_HOURS = 24;
 const INVITE_TOKEN_LIFETIME_DAYS = 7;
+// Progressive login delay, not a hard lockout — see login()'s own comment
+// for the reasoning. No friction for the first few genuine typos; only
+// consecutive failures at/above this count start requiring a wait.
+const LOGIN_LOCKOUT_THRESHOLD = 5;
+const LOGIN_LOCKOUT_BASE_DELAY_SECONDS = 2;
+const LOGIN_LOCKOUT_MAX_DELAY_SECONDS = 60;
 // Where signup/forgot-password/verify-email links point — the admin app,
 // not this API. No equivalent to storefront's STOREFRONT_URL existed yet
 // since nothing before this generated a link into the admin frontend.
@@ -114,19 +120,76 @@ export class AuthService {
     };
   }
 
+  // Per-IP brute-force protection is the ThrottlerGuard on this endpoint
+  // (5/min/IP, see auth.controller.ts) — this is the complementary
+  // per-account layer, since a distributed attacker spread across many IPs
+  // is invisible to per-IP throttling. Deliberately a *progressive delay*,
+  // not a hard lockout: a real account can never be denied service by
+  // someone who merely knows its email and guesses wrong — the correct
+  // password always succeeds immediately once the (capped) delay since the
+  // last failure has elapsed, and the counter resets to 0 on success. A true
+  // lockedUntil-style lockout would let an attacker who knows a merchant's
+  // email address indefinitely deny them access to their own shop, which is
+  // a worse outcome than the brute-force risk it would prevent.
+  //
+  // The response is identical (401 "Invalid email or password") whether the
+  // email doesn't exist, the password is wrong, or the account is within its
+  // cooldown window — bcrypt.compare is skipped in the cooldown case (same
+  // as the already-existing no-such-user fast path), so this doesn't add a
+  // new distinguishable timing/response class beyond what already existed.
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: SHOP_NAME_SELECT,
     });
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+
+    if (user && this.isWithinLoginCooldown(user)) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+      if (user) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: { increment: 1 },
+            lastFailedLoginAt: new Date(),
+          },
+        });
+      }
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (user.failedLoginAttempts > 0) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lastFailedLoginAt: null },
+      });
     }
     await this.auditLogService.log(
       { shopId: user.shopId, actorUserId: user.id },
       { action: 'auth.login', entityType: 'auth', entityId: user.id },
     );
     return this.issueTokenPair(user);
+  }
+
+  private isWithinLoginCooldown(user: {
+    failedLoginAttempts: number;
+    lastFailedLoginAt: Date | null;
+  }): boolean {
+    if (
+      user.failedLoginAttempts < LOGIN_LOCKOUT_THRESHOLD ||
+      !user.lastFailedLoginAt
+    ) {
+      return false;
+    }
+    const delaySeconds = Math.min(
+      LOGIN_LOCKOUT_MAX_DELAY_SECONDS,
+      LOGIN_LOCKOUT_BASE_DELAY_SECONDS **
+        (user.failedLoginAttempts - LOGIN_LOCKOUT_THRESHOLD + 1),
+    );
+    const elapsedMs = Date.now() - user.lastFailedLoginAt.getTime();
+    return elapsedMs < delaySeconds * 1000;
   }
 
   // New access+refresh pair for the same session family — the presented
@@ -442,6 +505,14 @@ export class AuthService {
         where: { userId: ctx.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       }),
+      // A password-reset link issued before this change (e.g. an old email
+      // still sitting in an inbox) must not still be redeemable afterward —
+      // the password it would "reset" no longer matches what the user
+      // thinks their account's state is.
+      this.prisma.authtoken.updateMany({
+        where: { userId: ctx.userId, purpose: 'password_reset', usedAt: null },
+        data: { usedAt: new Date() },
+      }),
     ]);
     return { success: true };
   }
@@ -455,6 +526,12 @@ export class AuthService {
     if (!user) {
       return { success: true };
     }
+
+    // A new request supersedes any still-outstanding one — otherwise
+    // multiple valid reset links for the same account could be alive at
+    // once (e.g. an old, forgotten email sitting in an inbox next to a
+    // freshly requested one).
+    await this.invalidateOutstandingTokens(user.id, 'password_reset');
 
     const raw = generateOpaqueToken();
     await this.prisma.authtoken.create({
@@ -508,6 +585,18 @@ export class AuthService {
       this.prisma.refreshtoken.updateMany({
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
+      }),
+      // Defense in depth alongside forgotPassword's own supersession call —
+      // any other reset token for this user (there normally shouldn't be
+      // one, but a race between two forgot-password requests could leave a
+      // second live one) dies the moment the password actually changes.
+      this.prisma.authtoken.updateMany({
+        where: {
+          userId: stored.userId,
+          purpose: 'password_reset',
+          usedAt: null,
+        },
+        data: { usedAt: new Date() },
       }),
     ]);
     return { success: true };
@@ -581,10 +670,32 @@ export class AuthService {
     };
   }
 
+  // Marks every still-live (unused, regardless of expiry) token of the given
+  // purpose as used, so an old link can never be redeemed after a newer one
+  // superseded it. Reuses the same `usedAt` CAS field single-use redemption
+  // already relies on — "invalidated" and "already used" are the same state
+  // from resetPassword/verifyEmail's point of view, so no new column/status
+  // is needed to represent it.
+  private async invalidateOutstandingTokens(
+    userId: number,
+    purpose: 'password_reset' | 'email_verification',
+  ) {
+    await this.prisma.authtoken.updateMany({
+      where: { userId, purpose, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+  }
+
   private async sendVerificationEmail(user: {
     id: number;
     email: string;
   }): Promise<string | undefined> {
+    // Same supersession rule as forgotPassword above — a resend must kill
+    // any still-outstanding verification token rather than leaving multiple
+    // valid links alive at once. A no-op on the signup call site (nothing to
+    // invalidate yet).
+    await this.invalidateOutstandingTokens(user.id, 'email_verification');
+
     const raw = generateOpaqueToken();
     await this.prisma.authtoken.create({
       data: {

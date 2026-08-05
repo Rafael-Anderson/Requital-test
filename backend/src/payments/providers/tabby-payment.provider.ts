@@ -62,8 +62,10 @@ export class TabbyPaymentProvider implements PaymentProvider {
     // toggle-bypass guard" note. A missing/empty key means Tabby is not
     // really configured for this shop no matter what shoppaymentprovider.enabled
     // says.
-    const secretKey = params.credentials?.secretKey ?? process.env.TABBY_SECRET_KEY;
-    const publicKey = params.credentials?.publicKey ?? process.env.TABBY_PUBLIC_KEY;
+    const secretKey =
+      params.credentials?.secretKey ?? process.env.TABBY_SECRET_KEY;
+    const publicKey =
+      params.credentials?.publicKey ?? process.env.TABBY_PUBLIC_KEY;
     if (!secretKey || !publicKey) {
       throw new PaymentProviderNotConfiguredException('Tabby');
     }

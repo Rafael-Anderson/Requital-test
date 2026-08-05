@@ -70,7 +70,12 @@ export class StorefrontSearchService {
   ): Promise<SearchResponse> {
     const trimmed = query.trim();
     if (!trimmed) {
-      return { results: [], nextCursor: null, matchType: 'none', suggestion: null };
+      return {
+        results: [],
+        nextCursor: null,
+        matchType: 'none',
+        suggestion: null,
+      };
     }
 
     const shop = await this.prisma.shop.findUnique({
@@ -135,7 +140,9 @@ export class StorefrontSearchService {
         // collection's own schema comment) and isn't worth re-evaluating
         // per product on every search; a shop's manually curated
         // collections (the common case) are still fully searchable.
-        collectionproduct: { select: { collection: { select: { title: true } } } },
+        collectionproduct: {
+          select: { collection: { select: { title: true } } },
+        },
       },
     });
     return products.map((p) => ({
@@ -205,5 +212,11 @@ export class StorefrontSearchService {
 }
 
 function toResult(doc: SearchDoc): SearchResult {
-  return { id: doc.id, name: doc.name, slug: doc.slug, thumbnail: doc.thumbnail, price: doc.price };
+  return {
+    id: doc.id,
+    name: doc.name,
+    slug: doc.slug,
+    thumbnail: doc.thumbnail,
+    price: doc.price,
+  };
 }

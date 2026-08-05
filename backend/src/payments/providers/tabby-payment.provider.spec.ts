@@ -28,7 +28,7 @@ describe('TabbyPaymentProvider', () => {
             },
           },
         }),
-      }) as unknown as typeof fetch;
+      });
 
       const provider = new TabbyPaymentProvider();
       const session = await provider.createCheckoutSession({
@@ -73,9 +73,11 @@ describe('TabbyPaymentProvider', () => {
         ok: true,
         json: async () => ({
           id: 'pay_1',
-          configuration: { available_products: { installments: [{ web_url: 'https://x' }] } },
+          configuration: {
+            available_products: { installments: [{ web_url: 'https://x' }] },
+          },
         }),
-      }) as unknown as typeof fetch;
+      });
 
       const provider = new TabbyPaymentProvider();
       await provider.createCheckoutSession({
@@ -89,7 +91,9 @@ describe('TabbyPaymentProvider', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer platform-secret' }),
+          headers: expect.objectContaining({
+            Authorization: 'Bearer platform-secret',
+          }),
         }),
       );
     });
@@ -107,7 +111,11 @@ describe('TabbyPaymentProvider', () => {
           payment: { id: 'pay_1', order: { reference_id: '99' } },
         }),
       );
-      const result = provider.parseWebhookEvent(payload, sign(payload, secret), secret);
+      const result = provider.parseWebhookEvent(
+        payload,
+        sign(payload, secret),
+        secret,
+      );
       expect(result).toEqual({
         providerReference: 'evt_1',
         orderId: 99,
@@ -127,43 +135,72 @@ describe('TabbyPaymentProvider', () => {
             payment: { id: 'pay_2', order: { reference_id: '99' } },
           }),
         );
-        const result = provider.parseWebhookEvent(payload, sign(payload, secret), secret);
-        expect(result).toMatchObject({ status: 'failed', advanceOrderStatus: 'cancelled' });
+        const result = provider.parseWebhookEvent(
+          payload,
+          sign(payload, secret),
+          secret,
+        );
+        expect(result).toMatchObject({
+          status: 'failed',
+          advanceOrderStatus: 'cancelled',
+        });
       }
     });
 
     it('a tampered signature is rejected — the payload is never parsed', () => {
       const provider = new TabbyPaymentProvider();
       const payload = Buffer.from(
-        JSON.stringify({ id: 'evt_3', event: 'payment.approved', payment: { order: { reference_id: '1' } } }),
+        JSON.stringify({
+          id: 'evt_3',
+          event: 'payment.approved',
+          payment: { order: { reference_id: '1' } },
+        }),
       );
-      const result = provider.parseWebhookEvent(payload, 'not-the-real-signature', secret);
+      const result = provider.parseWebhookEvent(
+        payload,
+        'not-the-real-signature',
+        secret,
+      );
       expect(result).toBeNull();
     });
 
     it('a signature computed with the wrong secret is rejected', () => {
       const provider = new TabbyPaymentProvider();
       const payload = Buffer.from(
-        JSON.stringify({ id: 'evt_4', event: 'payment.approved', payment: { order: { reference_id: '1' } } }),
+        JSON.stringify({
+          id: 'evt_4',
+          event: 'payment.approved',
+          payment: { order: { reference_id: '1' } },
+        }),
       );
-      const result = provider.parseWebhookEvent(payload, sign(payload, 'wrong-secret'), secret);
+      const result = provider.parseWebhookEvent(
+        payload,
+        sign(payload, 'wrong-secret'),
+        secret,
+      );
       expect(result).toBeNull();
     });
 
     it('throws PaymentProviderNotConfiguredException when no webhook secret is configured at all', () => {
       const provider = new TabbyPaymentProvider();
       const payload = Buffer.from('{}');
-      expect(() => provider.parseWebhookEvent(payload, 'sig', undefined)).toThrow(
-        PaymentProviderNotConfiguredException,
-      );
+      expect(() =>
+        provider.parseWebhookEvent(payload, 'sig', undefined),
+      ).toThrow(PaymentProviderNotConfiguredException);
     });
 
     it('an unrecognized event type is a safe no-op', () => {
       const provider = new TabbyPaymentProvider();
       const payload = Buffer.from(
-        JSON.stringify({ id: 'evt_5', event: 'payment.created', payment: { order: { reference_id: '1' } } }),
+        JSON.stringify({
+          id: 'evt_5',
+          event: 'payment.created',
+          payment: { order: { reference_id: '1' } },
+        }),
       );
-      expect(provider.parseWebhookEvent(payload, sign(payload, secret), secret)).toBeNull();
+      expect(
+        provider.parseWebhookEvent(payload, sign(payload, secret), secret),
+      ).toBeNull();
     });
   });
 });

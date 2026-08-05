@@ -6,10 +6,12 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 import { LowStockDigestService } from '../src/products/low-stock-digest.service';
 
 interface AuthResponse {
   accessToken: string;
+  devVerificationLink?: string;
 }
 interface OutletRow {
   id: number;
@@ -72,6 +74,10 @@ describe('Low Stock Alerts (e2e)', () => {
       })
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(signup).devVerificationLink,
+    );
 
     const outlets = await request(app.getHttpServer())
       .get('/outlets')

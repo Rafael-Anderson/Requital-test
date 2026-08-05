@@ -27,15 +27,23 @@ describe('PolicyPagesService.findAll', () => {
   it("returns only the requesting shop's rows, all 5 types with null content where unwritten", async () => {
     const prisma = createMockPrisma();
     prisma.policypage.findMany.mockResolvedValue([
-      { type: 'TERMS', content: '<p>Terms</p>', updatedAt: new Date('2026-01-01') },
+      {
+        type: 'TERMS',
+        content: '<p>Terms</p>',
+        updatedAt: new Date('2026-01-01'),
+      },
     ]);
     const service = new PolicyPagesService(prisma);
 
     const result = await service.findAll(ctxFor(10));
 
-    expect(prisma.policypage.findMany).toHaveBeenCalledWith({ where: { shopId: 10 } });
+    expect(prisma.policypage.findMany).toHaveBeenCalledWith({
+      where: { shopId: 10 },
+    });
     expect(result).toHaveLength(5);
-    expect(result.find((r) => r.type === 'TERMS')?.content).toBe('<p>Terms</p>');
+    expect(result.find((r) => r.type === 'TERMS')?.content).toBe(
+      '<p>Terms</p>',
+    );
     expect(result.find((r) => r.type === 'PRIVACY')?.content).toBeNull();
   });
 });
@@ -50,11 +58,17 @@ describe('PolicyPagesService.upsert', () => {
     });
     const service = new PolicyPagesService(prisma);
 
-    await service.upsert(ctxFor(10), 'PRIVACY', { content: '<p>New privacy content</p>' });
+    await service.upsert(ctxFor(10), 'PRIVACY', {
+      content: '<p>New privacy content</p>',
+    });
 
     expect(prisma.policypage.upsert).toHaveBeenCalledWith({
       where: { shopId_type: { shopId: 10, type: 'PRIVACY' } },
-      create: { shopId: 10, type: 'PRIVACY', content: '<p>New privacy content</p>' },
+      create: {
+        shopId: 10,
+        type: 'PRIVACY',
+        content: '<p>New privacy content</p>',
+      },
       update: { content: '<p>New privacy content</p>' },
     });
   });
@@ -90,6 +104,8 @@ describe('PolicyPagesService.findPublic', () => {
     prisma.policypage.findUnique.mockResolvedValue(null);
     const service = new PolicyPagesService(prisma);
 
-    await expect(service.findPublic(10, 'SHIPPING')).rejects.toThrow(NotFoundException);
+    await expect(service.findPublic(10, 'SHIPPING')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

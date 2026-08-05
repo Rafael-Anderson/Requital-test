@@ -1,4 +1,11 @@
-import { BadRequestException, Body, Controller, Delete, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Public } from '../auth/decorators/public.decorator';
 import { NotifySubscriptionsService } from './notify-subscriptions.service';
 import { SubscribeDto } from './dto/subscribe.dto';
@@ -21,8 +28,13 @@ export class NotifySubscriptionsController {
     @Query('productId') productId?: string,
   ) {
     if (!email || !productId || !/^\d+$/.test(productId)) {
-      throw new BadRequestException('email and a numeric productId are required');
+      throw new BadRequestException(
+        'email and a numeric productId are required',
+      );
     }
-    return this.notifySubscriptionsService.unsubscribe(email, Number(productId));
+    return this.notifySubscriptionsService.unsubscribe(
+      email,
+      Number(productId),
+    );
   }
 }
