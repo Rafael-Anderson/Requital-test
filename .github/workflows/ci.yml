@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lets a run be kicked off manually from the Actions tab / API — useful
+  # for testing whether push/pull_request-triggered runs specifically are
+  # stuck (account-wide Actions runner queue issue, 2026-08) vs. Actions
+  # scheduling being broken outright for this repo.
+  workflow_dispatch:
 
 jobs:
   backend:
