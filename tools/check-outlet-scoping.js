@@ -84,6 +84,7 @@ const ALLOWLIST = [
   "public/public.service.ts:listProducts",
   "public/public.service.ts:getProduct",
   "public/public.service.ts:getProductBySlug",
+  "public/public.service.ts:getRelatedProducts",
   "public/public.service.ts:publicProductInclude",
 ];
 
