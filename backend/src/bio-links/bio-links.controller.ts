@@ -18,6 +18,7 @@ import { UpdateBioLinkDto } from './dto/update-bio-link.dto';
 import { ReorderBioLinksDto } from './dto/reorder-bio-links.dto';
 import { UpdateBioPageConfigDto } from './dto/update-bio-page-config.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -29,7 +30,10 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('shop/bio-links')
 export class BioLinksController {
-  constructor(private readonly bioLinksService: BioLinksService) {}
+  constructor(
+    private readonly bioLinksService: BioLinksService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() ctx: TenantContext) {
@@ -70,14 +74,15 @@ export class BioLinksController {
   // — same pattern as Theme/SEO's own upload endpoints, just a different
   // subdirectory. No new upload machinery.
   @Post('upload')
-  @UseInterceptors(
-    FileInterceptor('file', createImageUploadOptions('bio-links')),
-  )
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadImage(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/bio-links/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'bio-links', file);
   }
 
   @Patch(':id')

@@ -552,10 +552,18 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
     it('creates and updates an ingredient with the fuller field set, including image via the upload endpoint', async () => {
       const { adminToken } = await setupShop('detail-fields');
 
+      // A real, valid 1x1 PNG — Phase 6's upload pipeline sniffs actual
+      // magic bytes now, not the client-declared filename/Content-Type, so
+      // plain text bytes (the previous stub here) would be correctly
+      // rejected regardless of the ".jpg" filename attached below.
+      const validPng = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      );
       const upload = await request(app.getHttpServer())
         .post('/shop/ingredients/upload')
         .set('Authorization', `Bearer ${adminToken}`)
-        .attach('file', Buffer.from('fake-image-bytes'), 'rose.jpg')
+        .attach('file', validPng, 'rose.jpg')
         .expect(201);
       const { url } = body<{ url: string }>(upload);
       expect(url).toMatch(/^\/uploads\/ingredients\//);

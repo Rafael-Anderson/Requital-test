@@ -18,6 +18,7 @@ import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { SetCollectionProductsDto } from './dto/set-collection-products.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -27,7 +28,10 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('collections')
 export class CollectionsController {
-  constructor(private readonly collectionsService: CollectionsService) {}
+  constructor(
+    private readonly collectionsService: CollectionsService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() ctx: TenantContext) {
@@ -35,14 +39,15 @@ export class CollectionsController {
   }
 
   @Post('upload')
-  @UseInterceptors(
-    FileInterceptor('file', createImageUploadOptions('collections')),
-  )
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadImage(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/collections/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'collections', file);
   }
 
   @Get(':id')

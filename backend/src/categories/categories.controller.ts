@@ -16,6 +16,7 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -27,7 +28,10 @@ import type { TenantContext } from '../common/tenant-context';
 // categories the way there is for products.
 @Controller('categories')
 export class CategoriesController {
-  constructor(private readonly categoriesService: CategoriesService) {}
+  constructor(
+    private readonly categoriesService: CategoriesService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() ctx: TenantContext) {
@@ -36,14 +40,15 @@ export class CategoriesController {
 
   @Roles('admin')
   @Post('upload')
-  @UseInterceptors(
-    FileInterceptor('file', createImageUploadOptions('categories')),
-  )
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadImage(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/categories/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'categories', file);
   }
 
   @Get(':id')
