@@ -11,7 +11,7 @@ const TABS: { id: OutletEditTab; label: string; sublabel: string; icon: typeof I
   { id: "delivery", label: "Delivery", sublabel: "Radius & availability", icon: Truck },
   { id: "deliveryArea", label: "Delivery Area", sublabel: "Zones & coverage", icon: Map },
   { id: "pickup", label: "Pickup", sublabel: "In-store collection", icon: Package },
-  { id: "qr", label: "QR", sublabel: "Coming soon", icon: QrCode },
+  { id: "qr", label: "QR", sublabel: "Storefront QR code", icon: QrCode },
 ];
 
 export default function OutletEditSidebar({

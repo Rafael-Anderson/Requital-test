@@ -12,11 +12,8 @@ import OutletAddressTab from "@/components/OutletAddressTab";
 import OutletDeliveryTab from "@/components/OutletDeliveryTab";
 import OutletDeliveryAreaTab from "@/components/OutletDeliveryAreaTab";
 import OutletPickupTab from "@/components/OutletPickupTab";
+import OutletQrTab from "@/components/OutletQrTab";
 import PageShell from "@/components/ui/PageShell";
-
-function ComingSoonTab({ label }: { label: string }) {
-  return <p className="text-sm text-zinc-500">{label} isn&apos;t built yet — coming soon.</p>;
-}
 
 export default function EditOutletPage() {
   const params = useParams<{ outletId: string }>();
@@ -77,7 +74,7 @@ export default function EditOutletPage() {
               {activeTab === "delivery" && <OutletDeliveryTab outlet={outlet} onSaved={refresh} />}
               {activeTab === "deliveryArea" && <OutletDeliveryAreaTab outletId={outlet.id} />}
               {activeTab === "pickup" && <OutletPickupTab outlet={outlet} onSaved={refresh} />}
-              {activeTab === "qr" && <ComingSoonTab label="QR" />}
+              {activeTab === "qr" && <OutletQrTab outlet={outlet} />}
             </div>
           </div>
         </>

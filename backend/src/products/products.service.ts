@@ -1939,6 +1939,7 @@ export class ProductsService {
     let created = 0;
     let updated = 0;
     const usedSlugsThisBatch = new Set<string>();
+    const restockNotifyTargets: { productId: number; variantId: number | null }[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       for (const group of groups) {
@@ -2038,11 +2039,14 @@ export class ProductsService {
         }
 
         if (group.stock !== undefined && outletId !== undefined) {
-          await this.applyImportStock(tx, ctx, {
+          const { crossedToPositive } = await this.applyImportStock(tx, ctx, {
             outletId,
             productId,
             stock: group.stock,
           });
+          if (crossedToPositive) {
+            restockNotifyTargets.push({ productId, variantId: null });
+          }
         }
 
         for (const variant of group.variants) {
@@ -2058,15 +2062,24 @@ export class ProductsService {
             });
           }
           if (variant.stock !== undefined && outletId !== undefined) {
-            await this.applyImportStock(tx, ctx, {
+            const { crossedToPositive } = await this.applyImportStock(tx, ctx, {
               outletId,
               variantId: variant.variantId!,
               stock: variant.stock,
             });
+            if (crossedToPositive) {
+              restockNotifyTargets.push({ productId, variantId: variant.variantId! });
+            }
           }
         }
       }
     });
+
+    for (const target of restockNotifyTargets) {
+      this.notifySubscriptionsService
+        .triggerForProduct(ctx.shopId, target.productId, target.variantId ?? undefined)
+        .catch(() => {});
+    }
 
     await this.auditLogService.logCtx(ctx, {
       action: 'product.bulk_imported',
@@ -2090,7 +2103,10 @@ export class ProductsService {
   // intended final count, same as re-importing their own prior export
   // should be a no-op. Still logged as a delta in stockmovement (computed
   // against the current value) so the movement history reads the same way
-  // as every other adjustment.
+  // as every other adjustment. Returns whether this write crossed 0 ->
+  // positive, so the caller can fire the back-in-stock notify-me trigger
+  // once the transaction actually commits (same before/after-tx split as
+  // adjustStock/transferStock use — never fired from inside the tx itself).
   private async applyImportStock(
     tx: Prisma.TransactionClient,
     ctx: TenantContext,
@@ -2100,7 +2116,7 @@ export class ProductsService {
       variantId?: number;
       stock: number;
     },
-  ) {
+  ): Promise<{ crossedToPositive: boolean }> {
     const before = target.variantId
       ? ((
           await tx.outletvariantstock.findUnique({
@@ -2170,6 +2186,8 @@ export class ProductsService {
         actorUserId: ctx.userId,
       },
     });
+
+    return { crossedToPositive: before <= 0 && target.stock > 0 };
   }
 
   // Same as resolveTagIds below but against a transaction client — kept

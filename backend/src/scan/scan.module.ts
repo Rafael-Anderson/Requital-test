@@ -4,9 +4,10 @@ import { ScanService } from './scan.service';
 import { ScanSettingsService } from './scan-settings.service';
 import { OcrService } from './ocr.service';
 import { StorageModule } from '../storage/storage.module';
+import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, NotifySubscriptionsModule],
   controllers: [ScanController],
   providers: [ScanService, ScanSettingsService, OcrService],
 })

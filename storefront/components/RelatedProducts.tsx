@@ -2,22 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useShop } from "@/lib/shop-context";
-import { listProducts } from "@/lib/api";
+import { getRelatedProducts } from "@/lib/api";
 import type { Product } from "@/lib/types";
 import ProductCard from "./ProductCard";
 
-// Same-category only, not Collection-based — see the Phase 2 report: a
-// product -> collection reverse lookup doesn't exist on the backend today
-// (only collection -> products), so building that would mean new backend
-// surface. Category is the one relationship every product already has and
-// the public API already supports filtering by, so this reuses
-// listProducts exactly as the homepage grid does — no new endpoint.
+// Collection-first, same-category fallback — computed server-side by
+// PublicService.getRelatedProducts (Phase 8.4). A product -> collection
+// reverse lookup didn't exist on the backend before this; see
+// CollectionsService.findRelatedProductIds for how it's resolved.
 export default function RelatedProducts({
-  categoryId,
+  productSlug,
   excludeProductId,
   outletId,
 }: {
-  categoryId: number | null;
+  productSlug: string;
   excludeProductId: number;
   outletId?: number;
 }) {
@@ -25,14 +23,10 @@ export default function RelatedProducts({
   const [related, setRelated] = useState<Product[] | null>(null);
 
   useEffect(() => {
-    if (categoryId === null) {
-      setRelated([]);
-      return;
-    }
-    listProducts(shopSlug, outletId, categoryId)
+    getRelatedProducts(shopSlug, productSlug, outletId)
       .then((all) => setRelated(all.filter((p) => p.id !== excludeProductId).slice(0, 4)))
       .catch(() => setRelated([]));
-  }, [shopSlug, categoryId, excludeProductId, outletId]);
+  }, [shopSlug, productSlug, excludeProductId, outletId]);
 
   if (!related || related.length === 0) return null;
 

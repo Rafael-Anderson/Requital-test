@@ -21,6 +21,7 @@ interface OutletRow {
 interface ProductRow {
   id: number;
   name: string;
+  slug: string;
 }
 interface CollectionRow {
   id: number;
@@ -531,5 +532,87 @@ describe('Collections (e2e)', () => {
         .send({ published: true })
         .expect(200);
     }
+  });
+
+  describe('related products (Phase 8.4 — collection reverse lookup)', () => {
+    async function publishShop(adminToken: string, outletId: number) {
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ pickupEnabled: true })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ published: true })
+        .expect(200);
+    }
+
+    it('prefers collection membership over category when the product is in a MANUAL collection', async () => {
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('related-manual');
+      const target = await createProduct(adminToken, categoryId, { name: 'Target' });
+      const sibling = await createProduct(adminToken, categoryId, { name: 'Sibling' });
+      // Same category as target/sibling, but deliberately left out of the
+      // collection — proves the result comes from collection membership,
+      // not just "everything in this category".
+      await createProduct(adminToken, categoryId, { name: 'SameCategoryNotInCollection' });
+      await publishShop(adminToken, outletId);
+
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ title: 'Curated Pair', type: 'MANUAL', isActive: true })
+        .expect(201);
+      await request(app.getHttpServer())
+        .put(`/collections/${body<CollectionRow>(collection).id}/products`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          products: [
+            { productId: target.id, sortOrder: 0 },
+            { productId: sibling.id, sortOrder: 1 },
+          ],
+        })
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get(`/public/${slug}/products/slug/${target.slug}/related`)
+        .expect(200);
+      const ids = body<{ id: number }[]>(res).map((p) => p.id);
+      expect(ids).toEqual([sibling.id]);
+    });
+
+    it('falls back to same-category products when the product belongs to no collection', async () => {
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('related-fallback');
+      const target = await createProduct(adminToken, categoryId, { name: 'Target' });
+      const sameCategory = await createProduct(adminToken, categoryId, { name: 'SameCategory' });
+      await publishShop(adminToken, outletId);
+
+      const res = await request(app.getHttpServer())
+        .get(`/public/${slug}/products/slug/${target.slug}/related`)
+        .expect(200);
+      const ids = body<{ id: number }[]>(res).map((p) => p.id);
+      expect(ids).toEqual([sameCategory.id]);
+    });
+
+    it('returns an empty array when there is no collection and no category sibling', async () => {
+      const { adminToken, slug, outletId, categoryId } =
+        await setupShop('related-empty');
+      const target = await createProduct(adminToken, categoryId, { name: 'Lonely' });
+      await publishShop(adminToken, outletId);
+
+      const res = await request(app.getHttpServer())
+        .get(`/public/${slug}/products/slug/${target.slug}/related`)
+        .expect(200);
+      expect(body<unknown[]>(res)).toEqual([]);
+    });
+
+    it('404s for an unknown product slug', async () => {
+      const { slug } = await setupShop('related-404');
+      await request(app.getHttpServer())
+        .get(`/public/${slug}/products/slug/does-not-exist/related`)
+        .expect(404);
+    });
   });
 });

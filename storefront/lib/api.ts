@@ -172,6 +172,14 @@ export async function getProductBySlug(shopSlug: string, slug: string, outletId?
   return resolveProductImage(product);
 }
 
+// Collection-first, same-category fallback — see RelatedProducts.tsx and
+// the backend's PublicService.getRelatedProducts (Phase 8.4).
+export async function getRelatedProducts(shopSlug: string, slug: string, outletId?: number) {
+  const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
+  const products = await get<Product[]>(`/public/${shopSlug}/products/slug/${slug}/related${qs}`);
+  return products.map(resolveProductImage);
+}
+
 export function listOutlets(shopSlug: string) {
   return get<Outlet[]>(`/public/${shopSlug}/outlets`);
 }

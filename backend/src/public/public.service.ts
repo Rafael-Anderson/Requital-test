@@ -411,6 +411,56 @@ export class PublicService {
     return this.toProductResponse(product);
   }
 
+  // Collection-first, same-category fallback — see RelatedProducts.tsx on
+  // the storefront and CollectionsService.findRelatedProductIds for why this
+  // didn't exist before Phase 8.4 (no product -> collection reverse lookup
+  // on the backend, only collection -> products).
+  async getRelatedProducts(shopSlug: string, slug: string, outletId?: number) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    const product = await this.prisma.product.findFirst({
+      where: { slug, shopId: shop.id, status: 'Available' },
+      include: { productcategory: true },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product '${slug}' not found`);
+    }
+
+    let relatedIds = await this.collectionsService.findRelatedProductIds(
+      shop.id,
+      product.id,
+    );
+
+    if (relatedIds.length === 0) {
+      const categoryId = product.productcategory[0]?.categoryId;
+      if (categoryId !== undefined) {
+        const rows = await this.prisma.product.findMany({
+          where: {
+            shopId: shop.id,
+            status: 'Available',
+            id: { not: product.id },
+            productcategory: { some: { categoryId } },
+          },
+          select: { id: true },
+          take: 4,
+        });
+        relatedIds = rows.map((r) => r.id);
+      }
+    }
+
+    if (relatedIds.length === 0) return [];
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: relatedIds }, shopId: shop.id },
+      include: this.publicProductInclude(outletId),
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return relatedIds
+      .map((id) => byId.get(id))
+      .filter((p): p is NonNullable<typeof p> => !!p)
+      .map((p) => this.toProductResponse(p));
+  }
+
   private publicProductInclude(outletId: number | undefined) {
     return {
       productcategory: { include: { category: true } },
