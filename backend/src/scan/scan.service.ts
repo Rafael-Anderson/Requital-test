@@ -9,6 +9,7 @@ import { parseInvoiceText } from './ocr-parser';
 import { findBestMatches, type MatchCandidate } from './fuzzy-match';
 import { CommitScanDto } from './dto/commit-scan.dto';
 import { StorageService } from '../storage/storage.service';
+import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 
 @Injectable()
 export class ScanService {
@@ -17,6 +18,7 @@ export class ScanService {
     private readonly ocrService: OcrService,
     private readonly scanSettingsService: ScanSettingsService,
     private readonly storageService: StorageService,
+    private readonly notifySubscriptionsService: NotifySubscriptionsService,
   ) {}
 
   // Read-only — OCR + heuristic parsing + fuzzy-match suggestions against
@@ -179,6 +181,7 @@ export class ScanService {
     let created = 0;
     let updated = 0;
     const usedSlugsThisBatch = new Set<string>();
+    const restockNotifyTargets = new Set<number>();
 
     const batch = await this.prisma.$transaction(async (tx) => {
       const scanBatch = await tx.scanbatch.create({
@@ -254,6 +257,18 @@ export class ScanService {
         // scanning an invoice means "these units arrived", never "this is
         // now the total count".
         if (item.targetType === 'product') {
+          const before = await tx.outletstock.findUnique({
+            where: {
+              outletId_productId: {
+                outletId: item.outletId,
+                productId: targetId,
+              },
+            },
+          });
+          const beforeQty = before?.stockQuantity ?? 0;
+          if (beforeQty <= 0 && beforeQty + item.quantity > 0) {
+            restockNotifyTargets.add(targetId);
+          }
           await tx.outletstock.upsert({
             where: {
               outletId_productId: {
@@ -304,6 +319,12 @@ export class ScanService {
 
       return scanBatch;
     });
+
+    for (const productId of restockNotifyTargets) {
+      this.notifySubscriptionsService
+        .triggerForProduct(ctx.shopId, productId)
+        .catch(() => {});
+    }
 
     return { batchId: batch.id, created, updated, total: dto.items.length };
   }
