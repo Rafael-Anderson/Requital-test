@@ -12,6 +12,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ShopService } from './shop.service';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -22,7 +23,10 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('shop')
 export class ShopController {
-  constructor(private readonly shopService: ShopService) {}
+  constructor(
+    private readonly shopService: ShopService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findOne(@CurrentUser() ctx: TenantContext) {
@@ -43,11 +47,14 @@ export class ShopController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', createImageUploadOptions('shop')))
-  uploadLogo(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadLogo(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/shop/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'shop', file);
   }
 }

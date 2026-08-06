@@ -93,6 +93,24 @@ describe('validateEnv', () => {
     expect(String(logger.errorCalls[0][0])).toContain('ADMIN_URL');
   });
 
+  it('fails fast when STORAGE_PROVIDER is present but neither "local" nor "s3"', () => {
+    process.env.STORAGE_PROVIDER = 'dropbox';
+    const logger = fakeLogger();
+    validateEnv(logger);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(String(logger.errorCalls[0][0])).toContain('STORAGE_PROVIDER');
+  });
+
+  it('accepts STORAGE_PROVIDER=s3 by itself — the S3_* vars-required-together check happens at StorageModule registration, not here', () => {
+    process.env.STORAGE_PROVIDER = 's3';
+    const logger = fakeLogger();
+    validateEnv(logger);
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(logger.errorCalls).toHaveLength(0);
+  });
+
   it('reports every broken var in one pass, not just the first', () => {
     delete process.env.JWT_SECRET;
     delete process.env.CREDENTIAL_ENCRYPTION_KEY;

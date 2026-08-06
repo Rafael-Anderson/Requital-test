@@ -46,12 +46,12 @@ export class ScanController {
     return this.scanSettingsService.upsert(ctx, dto);
   }
 
-  // Reuses the image-upload pipeline (disk storage under uploads/scans/,
-  // same mimetype/size guard as products/categories/seo) — the file is kept
-  // either way since POST /scan/commit needs its URL for the scanbatch
-  // audit row if the merchant confirms.
+  // Reuses the image-upload pipeline (StorageService, same magic-byte
+  // sniffing/size guard/shop-scoping as products/categories/seo) — the file
+  // is kept either way since POST /scan/commit needs its URL for the
+  // scanbatch audit row if the merchant confirms.
   @Post('preview')
-  @UseInterceptors(FileInterceptor('file', createImageUploadOptions('scans')))
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
   preview(
     @CurrentUser() ctx: TenantContext,
     @UploadedFile() file?: Express.Multer.File,

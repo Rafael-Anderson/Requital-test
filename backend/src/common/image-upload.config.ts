@@ -1,55 +1,26 @@
-import { randomUUID } from 'crypto';
-import { existsSync, mkdirSync } from 'fs';
-import { extname, join } from 'path';
-import { BadRequestException } from '@nestjs/common';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 
-// ponytail: local disk storage — fine for a single dev/staging instance,
-// does not survive container redeploys or horizontal scaling. Swapping to
-// S3/Cloudinary/etc later only touches this file (destination + returned
-// URL), nothing else in the products/categories modules.
-export const UPLOAD_ROOT = join(process.cwd(), 'uploads');
+// Memory storage, not disk — real validation (magic-byte sniffing, per-shop
+// key construction, resize) all happens in StorageService after the file is
+// fully buffered, since multer's own fileFilter only ever sees metadata
+// (fieldname/originalname/mimetype from the client's declared
+// Content-Type), never the actual bytes — that header-trusting fileFilter
+// was the exact gap docs/audit-2026-08.md §1.3 found. `limits.fileSize` is
+// still enforced here as the primary defense (multer aborts the stream
+// before an oversized file ever fully buffers in memory); StorageService's
+// own size check is defense-in-depth on top of this, not a replacement.
+//
+// Shared by every image-upload endpoint (products, categories, ingredients,
+// theme, bio-links, shop, seo, scan, collections) — same "one config, every
+// call site" shape as before this phase, just without a subdir parameter:
+// which feature/subdirectory a file belongs under is now StorageService's
+// concern (passed explicitly at the call site), not baked into multer's
+// disk destination.
+const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_SIZE_MB) || 10) * 1024 * 1024;
 
-const ALLOWED_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-];
-
-// Shared by the products and categories upload endpoints — same
-// destination/filename/validation logic, parameterized only by which
-// subdirectory under uploads/ a given entity's images land in.
-export function createImageUploadOptions(subdir: string) {
-  const dir = join(UPLOAD_ROOT, subdir);
+export function createImageUploadOptions() {
   return {
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        if (!existsSync(dir)) {
-          mkdirSync(dir, { recursive: true });
-        }
-        cb(null, dir);
-      },
-      filename: (_req, file, cb) => {
-        cb(null, `${randomUUID()}${extname(file.originalname)}`);
-      },
-    }),
-    fileFilter: (
-      _req: unknown,
-      file: Express.Multer.File,
-      cb: (error: Error | null, acceptFile: boolean) => void,
-    ) => {
-      if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-        cb(
-          new BadRequestException(
-            'Only JPEG, PNG, WebP, or GIF images are allowed',
-          ),
-          false,
-        );
-        return;
-      }
-      cb(null, true);
-    },
-    limits: { fileSize: 5 * 1024 * 1024 },
+    storage: memoryStorage(),
+    limits: { fileSize: MAX_UPLOAD_BYTES },
   };
 }

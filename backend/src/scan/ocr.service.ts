@@ -9,12 +9,16 @@ import { createWorker } from 'tesseract.js';
 // pooling/reusing a long-lived worker across requests.
 @Injectable()
 export class OcrService {
-  async recognize(imagePath: string): Promise<string> {
+  // Takes the in-memory buffer directly (tesseract.js's ImageLike accepts a
+  // Buffer natively) rather than a disk path — the upload pipeline moved to
+  // multer memoryStorage in Phase 6 (see common/image-upload.config.ts), so
+  // there's no file.path to read from anymore.
+  async recognize(image: Buffer): Promise<string> {
     const worker = await createWorker('eng');
     try {
       const {
         data: { text },
-      } = await worker.recognize(imagePath);
+      } = await worker.recognize(image);
       return text;
     } finally {
       await worker.terminate();

@@ -20,6 +20,7 @@ import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { UpdateIngredientDto } from './dto/update-ingredient.dto';
 import { csvUploadOptions } from '../common/csv-upload.config';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -46,7 +47,10 @@ class ListIngredientsQueryDto {
 // on the existing /products/stock/* endpoints, extended for ingredientId).
 @Controller('shop/ingredients')
 export class IngredientsController {
-  constructor(private readonly ingredientsService: IngredientsService) {}
+  constructor(
+    private readonly ingredientsService: IngredientsService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findAll(
@@ -65,14 +69,15 @@ export class IngredientsController {
   // own upload endpoints.
   @Roles('admin')
   @Post('upload')
-  @UseInterceptors(
-    FileInterceptor('file', createImageUploadOptions('ingredients')),
-  )
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadImage(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/ingredients/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'ingredients', file);
   }
 
   @Get(':id')

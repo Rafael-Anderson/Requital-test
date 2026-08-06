@@ -30,6 +30,7 @@ import { ListProductsQueryDto } from './dto/list-products-query.dto';
 import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { csvUploadOptions } from '../common/csv-upload.config';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -42,7 +43,10 @@ import type { TenantContext } from '../common/tenant-context';
 // assignment, create/delete) is admin-only, same as Outlets/DeliveryZones.
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findAll(
@@ -54,14 +58,15 @@ export class ProductsController {
 
   @Roles('admin')
   @Post('upload')
-  @UseInterceptors(
-    FileInterceptor('file', createImageUploadOptions('products')),
-  )
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadImage(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/products/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'products', file);
   }
 
   // 'viewer' explicitly excluded — this had no role guard at all before,

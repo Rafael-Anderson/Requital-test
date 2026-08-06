@@ -93,6 +93,45 @@ const SPECS: EnvVarSpec[] = [
     validate: isValidUrl,
     hint: 'must be a valid URL',
   },
+  {
+    name: 'STORAGE_PROVIDER',
+    required: false,
+    validate: (value) => ['local', 's3'].includes(value.toLowerCase()),
+    hint: 'must be "local" or "s3"',
+  },
+  {
+    name: 'MAX_UPLOAD_SIZE_MB',
+    required: false,
+    validate: isNumeric,
+    hint: 'must be numeric',
+  },
+  {
+    name: 'S3_ENDPOINT',
+    required: false,
+    validate: isValidUrl,
+    hint: 'must be a valid URL',
+  },
+  // S3_BUCKET/S3_REGION/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY have no shape
+  // to validate beyond non-empty (already implied by SPECS' own
+  // present-but-empty handling) — same reasoning as the payment gateway
+  // keys above. Whether all five are actually present together when
+  // STORAGE_PROVIDER=s3 is checked at StorageModule registration time (see
+  // storage-provider.factory.ts), not here — this file validates each var's
+  // own shape, not cross-field "required together" relationships, matching
+  // how the payment gateway vars are handled (PaymentProviderRegistry fails
+  // loudly per-shop at resolution time, not here).
+  { name: 'S3_BUCKET', required: false, hint: 'must be a non-empty string' },
+  { name: 'S3_REGION', required: false, hint: 'must be a non-empty string' },
+  {
+    name: 'S3_ACCESS_KEY_ID',
+    required: false,
+    hint: 'must be a non-empty string',
+  },
+  {
+    name: 'S3_SECRET_ACCESS_KEY',
+    required: false,
+    hint: 'must be a non-empty string',
+  },
 ];
 
 export function validateEnv(logger: LoggerService): void {

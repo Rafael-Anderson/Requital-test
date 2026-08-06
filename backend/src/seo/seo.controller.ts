@@ -12,6 +12,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { SeoService } from './seo.service';
 import { UpdateSeoDto } from './dto/update-seo.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
+import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -21,7 +22,10 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin')
 @Controller('seo')
 export class SeoController {
-  constructor(private readonly seoService: SeoService) {}
+  constructor(
+    private readonly seoService: SeoService,
+    private readonly storageService: StorageService,
+  ) {}
 
   @Get()
   findOne(@CurrentUser() ctx: TenantContext) {
@@ -34,11 +38,14 @@ export class SeoController {
   }
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', createImageUploadOptions('seo')))
-  uploadImage(@UploadedFile() file?: Express.Multer.File) {
+  @UseInterceptors(FileInterceptor('file', createImageUploadOptions()))
+  uploadImage(
+    @CurrentUser() ctx: TenantContext,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    return { url: `/uploads/seo/${file.filename}` };
+    return this.storageService.uploadImage(ctx.shopId, 'seo', file);
   }
 }

@@ -8,6 +8,7 @@ import { ScanSettingsService } from './scan-settings.service';
 import { parseInvoiceText } from './ocr-parser';
 import { findBestMatches, type MatchCandidate } from './fuzzy-match';
 import { CommitScanDto } from './dto/commit-scan.dto';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class ScanService {
@@ -15,16 +16,24 @@ export class ScanService {
     private readonly prisma: PrismaService,
     private readonly ocrService: OcrService,
     private readonly scanSettingsService: ScanSettingsService,
+    private readonly storageService: StorageService,
   ) {}
 
   // Read-only — OCR + heuristic parsing + fuzzy-match suggestions against
   // this shop's existing catalog. Nothing is persisted except the uploaded
   // image itself (needed either way for the audit trail once/if the
   // merchant confirms — see ScanController's multer config, same
-  // upload-now-reference-later pattern as products/upload).
+  // upload-now-reference-later pattern as products/upload). Routes through
+  // StorageService like every other image upload (Phase 6) — real
+  // magic-byte validation and shop-scoped storage apply here too, not just
+  // to customer-facing product photos; OCR runs against the same in-memory
+  // buffer, not the (thumbnail/medium) stored variants.
   async preview(ctx: TenantContext, file: Express.Multer.File) {
     const settings = await this.scanSettingsService.findOne(ctx);
-    const rawText = await this.ocrService.recognize(file.path);
+    const [rawText, uploaded] = await Promise.all([
+      this.ocrService.recognize(file.buffer),
+      this.storageService.uploadImage(ctx.shopId, 'scans', file),
+    ]);
     const parsedLines = parseInvoiceText(
       rawText,
       settings.excludeKeywords,
@@ -63,7 +72,7 @@ export class ScanService {
     }));
 
     return {
-      imageUrl: `/uploads/scans/${file.filename}`,
+      imageUrl: uploaded.url,
       rawText,
       items,
       defaultOutletId: settings.defaultOutletId,

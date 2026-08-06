@@ -6,6 +6,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 import { JobsModule } from '../jobs/jobs.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { JobsModule } from '../jobs/jobs.module';
     BranchRolesModule,
     NotifySubscriptionsModule,
     JobsModule,
+    StorageModule,
   ],
   controllers: [ProductsController],
   providers: [ProductsService, LowStockDigestService],

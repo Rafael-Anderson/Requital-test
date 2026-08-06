@@ -167,10 +167,17 @@ describe('Bio Link page config (e2e)', () => {
   describe('POST /shop/bio-links/upload', () => {
     it('uploads an image and returns a URL under /uploads/bio-links/', async () => {
       const shop = await setupShop('biopage-upload');
+      // A real, valid 1x1 PNG — Phase 6's upload pipeline sniffs actual
+      // magic bytes now, not the declared Content-Type, so a fake/partial
+      // buffer (the previous 4-byte stub here) would be correctly rejected.
+      const validPng = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      );
       const res = await request(app.getHttpServer())
         .post('/shop/bio-links/upload')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .attach('file', Buffer.from([0x89, 0x50, 0x4e, 0x47]), {
+        .attach('file', validPng, {
           filename: 'logo.png',
           contentType: 'image/png',
         })

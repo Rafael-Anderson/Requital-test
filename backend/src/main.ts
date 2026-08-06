@@ -65,8 +65,14 @@ async function bootstrap() {
     process.env.ADMIN_ORIGINS ?? 'http://localhost:3001,http://localhost:3002'
   ).split(',');
   app.enableCors({ origin: allowedOrigins });
-  // Local-disk product image uploads — see product-image-upload.config.ts
-  // for the storage/serving tradeoff this implies.
+  // Local-disk image uploads — only ever served from here when
+  // STORAGE_PROVIDER=local (the default; see src/storage/). Left
+  // unconditional rather than gated on the active provider: every file
+  // written before Phase 6 (and any written by a deployment that later
+  // switches away from local) still needs to keep resolving. Serves both
+  // pre-Phase-6 keys (no shopId path segment) and current shop-scoped keys
+  // identically — Express's static middleware doesn't care about the
+  // shape of what's under this root, just that it maps to a real file.
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   app.useGlobalPipes(
     new ValidationPipe({
