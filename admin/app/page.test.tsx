@@ -31,3 +31,30 @@ describe("HomePage — Reports tile mode gating", () => {
     await waitFor(() => expect(screen.getByText("Reports").closest("a")).toHaveAttribute("href", "/reports"));
   });
 });
+
+describe("HomePage — Theme tile dynamic-theme-builder badge", () => {
+  it("shows a Beta badge on the Theme tile when dynamicThemeBuilderEnabled is on", async () => {
+    vi.mocked(getShop).mockResolvedValue({
+      productEditorMode: "advanced",
+      dynamicThemeBuilderEnabled: true,
+    } as never);
+    renderPage();
+
+    const themeTile = await screen.findByText("Theme");
+    await waitFor(() =>
+      expect(themeTile.closest("a")?.querySelector("[title='Dynamic theme builder enabled']")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows no badge when dynamicThemeBuilderEnabled is off (the default)", async () => {
+    vi.mocked(getShop).mockResolvedValue({
+      productEditorMode: "advanced",
+      dynamicThemeBuilderEnabled: false,
+    } as never);
+    renderPage();
+
+    const themeTile = await screen.findByText("Theme");
+    await waitFor(() => expect(themeTile.closest("a")).toHaveAttribute("href", "/theme"));
+    expect(themeTile.closest("a")?.querySelector("[title='Dynamic theme builder enabled']")).not.toBeInTheDocument();
+  });
+});

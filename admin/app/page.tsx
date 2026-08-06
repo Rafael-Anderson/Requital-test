@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LayoutDashboard, ClipboardList, Package, Settings, Users, BarChart3, Palette, Share2, Link2, Percent, ClipboardEdit, History, Layers, MailWarning, Gift, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { useShopMode } from "@/lib/useShopMode";
+import { getShop } from "@/lib/api";
 import PageShell from "@/components/ui/PageShell";
 
 // Categories moved under Inventory as a tab (see InventoryTabs) rather than
@@ -37,9 +38,34 @@ const ADMIN_SECTIONS = [
 
 export default function HomePage() {
   const { user } = useAuth();
-  const mode = useShopMode();
-  const isSimple = mode === "simple";
+  // One getShop() fetch covering both flags this page reads — a second,
+  // parallel useShopMode() call here would just re-fetch the same shop a
+  // second time on every mount, since that hook's own fetch isn't shared
+  // via context (see its own comment on why).
+  const [shopFlags, setShopFlags] = useState<{
+    mode: "simple" | "advanced";
+    dynamicThemeBuilderEnabled: boolean;
+  }>({ mode: "simple", dynamicThemeBuilderEnabled: false });
+  const isSimple = shopFlags.mode === "simple";
   const sections = user?.role === "admin" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
+  // Store Configuration > "Coming Soon" toggle — inert until a real dynamic
+  // theme builder feature exists (see CLAUDE.md's own note on this flag).
+  // Wiring it here just reflects the toggle's state on the tile itself, a
+  // pure admin-UI cue — same "doesn't earn backend enforcement" pattern as
+  // every other xEnabled toggle; the Theme page keeps working identically
+  // either way, since this flag was never a gate for it.
+  const dynamicThemeBuilderEnabled = shopFlags.dynamicThemeBuilderEnabled;
+
+  useEffect(() => {
+    getShop()
+      .then((s) =>
+        setShopFlags({
+          mode: s.productEditorMode ?? "simple",
+          dynamicThemeBuilderEnabled: s.dynamicThemeBuilderEnabled,
+        }),
+      )
+      .catch(() => {});
+  }, []);
 
   return (
     <PageShell>
@@ -86,12 +112,21 @@ export default function HomePage() {
                 </div>
               );
             }
+            const showDynamicThemeBadge = href === "/theme" && dynamicThemeBuilderEnabled;
             return (
               <Link
                 key={href}
                 href={href}
-                className="aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
+                {showDynamicThemeBadge && (
+                  <span
+                    title="Dynamic theme builder enabled"
+                    className="absolute top-2 right-2 rounded-full bg-accent/15 text-accent-text dark:text-accent text-[10px] font-medium px-1.5 py-0.5"
+                  >
+                    Beta
+                  </span>
+                )}
                 <span className="flex items-center justify-center size-14 rounded-2xl bg-accent/10">
                   <Icon className="size-6 text-accent-text dark:text-accent" strokeWidth={1.75} />
                 </span>
