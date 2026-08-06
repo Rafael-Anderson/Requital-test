@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { sendEmail } from '../common/email';
+import { JobsService } from '../jobs/jobs.service';
+import { SchedulerService } from '../jobs/scheduler.service';
 import { generateOpaqueToken } from '../common/token-hash';
 import type { TenantContext } from '../common/tenant-context';
 import { CaptureAbandonedCartDto } from './dto/capture-abandoned-cart.dto';
@@ -21,7 +22,11 @@ export interface CartItemSnapshot {
 
 @Injectable()
 export class AbandonedCartsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jobsService: JobsService,
+    private readonly schedulerService: SchedulerService,
+  ) {}
 
   // Called by the storefront checkout page once name+phone are both
   // filled in — see PublicController. Upsert keyed on [shopId,
@@ -141,8 +146,21 @@ export class AbandonedCartsService {
     });
   }
 
+  // Wrapped in the cross-instance advisory lock (see SchedulerService) so
+  // only one app instance runs the sweep per tick — sendDueForShop's own
+  // per-cart CAS claim already made double-*sending* impossible, but
+  // without this lock every instance would still redundantly query every
+  // opted-in shop's abandoned carts on every tick.
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sendDueRecoveryEmails() {
+    await this.schedulerService.runLocked(
+      'abandoned-cart-recovery-sweep',
+      300,
+      () => this.runSweep(),
+    );
+  }
+
+  private async runSweep() {
     const shops = await this.prisma.shop.findMany({
       where: { notifyAbandonedCart: true },
       select: {
@@ -217,13 +235,16 @@ export class AbandonedCartsService {
         '',
         `Pick up where you left off: ${STOREFRONT_URL}/${shopSlug}/cart/recover?token=${cart.recoverToken}`,
       ];
-      await sendEmail(
-        cart.customerEmail,
-        `You left something at ${shopName}`,
-        bodyLines.join('\n'),
+      await this.jobsService.enqueue(
+        shopId,
+        'send_email',
         {
+          to: cart.customerEmail,
+          subject: `You left something at ${shopName}`,
+          bodyText: bodyLines.join('\n'),
           fromName: shopName,
         },
+        `abandoned-cart-recovery-email:${cart.id}:${cart.recoverToken}`,
       );
       sent += 1;
     }

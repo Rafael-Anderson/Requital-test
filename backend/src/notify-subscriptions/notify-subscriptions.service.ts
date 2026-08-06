@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { sendEmail } from '../common/email';
+import { JobsService } from '../jobs/jobs.service';
 import { SubscribeDto } from './dto/subscribe.dto';
 
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
@@ -13,7 +13,10 @@ const NOTIFY_CHUNK_SIZE = 50;
 
 @Injectable()
 export class NotifySubscriptionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jobsService: JobsService,
+  ) {}
 
   async subscribe(dto: SubscribeDto) {
     const product = await this.prisma.product.findUnique({
@@ -138,23 +141,30 @@ export class NotifySubscriptionsService {
       await Promise.allSettled(
         chunk.map(async (sub) => {
           const unsubscribeUrl = `${STOREFRONT_URL}/${product.shop.subdomain}/unsubscribe-notify?email=${encodeURIComponent(sub.email)}&productId=${productId}`;
-          await sendEmail(
-            sub.email,
-            `${product.name} is back in stock!`,
-            [
-              `Good news — ${product.name} is back in stock at ${product.shop.name}.`,
-              '',
-              `View it here: ${productUrl}`,
-              '',
-              `Don't want these emails? Unsubscribe: ${unsubscribeUrl}`,
-            ].join('\n'),
-            { fromName: product.shop.name },
+          await this.jobsService.enqueue(
+            shopId,
+            'send_email',
+            {
+              to: sub.email,
+              subject: `${product.name} is back in stock!`,
+              bodyText: [
+                `Good news — ${product.name} is back in stock at ${product.shop.name}.`,
+                '',
+                `View it here: ${productUrl}`,
+                '',
+                `Don't want these emails? Unsubscribe: ${unsubscribeUrl}`,
+              ].join('\n'),
+              fromName: product.shop.name,
+            },
+            `back-in-stock-email:${sub.id}`,
           );
-          // Marked notified even if sendEmail internally fell back to its
-          // stub (sendEmail never throws) — a batch failure here is only
-          // ever a genuinely unexpected error (e.g. the DB write itself),
-          // which Promise.allSettled already isolates per-subscriber so one
-          // bad row can't abort the rest of the chunk.
+          // Marked notified once the send is queued (not once it's actually
+          // delivered) — a batch failure here is only ever a genuinely
+          // unexpected error (e.g. the DB write itself), which
+          // Promise.allSettled already isolates per-subscriber so one bad
+          // row can't abort the rest of the chunk. Real delivery failures
+          // are now the queue's problem (retry/backoff/DLQ), not this
+          // method's.
           await this.prisma.notifysubscription.update({
             where: { id: sub.id },
             data: { notifiedAt: new Date() },

@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
+import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -21,26 +22,47 @@ interface OrderRow {
   id: number;
   status: string;
 }
+interface EmailJobPayload {
+  to: string;
+  subject: string;
+  bodyText: string;
+}
 
 function body<T>(res: Response): T {
   return res.body as T;
 }
 
-// Same stub-observation approach as order-notifications.e2e-spec.ts.
-function emailStubCalls(spy: jest.SpyInstance, to: string): string[] {
-  return spy.mock.calls
-    .map((args) => String(args[0]))
-    .filter(
-      (line) => line.startsWith('[email:stub]') && line.includes(`to=${to}`),
-    );
+// notifySurveyRequest is fire-and-forget as of the checkout-latency fix, so
+// a status-transition request can return before the survey row/email it
+// triggers has actually been created/sent — settle() gives that a moment to
+// at least enqueue its job.
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 100));
 }
 
-// Same reasoning as order-notifications.e2e-spec.ts's own helper of this
-// name: notifySurveyRequest is fire-and-forget as of the checkout-latency
-// fix, so a status-transition request can return before the survey row/
-// email it triggers has actually been created/sent.
-function flushNotifications() {
-  return new Promise((resolve) => setTimeout(resolve, 50));
+// As of Phase 5 the email itself is a queued job — see
+// order-notifications.e2e-spec.ts's identical helper for the full reasoning
+// (same file, same pattern): deliberately does NOT use the worker's generic
+// pollOnce() drain, since Jest runs each e2e spec file in its own process
+// and that has no process affinity — a different spec file's own worker can
+// claim and process this job first, whose side effects (here, the stub's
+// console.log) this process's spy could then never observe. Processes this
+// specific job, by its own idempotency key, in this process instead.
+let jobsWorker: JobsWorkerService;
+let prisma: PrismaService;
+async function processOwnEmailJob(idempotencyKey: string) {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    const job = await prisma.job.findUnique({ where: { idempotencyKey } });
+    if (job) {
+      if (job.status === 'pending') {
+        await jobsWorker.processJobById(job.id);
+      }
+      return prisma.job.findUnique({ where: { idempotencyKey } });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  }
+  return null;
 }
 
 // Most tests here drive an order through 4 sequential status transitions —
@@ -51,7 +73,6 @@ jest.setTimeout(20000);
 
 describe('Post-purchase survey (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   let logSpy: jest.SpyInstance;
   const runId = Date.now();
 
@@ -69,6 +90,7 @@ describe('Post-purchase survey (e2e)', () => {
     );
     await app.init();
     prisma = app.get(PrismaService);
+    jobsWorker = app.get(JobsWorkerService);
   });
 
   beforeEach(() => {
@@ -154,7 +176,7 @@ describe('Post-purchase survey (e2e)', () => {
         ...overrides,
       })
       .expect(201);
-    await flushNotifications();
+    await settle();
     return body<OrderRow>(res);
   }
 
@@ -171,7 +193,7 @@ describe('Post-purchase survey (e2e)', () => {
         .send({ status })
         .expect(200);
     }
-    await flushNotifications();
+    await settle();
   }
 
   // Longer timeout: signup + 4 status transitions, and (when RESEND_API_KEY
@@ -188,7 +210,6 @@ describe('Post-purchase survey (e2e)', () => {
     const order = await createOrder(adminToken, outletId, productId, {
       customerEmail: email,
     });
-    logSpy.mockClear();
 
     await driveToDelivered(adminToken, order.id);
 
@@ -198,14 +219,13 @@ describe('Post-purchase survey (e2e)', () => {
     expect(survey).not.toBeNull();
     expect(survey?.respondedAt).toBeNull();
 
-    // driveToDelivered's 'out_for_delivery' transition also emails this same
-    // address (see order-notifications.e2e-spec.ts) — filter to the survey
-    // email specifically, not just "any email sent to this customer".
-    const calls = emailStubCalls(logSpy, email).filter((line) =>
-      line.includes('How was your order'),
-    );
-    expect(calls.length).toBe(1);
-    expect(calls[0]).toContain(`#${order.id}`);
+    const job = await processOwnEmailJob(`order:${order.id}:survey-email`);
+    expect(job).not.toBeNull();
+    expect(job!.status).toBe('completed');
+    const payload = job!.payload as unknown as EmailJobPayload;
+    expect(payload.to).toBe(email);
+    expect(payload.subject).toContain('How was your order');
+    expect(payload.bodyText).toContain(`#${order.id}`);
   });
 
   it('does NOT create a survey row when customerSurveyEnabled is off', async () => {
@@ -232,7 +252,6 @@ describe('Post-purchase survey (e2e)', () => {
     const order = await createOrder(adminToken, outletId, productId, {
       customerEmail: email,
     });
-    logSpy.mockClear();
 
     await driveToDelivered(adminToken, order.id);
 
@@ -240,7 +259,10 @@ describe('Post-purchase survey (e2e)', () => {
       where: { orderId: order.id },
     });
     expect(survey).not.toBeNull();
-    expect(emailStubCalls(logSpy, email).length).toBe(0);
+    const job = await prisma.job.findUnique({
+      where: { idempotencyKey: `order:${order.id}:survey-email` },
+    });
+    expect(job).toBeNull();
   });
 
   it('is idempotent: calling notifySurveyRequest twice for the same order creates only one row and sends only one email', async () => {
@@ -252,7 +274,6 @@ describe('Post-purchase survey (e2e)', () => {
     const order = await createOrder(adminToken, outletId, productId, {
       customerEmail: email,
     });
-    logSpy.mockClear();
 
     const orderNotificationsService = app.get(OrderNotificationsService);
     const shop = await prisma.shop.findFirstOrThrow({
@@ -279,7 +300,17 @@ describe('Post-purchase survey (e2e)', () => {
       where: { orderId: order.id },
     });
     expect(count).toBe(1);
-    expect(emailStubCalls(logSpy, email).length).toBe(1);
+    // Idempotent at the job layer too: the second notifySurveyRequest call
+    // enqueues under the same idempotencyKey, so exactly one row exists —
+    // checked directly (job count), not by counting stub log lines, which
+    // can't distinguish "one job, sent once" from "one job, retried twice".
+    const jobCount = await prisma.job.count({
+      where: { idempotencyKey: `order:${order.id}:survey-email` },
+    });
+    expect(jobCount).toBe(1);
+    const job = await processOwnEmailJob(`order:${order.id}:survey-email`);
+    expect(job).not.toBeNull();
+    expect(job!.status).toBe('completed');
   });
 
   describe('public survey endpoints', () => {

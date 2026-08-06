@@ -45,6 +45,7 @@ import { BranchRolesModule } from './branch-roles/branch-roles.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { NotifySubscriptionsModule } from './notify-subscriptions/notify-subscriptions.module';
 import { StorefrontSearchModule } from './storefront-search/storefront-search.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -107,6 +108,7 @@ import { StorefrontSearchModule } from './storefront-search/storefront-search.mo
     NotifySubscriptionsModule,
     StorefrontSearchModule,
     HealthModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [

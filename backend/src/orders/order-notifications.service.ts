@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { sendEmail as sendEmailReal } from '../common/email';
 import { sendWhatsAppStub } from '../common/whatsapp';
 import { normalizePhoneToE164 } from '../common/phone';
 import { generateSurveyToken } from '../common/token-hash';
 import { WhatsAppSettingsService } from '../whatsapp/whatsapp-settings.service';
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
 import { createLogger } from '../common/logging/logger';
+import { JobsService } from '../jobs/jobs.service';
 
 const logger = createLogger('OrderNotifications');
 
@@ -43,10 +43,12 @@ interface NotifiableOrder {
 // here, and it was exactly as dead before this change as notifyEmail was
 // before #12 — not a duplicate, just a second still-unwired setting.
 //
-// Email routes through common/email.ts's sendEmail() — the real Resend
-// provider when RESEND_API_KEY is configured (platform-level, see the "Real
-// email delivery" report), otherwise the stub. WhatsApp calls the real Meta
-// Cloud API provider when a shop has configured credentials
+// Email is queued via JobsService (Phase 5) — the send_email job handler
+// resolves to the real Resend provider when RESEND_API_KEY is configured
+// (platform-level, see the "Real email delivery" report), otherwise the
+// stub, with real delivery failures retried by the queue instead of being
+// swallowed inline. WhatsApp stays synchronous: calls the real Meta Cloud
+// API provider when a shop has configured credentials
 // (WhatsAppSettingsService), otherwise falls back to sendWhatsAppStub —
 // never fails order creation/status updates either way.
 @Injectable()
@@ -55,6 +57,7 @@ export class OrderNotificationsService {
     private readonly prisma: PrismaService,
     private readonly whatsAppSettingsService: WhatsAppSettingsService,
     private readonly metaWhatsAppProvider: MetaWhatsAppProvider,
+    private readonly jobsService: JobsService,
   ) {}
 
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
@@ -65,6 +68,7 @@ export class OrderNotificationsService {
         order,
         `Order confirmation — #${order.id}`,
         bodyText,
+        `order:${order.id}:confirmed-email`,
       ),
       this.sendWhatsApp(shopId, order, bodyText),
     ]);
@@ -79,7 +83,13 @@ export class OrderNotificationsService {
       ? `Hi ${order.customerName}, order #${order.id} is ready for pickup at your selected outlet.`
       : `Hi ${order.customerName}, order #${order.id} is on its way to you now.`;
     await Promise.all([
-      this.sendEmail(shopId, order, subject, bodyText),
+      this.sendEmail(
+        shopId,
+        order,
+        subject,
+        bodyText,
+        `order:${order.id}:out-for-delivery-email`,
+      ),
       this.sendWhatsApp(shopId, order, bodyText),
     ]);
   }
@@ -117,11 +127,16 @@ export class OrderNotificationsService {
 
     if (!shop.notifyEmail || !order.customerEmail) return;
     const link = `${STOREFRONT_URL}/${shop.subdomain}/survey?token=${token}`;
-    await sendEmailReal(
-      order.customerEmail,
-      `How was your order? — #${order.id}`,
-      `Hi ${order.customerName}, we'd love your feedback on order #${order.id}: ${link}`,
-      { fromName: shop.displayName ?? shop.name },
+    await this.jobsService.enqueue(
+      shopId,
+      'send_email',
+      {
+        to: order.customerEmail,
+        subject: `How was your order? — #${order.id}`,
+        bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.id}: ${link}`,
+        fromName: shop.displayName ?? shop.name,
+      },
+      `order:${order.id}:survey-email`,
     );
   }
 
@@ -130,6 +145,7 @@ export class OrderNotificationsService {
     order: NotifiableOrder,
     subject: string,
     bodyText: string,
+    idempotencyKey: string,
   ) {
     if (!order.customerEmail) return;
     const shop = await this.prisma.shop.findUnique({
@@ -137,9 +153,17 @@ export class OrderNotificationsService {
       select: { notifyEmail: true, name: true, displayName: true },
     });
     if (!shop?.notifyEmail) return;
-    await sendEmailReal(order.customerEmail, subject, bodyText, {
-      fromName: shop.displayName ?? shop.name,
-    });
+    await this.jobsService.enqueue(
+      shopId,
+      'send_email',
+      {
+        to: order.customerEmail,
+        subject,
+        bodyText,
+        fromName: shop.displayName ?? shop.name,
+      },
+      idempotencyKey,
+    );
   }
 
   // Never throws — a WhatsApp send failure (network error, bad credentials,

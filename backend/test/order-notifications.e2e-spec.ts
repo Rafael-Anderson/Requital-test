@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
+import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -22,6 +23,12 @@ interface OutletRow {
 interface OrderRow {
   id: number;
   status: string;
+}
+interface EmailJobPayload {
+  to: string;
+  subject: string;
+  bodyText: string;
+  fromName?: string;
 }
 
 function body<T>(res: Response): T {
@@ -55,17 +62,53 @@ function whatsAppStubCalls(spy: jest.SpyInstance, to: string): string[] {
 // fire-and-forget as of the checkout-latency fix (OrdersService/
 // PublicService no longer `await` them) — the triggering HTTP request can
 // return before the notification's own async work (even against these
-// in-memory stubs) has actually run. A short drain after the triggering
-// request gives that scheduled work a chance to complete before asserting
-// on it, which is what every test below needs now that "the request
-// resolved" no longer implies "the notification already fired."
-function flushNotifications() {
-  return new Promise((resolve) => setTimeout(resolve, 50));
+// in-memory stubs) has actually run. A short settle after the triggering
+// request gives that scheduled work a chance to at least enqueue its job
+// (the WhatsApp channel isn't queued at all — see below — so this alone is
+// enough for WhatsApp assertions).
+function settle() {
+  return new Promise((resolve) => setTimeout(resolve, 100));
 }
+
+// As of Phase 5, the email half of a notification is a queued job — see
+// JobsWorkerService. It does NOT get processed by settle() alone, and
+// deliberately does NOT use the worker's generic pollOnce() drain either:
+// Jest runs each e2e spec file in its own OS process, and pollOnce()'s
+// claim query has no process affinity — a DIFFERENT spec file's own worker
+// can just as easily claim and process this file's job first (found for
+// real: running this file alongside another one intermittently failed
+// content assertions that pass every time this file runs alone). Any test
+// that needs to observe the *content* of a specific email (its subject,
+// or that the real Resend `fetch` call/console.log stub fired) must
+// process its own job itself, in this process, via
+// JobsWorkerService.processJobById — which is exactly what this helper
+// does: poll for the job to appear (the enqueue is itself fire-and-forget,
+// so it may not exist the instant the triggering request returns), then
+// claim+process it here. Returns the final row, or null if nothing was
+// ever enqueued for this key within the deadline.
+let jobsWorker: JobsWorkerService;
+let prisma: PrismaService;
+async function processOwnEmailJob(idempotencyKey: string) {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    const job = await prisma.job.findUnique({ where: { idempotencyKey } });
+    if (job) {
+      if (job.status === 'pending') {
+        await jobsWorker.processJobById(job.id);
+      }
+      return prisma.job.findUnique({ where: { idempotencyKey } });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  }
+  return null;
+}
+
+// flushNotifications' drain window is generous (see its own comment) —
+// needs more room than Jest's 5s default per test.
+jest.setTimeout(20000);
 
 describe('Order status customer email notifications (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   let logSpy: jest.SpyInstance;
   const runId = Date.now();
 
@@ -83,6 +126,7 @@ describe('Order status customer email notifications (e2e)', () => {
     );
     await app.init();
     prisma = app.get(PrismaService);
+    jobsWorker = app.get(JobsWorkerService);
   });
 
   beforeEach(() => {
@@ -168,7 +212,7 @@ describe('Order status customer email notifications (e2e)', () => {
         ...overrides,
       })
       .expect(201);
-    await flushNotifications();
+    await settle();
     return body<OrderRow>(res);
   }
 
@@ -182,9 +226,12 @@ describe('Order status customer email notifications (e2e)', () => {
       customerEmail: email,
     });
 
-    const calls = emailStubCalls(logSpy, email);
-    expect(calls.length).toBe(1);
-    expect(calls[0]).toContain(`Order confirmation — #${order.id}`);
+    const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
+    expect(job).not.toBeNull();
+    expect(job!.status).toBe('completed');
+    const payload = job!.payload as unknown as EmailJobPayload;
+    expect(payload.to).toBe(email);
+    expect(payload.subject).toContain(`Order confirmation — #${order.id}`);
   });
 
   it('does NOT send anything when the shop has notifications disabled', async () => {
@@ -193,11 +240,14 @@ describe('Order status customer email notifications (e2e)', () => {
       false,
     );
     const email = `confirm-off-${runId}@test.com`;
-    await createOrder(adminToken, outletId, productId, {
+    const order = await createOrder(adminToken, outletId, productId, {
       customerEmail: email,
     });
 
-    expect(emailStubCalls(logSpy, email).length).toBe(0);
+    const job = await prisma.job.findUnique({
+      where: { idempotencyKey: `order:${order.id}:confirmed-email` },
+    });
+    expect(job).toBeNull();
   });
 
   it('does NOT send anything when the order has no customer email, even with notifications enabled', async () => {
@@ -205,13 +255,17 @@ describe('Order status customer email notifications (e2e)', () => {
       'notify-no-email',
       true,
     );
-    const before = logSpy.mock.calls.length;
-    await createOrder(adminToken, outletId, productId, {});
-    // Nothing new logged with an "[email:stub] to=" line at all for this order.
-    const after = logSpy.mock.calls
-      .slice(before)
-      .filter((args) => String(args[0]).startsWith('[email:stub]'));
-    expect(after.length).toBe(0);
+    const order = await createOrder(adminToken, outletId, productId, {});
+    // Checked via the job table directly, scoped to this specific order's
+    // idempotency key, rather than "no [email:stub] line logged at all" —
+    // the queue is shared/global (Phase 5), so a blanket console.log count
+    // would also catch unrelated jobs (this shop's own verification email,
+    // anything still draining from an earlier test) that have nothing to
+    // do with this order.
+    const job = await prisma.job.findUnique({
+      where: { idempotencyKey: `order:${order.id}:confirmed-email` },
+    });
+    expect(job).toBeNull();
   });
 
   it('sends an out-for-delivery email at that exact status transition, worded for delivery orders', async () => {
@@ -224,7 +278,7 @@ describe('Order status customer email notifications (e2e)', () => {
       customerEmail: email,
       orderType: 'delivery',
     });
-    logSpy.mockClear();
+    const jobKey = `order:${order.id}:out-for-delivery-email`;
 
     for (const status of ['confirmed', 'preparing']) {
       await request(app.getHttpServer())
@@ -232,9 +286,12 @@ describe('Order status customer email notifications (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status })
         .expect(200);
-      await flushNotifications();
+      await settle();
       // No email at any of these intermediate transitions.
-      expect(emailStubCalls(logSpy, email).length).toBe(0);
+      const midJob = await prisma.job.findUnique({
+        where: { idempotencyKey: jobKey },
+      });
+      expect(midJob).toBeNull();
     }
 
     await request(app.getHttpServer())
@@ -242,12 +299,13 @@ describe('Order status customer email notifications (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'out_for_delivery' })
       .expect(200);
-    await flushNotifications();
 
-    const calls = emailStubCalls(logSpy, email);
-    expect(calls.length).toBe(1);
-    expect(calls[0]).toContain('out for delivery');
-    expect(calls[0]).not.toContain('ready for pickup');
+    const job = await processOwnEmailJob(jobKey);
+    expect(job).not.toBeNull();
+    expect(job!.status).toBe('completed');
+    const payload = job!.payload as unknown as EmailJobPayload;
+    expect(payload.subject).toContain('out for delivery');
+    expect(payload.subject).not.toContain('ready for pickup');
   });
 
   it('words the same transition as "ready for pickup" for a pickup order', async () => {
@@ -260,7 +318,6 @@ describe('Order status customer email notifications (e2e)', () => {
       customerEmail: email,
       orderType: 'pickup',
     });
-    logSpy.mockClear();
 
     await request(app.getHttpServer())
       .patch(`/orders/${order.id}/status`)
@@ -277,11 +334,14 @@ describe('Order status customer email notifications (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'out_for_delivery' })
       .expect(200);
-    await flushNotifications();
 
-    const calls = emailStubCalls(logSpy, email);
-    expect(calls.length).toBe(1);
-    expect(calls[0]).toContain('ready for pickup');
+    const job = await processOwnEmailJob(
+      `order:${order.id}:out-for-delivery-email`,
+    );
+    expect(job).not.toBeNull();
+    expect(job!.status).toBe('completed');
+    const payload = job!.payload as unknown as EmailJobPayload;
+    expect(payload.subject).toContain('ready for pickup');
   });
 
   it('a storefront checkout order also triggers the confirmation email (not just admin-created orders)', async () => {
@@ -345,7 +405,7 @@ describe('Order status customer email notifications (e2e)', () => {
       .expect(200);
 
     const email = `storefront-${runId}@test.com`;
-    await request(app.getHttpServer())
+    const orderRes = await request(app.getHttpServer())
       .post(`/public/${slug}/orders`)
       .send({
         customerName: 'Storefront Customer',
@@ -359,11 +419,13 @@ describe('Order status customer email notifications (e2e)', () => {
         items: [{ productId: body<IdRow>(product).id, quantity: 1 }],
       })
       .expect(201);
-    await flushNotifications();
+    const orderId = body<{ order: OrderRow }>(orderRes).order.id;
 
-    const calls = emailStubCalls(logSpy, email);
-    expect(calls.length).toBe(1);
-    expect(calls[0]).toContain('Order confirmation');
+    const job = await processOwnEmailJob(`order:${orderId}:confirmed-email`);
+    expect(job).not.toBeNull();
+    expect(job!.status).toBe('completed');
+    const payload = job!.payload as unknown as EmailJobPayload;
+    expect(payload.subject).toContain('Order confirmation');
   });
 
   describe('WhatsApp notifications', () => {
@@ -416,14 +478,16 @@ describe('Order status customer email notifications (e2e)', () => {
         false,
       );
       const email = `wa-off-customer-${runId}@test.com`;
-      await createOrder(adminToken, outletId, productId, {
+      const order = await createOrder(adminToken, outletId, productId, {
         customerPhone: '0501234568',
         customerEmail: email,
       });
 
       expect(whatsAppStubCalls(logSpy, '+971501234568').length).toBe(0);
       // The independent email channel still fires normally.
-      expect(emailStubCalls(logSpy, email).length).toBe(1);
+      const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
+      expect(job).not.toBeNull();
+      expect(job!.status).toBe('completed');
     });
 
     it('calls the real Meta Cloud API provider (not the stub) once credentials are configured', async () => {
@@ -479,13 +543,15 @@ describe('Order status customer email notifications (e2e)', () => {
       const email = `wa-fail-customer-${runId}@test.com`;
       // Order creation itself must still return 201 despite the WhatsApp
       // provider failing — createOrder() already asserts .expect(201).
-      await createOrder(adminToken, outletId, productId, {
+      const order = await createOrder(adminToken, outletId, productId, {
         customerPhone: '0501234570',
         customerEmail: email,
       });
 
       // Email channel is unaffected by the WhatsApp failure.
-      expect(emailStubCalls(logSpy, email).length).toBe(1);
+      const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
+      expect(job).not.toBeNull();
+      expect(job!.status).toBe('completed');
     });
 
     it('skips silently (no throw, no send) when the customer phone cannot be normalized to E.164', async () => {
@@ -546,6 +612,13 @@ describe('Order status customer email notifications (e2e)', () => {
       const order = await createOrder(adminToken, outletId, productId, {
         customerEmail: email,
       });
+      // Must process this order's own job in THIS process (not just wait for
+      // it) — the real Resend `fetch` call only shows up in fetchSpy if it
+      // happens here rather than in another concurrently-running spec
+      // file's own worker (see processOwnEmailJob's comment).
+      const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
+      expect(job).not.toBeNull();
+      expect(job!.status).toBe('completed');
 
       const orderCalls = fetchSpy.mock.calls.filter(
         ([, init]) => JSON.parse(init.body).to === email,
@@ -564,7 +637,7 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(emailStubCalls(logSpy, email).length).toBe(0);
     });
 
-    it('a Resend send failure does not block order creation, and falls back to stub logging', async () => {
+    it('a Resend send failure does not block order creation, and gets retried by the queue rather than silently falling back to the stub', async () => {
       process.env.RESEND_API_KEY = 'test-resend-key';
       fetchSpy.mockResolvedValue({
         ok: false,
@@ -580,11 +653,24 @@ describe('Order status customer email notifications (e2e)', () => {
       const email = `email-fail-customer-${runId}@test.com`;
       // Order creation itself must still return 201 despite the Resend call
       // failing — createOrder() already asserts .expect(201).
-      await createOrder(adminToken, outletId, productId, {
+      const order = await createOrder(adminToken, outletId, productId, {
         customerEmail: email,
       });
+      // Process this order's own job in THIS process — it must be the one
+      // that actually attempts (and fails) the real Resend call, not
+      // whichever process happens to claim it first.
+      const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
+      expect(job).not.toBeNull();
 
-      expect(emailStubCalls(logSpy, email).length).toBe(1);
+      // Phase 5 behavior change: the queue's send_email handler uses
+      // sendEmailOrThrow, not sendEmail's catch-and-stub-fallback — a real
+      // delivery failure is a genuine job failure the queue retries with
+      // backoff (and eventually dead-letters), not something silently
+      // logged as if it succeeded via the stub.
+      expect(emailStubCalls(logSpy, email).length).toBe(0);
+      expect(job!.status).toBe('pending');
+      expect(job!.attempts).toBe(1);
+      expect(job!.lastError).toContain('401');
     });
   });
 });

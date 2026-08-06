@@ -1659,6 +1659,21 @@ export interface PaginatedAuditLog {
   pageSize: number;
 }
 
+// Phase 5 job queue — mirrors backend/src/jobs/jobs.service.ts's `job` shape
+// (dead-letter rows only; this admin view never shows pending/processing
+// jobs, just what's actually broken and needs a human).
+export interface FailedJob {
+  id: number;
+  shopId: number;
+  type: string;
+  payload: unknown;
+  attempts: number;
+  maxAttempts: number;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PaginatedStockMovements {
   data: StockMovement[];
   total: number;

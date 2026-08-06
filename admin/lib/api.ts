@@ -69,6 +69,7 @@ import type {
   WhatsAppSettings,
   PaginatedAuditLog,
   PaginatedStockMovements,
+  FailedJob,
   Shop,
   StockMovementType,
   ThemeSettings,
@@ -804,6 +805,18 @@ export function listAuditLog(params: {
 
 export function listAuditLogActors() {
   return apiFetch<{ id: number; name: string }[]>("/audit-log/actors");
+}
+
+export function listFailedJobs() {
+  return apiFetch<FailedJob[]>("/jobs/failed");
+}
+
+export function retryFailedJob(id: number) {
+  return apiFetch<void>(`/jobs/${id}/retry`, { method: "POST" });
+}
+
+export function dismissFailedJob(id: number) {
+  return apiFetch<void>(`/jobs/${id}`, { method: "DELETE" });
 }
 
 export function listStockMovements(params: {

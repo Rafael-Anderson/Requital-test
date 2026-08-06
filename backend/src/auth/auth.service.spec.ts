@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { AuditLogService } from '../audit-log/audit-log.service';
+import type { JobsService } from '../jobs/jobs.service';
 
 // bcryptjs's exports aren't configurable, so jest.spyOn can't redefine them
 // directly — mock the whole module instead and drive each test through the
@@ -76,6 +77,12 @@ function createMockAuditLog() {
   } as unknown as AuditLogService;
 }
 
+function createMockJobsService() {
+  return {
+    enqueue: jest.fn().mockResolvedValue({}),
+  } as unknown as JobsService;
+}
+
 describe('AuthService.login — progressive lockout', () => {
   it('a correct password succeeds and resets the failed-attempt counter', async () => {
     const user = fakeUser({
@@ -90,6 +97,7 @@ describe('AuthService.login — progressive lockout', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -109,6 +117,7 @@ describe('AuthService.login — progressive lockout', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.login({ email: user.email, password: 'wrong' }),
@@ -134,6 +143,7 @@ describe('AuthService.login — progressive lockout', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.login({ email: 'nobody@nowhere.test', password: 'whatever' }),
@@ -159,6 +169,7 @@ describe('AuthService.login — progressive lockout', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.login({ email: user.email, password: 'correct' }),
@@ -185,6 +196,7 @@ describe('AuthService.login — progressive lockout', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -207,6 +219,7 @@ describe('AuthService.login — progressive lockout', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -224,6 +237,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await service.forgotPassword({ email: user.email });
 
@@ -248,6 +262,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await service.resendVerification({
       userId: user.id,
@@ -273,6 +288,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await service.changePassword(
       { userId: user.id, shopId: user.shopId, role: 'admin', outletId: null },
@@ -300,6 +316,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.resetPassword({
@@ -323,6 +340,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.resetPassword({
@@ -346,6 +364,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.resetPassword({
@@ -363,6 +382,7 @@ describe('AuthService — token supersession and invalidation', () => {
       prisma,
       createMockJwt(),
       createMockAuditLog(),
+      createMockJobsService(),
     );
     await expect(
       service.verifyEmail({ token: 'not-a-real-token' }),

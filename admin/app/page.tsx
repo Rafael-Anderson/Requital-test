@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, ClipboardList, Package, Settings, Users, BarChart3, Palette, Share2, Link2, Percent, ClipboardEdit, History, Layers, MailWarning, Gift } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Package, Settings, Users, BarChart3, Palette, Share2, Link2, Percent, ClipboardEdit, History, Layers, MailWarning, Gift, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useShopMode } from "@/lib/useShopMode";
 import PageShell from "@/components/ui/PageShell";
@@ -32,6 +32,7 @@ const ADMIN_SECTIONS = [
   { href: "/gift-cards", label: "Gift Cards", icon: Gift },
   { href: "/draft-orders", label: "Draft Orders", icon: ClipboardEdit },
   { href: "/activity-log", label: "Activity Log", icon: History },
+  { href: "/jobs", label: "Failed Jobs", icon: AlertTriangle },
 ];
 
 export default function HomePage() {

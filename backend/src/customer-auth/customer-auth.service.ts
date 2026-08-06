@@ -11,7 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { customer as CustomerModel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
-import { sendEmail } from '../common/email';
+import { JobsService } from '../jobs/jobs.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
 import { RefreshCustomerTokenDto } from './dto/refresh-customer-token.dto';
@@ -45,6 +45,7 @@ export class CustomerAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly jobsService: JobsService,
   ) {}
 
   // "Register" is "claim" — find the [shopId, phone] row guest checkout
@@ -258,11 +259,16 @@ export class CustomerAuthService {
       },
     });
     const resetLink = `${STOREFRONT_URL}/${shopSlug}/account/reset-password?token=${raw}`;
-    await sendEmail(
-      customer.email!,
-      'Reset your password',
-      `Reset your password: ${resetLink}\nThis link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
-      { fromName: shop.displayName ?? shop.name },
+    await this.jobsService.enqueue(
+      shop.id,
+      'send_email',
+      {
+        to: customer.email!,
+        subject: 'Reset your password',
+        bodyText: `Reset your password: ${resetLink}\nThis link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
+        fromName: shop.displayName ?? shop.name,
+      },
+      `customer-password-reset-email:${customer.id}:${raw}`,
     );
     return { success: true, ...(isDev ? { devResetLink: resetLink } : {}) };
   }

@@ -6,7 +6,7 @@ import {
 import { randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { sendEmail } from '../common/email';
+import { JobsService } from '../jobs/jobs.service';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateGiftCardDto } from './dto/create-gift-card.dto';
 import { UpdateGiftCardDto } from './dto/update-gift-card.dto';
@@ -37,7 +37,10 @@ function generateGiftCardCode(): string {
 
 @Injectable()
 export class GiftCardsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jobsService: JobsService,
+  ) {}
 
   async findAll(ctx: TenantContext) {
     return this.prisma.giftcard.findMany({
@@ -198,11 +201,23 @@ export class GiftCardsService {
         '',
         ...issued.map((g) => `${g.code} — ${g.initialValue}`),
       ];
-      await sendEmail(
-        recipientEmail,
-        `Your ${shopName} gift card`,
-        bodyLines.join('\n'),
-        { fromName: shopName },
+      // Enqueued via `tx` (not the plain injected prisma client) so the job
+      // row commits atomically with the gift cards it describes — if the
+      // surrounding order-creation transaction rolls back, this job row
+      // never exists to be sent either. Also moves what used to be a
+      // synchronous Resend network call off the critical path of an
+      // open DB transaction.
+      await this.jobsService.enqueue(
+        shopId,
+        'send_email',
+        {
+          to: recipientEmail,
+          subject: `Your ${shopName} gift card`,
+          bodyText: bodyLines.join('\n'),
+          fromName: shopName,
+        },
+        `gift-card-issued-email:${orderId}`,
+        { tx },
       );
     }
     return issued;

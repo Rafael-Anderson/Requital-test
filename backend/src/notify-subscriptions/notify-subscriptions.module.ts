@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { NotifySubscriptionsController } from './notify-subscriptions.controller';
 import { NotifySubscriptionsService } from './notify-subscriptions.service';
+import { JobsModule } from '../jobs/jobs.module';
 
 @Module({
+  imports: [JobsModule],
   controllers: [NotifySubscriptionsController],
   providers: [NotifySubscriptionsService],
   // Consumed by ProductsModule/OrdersModule to fire triggerForProduct

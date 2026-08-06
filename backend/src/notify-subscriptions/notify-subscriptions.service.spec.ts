@@ -1,15 +1,17 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { NotifySubscriptionsService } from './notify-subscriptions.service';
 import type { PrismaService } from '../prisma/prisma.service';
-
-jest.mock('../common/email', () => ({
-  sendEmail: jest.fn().mockResolvedValue(undefined),
-}));
-import { sendEmail } from '../common/email';
+import type { JobsService } from '../jobs/jobs.service';
 
 beforeEach(() => {
   jest.clearAllMocks();
 });
+
+function createMockJobsService() {
+  return {
+    enqueue: jest.fn().mockResolvedValue({}),
+  } as unknown as JobsService & { enqueue: jest.Mock };
+}
 
 function createMockPrisma() {
   return {
@@ -50,7 +52,7 @@ describe('NotifySubscriptionsService.subscribe', () => {
       variantId: null,
       email: 'a@b.com',
     });
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     const result = await service.subscribe({ productId: 1, email: 'a@b.com' });
 
@@ -72,7 +74,7 @@ describe('NotifySubscriptionsService.subscribe', () => {
     };
     prisma.notifysubscription.findFirst.mockResolvedValue(existing);
 
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
     const result = await service.subscribe({ productId: 1, email: 'a@b.com' });
 
     expect(result.alreadySubscribed).toBe(true);
@@ -83,7 +85,7 @@ describe('NotifySubscriptionsService.subscribe', () => {
   it('rejects a productId that does not exist (also covers cross-shop spoofing — shopId is always derived server-side from the product, never accepted from the client)', async () => {
     const prisma = createMockPrisma();
     prisma.product.findUnique.mockResolvedValue(null);
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     await expect(
       service.subscribe({ productId: 999, email: 'a@b.com' }),
@@ -94,7 +96,7 @@ describe('NotifySubscriptionsService.subscribe', () => {
     const prisma = createMockPrisma();
     prisma.product.findUnique.mockResolvedValue({ id: 1, shopId: 10 });
     prisma.productvariant.findFirst.mockResolvedValue(null);
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     await expect(
       service.subscribe({ productId: 1, variantId: 99, email: 'a@b.com' }),
@@ -106,7 +108,7 @@ describe('NotifySubscriptionsService.subscribe', () => {
     prisma.product.findUnique.mockResolvedValue({ id: 2, shopId: 10 });
     prisma.notifysubscription.findFirst.mockResolvedValue(null);
     prisma.notifysubscription.count.mockResolvedValue(3);
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     await expect(
       service.subscribe({ productId: 2, email: 'a@b.com' }),
@@ -124,7 +126,7 @@ describe('NotifySubscriptionsService.subscribe', () => {
       variantId: null,
       email: 'a@b.com',
     });
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     await service.subscribe({ productId: 2, email: 'a@b.com' });
 
@@ -137,7 +139,7 @@ describe('NotifySubscriptionsService.unsubscribe', () => {
     const prisma = createMockPrisma();
     prisma.product.findUnique.mockResolvedValue({ shopId: 10 });
     prisma.notifysubscription.deleteMany.mockResolvedValue({ count: 1 });
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     const result = await service.unsubscribe('A@B.com', 1);
 
@@ -150,7 +152,7 @@ describe('NotifySubscriptionsService.unsubscribe', () => {
   it('never reveals whether anything was actually subscribed — same response for a nonexistent product', async () => {
     const prisma = createMockPrisma();
     prisma.product.findUnique.mockResolvedValue(null);
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, createMockJobsService());
 
     const result = await service.unsubscribe('nobody@b.com', 999);
 
@@ -170,8 +172,9 @@ describe('NotifySubscriptionsService.triggerForProduct', () => {
     };
   }
 
-  it('sends an email per subscriber and marks each notified', async () => {
+  it('queues an email job per subscriber and marks each notified', async () => {
     const prisma = createMockPrisma();
+    const jobsService = createMockJobsService();
     prisma.product.findUnique.mockResolvedValue(fakeProduct());
     const subs = [
       { id: 1, email: 'a@b.com' },
@@ -179,11 +182,11 @@ describe('NotifySubscriptionsService.triggerForProduct', () => {
     ];
     prisma.notifysubscription.findMany.mockResolvedValue(subs);
     prisma.notifysubscription.update.mockResolvedValue({});
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, jobsService);
 
     await service.triggerForProduct(10, 1);
 
-    expect(sendEmail).toHaveBeenCalledTimes(2);
+    expect(jobsService.enqueue).toHaveBeenCalledTimes(2);
     expect(prisma.notifysubscription.update).toHaveBeenCalledWith({
       where: { id: 1 },
       data: { notifiedAt: expect.any(Date) },
@@ -194,18 +197,19 @@ describe('NotifySubscriptionsService.triggerForProduct', () => {
     });
   });
 
-  it('a failure on one email in a batch does not prevent the others from being processed', async () => {
+  it('a failure enqueuing one email in a batch does not prevent the others from being processed', async () => {
     const prisma = createMockPrisma();
+    const jobsService = createMockJobsService();
     prisma.product.findUnique.mockResolvedValue(fakeProduct());
     prisma.notifysubscription.findMany.mockResolvedValue([
       { id: 1, email: 'bad@b.com' },
       { id: 2, email: 'good@d.com' },
     ]);
-    (sendEmail as jest.Mock)
-      .mockRejectedValueOnce(new Error('smtp down'))
-      .mockResolvedValueOnce(undefined);
+    jobsService.enqueue
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce({});
     prisma.notifysubscription.update.mockResolvedValue({});
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, jobsService);
 
     await service.triggerForProduct(10, 1);
 
@@ -220,12 +224,13 @@ describe('NotifySubscriptionsService.triggerForProduct', () => {
 
   it('does nothing when there are no unnotified subscriptions', async () => {
     const prisma = createMockPrisma();
+    const jobsService = createMockJobsService();
     prisma.product.findUnique.mockResolvedValue(fakeProduct());
     prisma.notifysubscription.findMany.mockResolvedValue([]);
-    const service = new NotifySubscriptionsService(prisma);
+    const service = new NotifySubscriptionsService(prisma, jobsService);
 
     await service.triggerForProduct(10, 1);
 
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(jobsService.enqueue).not.toHaveBeenCalled();
   });
 });

@@ -5,9 +5,15 @@ import { LowStockDigestService } from './low-stock-digest.service';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
+import { JobsModule } from '../jobs/jobs.module';
 
 @Module({
-  imports: [AuditLogModule, BranchRolesModule, NotifySubscriptionsModule],
+  imports: [
+    AuditLogModule,
+    BranchRolesModule,
+    NotifySubscriptionsModule,
+    JobsModule,
+  ],
   controllers: [ProductsController],
   providers: [ProductsService, LowStockDigestService],
   // Consumed by OrdersModule/PublicModule for order-time variant resolution
