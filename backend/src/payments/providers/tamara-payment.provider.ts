@@ -7,7 +7,9 @@ import type {
 } from '../payment-provider.interface';
 import { PaymentProviderNotConfiguredException } from '../payment-provider-not-configured.exception';
 import { verifyHmacSha256 } from '../webhook-signature';
+import { createLogger } from '../../common/logging/logger';
 
+const logger = createLogger('TamaraPaymentProvider');
 const DEFAULT_TAMARA_API_URL = 'https://api-sandbox.tamara.co';
 
 interface TamaraCheckoutResponse {
@@ -104,7 +106,7 @@ export class TamaraPaymentProvider implements PaymentProvider {
       throw new PaymentProviderNotConfiguredException('Tamara');
     }
     if (!verifyHmacSha256(payload, signatureHeader, secret)) {
-      console.warn('[payments] tamara webhook: signature verification failed');
+      logger.warn('webhook signature verification failed');
       return null;
     }
 

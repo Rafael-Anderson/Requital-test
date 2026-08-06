@@ -6,6 +6,9 @@ import { OrdersService } from '../orders/orders.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { createLogger } from '../common/logging/logger';
+
+const logger = createLogger('ReturnsService');
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 
@@ -294,10 +297,10 @@ export class ReturnsService {
         providerRefundReference: result.providerReference,
       };
     } catch (error) {
-      console.warn(
-        `[returns] provider refund failed for order ${orderId}, falling back to manual:`,
-        error,
-      );
+      logger.warn(`provider refund failed for order ${orderId}, falling back to manual`, {
+        orderId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return { refundMethod: 'manual', providerRefundReference: null };
     }
   }

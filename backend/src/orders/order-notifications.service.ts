@@ -7,6 +7,9 @@ import { normalizePhoneToE164 } from '../common/phone';
 import { generateSurveyToken } from '../common/token-hash';
 import { WhatsAppSettingsService } from '../whatsapp/whatsapp-settings.service';
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
+import { createLogger } from '../common/logging/logger';
+
+const logger = createLogger('OrderNotifications');
 
 // Same env-driven storefront base URL every other customer-facing email
 // link uses — see e.g. customer-auth.service.ts's reset-password link.
@@ -156,8 +159,9 @@ export class OrderNotificationsService {
 
       const to = normalizePhoneToE164(order.customerPhone);
       if (!to) {
-        console.warn(
-          `[whatsapp] order #${order.id}: customer phone "${order.customerPhone}" could not be normalized to E.164 — skipping`,
+        logger.warn(
+          `order #${order.id}: customer phone could not be normalized to E.164 — skipping`,
+          { orderId: order.id, shopId },
         );
         return;
       }
@@ -174,10 +178,11 @@ export class OrderNotificationsService {
         credentials,
       });
     } catch (err) {
-      console.error(
-        `[whatsapp] order #${order.id}: notification failed —`,
-        err instanceof Error ? err.message : err,
-      );
+      logger.error(`order #${order.id}: WhatsApp notification failed`, {
+        orderId: order.id,
+        shopId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }

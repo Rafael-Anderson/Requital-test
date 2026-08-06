@@ -5,6 +5,9 @@ import type {
   PaymentProvider,
   WebhookResult,
 } from '../payment-provider.interface';
+import { createLogger } from '../../common/logging/logger';
+
+const logger = createLogger('PaytabsPaymentProvider');
 
 // STRUCTURAL STUB — not a real integration. PayTabs' actual Hosted Payment
 // Page request/response and callback shapes weren't guessed at here (per
@@ -27,9 +30,7 @@ export class PayTabsPaymentProvider implements PaymentProvider {
     _payload: Buffer,
     _signatureHeader: string,
   ): WebhookResult | null {
-    console.warn(
-      '[payments] paytabs webhook received but parseWebhookEvent is a stub — ignoring',
-    );
+    logger.warn('webhook received but parseWebhookEvent is a stub — ignoring');
     return null;
   }
 }

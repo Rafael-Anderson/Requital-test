@@ -1,4 +1,7 @@
 import { ResendEmailProvider } from '../email/providers/resend-email.provider';
+import { createLogger } from './logging/logger';
+
+const logger = createLogger('Email');
 
 // STUB: used when RESEND_API_KEY isn't configured (local dev, or a
 // deployment that hasn't set up real sending yet) — logs instead of
@@ -6,6 +9,16 @@ import { ResendEmailProvider } from '../email/providers/resend-email.provider';
 // silent no-op that looks like it worked. Also the fallback sendEmail()
 // below reaches for when the real provider call itself fails (invalid key,
 // unverified domain, network error) — never crashes the caller either way.
+//
+// Deliberately still a raw console.log, not the structured logger (Phase 4
+// ops foundations) — allowlisted in tools/check-no-console-log.js. This is
+// a dev-visibility placeholder meant to be eyeballed in a terminal, not an
+// operational error/warning the ops-logging pipeline needs to capture, and
+// dozens of existing e2e specs (order-notifications, survey) plus
+// email.spec.ts itself spy on console.log specifically to verify stub
+// behavior — converting this to JSON-on-stdout would mean spying on
+// process.stdout.write instead, which risks swallowing Jest's own reporter
+// output. Not worth the churn for a purely cosmetic format change.
 export function sendEmailStub(
   to: string,
   subject: string,
@@ -93,10 +106,9 @@ export async function sendEmail(
       credentials: { apiKey },
     });
   } catch (err) {
-    console.error(
-      `[email] send to ${to} failed, falling back to stub —`,
-      err instanceof Error ? err.message : err,
-    );
+    logger.error(`send to ${to} failed, falling back to stub`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
     sendEmailStub(to, subject, bodyText);
   }
 }

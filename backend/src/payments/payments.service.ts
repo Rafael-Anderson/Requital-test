@@ -14,6 +14,9 @@ import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { OrdersService } from '../orders/orders.service';
+import { createLogger } from '../common/logging/logger';
+
+const logger = createLogger('PaymentsService');
 
 const LINK_EXPIRY_DAYS = 3;
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
@@ -163,8 +166,9 @@ export class PaymentsService {
     // validly-signed event must actually belong to the shop whose URL it
     // arrived on, never silently applied to a different shop's order.
     if (shopId !== undefined && order.shopId !== shopId) {
-      console.warn(
-        `[payments] webhook for order ${order.id} (shop ${order.shopId}) received on shop ${shopId}'s webhook URL — ignoring`,
+      logger.warn(
+        `webhook for order ${order.id} received on the wrong shop's webhook URL — ignoring`,
+        { orderId: order.id, orderShopId: order.shopId, webhookShopId: shopId },
       );
       return { received: true };
     }
@@ -260,8 +264,9 @@ export class PaymentsService {
       orderBy: { id: 'asc' },
     });
     if (!admin) {
-      console.warn(
-        `[payments] webhook-driven order ${action} for order ${orderId} skipped — shop ${shopId} has no admin user to attribute it to`,
+      logger.warn(
+        `webhook-driven order ${action} skipped — shop has no admin user to attribute it to`,
+        { orderId, shopId, action },
       );
       return;
     }
@@ -280,10 +285,12 @@ export class PaymentsService {
         await this.ordersService.cancel(ctx, orderId);
       }
     } catch (error) {
-      console.warn(
-        `[payments] webhook-driven order ${action} for order ${orderId} failed:`,
-        error instanceof Error ? error.message : error,
-      );
+      logger.warn(`webhook-driven order ${action} failed`, {
+        orderId,
+        shopId,
+        action,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

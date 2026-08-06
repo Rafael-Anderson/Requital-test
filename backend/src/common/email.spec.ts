@@ -3,19 +3,26 @@ import { sendEmail, sendEmailStub } from './email';
 describe('sendEmail', () => {
   let fetchSpy: jest.SpyInstance;
   let logSpy: jest.SpyInstance;
-  let errorSpy: jest.SpyInstance;
+  // The catch-block failure log now goes through the structured logger
+  // (Phase 4), which writes JSON to process.stdout.write, not
+  // console.error — sendEmailStub itself is the one deliberate exception
+  // still using console.log (see its own comment), which is what logSpy
+  // still covers.
+  let stdoutSpy: jest.SpyInstance;
   const originalKey = process.env.RESEND_API_KEY;
 
   beforeEach(() => {
     fetchSpy = jest.spyOn(global, 'fetch');
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
-    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    stdoutSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
     logSpy.mockRestore();
-    errorSpy.mockRestore();
+    stdoutSpy.mockRestore();
     if (originalKey === undefined) delete process.env.RESEND_API_KEY;
     else process.env.RESEND_API_KEY = originalKey;
   });
@@ -111,7 +118,13 @@ describe('sendEmail', () => {
         '[email:stub] to=a@example.com subject="Subject"',
       ),
     );
-    expect(errorSpy).toHaveBeenCalled();
+    const errorLine = stdoutSpy.mock.calls
+      .map((args: unknown[]) => String(args[0]))
+      .find((line) => line.includes('"level":"error"'));
+    expect(errorLine).toBeDefined();
+    const parsed = JSON.parse(errorLine!) as { level: string; message: string };
+    expect(parsed.level).toBe('error');
+    expect(parsed.message).toContain('failed, falling back to stub');
   });
 
   it('falls back to stub logging (never throws) on a network error', async () => {

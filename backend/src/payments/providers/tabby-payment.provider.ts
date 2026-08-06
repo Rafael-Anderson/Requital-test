@@ -7,7 +7,9 @@ import type {
 } from '../payment-provider.interface';
 import { PaymentProviderNotConfiguredException } from '../payment-provider-not-configured.exception';
 import { verifyHmacSha256 } from '../webhook-signature';
+import { createLogger } from '../../common/logging/logger';
 
+const logger = createLogger('TabbyPaymentProvider');
 const TABBY_API_URL = 'https://api.tabby.ai/api/v2';
 
 interface TabbyCheckoutResponse {
@@ -120,7 +122,7 @@ export class TabbyPaymentProvider implements PaymentProvider {
       throw new PaymentProviderNotConfiguredException('Tabby');
     }
     if (!verifyHmacSha256(payload, signatureHeader, secret)) {
-      console.warn('[payments] tabby webhook: signature verification failed');
+      logger.warn('webhook signature verification failed');
       return null;
     }
 

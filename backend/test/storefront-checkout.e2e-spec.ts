@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
+import { StructuredLoggerService } from '../src/common/logging/structured-logger.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -83,7 +84,17 @@ describe('Storefront public checkout (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-    app = moduleFixture.createNestApplication();
+    // createNestApplication() with no options resets Nest's process-global
+    // Logger override back to its own default ConsoleLogger (clobbering the
+    // structured-logger override common/logging/logger.ts sets at import
+    // time) — passed explicitly here only because one test below
+    // (delivery-zone fallback warning) asserts on the actual log line, and
+    // needs it to be the real structured logger to match production
+    // behavior. See structured-logger.service.spec.ts for the direct,
+    // app-independent redaction/format tests.
+    app = moduleFixture.createNestApplication({
+      logger: new StructuredLoggerService(),
+    });
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -516,7 +527,12 @@ describe('Storefront public checkout (e2e)', () => {
     });
 
     it('an address matching no configured zone falls back to the default fee (radius is configured and passed) but logs a flag for the merchant', async () => {
-      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      // This warning now goes through the structured logger (Phase 4 ops
+      // foundations), which writes JSON to process.stdout.write, not
+      // console.warn — spy on stdout and parse the JSON line instead.
+      const stdoutSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(() => true);
       try {
         const res = await request(app.getHttpServer())
           .post(`/public/${shopSlug}/orders`)
@@ -533,11 +549,13 @@ describe('Storefront public checkout (e2e)', () => {
         const { order } = body<CreateOrderResponseBody>(res);
         expect(Number(order.deliveryFee)).toBe(15); // shop.defaultDeliveryFee, not the Marina zone's 25
 
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('matched no configured delivery zone'),
-        );
+        const warnLine = stdoutSpy.mock.calls
+          .map((args: unknown[]) => String(args[0]))
+          .find((line) => line.includes('matched no configured delivery zone'));
+        expect(warnLine).toBeDefined();
+        expect(JSON.parse(warnLine!)).toMatchObject({ level: 'warn' });
       } finally {
-        warnSpy.mockRestore();
+        stdoutSpy.mockRestore();
       }
     });
   });

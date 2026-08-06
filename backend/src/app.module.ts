@@ -1,6 +1,11 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { RequestContextMiddleware } from './common/logging/request-context.middleware';
+import { AllExceptionsFilter } from './common/error-tracking/all-exceptions.filter';
+import { resolveErrorTrackingProvider } from './common/error-tracking/error-tracking.provider';
+import { HealthModule } from './health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -101,8 +106,23 @@ import { StorefrontSearchModule } from './storefront-search/storefront-search.mo
     InvoicesModule,
     NotifySubscriptionsModule,
     StorefrontSearchModule,
+    HealthModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // APP_FILTER, not app.useGlobalFilters() in main.ts — same reason
+    // AuthGuard/RolesGuard are APP_GUARD providers instead: main.ts's
+    // bootstrap() never runs under Jest, so a filter only wired there would
+    // be inactive (and untested) in every e2e spec.
+    {
+      provide: APP_FILTER,
+      useFactory: () => new AllExceptionsFilter(resolveErrorTrackingProvider()),
+    },
+  ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}
