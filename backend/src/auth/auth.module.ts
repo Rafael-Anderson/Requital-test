@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { JobsModule } from '../jobs/jobs.module';
 
 // The access-token lifetime itself is set per-call in AuthService.issueTokenPair
 // (ACCESS_TOKEN_LIFETIME) — refresh-token rotation means a short-lived access
@@ -21,6 +22,7 @@ const DEFAULT_TOKEN_LIFETIME = '15m';
       signOptions: { expiresIn: DEFAULT_TOKEN_LIFETIME },
     }),
     AuditLogModule,
+    JobsModule,
   ],
   controllers: [AuthController],
   providers: [

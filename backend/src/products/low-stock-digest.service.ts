@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { sendEmail } from '../common/email';
+import { JobsService } from '../jobs/jobs.service';
+import { SchedulerService } from '../jobs/scheduler.service';
 import { buildVariantLabel } from './variant-generator';
 
 interface LowStockLine {
@@ -19,10 +20,27 @@ interface LowStockLine {
 // day, and a shop that hasn't opted in never gets queried at all.
 @Injectable()
 export class LowStockDigestService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jobsService: JobsService,
+    private readonly schedulerService: SchedulerService,
+  ) {}
 
+  // Wrapped in the cross-instance advisory lock (see SchedulerService) so
+  // only one app instance actually runs the sweep body per tick — the
+  // per-shop CAS claim inside sendForShop already made double-*sending*
+  // impossible, but without this lock every instance would still redundantly
+  // query every opted-in shop's stock on every tick.
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async sendDueDigests() {
+    await this.schedulerService.runLocked(
+      'low-stock-digest-sweep',
+      600,
+      () => this.runSweep(),
+    );
+  }
+
+  private async runSweep() {
     const candidates = await this.prisma.shop.findMany({
       where: { notifyLowStockDigest: true },
       select: {
@@ -94,13 +112,16 @@ export class LowStockDigestService {
           `- ${l.label} @ ${l.outletName}: ${l.stockQuantity} left (threshold ${l.lowStockThreshold})`,
       ),
     ].join('\n');
-    await sendEmail(
-      recipient,
-      `${shopName}: ${lines.length} low-stock item${lines.length === 1 ? '' : 's'}`,
-      bodyText,
+    await this.jobsService.enqueue(
+      shopId,
+      'send_email',
       {
+        to: recipient,
+        subject: `${shopName}: ${lines.length} low-stock item${lines.length === 1 ? '' : 's'}`,
+        bodyText,
         fromName: shopName,
       },
+      `low-stock-digest-email:${shopId}:${startOfToday.toISOString().slice(0, 10)}`,
     );
     return true;
   }

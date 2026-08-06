@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { CustomerAuthController } from './customer-auth.controller';
 import { CustomerAuthService } from './customer-auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
+import { JobsModule } from '../jobs/jobs.module';
 
 // Same JWT secret as the staff AuthModule's JwtModule.register (one
 // JWT_SECRET env var, shared) — what keeps the two token spaces from being
@@ -14,6 +15,7 @@ import { CustomerAuthGuard } from './customer-auth.guard';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '15m' },
     }),
+    JobsModule,
   ],
   controllers: [CustomerAuthController],
   providers: [CustomerAuthService, CustomerAuthGuard],

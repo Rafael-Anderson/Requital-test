@@ -69,13 +69,13 @@ interface SendEmailOptions {
   fromName?: string;
 }
 
-// The single entry point every call site uses instead of sendEmailStub
-// directly — resolves to the real Resend provider when RESEND_API_KEY is
-// configured, otherwise degrades to the stub. Never throws: a broken or
-// misconfigured provider must not fail the order creation/checkout/auth
-// flow it was called from, same discipline as AuditLogService.log and
-// OrderNotificationsService.sendWhatsApp.
-export async function sendEmail(
+// Same real-vs-stub resolution as sendEmail() below, but lets a real
+// delivery failure propagate instead of swallowing it. Used by the Phase 5
+// job queue's send_email handler (jobs/handlers/send-email.handler.ts) —
+// letting the failure throw is what gives the queue's retry/backoff/DLQ
+// something real to act on; every other (non-queued) code path should keep
+// using sendEmail() below.
+export async function sendEmailOrThrow(
   to: string,
   subject: string,
   bodyText: string,
@@ -96,15 +96,34 @@ export async function sendEmail(
     sendEmailStub(to, subject, bodyText);
     return;
   }
+  await new ResendEmailProvider().sendEmail({
+    to,
+    subject,
+    text: bodyText,
+    html: options.html ?? textToSimpleHtml(bodyText),
+    fromName: options.fromName ?? 'Requital',
+    credentials: { apiKey },
+  });
+}
+
+// The single entry point every non-queued call site uses instead of
+// sendEmailStub directly — resolves to the real Resend provider when
+// RESEND_API_KEY is configured, otherwise degrades to the stub. Never
+// throws: a broken or misconfigured provider must not fail the caller it
+// was invoked from, same discipline as AuditLogService.log and
+// OrderNotificationsService.sendWhatsApp. As of Phase 5, every real
+// transactional-email call site routes through the job queue instead (see
+// jobs/handlers/send-email.handler.ts, which calls sendEmailOrThrow above)
+// — this wrapper is kept as the safe direct-call option for anything that
+// isn't queued.
+export async function sendEmail(
+  to: string,
+  subject: string,
+  bodyText: string,
+  options: SendEmailOptions = {},
+): Promise<void> {
   try {
-    await new ResendEmailProvider().sendEmail({
-      to,
-      subject,
-      text: bodyText,
-      html: options.html ?? textToSimpleHtml(bodyText),
-      fromName: options.fromName ?? 'Requital',
-      credentials: { apiKey },
-    });
+    await sendEmailOrThrow(to, subject, bodyText, options);
   } catch (err) {
     logger.error(`send to ${to} failed, falling back to stub`, {
       error: err instanceof Error ? err.message : String(err),

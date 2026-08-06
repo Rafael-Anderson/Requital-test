@@ -8,6 +8,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { CustomerAuthService } from './customer-auth.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { JwtService } from '@nestjs/jwt';
+import type { JobsService } from '../jobs/jobs.service';
 
 jest.mock('bcryptjs');
 const mockCompare = bcrypt.compare as unknown as jest.Mock;
@@ -55,6 +56,12 @@ function createMockJwt() {
   } as unknown as JwtService;
 }
 
+function createMockJobsService() {
+  return {
+    enqueue: jest.fn().mockResolvedValue({}),
+  } as unknown as JobsService;
+}
+
 describe('CustomerAuthService.login — progressive lockout', () => {
   it('a correct password succeeds and resets the failed-attempt counter', async () => {
     const customer = fakeCustomer({
@@ -65,7 +72,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
     mockCompare.mockResolvedValue(true);
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await service.login('test-shop', {
       identifier: customer.phone,
       password: 'correct',
@@ -86,7 +97,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
     mockCompare.mockResolvedValue(false);
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await expect(
       service.login('test-shop', {
         identifier: customer.phone,
@@ -109,7 +124,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     (prisma.customer.findFirst as jest.Mock).mockResolvedValue(null);
     mockCompare.mockClear();
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await expect(
       service.login('test-shop', {
         identifier: 'nobody@nowhere.test',
@@ -127,7 +146,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     (prisma.customer.findFirst as jest.Mock).mockResolvedValue(guestRow);
     mockCompare.mockClear();
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await expect(
       service.login('test-shop', {
         identifier: guestRow.phone,
@@ -149,7 +172,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     mockCompare.mockClear();
     mockCompare.mockResolvedValue(true); // even the "right" password
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await expect(
       service.login('test-shop', {
         identifier: customer.phone,
@@ -170,7 +197,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
     mockCompare.mockResolvedValue(true);
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await service.login('test-shop', {
       identifier: customer.phone,
       password: 'correct',
@@ -188,7 +219,11 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
     mockCompare.mockResolvedValue(true);
 
-    const service = new CustomerAuthService(prisma, createMockJwt());
+    const service = new CustomerAuthService(
+      prisma,
+      createMockJwt(),
+      createMockJobsService(),
+    );
     await service.login('test-shop', {
       identifier: customer.phone,
       password: 'correct',

@@ -12,7 +12,7 @@ import * as bcrypt from 'bcryptjs';
 import { Prisma, user as UserModel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
-import { sendEmail } from '../common/email';
+import { JobsService } from '../jobs/jobs.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
@@ -63,6 +63,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly auditLogService: AuditLogService,
+    private readonly jobsService: JobsService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -545,10 +546,15 @@ export class AuthService {
       },
     });
     const resetLink = `${ADMIN_URL}/reset-password?token=${raw}`;
-    await sendEmail(
-      user.email,
-      'Reset your Requital password',
-      `Reset your password: ${resetLink}\nThis link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
+    await this.jobsService.enqueue(
+      user.shopId,
+      'send_email',
+      {
+        to: user.email,
+        subject: 'Reset your Requital password',
+        bodyText: `Reset your password: ${resetLink}\nThis link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
+      },
+      `staff-password-reset-email:${user.id}:${raw}`,
     );
     return { success: true, ...(isDev ? { devResetLink: resetLink } : {}) };
   }
@@ -689,6 +695,7 @@ export class AuthService {
   private async sendVerificationEmail(user: {
     id: number;
     email: string;
+    shopId: number;
   }): Promise<string | undefined> {
     // Same supersession rule as forgotPassword above — a resend must kill
     // any still-outstanding verification token rather than leaving multiple
@@ -708,10 +715,15 @@ export class AuthService {
       },
     });
     const link = `${ADMIN_URL}/verify-email?token=${raw}`;
-    await sendEmail(
-      user.email,
-      'Verify your Requital email',
-      `Verify your email: ${link}`,
+    await this.jobsService.enqueue(
+      user.shopId,
+      'send_email',
+      {
+        to: user.email,
+        subject: 'Verify your Requital email',
+        bodyText: `Verify your email: ${link}`,
+      },
+      `staff-verify-email:${user.id}:${raw}`,
     );
     return isDev ? link : undefined;
   }
@@ -719,6 +731,7 @@ export class AuthService {
   private async sendInviteEmail(user: {
     id: number;
     email: string;
+    shopId: number;
   }): Promise<string | undefined> {
     const raw = generateOpaqueToken();
     await this.prisma.authtoken.create({
@@ -732,10 +745,15 @@ export class AuthService {
       },
     });
     const link = `${ADMIN_URL}/accept-invite?token=${raw}`;
-    await sendEmail(
-      user.email,
-      "You've been invited to a Requital staff account",
-      `Set your password to activate your account: ${link}\nThis link expires in ${INVITE_TOKEN_LIFETIME_DAYS} days.`,
+    await this.jobsService.enqueue(
+      user.shopId,
+      'send_email',
+      {
+        to: user.email,
+        subject: "You've been invited to a Requital staff account",
+        bodyText: `Set your password to activate your account: ${link}\nThis link expires in ${INVITE_TOKEN_LIFETIME_DAYS} days.`,
+      },
+      `staff-invite-email:${user.id}:${raw}`,
     );
     return isDev ? link : undefined;
   }

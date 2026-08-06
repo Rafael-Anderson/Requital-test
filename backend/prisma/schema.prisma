@@ -880,6 +880,7 @@ model shop {
   invoice             invoice[]
   invoicecounter      invoicecounter[]
   notifysubscription  notifysubscription[]
+  job                 job[]
 }
 
 // Legal/policy pages (Terms, Privacy, Refund & Return, Payment, Shipping &
@@ -2093,4 +2094,54 @@ model giftcardredemption {
 
   @@index([giftCardId], map: "GiftCardRedemption_giftCardId_fkey")
   @@index([orderId], map: "GiftCardRedemption_orderId_fkey")
+}
+
+// Phase 5 — DB-backed job queue (no Redis: see the Phase 5 report for the
+// BullMQ-vs-DB tradeoff). One row per unit of async work (send an email,
+// etc). idempotencyKey is the re-enqueue-safety mechanism: a caller that
+// enqueues the same key twice (retried request, duplicate webhook, ...)
+// gets back the original row via a caught P2002, never a second one — same
+// catch-P2002-and-no-op idiom as PaymentsService.handleWebhook/
+// InvoicesService.generateForOrder. status walks pending -> processing ->
+// (completed | pending-with-a-future-nextAttemptAt | dead_letter);
+// dead_letter is terminal and is what the admin failed-jobs view lists.
+// shopId is required (validated at enqueue time, see JobsService.enqueue)
+// so every job is tenant-scoped from the moment it's created, same
+// discipline as every other tenant-owned table in this schema.
+model job {
+  id             Int       @id @default(autoincrement())
+  shopId         Int
+  type           String
+  payload        Json
+  idempotencyKey String    @unique(map: "Job_idempotencyKey_key")
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  // Due-date for the next claim attempt — set to "now" on enqueue (runnable
+  // immediately) and pushed forward on each failure per the exponential
+  // backoff schedule (see JobsService.scheduleRetry). The claim query's
+  // WHERE/ORDER BY both key off this column, backed by the composite index
+  // below.
+  nextAttemptAt  DateTime  @default(now())
+  lastError      String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+  completedAt    DateTime?
+  shop           shop      @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Job_shopId_fkey")
+
+  @@index([status, nextAttemptAt], map: "Job_status_nextAttemptAt_idx")
+  @@index([shopId], map: "Job_shopId_fkey")
+}
+
+// Cross-instance advisory lock for scheduled sweeps (abandoned-cart
+// recovery, low-stock digest) — one row per named schedule. Claiming is a
+// CAS updateMany (WHERE lockedUntil IS NULL OR lockedUntil < NOW()), the
+// same row-level-CAS idiom this schema already uses everywhere else
+// (abandonedcart.recoveryEmailSentAt, shop.lowStockDigestLastSentAt) rather
+// than MySQL's session-scoped GET_LOCK()/RELEASE_LOCK(), which doesn't
+// survive Prisma's connection pooling handing two calls to two different
+// physical connections. See SchedulerService.runLocked.
+model scheduledjoblock {
+  name        String    @id
+  lockedUntil DateTime?
 }
