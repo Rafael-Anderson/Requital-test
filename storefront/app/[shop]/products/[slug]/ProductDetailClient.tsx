@@ -130,8 +130,6 @@ export default function ProductDetailClient() {
   const pickupAvailable = outlets.some((o) => o.pickupEnabled);
   const deliveryEstimate = shop ? formatDeliveryEstimate(shop) : null;
 
-  const primaryCategoryId = product.categories[0]?.id ?? null;
-
   // "cart" (default): normal Add to Cart. "buy_now": Add to Cart becomes a
   // single-item Buy Now that skips straight to checkout. "contact": no cart
   // interaction at all — a WhatsApp/contact CTA replaces it entirely. See
@@ -497,7 +495,7 @@ export default function ProductDetailClient() {
         </div>
       )}
 
-      <RelatedProducts categoryId={primaryCategoryId} excludeProductId={product.id} outletId={defaultOutletId} />
+      <RelatedProducts productSlug={product.slug} excludeProductId={product.id} outletId={defaultOutletId} />
 
       {/* Sticky mobile bar — mirrors the real CTA above, only shown once
           that one has scrolled out of view. */}

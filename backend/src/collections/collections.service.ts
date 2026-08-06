@@ -266,6 +266,35 @@ export class CollectionsService {
     return rows.map((r) => r.id);
   }
 
+  // Storefront PDP "related products" reverse lookup (Phase 8.4) — collection
+  // membership is a stronger merchandising signal than category (a merchant
+  // curates it on purpose), so PublicService.getRelatedProducts tries this
+  // first and falls back to same-category only when it comes up empty.
+  // Reuses resolveProductIds per active collection rather than a dedicated
+  // reverse-rule-evaluation query — shops only ever have a handful of
+  // collections (config data, not a hot list), so re-resolving each one is
+  // cheap and avoids duplicating the MANUAL/RULE_BASED branching a second time.
+  async findRelatedProductIds(
+    shopId: number,
+    productId: number,
+    limit = 4,
+  ): Promise<number[]> {
+    const collections = await this.prisma.collection.findMany({
+      where: { shopId, isActive: true },
+      select: { id: true, type: true, rules: true },
+    });
+    const related = new Set<number>();
+    for (const collection of collections) {
+      const productIds = await this.resolveProductIds(shopId, collection);
+      if (!productIds.includes(productId)) continue;
+      for (const id of productIds) {
+        if (id !== productId) related.add(id);
+      }
+      if (related.size >= limit) break;
+    }
+    return [...related].slice(0, limit);
+  }
+
   // ---------- shared helpers ----------
 
   private assertRulesMatchType(

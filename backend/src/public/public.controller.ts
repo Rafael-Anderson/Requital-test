@@ -119,6 +119,22 @@ export class PublicController {
     );
   }
 
+  // Same slug-before-:id ordering reasoning as getProductBySlug above — 3
+  // segments here so it can never collide with either.
+  @Public()
+  @Get('products/slug/:slug/related')
+  getRelatedProducts(
+    @Param('shopSlug') shopSlug: string,
+    @Param('slug') slug: string,
+    @Query('outletId') outletId?: string,
+  ) {
+    return this.publicService.getRelatedProducts(
+      shopSlug,
+      slug,
+      outletId ? Number(outletId) : undefined,
+    );
+  }
+
   // Kept working (not replaced) so links shared before slug routing existed
   // don't break — the storefront's id-based route now just resolves the
   // product here to find its slug and redirects, but the API itself stays.
