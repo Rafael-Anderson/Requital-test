@@ -149,6 +149,14 @@ describe("ProductForm wizard", () => {
     expect(screen.queryByText("Options")).not.toBeInTheDocument();
   });
 
+  it("Cancel navigates to /products (Products moved out of /inventory in Phase B)", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await waitFor(() => expect(screen.getByText("Cancel")).toBeInTheDocument());
+    await user.click(screen.getByText("Cancel"));
+    expect(push).toHaveBeenCalledWith("/products");
+  });
+
   it("mode 'advanced': a new product renders all three sections expanded, with no stepper", async () => {
     vi.mocked(getShop).mockResolvedValueOnce({ productEditorMode: "advanced" } as never);
     renderForm();

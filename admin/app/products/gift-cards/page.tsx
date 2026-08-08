@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
+import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 
 const STATUS_STYLE: Record<GiftCard["status"], string> = {
@@ -72,7 +73,8 @@ export default function GiftCardsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BackButton href="/products" />
+      <ProductsTabs />
       <h1 className="text-2xl font-semibold mb-1">Gift Cards</h1>
       <p className="text-sm text-zinc-500 mb-4">
         Cards purchased on your storefront show up automatically. Issue one by hand below for service credit or a

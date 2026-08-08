@@ -1,41 +1,22 @@
 ﻿"use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeftRight, ChevronDown, Copy, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeftRight, ChevronDown, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import {
-  bulkDeleteProducts,
-  bulkUpdateProductStatus,
-  confirmImportProducts,
-  deleteProduct,
-  duplicateProduct,
-  listCategories,
-  listProducts,
-  previewImportProducts,
-  updateProductAvailability,
+  confirmImportIngredients,
+  deleteIngredient,
+  listIngredientCategories,
+  listIngredients,
+  previewImportIngredients,
 } from "@/lib/api";
-import {
-  buildCategoryTree,
-  flattenCategoryTree,
-  PRODUCT_STATUS_LABELS,
-  type Category,
-  type Product,
-} from "@/lib/types";
-import TransferStockModal from "@/components/TransferStockModal";
-import AdjustStockModal from "@/components/AdjustStockModal";
-import BulkPriceUpdateModal from "@/components/BulkPriceUpdateModal";
-import CsvImportModal from "@/components/CsvImportModal";
-import DropdownMenu from "@/components/ui/DropdownMenu";
+import type { Ingredient, IngredientCategory } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
-import { useRowSelection } from "@/lib/useRowSelection";
 import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
-import BulkActionBar from "@/components/ui/BulkActionBar";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
@@ -43,238 +24,91 @@ import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import InventoryTabs from "@/components/InventoryTabs";
 import PageShell from "@/components/ui/PageShell";
+import IngredientFormModal from "@/components/IngredientFormModal";
+import TransferStockModal from "@/components/TransferStockModal";
+import AdjustStockModal from "@/components/AdjustStockModal";
+import CsvImportModal from "@/components/CsvImportModal";
+import DropdownMenu from "@/components/ui/DropdownMenu";
 
-export default function InventoryPage() {
-  return (
-    <Suspense fallback={null}>
-      <InventoryPageContent />
-    </Suspense>
-  );
-}
-
-function InventoryPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [products, setProducts] = useState<Product[] | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  // Seeded from ?category=<id> so homepage shortcut tiles can deep-link into
-  // an already-filtered list; purely the initial value — changing the
-  // dropdown afterward doesn't write back to the URL.
-  const [categoryFilter, setCategoryFilter] = useState(searchParams.get("category") ?? "");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [transferringProduct, setTransferringProduct] = useState<Product | null>(null);
-  const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
+export default function IngredientsPage() {
+  const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
+  const [categories, setCategories] = useState<IngredientCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Ingredient | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [transferring, setTransferring] = useState<Ingredient | null>(null);
+  const [adjusting, setAdjusting] = useState<Ingredient | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const toast = useToast();
   const deleteWithUndo = useUndoableDelete();
   const { selectedOutletId, outlets } = useOutletFilter();
 
   const refresh = useCallback(async () => {
     try {
-      const [productList, categoryList] = await Promise.all([
-        listProducts(selectedOutletId ?? undefined),
-        listCategories(),
-      ]);
-      setProducts(productList);
-      setCategories(categoryList);
+      setIngredients(await listIngredients(selectedOutletId ?? undefined, categoryFilter ? Number(categoryFilter) : undefined));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load products");
+      setError(err instanceof Error ? err.message : "Failed to load ingredients");
     }
-  }, [selectedOutletId]);
+  }, [selectedOutletId, categoryFilter]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const categoryRows = useMemo(() => flattenCategoryTree(buildCategoryTree(categories)), [categories]);
-  const visibleProducts = useMemo(() => {
-    if (!products) return null;
-    let result = products;
-    if (categoryFilter) {
-      const id = Number(categoryFilter);
-      result = result.filter((p) => p.categories.some((c) => c.id === id));
-    }
-    if (lowStockOnly) {
-      result = result.filter(
-        (p) =>
-          p.trackInventory &&
-          p.stockQuantity !== null &&
-          p.lowStockThreshold !== null &&
-          p.stockQuantity <= p.lowStockThreshold,
-      );
-    }
-    return result;
-  }, [products, categoryFilter, lowStockOnly]);
+  useEffect(() => {
+    listIngredientCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
 
-  const visibleIds = useMemo(() => (visibleProducts ?? []).map((p) => p.id), [visibleProducts]);
-  const selection = useRowSelection(visibleIds);
-  const [bulkStatus, setBulkStatus] = useState("");
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkPricing, setBulkPricing] = useState(false);
-  const [importing, setImporting] = useState(false);
-
-  async function handleToggleStatus(product: Product) {
-    const nextStatus = product.status === "Available" ? "Unavailable" : "Available";
-    try {
-      await updateProductAvailability(product.id, nextStatus);
-      toast(nextStatus === "Available" ? `${product.name} is now active` : `${product.name} is now disabled`);
-      refresh();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to update product", "error");
-    }
-  }
-
-  function handleDelete(product: Product) {
+  function handleDelete(ingredient: Ingredient) {
     deleteWithUndo({
-      id: product.id,
-      label: `"${product.name}"`,
-      onRemoveLocally: () => setProducts((prev) => (prev ? prev.filter((p) => p.id !== product.id) : prev)),
+      id: ingredient.id,
+      label: `"${ingredient.name}"`,
+      onRemoveLocally: () => setIngredients((prev) => (prev ? prev.filter((i) => i.id !== ingredient.id) : prev)),
       onRestoreLocally: refresh,
-      commit: () => deleteProduct(product.id),
+      commit: () => deleteIngredient(ingredient.id),
     });
   }
 
-  // Lands on the copy's own edit page (matches other duplicate-then-edit
-  // flows) rather than just refreshing the list — it's created as a Draft
-  // with a placeholder SKU, so the natural next step is to fix those up.
-  async function handleDuplicate(product: Product) {
-    try {
-      const copy = await duplicateProduct(product.id);
-      toast(`Duplicated "${product.name}"`);
-      router.push(`/inventory/${copy.id}/edit`);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to duplicate product", "error");
-    }
-  }
-
-  async function handleBulkStatus() {
-    if (!bulkStatus) {
-      toast("Pick a status", "error");
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      const { updated } = await bulkUpdateProductStatus(selection.selectedIds, bulkStatus);
-      toast(`Updated ${updated} product${updated === 1 ? "" : "s"}`);
-      setBulkStatus("");
-      selection.clear();
-      refresh();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to update products", "error");
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
-  // Confirm-based, not the toast+undo pattern (#5) — explicitly out of
-  // scope for bulk delete per the task: this is bulk-irreversible, an
-  // accidental "keep the window open 6s" isn't enough friction for
-  // potentially hundreds of rows at once.
-  async function handleBulkDelete() {
-    if (!confirm(`Delete ${selection.selectedIds.length} product(s)? This cannot be undone.`)) return;
-    setBulkBusy(true);
-    try {
-      const { succeeded, results } = await bulkDeleteProducts(selection.selectedIds);
-      const failed = results.filter((r) => !r.success);
-      if (failed.length > 0) {
-        toast(`Deleted ${succeeded}, ${failed.length} failed (likely have order history)`, "error");
-      } else {
-        toast(`Deleted ${succeeded} product${succeeded === 1 ? "" : "s"}`);
-      }
-      selection.clear();
-      refresh();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete products", "error");
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
-  // Column order matches PRODUCT_IMPORT_HEADERS in backend/src/products/
-  // products-import.ts exactly — this is also the shape "Import CSV" reads
-  // back, so re-importing an unmodified export is a no-op round trip. Only
-  // reachable from the bulk action bar (a selection always exists here).
-  function handleBulkExport() {
-    const source = (visibleProducts ?? []).filter((p) => selection.selected.has(p.id));
-    const rows: unknown[][] = [];
-    for (const p of source) {
-      const base = [
-        p.slug,
-        p.name,
-        p.description ?? "",
-        p.sku,
-        p.barcode ?? "",
-        p.price,
-        p.compareAtPrice ?? "",
-        p.costPrice ?? "",
-        p.status,
-        p.trackInventory,
-        p.chargeTax,
-        p.vendor ?? "",
-        p.productType ?? "",
-        p.thumbnail,
-        p.categories.map((c) => c.name).join("; "),
-        p.tags.join("; "),
-      ];
-      // A variant-bearing product's own Stock column is meaningless (stock
-      // lives per-variant, not on the product) — only a simple product's row
-      // carries it.
-      if (p.variants.length === 0) {
-        rows.push([...base, "", "", "", "", p.stockQuantity ?? ""]);
-      } else {
-        for (const v of p.variants) {
-          rows.push([...base, v.label ?? "", v.sku ?? "", v.price ?? "", v.compareAtPrice ?? "", v.stockQuantity ?? ""]);
-        }
-      }
-    }
+  // Column order matches INGREDIENT_IMPORT_HEADERS in backend/src/products/
+  // products-import.ts — Import CSV reads this same shape back.
+  function handleExport() {
+    const rows = ingredients ?? [];
     downloadCsv(
-      `products-${new Date().toISOString().slice(0, 10)}.csv`,
-      [
-        "Handle",
-        "Name",
-        "Description",
-        "SKU",
-        "Barcode",
-        "Price",
-        "Compare At Price",
-        "Cost Price",
-        "Status",
-        "Track Inventory",
-        "Charge Tax",
-        "Vendor",
-        "Product Type",
-        "Thumbnail URL",
-        "Categories",
-        "Tags",
-        "Variant",
-        "Variant SKU",
-        "Variant Price",
-        "Variant Compare At Price",
-        "Stock",
-      ],
-      rows,
+      `ingredients-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Name", "Unit", "Track Inventory", "Stock"],
+      rows.map((i) => [i.name, i.unit, i.trackInventory, i.stockQuantity ?? ""]),
     );
-    toast(`Exported ${source.length} product${source.length === 1 ? "" : "s"}`);
+    toast(`Exported ${rows.length} ingredient${rows.length === 1 ? "" : "s"}`);
   }
+
+  const visibleIngredients = (ingredients ?? []).filter(
+    (i) =>
+      !lowStockOnly ||
+      (i.stockQuantity !== null && i.lowStockThreshold !== null && i.stockQuantity <= i.lowStockThreshold),
+  );
 
   return (
     <PageShell>
       <BackButton href="/" />
       <InventoryTabs />
       <BranchBar />
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Inventory</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Ingredients</h1>
         <div className="flex items-center gap-2">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+            aria-label="Filter by category"
+            className="h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           >
             <option value="">All categories</option>
-            {categoryRows.map((c) => (
+            {categories.map((c) => (
               <option key={c.id} value={c.id}>
-                {"— ".repeat(c.depth)}
                 {c.name}
               </option>
             ))}
@@ -283,29 +117,32 @@ function InventoryPageContent() {
             <Checkbox checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} aria-label="Low stock only" />
             Low stock only
           </label>
-          <Link href="/inventory/movements">
-            <Button variant="secondary">Movement history</Button>
-          </Link>
+          <Button variant="secondary" onClick={handleExport}>
+            Export CSV
+          </Button>
           <DropdownMenu
             trigger={({ toggle, open }) => (
               <Button variant="primary" onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
                 <Plus className="size-4 inline -mt-0.5 mr-1" />
-                New product
+                New ingredient
                 <ChevronDown className="size-3.5 inline ml-1 -mt-0.5" />
               </Button>
             )}
           >
             {(close) => (
               <>
-                <Link
-                  href="/inventory/new"
+                <button
+                  type="button"
                   role="menuitem"
-                  onClick={close}
-                  className="flex items-center gap-2 px-3.5 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  onClick={() => {
+                    close();
+                    setCreating(true);
+                  }}
+                  className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <Plus className="size-3.5" />
-                  New product
-                </Link>
+                  New ingredient
+                </button>
                 <button
                   type="button"
                   role="menuitem"
@@ -323,58 +160,19 @@ function InventoryPageContent() {
           </DropdownMenu>
         </div>
       </div>
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-      {!selectedOutletId && outlets.length > 0 && (
-        <p className="text-sm text-zinc-500 mb-3">
-          Stock is tracked per branch — pick one from the switcher above to see or adjust counts.
-        </p>
-      )}
+      <p className="text-sm text-zinc-500 -mt-2 mb-4">
+        These items do not appear for sale
+      </p>
 
-      <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>
-        <select
-          value={bulkStatus}
-          onChange={(e) => setBulkStatus(e.target.value)}
-          className="border rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
-        >
-          <option value="">Set status…</option>
-          {Object.keys(PRODUCT_STATUS_LABELS).map((s) => (
-            <option key={s} value={s}>
-              {PRODUCT_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <Button size="sm" variant="secondary" onClick={handleBulkStatus} disabled={bulkBusy}>
-          Apply
-        </Button>
-        <Button size="sm" variant="secondary" onClick={() => setBulkPricing(true)} disabled={bulkBusy}>
-          Adjust prices
-        </Button>
-        <Button size="sm" variant="secondary" onClick={handleBulkExport} disabled={bulkBusy}>
-          Export CSV
-        </Button>
-        <Button size="sm" variant="danger" onClick={handleBulkDelete} disabled={bulkBusy}>
-          Delete
-        </Button>
-      </BulkActionBar>
+      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
       <Table>
         <THead>
           <tr>
-            <TH className="w-8">
-              <Checkbox
-                checked={selection.allSelected}
-                onChange={selection.toggleAll}
-                aria-label="Select all products"
-              />
-            </TH>
-            <TH>Product</TH>
-            <TH className="w-20">Price</TH>
-            <TH className="w-20">SKU</TH>
-            <TH className="w-24">Total sales</TH>
-            <TH className="w-56">Categories</TH>
-            <TH className="w-28">Status</TH>
-            <TH className="w-24">Stock</TH>
-            <TH className="w-10"></TH>
+            <TH>Name</TH>
+            <TH className="w-32">Category</TH>
+            <TH className="w-24">Unit</TH>
+            <TH className="w-40">Stock</TH>
             <TH className="w-10"></TH>
             <TH className="w-10"></TH>
             <TH className="w-10"></TH>
@@ -382,64 +180,43 @@ function InventoryPageContent() {
           </tr>
         </THead>
         <TBody>
-          {visibleProducts === null ? (
+          {ingredients === null ? (
             <tr>
-              <td colSpan={13}>
-                <TableSkeleton rows={5} cols={13} />
+              <td colSpan={8}>
+                <TableSkeleton rows={3} cols={8} />
               </td>
             </tr>
-          ) : visibleProducts.length === 0 && !error ? (
+          ) : visibleIngredients.length === 0 ? (
             <tr>
-              <td colSpan={13}>
+              <td colSpan={8}>
                 <EmptyState
-                  title="No products yet"
-                  description="Products you add to the catalog will show up here."
+                  title={lowStockOnly ? "Nothing is low on stock" : "No ingredients yet"}
+                  description={
+                    lowStockOnly
+                      ? "Every ingredient with an alert threshold set is above it right now."
+                      : "Raw materials you want to track stock of will show up here."
+                  }
                 />
               </td>
             </tr>
           ) : (
-            visibleProducts.map((p) => {
+            visibleIngredients.map((ingredient) => {
               const lowStock =
-                p.trackInventory &&
-                p.stockQuantity !== null &&
-                p.lowStockThreshold !== null &&
-                p.stockQuantity <= p.lowStockThreshold;
-              const active = p.status === "Available";
+                ingredient.stockQuantity !== null &&
+                ingredient.lowStockThreshold !== null &&
+                ingredient.stockQuantity <= ingredient.lowStockThreshold;
               return (
-                <TR key={p.id}>
-                  <TD>
-                    <Checkbox
-                      checked={selection.selected.has(p.id)}
-                      onChange={() => selection.toggle(p.id)}
-                      aria-label={`Select ${p.name}`}
-                    />
-                  </TD>
-                  <TD>
+                <TR key={ingredient.id}>
+                  <TD className="font-medium">
                     <div className="flex items-center gap-3">
-                      <Thumbnail src={p.thumbnail} size="size-10" />
-                      <span className="font-medium">{p.name}</span>
+                      <Thumbnail src={ingredient.image} size="size-10" />
+                      <span>{ingredient.name}</span>
                     </div>
                   </TD>
-                  <TD>{p.price} AED</TD>
-                  <TD className="text-zinc-500">{p.sku}</TD>
-                  <TD className="text-zinc-500">{p.totalSold} sold</TD>
-                  <TD className="text-xs text-zinc-500">
-                    {p.categories.length > 0 ? p.categories.map((c) => c.name).join(", ") : "—"}
-                  </TD>
+                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "—"}</TD>
+                  <TD className="text-zinc-500">{ingredient.unit}</TD>
                   <TD>
-                    <button
-                      onClick={() => handleToggleStatus(p)}
-                      className={`text-xs rounded px-2 py-1 border transition-colors cursor-pointer ${
-                        active
-                          ? "border-green-400 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950"
-                          : "border-red-300 text-red-600 dark:border-red-800 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
-                      }`}
-                    >
-                      {active ? "Active" : "Disabled"}
-                    </button>
-                  </TD>
-                  <TD>
-                    {p.trackInventory && p.stockQuantity !== null ? (
+                    {ingredient.stockQuantity !== null ? (
                       <span
                         className={
                           lowStock
@@ -447,42 +224,28 @@ function InventoryPageContent() {
                             : ""
                         }
                       >
-                        {p.stockQuantity}
+                        {ingredient.stockQuantity} {ingredient.unit}
                         {lowStock ? " — low stock" : ""}
                       </span>
                     ) : (
-                      <span className="text-zinc-400">—</span>
+                      <span className="text-zinc-400">Pick a branch to see stock</span>
                     )}
-                    {/* Bill of Materials — informational only, doesn't gate the
-                        Active toggle or checkout (see backend
-                        ProductsService.consumeForOrderItems's own comment on
-                        why enforcing this is deferred). Only shown when the
-                        recipe is actually the binding constraint — a
-                        makeableQuantity that isn't lower than the product's
-                        own stock number is just noise here. */}
-                    {p.makeableQuantity !== null &&
-                      p.stockQuantity !== null &&
-                      p.makeableQuantity < p.stockQuantity && (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                          only {p.makeableQuantity} can be made — limited by {p.limitedByIngredient}
-                        </div>
-                      )}
                   </TD>
                   <TD>
-                    <Link
-                      href={`/inventory/${p.id}/edit`}
-                      className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                      aria-label={`Edit ${p.name}`}
+                    <button
+                      onClick={() => setEditing(ingredient)}
+                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      aria-label={`Edit ${ingredient.name}`}
                     >
                       <Pencil className="size-4" />
-                    </Link>
+                    </button>
                   </TD>
                   <TD>
-                    {p.trackInventory && selectedOutletId && (
+                    {selectedOutletId && (
                       <button
-                        onClick={() => setAdjustingProduct(p)}
+                        onClick={() => setAdjusting(ingredient)}
                         className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        aria-label={`Adjust stock for ${p.name}`}
+                        aria-label={`Adjust stock for ${ingredient.name}`}
                       >
                         <SlidersHorizontal className="size-4" />
                       </button>
@@ -490,27 +253,18 @@ function InventoryPageContent() {
                   </TD>
                   <TD>
                     <button
-                      onClick={() => setTransferringProduct(p)}
+                      onClick={() => setTransferring(ingredient)}
                       className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Transfer stock for ${p.name}`}
+                      aria-label={`Transfer stock for ${ingredient.name}`}
                     >
                       <ArrowLeftRight className="size-4" />
                     </button>
                   </TD>
                   <TD>
                     <button
-                      onClick={() => handleDuplicate(p)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Duplicate ${p.name}`}
-                    >
-                      <Copy className="size-4" />
-                    </button>
-                  </TD>
-                  <TD>
-                    <button
-                      onClick={() => handleDelete(p)}
+                      onClick={() => handleDelete(ingredient)}
                       className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                      aria-label={`Delete ${p.name}`}
+                      aria-label={`Delete ${ingredient.name}`}
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -522,44 +276,44 @@ function InventoryPageContent() {
         </TBody>
       </Table>
 
-      {transferringProduct && (
+      {(creating || editing) && (
+        <IngredientFormModal
+          ingredient={editing}
+          categories={categories}
+          onClose={() => {
+            setCreating(false);
+            setEditing(null);
+          }}
+          onSaved={refresh}
+        />
+      )}
+
+      {transferring && (
         <TransferStockModal
-          target={{ kind: "product", product: transferringProduct }}
-          onClose={() => setTransferringProduct(null)}
+          target={{ kind: "ingredient", ingredient: transferring }}
+          onClose={() => setTransferring(null)}
           onTransferred={() => {
-            setTransferringProduct(null);
+            setTransferring(null);
             refresh();
           }}
         />
       )}
 
-      {adjustingProduct && selectedOutletId && (
+      {adjusting && selectedOutletId && (
         <AdjustStockModal
-          target={{ kind: "product", product: adjustingProduct }}
+          target={{ kind: "ingredient", ingredient: adjusting }}
           outletId={selectedOutletId}
           outletName={outlets.find((o) => o.id === selectedOutletId)?.name ?? ""}
-          onClose={() => setAdjustingProduct(null)}
+          onClose={() => setAdjusting(null)}
           onAdjusted={refresh}
-        />
-      )}
-
-      {bulkPricing && (
-        <BulkPriceUpdateModal
-          products={(visibleProducts ?? []).filter((p) => selection.selected.has(p.id))}
-          onClose={() => setBulkPricing(false)}
-          onApplied={() => {
-            setBulkPricing(false);
-            selection.clear();
-            refresh();
-          }}
         />
       )}
 
       {importing && (
         <CsvImportModal
-          title="Import products"
-          previewFn={previewImportProducts}
-          confirmFn={(file) => confirmImportProducts(file, selectedOutletId ?? undefined)}
+          title="Import ingredients"
+          previewFn={previewImportIngredients}
+          confirmFn={(file) => confirmImportIngredients(file, selectedOutletId ?? undefined)}
           onClose={() => setImporting(false)}
           onImported={refresh}
         />

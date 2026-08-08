@@ -95,7 +95,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
 
   function handleCancel() {
     suppressGuardRef.current = true;
-    form.router.push("/inventory");
+    form.router.push("/products");
   }
 
   // Advanced mode: one scrollable page, no stepper/slide transitions — every

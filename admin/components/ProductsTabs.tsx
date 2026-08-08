@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { href: "/inventory", label: "Ingredients" },
-  { href: "/inventory/categories", label: "Categories" },
-  { href: "/inventory/scan", label: "Scan to Stock" },
-  { href: "/inventory/movements", label: "Movement History" },
+  { href: "/products", label: "Products" },
+  { href: "/products/categories", label: "Categories" },
+  { href: "/products/discounts", label: "Discounts" },
+  { href: "/products/gift-cards", label: "Gift Cards" },
 ];
 
-export default function InventoryTabs() {
+export default function ProductsTabs() {
   const pathname = usePathname();
 
   return (

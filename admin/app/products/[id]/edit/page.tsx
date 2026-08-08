@@ -24,7 +24,7 @@ export default function EditProductPage() {
 
   return (
     <PageShell>
-      <BackButton href="/inventory" />
+      <BackButton href="/products" />
       <h1 className="text-2xl font-semibold mb-4">Edit product</h1>
       {error && <p className="text-red-600 text-sm">{error}</p>}
       {!product && !error ? (

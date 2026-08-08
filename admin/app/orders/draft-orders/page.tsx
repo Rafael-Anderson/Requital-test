@@ -10,6 +10,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
 
 const STATUS_CLASS: Record<DraftOrderStatus, string> = {
@@ -38,10 +39,11 @@ export default function DraftOrdersPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BackButton href="/orders" />
+      <OrdersTabs />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Draft Orders</h1>
-        <Link href="/draft-orders/new">
+        <Link href="/orders/draft-orders/new">
           <Button variant="primary">
             <Plus className="size-4 inline -mt-0.5 mr-1" />
             New draft order
@@ -81,7 +83,7 @@ export default function DraftOrdersPage() {
             drafts.map((d) => (
               <TR key={d.id}>
                 <TD>
-                  <Link href={`/draft-orders/${d.id}`} className="font-medium hover:underline">
+                  <Link href={`/orders/draft-orders/${d.id}`} className="font-medium hover:underline">
                     {d.customerName}
                   </Link>
                   <div className="text-xs text-zinc-500">{d.customerPhone}</div>

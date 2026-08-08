@@ -30,11 +30,27 @@ const CSP = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
-  // Categories moved from its own top-level page into a tab under
-  // Inventory — kept as a real redirect (not a client-side stub page) so
-  // any bookmarked/shared /categories link still lands correctly.
+  // Phase B app restructure: Products split out of Inventory (which is now
+  // ingredients/stock-only), and Discounts/Gift Cards/Draft Orders/Abandoned
+  // Carts moved under Products/Orders as tabs. Real redirects (not
+  // client-side stub pages) so bookmarked/shared old links still land
+  // correctly. No redirect for bare /inventory or /inventory/categories —
+  // both remain real, live routes (repurposed to ingredient content), not
+  // dead links, and a route can't redirect to itself while also serving
+  // its own page.
   async redirects() {
-    return [{ source: "/categories", destination: "/inventory/categories", permanent: true }];
+    return [
+      { source: "/categories", destination: "/inventory/categories", permanent: true },
+      { source: "/inventory/new", destination: "/products/new", permanent: true },
+      { source: "/inventory/:id/edit", destination: "/products/:id/edit", permanent: true },
+      { source: "/inventory/ingredients", destination: "/inventory", permanent: true },
+      { source: "/discounts", destination: "/products/discounts", permanent: true },
+      { source: "/gift-cards", destination: "/products/gift-cards", permanent: true },
+      { source: "/draft-orders", destination: "/orders/draft-orders", permanent: true },
+      { source: "/draft-orders/new", destination: "/orders/draft-orders/new", permanent: true },
+      { source: "/draft-orders/:id", destination: "/orders/draft-orders/:id", permanent: true },
+      { source: "/abandoned-carts", destination: "/orders/abandoned-carts", permanent: true },
+    ];
   },
   async headers() {
     return [

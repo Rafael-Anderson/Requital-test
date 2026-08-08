@@ -89,7 +89,7 @@ export default function DraftOrderDetailPage() {
 
   return (
     <div>
-      <BackButton href="/draft-orders" />
+      <BackButton href="/orders/draft-orders" />
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
       {!draft ? (
@@ -176,7 +176,7 @@ export default function DraftOrderDetailPage() {
             )}
 
             <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => router.push("/draft-orders")}>
+              <Button variant="secondary" onClick={() => router.push("/orders/draft-orders")}>
                 Back to list
               </Button>
               {draft.status === "INVOICE_SENT" && (

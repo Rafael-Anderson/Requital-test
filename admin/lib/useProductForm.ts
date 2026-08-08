@@ -270,7 +270,7 @@ export function useProductForm(initialProduct: Product | undefined) {
         await commitStockChanges(stockRows, stockValues, { productId: saved.id });
       }
 
-      router.push("/inventory");
+      router.push("/products");
       return { ok: true, fieldErrors: {} };
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save product", "error");
@@ -286,7 +286,7 @@ export function useProductForm(initialProduct: Product | undefined) {
     try {
       const copy = await duplicateProduct(product.id);
       toast(`Duplicated "${product.name}"`);
-      router.push(`/inventory/${copy.id}/edit`);
+      router.push(`/products/${copy.id}/edit`);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to duplicate product", "error");
     } finally {

@@ -6,7 +6,7 @@ import DraftOrderBuilder from "@/components/DraftOrderBuilder";
 export default function NewDraftOrderPage() {
   return (
     <div>
-      <BackButton href="/draft-orders" />
+      <BackButton href="/orders/draft-orders" />
       <h1 className="text-2xl font-semibold mb-4">New draft order</h1>
       <DraftOrderBuilder />
     </div>
