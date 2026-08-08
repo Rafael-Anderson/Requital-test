@@ -274,9 +274,20 @@ describe('Gift Cards (e2e)', () => {
           }),
         )
         .expect(201);
-      const stockRow = await prisma.outletstock.findUnique({
+      // Phase A: a gift-card product still auto-provisions its own shadow
+      // Ingredient (every usesIngredients:false product does), but
+      // consumeForOrderItems filters gift-card items out before ever
+      // touching outletingredientstock — so the shadow's stock row itself
+      // should never have been created, same "no row at all" assertion as
+      // the pre-Phase-A direct outletstock check.
+      const shadow = await prisma.ingredient.findFirst({
+        where: { shadowProductId: giftCardProductId },
+        select: { id: true },
+      });
+      expect(shadow).not.toBeNull();
+      const stockRow = await prisma.outletingredientstock.findUnique({
         where: {
-          outletId_productId: { outletId, productId: giftCardProductId },
+          outletId_ingredientId: { outletId, ingredientId: shadow!.id },
         },
       });
       expect(stockRow).toBeNull();

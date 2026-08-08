@@ -10,6 +10,7 @@ import { createLogger } from '../common/logging/logger';
 
 const logger = createLogger('ReturnsService');
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
+import { ProductsService } from '../products/products.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 
 const returnInclude = {
@@ -26,6 +27,7 @@ export class ReturnsService {
     private readonly paymentSettingsService: PaymentSettingsService,
     private readonly auditLogService: AuditLogService,
     private readonly giftCardsService: GiftCardsService,
+    private readonly productsService: ProductsService,
   ) {}
 
   async findAllForOrder(ctx: TenantContext, orderId: number) {
@@ -169,50 +171,36 @@ export class ReturnsService {
         });
 
         if (restock && trackInventoryByProduct.get(orderItem.productId)) {
-          if (orderItem.variantId) {
-            await tx.outletvariantstock.upsert({
-              where: {
-                outletId_variantId: {
-                  outletId: order.outletId,
-                  variantId: orderItem.variantId,
-                },
-              },
-              update: { stockQuantity: { increment: line.quantity } },
-              create: {
-                outletId: order.outletId,
-                variantId: orderItem.variantId,
-                stockQuantity: line.quantity,
-              },
-            });
-          } else {
-            await tx.outletstock.upsert({
-              where: {
-                outletId_productId: {
-                  outletId: order.outletId,
-                  productId: orderItem.productId,
-                },
-              },
-              update: { stockQuantity: { increment: line.quantity } },
-              create: {
-                outletId: order.outletId,
+          // Phase A: routes through the same CAS-disciplined mechanism
+          // every other stock-mutation path now uses (shadow or real
+          // recipe) — throwOnInsufficientStock: false since a return
+          // restocking never fails on a floor check, matching this
+          // codebase's own unconditional-upsert restock behavior
+          // everywhere else. movementType: 'RETURN' (not the default
+          // 'CONSUMED') keeps this distinguishable from an order
+          // cancellation in Movement History, same distinction the
+          // original inline stockmovement.create already drew.
+          await this.productsService.consumeForOrderItems(
+            tx,
+            order.shopId,
+            order.outletId,
+            [
+              {
                 productId: orderItem.productId,
-                stockQuantity: line.quantity,
+                variantId: orderItem.variantId,
+                quantity: line.quantity,
+                allowNegative: true,
               },
-            });
-          }
-          await tx.stockmovement.create({
-            data: {
-              shopId: order.shopId,
-              productId: orderItem.productId,
-              variantId: orderItem.variantId,
-              type: 'RETURN',
-              reason: dto.reason,
-              delta: line.quantity,
-              outletId: order.outletId,
-              note: `Return #${orderReturn.id}`,
+            ],
+            1,
+            {
+              throwOnInsufficientStock: false,
               actorUserId: ctx.userId,
+              movementType: 'RETURN',
+              note: `Return #${orderReturn.id}`,
+              reason: dto.reason,
             },
-          });
+          );
         }
       }
 

@@ -140,6 +140,13 @@ export class UpdateProductDto {
   @IsBoolean()
   trackInventory?: boolean;
 
+  // Toggle-flip — see CreateProductDto's own comment and
+  // ProductsService.update's toggling-to-recipe/toggling-to-shadow
+  // handling. Omitted leaves the product's current mode untouched.
+  @IsOptional()
+  @IsBoolean()
+  usesIngredients?: boolean;
+
   // Gift Cards — see CreateProductDto's own comment.
   @IsOptional()
   @IsBoolean()

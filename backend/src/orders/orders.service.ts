@@ -307,48 +307,29 @@ export class OrdersService {
     );
 
     const order = await this.prisma.$transaction(async (tx) => {
-      // Ingredient consumption only fires alongside an immediate stock
-      // reservation, same condition as the product-stock loop right below —
-      // a deferred (non-reserveStock) admin order hasn't committed product
-      // stock yet either, so consuming ingredients here would run ahead of
-      // it; that case is instead covered at the pending->confirmed
-      // transition (see OrdersService.adjustStockForOrder).
+      // Stock reservation only fires alongside an immediate reservation
+      // (reserveStock) — a deferred (non-reserveStock) admin order hasn't
+      // committed stock yet either; that case is instead covered at the
+      // pending->confirmed transition (see OrdersService.adjustStockForOrder).
+      // Every product/variant resolves through consumeForOrderItems now
+      // (Phase A) — a usesIngredients:false product's own shadow ingredient
+      // mirrors its trackInventory flag, so the per-row skip inside
+      // consumeForOrderItems already reproduces the old
+      // `if (!product.trackInventory) continue` behavior without a
+      // redundant filter here.
       let ingredientsConsumed = false;
       if (options.reserveStock) {
-        for (const { product, variant, quantity } of resolvedItems) {
-          if (!product.trackInventory) continue;
-          const result = variant
-            ? await tx.outletvariantstock.updateMany({
-                where: {
-                  outletId,
-                  variantId: variant.id,
-                  stockQuantity: { gte: quantity },
-                },
-                data: { stockQuantity: { decrement: quantity } },
-              })
-            : await tx.outletstock.updateMany({
-                where: {
-                  outletId,
-                  productId: product.id,
-                  stockQuantity: { gte: quantity },
-                },
-                data: { stockQuantity: { decrement: quantity } },
-              });
-          if (result.count === 0) {
-            throw new ConflictException(`${product.name} is out of stock`);
-          }
-        }
-
         ingredientsConsumed = await this.productsService.consumeForOrderItems(
           tx,
           ctx.shopId,
           outletId,
           resolvedItems
             .filter(({ product }) => !product.isGiftCard)
-            .map(({ product, variant, quantity }) => ({
+            .map(({ product, variant, quantity, allowNegative }) => ({
               productId: product.id,
               variantId: variant?.id ?? null,
               quantity,
+              allowNegative,
             })),
           -1,
           { throwOnInsufficientStock: true, actorUserId: ctx.userId },
@@ -717,98 +698,46 @@ export class OrdersService {
             i.quantity,
           ]),
         );
-        const productTrackInventory = new Map(
-          resolvedItems.map((i) => [i.product.id, i.product.trackInventory]),
-        );
         const allKeys = new Set([...oldQtyByKey.keys(), ...newQtyByKey.keys()]);
 
-        for (const k of allKeys) {
-          const [productIdStr, variantIdStr] = k.split(':');
-          const productId = Number(productIdStr);
-          const variantId = variantIdStr ? Number(variantIdStr) : null;
-          const delta = (newQtyByKey.get(k) ?? 0) - (oldQtyByKey.get(k) ?? 0);
-          if (delta === 0) continue;
-
-          const trackInventory =
-            productTrackInventory.get(productId) ??
-            (
-              await tx.product.findUnique({
-                where: { id: productId },
-                select: { trackInventory: true },
-              })
-            )?.trackInventory ??
-            false;
-          if (!trackInventory) continue;
-
-          if (delta > 0) {
-            const result = variantId
-              ? await tx.outletvariantstock.updateMany({
-                  where: {
-                    outletId: order.outletId,
-                    variantId,
-                    stockQuantity: { gte: delta },
-                  },
-                  data: { stockQuantity: { decrement: delta } },
-                })
-              : await tx.outletstock.updateMany({
-                  where: {
-                    outletId: order.outletId,
-                    productId,
-                    stockQuantity: { gte: delta },
-                  },
-                  data: { stockQuantity: { decrement: delta } },
-                });
-            if (result.count === 0) {
-              throw new ConflictException(
-                'Not enough stock available to increase this item’s quantity',
-              );
-            }
-          } else if (variantId) {
-            await tx.outletvariantstock.upsert({
-              where: {
-                outletId_variantId: { outletId: order.outletId, variantId },
-              },
-              update: { stockQuantity: { increment: -delta } },
-              create: {
-                outletId: order.outletId,
-                variantId,
-                stockQuantity: -delta,
-              },
-            });
-          } else {
-            await tx.outletstock.upsert({
-              where: {
-                outletId_productId: { outletId: order.outletId, productId },
-              },
-              update: { stockQuantity: { increment: -delta } },
-              create: {
-                outletId: order.outletId,
-                productId,
-                stockQuantity: -delta,
-              },
-            });
-          }
-        }
-
-        // BOM ingredient stock — only for an order that's actually reached
-        // 'confirmed' and already consumed ingredients once (see
+        // Stock delta adjustment (Phase A: shadow or real recipe — every
+        // product/variant resolves through consumeForOrderItems now, so
+        // there's no separate product-stock-vs-BOM-ingredient carve-out
+        // anymore) — only for an order that's actually reached 'confirmed'
+        // and already consumed ingredients once (see
         // order.ingredientsConsumedAt). A still-pending order (even one
-        // whose product stock is already reserved via
+        // whose stock is already reserved via
         // IMMEDIATE_STOCK_RESERVATION_CHANNELS) has never run
         // consumeForOrderItems yet — that only happens at the
         // pending->confirmed transition, see adjustStockForOrder — so it has
         // nothing to adjust by delta here; the eventual confirm will consume
-        // ingredients for whatever the (now-edited) item list says.
+        // stock for whatever the (now-edited) item list says.
         // Adjusted by delta (not recomputed from scratch) to avoid
         // double-deducting what confirm already took.
         if (
           order.status === 'confirmed' &&
           order.ingredientsConsumedAt !== null
         ) {
+          // A usesIngredients:true product's recipe consumption must never
+          // block the save (going negative is surfaced as a warning
+          // instead, see findNegativeIngredientStock below) — the
+          // long-established BOM behavior. A usesIngredients:false
+          // product's own shadow-ingredient stock instead keeps the old
+          // direct-product-stock semantics: a quantity increase beyond
+          // available stock is rejected outright (409), same as every
+          // other stock-reservation point in this file. This is exactly
+          // what consumeForOrderItems's per-item allowNegative flag is
+          // for — sourced here from each resolved item's product, not the
+          // continueSellingOutOfStock-based rule resolveOrderItems uses for
+          // order creation (order-item-edit never had that escape valve).
+          const usesIngredientsByProduct = new Map(
+            resolvedItems.map((i) => [i.product.id, i.product.usesIngredients]),
+          );
           const increasedItems: {
             productId: number;
             variantId: number | null;
             quantity: number;
+            allowNegative: boolean;
           }[] = [];
           const decreasedItems: {
             productId: number;
@@ -821,24 +750,24 @@ export class OrdersService {
             const variantId = variantIdStr ? Number(variantIdStr) : null;
             const delta = (newQtyByKey.get(k) ?? 0) - (oldQtyByKey.get(k) ?? 0);
             if (delta > 0)
-              increasedItems.push({ productId, variantId, quantity: delta });
+              increasedItems.push({
+                productId,
+                variantId,
+                quantity: delta,
+                allowNegative: usesIngredientsByProduct.get(productId) ?? false,
+              });
             else if (delta < 0)
               decreasedItems.push({ productId, variantId, quantity: -delta });
           }
 
           if (increasedItems.length > 0) {
-            // throwOnInsufficientStock: false — a quantity increase must
-            // never block the save; going negative is surfaced as a warning
-            // instead (see findNegativeIngredientStock below), matching the
-            // "allow the save, don't silently allow negative, don't
-            // silently block" requirement.
             await this.productsService.consumeForOrderItems(
               tx,
               ctx.shopId,
               order.outletId,
               increasedItems,
               -1,
-              { throwOnInsufficientStock: false, actorUserId: ctx.userId },
+              { throwOnInsufficientStock: true, actorUserId: ctx.userId },
             );
             ingredientStockWarnings = await this.findNegativeIngredientStock(
               tx,
@@ -1061,73 +990,46 @@ export class OrdersService {
   ) {
     const items = await tx.orderitem.findMany({
       where: { orderId },
-      include: { product: { select: { trackInventory: true } } },
+      include: {
+        product: { select: { trackInventory: true, usesIngredients: true } },
+      },
     });
     // Only a restock (direction 1, i.e. cancellation) can ever cross stock
     // from 0 up to positive — collected here and fired (not awaited, see
     // below) after the loop so a slow email batch never delays the
-    // transaction this runs inside.
+    // transaction this runs inside. Phase A: reads through each item's own
+    // shadow ingredient (mechanical outletstock/outletvariantstock ->
+    // outletingredientstock swap, same "before <= 0" check as before) —
+    // skipped for a usesIngredients:true item, which has no single stock
+    // number across a multi-ingredient recipe to check here.
     const restockNotifyTargets: {
       productId: number;
       variantId: number | null;
     }[] = [];
-    for (const item of items) {
-      if (!item.product.trackInventory) continue;
-      // Stock is per-outlet-per-product now, not shop-wide — upsert because
-      // a product may never have had an explicit stock row created for this
-      // outlet yet (e.g. added to the catalog after the outlet was set up).
-      // A variant-bearing item adjusts its own outletvariantstock row
-      // instead (see schema.prisma) — the parent product's outletstock
-      // stays untouched once a product has variants.
-      if (item.variantId) {
-        if (direction === 1) {
-          const before = await tx.outletvariantstock.findUnique({
-            where: {
-              outletId_variantId: { outletId, variantId: item.variantId },
-            },
-          });
-          if ((before?.stockQuantity ?? 0) <= 0) {
-            restockNotifyTargets.push({
-              productId: item.productId,
-              variantId: item.variantId,
-            });
-          }
-        }
-        await tx.outletvariantstock.upsert({
-          where: {
-            outletId_variantId: { outletId, variantId: item.variantId },
-          },
-          update: { stockQuantity: { increment: direction * item.quantity } },
-          create: {
-            outletId,
-            variantId: item.variantId,
-            stockQuantity: direction * item.quantity,
-          },
+    if (direction === 1) {
+      for (const item of items) {
+        if (!item.product.trackInventory || item.product.usesIngredients)
+          continue;
+        const shadow = await tx.ingredient.findFirst({
+          where: item.variantId
+            ? { shadowVariantId: item.variantId }
+            : { shadowProductId: item.productId },
+          select: { id: true },
         });
-        continue;
-      }
-      if (direction === 1) {
-        const before = await tx.outletstock.findUnique({
-          where: {
-            outletId_productId: { outletId, productId: item.productId },
-          },
-        });
+        const before = shadow
+          ? await tx.outletingredientstock.findUnique({
+              where: {
+                outletId_ingredientId: { outletId, ingredientId: shadow.id },
+              },
+            })
+          : null;
         if ((before?.stockQuantity ?? 0) <= 0) {
           restockNotifyTargets.push({
             productId: item.productId,
-            variantId: null,
+            variantId: item.variantId,
           });
         }
       }
-      await tx.outletstock.upsert({
-        where: { outletId_productId: { outletId, productId: item.productId } },
-        update: { stockQuantity: { increment: direction * item.quantity } },
-        create: {
-          outletId,
-          productId: item.productId,
-          stockQuantity: direction * item.quantity,
-        },
-      });
     }
     for (const target of restockNotifyTargets) {
       this.notifySubscriptionsService
@@ -1135,10 +1037,11 @@ export class OrdersService {
         .catch(() => {});
     }
 
-    // Bill of Materials — same trigger point as the product-stock loop just
-    // above, direction for direction: the pending->confirmed decrement
+    // The actual stock adjustment (Phase A: shadow or real recipe, every
+    // product/variant now resolves through consumeForOrderItems) — same
+    // trigger points as before: the pending->confirmed decrement
     // (direction -1) and every cancel-restock (direction 1, but only when
-    // this specific order actually consumed ingredients in the first place).
+    // this specific order actually consumed stock in the first place).
     if (direction === -1) {
       const consumed = await this.productsService.consumeForOrderItems(
         tx,

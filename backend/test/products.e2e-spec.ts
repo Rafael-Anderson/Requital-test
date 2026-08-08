@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
+import { getShadowStockQuantity } from './helpers/stock';
 
 interface AuthResponse {
   accessToken: string;
@@ -789,14 +790,20 @@ describe('Products / variants (e2e)', () => {
         })
         .expect(201);
 
-      const variantStock = await prisma.outletvariantstock.findUnique({
-        where: { outletId_variantId: { outletId, variantId: small.id } },
+      const variantStock = await getShadowStockQuantity(prisma, outletId, {
+        productId: product.id,
+        variantId: small.id,
       });
-      expect(variantStock?.stockQuantity).toBe(2);
-      const productStock = await prisma.outletstock.findUnique({
-        where: { outletId_productId: { outletId, productId: product.id } },
+      expect(variantStock).toBe(2);
+      // A variant-carrying product never gets a product-level shadow
+      // ingredient (Phase A) — only one per variant, see
+      // ingredient.shadowProductId's schema comment — so there's no
+      // product-level stock row to find at all, same "stays untouched"
+      // assertion as the pre-Phase-A direct outletstock check.
+      const productShadow = await prisma.ingredient.findFirst({
+        where: { shadowProductId: product.id },
       });
-      expect(productStock).toBeNull();
+      expect(productShadow).toBeNull();
 
       // Out of stock — only 2 left, ordering 5 must be rejected, not
       // silently oversell.
