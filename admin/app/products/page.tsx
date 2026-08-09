@@ -35,6 +35,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import Select from "@/components/ui/Select";
 import BulkActionBar from "@/components/ui/BulkActionBar";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
@@ -260,25 +261,26 @@ function InventoryPageContent() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BranchBar left={<BackButton href="/" />} />
       <ProductsTabs />
-      <BranchBar />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Inventory</h1>
         <div className="flex items-center gap-2">
-          <select
-            value={collectionFilter}
-            onChange={(e) => setCollectionFilter(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
-          >
-            <option value="">All collections</option>
-            {collectionRows.map((c) => (
-              <option key={c.id} value={c.id}>
-                {"— ".repeat(c.depth)}
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="w-44">
+            <Select
+              value={collectionFilter}
+              onChange={(e) => setCollectionFilter(e.target.value)}
+              aria-label="Filter by collection"
+            >
+              <option value="">All collections</option>
+              {collectionRows.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {"— ".repeat(c.depth)}
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
           <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
             <Checkbox checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} aria-label="Low stock only" />
             Low stock only

@@ -118,10 +118,9 @@ export default function OrdersPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
-      <BranchBar />
+      <BranchBar left={<BackButton href="/" />} />
       <h1 className="text-2xl font-semibold mb-1">Orders</h1>
-      {!isSimple && <OrdersTabs />}
+      <OrdersTabs />
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 

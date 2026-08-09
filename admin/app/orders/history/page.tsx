@@ -122,8 +122,7 @@ export default function OrderHistoryPage() {
 
   return (
     <PageShell>
-      <BackButton href="/orders" />
-      <BranchBar />
+      <BranchBar left={<BackButton href="/orders" />} />
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Orders</h1>
         <div className="relative w-full sm:w-72">

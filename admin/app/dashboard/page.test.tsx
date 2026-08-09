@@ -1,11 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import DashboardPage from "./page";
-import { getDashboardSummary, getDailyRevenue, getShop, getTopProducts } from "@/lib/api";
+import { getDashboardSummary, getDailyRevenue, getTopProducts } from "@/lib/api";
 import type { DashboardSummary, TopProduct } from "@/lib/types";
 
 vi.mock("@/lib/api", () => ({
-  getShop: vi.fn(),
   getDashboardSummary: vi.fn(),
   getDailyRevenue: vi.fn(),
   getTopProducts: vi.fn(),
@@ -39,33 +38,13 @@ function renderPage() {
   return render(<DashboardPage />);
 }
 
-describe("DashboardPage — simple/advanced mode", () => {
-  it("simple mode: shows only the 3 focused cards", async () => {
-    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
-    vi.mocked(getDashboardSummary).mockResolvedValue(summary);
-    vi.mocked(getTopProducts).mockResolvedValue(topProducts);
-    renderPage();
-
-    await waitFor(() => expect(screen.getByText("Revenue Today")).toBeInTheDocument());
-    expect(screen.getByText("Orders Today")).toBeInTheDocument();
-    expect(screen.getByText("Top 3 Products")).toBeInTheDocument();
-  });
-
-  it("simple mode: hides the date range picker and chart/breakdown sections", async () => {
-    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
-    vi.mocked(getDashboardSummary).mockResolvedValue(summary);
-    vi.mocked(getTopProducts).mockResolvedValue(topProducts);
-    renderPage();
-
-    await waitFor(() => expect(screen.getByText("Revenue Today")).toBeInTheDocument());
-    expect(screen.queryByText("Sale Overview")).not.toBeInTheDocument();
-    expect(screen.queryByText("Outlet Distribution")).not.toBeInTheDocument();
-    expect(screen.queryByText("Sales Distribution by Channel")).not.toBeInTheDocument();
-    expect(getDailyRevenue).not.toHaveBeenCalled();
-  });
-
-  it("advanced mode: shows the full stat/chart/breakdown layout", async () => {
-    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+// Dashboard used to split into a trimmed "simple" layout vs. this full one
+// depending on shop.productEditorMode — that split was removed (Dashboard
+// isn't a page that should differ between modes), so this now always
+// renders the full stat/chart/breakdown layout regardless of shop mode, and
+// no longer fetches shop data at all to decide.
+describe("DashboardPage", () => {
+  it("shows the full stat/chart/breakdown layout", async () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(summary);
     vi.mocked(getDailyRevenue).mockResolvedValue([{ date: "2026-08-04", revenue: 500 }]);
     vi.mocked(getTopProducts).mockResolvedValue(topProducts);
@@ -77,15 +56,15 @@ describe("DashboardPage — simple/advanced mode", () => {
     expect(screen.getByText("Sales Distribution by Channel")).toBeInTheDocument();
   });
 
-  it("advanced mode: does not render the simple-mode 'Revenue Today'/'Orders Today' cards", async () => {
-    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+  it("fetches summary, daily revenue, and top products on mount", async () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(summary);
     vi.mocked(getDailyRevenue).mockResolvedValue([{ date: "2026-08-04", revenue: 500 }]);
     vi.mocked(getTopProducts).mockResolvedValue(topProducts);
     renderPage();
 
     await waitFor(() => expect(screen.getByText("Total Revenue")).toBeInTheDocument());
-    expect(screen.queryByText("Revenue Today")).not.toBeInTheDocument();
-    expect(screen.queryByText("Orders Today")).not.toBeInTheDocument();
+    expect(getDashboardSummary).toHaveBeenCalled();
+    expect(getDailyRevenue).toHaveBeenCalled();
+    expect(getTopProducts).toHaveBeenCalled();
   });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizePhone,
+  normalizeTrn,
+  normalizeWebsiteUrl,
   passwordRequirements,
   stripPhoneFormatting,
   validateEmail,
@@ -36,9 +39,13 @@ describe("validateEmail", () => {
   });
 });
 
+// validatePhone runs post-normalization in real usage (normalizePhone is
+// called onBlur before validateField) — so it only needs to accept the
+// canonical E.164 shape, not every raw format a user might type. Those raw
+// formats are covered by normalizePhone's own tests below.
 describe("validatePhone", () => {
-  const valid = ["1234567", "123456789012345", "+971501234567", "+12345678", "0501234567", "971501234567", "1112223", "+1234567890123"];
-  const invalid = ["", "123456", "1234567890123456", "abcdefg", "+", "12-34-56-78", "123 456 7890", "++971501234567"];
+  const valid = ["+971501234567", "+12345678", "+1234567890123"];
+  const invalid = ["", "123456", "0501234567", "971501234567", "abcdefg", "+", "12-34-56-78", "123 456 7890", "++971501234567"];
 
   it.each(valid)("accepts %s", (phone) => {
     expect(validatePhone(phone)).toEqual({ valid: true });
@@ -58,6 +65,30 @@ describe("stripPhoneFormatting", () => {
 
   it("leaves an already-clean number unchanged", () => {
     expect(stripPhoneFormatting("+971501234567")).toBe("+971501234567");
+  });
+});
+
+describe("normalizePhone", () => {
+  it("prefixes a local UAE number with a leading 0", () => {
+    expect(normalizePhone("0501234567")).toBe("+971501234567");
+  });
+
+  it("prefixes a bare UAE number with the country code but no +", () => {
+    expect(normalizePhone("971501234567")).toBe("+971501234567");
+  });
+
+  it("leaves an already-E.164 number unchanged", () => {
+    expect(normalizePhone("+971501234567")).toBe("+971501234567");
+  });
+
+  it("strips spaces, hyphens, and parentheses before normalizing", () => {
+    expect(normalizePhone("050 123 4567")).toBe("+971501234567");
+    expect(normalizePhone("(050) 123-4567")).toBe("+971501234567");
+  });
+
+  it("returns the input unchanged when it can't be parsed", () => {
+    expect(normalizePhone("not-a-phone")).toBe("not-a-phone");
+    expect(normalizePhone("")).toBe("");
   });
 });
 
@@ -116,13 +147,15 @@ describe("passwordRequirements", () => {
   });
 });
 
+// validateTrn also runs post-normalization in real usage (normalizeTrn
+// strips dashes/spaces onBlur before validateField runs).
 describe("validateTrn", () => {
   it("is valid when blank (optional field)", () => {
     expect(validateTrn("")).toEqual({ valid: true });
   });
 
-  const valid = ["100-1234-567-890", "12-123-12-12", "1000-12345-1234-1234"];
-  const invalid = ["not-a-trn", "100 1234 567 890", "abc-1234-567-890", "100-1234-567"];
+  const valid = ["12312312", "100123456789012"];
+  const invalid = ["not-a-trn", "100-1234-567-890", "1234567"];
 
   it.each(valid)("accepts %s", (trn) => {
     expect(validateTrn(trn)).toEqual({ valid: true });
@@ -132,6 +165,17 @@ describe("validateTrn", () => {
     const result = validateTrn(trn);
     expect(result.valid).toBe(false);
     expect(result.message).toBeTruthy();
+  });
+});
+
+describe("normalizeTrn", () => {
+  it("strips dashes and spaces to digits-only", () => {
+    expect(normalizeTrn("100-1234-567-890")).toBe("1001234567890");
+    expect(normalizeTrn("100 1234 567 890")).toBe("1001234567890");
+  });
+
+  it("leaves an already digits-only TRN unchanged", () => {
+    expect(normalizeTrn("123456789012345")).toBe("123456789012345");
   });
 });
 
@@ -151,6 +195,21 @@ describe("validateUrl", () => {
     const result = validateUrl(url);
     expect(result.valid).toBe(false);
     expect(result.message).toBeTruthy();
+  });
+});
+
+describe("normalizeWebsiteUrl", () => {
+  it("leaves an already-protocol-prefixed URL unchanged", () => {
+    expect(normalizeWebsiteUrl("https://example.com")).toBe("https://example.com");
+    expect(normalizeWebsiteUrl("http://example.com")).toBe("http://example.com");
+  });
+
+  it("prefixes a bare domain with https://", () => {
+    expect(normalizeWebsiteUrl("example.com")).toBe("https://example.com");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(normalizeWebsiteUrl("  example.com  ")).toBe("https://example.com");
   });
 });
 

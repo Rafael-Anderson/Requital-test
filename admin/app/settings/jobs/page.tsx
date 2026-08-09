@@ -6,7 +6,6 @@ import type { FailedJob } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
-import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
 import { RotateCcw, X } from "lucide-react";
@@ -64,7 +63,6 @@ export default function FailedJobsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Failed Jobs</h1>
       </div>

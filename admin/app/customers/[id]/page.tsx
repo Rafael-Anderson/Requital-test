@@ -6,6 +6,7 @@ import { Wallet, ClipboardList, Calendar, CalendarClock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useShopMode } from "@/lib/useShopMode";
 import { getCustomer, updateCustomer } from "@/lib/api";
+import { normalizePhone } from "@/lib/validators";
 import type { CustomerDetail } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Skeleton, { CardSkeleton } from "@/components/ui/Skeleton";
@@ -123,7 +124,13 @@ export default function CustomerDetailPage() {
             <h2 className="font-medium mb-4">Contact info</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-              <Input label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input
+                label="Phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onBlur={(e) => setPhone(normalizePhone(e.target.value))}
+              />
               <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               {!isSimple && (
                 <Input

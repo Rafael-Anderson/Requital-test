@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { getShop, updateOutlet, updateShop } from "@/lib/api";
+import { normalizePhone } from "@/lib/validators";
 import type { Outlet, Shop } from "@/lib/types";
 import { mergeBusinessHours } from "@/lib/business-hours";
 import Button from "@/components/ui/Button";
@@ -122,9 +123,19 @@ export default function OutletBasicInfoTab({
         <h3 className="text-sm font-semibold mb-3">Contact Information</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input
+            label="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onBlur={(e) => setPhone(normalizePhone(e.target.value))}
+          />
 
-          <Input label="WhatsApp" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
+          <Input
+            label="WhatsApp"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            onBlur={(e) => setWhatsapp(normalizePhone(e.target.value))}
+          />
           {/* Tax Registration Number: no such field exists anywhere in the
               data model yet — not even at the shop level — so there's
               nothing to read-only-pull the way Country/Time Zone/Currency/

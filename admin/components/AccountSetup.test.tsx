@@ -125,7 +125,7 @@ describe("AccountSetup wizard", () => {
     await waitFor(() => expect(screen.getByLabelText("Primary Location / Address")).toBeInTheDocument());
   });
 
-  it("blocks Step 3 when no Operating Model checkbox is selected", async () => {
+  it("blocks Step 3 when no Operating Model option is selected", async () => {
     const user = userEvent.setup();
     renderWizard();
     await fillStep1(user);
@@ -140,7 +140,7 @@ describe("AccountSetup wizard", () => {
     await user.click(screen.getByText("Next"));
 
     expect(screen.getByText("Fix these issues to continue")).toBeInTheDocument();
-    expect(screen.getByText(/Operating Model: Select at least one option/)).toBeInTheDocument();
+    expect(screen.getByText(/Operating Model: Select an option/)).toBeInTheDocument();
   });
 
   it("reaches the Review step with a summary of every entered field", async () => {

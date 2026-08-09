@@ -13,9 +13,15 @@ const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 // attributes used throughout components/ui. Tracked as a known, reviewed
 // tradeoff, not an oversight — the other directives are still real
 // restrictions (no object embeds, no framing, no foreign form targets).
+// 'unsafe-eval' is dev-only — React dev mode needs eval() to reconstruct
+// callstacks for its debugging features (never used in production builds),
+// so it's added only when NODE_ENV isn't "production" rather than left out
+// entirely (which breaks `next dev`) or left in always (which would be a
+// real production CSP weakening for no reason).
+const isDev = process.env.NODE_ENV !== "production";
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   // MapPickerLeaflet.tsx (outlet address entry) loads tiles directly from
   // CARTO's CDN in the browser — without this, the map picker renders a
@@ -48,6 +54,10 @@ const nextConfig: NextConfig = {
   // adjacent, same tier as Discounts/Gift Cards); both /collections (the
   // pre-rename top-level curated-grouping route) and /templates redirect
   // straight to the final /products/templates location.
+  //
+  // UI polish batch: Failed Jobs moved from a top-level homepage tile into
+  // Settings (an internal ops/debugging view, not a merchant-facing app) —
+  // /jobs redirects to /settings/jobs.
   async redirects() {
     return [
       { source: "/categories", destination: "/inventory/categories", permanent: true },
@@ -66,6 +76,7 @@ const nextConfig: NextConfig = {
       { source: "/templates", destination: "/products/templates", permanent: true },
       { source: "/templates/new", destination: "/products/templates/new", permanent: true },
       { source: "/templates/:id/edit", destination: "/products/templates/:id/edit", permanent: true },
+      { source: "/jobs", destination: "/settings/jobs", permanent: true },
     ];
   },
   async headers() {

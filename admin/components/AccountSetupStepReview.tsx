@@ -29,10 +29,7 @@ const PRODUCT_EDITOR_MODES = [
 
 export default function AccountSetupStepReview({ form }: { form: AccountSetupFormState }) {
   const operatingModelLabel =
-    [...form.operatingModel]
-      .map((v) => OPERATING_MODELS.find((o) => o.value === v)?.label)
-      .filter(Boolean)
-      .join(", ") || "—";
+    OPERATING_MODELS.find((o) => o.value === form.operatingModel)?.label ?? "—";
 
   return (
     <div className="space-y-4">

@@ -61,9 +61,8 @@ export default function StockMovementsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/inventory" />
+      <BranchBar left={<BackButton href="/inventory" />} />
       <InventoryTabs />
-      <BranchBar />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Movement History</h1>
         <select

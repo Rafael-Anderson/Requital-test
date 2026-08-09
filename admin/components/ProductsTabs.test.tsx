@@ -20,7 +20,7 @@ describe("ProductsTabs", () => {
   it("highlights the tab matching the current path", () => {
     pathname = "/products/discounts";
     render(<ProductsTabs />);
-    expect(screen.getByText("Discounts").closest("a")).toHaveClass("border-accent");
-    expect(screen.getByText("Products").closest("a")).not.toHaveClass("border-accent");
+    expect(screen.getByText("Discounts").closest("a")).toHaveClass("text-accent-text");
+    expect(screen.getByText("Products").closest("a")).not.toHaveClass("text-accent-text");
   });
 });

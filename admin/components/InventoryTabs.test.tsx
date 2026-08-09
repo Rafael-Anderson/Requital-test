@@ -20,7 +20,7 @@ describe("InventoryTabs", () => {
   it("highlights the tab matching the current path", () => {
     pathname = "/inventory/movements";
     render(<InventoryTabs />);
-    expect(screen.getByText("Movement History").closest("a")).toHaveClass("border-accent");
-    expect(screen.getByText("Ingredients").closest("a")).not.toHaveClass("border-accent");
+    expect(screen.getByText("Movement History").closest("a")).toHaveClass("text-accent-text");
+    expect(screen.getByText("Ingredients").closest("a")).not.toHaveClass("text-accent-text");
   });
 });
