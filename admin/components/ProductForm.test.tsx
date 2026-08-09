@@ -48,6 +48,7 @@ const existingProduct: Product = {
   status: "Available",
   trackInventory: false,
   continueSellingOutOfStock: false,
+  usesIngredients: false,
   chargeTax: true,
   isCheckoutAddon: false,
   showVariants: false,
@@ -147,6 +148,60 @@ describe("ProductForm wizard", () => {
     expect(screen.getByText("Add attributes")).toBeInTheDocument();
     expect(screen.getByText("Add FAQs")).toBeInTheDocument();
     expect(screen.queryByText("Options")).not.toBeInTheDocument();
+  });
+
+  it("Recipe off (default): Step 2 shows the Inventory card and an 'Add recipe' link, not the ingredient editor", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await user.type(screen.getByLabelText("Title"), "New Product");
+    await user.click(screen.getByText("Next"));
+    await waitFor(() => expect(screen.getByText("Inventory")).toBeInTheDocument());
+    expect(screen.getByText("Add recipe")).toBeInTheDocument();
+    expect(screen.queryByText("No ingredients yet — add some in Inventory > Ingredients first.")).not.toBeInTheDocument();
+  });
+
+  it("enabling Recipe hides the Inventory card and shows the ingredient editor", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await user.type(screen.getByLabelText("Title"), "New Product");
+    await user.click(screen.getByText("Next"));
+    await waitFor(() => expect(screen.getByText("Add recipe")).toBeInTheDocument());
+
+    await user.click(screen.getByText("Add recipe"));
+
+    expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
+    expect(screen.getByText("No ingredients yet — add some in Inventory > Ingredients first.")).toBeInTheDocument();
+    expect(screen.getByText("Remove recipe")).toBeInTheDocument();
+  });
+
+  it("editing a usesIngredients:true product opens Step 2 with Recipe expanded and Inventory hidden", async () => {
+    const recipeProduct: Product = { ...existingProduct, usesIngredients: true };
+    const user = userEvent.setup();
+    renderForm(recipeProduct);
+    await user.click(screen.getByText("Pricing & Inventory"));
+    await waitFor(() => expect(screen.getByText("Remove recipe")).toBeInTheDocument());
+    expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
+  });
+
+  it("disabling Recipe with rows present asks for confirmation before switching back to Inventory", async () => {
+    const recipeProduct: Product = {
+      ...existingProduct,
+      usesIngredients: true,
+      ingredients: [{ id: 1, ingredientId: 5, ingredientName: "Rose", ingredientUnit: "stem", quantityPerUnit: 2 }],
+    };
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    renderForm(recipeProduct);
+    await user.click(screen.getByText("Pricing & Inventory"));
+    await waitFor(() => expect(screen.getByText("Remove recipe")).toBeInTheDocument());
+
+    await user.click(screen.getByText("Remove recipe"));
+    expect(confirmSpy).toHaveBeenCalled();
+    // Cancelled the confirm — stays in Recipe mode, Inventory still hidden.
+    expect(screen.getByText("Remove recipe")).toBeInTheDocument();
+    expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
   });
 
   it("mode 'advanced': a new product renders all three sections expanded, with no stepper", async () => {

@@ -353,17 +353,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         expect.objectContaining({ ingredientId: rose, quantityPerUnit: 10 }),
       ]);
 
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          outletId,
-          adjustments: [
-            { productId: product.id, variantId: small.id, delta: 10 },
-            { productId: product.id, variantId: large.id, delta: 10 },
-          ],
-        })
-        .expect(200);
+      // Phase A: a usesIngredients:true product/variant has no settable
+      // direct stock of its own anymore (bulk-adjust rejects it, see
+      // resolveShadowStockTarget) — availability is purely ingredient-
+      // derived, already set via setIngredientStock above.
       await publishShop(adminToken);
 
       // Ordering one of each must consume 6 (Small, product default) + 10
@@ -398,11 +391,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       const created = await request(app.getHttpServer())
@@ -436,7 +424,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       );
     });
 
-    it('a product/variant with no recipe defined consumes nothing — fully backward compatible', async () => {
+    it('a product with no merchant-authored recipe consumes only its own shadow ingredient, never a real one', async () => {
       const { adminToken, collectionId, outletId, slug } =
         await setupShop('no-recipe');
       const product = await createProduct(adminToken, collectionId);
@@ -452,12 +440,23 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .send(storefrontOrderPayload(outletId, product.id))
         .expect(201);
 
+      // Phase A: every product resolves through consumeForOrderItems now,
+      // even one with no merchant-authored recipe — its own auto-provisioned
+      // shadow ingredient is what actually gets the CONSUMED row. This is
+      // the single stock-decrement mechanism replacing the old, separate
+      // (non-CONSUMED) product-stock write path — not a real Ingredient's
+      // stock, still never touched for a plain product like this one.
       const movements = await request(app.getHttpServer())
         .get('/products/stock/movements')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ type: 'CONSUMED' })
         .expect(200);
-      expect(body<MovementList>(movements).data).toHaveLength(0);
+      const rows = body<MovementList>(movements).data;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        productId: product.id,
+        delta: -1,
+      });
     });
 
     it('respects the shop toggle: off means no deduction even though a recipe is linked', async () => {
@@ -468,11 +467,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       await request(app.getHttpServer())
@@ -506,11 +500,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
 
       const created = await request(app.getHttpServer())
         .post('/orders')
@@ -555,11 +544,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       const created = await request(app.getHttpServer())
@@ -599,11 +583,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
           { ingredientId: box, quantityPerUnit: 1 },
         ],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 20 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       const res = await request(app.getHttpServer())
@@ -615,12 +594,12 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       expect(fetched.makeableQuantity).toBe(2);
       expect(fetched.limitedByIngredient).toBe('Rose');
 
-      // Doesn't gate anything — a 3rd unit would need 30 roses (only 25
-      // in stock), but checkout still only ever enforces the recipe at the
-      // point it's actually consumed (throwing there, see the race test
-      // below), never as a pre-emptive block on how many units can be
-      // ordered based on makeableQuantity. Ordering within product stock
-      // (20) but above what's "makeable" (2) still succeeds here.
+      // makeableQuantity/limitedByIngredient are a read-side display only —
+      // checkout itself enforces the recipe by actually attempting the
+      // decrement at consumption time (throwing there if insufficient, see
+      // the race test below), never as a separate pre-emptive block based
+      // on this displayed number. Ordering 1 (within what's makeable here)
+      // still succeeds normally.
       await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
         .send(
@@ -641,11 +620,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 10 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] }) // plenty of product stock — the ingredient is the real constraint
-        .expect(200);
       await publishShop(adminToken);
 
       const attempt = () =>

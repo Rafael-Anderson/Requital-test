@@ -198,9 +198,18 @@ export class CreateProductDto {
   @IsBoolean()
   trackInventory?: boolean;
 
-  // Stock counts live per-outlet now (see outletstock), not on the catalog
-  // entry — set them via PATCH /products/stock/bulk-adjust after creating
-  // the product.
+  // Stock counts live per-outlet now (see outletingredientstock), not on
+  // the catalog entry — set them via PATCH /products/stock/bulk-adjust
+  // after creating the product.
+
+  // false (default, omitted): this product auto-mirrors as its own shadow
+  // Ingredient — zero behavior change from before this feature, stock set
+  // via the bulk-adjust endpoint above. true: stock/availability is
+  // computed from `ingredients` below against real Ingredient stock
+  // instead — requires at least one row (see ProductsService.create).
+  @IsOptional()
+  @IsBoolean()
+  usesIngredients?: boolean;
 
   // Gift Cards — see schema.prisma's comment on product.isGiftCard. `price`
   // above still has to be set (a positive placeholder) to satisfy the

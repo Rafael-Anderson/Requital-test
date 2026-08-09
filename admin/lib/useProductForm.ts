@@ -40,6 +40,7 @@ export const FIELD_STEP: Record<string, number> = {
   image: 0,
   sku: 1,
   price: 1,
+  recipe: 1,
   collections: 2,
 };
 
@@ -72,6 +73,7 @@ export function useProductForm(initialProduct: Product | undefined) {
   const [continueSellingOutOfStock, setContinueSellingOutOfStock] = useState(
     product?.continueSellingOutOfStock ?? false,
   );
+  const [usesIngredients, setUsesIngredients] = useState(product?.usesIngredients ?? false);
   const [sku, setSku] = useState(product?.sku ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
 
@@ -200,6 +202,9 @@ export function useProductForm(initialProduct: Product | undefined) {
     if (!price) nextFieldErrors.price = "Price is required";
     if (images.length === 0) nextFieldErrors.image = "At least one image is required";
     if (collectionIds.size === 0) nextFieldErrors.collections = "Select at least one collection";
+    if (usesIngredients && recipeRows.filter((r) => Number(r.quantityPerUnit) > 0).length === 0) {
+      nextFieldErrors.recipe = "Add at least one ingredient, or turn Recipe off";
+    }
     return nextFieldErrors;
   }
 
@@ -238,6 +243,7 @@ export function useProductForm(initialProduct: Product | undefined) {
           .map((f, i) => ({ question: f.question.trim(), answer: f.answer.trim(), order: i })),
         trackInventory,
         continueSellingOutOfStock,
+        usesIngredients,
         physicalProduct,
         weight: physicalProduct && weight ? Number(weight) : undefined,
         weightUnit,
@@ -266,7 +272,7 @@ export function useProductForm(initialProduct: Product | undefined) {
         toast(`"${name}" created`);
       }
 
-      if (trackInventory) {
+      if (trackInventory && !usesIngredients) {
         await commitStockChanges(stockRows, stockValues, { productId: saved.id });
       }
 
@@ -309,6 +315,7 @@ export function useProductForm(initialProduct: Product | undefined) {
     isCheckoutAddon, setIsCheckoutAddon,
     trackInventory, setTrackInventory,
     continueSellingOutOfStock, setContinueSellingOutOfStock,
+    usesIngredients, setUsesIngredients,
     sku, setSku,
     barcode, setBarcode,
     physicalProduct, setPhysicalProduct,

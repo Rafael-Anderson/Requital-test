@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -560,21 +559,36 @@ export class PublicService {
           optionValue1: true,
           optionValue2: true,
           optionValue3: true,
+          // Only ever a shadow ingredient's stock (see
+          // ingredient.shadowVariantId's schema comment) — null for a
+          // usesIngredients:true variant, which never surfaces its real
+          // recipe/ingredient stock to a shopper. Selecting only
+          // stockQuantity keeps the ingredient's own id/name out of this
+          // response entirely, preserving the "no ingredient identity ever
+          // leaks to /public" invariant.
           ...(outletId !== undefined && {
-            outletvariantstock: {
-              where: { outletId },
-              select: { stockQuantity: true },
+            shadowIngredient: {
+              select: {
+                outletingredientstock: {
+                  where: { outletId },
+                  select: { stockQuantity: true },
+                },
+              },
             },
           }),
         },
       },
       ...(outletId !== undefined && {
-        outletstock: {
-          where: { outletId },
-          select: { stockQuantity: true },
+        shadowIngredient: {
+          select: {
+            outletingredientstock: {
+              where: { outletId },
+              select: { stockQuantity: true },
+            },
+          },
         },
       }),
-    };
+    } satisfies Prisma.productInclude;
   }
 
   async listOutlets(shopSlug: string) {
@@ -909,92 +923,25 @@ export class PublicService {
     );
 
     const order = await this.prisma.$transaction(async (tx) => {
-      for (const { product, variant, quantity } of resolvedItems) {
-        // A gift card is never physical inventory — trackInventory should
-        // already be false on a gift-card product, but this is a defensive
-        // second guard, not the only one, since nothing about "stock" is
-        // meaningful for a digital gift card regardless of how that flag
-        // happens to be set.
-        if (!product.trackInventory || product.isGiftCard) continue;
-        // Reserved at the moment the storefront customer checks out, not
-        // deferred to merchant confirmation like the admin-entered order
-        // flow — a real customer transaction needs the stock guarantee
-        // immediately. The CAS-style `stockQuantity >= quantity` guard in
-        // the WHERE clause means two concurrent checkouts for the last unit
-        // can't both succeed: only one UPDATE matches, the other gets
-        // count 0. See orders.service.ts's channel === 'storefront' checks
-        // for why the confirm-time decrement is skipped for these orders,
-        // and why cancelling a still-pending one restocks immediately.
-        // A variant-bearing product decrements its own outletvariantstock
-        // row instead of the parent product's outletstock (which stays
-        // untouched/unused once a product has variants — see schema.prisma).
-        // continueSellingOutOfStock skips the floor guard entirely (stock
-        // may go negative) rather than blocking the sale.
-        if (product.continueSellingOutOfStock) {
-          if (variant) {
-            await tx.outletvariantstock.upsert({
-              where: {
-                outletId_variantId: {
-                  outletId: outlet.id,
-                  variantId: variant.id,
-                },
-              },
-              update: { stockQuantity: { decrement: quantity } },
-              create: {
-                outletId: outlet.id,
-                variantId: variant.id,
-                stockQuantity: -quantity,
-              },
-            });
-          } else {
-            await tx.outletstock.upsert({
-              where: {
-                outletId_productId: {
-                  outletId: outlet.id,
-                  productId: product.id,
-                },
-              },
-              update: { stockQuantity: { decrement: quantity } },
-              create: {
-                outletId: outlet.id,
-                productId: product.id,
-                stockQuantity: -quantity,
-              },
-            });
-          }
-          continue;
-        }
-        const result = variant
-          ? await tx.outletvariantstock.updateMany({
-              where: {
-                outletId: outlet.id,
-                variantId: variant.id,
-                stockQuantity: { gte: quantity },
-              },
-              data: { stockQuantity: { decrement: quantity } },
-            })
-          : await tx.outletstock.updateMany({
-              where: {
-                outletId: outlet.id,
-                productId: product.id,
-                stockQuantity: { gte: quantity },
-              },
-              data: { stockQuantity: { decrement: quantity } },
-            });
-        if (result.count === 0) {
-          throw new ConflictException(`${product.name} is out of stock`);
-        }
-      }
-
-      // Bill of Materials — same immediate-reservation trigger as the stock
-      // loop just above, not a second/deferred point: a real customer
-      // transaction needs both the product AND ingredient stock guarantee
-      // right now. throwOnInsufficientStock: true for the same reason the
-      // product-stock CAS above throws — an insufficient ingredient blocks
-      // this checkout outright rather than silently overselling it.
-      // actorUserId: null — no authenticated staff user exists on this
-      // anonymous storefront path (see stockmovement.actorUserId's schema
-      // comment).
+      // Reserved at the moment the storefront customer checks out, not
+      // deferred to merchant confirmation like the admin-entered order flow
+      // — a real customer transaction needs the stock guarantee
+      // immediately. Every product/variant resolves through
+      // consumeForOrderItems now (Phase A: shadow or real recipe) — the
+      // CAS-style `stockQuantity >= quantity` guard means two concurrent
+      // checkouts for the last unit can't both succeed: only one UPDATE
+      // matches, the other gets count 0 and this throws. See
+      // orders.service.ts's channel === 'storefront' checks for why the
+      // confirm-time decrement is skipped for these orders, and why
+      // cancelling a still-pending one restocks immediately.
+      // continueSellingOutOfStock/an untracked product skip the floor guard
+      // entirely (stock may go negative) via the item's own allowNegative
+      // flag rather than blocking the sale — see resolveOrderItems. A gift
+      // card is never physical inventory (isGiftCard filtered out below);
+      // trackInventory should already be false on one regardless, but this
+      // is a defensive second guard, not the only one. actorUserId: null —
+      // no authenticated staff user exists on this anonymous storefront
+      // path (see stockmovement.actorUserId's schema comment).
       const ingredientsConsumed =
         await this.productsService.consumeForOrderItems(
           tx,
@@ -1002,10 +949,11 @@ export class PublicService {
           outlet.id,
           resolvedItems
             .filter(({ product }) => !product.isGiftCard)
-            .map(({ product, variant, quantity }) => ({
+            .map(({ product, variant, quantity, allowNegative }) => ({
               productId: product.id,
               variantId: variant?.id ?? null,
               quantity,
+              allowNegative,
             })),
           -1,
           { throwOnInsufficientStock: true, actorUserId: null },
@@ -1410,7 +1358,7 @@ export class PublicService {
       productfaq,
       productoption,
       productvariant,
-      outletstock,
+      shadowIngredient,
       metaTitle,
       metaDescription,
       description,
@@ -1465,13 +1413,17 @@ export class PublicService {
           v.optionValue2?.value,
           v.optionValue3?.value,
         ]),
-        stockQuantity: v.outletvariantstock?.[0]?.stockQuantity ?? null,
+        stockQuantity:
+          v.shadowIngredient?.outletingredientstock?.[0]?.stockQuantity ?? null,
       })),
       // Same convention as the admin ProductsService: null when no outlet
-      // was resolved for this request, or when trackInventory is off and no
-      // stock row was ever created — distinct from 0, which means the
-      // outlet genuinely has none in stock right now.
-      stockQuantity: outletstock?.[0]?.stockQuantity ?? null,
+      // was resolved for this request, when trackInventory is off and no
+      // stock row was ever created, or when this product uses a recipe
+      // (shadowIngredient is null — a recipe's real availability never
+      // surfaces to the storefront, same as before Phase A) — distinct from
+      // 0, which means the outlet genuinely has none in stock right now.
+      stockQuantity:
+        shadowIngredient?.outletingredientstock?.[0]?.stockQuantity ?? null,
       // Fallback chain lives here (not client-side) so every consumer of
       // this API — the storefront's generateMetadata included — gets an
       // already-sensible title/description without duplicating the logic.
@@ -1501,7 +1453,16 @@ type PublicProductRow = Omit<
   }>,
   'productvariant'
 > & {
-  outletstock?: { stockQuantity: number }[];
+  // Prisma's payload-inference generics can't narrow a relation whose
+  // include shape is computed dynamically (publicProductInclude branches on
+  // outletId) rather than passed as an inline literal — same known
+  // limitation this codebase's own `(response as any).stockByOutlet` cast
+  // in products.service.ts already works around. Loosely typed here (only
+  // ever actually shaped `{ outletingredientstock: {...}[] } | null` at
+  // runtime, per publicProductInclude's own `select`) rather than fighting
+  // Prisma's generics for a field this method reads exactly once.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shadowIngredient?: any;
   productvariant: (Prisma.productvariantGetPayload<{
     include: {
       image: true;
@@ -1509,5 +1470,8 @@ type PublicProductRow = Omit<
       optionValue2: true;
       optionValue3: true;
     };
-  }> & { outletvariantstock?: { stockQuantity: number }[] })[];
+  }> & {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    shadowIngredient?: any;
+  })[];
 };

@@ -6,6 +6,7 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { getShadowStockQuantity } from './helpers/stock';
 
 // supertest types response bodies as `any` — these describe just enough of
 // each JSON shape this file reads to satisfy the strict no-unsafe-* lint
@@ -348,10 +349,8 @@ describe('Outlet & shop isolation (e2e)', () => {
     });
 
     it('PATCH /products/stock/bulk-adjust with outletId=A2 never touches A2 stock', async () => {
-      const before = await prisma.outletstock.findUniqueOrThrow({
-        where: {
-          outletId_productId: { outletId: outletA2Id, productId: productAId },
-        },
+      const before = await getShadowStockQuantity(prisma, outletA2Id, {
+        productId: productAId,
       });
 
       await request(app.getHttpServer())
@@ -363,14 +362,12 @@ describe('Outlet & shop isolation (e2e)', () => {
         })
         .expect(200);
 
-      const after = await prisma.outletstock.findUniqueOrThrow({
-        where: {
-          outletId_productId: { outletId: outletA2Id, productId: productAId },
-        },
+      const after = await getShadowStockQuantity(prisma, outletA2Id, {
+        productId: productAId,
       });
       // A2's stock must be exactly what it was before this request — the
       // +1000 delta must have landed on A1 (or been rejected), never A2.
-      expect(after.stockQuantity).toBe(before.stockQuantity);
+      expect(after).toBe(before);
     });
 
     it('GET /dashboard/summary?outletId=<A2> returns A1-scoped numbers, not A2 aggregated data', async () => {
@@ -540,12 +537,9 @@ describe('Outlet & shop isolation (e2e)', () => {
     });
 
     it("PATCH /products/stock/bulk-adjust with no outletId adjusts A1's stock", async () => {
-      const before = await prisma.outletstock.findUnique({
-        where: {
-          outletId_productId: { outletId: outletA1Id, productId: productAId },
-        },
+      const beforeQty = await getShadowStockQuantity(prisma, outletA1Id, {
+        productId: productAId,
       });
-      const beforeQty = before?.stockQuantity ?? 0;
 
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
@@ -553,12 +547,10 @@ describe('Outlet & shop isolation (e2e)', () => {
         .send({ adjustments: [{ productId: productAId, delta: 7 }] })
         .expect(200);
 
-      const after = await prisma.outletstock.findUniqueOrThrow({
-        where: {
-          outletId_productId: { outletId: outletA1Id, productId: productAId },
-        },
+      const after = await getShadowStockQuantity(prisma, outletA1Id, {
+        productId: productAId,
       });
-      expect(after.stockQuantity).toBe(beforeQty + 7);
+      expect(after).toBe(beforeQty + 7);
     });
 
     it('GET /dashboard/summary (no outletId) reflects A1, not an empty/wrong scope', async () => {

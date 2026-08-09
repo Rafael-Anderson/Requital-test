@@ -371,6 +371,19 @@ model product {
   // Whether checkout still accepts orders once trackInventory'd stock hits
   // zero — mirrors Shopify's "continue selling when out of stock".
   continueSellingOutOfStock Boolean             @default(false)
+  // false (default): this product IS its own atomic stock unit — a single
+  // shadow `ingredient` row (or one per variant, see productvariant.shadowIngredient)
+  // is auto-provisioned/kept in sync (name/image/trackInventory) by
+  // ProductsService and carries the real outletingredientstock row; the
+  // merchant never sees or manages that ingredient directly (excluded from
+  // GET /ingredients). true: stock/availability is computed from a
+  // merchant-authored productingredient recipe against real Ingredient
+  // stock instead — see ProductsService.computeIngredientAvailability. See
+  // ProductsService's shadow-provisioning methods for the toggle-flip
+  // semantics (false->true deletes the shadow and requires a non-empty
+  // recipe in the same request; true->false deletes the recipe and
+  // reprovisions a shadow).
+  usesIngredients           Boolean             @default(false)
   chargeTax                 Boolean             @default(true)
   // When true, offered in the storefront checkout's "would you like to add
   // any extras?" popup for carts that don't already contain it.
@@ -435,7 +448,7 @@ model product {
   productcollection         productcollection[]
   producttag                producttag[]
   orderitem                 orderitem[]
-  outletstock               outletstock[]
+  shadowIngredient          ingredient?         @relation("ProductShadowIngredient")
   biolink                   biolink[]
   discountproduct           discountproduct[]
   draftorderitem            draftorderitem[]
@@ -528,8 +541,8 @@ model productfaq {
 
 // A product with zero productoption rows behaves exactly as before this
 // feature existed (single implicit variant — product-level price/sku/
-// outletstock). Options only appear once a merchant explicitly adds one via
-// PUT /products/:id/options.
+// shadow-ingredient stock). Options only appear once a merchant explicitly
+// adds one via PUT /products/:id/options.
 model productoption {
   id                 Int                  @id @default(autoincrement())
   productId          Int
@@ -635,7 +648,7 @@ model productvariant {
   optionValue1       productoptionvalue?  @relation("VariantOptionValue1", fields: [optionValue1Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue1Id_fkey")
   optionValue2       productoptionvalue?  @relation("VariantOptionValue2", fields: [optionValue2Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue2Id_fkey")
   optionValue3       productoptionvalue?  @relation("VariantOptionValue3", fields: [optionValue3Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue3Id_fkey")
-  outletvariantstock outletvariantstock[]
+  shadowIngredient   ingredient?          @relation("VariantShadowIngredient")
   orderitem          orderitem[]
   draftorderitem     draftorderitem[]
   stockmovement      stockmovement[]
@@ -648,30 +661,6 @@ model productvariant {
   @@index([optionValue1Id], map: "ProductVariant_optionValue1Id_fkey")
   @@index([optionValue2Id], map: "ProductVariant_optionValue2Id_fkey")
   @@index([optionValue3Id], map: "ProductVariant_optionValue3Id_fkey")
-}
-
-// Per-outlet stock for a variant-bearing product — parallel to outletstock
-// (product-level), not an overload of it: a variant product's rows live
-// here keyed by variantId instead, so the two never collide and every
-// existing outletstock caller (bulk-adjust, order creation for non-variant
-// products) stays untouched.
-model outletvariantstock {
-  outletId          Int
-  variantId         Int
-  stockQuantity     Int            @default(0)
-  // Nullable, no default — null means "no alert configured" (off), not
-  // "alert at 0." Per-outlet, not per-product-total: a merchant needs to
-  // know a *specific branch* is running low, not that a sum across five
-  // branches dipped — see the Low Stock Alerts task's own reasoning. See
-  // ProductsService.setLowStockThreshold for the write path (there's no
-  // dedicated admin UI field elsewhere; this was previously a dead,
-  // always-0 column with no way to ever set it away from the default).
-  lowStockThreshold Int?
-  outlet            outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletVariantStock_outletId_fkey")
-  variant           productvariant @relation(fields: [variantId], references: [id], onDelete: Cascade, map: "OutletVariantStock_variantId_fkey")
-
-  @@id([outletId, variantId])
-  @@index([variantId], map: "OutletVariantStock_variantId_fkey")
 }
 
 model shop {
@@ -928,7 +917,7 @@ model bannerimage {
 
 // Link-in-bio page (Dukany parity) — a per-shop, publicly shareable list of
 // links at storefront /:shopSlug/bio. `type` picks which of
-// url/productId/categoryId/socialPlatform is meaningful; the other three are
+// url/productId/collectionId/templateId/socialPlatform is meaningful; the other four are
 // always null (enforced in BioLinksService, not a DB constraint — same
 // convention as every other discriminated-field model in this schema, e.g.
 // shoppaymentprovider's provider-keyed credentials). Plain String columns
@@ -1367,8 +1356,6 @@ model outlet {
   shop                  shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Outlet_shopId_fkey")
   order                 order[]
   user                  user[]
-  outletstock           outletstock[]
-  outletvariantstock    outletvariantstock[]
   outletingredientstock outletingredientstock[]
   deliveryzone          deliveryzone[]
   draftorder            draftorder[]
@@ -1402,28 +1389,27 @@ model deliveryzone {
 // Product.stockQuantity/lowStockThreshold columns — the catalog stays
 // shared, but how many units sit at each branch (and each branch's reorder
 // threshold) genuinely differs, so it lives on the join, not the product.
-model outletstock {
-  outletId          Int
-  productId         Int
-  stockQuantity     Int     @default(0)
-  // See outletvariantstock.lowStockThreshold's comment — nullable/off by
-  // default, per-outlet.
-  lowStockThreshold Int?
-  outlet            outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletStock_outletId_fkey")
-  product           product @relation(fields: [productId], references: [id], onDelete: Cascade, map: "OutletStock_productId_fkey")
-
-  @@id([outletId, productId])
-  @@index([productId], map: "OutletStock_productId_fkey")
-}
-
 // Raw material/component a merchant tracks stock of but never sells —
 // deliberately a separate model from `product`, not a `product.isIngredient`
 // flag: the field sets genuinely differ (no price/sku-for-sale/variants/SEO/
-// publishing here), and keeping it separate means an ingredient can never
-// leak onto the storefront through a Product query somewhere that wasn't
-// updated to filter it out — there's structurally no code path from
-// src/public to this table at all (see IngredientsModule; not imported by
-// PublicModule, no route under /public references it).
+// publishing here), and keeping it separate means a *merchant-authored*
+// ingredient can never leak onto the storefront through a Product query
+// somewhere that wasn't updated to filter it out — there's structurally no
+// code path from src/public to this table at all (see IngredientsModule;
+// not imported by PublicModule, no route under /public references it).
+//
+// shadowProductId/shadowVariantId (Phase A, ingredient-backed stock): at
+// most one of the two is ever set, marking a row as an internal,
+// auto-provisioned mirror of a `usesIngredients: false` product/variant
+// rather than a real ingredient a merchant created — ProductsService
+// creates/syncs/deletes these (name/image/trackInventory kept in sync,
+// stock lives on its outletingredientstock row exactly like a real
+// ingredient's does) and IngredientsService.findAll excludes them, so they
+// never appear on the Ingredients admin page. "Never both set" is an
+// app-level invariant, not a DB constraint, same convention as
+// stockmovement's own productId/ingredientId exclusivity below — the DB
+// only needs to (and does, via @unique) guarantee a product/variant never
+// has more than one shadow.
 model ingredient {
   id                    Int                     @id @default(autoincrement())
   shopId                Int
@@ -1454,9 +1440,13 @@ model ingredient {
   // justify a real table; a name/contact string is what merchants asked for.
   supplier              String?
   categoryId            Int?
+  shadowProductId       Int?                    @unique
+  shadowVariantId       Int?                    @unique
   createdAt             DateTime                @default(now())
   shop                  shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Ingredient_shopId_fkey")
   category              ingredientcategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "Ingredient_categoryId_fkey")
+  shadowProduct         product?                @relation("ProductShadowIngredient", fields: [shadowProductId], references: [id], onDelete: Cascade, map: "Ingredient_shadowProductId_fkey")
+  shadowVariant         productvariant?         @relation("VariantShadowIngredient", fields: [shadowVariantId], references: [id], onDelete: Cascade, map: "Ingredient_shadowVariantId_fkey")
   outletingredientstock outletingredientstock[]
   stockmovement         stockmovement[]
   productingredient     productingredient[]
@@ -1527,15 +1517,20 @@ model useroutletrole {
   @@index([branchRoleId], map: "UserOutletRole_branchRoleId_fkey")
 }
 
-// Per-outlet stock count for an ingredient — parallel to outletstock
-// (product-level), not an overload of it, same reasoning as
-// outletvariantstock existing alongside outletstock instead of reusing it.
+// Per-outlet stock count for an ingredient — the only stock-quantity table
+// in this schema (Phase A retired the earlier, separate outletstock/
+// outletvariantstock product/variant-level tables; a usesIngredients:false
+// product's stock lives here too, on its auto-provisioned shadow
+// ingredient's row — see ingredient.shadowProductId/shadowVariantId).
 model outletingredientstock {
   outletId          Int
   ingredientId      Int
   stockQuantity     Int        @default(0)
-  // See outletvariantstock.lowStockThreshold's comment — nullable/off by
-  // default, per-outlet.
+  // Nullable, no default — null means "no alert configured" (off), not
+  // "alert at 0." Per-outlet, not per-ingredient-total: a merchant needs to
+  // know a *specific branch* is running low, not that a sum across five
+  // branches dipped. See ProductsService.setLowStockThreshold for the write
+  // path.
   lowStockThreshold Int?
   outlet            outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletIngredientStock_outletId_fkey")
   ingredient        ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade, map: "OutletIngredientStock_ingredientId_fkey")
@@ -1611,15 +1606,21 @@ model productingredient {
 //     `toOutletId` null. Always `ingredientId` set, `productId`/`variantId`
 //     null — see ProductsService.consumeForOrderItems.
 // This table is an audit trail, not a source of truth for current stock —
-// outletstock/outletvariantstock remain that; this only ever gets inserted
-// into, alongside (same transaction as) the real stock mutation.
-// productId/ingredientId: exactly one set, never both/neither — enforced in
+// outletingredientstock remains that; this only ever gets inserted into,
+// alongside (same transaction as) the real stock mutation.
+// productId/ingredientId: exactly one set, never both/neither for a row
+// describing a REAL (merchant-created, non-shadow) ingredient — enforced in
 // ProductsService/IngredientsService (whichever creates the row), same
 // app-level-not-DB-constraint convention as every other discriminated-field
 // model in this schema (see biolink's type/url/productId/collectionId comment
-// above). Both nullable rather than a separate ingredientstockmovement
-// table — a merchant wants one Movement History timeline mixing products
-// and ingredients (same reasoning the original ADJUSTMENT/TRANSFER comment
+// above). EXCEPTION (Phase A): a write resolved through a
+// usesIngredients:false product/variant's shadow ingredient sets BOTH
+// productId(+variantId) AND ingredientId on the row — deliberately, so
+// listStockMovements' existing productId/variantId filter and product-name
+// response mapping keep working unmodified for shadow-backed products. Both
+// columns nullable rather than a separate ingredientstockmovement table — a
+// merchant wants one Movement History timeline mixing products and
+// ingredients (same reasoning the original ADJUSTMENT/TRANSFER comment
 // below gives for sharing one table instead of two).
 model stockmovement {
   id           Int             @id @default(autoincrement())

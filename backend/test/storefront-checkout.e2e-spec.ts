@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 import { StructuredLoggerService } from '../src/common/logging/structured-logger.service';
+import { getShadowStockQuantity } from './helpers/stock';
 
 interface AuthResponse {
   accessToken: string;
@@ -778,14 +779,19 @@ describe('Storefront public checkout (e2e)', () => {
           }),
         )
         .expect(409);
+      // Phase A: every product's stock decrement (shadow or real recipe)
+      // routes through ProductsService.consumeForOrderItems now, whose own
+      // insufficient-stock message names the item, not "out of stock"
+      // verbatim — same message an insufficient real-ingredient recipe
+      // already produced before this change.
       expect(body<ErrorBody>(res).message).toEqual(
-        expect.stringContaining('out of stock'),
+        expect.stringContaining('Not enough'),
       );
 
-      const stock = await prisma.outletstock.findUniqueOrThrow({
-        where: { outletId_productId: { outletId, productId: raceProductId } },
+      const stock = await getShadowStockQuantity(prisma, outletId, {
+        productId: raceProductId,
       });
-      expect(stock.stockQuantity).toBe(1); // untouched — the whole transaction rolled back
+      expect(stock).toBe(1); // untouched — the whole transaction rolled back
     });
 
     it('exactly one of two concurrent checkouts for the last unit succeeds; final stock is 0, never negative', async () => {
@@ -804,10 +810,10 @@ describe('Storefront public checkout (e2e)', () => {
       const statuses = [a.status, b.status].sort();
       expect(statuses).toEqual([201, 409]);
 
-      const stock = await prisma.outletstock.findUniqueOrThrow({
-        where: { outletId_productId: { outletId, productId: raceProductId } },
+      const stock = await getShadowStockQuantity(prisma, outletId, {
+        productId: raceProductId,
       });
-      expect(stock.stockQuantity).toBe(0);
+      expect(stock).toBe(0);
 
       const orderCount = await prisma.order.count({
         where: {

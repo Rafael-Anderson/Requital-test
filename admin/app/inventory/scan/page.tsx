@@ -42,12 +42,18 @@ interface ReviewRow {
   quantity: string;
   targetType: "product" | "ingredient";
   matchedId: number | null; // null = create new
+  // Set only when matchedId resolves to a variant-carrying product — which
+  // specific variant this line's stock/price lands on.
+  variantId: number | null;
   suggestions: ScanMatchSuggestion[];
   outletId: number | "";
   skip: boolean;
   newPrice: string;
   newCollectionId: number | "";
   newUnit: string;
+  // OCR-parsed cost, editable, sent as the commit item's `price` regardless
+  // of matched vs. newly-created (see ScanCommitItem.price).
+  costPrice: string;
 }
 
 const SELECT_CLASS =
@@ -179,12 +185,14 @@ export default function ScanToStockPage() {
             quantity: String(item.quantity || 1),
             targetType: (topMatch?.type ?? "product") as "product" | "ingredient",
             matchedId: topMatch?.id ?? null,
+            variantId: null,
             suggestions: item.suggestions,
             outletId: res.defaultOutletId ?? "",
             skip: false,
             newPrice: item.price !== null ? String(item.price) : "",
             newCollectionId: "",
             newUnit: "",
+            costPrice: item.price !== null ? String(item.price) : "",
           };
         }),
       );
@@ -220,6 +228,16 @@ export default function ScanToStockPage() {
           toast(`"${r.name}" needs a unit to create as a new ingredient`, "error");
           return;
         }
+      } else if (r.targetType === "product") {
+        const matchedProduct = products.find((p) => p.id === r.matchedId);
+        if (matchedProduct?.usesIngredients) {
+          toast(`"${r.name}" uses a recipe — scan its ingredients individually instead`, "error");
+          return;
+        }
+        if (matchedProduct?.hasVariants && !r.variantId) {
+          toast(`"${r.name}" has variants — select which one this line is for`, "error");
+          return;
+        }
       }
     }
 
@@ -229,8 +247,9 @@ export default function ScanToStockPage() {
         targetType: r.targetType,
         outletId: Number(r.outletId),
         quantity: Number(r.quantity) || 1,
+        ...(r.costPrice && { price: Number(r.costPrice) }),
         ...(r.matchedId !== null
-          ? { matchedId: r.matchedId }
+          ? { matchedId: r.matchedId, ...(r.variantId !== null && { variantId: r.variantId }) }
           : {
               createNew:
                 r.targetType === "product"
@@ -395,9 +414,17 @@ export default function ScanToStockPage() {
                             onChange={(e) => {
                               const [kind, rest] = e.target.value.split(":");
                               if (kind === "new") {
-                                updateRow(row.key, { matchedId: null, targetType: rest as "product" | "ingredient" });
+                                updateRow(row.key, {
+                                  matchedId: null,
+                                  variantId: null,
+                                  targetType: rest as "product" | "ingredient",
+                                });
                               } else {
-                                updateRow(row.key, { matchedId: Number(rest), targetType: kind as "product" | "ingredient" });
+                                updateRow(row.key, {
+                                  matchedId: Number(rest),
+                                  variantId: null,
+                                  targetType: kind as "product" | "ingredient",
+                                });
                               }
                             }}
                             className={SELECT_CLASS}
@@ -428,6 +455,51 @@ export default function ScanToStockPage() {
                               ))}
                             </optgroup>
                           </select>
+                          {row.matchedId !== null &&
+                            row.targetType === "product" &&
+                            products.find((p) => p.id === row.matchedId)?.usesIngredients && (
+                              <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                                This product uses a recipe — scan its ingredients individually instead.
+                              </p>
+                            )}
+                        </div>
+
+                        {row.matchedId !== null &&
+                          row.targetType === "product" &&
+                          (() => {
+                            const matchedProduct = products.find((p) => p.id === row.matchedId);
+                            if (!matchedProduct?.hasVariants) return null;
+                            return (
+                              <div>
+                                <label className="text-xs text-zinc-500 block mb-1">Variant</label>
+                                <select
+                                  value={row.variantId ?? ""}
+                                  onChange={(e) =>
+                                    updateRow(row.key, { variantId: e.target.value ? Number(e.target.value) : null })
+                                  }
+                                  className={SELECT_CLASS}
+                                >
+                                  <option value="">— Pick —</option>
+                                  {matchedProduct.variants.map((v) => (
+                                    <option key={v.id} value={v.id}>
+                                      {v.label ?? `Variant ${v.id}`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          })()}
+
+                        <div>
+                          <label className="text-xs text-zinc-500 block mb-1">Cost price (AED)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={row.costPrice}
+                            onChange={(e) => updateRow(row.key, { costPrice: e.target.value })}
+                            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                          />
                         </div>
 
                         <div>

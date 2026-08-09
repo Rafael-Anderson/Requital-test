@@ -6,6 +6,7 @@ import Combobox from "@/components/ui/Combobox";
 import Toggle from "@/components/ui/Toggle";
 import OutletQuantityTable from "@/components/ui/OutletQuantityTable";
 import IngredientRecipeEditor from "@/components/IngredientRecipeEditor";
+import ProductFeatureSection from "@/components/ProductFeatureSection";
 import { WEIGHT_UNITS, type WeightUnit } from "@/lib/types";
 import type { ProductFormState } from "@/lib/useProductForm";
 
@@ -50,65 +51,74 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
             </div>
           </Card>
 
-          <Card className="space-y-4">
-            <h3 className="text-sm font-semibold">Inventory</h3>
-            <div>
-              <div className="flex items-center gap-2">
-                <Toggle checked={form.trackInventory} onChange={form.setTrackInventory} />
-                <span className="text-sm">Track inventory</span>
+          {!form.usesIngredients && (
+            <Card className="space-y-4">
+              <h3 className="text-sm font-semibold">Inventory</h3>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Toggle checked={form.trackInventory} onChange={form.setTrackInventory} />
+                  <span className="text-sm">Track inventory</span>
+                </div>
+                {form.trackInventory && (
+                  <label className="flex items-center gap-2 mt-2">
+                    <Toggle checked={form.continueSellingOutOfStock} onChange={form.setContinueSellingOutOfStock} />
+                    <span className="text-sm">Continue selling when out of stock</span>
+                  </label>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="SKU" value={form.sku} onChange={(e) => form.setSku(e.target.value)} error={form.fieldErrors.sku} />
+                <Input label="Barcode" value={form.barcode} onChange={(e) => form.setBarcode(e.target.value)} />
               </div>
               {form.trackInventory && (
-                <label className="flex items-center gap-2 mt-2">
-                  <Toggle checked={form.continueSellingOutOfStock} onChange={form.setContinueSellingOutOfStock} />
-                  <span className="text-sm">Continue selling when out of stock</span>
-                </label>
+                <div>
+                  <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+                    Quantity by branch
+                  </label>
+                  <OutletQuantityTable
+                    rows={form.stockRows}
+                    values={form.stockValues}
+                    onChangeValue={(outletId, value) => form.setStockValues((v) => ({ ...v, [outletId]: value }))}
+                  />
+                </div>
               )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input label="SKU" value={form.sku} onChange={(e) => form.setSku(e.target.value)} error={form.fieldErrors.sku} />
-              <Input label="Barcode" value={form.barcode} onChange={(e) => form.setBarcode(e.target.value)} />
-            </div>
-            {form.trackInventory && (
-              <div>
-                <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
-                  Quantity by branch
-                </label>
-                <OutletQuantityTable
-                  rows={form.stockRows}
-                  values={form.stockValues}
-                  onChangeValue={(outletId, value) => form.setStockValues((v) => ({ ...v, [outletId]: value }))}
-                />
-                {form.product &&
-                  form.product.makeableQuantity !== null &&
-                  form.product.stockQuantity !== null &&
-                  form.product.makeableQuantity < form.product.stockQuantity && (
-                    <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                      Only {form.product.makeableQuantity} can actually be made right now — limited by{" "}
-                      {form.product.limitedByIngredient}. See the Recipe section below.
-                    </p>
-                  )}
-              </div>
-            )}
-          </Card>
+            </Card>
+          )}
         </>
       )}
 
-      <Card className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">Recipe</h3>
-          <p className="text-xs text-zinc-400 mt-1">
-            Ingredients consumed to make one unit of this product. Used as the default for every variant that
-            doesn&apos;t have its own override (set per-variant in the Variants section on the next step). Leave
-            empty if this product doesn&apos;t consume tracked ingredients.
-          </p>
-        </div>
+      <ProductFeatureSection
+        title="Recipe"
+        addLabel="Add recipe"
+        enabled={form.usesIngredients}
+        defaultOpen
+        onEnable={() => form.setUsesIngredients(true)}
+        onDisable={() => {
+          if (
+            form.recipeRows.length > 0 &&
+            !window.confirm(
+              "Switching off Recipe deletes this product's ingredient list and starts tracking its own stock instead. Continue?",
+            )
+          ) {
+            return;
+          }
+          form.setUsesIngredients(false);
+        }}
+      >
+        <p className="text-xs text-zinc-400">
+          Ingredients consumed to make one unit of this product. Used as the default for every variant that
+          doesn&apos;t have its own override (set per-variant in the Variants section on the next step).
+        </p>
         <IngredientRecipeEditor
           ingredients={form.ingredientsList}
           collections={form.ingredientCategories}
           rows={form.recipeRows}
           onChange={form.setRecipeRows}
         />
-      </Card>
+        {form.fieldErrors.recipe && (
+          <p className="text-xs text-red-600 dark:text-red-400">{form.fieldErrors.recipe}</p>
+        )}
+      </ProductFeatureSection>
 
       <Card className="space-y-4">
         <div className="flex items-center justify-between">

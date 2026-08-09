@@ -10,6 +10,7 @@ import { findBestMatches, type MatchCandidate } from './fuzzy-match';
 import { CommitScanDto } from './dto/commit-scan.dto';
 import { StorageService } from '../storage/storage.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
+import { ProductsService } from '../products/products.service';
 
 @Injectable()
 export class ScanService {
@@ -19,6 +20,7 @@ export class ScanService {
     private readonly scanSettingsService: ScanSettingsService,
     private readonly storageService: StorageService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
+    private readonly productsService: ProductsService,
   ) {}
 
   // Read-only — OCR + heuristic parsing + fuzzy-match suggestions against
@@ -114,7 +116,11 @@ export class ScanService {
       matchedProductIds.length
         ? this.prisma.product.findMany({
             where: { id: { in: matchedProductIds }, shopId: ctx.shopId },
-            select: { id: true },
+            select: {
+              id: true,
+              usesIngredients: true,
+              productoption: { select: { id: true } },
+            },
           })
         : [],
       matchedIngredientIds.length
@@ -125,7 +131,33 @@ export class ScanService {
         : [],
     ]);
     const ownedProductIds = new Set(ownedProducts.map((p) => p.id));
+    // `as const` on the tuple, not just relying on inference — this
+    // ternary+Promise.all pattern makes TS lose ownedProducts' element type
+    // (collapses to `any`, see CLAUDE.md's own note on this exact file),
+    // which otherwise breaks Map's constructor overload resolution
+    // entirely (a bare `.map((p) => [p.id, p])` infers `any[]`, not a
+    // 2-tuple). The `.usesIngredients`/`.productoption` reads below are
+    // still effectively unchecked by the type checker as a result — a
+    // pre-existing, documented gap, not introduced by this cast.
+    const ownedProductsById = new Map(
+      ownedProducts.map((p) => [p.id, p] as const),
+    );
     const ownedIngredientIds = new Set(ownedIngredients.map((i) => i.id));
+
+    // Every variantId the client sent alongside a matched product — checked
+    // in bulk (not per-item findFirst) that each actually belongs to the
+    // product it was submitted against.
+    const variantChecks = dto.items.filter(
+      (i) => i.targetType === 'product' && i.matchedId && i.variantId,
+    );
+    const variantIdsToCheck = variantChecks.map((i) => i.variantId!);
+    const ownedVariants = variantIdsToCheck.length
+      ? await this.prisma.productvariant.findMany({
+          where: { id: { in: variantIdsToCheck } },
+          select: { id: true, productId: true },
+        })
+      : [];
+    const ownedVariantsById = new Map(ownedVariants.map((v) => [v.id, v]));
 
     const newCollectionIds = [
       ...new Set(
@@ -159,6 +191,36 @@ export class ScanService {
             `matchedId ${item.matchedId} is invalid for this shop`,
           );
         }
+        if (item.targetType === 'product') {
+          const product = ownedProductsById.get(item.matchedId)!;
+          if (product.usesIngredients) {
+            throw new BadRequestException(
+              'This product uses a recipe — scan its ingredients individually instead',
+            );
+          }
+          if (product.productoption.length > 0 && !item.variantId) {
+            throw new BadRequestException(
+              `Product ${item.matchedId} has variants — select which one this line is for`,
+            );
+          }
+          if (product.productoption.length === 0 && item.variantId) {
+            throw new BadRequestException(
+              `Product ${item.matchedId} does not have variants`,
+            );
+          }
+          if (item.variantId) {
+            const variant = ownedVariantsById.get(item.variantId);
+            if (!variant || variant.productId !== item.matchedId) {
+              throw new BadRequestException(
+                `variantId ${item.variantId} is invalid for product ${item.matchedId}`,
+              );
+            }
+          }
+        } else if (item.variantId) {
+          throw new BadRequestException(
+            'variantId is only valid for targetType product',
+          );
+        }
       } else if (!item.createNew) {
         throw new BadRequestException(
           'Each item needs either matchedId or createNew',
@@ -181,7 +243,7 @@ export class ScanService {
     let created = 0;
     let updated = 0;
     const usedSlugsThisBatch = new Set<string>();
-    const restockNotifyTargets = new Set<number>();
+    const restockNotifyTargets = new Set<string>();
 
     const batch = await this.prisma.$transaction(async (tx) => {
       const scanBatch = await tx.scanbatch.create({
@@ -235,8 +297,28 @@ export class ScanService {
                 create: [{ collectionId: item.createNew!.collectionId! }],
               },
             },
-            select: { id: true },
+            select: {
+              id: true,
+              name: true,
+              thumbnail: true,
+              trackInventory: true,
+              costPrice: true,
+            },
           });
+          // A scan-created product is always simple/usesIngredients:false
+          // (no recipe UI exists on this flow) — needs its own shadow
+          // ingredient just like one created via the product form.
+          await this.productsService.provisionShadowForProduct(
+            tx,
+            ctx,
+            newProduct.id,
+            {
+              name: newProduct.name,
+              thumbnail: newProduct.thumbnail,
+              trackInventory: newProduct.trackInventory,
+              costPrice: newProduct.costPrice,
+            },
+          );
           targetId = newProduct.id;
           created += 1;
         } else {
@@ -255,56 +337,78 @@ export class ScanService {
 
         // RECEIVED is always an add, not the CSV import's absolute-set —
         // scanning an invoice means "these units arrived", never "this is
-        // now the total count".
-        if (item.targetType === 'product') {
-          const before = await tx.outletstock.findUnique({
-            where: {
-              outletId_productId: {
-                outletId: item.outletId,
-                productId: targetId,
-              },
+        // now the total count". A product target resolves through its
+        // shadow ingredient (or the matched variant's own shadow) — same
+        // resolver every other stock-mutation endpoint uses; an ingredient
+        // target is already the real ingredientId.
+        const resolved =
+          item.targetType === 'product'
+            ? await this.productsService.resolveShadowStockTarget(
+                ctx,
+                { productId: targetId, variantId: item.variantId },
+                tx,
+              )
+            : { ingredientId: targetId, productId: null, variantId: null };
+
+        const before = await tx.outletingredientstock.findUnique({
+          where: {
+            outletId_ingredientId: {
+              outletId: item.outletId,
+              ingredientId: resolved.ingredientId,
             },
-          });
-          const beforeQty = before?.stockQuantity ?? 0;
-          if (beforeQty <= 0 && beforeQty + item.quantity > 0) {
-            restockNotifyTargets.add(targetId);
+          },
+        });
+        const beforeQty = before?.stockQuantity ?? 0;
+        if (
+          item.targetType === 'product' &&
+          beforeQty <= 0 &&
+          beforeQty + item.quantity > 0
+        ) {
+          restockNotifyTargets.add(
+            `${targetId}:${item.variantId ?? ''}`,
+          );
+        }
+        await tx.outletingredientstock.upsert({
+          where: {
+            outletId_ingredientId: {
+              outletId: item.outletId,
+              ingredientId: resolved.ingredientId,
+            },
+          },
+          update: { stockQuantity: { increment: item.quantity } },
+          create: {
+            outletId: item.outletId,
+            ingredientId: resolved.ingredientId,
+            stockQuantity: item.quantity,
+          },
+        });
+
+        // Price capture — OCR-parsed and merchant-confirmed on the review
+        // screen (see CommitScanItemDto.price's own comment). Written to
+        // whichever field the merchant actually sees: product.costPrice for
+        // a product target (its own shadow ingredient's costPerUnit is
+        // never displayed anywhere), ingredient.costPerUnit for a real
+        // ingredient target.
+        if (item.price !== undefined) {
+          if (item.targetType === 'product') {
+            await tx.product.update({
+              where: { id: targetId },
+              data: { costPrice: item.price },
+            });
+          } else {
+            await tx.ingredient.update({
+              where: { id: targetId },
+              data: { costPerUnit: item.price },
+            });
           }
-          await tx.outletstock.upsert({
-            where: {
-              outletId_productId: {
-                outletId: item.outletId,
-                productId: targetId,
-              },
-            },
-            update: { stockQuantity: { increment: item.quantity } },
-            create: {
-              outletId: item.outletId,
-              productId: targetId,
-              stockQuantity: item.quantity,
-            },
-          });
-        } else {
-          await tx.outletingredientstock.upsert({
-            where: {
-              outletId_ingredientId: {
-                outletId: item.outletId,
-                ingredientId: targetId,
-              },
-            },
-            update: { stockQuantity: { increment: item.quantity } },
-            create: {
-              outletId: item.outletId,
-              ingredientId: targetId,
-              stockQuantity: item.quantity,
-            },
-          });
         }
 
         await tx.stockmovement.create({
           data: {
             shopId: ctx.shopId,
-            productId: item.targetType === 'product' ? targetId : null,
-            ingredientId: item.targetType === 'ingredient' ? targetId : null,
+            productId: resolved.productId,
+            variantId: resolved.variantId,
+            ingredientId: resolved.ingredientId,
             type: 'RECEIVED',
             reason: null,
             delta: item.quantity,
@@ -320,9 +424,14 @@ export class ScanService {
       return scanBatch;
     });
 
-    for (const productId of restockNotifyTargets) {
+    for (const key of restockNotifyTargets) {
+      const [productIdStr, variantIdStr] = key.split(':');
       this.notifySubscriptionsService
-        .triggerForProduct(ctx.shopId, productId)
+        .triggerForProduct(
+          ctx.shopId,
+          Number(productIdStr),
+          variantIdStr ? Number(variantIdStr) : undefined,
+        )
         .catch(() => {});
     }
 

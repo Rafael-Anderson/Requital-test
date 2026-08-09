@@ -55,6 +55,17 @@ export class CommitScanItemDto {
   @IsPositive()
   matchedId?: number;
 
+  // Required (and server-verified against matchedId's own product) whenever
+  // matchedId resolves to a variant-carrying product — scanned stock has to
+  // land on one specific variant's shadow ingredient, same as every other
+  // stock-mutation endpoint (see ProductsService.resolveShadowStockTarget).
+  // Meaningless (and rejected) for targetType 'ingredient'.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  variantId?: number;
+
   @Type(() => Number)
   @IsInt()
   @IsPositive()
@@ -64,6 +75,17 @@ export class CommitScanItemDto {
   @IsNumber()
   @IsPositive()
   quantity: number;
+
+  // OCR-parsed and merchant-confirmed/edited on the review screen — when
+  // present, persisted to the target's own cost field (product.costPrice or
+  // ingredient.costPerUnit) on commit. Previously parsed and shown but
+  // silently discarded; this is the only change needed to make scan price
+  // capture actually persist (see ScanService.commit).
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  price?: number;
 
   @IsOptional()
   @ValidateNested()
