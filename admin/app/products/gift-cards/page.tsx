@@ -131,7 +131,7 @@ export default function GiftCardsPage() {
                 <TD>
                   <span className={`text-xs rounded px-2 py-1 border capitalize ${STATUS_STYLE[c.status]}`}>{c.status}</span>
                 </TD>
-                <TD className="text-zinc-500">{c.purchasedByCustomer?.name ?? "—"}</TD>
+                <TD className="text-zinc-500">{c.purchasedByCustomer?.name ?? "-"}</TD>
                 <TD>
                   {(c.status === "active" || c.status === "disabled") && (
                     <button

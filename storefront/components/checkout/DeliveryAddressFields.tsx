@@ -39,10 +39,10 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
             }}
             className={FIELD_CLASS}
           >
-            <option value="">— Choose a saved address —</option>
+            <option value="">Choose a saved address</option>
             {savedAddresses.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.label ? `${a.label} — ` : ""}
+                {a.label ? `${a.label}: ` : ""}
                 {a.address}
               </option>
             ))}

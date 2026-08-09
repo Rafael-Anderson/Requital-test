@@ -37,7 +37,7 @@ export default function OutletFormModal({ onClose }: { onClose: () => void }) {
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <p className="text-sm text-zinc-500 -mt-2 mb-4">
-          Give it a name — you&apos;ll set hours, address, delivery, and pickup next.
+          Give it a name. You&apos;ll set hours, address, delivery, and pickup next.
         </p>
 
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />

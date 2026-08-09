@@ -8,7 +8,7 @@ import Tabs from "@/components/ui/Tabs";
 const TABS = [
   { href: "/theme/edit/site-settings", label: "Site Settings", exact: false },
   { href: "/theme/edit/appearance-color", label: "Appearance Color", exact: false },
-  { href: "/theme/edit/advanced", label: "Advanced", exact: false },
+  { href: "/theme/edit/advanced", label: "Layout", exact: false },
 ];
 
 export default function ThemeTabs() {

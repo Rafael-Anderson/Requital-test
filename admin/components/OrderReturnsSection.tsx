@@ -101,7 +101,7 @@ export default function OrderReturnsSection({
   }
 
   return (
-    <section className="border rounded-lg p-4 dark:border-white/10">
+    <section className="border border-black/10 rounded-lg p-4 dark:border-white/10">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-medium">Returns / refunds</h3>
         {order.status === "delivered" && !initiating && returnableItems.length > 0 && (
@@ -116,7 +116,7 @@ export default function OrderReturnsSection({
       ) : returns.length > 0 ? (
         <div className="space-y-2 mb-3">
           {returns.map((r) => (
-            <div key={r.id} className="text-sm border rounded-md p-2.5 dark:border-white/10">
+            <div key={r.id} className="text-sm border border-black/10 rounded-md p-2.5 dark:border-white/10">
               <div className="flex justify-between">
                 <span className="font-medium">{r.refundAmount} AED refunded</span>
                 <span className="text-xs text-zinc-500">{new Date(r.createdAt).toLocaleDateString()}</span>
@@ -133,7 +133,7 @@ export default function OrderReturnsSection({
       )}
 
       {initiating && (
-        <div className="space-y-3 border-t dark:border-white/10 pt-3 mt-1">
+        <div className="space-y-3 border-t border-gray-200 dark:border-white/10 pt-3 mt-1">
           <div className="space-y-2">
             {returnableItems.map(({ item, remaining }) => {
               const checked = item.id in selected;
@@ -145,7 +145,7 @@ export default function OrderReturnsSection({
                   />
                   <div className="flex-1 min-w-0 text-sm">
                     {item.productName}
-                    {item.variantLabel ? ` — ${item.variantLabel}` : ""}
+                    {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                     <span className="text-zinc-400"> ({remaining} eligible)</span>
                   </div>
                   {checked && (

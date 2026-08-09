@@ -111,7 +111,7 @@ export default function Footer() {
     <div className="border-t border-white/10">
       <div className={`max-w-7xl mx-auto px-4 sm:px-6 ${padding.bottom} flex flex-col sm:flex-row items-center justify-between gap-3 text-xs opacity-70`}>
         <p>
-          © {new Date().getFullYear()} {copyrightName} — All Rights Reserved
+          © {new Date().getFullYear()} {copyrightName}. All Rights Reserved
         </p>
         {badges.length > 0 && (
           <div className="flex items-center gap-2">

@@ -109,12 +109,12 @@ export default function CustomerDetailPage() {
               />
               <StatCard
                 label="First Order"
-                value={customer.firstOrderDate ? new Date(customer.firstOrderDate).toLocaleDateString() : "—"}
+                value={customer.firstOrderDate ? new Date(customer.firstOrderDate).toLocaleDateString() : "-"}
                 icon={<Calendar className="size-4" />}
               />
               <StatCard
                 label="Last Order"
-                value={customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "—"}
+                value={customer.lastOrderDate ? new Date(customer.lastOrderDate).toLocaleDateString() : "-"}
                 icon={<CalendarClock className="size-4" />}
               />
             </div>
@@ -174,7 +174,7 @@ export default function CustomerDetailPage() {
                       <TD>
                         <StatusBadge status={order.status} />
                       </TD>
-                      <TD className="capitalize text-zinc-500">{order.orderType ?? "—"}</TD>
+                      <TD className="capitalize text-zinc-500">{order.orderType ?? "-"}</TD>
                       <TD>{order.total} AED</TD>
                       <TD className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleString()}</TD>
                     </TR>

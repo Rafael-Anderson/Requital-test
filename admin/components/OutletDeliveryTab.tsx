@@ -136,7 +136,7 @@ export default function OutletDeliveryTab({
               />
               {(outlet.latitude === null || outlet.longitude === null) && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  This outlet has no coordinates yet — set them on the Address tab before saving.
+                  This outlet has no coordinates yet. Set them on the Address tab before saving.
                 </p>
               )}
             </div>
@@ -156,7 +156,7 @@ export default function OutletDeliveryTab({
             <Card>
               <h3 className="text-sm font-semibold mb-1">Delivery Settings</h3>
               <p className="text-xs text-zinc-400 mb-4">
-                These apply shop-wide, across every outlet — not just this one.
+                These apply shop-wide, across every outlet, not just this one.
               </p>
 
               <div className="space-y-6">

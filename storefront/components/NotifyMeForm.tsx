@@ -31,7 +31,7 @@ export default function NotifyMeForm({
   }
 
   if (status === "subscribed") {
-    return <p className="mt-3 text-sm text-green-700 dark:text-green-500">You're on the list — we'll email you when it's back.</p>;
+    return <p className="mt-3 text-sm text-green-700 dark:text-green-500">You're on the list. We'll email you when it's back.</p>;
   }
   if (status === "duplicate") {
     return <p className="mt-3 text-sm text-zinc-500">You're already on the list.</p>;

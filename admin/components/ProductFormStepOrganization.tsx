@@ -83,7 +83,7 @@ export default function ProductFormStepOrganization({
               }
             }}
             placeholder="Add a tag and press Enter"
-            className="w-full border rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+            className="w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
           />
         </div>
       </Card>
@@ -125,7 +125,7 @@ export default function ProductFormStepOrganization({
         <details>
           <summary className="text-sm font-medium cursor-pointer select-none">
             Search engine listing{" "}
-            <span className="text-xs font-normal text-zinc-400">(optional — sensible defaults apply)</span>
+            <span className="text-xs font-normal text-zinc-400">(optional, sensible defaults apply)</span>
           </summary>
           <div className="mt-4 space-y-4">
             <Input

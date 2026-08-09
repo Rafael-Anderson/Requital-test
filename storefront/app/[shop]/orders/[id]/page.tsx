@@ -39,7 +39,7 @@ function OrderConfirmationContent() {
         <div className="mt-6 rounded-lg border border-accent/30 bg-accent/5 p-4 text-left">
           <p className="text-sm font-medium">Save your tracking code</p>
           <p className="text-xs text-zinc-500 mt-1">
-            Use this code to check your order status any time — no account needed. If you have an account, it&apos;ll
+            Use this code to check your order status any time. No account needed. If you have an account, it&apos;ll
             also show up in your order history.
           </p>
           <p className="mt-2 font-mono text-lg tracking-wide">{order.trackingToken}</p>

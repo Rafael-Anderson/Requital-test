@@ -165,7 +165,7 @@ describe("ProductForm wizard", () => {
     await user.click(screen.getByText("Next"));
     await waitFor(() => expect(screen.getByText("Inventory")).toBeInTheDocument());
     expect(screen.getByText("Add recipe")).toBeInTheDocument();
-    expect(screen.queryByText("No ingredients yet — add some in Inventory > Ingredients first.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No ingredients yet. Add some in Inventory > Ingredients first.")).not.toBeInTheDocument();
   });
 
   it("enabling Recipe hides the Inventory card and shows the ingredient editor", async () => {
@@ -178,7 +178,7 @@ describe("ProductForm wizard", () => {
     await user.click(screen.getByText("Add recipe"));
 
     expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
-    expect(screen.getByText("No ingredients yet — add some in Inventory > Ingredients first.")).toBeInTheDocument();
+    expect(screen.getByText("No ingredients yet. Add some in Inventory > Ingredients first.")).toBeInTheDocument();
     expect(screen.getByText("Remove recipe")).toBeInTheDocument();
   });
 
@@ -223,7 +223,7 @@ describe("ProductForm wizard", () => {
       expect(screen.getByText("Save the product first to add options like size or color.")).toBeInTheDocument(),
     );
     expect(
-      screen.getByText("Informational facts shown on the product page — not purchasable options like Size/Color."),
+      screen.getByText("Informational facts shown on the product page, not purchasable options like Size/Color."),
     ).toBeInTheDocument();
     expect(screen.getByText("Question/answer pairs shown on the product page.")).toBeInTheDocument();
     expect(screen.queryByText("Next")).not.toBeInTheDocument();

@@ -314,7 +314,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
           {type === "RULE_BASED" ? (
             <div className="space-y-3.5">
               <p className="text-xs text-zinc-500">
-                Products matching every condition set below are included automatically — leave a condition blank to
+                Products matching every condition set below are included automatically. Leave a condition blank to
                 ignore it.
               </p>
               <Combobox
@@ -373,7 +373,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                               type="number"
                               value={m.sortOrder}
                               onChange={(e) => updateCollectionMemberOrder(m.collectionId, Number(e.target.value) || 0)}
-                              className="w-16 border rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                              className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                             />
                           </TD>
                           <TD>
@@ -435,7 +435,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                               type="number"
                               value={m.sortOrder}
                               onChange={(e) => updateMemberOrder(m.productId, Number(e.target.value) || 0)}
-                              className="w-16 border rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                              className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                             />
                           </TD>
                           <TD>

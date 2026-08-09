@@ -178,7 +178,7 @@ export default function StoreConfigurationPage() {
               onChange={(e) => setDefaultDeliveryFee(e.target.value)}
             />
             <p className="text-xs text-zinc-400 mt-1.5">
-              Added to every order&apos;s total automatically — orders don&apos;t set their own fee yet.
+              Added to every order&apos;s total automatically. Orders don&apos;t set their own fee yet.
             </p>
           </div>
 
@@ -207,7 +207,7 @@ export default function StoreConfigurationPage() {
                     />
                   </Field>
                   <p className="text-xs text-zinc-400 mt-1.5">
-                    Saved as a preference only — no storefront exists yet to apply it to.
+                    Saved as a preference only. No storefront exists yet to apply it to.
                   </p>
                 </div>
 
@@ -284,7 +284,7 @@ export default function StoreConfigurationPage() {
                 />
               </div>
               <p className="text-xs text-zinc-400 mt-3">
-                UI toggles only — no WhatsApp integration or discount engine is connected yet.
+                UI toggles only. No WhatsApp integration or discount engine is connected yet.
               </p>
             </Card>
 
@@ -316,7 +316,7 @@ export default function StoreConfigurationPage() {
                 )}
               </div>
               <p className="text-xs text-zinc-400 mt-3">
-                &quot;Buy now&quot; skips the cart page — Add to Cart on a product takes the customer straight to
+                &quot;Buy now&quot; skips the cart page. Add to Cart on a product takes the customer straight to
                 checkout with just that item. &quot;Contact to order&quot; removes checkout entirely and shows a
                 WhatsApp button instead.
               </p>
@@ -336,7 +336,7 @@ export default function StoreConfigurationPage() {
             <Card>
               <h3 className="text-sm font-semibold mb-1">Coming Soon</h3>
               <p className="text-xs text-zinc-400 mb-3">
-                Saves a preference now, but the feature behind it doesn&apos;t exist yet — toggling has no effect
+                Saves a preference now, but the feature behind it doesn&apos;t exist yet. Toggling has no effect
                 until it&apos;s built.
               </p>
               <Checkbox

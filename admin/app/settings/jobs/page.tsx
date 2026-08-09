@@ -97,7 +97,7 @@ export default function FailedJobsPage() {
               <TR key={j.id}>
                 <TD className="font-medium">{j.type}</TD>
                 <TD className="text-xs text-zinc-500 max-w-md truncate" title={j.lastError ?? ""}>
-                  {j.lastError ?? "—"}
+                  {j.lastError ?? "-"}
                 </TD>
                 <TD className="text-zinc-500">
                   {j.attempts}/{j.maxAttempts}

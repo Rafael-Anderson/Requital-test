@@ -119,7 +119,7 @@ export default function ExternalDeliveryReportPage() {
                   description={
                     search
                       ? "Try a different search term."
-                      : "Log a courier handoff from an order's detail view — it'll show up here."
+                      : "Log a courier handoff from an order's detail view. It'll show up here."
                   }
                 />
               </td>
@@ -134,7 +134,7 @@ export default function ExternalDeliveryReportPage() {
                   <div className="text-xs text-zinc-500">{row.customerPhone}</div>
                 </TD>
                 <TD>{row.carrier}</TD>
-                <TD className="text-zinc-500">{row.vehicleType ?? "—"}</TD>
+                <TD className="text-zinc-500">{row.vehicleType ?? "-"}</TD>
                 <TD className="text-zinc-500">{row.destination}</TD>
                 <TD>{Number(row.price).toFixed(2)} AED</TD>
                 <TD>

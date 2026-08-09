@@ -166,7 +166,7 @@ export default function SettingsUsersPage() {
             <div>
               <h2 className="text-lg font-semibold">Branch roles</h2>
               <p className="text-sm text-zinc-500">
-                Reusable permission bundles you can assign to a staff member at one specific outlet —
+                Reusable permission bundles you can assign to a staff member at one specific outlet,
                 layered on top of, not replacing, their role above.
               </p>
             </div>
@@ -176,7 +176,7 @@ export default function SettingsUsersPage() {
             </Button>
           </div>
 
-          <div className="rounded-lg border dark:border-white/10 overflow-hidden">
+          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
             {branchRoles === null ? (
               <TableSkeleton rows={2} cols={2} />
             ) : branchRoles.length === 0 ? (
@@ -225,7 +225,7 @@ export default function SettingsUsersPage() {
             <div>
               <h2 className="text-lg font-semibold">Branch-role assignments</h2>
               <p className="text-sm text-zinc-500">
-                Overrides one staff member&apos;s access at one specific outlet — every other outlet stays
+                Overrides one staff member&apos;s access at one specific outlet. Every other outlet stays
                 on their role above, unaffected.
               </p>
             </div>

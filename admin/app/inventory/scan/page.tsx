@@ -111,7 +111,7 @@ function KeywordChips({
           }
         }}
         placeholder="Add a keyword and press Enter"
-        className="w-full border rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+        className="w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
       />
     </div>
   );
@@ -211,7 +211,7 @@ export default function ScanToStockPage() {
     if (!result) return;
     const active = rows.filter((r) => !r.skip);
     if (active.length === 0) {
-      toast("Nothing to commit — every row is skipped", "error");
+      toast("Nothing to commit. Every row is skipped.", "error");
       return;
     }
     for (const r of active) {
@@ -231,11 +231,11 @@ export default function ScanToStockPage() {
       } else if (r.targetType === "product") {
         const matchedProduct = products.find((p) => p.id === r.matchedId);
         if (matchedProduct?.usesIngredients) {
-          toast(`"${r.name}" uses a recipe — scan its ingredients individually instead`, "error");
+          toast(`"${r.name}" uses a recipe. Scan its ingredients individually instead.`, "error");
           return;
         }
         if (matchedProduct?.hasVariants && !r.variantId) {
-          toast(`"${r.name}" has variants — select which one this line is for`, "error");
+          toast(`"${r.name}" has variants. Select which one this line is for.`, "error");
           return;
         }
       }
@@ -281,7 +281,7 @@ export default function ScanToStockPage() {
         <h1 className="text-2xl font-semibold">Scan to Stock</h1>
       </div>
       <p className="text-sm text-zinc-500 -mt-2 mb-4">
-        Photograph a supplier invoice or receipt — OCR pulls out candidate line items for you to review before
+        Photograph a supplier invoice or receipt. OCR pulls out candidate line items for you to review before
         anything is added to stock.
       </p>
 
@@ -298,7 +298,7 @@ export default function ScanToStockPage() {
           <div className="mt-4 space-y-4">
             <KeywordChips
               label="Exclude keywords"
-              hint="Any OCR line containing one of these (case-insensitive) is dropped before parsing — subtotal, tax, etc."
+              hint="Any OCR line containing one of these (case-insensitive) is dropped before parsing: subtotal, tax, etc."
               values={settings.excludeKeywords}
               onChange={(v) => saveSettings({ excludeKeywords: v })}
             />
@@ -318,7 +318,7 @@ export default function ScanToStockPage() {
                   onChange={(e) => saveSettings({ defaultOutletId: e.target.value ? Number(e.target.value) : null })}
                   className={SELECT_CLASS}
                 >
-                  <option value="">— None —</option>
+                  <option value="">None</option>
                   {outlets.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name}
@@ -374,7 +374,7 @@ export default function ScanToStockPage() {
           {rows.length === 0 ? (
             <Card>
               <p className="text-sm text-zinc-500">
-                No candidate lines survived filtering — check Scan settings, or use the raw OCR text above to add
+                No candidate lines survived filtering. Check Scan settings, or use the raw OCR text above to add
                 items in the normal Inventory pages.
               </p>
             </Card>
@@ -392,7 +392,7 @@ export default function ScanToStockPage() {
                           type="text"
                           value={row.name}
                           onChange={(e) => updateRow(row.key, { name: e.target.value })}
-                          className="mt-1 w-full border rounded px-2.5 py-1.5 text-sm font-medium dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                          className="mt-1 w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm font-medium dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                         />
                       </div>
                       <label className="flex items-center gap-1.5 text-xs text-zinc-500 shrink-0 pt-1 cursor-pointer">
@@ -459,7 +459,7 @@ export default function ScanToStockPage() {
                             row.targetType === "product" &&
                             products.find((p) => p.id === row.matchedId)?.usesIngredients && (
                               <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                                This product uses a recipe — scan its ingredients individually instead.
+                                This product uses a recipe. Scan its ingredients individually instead.
                               </p>
                             )}
                         </div>
@@ -479,7 +479,7 @@ export default function ScanToStockPage() {
                                   }
                                   className={SELECT_CLASS}
                                 >
-                                  <option value="">— Pick —</option>
+                                  <option value="">Pick one</option>
                                   {matchedProduct.variants.map((v) => (
                                     <option key={v.id} value={v.id}>
                                       {v.label ?? `Variant ${v.id}`}
@@ -520,7 +520,7 @@ export default function ScanToStockPage() {
                             onChange={(e) => updateRow(row.key, { outletId: e.target.value ? Number(e.target.value) : "" })}
                             className={SELECT_CLASS}
                           >
-                            <option value="">— Pick —</option>
+                            <option value="">Pick one</option>
                             {outlets.map((o) => (
                               <option key={o.id} value={o.id}>
                                 {o.name}
@@ -551,7 +551,7 @@ export default function ScanToStockPage() {
                                 }
                                 className={SELECT_CLASS}
                               >
-                                <option value="">— Pick —</option>
+                                <option value="">Pick one</option>
                                 {collections.map((c) => (
                                   <option key={c.id} value={c.id}>
                                     {c.name}

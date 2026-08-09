@@ -126,7 +126,7 @@ export default function OrderDetailPage() {
           {order.deliveryDate
             ? new Date(order.deliveryDate).toLocaleDateString()
             : "No delivery date set"}
-          {order.deliveryTimeSlot ? ` — ${order.deliveryTimeSlot}` : ""}
+          {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}
         </p>
       </Card>
 
@@ -142,10 +142,10 @@ export default function OrderDetailPage() {
         <table className="w-full text-sm">
           <tbody>
             {order.orderitem.map((item) => (
-              <tr key={item.id} className="border-t dark:border-white/10 first:border-t-0">
+              <tr key={item.id} className="border-t border-gray-200 dark:border-white/10 first:border-t-0">
                 <td className="py-2">
                   {item.productName}
-                  {item.variantLabel ? ` — ${item.variantLabel}` : ""}
+                  {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                 </td>
                 <td className="py-2 text-zinc-500">× {item.quantity}</td>
                 <td className="py-2 text-right">{item.priceAtPurchase} AED</td>
@@ -153,7 +153,7 @@ export default function OrderDetailPage() {
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t font-medium dark:border-white/10">
+            <tr className="border-t border-gray-200 font-medium dark:border-white/10">
               <td className="py-2" colSpan={2}>
                 Total
               </td>
@@ -168,7 +168,7 @@ export default function OrderDetailPage() {
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <label className="text-sm text-zinc-500">Move to:</label>
           <select
-            className="border rounded px-2 py-1 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            className="border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             value=""
             disabled={!canCancel}
             onChange={(e) => e.target.value && handleStatusChange(e.target.value as OrderStatus)}

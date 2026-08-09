@@ -144,7 +144,7 @@ export default function OutletBasicInfoTab({
               cell keeps this row's shape matching the reference. */}
           <div aria-hidden="true" />
 
-          <Input label="Country" value={shop?.country ?? ""} disabled placeholder="—" />
+          <Input label="Country" value={shop?.country ?? ""} disabled placeholder="-" />
           <Input label="Time Zone" value={shop?.timezone ?? ""} disabled />
 
           <Input label="Currency" value={shop?.currency ?? ""} disabled />
@@ -155,7 +155,7 @@ export default function OutletBasicInfoTab({
           />
 
           <p className="sm:col-span-2 text-xs text-zinc-400 -mt-2">
-            Country, Time Zone, Currency, and Default Language are shop-wide — change them under
+            Country, Time Zone, Currency, and Default Language are shop-wide. Change them under
             Settings → Business Settings, not per outlet.
           </p>
         </div>
@@ -173,7 +173,7 @@ export default function OutletBasicInfoTab({
       <Card>
         <h3 className="text-sm font-semibold mb-1">Order Setting</h3>
         <p className="text-xs text-zinc-400 mb-4">
-          These apply shop-wide, across every outlet — not just this one.
+          These apply shop-wide, across every outlet, not just this one.
         </p>
 
         <div className="space-y-5">

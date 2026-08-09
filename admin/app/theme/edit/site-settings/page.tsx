@@ -190,7 +190,7 @@ export default function ThemeSiteSettingsPage() {
       <Card>
         <h3 className="text-sm font-semibold mb-1">Header &amp; Footer Preview</h3>
         <p className="text-xs text-zinc-400 mb-4">
-          Reflects your logo, announcement bar, and footer content as you edit below — colors and layout come from
+          Reflects your logo, announcement bar, and footer content as you edit below. Colors and layout come from
           Appearance Color and Theme &gt; Advanced.
         </p>
         <HeaderFooterPreview
@@ -241,7 +241,7 @@ export default function ThemeSiteSettingsPage() {
             </div>
             {announcementBarEnabled && notificationText.length === 0 && (
               <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                Add at least one message above — an empty bar never shows even when this is on.
+                Add at least one message above. An empty bar never shows even when this is on.
               </p>
             )}
           </div>
@@ -301,7 +301,7 @@ export default function ThemeSiteSettingsPage() {
                 setLogoFile(f);
                 setLogoPreview(URL.createObjectURL(f));
               }}
-              hint="Recommended size — Square/Vertical logo: 300 x 150 px, Horizontal logo: 300 x 90 px (WxH)"
+              hint="Recommended size: Square/Vertical logo 300 x 150 px, Horizontal logo 300 x 90 px (WxH)"
             />
             <ImageDropzone
               label="Favicon"
@@ -320,7 +320,7 @@ export default function ThemeSiteSettingsPage() {
                   setFooterLogoFile(f);
                   setFooterLogoPreview(URL.createObjectURL(f));
                 }}
-                hint="Recommended size — Square/Vertical logo: 300 x 150 px, Horizontal logo: 300 x 90 px (WxH)"
+                hint="Recommended size: Square/Vertical logo 300 x 150 px, Horizontal logo 300 x 90 px (WxH)"
               />
               <p className="mt-1.5 text-xs text-zinc-400">Shown in the footer&apos;s brand column. Falls back to your regular logo if left unset.</p>
             </div>
@@ -337,7 +337,7 @@ export default function ThemeSiteSettingsPage() {
             value={footerDescription}
             onChange={(e) => setFooterDescription(e.target.value)}
             rows={3}
-            placeholder="A short line about your shop — shown under your logo in the footer."
+            placeholder="A short line about your shop, shown under your logo in the footer."
           />
         </Card>
 

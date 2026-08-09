@@ -68,7 +68,7 @@ export default function StockMovementsPage() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as StockMovementType | "")}
-          className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+          className="border border-black/15 dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
         >
           <option value="">All movements</option>
           <option value="ADJUSTMENT">Adjustments only</option>
@@ -129,7 +129,7 @@ export default function StockMovementsPage() {
                 <TD className="text-zinc-500">{TYPE_LABEL[m.type]}</TD>
                 <TD className="text-xs text-zinc-500">
                   {m.type === "ADJUSTMENT"
-                    ? (m.reason && ADJUSTMENT_REASON_LABELS[m.reason]) ?? "—"
+                    ? (m.reason && ADJUSTMENT_REASON_LABELS[m.reason]) ?? "-"
                     : m.toOutletName
                       ? `${m.outletName} → ${m.toOutletName}`
                       : // No destination outlet — a stock-in event (e.g. Scan to

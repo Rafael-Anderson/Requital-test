@@ -34,7 +34,7 @@ export default function EditOrderItemsModal({
     order.orderitem.map((i) => ({
       productId: i.productId,
       variantId: i.variantId ?? undefined,
-      productName: i.variantLabel ? `${i.productName} — ${i.variantLabel}` : i.productName,
+      productName: i.variantLabel ? `${i.productName} · ${i.variantLabel}` : i.productName,
       quantity: i.quantity,
     })),
   );
@@ -76,16 +76,16 @@ export default function EditOrderItemsModal({
         return;
       }
       if (items.some((i) => lineKey(i.productId, i.variantId) === lineKey(product.id, variant.id))) {
-        toast("That option is already on this order — adjust its quantity instead", "error");
+        toast("That option is already on this order. Adjust its quantity instead.", "error");
         return;
       }
       setItems((prev) => [
         ...prev,
-        { productId: product.id, variantId: variant.id, productName: `${product.name} — ${variant.label}`, quantity },
+        { productId: product.id, variantId: variant.id, productName: `${product.name} · ${variant.label}`, quantity },
       ]);
     } else {
       if (items.some((i) => lineKey(i.productId, i.variantId) === lineKey(product.id, undefined))) {
-        toast("That product is already on this order — adjust its quantity instead", "error");
+        toast("That product is already on this order. Adjust its quantity instead.", "error");
         return;
       }
       setItems((prev) => [...prev, { productId: product.id, productName: product.name, quantity }]);
@@ -107,10 +107,10 @@ export default function EditOrderItemsModal({
         items.map((i) => ({ productId: i.productId, variantId: i.variantId, quantity: i.quantity })),
       );
       if (updated.discountDropped) {
-        toast("Saved — the applied discount no longer qualified and was removed", "error");
+        toast("Saved. The applied discount no longer qualified and was removed.", "error");
       }
       if (updated.ingredientStockWarnings.length > 0) {
-        toast(`Saved — ${updated.ingredientStockWarnings.join(", ")} stock is now below zero at this outlet`, "error");
+        toast(`Saved. ${updated.ingredientStockWarnings.join(", ")} stock is now below zero at this outlet`, "error");
       }
       if (!updated.discountDropped && updated.ingredientStockWarnings.length === 0) {
         toast("Order items updated");
@@ -160,7 +160,7 @@ export default function EditOrderItemsModal({
                     min="1"
                     value={item.quantity}
                     onChange={(e) => updateQuantity(item.productId, item.variantId, Number(e.target.value) || 1)}
-                    className="w-16 border rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                    className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                   />
                 </TD>
                 <TD>

@@ -80,7 +80,7 @@ export default function BannerImageGallery({
               <input
                 value={img.linkUrl ?? ""}
                 onChange={(e) => handleLinkChange(i, e.target.value)}
-                placeholder="Optional link (e.g. /templates/sale) — leave blank for no click-through"
+                placeholder="Optional link (e.g. /templates/sale). Leave blank for no click-through"
                 className="flex-1 h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               />
               <button
@@ -102,7 +102,7 @@ export default function BannerImageGallery({
         hint={
           uploading
             ? "Uploading…"
-            : "Drag to reorder — cycles as a slideshow on the \"Slideshow\" homepage layout. Recommended size: 1600 x 500px."
+            : "Drag to reorder. Cycles as a slideshow on the \"Slideshow\" homepage layout. Recommended size: 1600 x 500px."
         }
       />
     </div>

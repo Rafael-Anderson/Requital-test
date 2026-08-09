@@ -212,7 +212,7 @@ export default function IngredientsPage() {
                       <span>{ingredient.name}</span>
                     </div>
                   </TD>
-                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "—"}</TD>
+                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "-"}</TD>
                   <TD className="text-zinc-500">{ingredient.unit}</TD>
                   <TD>
                     {ingredient.stockQuantity !== null ? (
@@ -224,7 +224,7 @@ export default function IngredientsPage() {
                         }
                       >
                         {ingredient.stockQuantity} {ingredient.unit}
-                        {lowStock ? " — low stock" : ""}
+                        {lowStock ? " (low stock)" : ""}
                       </span>
                     ) : (
                       <span className="text-zinc-400">Pick a branch to see stock</span>

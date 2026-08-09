@@ -71,7 +71,7 @@ export default function SeoSettingsPage() {
           label="Meta title"
           value={metaTitle}
           onChange={(e) => setMetaTitle(e.target.value)}
-          placeholder="Your Shop Name — Flowers & Gifts in Dubai"
+          placeholder="Your Shop Name: Flowers & Gifts in Dubai"
           maxLength={255}
         />
         <Textarea
@@ -87,14 +87,14 @@ export default function SeoSettingsPage() {
           onFileSelected={handleOgImageSelected}
         />
         <p className="text-xs text-zinc-400 -mt-2">
-          Falls back to your Theme banner or logo if left unset — never blank on a shared link.
+          Falls back to your Theme banner or logo if left unset. Never blank on a shared link.
         </p>
       </Card>
 
       <Card className="space-y-4">
         <h3 className="text-sm font-semibold">Keywords</h3>
         <p className="text-xs text-zinc-400">
-          Low impact on modern search rankings, but included for parity — comma-separated, optional.
+          Low impact on modern search rankings, but included for parity. Comma-separated, optional.
         </p>
         <Input
           label="Keywords"

@@ -91,7 +91,7 @@ export default function CollectionsPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-      <div className="rounded-lg border dark:border-white/10 overflow-hidden">
+      <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
         {collections === null ? (
           <TableSkeleton rows={4} cols={3} />
         ) : rows.length === 0 ? (

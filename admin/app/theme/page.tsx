@@ -61,7 +61,7 @@ export default function ThemeLibraryPage() {
             </div>
             <p className="text-sm text-zinc-500">
               {layoutOption?.label ?? "Classic"} layout
-              {theme.updatedAt && ` — last saved ${new Date(theme.updatedAt).toLocaleString()}`}
+              {theme.updatedAt && ` (last saved ${new Date(theme.updatedAt).toLocaleString()})`}
             </p>
           </div>
 

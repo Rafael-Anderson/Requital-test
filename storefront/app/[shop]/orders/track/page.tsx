@@ -88,7 +88,7 @@ function TrackOrderContent() {
         </p>
       ) : (
         <p className="text-sm text-zinc-500 mb-6">
-          Enter the tracking code from your order confirmation to check its status — no account needed. Already have
+          Enter the tracking code from your order confirmation to check its status. No account needed. Already have
           an account?{" "}
           <Link href={`/${shopSlug}/account/login`} className="text-accent hover:underline">
             Sign in
@@ -138,7 +138,7 @@ function TrackOrderContent() {
           <div className="text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-zinc-500">Fulfillment</span>
-              <span className="capitalize">{order.orderType ?? "—"}</span>
+              <span className="capitalize">{order.orderType ?? "-"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500">Location</span>

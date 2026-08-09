@@ -104,7 +104,7 @@ export default function HomePage() {
                   key={href}
                   aria-disabled="true"
                   title="Switch to Advanced in Business Information to use Reports"
-                  className="aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-5 dark:border-white/10 opacity-40 cursor-not-allowed"
+                  className="aspect-square flex flex-col items-center justify-center gap-3 border border-black/10 rounded-xl p-5 dark:border-white/10 opacity-40 cursor-not-allowed"
                 >
                   <span className="flex items-center justify-center size-16 rounded-2xl bg-accent/10">
                     <Icon className="size-7 text-accent-text dark:text-accent" strokeWidth={1.75} />
@@ -118,7 +118,7 @@ export default function HomePage() {
               <Link
                 key={href}
                 href={href}
-                className="relative aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative aspect-square flex flex-col items-center justify-center gap-3 border border-black/10 rounded-xl p-5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
                 {showDynamicThemeBadge && (
                   <span

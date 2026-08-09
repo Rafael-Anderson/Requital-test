@@ -133,12 +133,12 @@ export default function CollectionFormModal({
             label="Parent collection"
             value={parentCollectionId}
             onChange={setParentCollectionId}
-            placeholder="— None (top level) —"
+            placeholder="None (top level)"
             options={[
-              { value: "", label: "— None (top level) —" },
+              { value: "", label: "None (top level)" },
               ...parentOptions.map((c) => ({
                 value: String(c.id),
-                label: `${"— ".repeat(c.depth)}${c.name}`,
+                label: `${"- ".repeat(c.depth)}${c.name}`,
               })),
             ]}
           />

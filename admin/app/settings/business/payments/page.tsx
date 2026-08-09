@@ -215,7 +215,7 @@ export default function PaymentGatewaysPage() {
         <div>
           <h3 className="text-sm font-semibold">Card processing</h3>
           <p className="text-xs text-zinc-400 mt-1">
-            Choose one — Nomod and Stripe can&apos;t both be active at the same time.
+            Choose one. Nomod and Stripe can&apos;t both be active at the same time.
           </p>
         </div>
         <div className="space-y-2">
@@ -261,7 +261,7 @@ export default function PaymentGatewaysPage() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold">{PAYMENT_PROVIDER_LABELS[provider]}</h3>
-              <p className="text-xs text-zinc-400 mt-1">Independent of card processing — enable it on its own.</p>
+              <p className="text-xs text-zinc-400 mt-1">Independent of card processing, enable it on its own.</p>
             </div>
             <Toggle
               checked={independentEnabled[provider] ?? false}
@@ -296,7 +296,7 @@ export default function PaymentGatewaysPage() {
           <div>
             <h3 className="text-sm font-semibold">Cash on Delivery</h3>
             <p className="text-xs text-zinc-400 mt-1">
-              No API key needed — just a visibility toggle. Sets both delivery and pickup Cash on Delivery
+              No API key needed, just a visibility toggle. Sets both delivery and pickup Cash on Delivery
               together (see Outlets for finer per-context control).
             </p>
           </div>

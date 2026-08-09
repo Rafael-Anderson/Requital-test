@@ -59,13 +59,13 @@ export default function IngredientCategoriesPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-      <div className="rounded-lg border dark:border-white/10 overflow-hidden">
+      <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
         {ingredientCategories === null ? (
           <TableSkeleton rows={4} cols={2} />
         ) : ingredientCategories.length === 0 ? (
           <EmptyState
             title="No ingredient categories yet"
-            description="Create categories to organize raw materials — flowers, packaging, add-ons."
+            description="Create categories to organize raw materials: flowers, packaging, add-ons."
           />
         ) : (
           <div className="divide-y divide-black/5 dark:divide-white/10">

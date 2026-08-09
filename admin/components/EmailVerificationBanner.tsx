@@ -33,7 +33,7 @@ export default function EmailVerificationBanner() {
     setSending(true);
     try {
       await api.resendVerification();
-      showToast("Verification email sent — check your inbox.", "success");
+      showToast("Verification email sent. Check your inbox.", "success");
     } catch {
       showToast("Couldn't send the verification email. Try again shortly.", "error");
     } finally {
@@ -49,7 +49,7 @@ export default function EmailVerificationBanner() {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-6 py-2.5 text-sm text-amber-800 dark:text-amber-300">
       <span>
-        Verify your email address — you won&apos;t be able to publish your shop until you do.
+        Verify your email address. You won&apos;t be able to publish your shop until you do.
       </span>
       <div className="flex items-center gap-2 shrink-0">
         <Button variant="secondary" size="sm" loading={sending} onClick={resend}>

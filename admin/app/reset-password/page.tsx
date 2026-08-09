@@ -24,7 +24,7 @@ function ResetPasswordForm() {
     e.preventDefault();
     setError(null);
     if (!token) {
-      setError("This reset link is missing its token — request a new one");
+      setError("This reset link is missing its token. Request a new one.");
       return;
     }
     if (newPassword.length < 8) {
@@ -56,7 +56,7 @@ function ResetPasswordForm() {
           </p>
         ) : !token ? (
           <p className="text-sm text-center text-red-600 dark:text-red-400">
-            This reset link is invalid — request a new one from the{" "}
+            This reset link is invalid. Request a new one from the{" "}
             <Link href="/forgot-password" className="underline">
               forgot password
             </Link>{" "}

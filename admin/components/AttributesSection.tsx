@@ -62,7 +62,7 @@ export default function AttributesSection({
     >
       <div className="flex items-center justify-between">
         <p className="text-xs text-zinc-400">
-          Informational facts shown on the product page — not purchasable options like Size/Color.
+          Informational facts shown on the product page, not purchasable options like Size/Color.
         </p>
         <button
           type="button"

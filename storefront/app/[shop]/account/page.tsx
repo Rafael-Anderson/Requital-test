@@ -113,7 +113,7 @@ export default function AccountDashboardPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-zinc-500">Email</span>
-              <span>{customer.email ?? "—"}</span>
+              <span>{customer.email ?? "-"}</span>
             </div>
             <button
               type="button"

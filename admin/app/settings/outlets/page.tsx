@@ -15,7 +15,7 @@ import PageShell from "@/components/ui/PageShell";
 
 function locationLabel(outlet: Outlet): string {
   if (outlet.area && outlet.emirate) return `${outlet.area}, ${outlet.emirate}`;
-  return outlet.area ?? outlet.emirate ?? "—";
+  return outlet.area ?? outlet.emirate ?? "-";
 }
 
 export default function SettingsOutletsPage() {

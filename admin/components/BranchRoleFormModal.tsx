@@ -86,7 +86,7 @@ export default function BranchRoleFormModal({
             </div>
             <p className="mt-2 text-xs text-zinc-400">
               A staff member assigned this bundle at an outlet can never end up with more access than
-              their existing shop-wide role already allows — an outlet assignment can only restrict, never
+              their existing shop-wide role already allows. An outlet assignment can only restrict, never
               upgrade.
             </p>
           </div>

@@ -81,7 +81,7 @@ export default function PolicyPagesSettingsPage() {
             <h3 className="text-sm font-semibold">{POLICY_PAGE_LABELS[selected]}</h3>
             <p className="text-xs text-zinc-400 mt-1">
               Publicly viewable on your storefront once saved, and linked from the footer&apos;s Useful Links column.
-              Left blank, the footer simply won&apos;t link to it — no broken or empty page.
+              Left blank, the footer simply won&apos;t link to it: no broken or empty page.
             </p>
           </div>
           <RichTextEditor label="Content" value={draft} onChange={setDraft} />

@@ -100,9 +100,9 @@ export default function IngredientFormModal({
             label="Category"
             value={categoryId}
             onChange={setCategoryId}
-            placeholder="— None —"
+            placeholder="None"
             options={[
-              { value: "", label: "— None —" },
+              { value: "", label: "None" },
               ...categories.map((c) => ({ value: String(c.id), label: c.name })),
             ]}
           />

@@ -56,7 +56,7 @@ export default function TemplatesPage() {
         </Link>
       </div>
       <p className="text-sm text-zinc-500 mb-4">
-        Marketing groupings that cut across collections — &quot;Summer Sale&quot;, &quot;New Arrivals&quot;, and similar.
+        Marketing groupings that cut across collections, like &quot;Summer Sale&quot; or &quot;New Arrivals&quot;.
       </p>
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
