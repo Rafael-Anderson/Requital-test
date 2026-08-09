@@ -18,9 +18,12 @@ test('customer browses, selects a variant, adds to cart, and checks out', async 
   const seed = readSeedState();
   const variant = seed.variantProduct.variants[0];
 
-  await page.goto(`${STOREFRONT_URL}/${seed.subdomain}`);
-  await page.getByRole('link', { name: new RegExp(seed.variantProduct.name) }).first().click();
-  await page.waitForURL(new RegExp(`/products/${seed.variantProduct.slug}$`));
+  // Direct navigation, not a homepage click-through: the Home tab's default
+  // content is now Template sections (Phase C), and this seed doesn't set
+  // up a Template — the product's own page is unaffected by that and is
+  // what this test actually exercises (variant/cart/checkout), not
+  // homepage discovery.
+  await page.goto(`${STOREFRONT_URL}/${seed.subdomain}/products/${seed.variantProduct.slug}`);
 
   await page.getByRole('button', { name: variant.label, exact: true }).click();
   await page.getByRole('button', { name: 'Add to cart' }).click();
