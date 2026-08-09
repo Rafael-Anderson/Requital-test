@@ -33,7 +33,7 @@ interface WorkingItem {
   price: string;
 }
 
-// Shared by /draft-orders/new and /draft-orders/[id] (edit) — same "product
+// Shared by /orders/draft-orders/new and /orders/draft-orders/[id] (edit) — same "product
 // prop optional = create vs edit" pattern as ProductForm. Product/outlet/
 // emirate/order-type pickers are Combobox.tsx, same as every other picker
 // in this app.
@@ -180,11 +180,11 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       if (isEdit) {
         await updateDraftOrder(draft.id, payload);
         toast("Draft order saved");
-        router.push(`/draft-orders/${draft.id}`);
+        router.push(`/orders/draft-orders/${draft.id}`);
       } else {
         const created = await createDraftOrder(payload);
         toast("Draft order created");
-        router.push(`/draft-orders/${created.id}`);
+        router.push(`/orders/draft-orders/${created.id}`);
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save draft order", "error");
@@ -399,7 +399,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       </Card>
 
       <div className="flex gap-2">
-        <Button type="button" variant="secondary" onClick={() => router.push("/draft-orders")}>
+        <Button type="button" variant="secondary" onClick={() => router.push("/orders/draft-orders")}>
           Cancel
         </Button>
         <Button type="submit" variant="primary" disabled={saving}>

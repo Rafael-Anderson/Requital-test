@@ -54,7 +54,7 @@ interface WorkingCollectionMember {
   sortOrder: number;
 }
 
-// Shared by /templates/new and /templates/[id]/edit — same "prop
+// Shared by /products/templates/new and /products/templates/[id]/edit — same "prop
 // optional = create vs edit" pattern as ProductForm. MANUAL's product list
 // is a numeric-order-input table (Collections' own reorder convention), not
 // native drag-and-drop (that stays Bio Links' one special case — see its
@@ -242,7 +242,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
         );
       }
 
-      router.push("/templates");
+      router.push("/products/templates");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save template", "error");
     } finally {
@@ -257,7 +257,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
     try {
       await deleteTemplate(initial.id);
       toast(`"${initial.title}" deleted`);
-      router.push("/templates");
+      router.push("/products/templates");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to delete template", "error");
       setDeleting(false);
@@ -266,7 +266,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
 
   return (
     <PageShell>
-      <BackButton href="/templates" />
+      <BackButton href="/products/templates" />
       <form onSubmit={handleSubmit} className="max-w-3xl space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">{isEdit ? `Edit "${initial!.title}"` : "New template"}</h1>
@@ -473,7 +473,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
         </Card>
 
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={() => router.push("/templates")}>
+          <Button type="button" variant="secondary" onClick={() => router.push("/products/templates")}>
             Cancel
           </Button>
           <Button type="submit" variant="primary" disabled={saving}>

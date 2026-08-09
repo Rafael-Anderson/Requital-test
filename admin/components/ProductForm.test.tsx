@@ -150,6 +150,14 @@ describe("ProductForm wizard", () => {
     expect(screen.queryByText("Options")).not.toBeInTheDocument();
   });
 
+  it("Cancel navigates to /products (Products moved out of /inventory in Phase B)", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await waitFor(() => expect(screen.getByText("Cancel")).toBeInTheDocument());
+    await user.click(screen.getByText("Cancel"));
+    expect(push).toHaveBeenCalledWith("/products");
+  });
+
   it("Recipe off (default): Step 2 shows the Inventory card and an 'Add recipe' link, not the ingredient editor", async () => {
     const user = userEvent.setup();
     renderForm();

@@ -876,13 +876,13 @@ export interface IngredientInput {
   description?: string | null;
   costPerUnit?: number | null;
   supplier?: string | null;
-  collectionId?: number | null;
+  categoryId?: number | null;
 }
 
-export function listIngredients(outletId?: number, collectionId?: number) {
+export function listIngredients(outletId?: number, categoryId?: number) {
   const search = new URLSearchParams();
   if (outletId) search.set("outletId", String(outletId));
-  if (collectionId) search.set("collectionId", String(collectionId));
+  if (categoryId) search.set("categoryId", String(categoryId));
   const query = search.toString();
   return apiFetch<Ingredient[]>(`/shop/ingredients${query ? `?${query}` : ""}`);
 }

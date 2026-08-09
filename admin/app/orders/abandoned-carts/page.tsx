@@ -7,6 +7,7 @@ import BackButton from "@/components/ui/BackButton";
 import EmptyState from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
+import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
 
 function timeAgo(iso: string): string {
@@ -29,7 +30,8 @@ export default function AbandonedCartsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BackButton href="/orders" />
+      <OrdersTabs />
       <h1 className="text-2xl font-semibold mb-1">Abandoned Carts</h1>
       <p className="text-sm text-zinc-500 mb-4">
         Shoppers who started checkout but didn&apos;t complete an order. Turn on recovery emails in Settings &gt;

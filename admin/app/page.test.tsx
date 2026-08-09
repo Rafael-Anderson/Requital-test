@@ -15,6 +15,27 @@ function renderPage() {
   return render(<HomePage />);
 }
 
+describe("HomePage — Phase B app restructure", () => {
+  it("shows a Products tile pointing at /products, alongside Inventory", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Products").closest("a")).toHaveAttribute("href", "/products"));
+    expect(screen.getByText("Inventory").closest("a")).toHaveAttribute("href", "/inventory");
+  });
+
+  it("no longer shows Discounts, Gift Cards, Draft Orders, or Abandoned Carts tiles (moved into Products/Orders tabs)", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Products")).toBeInTheDocument());
+    expect(screen.queryByText("Discounts")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gift Cards")).not.toBeInTheDocument();
+    expect(screen.queryByText("Draft Orders")).not.toBeInTheDocument();
+    expect(screen.queryByText("Abandoned Carts")).not.toBeInTheDocument();
+  });
+});
+
 describe("HomePage — Reports tile mode gating", () => {
   it("simple mode: greys out the Reports tile (not a link)", async () => {
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);

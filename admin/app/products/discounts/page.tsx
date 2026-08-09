@@ -12,6 +12,7 @@ import BackButton from "@/components/ui/BackButton";
 import { useToast } from "@/components/ui/Toast";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import DiscountFormModal from "@/components/DiscountFormModal";
+import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 
 function formatValidity(from: string | null, until: string | null): string {
@@ -72,7 +73,8 @@ export default function DiscountsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BackButton href="/products" />
+      <ProductsTabs />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Discounts</h1>
         <Button variant="primary" onClick={() => setEditing("new")}>

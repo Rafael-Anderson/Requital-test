@@ -30,18 +30,42 @@ const CSP = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
-  // Categories moved from its own top-level page into a tab under
-  // Inventory — kept as a real redirect (not a client-side stub page) so
-  // any bookmarked/shared /categories link still lands correctly.
-  // /collections (the old curated-grouping model) was renamed to /templates
-  // as part of the Phase C Categories→Collections/Collections→Templates
-  // terminology swap — same reasoning, real redirect for old bookmarks.
+  // Phase B app restructure: Products split out of Inventory (which is now
+  // ingredients/stock-only), and Discounts/Gift Cards/Draft Orders/Abandoned
+  // Carts moved under Products/Orders as tabs. Real redirects (not
+  // client-side stub pages) so bookmarked/shared old links still land
+  // correctly. No redirect for bare /inventory or /inventory/categories —
+  // both remain real, live routes (repurposed to ingredient content), not
+  // dead links, and a route can't redirect to itself while also serving
+  // its own page.
+  //
+  // Phase C terminology swap (Categories→Collections, Collections→Templates)
+  // layered on top: /products/categories is the real, live route for the
+  // renamed Collections (no redirect needed, same "can't redirect to itself"
+  // reasoning). Templates — Phase C's rename of the old curated-grouping
+  // model — was briefly its own top-level /templates route before joining
+  // this same Phase B reorganization as /products/templates (catalog-
+  // adjacent, same tier as Discounts/Gift Cards); both /collections (the
+  // pre-rename top-level curated-grouping route) and /templates redirect
+  // straight to the final /products/templates location.
   async redirects() {
     return [
       { source: "/categories", destination: "/inventory/categories", permanent: true },
-      { source: "/collections", destination: "/templates", permanent: true },
-      { source: "/collections/new", destination: "/templates/new", permanent: true },
-      { source: "/collections/:id/edit", destination: "/templates/:id/edit", permanent: true },
+      { source: "/inventory/new", destination: "/products/new", permanent: true },
+      { source: "/inventory/:id/edit", destination: "/products/:id/edit", permanent: true },
+      { source: "/inventory/ingredients", destination: "/inventory", permanent: true },
+      { source: "/discounts", destination: "/products/discounts", permanent: true },
+      { source: "/gift-cards", destination: "/products/gift-cards", permanent: true },
+      { source: "/draft-orders", destination: "/orders/draft-orders", permanent: true },
+      { source: "/draft-orders/new", destination: "/orders/draft-orders/new", permanent: true },
+      { source: "/draft-orders/:id", destination: "/orders/draft-orders/:id", permanent: true },
+      { source: "/abandoned-carts", destination: "/orders/abandoned-carts", permanent: true },
+      { source: "/collections", destination: "/products/templates", permanent: true },
+      { source: "/collections/new", destination: "/products/templates/new", permanent: true },
+      { source: "/collections/:id/edit", destination: "/products/templates/:id/edit", permanent: true },
+      { source: "/templates", destination: "/products/templates", permanent: true },
+      { source: "/templates/new", destination: "/products/templates/new", permanent: true },
+      { source: "/templates/:id/edit", destination: "/products/templates/:id/edit", permanent: true },
     ];
   },
   async headers() {

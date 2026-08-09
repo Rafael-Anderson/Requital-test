@@ -25,7 +25,7 @@ export default function EditTemplatePage() {
   if (error) {
     return (
       <PageShell>
-        <BackButton href="/templates" />
+        <BackButton href="/products/templates" />
         <p className="text-red-600 text-sm">{error}</p>
       </PageShell>
     );
@@ -33,7 +33,7 @@ export default function EditTemplatePage() {
   if (!template) {
     return (
       <PageShell>
-        <BackButton href="/templates" />
+        <BackButton href="/products/templates" />
         <div className="max-w-2xl space-y-4">
           <Skeleton className="h-8 w-full" />
           <Skeleton className="h-24 w-full" />

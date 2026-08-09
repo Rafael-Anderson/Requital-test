@@ -111,7 +111,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
         </p>
         <IngredientRecipeEditor
           ingredients={form.ingredientsList}
-          collections={form.ingredientCategories}
+          categories={form.ingredientCategories}
           rows={form.recipeRows}
           onChange={form.setRecipeRows}
         />

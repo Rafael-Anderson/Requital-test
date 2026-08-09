@@ -1655,8 +1655,8 @@ export interface Ingredient {
   description: string | null;
   costPerUnit: string | null;
   supplier: string | null;
-  collectionId: number | null;
-  collectionName: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
   createdAt: string;
   // Only populated when the request specified an outletId (list/detail
   // fetch scoped to one outlet) — null otherwise, same convention as

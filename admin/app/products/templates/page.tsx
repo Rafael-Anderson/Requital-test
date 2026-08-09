@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
+import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 
 export default function TemplatesPage() {
@@ -43,10 +44,11 @@ export default function TemplatesPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BackButton href="/products" />
+      <ProductsTabs />
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-semibold">Templates</h1>
-        <Link href="/templates/new">
+        <Link href="/products/templates/new">
           <Button variant="primary">
             <Plus className="size-4 inline -mt-0.5 mr-1" />
             New template
@@ -105,7 +107,7 @@ export default function TemplatesPage() {
                 </TD>
                 <TD>
                   <Link
-                    href={`/templates/${c.id}/edit`}
+                    href={`/products/templates/${c.id}/edit`}
                     className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                     aria-label={`Edit ${c.title}`}
                   >

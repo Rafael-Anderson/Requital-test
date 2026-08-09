@@ -116,7 +116,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   });
 
   // --- Create a product in Simple mode (the wizard's own default) ---
-  await page.goto(`${ADMIN_URL}/inventory/new`);
+  await page.goto(`${ADMIN_URL}/products/new`);
   await page.getByLabel('Title', { exact: true }).fill('Rose Bouquet');
   await uploadImage(page, 'rose.png');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -125,7 +125,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await page.getByLabel('Flowers').check();
   await page.getByRole('button', { name: 'Create product' }).click();
-  await page.waitForURL(`${ADMIN_URL}/inventory`, { timeout: 15_000 });
+  await page.waitForURL(`${ADMIN_URL}/products`, { timeout: 15_000 });
 
   // --- Switch to Advanced editor mode, then create a second product there ---
   await page.goto(`${ADMIN_URL}/settings/business/information`);
@@ -133,7 +133,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('saved', { exact: false })).toBeVisible({ timeout: 10_000 });
 
-  await page.goto(`${ADMIN_URL}/inventory/new`);
+  await page.goto(`${ADMIN_URL}/products/new`);
   await uploadImage(page, 'tulip.png');
   // Title filled last, right before submit: on the advanced single-page
   // form (no per-step gating to wait on), filling it first was observed
@@ -148,7 +148,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   await titleField.fill('Tulip Bunch');
   await expect(titleField).toHaveValue('Tulip Bunch');
   await page.getByRole('button', { name: 'Create product' }).click();
-  await page.waitForURL(`${ADMIN_URL}/inventory`, { timeout: 15_000 });
+  await page.waitForURL(`${ADMIN_URL}/products`, { timeout: 15_000 });
 
   // --- Publish the shop (now unblocked: outlet pickup + >=1 product) ---
   await page.goto(`${ADMIN_URL}/settings/business/information`);

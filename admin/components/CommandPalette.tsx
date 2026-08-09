@@ -24,7 +24,7 @@ function flatten(result: GlobalSearchResult | null): FlatResult[] {
       type: "product" as const,
       label: p.name,
       sublabel: `${p.sku} · ${p.price} AED`,
-      href: `/inventory/${p.id}/edit`,
+      href: `/products/${p.id}/edit`,
     })),
     ...result.orders.map((o) => ({
       key: `order-${o.id}`,
