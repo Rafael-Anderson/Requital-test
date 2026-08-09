@@ -16,8 +16,8 @@ function fakeIngredient(overrides: Partial<Ingredient> = {}): Ingredient {
     description: null,
     costPerUnit: null,
     supplier: null,
-    categoryId: null,
-    categoryName: null,
+    collectionId: null,
+    collectionName: null,
     createdAt: new Date().toISOString(),
     stockQuantity: null,
     lowStockThreshold: null,
@@ -26,20 +26,20 @@ function fakeIngredient(overrides: Partial<Ingredient> = {}): Ingredient {
 }
 
 const ingredients: Ingredient[] = [fakeIngredient({ id: 1, name: "Rose" }), fakeIngredient({ id: 2, name: "Box" })];
-const categories: IngredientCategory[] = [{ id: 1, name: "Flowers" }];
+const collections: IngredientCategory[] = [{ id: 1, name: "Flowers" }];
 const rows: RecipeRowDraft[] = [{ ingredientId: 1, quantityPerUnit: "6" }];
 
-describe("IngredientRecipeEditor — category filter and row pickers", () => {
+describe("IngredientRecipeEditor — collection filter and row pickers", () => {
   it("renders both pickers as Comboboxes, not native selects", () => {
-    render(<IngredientRecipeEditor ingredients={ingredients} categories={categories} rows={rows} onChange={vi.fn()} />);
-    expect(screen.getAllByRole("combobox")).toHaveLength(2); // category filter + 1 row
+    render(<IngredientRecipeEditor ingredients={ingredients} collections={collections} rows={rows} onChange={vi.fn()} />);
+    expect(screen.getAllByRole("combobox")).toHaveLength(2); // collection filter + 1 row
     expect(document.querySelector("select")).not.toBeInTheDocument();
   });
 
   it("changing the row's ingredient picker calls onChange with the new ingredientId", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<IngredientRecipeEditor ingredients={ingredients} categories={categories} rows={rows} onChange={onChange} />);
+    render(<IngredientRecipeEditor ingredients={ingredients} collections={collections} rows={rows} onChange={onChange} />);
 
     const [, rowCombobox] = screen.getAllByRole("combobox");
     await user.click(rowCombobox);

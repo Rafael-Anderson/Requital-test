@@ -96,12 +96,12 @@ describe('Bio Link page config (e2e)', () => {
         deliveryRadiusKm: 5,
       })
       .expect(200);
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${shop.adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
     await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -110,7 +110,7 @@ describe('Bio Link page config (e2e)', () => {
         price: 50,
         thumbnail: 'https://example.com/rose.jpg',
         sku: `BIOPAGE-${slugPrefix}-${runId}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     await request(app.getHttpServer())

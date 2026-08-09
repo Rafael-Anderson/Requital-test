@@ -4,7 +4,7 @@ import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
-const RESULTS_PER_CATEGORY = 5;
+const RESULTS_PER_COLLECTION = 5;
 
 @Injectable()
 export class SearchService {
@@ -44,7 +44,7 @@ export class SearchService {
         OR: [{ name: { contains: query } }, { sku: { contains: query } }],
       },
       select: { id: true, name: true, sku: true, price: true, thumbnail: true },
-      take: RESULTS_PER_CATEGORY,
+      take: RESULTS_PER_COLLECTION,
       orderBy: { name: 'asc' },
     });
     return rows.map((p) => ({ ...p, price: p.price.toString() }));
@@ -77,7 +77,7 @@ export class SearchService {
         ],
       },
       select: { id: true, customerName: true, status: true, total: true },
-      take: RESULTS_PER_CATEGORY,
+      take: RESULTS_PER_COLLECTION,
       orderBy: { createdAt: 'desc' },
     });
     return rows.map((o) => ({ ...o, total: o.total.toString() }));
@@ -87,7 +87,7 @@ export class SearchService {
     // Matches CustomersController's own access split — 'branch' and
     // 'order_manager' never see customer data anywhere else in the app, so
     // they shouldn't see it surface here either. Silently empty rather than
-    // throwing, so one blocked category doesn't fail the whole search.
+    // throwing, so one blocked collection doesn't fail the whole search.
     if (ctx.role !== 'admin' && ctx.role !== 'viewer') return [];
 
     const rows = await this.prisma.customer.findMany({
@@ -100,7 +100,7 @@ export class SearchService {
         ],
       },
       select: { id: true, name: true, phone: true, email: true },
-      take: RESULTS_PER_CATEGORY,
+      take: RESULTS_PER_COLLECTION,
       orderBy: { name: 'asc' },
     });
     return rows;

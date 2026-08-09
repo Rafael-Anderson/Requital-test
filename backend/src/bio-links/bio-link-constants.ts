@@ -1,8 +1,8 @@
 export const BIO_LINK_TYPES = [
   'EXTERNAL_URL',
   'PRODUCT',
-  'CATEGORY',
   'COLLECTION',
+  'TEMPLATE',
   'SOCIAL_ICON',
 ] as const;
 export type BioLinkType = (typeof BIO_LINK_TYPES)[number];
@@ -12,12 +12,12 @@ export type BioLinkType = (typeof BIO_LINK_TYPES)[number];
 // admin/lib/types.ts by hand.
 export const BIO_LINK_TARGET_FIELD: Record<
   BioLinkType,
-  'url' | 'productId' | 'categoryId' | 'collectionId' | 'socialPlatform'
+  'url' | 'productId' | 'collectionId' | 'templateId' | 'socialPlatform'
 > = {
   EXTERNAL_URL: 'url',
   PRODUCT: 'productId',
-  CATEGORY: 'categoryId',
   COLLECTION: 'collectionId',
+  TEMPLATE: 'templateId',
   SOCIAL_ICON: 'socialPlatform',
 };
 

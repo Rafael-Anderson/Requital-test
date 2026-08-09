@@ -32,8 +32,8 @@ import DropdownMenu from "@/components/ui/DropdownMenu";
 
 export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
-  const [categories, setCategories] = useState<IngredientCategory[]>([]);
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [collections, setCollections] = useState<IngredientCategory[]>([]);
+  const [collectionFilter, setCollectionFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Ingredient | null>(null);
   const [creating, setCreating] = useState(false);
@@ -47,12 +47,12 @@ export default function IngredientsPage() {
 
   const refresh = useCallback(async () => {
     try {
-      setIngredients(await listIngredients(selectedOutletId ?? undefined, categoryFilter ? Number(categoryFilter) : undefined));
+      setIngredients(await listIngredients(selectedOutletId ?? undefined, collectionFilter ? Number(collectionFilter) : undefined));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ingredients");
     }
-  }, [selectedOutletId, categoryFilter]);
+  }, [selectedOutletId, collectionFilter]);
 
   useEffect(() => {
     refresh();
@@ -60,8 +60,8 @@ export default function IngredientsPage() {
 
   useEffect(() => {
     listIngredientCategories()
-      .then(setCategories)
-      .catch(() => setCategories([]));
+      .then(setCollections)
+      .catch(() => setCollections([]));
   }, []);
 
   function handleDelete(ingredient: Ingredient) {
@@ -101,13 +101,13 @@ export default function IngredientsPage() {
         <h1 className="text-2xl font-semibold">Ingredients</h1>
         <div className="flex items-center gap-2">
           <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            aria-label="Filter by category"
+            value={collectionFilter}
+            onChange={(e) => setCollectionFilter(e.target.value)}
+            aria-label="Filter by collection"
             className="h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           >
-            <option value="">All categories</option>
-            {categories.map((c) => (
+            <option value="">All collections</option>
+            {collections.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -170,7 +170,7 @@ export default function IngredientsPage() {
         <THead>
           <tr>
             <TH>Name</TH>
-            <TH className="w-32">Category</TH>
+            <TH className="w-32">Collection</TH>
             <TH className="w-24">Unit</TH>
             <TH className="w-40">Stock</TH>
             <TH className="w-10"></TH>
@@ -213,7 +213,7 @@ export default function IngredientsPage() {
                       <span>{ingredient.name}</span>
                     </div>
                   </TD>
-                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "—"}</TD>
+                  <TD className="text-zinc-500 text-xs">{ingredient.collectionName ?? "—"}</TD>
                   <TD className="text-zinc-500">{ingredient.unit}</TD>
                   <TD>
                     {ingredient.stockQuantity !== null ? (
@@ -279,7 +279,7 @@ export default function IngredientsPage() {
       {(creating || editing) && (
         <IngredientFormModal
           ingredient={editing}
-          categories={categories}
+          collections={collections}
           onClose={() => {
             setCreating(false);
             setEditing(null);

@@ -67,8 +67,8 @@ describe('Notify subscriptions (e2e)', () => {
       .expect(201);
     const adminToken = body<AuthResponse>(signup).accessToken;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
@@ -82,7 +82,7 @@ describe('Notify subscriptions (e2e)', () => {
         thumbnail: 'https://example.com/p.jpg',
         sku: `NOTIFY-${runId}-${Math.random().toString(36).slice(2, 8)}`,
         trackInventory: true,
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
       })
       .expect(201);
 

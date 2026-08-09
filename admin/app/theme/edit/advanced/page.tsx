@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getTheme, updateTheme } from "@/lib/api";
 import {
   HOMEPAGE_LAYOUT_OPTIONS,
+  HOME_TAB_MODE_OPTIONS,
   TOP_BAR_LAYOUT_OPTIONS,
   PDP_LAYOUT_OPTIONS,
   CART_LAYOUT_OPTIONS,
@@ -15,6 +16,7 @@ import {
   BUTTON_RADIUS_OPTIONS,
   BUTTON_FILL_OPTIONS,
   type HomepageLayout,
+  type HomeTabMode,
   type TopBarLayout,
   type PdpLayout,
   type CartLayout,
@@ -29,6 +31,8 @@ import {
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import PresetPicker from "@/components/PresetPicker";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import MenuBuilder from "@/components/MenuBuilder";
 import {
   HomepageLayoutThumbnail,
   TopBarLayoutThumbnail,
@@ -58,6 +62,7 @@ export default function ThemeAdvancedPage() {
   const toast = useToast();
   const [theme, setTheme] = useState<ThemeSettings | null>(null);
   const [homepageLayout, setHomepageLayout] = useState<HomepageLayout>("classic");
+  const [homeTabMode, setHomeTabMode] = useState<HomeTabMode>("templates");
   const [topBarLayout, setTopBarLayout] = useState<TopBarLayout>("logo_left");
   const [pdpLayout, setPdpLayout] = useState<PdpLayout>("gallery_left");
   const [cartLayout, setCartLayout] = useState<CartLayout>("full_page");
@@ -74,6 +79,7 @@ export default function ThemeAdvancedPage() {
     getTheme().then((data) => {
       setTheme(data);
       setHomepageLayout(data.homepageLayout);
+      setHomeTabMode(data.homeTabMode);
       setTopBarLayout(data.topBarLayout);
       setPdpLayout(data.pdpLayout);
       setCartLayout(data.cartLayout);
@@ -92,6 +98,7 @@ export default function ThemeAdvancedPage() {
     try {
       await updateTheme({
         homepageLayout,
+        homeTabMode,
         topBarLayout,
         pdpLayout,
         cartLayout,
@@ -141,6 +148,15 @@ export default function ThemeAdvancedPage() {
           </Card>
 
           <Card>
+            <Section
+              title="Home tab"
+              hint="What the storefront's Home tab shows below the banner — grouped Template sections, or a flat grid of top-level Collections."
+            >
+              <SegmentedToggle value={homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={setHomeTabMode} />
+            </Section>
+          </Card>
+
+          <Card>
             <Section title="Top bar layout" hint="How the header is arranged — logo, navigation icons, and cart.">
               <PresetPicker
                 options={TOP_BAR_LAYOUT_OPTIONS}
@@ -148,6 +164,15 @@ export default function ThemeAdvancedPage() {
                 onChange={setTopBarLayout}
                 renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
               />
+            </Section>
+          </Card>
+
+          <Card>
+            <Section
+              title="Menu"
+              hint="The storefront top bar's nav links — add direct Collection buttons, or Dropdowns exposing several Collections on hover."
+            >
+              <MenuBuilder />
             </Section>
           </Card>
 

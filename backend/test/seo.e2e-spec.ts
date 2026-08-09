@@ -119,13 +119,13 @@ describe('SEO (e2e)', () => {
         deliveryRadiusKm: 5,
       })
       .expect(200);
-    // A distinctly-named category, not 'Flowers' — each test's own
-    // setupProductFixture(adminToken) call creates a 'Flowers' category too,
-    // and category names are unique per shop.
-    const readinessCategory = await request(app.getHttpServer())
-      .post('/categories')
+    // A distinctly-named collection, not 'Flowers' — each test's own
+    // setupProductFixture(adminToken) call creates a 'Flowers' collection too,
+    // and collection names are unique per shop.
+    const readinessCollection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Readiness Placeholder Category' })
+      .send({ name: 'Readiness Placeholder Collection' })
       .expect(201);
     await request(app.getHttpServer())
       .post('/products')
@@ -135,7 +135,7 @@ describe('SEO (e2e)', () => {
         price: 10,
         thumbnail: 'https://example.com/placeholder.jpg',
         sku: `SEO-READY-${slugPrefix}-${runId}`,
-        categoryIds: [body<IdRow>(readinessCategory).id],
+        collectionIds: [body<IdRow>(readinessCollection).id],
       })
       .expect(201);
 
@@ -153,12 +153,12 @@ describe('SEO (e2e)', () => {
   }
 
   async function setupProductFixture(adminToken: string) {
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    return body<IdRow>(category).id;
+    return body<IdRow>(collection).id;
   }
 
   describe('GET /seo defaults for an unconfigured shop', () => {
@@ -334,7 +334,7 @@ describe('SEO (e2e)', () => {
   describe('product metadata fallback', () => {
     it('a product with no SEO fields set falls back to name + truncated description', async () => {
       const shop = await setupShop('product-seo-fallback');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
       // Long enough to exceed the 160-char meta-description cutoff. (Used to
       // also need to stay under description's old 191-char VARCHAR limit —
       // that column is TEXT now, see platform.e2e-spec.ts's regression test.)
@@ -350,7 +350,7 @@ describe('SEO (e2e)', () => {
           thumbnail: 'https://example.com/rose.jpg',
           sku: `ROSE-FB-${runId}`,
           description: longDescription,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(created).id;
@@ -369,7 +369,7 @@ describe('SEO (e2e)', () => {
 
     it('explicit metaTitle/metaDescription override the fallback', async () => {
       const shop = await setupShop('product-seo-explicit');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
 
       const created = await request(app.getHttpServer())
         .post('/products')
@@ -379,7 +379,7 @@ describe('SEO (e2e)', () => {
           price: 100,
           thumbnail: 'https://example.com/rose.jpg',
           sku: `ROSE-EX-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
           metaTitle: 'Buy Fresh Roses Online',
           metaDescription: 'Custom description for SEO.',
         })
@@ -398,7 +398,7 @@ describe('SEO (e2e)', () => {
   describe('product slug uniqueness', () => {
     it('auto-generates unique slugs for two products with the same name in the same shop', async () => {
       const shop = await setupShop('slug-collision');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
 
       const first = await request(app.getHttpServer())
         .post('/products')
@@ -408,7 +408,7 @@ describe('SEO (e2e)', () => {
           price: 50,
           thumbnail: 'https://example.com/cake.jpg',
           sku: `CAKE-1-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const second = await request(app.getHttpServer())
@@ -419,7 +419,7 @@ describe('SEO (e2e)', () => {
           price: 55,
           thumbnail: 'https://example.com/cake2.jpg',
           sku: `CAKE-2-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
 
@@ -441,8 +441,8 @@ describe('SEO (e2e)', () => {
     it('the same product name in two different shops is fine — no cross-shop collision', async () => {
       const shopA = await setupShop('slug-cross-a');
       const shopB = await setupShop('slug-cross-b');
-      const categoryA = await setupProductFixture(shopA.adminToken);
-      const categoryB = await setupProductFixture(shopB.adminToken);
+      const collectionA = await setupProductFixture(shopA.adminToken);
+      const collectionB = await setupProductFixture(shopB.adminToken);
 
       const productA = await request(app.getHttpServer())
         .post('/products')
@@ -452,7 +452,7 @@ describe('SEO (e2e)', () => {
           price: 100,
           thumbnail: 'https://example.com/a.jpg',
           sku: `SIG-A-${runId}`,
-          categoryIds: [categoryA],
+          collectionIds: [collectionA],
         })
         .expect(201);
       const productB = await request(app.getHttpServer())
@@ -463,7 +463,7 @@ describe('SEO (e2e)', () => {
           price: 100,
           thumbnail: 'https://example.com/b.jpg',
           sku: `SIG-B-${runId}`,
-          categoryIds: [categoryB],
+          collectionIds: [collectionB],
         })
         .expect(201);
 
@@ -491,7 +491,7 @@ describe('SEO (e2e)', () => {
 
     it('an explicit slug that collides is rejected with a 409, not silently disambiguated', async () => {
       const shop = await setupShop('slug-explicit-conflict');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
 
       await request(app.getHttpServer())
         .post('/products')
@@ -501,7 +501,7 @@ describe('SEO (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/1.jpg',
           sku: `EXPL-1-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
           slug: 'taken-slug',
         })
         .expect(201);
@@ -514,7 +514,7 @@ describe('SEO (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/2.jpg',
           sku: `EXPL-2-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
           slug: 'taken-slug',
         })
         .expect(409);
@@ -523,7 +523,7 @@ describe('SEO (e2e)', () => {
 
     it('rejects a slug with invalid characters', async () => {
       const shop = await setupShop('slug-invalid');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
 
       await request(app.getHttpServer())
         .post('/products')
@@ -533,7 +533,7 @@ describe('SEO (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/1.jpg',
           sku: `BADSLUG-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
           slug: 'Not A Valid Slug!',
         })
         .expect(400);
@@ -541,7 +541,7 @@ describe('SEO (e2e)', () => {
 
     it('editing other fields does not silently change an already-published slug', async () => {
       const shop = await setupShop('slug-stable');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
 
       const created = await request(app.getHttpServer())
         .post('/products')
@@ -551,7 +551,7 @@ describe('SEO (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/1.jpg',
           sku: `STABLE-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(created).id;
@@ -569,7 +569,7 @@ describe('SEO (e2e)', () => {
   describe('id-based product route keeps working (backward compatibility)', () => {
     it('an old id-based link still resolves the product, including its slug', async () => {
       const shop = await setupShop('id-route-compat');
-      const categoryId = await setupProductFixture(shop.adminToken);
+      const collectionId = await setupProductFixture(shop.adminToken);
 
       const created = await request(app.getHttpServer())
         .post('/products')
@@ -579,7 +579,7 @@ describe('SEO (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/1.jpg',
           sku: `LEGACY-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(created).id;

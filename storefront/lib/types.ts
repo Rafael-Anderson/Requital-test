@@ -1,5 +1,5 @@
 export interface Shop {
-  // Every other storefront-facing endpoint (products/categories/outlets/
+  // Every other storefront-facing endpoint (products/collections/outlets/
   // checkout) 404s for an unpublished shop — this field alone is what's
   // still exposed, specifically so ShopLayoutClient can render a branded
   // "Coming soon" placeholder instead of a dead end. See backend
@@ -22,7 +22,7 @@ export interface Shop {
   socialLinks: Record<string, string> | null;
   productDisplayOrientation: "grid" | "list";
   productImageZoomEnabled: boolean;
-  showCategoryMenu: boolean;
+  showCollectionMenu: boolean;
   taxRate: string;
   taxInclusive: boolean;
   taxDisplayText: string | null;
@@ -77,6 +77,9 @@ export interface Shop {
   // Advanced tab — see HomepageLayout below. Always a real value (defaults
   // to "classic" server-side even for a shop that's never touched Theme).
   homepageLayout: HomepageLayout;
+  // Phase C — what the Home tab renders below the banner. Always a real
+  // value, same rule as homepageLayout.
+  homeTabMode: HomeTabMode;
   // Theme Customizer v2 — see the enum exports below. Every field here is
   // always a real, non-null value (defaults server-side to the pre-this-
   // task behavior), same rule as homepageLayout above.
@@ -120,6 +123,9 @@ export type FontChoice = (typeof FONT_CHOICES)[number];
 export const HOMEPAGE_LAYOUTS = ["classic", "slideshow", "featured_grid", "grid_first", "custom"] as const;
 export type HomepageLayout = (typeof HOMEPAGE_LAYOUTS)[number];
 
+export const HOME_TAB_MODES = ["templates", "collections"] as const;
+export type HomeTabMode = (typeof HOME_TAB_MODES)[number];
+
 // Theme Customizer v2 — mirrors backend/src/theme/constants.ts by hand (same
 // no-shared-package tradeoff as everything else on this page). See
 // lib/layout.tsx (top bar/PDP/cart/checkout dispatch), lib/icon-style.ts,
@@ -153,32 +159,68 @@ export type Density = (typeof DENSITY_OPTIONS)[number];
 
 export type DayHours = Record<string, { open: string; close: string; closed: boolean }>;
 
-export interface Category {
+export interface Collection {
   id: number;
   name: string;
   slug: string;
   displayOrder: number;
   image: string | null;
   isFeatured: boolean;
-  parentCategoryId: number | null;
+  parentCollectionId: number | null;
 }
 
-export interface CollectionSummary {
+// Collection (taxonomy node) detail page — /[shop]/collections/[slug].
+export interface CollectionDetail {
+  id: number;
+  name: string;
+  slug: string;
+  image: string | null;
+  products: Product[];
+}
+
+export interface TemplateSummary {
   id: number;
   title: string;
   slug: string;
   description: string | null;
   image: string | null;
-  type: "MANUAL" | "RULE_BASED";
+  type: "MANUAL" | "RULE_BASED" | "COLLECTION_GROUP";
 }
 
-export interface CollectionDetail {
+export interface TemplateDetail {
   id: number;
   title: string;
   slug: string;
   description: string | null;
   image: string | null;
   products: Product[];
+}
+
+// Storefront Home tab, 'templates' mode — one section per active Template.
+export interface HomepageTemplateSection {
+  id: number;
+  title: string;
+  slug: string;
+  description: string | null;
+  products: Product[];
+}
+
+export const MENU_ITEM_TYPES = ["LINK", "DROPDOWN"] as const;
+export type MenuItemType = (typeof MENU_ITEM_TYPES)[number];
+
+export interface MenuItemCollectionRef {
+  collectionId: number;
+  sortOrder: number;
+  collection: { id: number; name: string; slug: string } | null;
+}
+
+export interface MenuItem {
+  id: number;
+  label: string;
+  type: MenuItemType;
+  collectionId: number | null;
+  collection: { id: number; name: string; slug: string } | null;
+  collections: MenuItemCollectionRef[];
 }
 
 export interface ProductImage {
@@ -244,7 +286,7 @@ export interface Product {
   sku: string;
   status: string;
   trackInventory: boolean;
-  categories: { id: number; name: string }[];
+  collections: { id: number; name: string }[];
   stockQuantity: number | null; // null = unlimited/unknown (no outlet context or not tracked)
   images: ProductImage[];
   attributes: ProductAttribute[];
@@ -395,7 +437,7 @@ export interface SurveyLookupResult {
 }
 
 // Mirrors backend/src/bio-links/bio-link-constants.ts by hand.
-export type BioLinkType = "EXTERNAL_URL" | "PRODUCT" | "CATEGORY" | "COLLECTION" | "SOCIAL_ICON";
+export type BioLinkType = "EXTERNAL_URL" | "PRODUCT" | "COLLECTION" | "TEMPLATE" | "SOCIAL_ICON";
 export type BioLinkSocialPlatform =
   | "instagram"
   | "facebook"
@@ -410,13 +452,13 @@ export interface BioLink {
   id: number;
   type: BioLinkType;
   label: string;
-  // Present only for PRODUCT/CATEGORY/SOCIAL_ICON respectively — see backend
+  // Present only for PRODUCT/COLLECTION/SOCIAL_ICON respectively — see backend
   // BioLinksService.listPublic, which already excludes anything unresolvable
-  // (deleted/unavailable product or category, unconfigured social platform)
+  // (deleted/unavailable product or collection, unconfigured social platform)
   // rather than sending a broken entry.
   product?: { name: string; slug: string; thumbnail: string } | null;
-  category?: { name: string; slug: string; image: string | null } | null;
-  collection?: { title: string; slug: string; image: string | null } | null;
+  collection?: { name: string; slug: string; image: string | null } | null;
+  template?: { title: string; slug: string; image: string | null } | null;
   socialPlatform?: BioLinkSocialPlatform | null;
 }
 

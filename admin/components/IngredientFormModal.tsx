@@ -18,12 +18,12 @@ import { useToast } from "@/components/ui/Toast";
 // list page's inline adjust/transfer actions, not this form.
 export default function IngredientFormModal({
   ingredient,
-  categories,
+  collections,
   onClose,
   onSaved,
 }: {
   ingredient: Ingredient | null;
-  categories: IngredientCategory[];
+  collections: IngredientCategory[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -33,7 +33,7 @@ export default function IngredientFormModal({
   const [description, setDescription] = useState(ingredient?.description ?? "");
   const [costPerUnit, setCostPerUnit] = useState(ingredient?.costPerUnit ?? "");
   const [supplier, setSupplier] = useState(ingredient?.supplier ?? "");
-  const [categoryId, setCategoryId] = useState(ingredient?.categoryId ? String(ingredient.categoryId) : "");
+  const [collectionId, setCollectionId] = useState(ingredient?.collectionId ? String(ingredient.collectionId) : "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(resolveImageUrl(ingredient?.image));
   const [saving, setSaving] = useState(false);
@@ -59,7 +59,7 @@ export default function IngredientFormModal({
         description: description.trim() || null,
         costPerUnit: costPerUnit === "" ? null : Number(costPerUnit),
         supplier: supplier.trim() || null,
-        categoryId: categoryId === "" ? null : Number(categoryId),
+        collectionId: collectionId === "" ? null : Number(collectionId),
         ...(image !== undefined && { image }),
       };
       if (ingredient) {
@@ -97,13 +97,13 @@ export default function IngredientFormModal({
           </div>
 
           <Combobox
-            label="Category"
-            value={categoryId}
-            onChange={setCategoryId}
+            label="Collection"
+            value={collectionId}
+            onChange={setCollectionId}
             placeholder="— None —"
             options={[
               { value: "", label: "— None —" },
-              ...categories.map((c) => ({ value: String(c.id), label: c.name })),
+              ...collections.map((c) => ({ value: String(c.id), label: c.name })),
             ]}
           />
 

@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getShop } from "@/lib/api";
 import PageShell from "@/components/ui/PageShell";
 
-// Categories moved under Inventory as a tab (see InventoryTabs) rather than
+// Collections moved under Inventory as a tab (see InventoryTabs) rather than
 // its own tile — it's a sub-view of the catalog, not a peer section.
 const SECTIONS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -28,7 +28,7 @@ const ADMIN_SECTIONS = [
   { href: "/affiliate", label: "Affiliate", icon: Share2 },
   { href: "/bio-links", label: "Bio Links", icon: Link2 },
   { href: "/discounts", label: "Discounts", icon: Percent },
-  { href: "/collections", label: "Collections", icon: Layers },
+  { href: "/templates", label: "Templates", icon: Layers },
   { href: "/abandoned-carts", label: "Abandoned Carts", icon: MailWarning },
   { href: "/gift-cards", label: "Gift Cards", icon: Gift },
   { href: "/draft-orders", label: "Draft Orders", icon: ClipboardEdit },

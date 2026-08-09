@@ -136,8 +136,8 @@ describe('Post-purchase survey (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
@@ -149,7 +149,7 @@ describe('Post-purchase survey (e2e)', () => {
         price: 25,
         thumbnail: 'https://example.com/x.jpg',
         sku: `SURVEY-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
         trackInventory: false,
       })
       .expect(201);

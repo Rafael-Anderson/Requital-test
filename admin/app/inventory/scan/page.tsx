@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   commitScan,
   getScanSettings,
-  listCategories,
+  listCollections,
   listIngredients,
   listOutlets,
   listProducts,
@@ -13,7 +13,7 @@ import {
   updateScanSettings,
 } from "@/lib/api";
 import type {
-  Category,
+  Collection,
   Ingredient,
   Outlet,
   Product,
@@ -49,7 +49,7 @@ interface ReviewRow {
   outletId: number | "";
   skip: boolean;
   newPrice: string;
-  newCategoryId: number | "";
+  newCollectionId: number | "";
   newUnit: string;
   // OCR-parsed cost, editable, sent as the commit item's `price` regardless
   // of matched vs. newly-created (see ScanCommitItem.price).
@@ -123,7 +123,7 @@ export default function ScanToStockPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
 
@@ -143,7 +143,7 @@ export default function ScanToStockPage() {
   useEffect(() => {
     getScanSettings().then(setSettings);
     listOutlets().then(setOutlets);
-    listCategories().then(setCategories);
+    listCollections().then(setCollections);
     refreshCatalog();
   }, []);
 
@@ -190,7 +190,7 @@ export default function ScanToStockPage() {
             outletId: res.defaultOutletId ?? "",
             skip: false,
             newPrice: item.price !== null ? String(item.price) : "",
-            newCategoryId: "",
+            newCollectionId: "",
             newUnit: "",
             costPrice: item.price !== null ? String(item.price) : "",
           };
@@ -220,8 +220,8 @@ export default function ScanToStockPage() {
         return;
       }
       if (r.matchedId === null) {
-        if (r.targetType === "product" && (!r.newPrice || !r.newCategoryId)) {
-          toast(`"${r.name}" needs a price and category to create as a new product`, "error");
+        if (r.targetType === "product" && (!r.newPrice || !r.newCollectionId)) {
+          toast(`"${r.name}" needs a price and collection to create as a new product`, "error");
           return;
         }
         if (r.targetType === "ingredient" && !r.newUnit.trim()) {
@@ -253,7 +253,7 @@ export default function ScanToStockPage() {
           : {
               createNew:
                 r.targetType === "product"
-                  ? { name: r.name, price: Number(r.newPrice), categoryId: Number(r.newCategoryId) }
+                  ? { name: r.name, price: Number(r.newPrice), collectionId: Number(r.newCollectionId) }
                   : { name: r.name, unit: r.newUnit.trim() },
             }),
       }));
@@ -543,16 +543,16 @@ export default function ScanToStockPage() {
                               />
                             </div>
                             <div>
-                              <label className="text-xs text-zinc-500 block mb-1">New product category</label>
+                              <label className="text-xs text-zinc-500 block mb-1">New product collection</label>
                               <select
-                                value={row.newCategoryId}
+                                value={row.newCollectionId}
                                 onChange={(e) =>
-                                  updateRow(row.key, { newCategoryId: e.target.value ? Number(e.target.value) : "" })
+                                  updateRow(row.key, { newCollectionId: e.target.value ? Number(e.target.value) : "" })
                                 }
                                 className={SELECT_CLASS}
                               >
                                 <option value="">— Pick —</option>
-                                {categories.map((c) => (
+                                {collections.map((c) => (
                                   <option key={c.id} value={c.id}>
                                     {c.name}
                                   </option>

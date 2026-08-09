@@ -36,7 +36,7 @@ export function buildSlides(banners: BannerImageInput[], products: Product[]): S
 // "Slideshow" layout's hero — auto-advances, plus manual prev/next arrows
 // and the existing click-a-dot jump, matching the task's "auto-advance +
 // manual controls" ask. No slider UX pattern already existed elsewhere on
-// this storefront to match (checked CategoryNav's mobile arrows — a
+// this storefront to match (checked CollectionNav's mobile arrows — a
 // different, horizontal-scroll-nudge interaction, not a slide-index
 // carousel) — these arrows are new, styled consistently with the existing
 // dot indicators (same --color-slider-fg token).

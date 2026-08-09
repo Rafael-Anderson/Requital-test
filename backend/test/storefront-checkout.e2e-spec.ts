@@ -79,7 +79,7 @@ describe('Storefront public checkout (e2e)', () => {
   let adminToken: string;
   let outletId: number;
   let productId: number; // trackInventory, price 100, stock 100 — shared across most tests
-  let categoryId: number;
+  let collectionId: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -148,12 +148,12 @@ describe('Storefront public checkout (e2e)', () => {
       .send({ defaultDeliveryFee: 15, taxRate: 5, taxInclusive: false })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    categoryId = body<IdRow>(category).id;
+    collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -164,7 +164,7 @@ describe('Storefront public checkout (e2e)', () => {
         thumbnail: 'https://example.com/rose.jpg',
         sku: `ROSE-${runId}`,
         trackInventory: true,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     productId = body<IdRow>(product).id;
@@ -211,12 +211,12 @@ describe('Storefront public checkout (e2e)', () => {
       expect(body<{ name: string }>(res).name).toBe('Storefront Test Shop');
     });
 
-    it('GET /public/:shopSlug/categories returns the created category', async () => {
+    it('GET /public/:shopSlug/collections returns the created collection', async () => {
       const res = await request(app.getHttpServer())
-        .get(`/public/${shopSlug}/categories`)
+        .get(`/public/${shopSlug}/collections`)
         .expect(200);
       expect(body<{ id: number }[]>(res).map((c) => c.id)).toContain(
-        categoryId,
+        collectionId,
       );
     });
 
@@ -257,7 +257,7 @@ describe('Storefront public checkout (e2e)', () => {
           thumbnail: 'https://example.com/candle.jpg',
           sku: `ADDON-${runId}`,
           isCheckoutAddon: true,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const addonId = body<IdRow>(addon).id;
@@ -276,10 +276,10 @@ describe('Storefront public checkout (e2e)', () => {
         })
         .expect(201);
       const otherToken = body<AuthResponse>(otherSignup).accessToken;
-      const otherCategory = await request(app.getHttpServer())
-        .post('/categories')
+      const otherCollection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${otherToken}`)
-        .send({ name: 'Other Category' })
+        .send({ name: 'Other Collection' })
         .expect(201);
       await request(app.getHttpServer())
         .post('/products')
@@ -290,7 +290,7 @@ describe('Storefront public checkout (e2e)', () => {
           thumbnail: 'https://example.com/other.jpg',
           sku: `OTHER-ADDON-${runId}`,
           isCheckoutAddon: true,
-          categoryIds: [body<IdRow>(otherCategory).id],
+          collectionIds: [body<IdRow>(otherCollection).id],
         })
         .expect(201);
 
@@ -753,7 +753,7 @@ describe('Storefront public checkout (e2e)', () => {
           thumbnail: 'https://example.com/last.jpg',
           sku: `LAST-${runId}`,
           trackInventory: true,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       raceProductId = body<IdRow>(product).id;

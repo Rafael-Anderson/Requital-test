@@ -48,7 +48,7 @@ export default function StoreConfigurationPage() {
   const [taxDisplayText, setTaxDisplayText] = useState("");
   const [productDisplayOrientation, setProductDisplayOrientation] = useState<ProductDisplayOrientation>("grid");
   const [productImageZoomEnabled, setProductImageZoomEnabled] = useState(true);
-  const [showCategoryMenu, setShowCategoryMenu] = useState(true);
+  const [showCollectionMenu, setShowCollectionMenu] = useState(true);
   const [allowPreOrders, setAllowPreOrders] = useState(false);
   const [customerConfirmationRequired, setCustomerConfirmationRequired] = useState(false);
   const [externalDeliveryEnabled, setExternalDeliveryEnabled] = useState(false);
@@ -74,7 +74,7 @@ export default function StoreConfigurationPage() {
       setTaxDisplayText(s.taxDisplayText ?? "");
       setProductDisplayOrientation(s.productDisplayOrientation);
       setProductImageZoomEnabled(s.productImageZoomEnabled);
-      setShowCategoryMenu(s.showCategoryMenu);
+      setShowCollectionMenu(s.showCollectionMenu);
       setAllowPreOrders(s.allowPreOrders);
       setCustomerConfirmationRequired(s.customerConfirmationRequired);
       setExternalDeliveryEnabled(s.externalDeliveryEnabled);
@@ -101,7 +101,7 @@ export default function StoreConfigurationPage() {
         taxDisplayText,
         productDisplayOrientation,
         productImageZoomEnabled,
-        showCategoryMenu,
+        showCollectionMenu,
         allowPreOrders,
         customerConfirmationRequired,
         externalDeliveryEnabled,
@@ -218,9 +218,9 @@ export default function StoreConfigurationPage() {
                     onChange={(e) => setProductImageZoomEnabled(e.target.checked)}
                   />
                   <Checkbox
-                    label="Show category menu"
-                    checked={showCategoryMenu}
-                    onChange={(e) => setShowCategoryMenu(e.target.checked)}
+                    label="Show collection menu"
+                    checked={showCollectionMenu}
+                    onChange={(e) => setShowCollectionMenu(e.target.checked)}
                   />
                   <Checkbox
                     label="Allow pre-orders"

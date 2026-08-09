@@ -414,47 +414,47 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         .expect(403);
     });
 
-    // Structure (name/price/images/category tree) is admin-only, same as
+    // Structure (name/price/images/collection tree) is admin-only, same as
     // Shop/Users/Outlets/DeliveryZones — this was the gap flagged in the
     // prior audit ([FINDING] tests here previously asserted branch access
     // *worked*; now that it's closed, they assert the opposite).
-    it('a branch user CANNOT create, edit, or delete a category — admin can', async () => {
+    it('a branch user CANNOT create, edit, or delete a collection — admin can', async () => {
       const created = await request(app.getHttpServer())
-        .post('/categories')
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: `Admin category ${runId}` })
+        .send({ name: `Admin collection ${runId}` })
         .expect(201);
-      const categoryId = body<IdRow>(created).id;
+      const collectionId = body<IdRow>(created).id;
 
       await request(app.getHttpServer())
-        .post('/categories')
+        .post('/collections')
         .set('Authorization', `Bearer ${branchToken}`)
-        .send({ name: `Branch-attempted category ${runId}` })
+        .send({ name: `Branch-attempted collection ${runId}` })
         .expect(403);
       await request(app.getHttpServer())
-        .patch(`/categories/${categoryId}`)
+        .patch(`/collections/${collectionId}`)
         .set('Authorization', `Bearer ${branchToken}`)
         .send({ name: 'Renamed by branch user' })
         .expect(403);
       await request(app.getHttpServer())
-        .delete(`/categories/${categoryId}`)
+        .delete(`/collections/${collectionId}`)
         .set('Authorization', `Bearer ${branchToken}`)
         .expect(403);
 
       // Branch reads still work — only writes are gated.
       await request(app.getHttpServer())
-        .get('/categories')
+        .get('/collections')
         .set('Authorization', `Bearer ${branchToken}`)
         .expect(200);
     });
 
     it('a branch user CANNOT create, structurally edit, or delete a product — admin can', async () => {
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: `Admin category for product test ${runId}` })
+        .send({ name: `Admin collection for product test ${runId}` })
         .expect(201);
-      const categoryId = body<IdRow>(category).id;
+      const collectionId = body<IdRow>(collection).id;
 
       await request(app.getHttpServer())
         .post('/products')
@@ -464,7 +464,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
           price: 10,
           thumbnail: 'https://example.com/x.jpg',
           sku: `BRANCH-DENIED-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(403);
 
@@ -476,7 +476,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
           price: 10,
           thumbnail: 'https://example.com/x.jpg',
           sku: `ADMIN-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(product).id;
@@ -500,10 +500,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it('a branch user CAN toggle product availability — that stays open, unlike structural edits', async () => {
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: `Availability test category ${runId}` })
+        .send({ name: `Availability test collection ${runId}` })
         .expect(201);
       const product = await request(app.getHttpServer())
         .post('/products')
@@ -513,7 +513,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
           price: 10,
           thumbnail: 'https://example.com/x.jpg',
           sku: `AVAIL-${runId}`,
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
       const productId = body<IdRow>(product).id;
@@ -527,10 +527,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it("the availability endpoint's DTO rejects extra fields — a branch request can't smuggle a name/price change through it", async () => {
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: `DTO-splitting test category ${runId}` })
+        .send({ name: `DTO-splitting test collection ${runId}` })
         .expect(201);
       const product = await request(app.getHttpServer())
         .post('/products')
@@ -540,7 +540,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
           price: 10,
           thumbnail: 'https://example.com/x.jpg',
           sku: `DTOSPLIT-${runId}`,
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
       const productId = body<IdRow>(product).id;
@@ -571,10 +571,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it('the stock bulk-adjust endpoint stays open to branch users (day-to-day inventory, not catalog structure)', async () => {
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: `Stock test category ${runId}` })
+        .send({ name: `Stock test collection ${runId}` })
         .expect(201);
       const product = await request(app.getHttpServer())
         .post('/products')
@@ -585,7 +585,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
           thumbnail: 'https://example.com/x.jpg',
           sku: `STOCK-${runId}`,
           trackInventory: true,
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
 

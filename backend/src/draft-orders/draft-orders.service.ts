@@ -251,7 +251,7 @@ export class DraftOrdersService {
   // Converts to a real (unpaid) Order immediately and generates a payment
   // link on it via the existing mechanism (PaymentsService.generateLink) —
   // no separate draft-order payment infrastructure. Actual payment
-  // collection then follows the normal flow for that order; a merchant who
+  // template then follows the normal flow for that order; a merchant who
   // sees it get paid (or gets paid by cash instead) calls complete() to
   // finish it off, or the order can be tracked/marked paid the same way any
   // other order is.

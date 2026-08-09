@@ -417,7 +417,7 @@ model product {
   giftCardCustomAmountMin   Decimal?
   giftCardCustomAmountMax   Decimal?
   // Organization sidebar fields — free text, no dedicated lookup tables
-  // (matches how tag/category already work: shop-scoped, no cross-shop
+  // (matches how tag/collection already work: shop-scoped, no cross-shop
   // sharing). Collections were explicitly out of scope (no such model exists
   // in this schema; task said to flag rather than build one from scratch).
   vendor                    String?
@@ -435,7 +435,7 @@ model product {
   // Unlike sku, name collisions are common (two "Chocolate Cake" products),
   // so auto-generation disambiguates with a numeric suffix rather than
   // failing; an explicitly-chosen slug that collides still hard-rejects,
-  // same as category slugs.
+  // same as collection slugs.
   slug                      String
   metaTitle                 String?
   metaDescription           String?             @db.Text
@@ -445,7 +445,7 @@ model product {
   productattribute          productattribute[]
   productfaq                productfaq[]
   productoption             productoption[]
-  productcategory           productcategory[]
+  productcollection         productcollection[]
   producttag                producttag[]
   orderitem                 orderitem[]
   shadowIngredient          ingredient?         @relation("ProductShadowIngredient")
@@ -453,7 +453,7 @@ model product {
   discountproduct           discountproduct[]
   draftorderitem            draftorderitem[]
   stockmovement             stockmovement[]
-  collectionproduct         collectionproduct[]
+  templateproduct           templateproduct[]
   productingredient         productingredient[]
   notifysubscription        notifysubscription[]
 
@@ -567,36 +567,39 @@ model productoptionvalue {
   @@index([optionId], map: "ProductOptionValue_optionId_fkey")
 }
 
-model category {
-  id               Int                @id @default(autoincrement())
-  shopId           Int
-  name             String
-  slug             String
-  displayOrder     Int                @default(0)
-  image            String?
-  isFeatured       Boolean            @default(false)
-  parentCategoryId Int?
-  createdAt        DateTime           @default(now())
-  shop             shop               @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Category_shopId_fkey")
-  parent           category?          @relation("CategoryToParent", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Category_parentCategoryId_fkey")
-  children         category[]         @relation("CategoryToParent")
-  productcategory  productcategory[]
-  biolink          biolink[]
-  discountcategory discountcategory[]
+model collection {
+  id                 Int                  @id @default(autoincrement())
+  shopId             Int
+  name               String
+  slug               String
+  displayOrder       Int                  @default(0)
+  image              String?
+  isFeatured         Boolean              @default(false)
+  parentCollectionId Int?
+  createdAt          DateTime             @default(now())
+  shop               shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Collection_shopId_fkey")
+  parent             collection?          @relation("CollectionToParent", fields: [parentCollectionId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Collection_parentCollectionId_fkey")
+  children           collection[]         @relation("CollectionToParent")
+  productcollection  productcollection[]
+  biolink            biolink[]
+  discountcollection discountcollection[]
+  templatecollection templatecollection[]
+  menuitem           menuitem[]
+  menuitemcollection menuitemcollection[]
 
-  @@unique([shopId, slug], map: "Category_shopId_slug_key")
-  @@index([shopId], map: "Category_shopId_fkey")
-  @@index([parentCategoryId], map: "Category_parentCategoryId_fkey")
+  @@unique([shopId, slug], map: "Collection_shopId_slug_key")
+  @@index([shopId], map: "Collection_shopId_fkey")
+  @@index([parentCollectionId], map: "Collection_parentCollectionId_fkey")
 }
 
-model productcategory {
-  productId  Int
-  categoryId Int
-  product    product  @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductCategory_productId_fkey")
-  category   category @relation(fields: [categoryId], references: [id], onDelete: Cascade, map: "ProductCategory_categoryId_fkey")
+model productcollection {
+  productId    Int
+  collectionId Int
+  product      product    @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductCollection_productId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "ProductCollection_collectionId_fkey")
 
-  @@id([productId, categoryId])
-  @@index([categoryId], map: "ProductCategory_categoryId_fkey")
+  @@id([productId, collectionId])
+  @@index([collectionId], map: "ProductCollection_collectionId_fkey")
 }
 
 model tag {
@@ -740,7 +743,7 @@ model shop {
   taxDisplayText                String?
   productDisplayOrientation     String  @default("grid")
   productImageZoomEnabled       Boolean @default(true)
-  showCategoryMenu              Boolean @default(true)
+  showCollectionMenu            Boolean @default(true)
   allowPreOrders                Boolean @default(false)
   customerConfirmationRequired  Boolean @default(false)
   externalDeliveryEnabled       Boolean @default(false)
@@ -837,7 +840,7 @@ model shop {
 
   order               order[]
   product             product[]
-  category            category[]
+  collection          collection[]
   tag                 tag[]
   themesettings       themesettings?
   shopseosettings     shopseosettings?
@@ -857,7 +860,8 @@ model shop {
   ingredient          ingredient[]
   ingredientcategory  ingredientcategory[]
   branchrole          branchrole[]
-  collection          collection[]
+  template            template[]
+  menuitem            menuitem[]
   scansettings        scansettings?
   abandonedcart       abandonedcart[]
   giftcard            giftcard[]
@@ -913,7 +917,7 @@ model bannerimage {
 
 // Link-in-bio page (Dukany parity) — a per-shop, publicly shareable list of
 // links at storefront /:shopSlug/bio. `type` picks which of
-// url/productId/categoryId/socialPlatform is meaningful; the other three are
+// url/productId/collectionId/templateId/socialPlatform is meaningful; the other four are
 // always null (enforced in BioLinksService, not a DB constraint — same
 // convention as every other discriminated-field model in this schema, e.g.
 // shoppaymentprovider's provider-keyed credentials). Plain String columns
@@ -924,7 +928,7 @@ model bannerimage {
 model biolink {
   id             Int         @id @default(autoincrement())
   shopId         Int
-  // 'EXTERNAL_URL' | 'PRODUCT' | 'CATEGORY' | 'COLLECTION' | 'SOCIAL_ICON'
+  // 'EXTERNAL_URL' | 'PRODUCT' | 'COLLECTION' | 'TEMPLATE' | 'SOCIAL_ICON'
   type           String
   // Display text. Not required for SOCIAL_ICON (falls back to the platform's
   // display name at read time — see BioLinksService.resolveDisplayLabel).
@@ -938,10 +942,10 @@ model biolink {
   // productId is null. See the task's own "hide from public, stays active
   // in admin" default.
   productId      Int?
-  // CATEGORY only. Same SetNull reasoning as productId.
-  categoryId     Int?
   // COLLECTION only. Same SetNull reasoning as productId.
   collectionId   Int?
+  // TEMPLATE only. Same SetNull reasoning as productId.
+  templateId     Int?
   // SOCIAL_ICON only — one of BIO_LINK_SOCIAL_PLATFORMS (bio-link-constants.ts).
   // No URL is stored here: the actual link is resolved at click time from
   // shop.socialLinks[socialPlatform], or from shop.whatsappNumber for the
@@ -959,13 +963,13 @@ model biolink {
   updatedAt      DateTime    @default(now()) @updatedAt
   shop           shop        @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BioLink_shopId_fkey")
   product        product?    @relation(fields: [productId], references: [id], onDelete: SetNull, map: "BioLink_productId_fkey")
-  category       category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "BioLink_categoryId_fkey")
   collection     collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "BioLink_collectionId_fkey")
+  template       template?   @relation(fields: [templateId], references: [id], onDelete: SetNull, map: "BioLink_templateId_fkey")
 
   @@index([shopId], map: "BioLink_shopId_fkey")
   @@index([productId], map: "BioLink_productId_fkey")
-  @@index([categoryId], map: "BioLink_categoryId_fkey")
   @@index([collectionId], map: "BioLink_collectionId_fkey")
+  @@index([templateId], map: "BioLink_templateId_fkey")
 }
 
 // Page-level config for the bio-link page (/:shopSlug/bio), decoupled from
@@ -994,33 +998,41 @@ model biolinkpageconfig {
   shop            shop    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BioLinkPageConfig_shopId_fkey")
 }
 
-// Marketing-driven product groupings that cut across the category tree
+// Marketing-driven product groupings that cut across the collection tree
 // ("Summer Sale", "New Arrivals", "Under 50 AED") — deliberately a real,
-// separate model from `category` rather than a Product boolean/tag array.
+// separate model from `collection` rather than a Product boolean/tag array.
 // Decision (see the task this was built under): a lightweight
 // tag/boolean alternative was evaluated first and rejected because the two
 // concrete capabilities actually asked for — RULE_BASED dynamic membership
-// (auto-include by category/tag/price/recency) and MANUAL per-product
+// (auto-include by collection/tag/price/recency) and MANUAL per-product
 // ordering within the group — can't be expressed by a static tag without
 // effectively rebuilding a worse version of this model anyway (a tag has no
 // order field, and "auto-update membership as prices change" needs real
 // query-time rule evaluation, not a value someone remembers to reapply).
-// Categories stay a single hierarchical taxonomy for browse navigation;
+// Collections stay a single hierarchical taxonomy for browse navigation;
 // mixing one-off campaigns into that tree (a "Summer Sale" sibling of
-// "Bouquets") would pollute it for every merchant who doesn't use collections.
-model collection {
+// "Bouquets") would pollute it for every merchant who doesn't use templates.
+//
+// Phase C addition: a third type, COLLECTION_GROUP, has no templateproduct
+// rows and no rules — membership is a curated list of Collections
+// (templatecollection, ordered by sortOrder), and its effective product list
+// is the union of every member Collection's own resolved products (see
+// TemplatesService.resolveProductIds). This is what powers the storefront
+// homepage's Template sections ("named group of Collections").
+model template {
   id                Int                 @id @default(autoincrement())
   shopId            Int
   title             String
   slug              String
   description       String?             @db.Text
   image             String?
-  // 'MANUAL' | 'RULE_BASED' — MANUAL membership lives in collectionproduct
-  // (with per-product sortOrder); RULE_BASED has no collectionproduct rows
-  // at all, membership is computed at read time from `rules` against the
-  // live product table (see CollectionsService.resolveProductIds).
+  // 'MANUAL' | 'RULE_BASED' | 'COLLECTION_GROUP' — MANUAL membership lives in
+  // templateproduct (with per-product sortOrder); RULE_BASED has no
+  // templateproduct rows at all, membership is computed at read time from
+  // `rules` against the live product table; COLLECTION_GROUP membership
+  // lives in templatecollection (see TemplatesService.resolveProductIds).
   type              String
-  // RULE_BASED only, null for MANUAL. Shape: { categoryId?, tagName?,
+  // RULE_BASED only, null otherwise. Shape: { collectionId?, tagName?,
   // minPrice?, maxPrice?, createdWithinDays? } — every set field is ANDed.
   // Deliberately this small, fixed shape (not a generic condition-builder)
   // — it's enough to express every example the task named ("Summer Sale" =
@@ -1030,25 +1042,77 @@ model collection {
   isActive          Boolean             @default(true)
   displayOrder      Int                 @default(0)
   createdAt         DateTime            @default(now())
-  shop              shop                @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Collection_shopId_fkey")
-  collectionproduct collectionproduct[]
+  shop              shop                @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Template_shopId_fkey")
+  templateproduct   templateproduct[]
+  templatecollection templatecollection[]
   biolink           biolink[]
 
-  @@unique([shopId, slug], map: "Collection_shopId_slug_key")
-  @@index([shopId], map: "Collection_shopId_fkey")
+  @@unique([shopId, slug], map: "Template_shopId_slug_key")
+  @@index([shopId], map: "Template_shopId_fkey")
 }
 
-// MANUAL-collection membership + manual display order. Not used for
-// RULE_BASED collections at all (see the `collection.type` comment).
-model collectionproduct {
-  collectionId Int
-  productId    Int
-  sortOrder    Int        @default(0)
-  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "CollectionProduct_collectionId_fkey")
-  product      product    @relation(fields: [productId], references: [id], onDelete: Cascade, map: "CollectionProduct_productId_fkey")
+// MANUAL-template membership + manual display order. Not used for
+// RULE_BASED or COLLECTION_GROUP templates at all (see `template.type`).
+model templateproduct {
+  templateId Int
+  productId  Int
+  sortOrder  Int      @default(0)
+  template   template @relation(fields: [templateId], references: [id], onDelete: Cascade, map: "TemplateProduct_templateId_fkey")
+  product    product  @relation(fields: [productId], references: [id], onDelete: Cascade, map: "TemplateProduct_productId_fkey")
 
-  @@id([collectionId, productId])
-  @@index([productId], map: "CollectionProduct_productId_fkey")
+  @@id([templateId, productId])
+  @@index([productId], map: "TemplateProduct_productId_fkey")
+}
+
+// COLLECTION_GROUP-template membership: which Collections a Template groups
+// together on the storefront homepage, in what order. Not used for MANUAL or
+// RULE_BASED templates (see `template.type`).
+model templatecollection {
+  templateId   Int
+  collectionId Int
+  sortOrder    Int        @default(0)
+  template     template   @relation(fields: [templateId], references: [id], onDelete: Cascade, map: "TemplateCollection_templateId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "TemplateCollection_collectionId_fkey")
+
+  @@id([templateId, collectionId])
+  @@index([collectionId], map: "TemplateCollection_collectionId_fkey")
+}
+
+// Storefront top-bar "Menu" (Phase C) — a merchant-ordered list of nav items,
+// each either a direct link to one Collection or a Dropdown exposing several.
+// LINK rows use `collectionId` directly and have no menuitemcollection rows;
+// DROPDOWN rows use menuitemcollection for their member list and leave
+// collectionId null — same discriminated-fields shape bio-links already uses
+// for its own type union (see BioLinksService's assertFieldsMatchType).
+model menuitem {
+  id                 Int                  @id @default(autoincrement())
+  shopId             Int
+  label              String
+  // 'LINK' | 'DROPDOWN'
+  type               String
+  // LINK only.
+  collectionId       Int?
+  displayOrder       Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  shop               shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "MenuItem_shopId_fkey")
+  collection         collection?          @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "MenuItem_collectionId_fkey")
+  menuitemcollection menuitemcollection[]
+
+  @@index([shopId], map: "MenuItem_shopId_fkey")
+  @@index([collectionId], map: "MenuItem_collectionId_fkey")
+}
+
+// DROPDOWN-menuitem membership: which Collections show in the hover panel,
+// in what order. Not used for LINK menu items.
+model menuitemcollection {
+  menuItemId   Int
+  collectionId Int
+  sortOrder    Int      @default(0)
+  menuitem     menuitem @relation(fields: [menuItemId], references: [id], onDelete: Cascade, map: "MenuItemCollection_menuItemId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "MenuItemCollection_collectionId_fkey")
+
+  @@id([menuItemId, collectionId])
+  @@index([collectionId], map: "MenuItemCollection_collectionId_fkey")
 }
 
 // Referral/affiliate marketing (Shopify-style): a merchant-managed roster of
@@ -1076,7 +1140,7 @@ model affiliatecode {
   affiliateId     Int
   code            String
   // What the code applies to — free text (e.g. "All Products" or a specific
-  // product/category name typed by the merchant), not a real product/category
+  // product/collection name typed by the merchant), not a real product/collection
   // relation. Deliberately simple per the task's own scoping.
   promotionFor    String           @default("All Products")
   // approved | pending | blocked
@@ -1247,7 +1311,7 @@ model customerauthtoken {
   @@index([customerId, purpose], map: "CustomerAuthToken_customerId_purpose_idx")
 }
 
-// A shop's physical branch. Products/categories are NOT outlet-scoped (one
+// A shop's physical branch. Products/collections are NOT outlet-scoped (one
 // shared catalog across branches) — only orders and stock levels are.
 model outlet {
   id                    Int                     @id @default(autoincrement())
@@ -1363,7 +1427,7 @@ model ingredient {
   // Single image, not a productimage-style gallery — ingredients have no
   // multi-photo/reorder use case anywhere in this app (no storefront
   // exposure, no variant-level image override to sync). Same "one field is
-  // enough" reasoning category.image already uses.
+  // enough" reasoning collection.image already uses.
   image                 String?
   description           String?                 @db.Text
   // Decimal like product.costPrice, not Int like ingredient stock — cost
@@ -1391,11 +1455,11 @@ model ingredient {
   @@index([categoryId], map: "Ingredient_categoryId_fkey")
 }
 
-// Flat (no parent/tree) unlike `category` — ingredient categories are a
+// Flat (no parent/tree) unlike `collection` — ingredient categories are a
 // purely internal inventory-organization concept with no storefront
 // navigation use case (ingredients themselves are structurally unreachable
 // from /public, see `ingredient`'s own comment), so the unlimited-depth
-// tree/cycle-guard machinery `category` needs for storefront nav menus
+// tree/cycle-guard machinery `collection` needs for storefront nav menus
 // would be pure overhead here.
 model ingredientcategory {
   id         Int          @id @default(autoincrement())
@@ -1517,7 +1581,7 @@ model productingredient {
   // DB constraint" convention already used for stockmovement's own
   // productId/ingredientId exclusivity below. In practice this table is
   // always fully replaced per product/variant (delete-all-then-recreate,
-  // same convention as product images/categories/tags), never incrementally
+  // same convention as product images/collections/tags), never incrementally
   // upserted, so there's no concurrent-insert race for this index to guard
   // against in the first place.
   @@unique([productId, variantId, ingredientId], map: "ProductIngredient_product_variant_ingredient_key")
@@ -1548,7 +1612,7 @@ model productingredient {
 // describing a REAL (merchant-created, non-shadow) ingredient — enforced in
 // ProductsService/IngredientsService (whichever creates the row), same
 // app-level-not-DB-constraint convention as every other discriminated-field
-// model in this schema (see biolink's type/url/productId/categoryId comment
+// model in this schema (see biolink's type/url/productId/collectionId comment
 // above). EXCEPTION (Phase A): a write resolved through a
 // usesIngredients:false product/variant's shadow ingredient sets BOTH
 // productId(+variantId) AND ingredientId on the row — deliberately, so
@@ -1709,6 +1773,12 @@ model themesettings {
   // existing (only) behavior, so this ships as a no-op for every shop that
   // never touches the Advanced tab.
   homepageLayout           String   @default("classic")
+  // Phase C — what the storefront's "Home" tab (formerly "All") renders:
+  // 'templates' (default) shows the Template sections computed from active
+  // Templates' resolved products; 'collections' shows a flat grid of
+  // top-level Collections instead, for merchants who prefer that. Same
+  // closed-enum-string convention as homepageLayout above.
+  homeTabMode              String   @default("templates")
   // Theme Customizer v2 — curated per-page-type layout presets and global
   // chrome/icon/button styling, all following the exact same "VARCHAR enum
   // string, NOT NULL DEFAULT <current behavior>" shape as homepageLayout
@@ -1862,7 +1932,7 @@ model discount {
   updatedAt             DateTime             @default(now()) @updatedAt
   shop                  shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Discount_shopId_fkey")
   discountproduct       discountproduct[]
-  discountcategory      discountcategory[]
+  discountcollection    discountcollection[]
   discountredemption    discountredemption[]
   order                 order[]
   draftorder            draftorder[]
@@ -1881,14 +1951,14 @@ model discountproduct {
   @@index([productId], map: "DiscountProduct_productId_fkey")
 }
 
-model discountcategory {
-  discountId Int
-  categoryId Int
-  discount   discount @relation(fields: [discountId], references: [id], onDelete: Cascade, map: "DiscountCategory_discountId_fkey")
-  category   category @relation(fields: [categoryId], references: [id], onDelete: Cascade, map: "DiscountCategory_categoryId_fkey")
+model discountcollection {
+  discountId   Int
+  collectionId Int
+  discount     discount   @relation(fields: [discountId], references: [id], onDelete: Cascade, map: "DiscountCollection_discountId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "DiscountCollection_collectionId_fkey")
 
-  @@id([discountId, categoryId])
-  @@index([categoryId], map: "DiscountCategory_categoryId_fkey")
+  @@id([discountId, collectionId])
+  @@index([collectionId], map: "DiscountCollection_collectionId_fkey")
 }
 
 // One row per successful redemption — an audit trail, and specifically what

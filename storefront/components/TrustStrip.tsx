@@ -18,7 +18,7 @@ const ITEMS = [
 // caller places this outside StorefrontPageShell, same as the homepage
 // hero, rather than nested inside it. A contained max-w-7xl row holds the
 // actual icon/text content, same "full-width bar, contained inner row"
-// pattern TopBar/CategoryNav already use. Previously this rendered as a
+// pattern TopBar/CollectionNav already use. Previously this rendered as a
 // plain grid nested *inside* the wide shell, so its border-y lines only
 // ever spanned the shell's own padded content width (visibly narrower than
 // the page, and inconsistent with the hero directly above it going truly

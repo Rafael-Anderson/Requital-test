@@ -131,14 +131,14 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId, slug };
+    return { adminToken, outletId, collectionId, slug };
   }
 
   // Publishing requires the readiness bar (outlet + at least one product
@@ -180,7 +180,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -192,7 +192,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         thumbnail: 'https://example.com/bouquet.jpg',
         sku: `BOM-${runId}-${Math.random().toString(36).slice(2, 8)}`,
         trackInventory: true,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         ...overrides,
       })
       .expect(201);
@@ -236,11 +236,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('recipe CRUD + variant-override resolution', () => {
     it('a product created with a recipe returns it, and updating replaces the full set', async () => {
-      const { adminToken, categoryId } = await setupShop('crud');
+      const { adminToken, collectionId } = await setupShop('crud');
       const rose = await createIngredient(adminToken, 'Rose');
       const box = await createIngredient(adminToken, 'Box');
 
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       expect(product.ingredients).toHaveLength(1);
@@ -292,7 +292,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
           price: 50,
           thumbnail: 'https://example.com/x.jpg',
           sku: `BOM-XTENANT-${runId}`,
-          categoryIds: [shopA.categoryId],
+          collectionIds: [shopA.collectionId],
           ingredients: [
             { ingredientId: foreignIngredient, quantityPerUnit: 1 },
           ],
@@ -302,7 +302,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('rejects the same ingredient linked twice in one recipe submission', async () => {
-      const { adminToken, categoryId } = await setupShop('dup');
+      const { adminToken, collectionId } = await setupShop('dup');
       const rose = await createIngredient(adminToken, 'Rose');
       const res = await request(app.getHttpServer())
         .post('/products')
@@ -312,7 +312,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
           price: 50,
           thumbnail: 'https://example.com/x.jpg',
           sku: `BOM-DUP-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
           ingredients: [
             { ingredientId: rose, quantityPerUnit: 6 },
             { ingredientId: rose, quantityPerUnit: 10 },
@@ -323,12 +323,12 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('a variant override wins for that variant; a variant with no override falls back to the product default', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('override');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 1000);
 
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       const withOptions = await request(app.getHttpServer())
@@ -384,11 +384,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('consumption fires at the same trigger points as product stock, gated by the toggle', () => {
     it('storefront checkout (immediate reservation) consumes the recipe and logs a CONSUMED movement', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('consume-immediate');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       await publishShop(adminToken);
@@ -425,9 +425,9 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('a product with no merchant-authored recipe consumes only its own shadow ingredient, never a real one', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('no-recipe');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -460,11 +460,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('respects the shop toggle: off means no deduction even though a recipe is linked', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('toggle-off');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       await publishShop(adminToken);
@@ -493,11 +493,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('a deferred admin order consumes at the pending->confirmed transition, not at creation', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('consume-confirm');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
 
@@ -537,11 +537,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('cancelling a still-pending immediate-reservation order restocks ingredients immediately', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('cancel-immediate');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       await publishShop(adminToken);
@@ -571,13 +571,13 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe("effective availability (informational, doesn't gate checkout)", () => {
     it('makeableQuantity/limitedByIngredient reflect the binding ingredient at the resolved outlet', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('availability');
       const rose = await createIngredient(adminToken, 'Rose');
       const box = await createIngredient(adminToken, 'Box');
       await setIngredientStock(adminToken, rose, outletId, 25); // 25 / 10 = 2 makeable
       await setIngredientStock(adminToken, box, outletId, 100); // 100 / 1 = 100 makeable — not the binding one
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [
           { ingredientId: rose, quantityPerUnit: 10 },
           { ingredientId: box, quantityPerUnit: 1 },
@@ -613,11 +613,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('race safety: concurrent orders against a nearly-depleted ingredient', () => {
     it('two concurrent storefront orders racing a recipe that only one can fully cover never overdraw the ingredient', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('bom-race');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 10); // exactly one order's worth (quantityPerUnit 10)
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 10 }],
       });
       await publishShop(adminToken);

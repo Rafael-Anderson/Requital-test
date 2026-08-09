@@ -85,14 +85,14 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
       .send({ pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, categoryId, slug };
+    return { adminToken, collectionId, slug };
   }
 
   // Publishing requires the readiness bar (outlet + at least one product
@@ -109,7 +109,7 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     name: string,
     sku: string,
   ) {
@@ -121,18 +121,18 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
         price: 50,
         thumbnail: 'https://example.com/p.jpg',
         sku,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         status: 'Available',
       })
       .expect(201);
   }
 
   it('returns exact matches by product name', async () => {
-    const { adminToken, categoryId, slug } =
+    const { adminToken, collectionId, slug } =
       await setupPublishedShop('search-exact');
     await createProduct(
       adminToken,
-      categoryId,
+      collectionId,
       'Rose Bouquet',
       `SRCH-${runId}-1`,
     );
@@ -149,11 +149,11 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
   });
 
   it('falls back to a typo-tolerant fuzzy match when the exact query has zero hits', async () => {
-    const { adminToken, categoryId, slug } =
+    const { adminToken, collectionId, slug } =
       await setupPublishedShop('search-fuzzy');
     await createProduct(
       adminToken,
-      categoryId,
+      collectionId,
       'Rose Bouquet',
       `SRCH-${runId}-2`,
     );
@@ -185,14 +185,14 @@ describe('Storefront search: GET /public/:shopSlug/search (e2e)', () => {
     const shopB = await setupPublishedShop('search-isolation-b');
     await createProduct(
       shopA.adminToken,
-      shopA.categoryId,
+      shopA.collectionId,
       'Rose Bouquet',
       `SRCH-${runId}-3`,
     );
     await publishShop(shopA.adminToken);
     await createProduct(
       shopB.adminToken,
-      shopB.categoryId,
+      shopB.collectionId,
       'Tulip Bouquet',
       `SRCH-${runId}-4`,
     );

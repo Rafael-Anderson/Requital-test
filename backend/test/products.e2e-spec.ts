@@ -88,7 +88,7 @@ describe('Products / variants (e2e)', () => {
   });
 
   // Mirrors the setup pattern already used in bio-links/storefront-checkout
-  // e2e specs — signup, configure an orderable outlet, one category, one
+  // e2e specs — signup, configure an orderable outlet, one collection, one
   // product. Publishing (if requested) must come last — the readiness gate
   // needs the outlet + product to already exist.
   async function setupShop(
@@ -130,12 +130,12 @@ describe('Products / variants (e2e)', () => {
       })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     if (opts.publish) {
       await request(app.getHttpServer())
@@ -145,12 +145,12 @@ describe('Products / variants (e2e)', () => {
         .expect(200);
     }
 
-    return { adminToken, outletId, categoryId, slug };
+    return { adminToken, outletId, collectionId, slug };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -161,7 +161,7 @@ describe('Products / variants (e2e)', () => {
         price: 100,
         thumbnail: 'https://example.com/shirt.jpg',
         sku: `SHIRT-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         ...overrides,
       })
       .expect(201);
@@ -170,8 +170,8 @@ describe('Products / variants (e2e)', () => {
 
   describe('backward compatibility', () => {
     it('a product created with no options/images behaves exactly as before (single implicit variant)', async () => {
-      const { adminToken, categoryId } = await setupShop('compat');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('compat');
+      const product = await createProduct(adminToken, collectionId, {
         thumbnail: 'https://example.com/legacy.jpg',
       });
       expect(product.hasVariants).toBe(false);
@@ -184,8 +184,8 @@ describe('Products / variants (e2e)', () => {
 
   describe('media gallery', () => {
     it('images[0].url becomes the canonical thumbnail, overriding the legacy field', async () => {
-      const { adminToken, categoryId } = await setupShop('gallery');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('gallery');
+      const product = await createProduct(adminToken, collectionId, {
         thumbnail: 'https://example.com/ignored.jpg',
         images: [
           { url: 'https://example.com/second.jpg', order: 1 },
@@ -197,8 +197,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('omitting images on update leaves the existing gallery/thumbnail untouched', async () => {
-      const { adminToken, categoryId } = await setupShop('gallery-update');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('gallery-update');
+      const product = await createProduct(adminToken, collectionId, {
         images: [{ url: 'https://example.com/first.jpg', order: 0 }],
       });
       const res = await request(app.getHttpServer())
@@ -220,10 +220,10 @@ describe('Products / variants (e2e)', () => {
     // a save that resends the same url, and is only actually cleared when
     // the url is genuinely removed.
     it('a variant image assignment survives a later product save that resends the same images', async () => {
-      const { adminToken, categoryId } = await setupShop(
+      const { adminToken, collectionId } = await setupShop(
         'gallery-variant-stable',
       );
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 40,
         images: [
           { url: 'https://example.com/a.jpg', order: 0 },
@@ -282,10 +282,10 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('removing an image from the gallery clears a variant that was pointing at it, but leaves the others alone', async () => {
-      const { adminToken, categoryId } = await setupShop(
+      const { adminToken, collectionId } = await setupShop(
         'gallery-variant-removed',
       );
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 40,
         images: [
           { url: 'https://example.com/keep.jpg', order: 0 },
@@ -330,8 +330,8 @@ describe('Products / variants (e2e)', () => {
 
   describe('options -> variant generation and reconciliation', () => {
     it('two options generate the full cartesian product, inheriting price from the product', async () => {
-      const { adminToken, categoryId } = await setupShop('gen');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('gen');
+      const product = await createProduct(adminToken, collectionId, {
         price: 75,
       });
 
@@ -364,8 +364,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('editing a variant then adding a new option value preserves the edited variant and only creates the new combos', async () => {
-      const { adminToken, categoryId } = await setupShop('reconcile');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('reconcile');
+      const product = await createProduct(adminToken, collectionId, {
         price: 50,
       });
       await request(app.getHttpServer())
@@ -408,8 +408,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('removing an option value deletes the corresponding variants', async () => {
-      const { adminToken, categoryId } = await setupShop('remove-value');
-      const product = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('remove-value');
+      const product = await createProduct(adminToken, collectionId);
       await request(app.getHttpServer())
         .put(`/products/${product.id}/options`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -432,8 +432,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('an empty options array wipes all options/variants, reverting to a single implicit variant', async () => {
-      const { adminToken, categoryId } = await setupShop('wipe');
-      const product = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('wipe');
+      const product = await createProduct(adminToken, collectionId);
       await request(app.getHttpServer())
         .put(`/products/${product.id}/options`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -452,8 +452,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('rejects more than 3 options', async () => {
-      const { adminToken, categoryId } = await setupShop('too-many-options');
-      const product = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('too-many-options');
+      const product = await createProduct(adminToken, collectionId);
       const res = await request(app.getHttpServer())
         .put(`/products/${product.id}/options`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -470,8 +470,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('rejects an option combination that would exceed 100 variants, without creating any', async () => {
-      const { adminToken, categoryId } = await setupShop('cap');
-      const product = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('cap');
+      const product = await createProduct(adminToken, collectionId);
       const res = await request(app.getHttpServer())
         .put(`/products/${product.id}/options`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -502,7 +502,7 @@ describe('Products / variants (e2e)', () => {
     it("rejects options/variant writes against another shop's product", async () => {
       const shopA = await setupShop('tenant-a');
       const shopB = await setupShop('tenant-b');
-      const productA = await createProduct(shopA.adminToken, shopA.categoryId);
+      const productA = await createProduct(shopA.adminToken, shopA.collectionId);
 
       await request(app.getHttpServer())
         .put(`/products/${productA.id}/options`)
@@ -531,7 +531,7 @@ describe('Products / variants (e2e)', () => {
     it("rejects attribute/FAQ writes against another shop's product, and a foreign product update never leaks a second shop's attributes/FAQs", async () => {
       const shopA = await setupShop('attrs-tenant-a');
       const shopB = await setupShop('attrs-tenant-b');
-      const productA = await createProduct(shopA.adminToken, shopA.categoryId);
+      const productA = await createProduct(shopA.adminToken, shopA.collectionId);
 
       await request(app.getHttpServer())
         .patch(`/products/${productA.id}`)
@@ -561,8 +561,8 @@ describe('Products / variants (e2e)', () => {
 
   describe('attributes and FAQs', () => {
     it('creates, replaces, and clears attributes/FAQs on a product', async () => {
-      const { adminToken, categoryId } = await setupShop('attrs-faqs');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('attrs-faqs');
+      const product = await createProduct(adminToken, collectionId, {
         attributes: [{ name: 'Material', value: 'Cotton' }],
         faqs: [{ question: 'Is it washable?', answer: 'Yes' }],
       });
@@ -606,8 +606,8 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('omitting attributes/faqs on update leaves the existing set untouched (same convention as images)', async () => {
-      const { adminToken, categoryId } = await setupShop('attrs-untouched');
-      const product = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('attrs-untouched');
+      const product = await createProduct(adminToken, collectionId, {
         attributes: [{ name: 'Material', value: 'Cotton' }],
       });
       const updated = await request(app.getHttpServer())
@@ -623,8 +623,8 @@ describe('Products / variants (e2e)', () => {
 
   describe('per-product Variants/Attributes/FAQs opt-in (showVariants/showAttributes/showFaqs)', () => {
     it('defaults all three to false, and round-trips explicit values on create and update', async () => {
-      const { adminToken, categoryId } = await setupShop('feature-toggles');
-      const product = await createProduct(adminToken, categoryId, {});
+      const { adminToken, collectionId } = await setupShop('feature-toggles');
+      const product = await createProduct(adminToken, collectionId, {});
       expect(product).toEqual(
         expect.objectContaining({
           showVariants: false,
@@ -633,7 +633,7 @@ describe('Products / variants (e2e)', () => {
         }),
       );
 
-      const withToggles = await createProduct(adminToken, categoryId, {
+      const withToggles = await createProduct(adminToken, collectionId, {
         showVariants: true,
         showAttributes: true,
         showFaqs: true,
@@ -663,9 +663,9 @@ describe('Products / variants (e2e)', () => {
 
   describe('order creation resolves the specific variant', () => {
     it("requires a variantId for a variant-bearing product and resolves its price/sku/stock, not the parent product's", async () => {
-      const { adminToken, outletId, categoryId, slug } =
+      const { adminToken, outletId, collectionId, slug } =
         await setupShop('order-variant');
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 100,
         sku: `PARENT-${runId}`,
       });
@@ -739,10 +739,10 @@ describe('Products / variants (e2e)', () => {
     });
 
     it("decrements the variant's own outletvariantstock, leaving the parent product's outletstock untouched", async () => {
-      const { adminToken, outletId, categoryId, slug } = await setupShop(
+      const { adminToken, outletId, collectionId, slug } = await setupShop(
         'order-variant-stock',
       );
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         trackInventory: true,
       });
       await request(app.getHttpServer())
@@ -825,9 +825,9 @@ describe('Products / variants (e2e)', () => {
     });
 
     it('rejects a variantId for a product that has no variants', async () => {
-      const { adminToken, outletId, categoryId, slug } =
+      const { adminToken, outletId, collectionId, slug } =
         await setupShop('no-variant-reject');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await request(app.getHttpServer())
         .patch('/shop')
         .set('Authorization', `Bearer ${adminToken}`)

@@ -112,12 +112,12 @@ describe('Shop publish state (e2e)', () => {
         deliveryRadiusKm: 5,
       })
       .expect(200);
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${shop.adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
     const product = await request(app.getHttpServer())
       .post('/products')
       .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -126,7 +126,7 @@ describe('Shop publish state (e2e)', () => {
         price: 50,
         thumbnail: 'https://example.com/rose.jpg',
         sku: `PUB-${slugPrefix}-${runId}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     const productId = body<IdRow>(product).id;
@@ -182,7 +182,7 @@ describe('Shop publish state (e2e)', () => {
         .get(`/public/${shop.slug}`)
         .expect(200);
       await request(app.getHttpServer())
-        .get(`/public/${shop.slug}/categories`)
+        .get(`/public/${shop.slug}/collections`)
         .expect(404);
       await request(app.getHttpServer())
         .get(`/public/${shop.slug}/products`)
@@ -223,7 +223,7 @@ describe('Shop publish state (e2e)', () => {
         .expect(200);
 
       await request(app.getHttpServer())
-        .get(`/public/${shop.slug}/categories`)
+        .get(`/public/${shop.slug}/collections`)
         .expect(200);
       await request(app.getHttpServer())
         .get(`/public/${shop.slug}/products`)
@@ -313,12 +313,12 @@ describe('Shop publish state (e2e)', () => {
 
     it('rejects publishing when no outlet has delivery or pickup enabled', async () => {
       const shop = await setupShop('pub-ready-no-outlet');
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ name: 'Flowers' })
         .expect(201);
-      const categoryId = body<IdRow>(category).id;
+      const collectionId = body<IdRow>(collection).id;
       await request(app.getHttpServer())
         .post('/products')
         .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -327,7 +327,7 @@ describe('Shop publish state (e2e)', () => {
           price: 50,
           thumbnail: 'https://example.com/rose.jpg',
           sku: `PUB-READY-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       // Outlet exists (auto-created at signup) but neither deliveryEnabled
@@ -449,8 +449,8 @@ describe('Shop publish state (e2e)', () => {
           deliveryRadiusKm: 5,
         })
         .expect(200);
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Flowers' })
         .expect(201);
@@ -462,7 +462,7 @@ describe('Shop publish state (e2e)', () => {
           price: 50,
           thumbnail: 'https://example.com/rose.jpg',
           sku: `PUB-VERIFY-${runId}`,
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
 

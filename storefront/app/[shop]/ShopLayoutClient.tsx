@@ -6,7 +6,7 @@ import { CartProvider, useCart } from "@/lib/cart";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
-import CategoryNav from "@/components/CategoryNav";
+import MenuBar from "@/components/MenuBar";
 import TopBar from "@/components/TopBar";
 import CartDrawer from "@/components/CartDrawer";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
@@ -25,7 +25,7 @@ function Header() {
     <header className="border-b border-stroke bg-header text-header-fg">
       <AnnouncementBar />
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />
-      {shop?.showCategoryMenu !== false && <CategoryNav />}
+      {shop?.showCollectionMenu !== false && <MenuBar />}
       {shop?.cartLayout === "drawer" && <CartDrawer />}
     </header>
   );
@@ -34,7 +34,7 @@ function Header() {
 // Rendered instead of {children} for a shop that exists but hasn't been
 // published yet (shop.published === false) — see backend
 // PublicService.assertPublished. Every content endpoint (products,
-// categories, checkout, ...) already 404s server-side for these shops
+// collections, checkout, ...) already 404s server-side for these shops
 // regardless of what this page does; this is just the friendlier UI for
 // that same gate, and — since {children} is never mounted in this branch —
 // none of the page components underneath ever fire their data-fetching

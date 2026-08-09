@@ -15,7 +15,7 @@ import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PaymentsModule } from './payments/payments.module';
-import { CategoriesModule } from './categories/categories.module';
+import { CollectionsModule } from './collections/collections.module';
 import { ShopModule } from './shop/shop.module';
 import { DeliveryZonesModule } from './delivery-zones/delivery-zones.module';
 import { PublicModule } from './public/public.module';
@@ -33,7 +33,8 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { IngredientsModule } from './ingredients/ingredients.module';
 import { IngredientCategoriesModule } from './ingredient-categories/ingredient-categories.module';
-import { CollectionsModule } from './collections/collections.module';
+import { TemplatesModule } from './templates/templates.module';
+import { MenuModule } from './menu/menu.module';
 import { ReturnsModule } from './returns/returns.module';
 import { ScanModule } from './scan/scan.module';
 import { CustomerAuthModule } from './customer-auth/customer-auth.module';
@@ -78,7 +79,7 @@ import { StorageModule } from './storage/storage.module';
     OrdersModule,
     DashboardModule,
     PaymentsModule,
-    CategoriesModule,
+    CollectionsModule,
     ShopModule,
     DeliveryZonesModule,
     PublicModule,
@@ -97,7 +98,8 @@ import { StorageModule } from './storage/storage.module';
     IngredientsModule,
     IngredientCategoriesModule,
     BranchRolesModule,
-    CollectionsModule,
+    TemplatesModule,
+    MenuModule,
     ReturnsModule,
     ScanModule,
     CustomerAuthModule,

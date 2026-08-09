@@ -38,7 +38,7 @@ export class ValidateDiscountDto {
   @IsArray()
   @Type(() => Number)
   @IsInt({ each: true })
-  categoryIds?: number[];
+  collectionIds?: number[];
 
   @IsOptional()
   @IsInt()

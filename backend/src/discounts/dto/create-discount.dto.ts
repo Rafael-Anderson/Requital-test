@@ -62,7 +62,7 @@ export class CreateDiscountDto {
   @ArrayNotEmpty()
   @Type(() => Number)
   @IsInt({ each: true })
-  categoryIds?: number[];
+  collectionIds?: number[];
 
   @IsOptional()
   @IsInt()

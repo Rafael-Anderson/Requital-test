@@ -1,6 +1,6 @@
 "use client";
 
-// Searchable single-select for the long, flat product/category/outlet
+// Searchable single-select for the long, flat product/collection/outlet
 // pickers named in the design brief — a plain <select> has no search, and
 // this app's catalogs can run long enough that scanning one becomes the
 // bottleneck. Same trigger/popover/list shape as shadcn's Combobox (Popover

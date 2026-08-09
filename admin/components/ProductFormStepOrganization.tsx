@@ -4,7 +4,7 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Combobox from "@/components/ui/Combobox";
 import Thumbnail from "@/components/ui/Thumbnail";
-import CategoryCheckboxTree from "@/components/CategoryCheckboxTree";
+import CollectionCheckboxTree from "@/components/CollectionCheckboxTree";
 import VariantsSection from "@/components/VariantsSection";
 import AttributesSection from "@/components/AttributesSection";
 import FaqsSection from "@/components/FaqsSection";
@@ -36,15 +36,15 @@ export default function ProductFormStepOrganization({
       <Card className="space-y-4">
         <h3 className="text-sm font-semibold">Organization</h3>
         <div>
-          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Categories</label>
-          <CategoryCheckboxTree
-            categories={form.categories ?? []}
-            selected={form.categoryIds}
-            onToggle={form.toggleCategory}
+          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Collections</label>
+          <CollectionCheckboxTree
+            collections={form.collections ?? []}
+            selected={form.collectionIds}
+            onToggle={form.toggleCollection}
           />
-          {form.fieldErrors.categories && (
+          {form.fieldErrors.collections && (
             <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">
-              {form.fieldErrors.categories}
+              {form.fieldErrors.collections}
             </p>
           )}
         </div>

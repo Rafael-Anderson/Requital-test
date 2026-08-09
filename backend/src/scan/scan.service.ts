@@ -159,25 +159,25 @@ export class ScanService {
       : [];
     const ownedVariantsById = new Map(ownedVariants.map((v) => [v.id, v]));
 
-    const newCategoryIds = [
+    const newCollectionIds = [
       ...new Set(
         dto.items
           .filter(
             (i) =>
               !i.matchedId &&
               i.targetType === 'product' &&
-              i.createNew?.categoryId,
+              i.createNew?.collectionId,
           )
-          .map((i) => i.createNew!.categoryId!),
+          .map((i) => i.createNew!.collectionId!),
       ),
     ];
-    if (newCategoryIds.length > 0) {
-      const owned = await this.prisma.category.count({
-        where: { id: { in: newCategoryIds }, shopId: ctx.shopId },
+    if (newCollectionIds.length > 0) {
+      const owned = await this.prisma.collection.count({
+        where: { id: { in: newCollectionIds }, shopId: ctx.shopId },
       });
-      if (owned !== newCategoryIds.length) {
+      if (owned !== newCollectionIds.length) {
         throw new BadRequestException(
-          'One or more categoryId values are invalid for this shop',
+          'One or more collectionId values are invalid for this shop',
         );
       }
     }
@@ -228,10 +228,10 @@ export class ScanService {
       } else if (
         item.targetType === 'product' &&
         (item.createNew.price === undefined ||
-          item.createNew.categoryId === undefined)
+          item.createNew.collectionId === undefined)
       ) {
         throw new BadRequestException(
-          'Creating a new product requires price and categoryId',
+          'Creating a new product requires price and collectionId',
         );
       } else if (item.targetType === 'ingredient' && !item.createNew.unit) {
         throw new BadRequestException(
@@ -293,8 +293,8 @@ export class ScanService {
               // storefront before the merchant has reviewed it.
               status: 'Unavailable',
               trackInventory: true,
-              productcategory: {
-                create: [{ categoryId: item.createNew!.categoryId! }],
+              productcollection: {
+                create: [{ collectionId: item.createNew!.collectionId! }],
               },
             },
             select: {

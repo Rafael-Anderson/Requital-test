@@ -25,7 +25,7 @@ interface ProductRow {
   thumbnail: string;
   status: string;
   stockQuantity: number | null;
-  categories: { id: number; name: string }[];
+  collections: { id: number; name: string }[];
 }
 interface ImportRowResult {
   rowNumber: number;
@@ -73,7 +73,7 @@ const PRODUCT_HEADERS = [
   'Vendor',
   'Product Type',
   'Thumbnail URL',
-  'Categories',
+  'Collections',
   'Tags',
   'Variant',
   'Variant SKU',
@@ -136,14 +136,14 @@ describe('Products CSV Import/Export (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId };
+    return { adminToken, outletId, collectionId };
   }
 
   function preview(adminToken: string, csv: string) {
@@ -169,14 +169,14 @@ describe('Products CSV Import/Export (e2e)', () => {
   }
 
   it('creates a new product from a CSV row', async () => {
-    const { adminToken, categoryId } = await setupShop('import-create');
+    const { adminToken, collectionId } = await setupShop('import-create');
     const csv = buildCsv([
       {
         Name: 'Imported Rose Bouquet',
         SKU: `IMP-${runId}-1`,
         Price: 45,
         'Thumbnail URL': 'https://example.com/rose.jpg',
-        Categories: 'General',
+        Collections: 'General',
         Status: 'Available',
       },
     ]);
@@ -196,7 +196,7 @@ describe('Products CSV Import/Export (e2e)', () => {
     expect(created).toBeDefined();
     expect(created!.name).toBe('Imported Rose Bouquet');
     expect(Number(created!.price)).toBe(45);
-    expect(created!.categories.map((c) => c.id)).toContain(categoryId);
+    expect(created!.collections.map((c) => c.id)).toContain(collectionId);
   });
 
   it('round-trips: re-importing an exported row is a no-op that leaves data identical', async () => {
@@ -210,7 +210,7 @@ describe('Products CSV Import/Export (e2e)', () => {
           price: 60,
           thumbnail: 'https://example.com/vase.jpg',
           sku: `RT-${runId}`,
-          categoryIds: [shop.categoryId],
+          collectionIds: [shop.collectionId],
           status: 'Available',
           vendor: 'Acme',
         })
@@ -224,7 +224,7 @@ describe('Products CSV Import/Export (e2e)', () => {
         SKU: original.sku,
         Price: original.price,
         'Thumbnail URL': original.thumbnail,
-        Categories: 'General',
+        Collections: 'General',
         Status: original.status,
         Vendor: original.vendor,
       },
@@ -253,21 +253,21 @@ describe('Products CSV Import/Export (e2e)', () => {
         SKU: `GOOD-${runId}`,
         Price: 30,
         'Thumbnail URL': 'https://example.com/x.jpg',
-        Categories: 'General',
+        Collections: 'General',
       },
       {
         Name: 'Bad Product',
         SKU: `BAD-${runId}`,
         Price: 'not-a-number',
         'Thumbnail URL': 'https://example.com/y.jpg',
-        Categories: 'General',
+        Collections: 'General',
       },
       {
         Name: '',
         SKU: `NONAME-${runId}`,
         Price: 20,
         'Thumbnail URL': 'https://example.com/z.jpg',
-        Categories: 'General',
+        Collections: 'General',
       },
     ]);
 
@@ -298,7 +298,7 @@ describe('Products CSV Import/Export (e2e)', () => {
   });
 
   it('distinguishes create vs update within the same batch', async () => {
-    const { adminToken, categoryId } = await setupShop(
+    const { adminToken, collectionId } = await setupShop(
       'import-create-vs-update',
     );
     const existing = await request(app.getHttpServer())
@@ -309,7 +309,7 @@ describe('Products CSV Import/Export (e2e)', () => {
         price: 15,
         thumbnail: 'https://example.com/a.jpg',
         sku: `EXIST-${runId}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     const existingId = body<ProductRow>(existing).id;
@@ -319,14 +319,14 @@ describe('Products CSV Import/Export (e2e)', () => {
         Name: 'Existing Product Renamed',
         SKU: `EXIST-${runId}`,
         Price: 18,
-        Categories: 'General',
+        Collections: 'General',
       },
       {
         Name: 'Brand New Product',
         SKU: `NEW-${runId}`,
         Price: 22,
         'Thumbnail URL': 'https://example.com/b.jpg',
-        Categories: 'General',
+        Collections: 'General',
       },
     ]);
 
@@ -359,7 +359,7 @@ describe('Products CSV Import/Export (e2e)', () => {
         price: 100,
         thumbnail: 'https://example.com/a.jpg',
         sku: sharedSku,
-        categoryIds: [shopA.categoryId],
+        collectionIds: [shopA.collectionId],
       })
       .expect(201);
     const productAId = body<ProductRow>(productA).id;
@@ -370,7 +370,7 @@ describe('Products CSV Import/Export (e2e)', () => {
         SKU: sharedSku,
         Price: 1,
         'Thumbnail URL': 'https://example.com/evil.jpg',
-        Categories: 'General',
+        Collections: 'General',
       },
     ]);
     const res = await confirm(shopB.adminToken, csv).expect(201);
@@ -400,7 +400,7 @@ describe('Products CSV Import/Export (e2e)', () => {
         SKU: `STOCK-${runId}`,
         Price: 10,
         'Thumbnail URL': 'https://example.com/s.jpg',
-        Categories: 'General',
+        Collections: 'General',
         'Track Inventory': 'true',
         Stock: 25,
       },
@@ -432,7 +432,7 @@ describe('Products CSV Import/Export (e2e)', () => {
         SKU: sku,
         Price: 10,
         'Thumbnail URL': 'https://example.com/s.jpg',
-        Categories: 'General',
+        Collections: 'General',
         'Track Inventory': 'true',
         Stock: 99,
       },

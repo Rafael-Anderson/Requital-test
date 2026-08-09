@@ -48,6 +48,7 @@ export class ThemeService {
         announcementBarScrolling: false,
         colors: null,
         homepageLayout: 'classic',
+        homeTabMode: 'templates',
         topBarLayout: 'logo_left',
         iconStyle: 'outline',
         buttonRadius: 'rounded',

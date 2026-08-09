@@ -25,8 +25,8 @@ interface BioLinkRow {
   url: string | null;
   productId: number | null;
   productName: string | null;
-  categoryId: number | null;
-  categoryName: string | null;
+  collectionId: number | null;
+  collectionName: string | null;
   socialPlatform: string | null;
   order: number;
   active: boolean;
@@ -37,8 +37,8 @@ interface PublicBioLinkRow {
   type: string;
   label: string;
   product?: { name: string; slug: string; thumbnail: string } | null;
-  category?: { name: string; slug: string; image: string | null } | null;
-  collection?: { title: string; slug: string; image: string | null } | null;
+  collection?: { name: string; slug: string; image: string | null } | null;
+  template?: { title: string; slug: string; image: string | null } | null;
   socialPlatform?: string | null;
 }
 interface ErrorBody {
@@ -111,12 +111,12 @@ describe('Bio Links (e2e)', () => {
       })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -126,7 +126,7 @@ describe('Bio Links (e2e)', () => {
         price: 50,
         thumbnail: 'https://example.com/rose.jpg',
         sku: `BIO-${slugPrefix}-${runId}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     const productId = body<IdRow>(product).id;
@@ -137,7 +137,7 @@ describe('Bio Links (e2e)', () => {
       .send({ published: true })
       .expect(200);
 
-    return { adminToken, slug, outletId, categoryId, productId };
+    return { adminToken, slug, outletId, collectionId, productId };
   }
 
   describe('DTO / service validation', () => {
@@ -154,7 +154,7 @@ describe('Bio Links (e2e)', () => {
         })
         .expect(400);
       expect(body<ErrorBody>(res).message).toContain(
-        "type 'EXTERNAL_URL' requires exactly 'url' to be set, and no other target field (url/productId/categoryId/collectionId/socialPlatform)",
+        "type 'EXTERNAL_URL' requires exactly 'url' to be set, and no other target field (url/productId/collectionId/templateId/socialPlatform)",
       );
     });
 
@@ -436,7 +436,7 @@ describe('Bio Links (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/doomed.jpg',
           sku: `DOOMED-${runId}`,
-          categoryIds: [shop.categoryId],
+          collectionIds: [shop.collectionId],
         })
         .expect(201);
       const doomedProductLink = await request(app.getHttpServer())
@@ -462,7 +462,7 @@ describe('Bio Links (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/unavailable.jpg',
           sku: `UNAVAIL-${runId}`,
-          categoryIds: [shop.categoryId],
+          collectionIds: [shop.collectionId],
         })
         .expect(201);
       const unavailableProductLink = await request(app.getHttpServer())
@@ -480,13 +480,13 @@ describe('Bio Links (e2e)', () => {
         .send({ status: 'Unavailable' })
         .expect(200);
 
-      const categoryLink = await request(app.getHttpServer())
+      const collectionLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
-          type: 'CATEGORY',
+          type: 'COLLECTION',
           label: 'Shop Flowers',
-          categoryId: shop.categoryId,
+          collectionId: shop.collectionId,
         })
         .expect(201);
 
@@ -497,46 +497,46 @@ describe('Bio Links (e2e)', () => {
       const ids = publicLinks.map((l) => l.id);
 
       expect(ids).toContain(body<BioLinkRow>(activeExternal).id);
-      expect(ids).toContain(body<BioLinkRow>(categoryLink).id);
+      expect(ids).toContain(body<BioLinkRow>(collectionLink).id);
       expect(ids).not.toContain(body<BioLinkRow>(inactiveLink).id);
       expect(ids).not.toContain(body<BioLinkRow>(doomedProductLink).id);
       expect(ids).not.toContain(body<BioLinkRow>(unavailableProductLink).id);
 
-      const categoryEntry = publicLinks.find(
-        (l) => l.id === body<BioLinkRow>(categoryLink).id,
+      const collectionEntry = publicLinks.find(
+        (l) => l.id === body<BioLinkRow>(collectionLink).id,
       );
-      expect(categoryEntry?.category?.name).toBe('Flowers');
+      expect(collectionEntry?.collection?.name).toBe('Flowers');
     });
 
-    it('resolves a COLLECTION link, and excludes one pointing at an inactive collection', async () => {
-      const shop = await setupOrderableShop('bio-public-collection');
-      const activeCollection = await request(app.getHttpServer())
-        .post('/collections')
+    it('resolves a TEMPLATE link, and excludes one pointing at an inactive template', async () => {
+      const shop = await setupOrderableShop('bio-public-template');
+      const activeTemplate = await request(app.getHttpServer())
+        .post('/templates')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ title: 'Active Collection', type: 'MANUAL', isActive: true })
+        .send({ title: 'Active Template', type: 'MANUAL', isActive: true })
         .expect(201);
-      const inactiveCollection = await request(app.getHttpServer())
-        .post('/collections')
+      const inactiveTemplate = await request(app.getHttpServer())
+        .post('/templates')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ title: 'Inactive Collection', type: 'MANUAL', isActive: false })
+        .send({ title: 'Inactive Template', type: 'MANUAL', isActive: false })
         .expect(201);
 
       const activeLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
-          type: 'COLLECTION',
+          type: 'TEMPLATE',
           label: 'Shop It',
-          collectionId: body<IdRow>(activeCollection).id,
+          templateId: body<IdRow>(activeTemplate).id,
         })
         .expect(201);
       const inactiveLink = await request(app.getHttpServer())
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
-          type: 'COLLECTION',
+          type: 'TEMPLATE',
           label: 'Hidden',
-          collectionId: body<IdRow>(inactiveCollection).id,
+          templateId: body<IdRow>(inactiveTemplate).id,
         })
         .expect(201);
 
@@ -551,7 +551,7 @@ describe('Bio Links (e2e)', () => {
       const entry = publicLinks.find(
         (l) => l.id === body<BioLinkRow>(activeLink).id,
       );
-      expect(entry?.collection?.title).toBe('Active Collection');
+      expect(entry?.template?.title).toBe('Active Template');
     });
 
     it('resolves a SOCIAL_ICON link from shop.socialLinks, and excludes one whose platform was never configured', async () => {
@@ -622,10 +622,10 @@ describe('Bio Links (e2e)', () => {
       expect(res.headers.location).toContain(`/${shop.slug}/products/`);
     });
 
-    it('redirects COLLECTION to the storefront collection page', async () => {
-      const shop = await setupOrderableShop('bio-click-collection');
-      const collection = await request(app.getHttpServer())
-        .post('/collections')
+    it('redirects TEMPLATE to the storefront template page', async () => {
+      const shop = await setupOrderableShop('bio-click-template');
+      const template = await request(app.getHttpServer())
+        .post('/templates')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ title: 'Click Target', type: 'MANUAL', isActive: true })
         .expect(201);
@@ -633,9 +633,9 @@ describe('Bio Links (e2e)', () => {
         .post('/shop/bio-links')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
-          type: 'COLLECTION',
+          type: 'TEMPLATE',
           label: 'Shop It',
-          collectionId: body<IdRow>(collection).id,
+          templateId: body<IdRow>(template).id,
         })
         .expect(201);
 
@@ -643,7 +643,7 @@ describe('Bio Links (e2e)', () => {
         .get(`/public/bio-links/${body<BioLinkRow>(link).id}/click`)
         .expect(302);
       expect(res.headers.location).toBe(
-        `http://localhost:3002/${shop.slug}/collections/click-target`,
+        `http://localhost:3002/${shop.slug}/templates/click-target`,
       );
     });
 

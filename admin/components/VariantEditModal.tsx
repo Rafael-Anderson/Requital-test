@@ -330,7 +330,7 @@ export default function VariantEditModal({
             </p>
             <IngredientRecipeEditor
               ingredients={ingredientsList}
-              categories={ingredientCategories}
+              collections={ingredientCategories}
               rows={recipeRows}
               onChange={setRecipeRows}
             />

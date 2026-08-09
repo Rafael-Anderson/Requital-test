@@ -109,12 +109,12 @@ describe('Gift Cards (e2e)', () => {
       .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -124,7 +124,7 @@ describe('Gift Cards (e2e)', () => {
         price: 80,
         thumbnail: 'https://example.com/x.jpg',
         sku: `GC-PROD-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     const productId = body<IdRow>(product).id;
@@ -137,7 +137,7 @@ describe('Gift Cards (e2e)', () => {
         price: 1, // placeholder — ignored for a gift-card product, see CreateProductDto's comment
         thumbnail: 'https://example.com/gift.jpg',
         sku: `GC-CARD-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         isGiftCard: true,
         giftCardDenominations: [100, 200],
       })

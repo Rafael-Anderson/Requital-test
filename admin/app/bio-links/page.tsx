@@ -6,8 +6,8 @@ import {
   deleteBioLink,
   getBioPageConfig,
   listBioLinks,
-  listCategories,
   listCollections,
+  listTemplates,
   listProducts,
   reorderBioLinks,
   resolveImageUrl,
@@ -19,8 +19,8 @@ import {
   BIO_LINK_TYPE_LABELS,
   type BioLink,
   type BioPageConfig,
-  type Category,
   type Collection,
+  type Template,
   type Product,
 } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
@@ -212,8 +212,8 @@ function BioPageConfigCard() {
 export default function BioLinksPage() {
   const [bioLinks, setBioLinks] = useState<BioLink[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<BioLink | null>(null);
   const [creating, setCreating] = useState(false);
@@ -233,8 +233,8 @@ export default function BioLinksPage() {
   useEffect(() => {
     refresh();
     listProducts().then(setProducts).catch(() => setProducts([]));
-    listCategories().then(setCategories).catch(() => setCategories([]));
     listCollections().then(setCollections).catch(() => setCollections([]));
+    listTemplates().then(setTemplates).catch(() => setTemplates([]));
   }, [refresh]);
 
   function handleDelete(link: BioLink) {
@@ -260,7 +260,7 @@ export default function BioLinksPage() {
   // Native HTML5 drag-and-drop — no drag library exists anywhere else in
   // this app (confirmed before building this), and this is the one place
   // that needs true drag reordering rather than the numeric-order-input
-  // pattern Categories uses, so it's not reusing an existing UI either way.
+  // pattern Collections uses, so it's not reusing an existing UI either way.
   function handleDrop(targetId: number) {
     if (draggedId === null || draggedId === targetId || !bioLinks) {
       setDraggedId(null);
@@ -361,8 +361,8 @@ export default function BioLinksPage() {
         <BioLinkFormModal
           bioLink={editing}
           products={products}
-          categories={categories}
           collections={collections}
+          templates={templates}
           onClose={() => {
             setCreating(false);
             setEditing(null);

@@ -22,7 +22,7 @@ vi.mock("@/lib/api", () => ({
   getShop: vi.fn().mockResolvedValue({
     productEditorMode: "simple",
   }),
-  listCategories: vi.fn().mockResolvedValue([]),
+  listCollections: vi.fn().mockResolvedValue([]),
   listIngredients: vi.fn().mockResolvedValue([]),
   listIngredientCategories: vi.fn().mockResolvedValue([]),
   listOutlets: vi.fn().mockResolvedValue([]),
@@ -73,7 +73,7 @@ const existingProduct: Product = {
   hasVariants: false,
   options: [],
   variants: [],
-  categories: [{ id: 1, name: "Flowers" } as Product["categories"][number]],
+  collections: [{ id: 1, name: "Flowers" } as Product["collections"][number]],
   tags: [],
   ingredients: [],
   makeableQuantity: null,

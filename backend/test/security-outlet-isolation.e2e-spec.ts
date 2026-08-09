@@ -158,8 +158,8 @@ describe('Outlet & shop isolation (e2e)', () => {
     expect(branchAuth.user.role).toBe('branch');
     expect(branchAuth.user.outletId).toBe(outletA1Id);
 
-    const categoryA = await request(app.getHttpServer())
-      .post('/categories')
+    const collectionA = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${shopAAdminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
@@ -173,7 +173,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         thumbnail: 'https://example.com/rose.jpg',
         sku: `ROSE-${runId}`,
         trackInventory: true,
-        categoryIds: [body<IdRow>(categoryA).id],
+        collectionIds: [body<IdRow>(collectionA).id],
       })
       .expect(201);
     productAId = body<IdRow>(productA).id;
@@ -252,8 +252,8 @@ describe('Outlet & shop isolation (e2e)', () => {
       .expect(201);
     outletB1ZoneId = body<IdRow>(zoneB1).id;
 
-    const categoryB = await request(app.getHttpServer())
-      .post('/categories')
+    const collectionB = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${shopBAdminToken}`)
       .send({ name: 'Gifts' })
       .expect(201);
@@ -265,7 +265,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         price: 50,
         thumbnail: 'https://example.com/gift.jpg',
         sku: `GIFT-${runId}`,
-        categoryIds: [body<IdRow>(categoryB).id],
+        collectionIds: [body<IdRow>(collectionB).id],
       })
       .expect(201);
 

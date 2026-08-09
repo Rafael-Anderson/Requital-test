@@ -20,12 +20,12 @@ const ACTION_LABELS: Record<string, string> = {
   "product.bulk_status_changed": "Bulk status change",
   "product.bulk_price_changed": "Bulk price change",
   "order.status_changed": "Changed order status",
-  "category.deleted": "Deleted category",
+  "collection.deleted": "Deleted collection",
   "discount.deleted": "Deleted discount",
   "biolink.deleted": "Deleted bio link",
 };
 
-const ENTITY_TYPES = ["auth", "product", "order", "category", "discount", "biolink"];
+const ENTITY_TYPES = ["auth", "product", "order", "collection", "discount", "biolink"];
 
 function describe(entry: AuditLogEntry): string {
   const before = entry.before as Record<string, unknown> | null;
@@ -47,7 +47,7 @@ function describe(entry: AuditLogEntry): string {
     }
     case "order.status_changed":
       return `${before?.status ?? "?"} → ${after?.status ?? "?"}`;
-    case "category.deleted":
+    case "collection.deleted":
       return `"${before?.name ?? "?"}"`;
     case "discount.deleted":
       return `"${before?.code ?? "?"}"`;

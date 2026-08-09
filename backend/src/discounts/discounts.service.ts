@@ -21,8 +21,8 @@ const discountInclude = {
   discountproduct: {
     include: { product: { select: { id: true, name: true } } },
   },
-  discountcategory: {
-    include: { category: { select: { id: true, name: true } } },
+  discountcollection: {
+    include: { collection: { select: { id: true, name: true } } },
   },
 } satisfies Prisma.discountInclude;
 
@@ -90,10 +90,10 @@ export class DiscountsService {
             dto.appliesTo === 'SPECIFIC_PRODUCTS' && dto.productIds
               ? { create: dto.productIds.map((productId) => ({ productId })) }
               : undefined,
-          discountcategory:
-            dto.appliesTo === 'SPECIFIC_CATEGORIES' && dto.categoryIds
+          discountcollection:
+            dto.appliesTo === 'SPECIFIC_COLLECTIONS' && dto.collectionIds
               ? {
-                  create: dto.categoryIds.map((categoryId) => ({ categoryId })),
+                  create: dto.collectionIds.map((collectionId) => ({ collectionId })),
                 }
               : undefined,
         },
@@ -114,7 +114,7 @@ export class DiscountsService {
         value: dto.value ?? (current.value ? Number(current.value) : undefined),
       });
     }
-    if (dto.productIds || dto.categoryIds) {
+    if (dto.productIds || dto.collectionIds) {
       await this.assertEligibilityTargetsBelongToShop(ctx, dto);
     }
 
@@ -123,8 +123,8 @@ export class DiscountsService {
         if (dto.productIds) {
           await tx.discountproduct.deleteMany({ where: { discountId: id } });
         }
-        if (dto.categoryIds) {
-          await tx.discountcategory.deleteMany({ where: { discountId: id } });
+        if (dto.collectionIds) {
+          await tx.discountcollection.deleteMany({ where: { discountId: id } });
         }
         return tx.discount.update({
           where: { id },
@@ -144,9 +144,9 @@ export class DiscountsService {
                 create: dto.productIds.map((productId) => ({ productId })),
               },
             }),
-            ...(dto.categoryIds && {
-              discountcategory: {
-                create: dto.categoryIds.map((categoryId) => ({ categoryId })),
+            ...(dto.collectionIds && {
+              discountcollection: {
+                create: dto.collectionIds.map((collectionId) => ({ collectionId })),
               },
             }),
           },
@@ -213,7 +213,7 @@ export class DiscountsService {
     input: {
       cartSubtotal: number;
       productIds?: number[];
-      categoryIds?: number[];
+      collectionIds?: number[];
       customerId?: number;
     },
   ): Promise<EvaluateResult> {
@@ -258,11 +258,11 @@ export class DiscountsService {
       if (!(input.productIds ?? []).some((id) => eligibleIds.has(id))) {
         return this.reject('not_eligible');
       }
-    } else if (discount.appliesTo === 'SPECIFIC_CATEGORIES') {
+    } else if (discount.appliesTo === 'SPECIFIC_COLLECTIONS') {
       const eligibleIds = new Set(
-        discount.discountcategory.map((d) => d.categoryId),
+        discount.discountcollection.map((d) => d.collectionId),
       );
-      if (!(input.categoryIds ?? []).some((id) => eligibleIds.has(id))) {
+      if (!(input.collectionIds ?? []).some((id) => eligibleIds.has(id))) {
         return this.reject('not_eligible');
       }
     }
@@ -355,7 +355,7 @@ export class DiscountsService {
 
   private async assertEligibilityTargetsBelongToShop(
     ctx: TenantContext,
-    dto: { appliesTo?: string; productIds?: number[]; categoryIds?: number[] },
+    dto: { appliesTo?: string; productIds?: number[]; collectionIds?: number[] },
   ) {
     if (dto.productIds?.length) {
       const count = await this.prisma.product.count({
@@ -367,13 +367,13 @@ export class DiscountsService {
         );
       }
     }
-    if (dto.categoryIds?.length) {
-      const count = await this.prisma.category.count({
-        where: { id: { in: dto.categoryIds }, shopId: ctx.shopId },
+    if (dto.collectionIds?.length) {
+      const count = await this.prisma.collection.count({
+        where: { id: { in: dto.collectionIds }, shopId: ctx.shopId },
       });
-      if (count !== new Set(dto.categoryIds).size) {
+      if (count !== new Set(dto.collectionIds).size) {
         throw new BadRequestException(
-          'One or more categoryIds are invalid for this shop',
+          'One or more collectionIds are invalid for this shop',
         );
       }
     }
@@ -390,11 +390,11 @@ export class DiscountsService {
   }
 
   private toResponse(discount: DiscountWithEligibility) {
-    const { discountproduct, discountcategory, ...rest } = discount;
+    const { discountproduct, discountcollection, ...rest } = discount;
     return {
       ...rest,
       products: discountproduct.map((dp) => dp.product),
-      categories: discountcategory.map((dc) => dc.category),
+      collections: discountcollection.map((dc) => dc.collection),
     };
   }
 

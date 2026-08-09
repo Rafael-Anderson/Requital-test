@@ -100,19 +100,19 @@ describe('Order Returns/Refunds (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId };
+    return { adminToken, outletId, collectionId };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -123,7 +123,7 @@ describe('Order Returns/Refunds (e2e)', () => {
         price: 20,
         thumbnail: 'https://example.com/x.jpg',
         sku: `RET-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
         ...overrides,
       })
@@ -197,9 +197,9 @@ describe('Order Returns/Refunds (e2e)', () => {
 
   describe('refund calculation', () => {
     it('computes the default refund from priceAtPurchase * returned quantity, editable via override', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('return-calc');
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 25,
       });
       await seedStock(adminToken, outletId, product.id, 10);
@@ -239,9 +239,9 @@ describe('Order Returns/Refunds (e2e)', () => {
     });
 
     it('rejects returning more units of a line item than remain unreturned', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('return-line-cap');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createDeliveredOrder(
         adminToken,
@@ -276,9 +276,9 @@ describe('Order Returns/Refunds (e2e)', () => {
 
   describe('running-total cap', () => {
     it('never lets cumulative refunds across multiple returns exceed the order total', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('return-running-cap');
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 30,
       });
       await seedStock(adminToken, outletId, product.id, 10);
@@ -324,9 +324,9 @@ describe('Order Returns/Refunds (e2e)', () => {
     });
 
     it('flips order.paymentStatus to refunded once cumulative refunds reach the total', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('return-full-refund');
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 40,
       });
       await seedStock(adminToken, outletId, product.id, 10);
@@ -358,9 +358,9 @@ describe('Order Returns/Refunds (e2e)', () => {
 
   describe('restock', () => {
     it('restocking a return increments stock and logs a RETURN stockmovement row', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('return-restock');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createDeliveredOrder(
         adminToken,
@@ -392,9 +392,9 @@ describe('Order Returns/Refunds (e2e)', () => {
     });
 
     it('does not restock when restock is false', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('return-no-restock');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createDeliveredOrder(
         adminToken,
@@ -421,10 +421,10 @@ describe('Order Returns/Refunds (e2e)', () => {
 
   describe('provider refund fallback', () => {
     it('falls back to a manual refund and still records it when the provider call fails', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'return-provider-fail',
       );
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createDeliveredOrder(
         adminToken,
@@ -465,10 +465,10 @@ describe('Order Returns/Refunds (e2e)', () => {
 
   describe('eligibility', () => {
     it('rejects a return for an order that is not delivered', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'return-not-delivered',
       );
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       const orderRes = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -499,7 +499,7 @@ describe('Order Returns/Refunds (e2e)', () => {
     it("cannot create or view returns on another shop's order", async () => {
       const shopA = await setupShop('return-tenant-a');
       const shopB = await setupShop('return-tenant-b');
-      const productA = await createProduct(shopA.adminToken, shopA.categoryId);
+      const productA = await createProduct(shopA.adminToken, shopA.collectionId);
       await seedStock(shopA.adminToken, shopA.outletId, productA.id, 10);
       const orderA = await createDeliveredOrder(
         shopA.adminToken,

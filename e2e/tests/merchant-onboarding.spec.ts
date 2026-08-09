@@ -74,9 +74,9 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   // observable outcome of a successful signup.
   await page.waitForURL(`${ADMIN_URL}/`, { timeout: 15_000 });
 
-  // A category has to pre-exist for the product form's required
-  // CategoryCheckboxTree — creating one is a separate concern from this
-  // flow (categories UI isn't one of the 4 critical paths), so it's done
+  // A collection has to pre-exist for the product form's required
+  // CollectionCheckboxTree — creating one is a separate concern from this
+  // flow (collections UI isn't one of the 4 critical paths), so it's done
   // directly against the API with the token the wizard just signed in
   // with, same as the outlet pickup-enable needed for Publish readiness.
   const accessToken = await page.evaluate(() =>
@@ -102,11 +102,11 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
     });
   }
 
-  const categoryRes = await request.post(`${API_URL}/categories`, {
+  const collectionRes = await request.post(`${API_URL}/collections`, {
     headers: authHeaders,
     data: { name: 'Flowers' },
   });
-  const category = (await categoryRes.json()) as { id: number };
+  const collection = (await collectionRes.json()) as { id: number };
 
   const outletsRes = await request.get(`${API_URL}/outlets`, { headers: authHeaders });
   const outlets = (await outletsRes.json()) as { id: number }[];
