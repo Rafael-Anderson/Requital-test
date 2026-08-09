@@ -5,10 +5,10 @@
 // homeSliderBackgroundColor/homeSliderColor were wired for the Advanced/
 // homepageLayout task's real Featured Grid and Slideshow layout components
 // (see components/home-layouts/). priceSecondaryColor,
-// featuredProductTextColor, categorySliderArrowColor/ActiveColor, and
+// featuredProductTextColor, collectionSliderArrowColor/ActiveColor, and
 // brandBackgroundColor were wired for the storefront layout/dead-settings
 // pass — see PDP's compare-at-price line, FeaturedGrid's tile label,
-// CategoryNav's mobile scroll arrows, and ClassicHero's fallback background
+// CollectionNav's mobile scroll arrows, and ClassicHero's fallback background
 // respectively (brandBackgroundColor is read directly from shop.colors
 // there rather than through the generic applyTheme() loop, so its own
 // existing computed default — an accent tint, not a flat color — stays
@@ -54,8 +54,8 @@ export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
   { key: "productNameColor", cssVar: "--color-product-name", default: "#171717", wired: true },
   { key: "priceMainColor", cssVar: "--color-price-main", default: "#71717a", wired: true },
   { key: "priceSecondaryColor", cssVar: "--color-price-secondary", default: "#a1a1aa", wired: true },
-  { key: "categorySliderArrowColor", cssVar: "--color-category-arrow", default: "#069494", wired: true },
-  { key: "categorySliderArrowActiveColor", cssVar: "--color-category-arrow-active", default: "#057a7a", wired: true },
+  { key: "collectionSliderArrowColor", cssVar: "--color-collection-arrow", default: "#069494", wired: true },
+  { key: "collectionSliderArrowActiveColor", cssVar: "--color-collection-arrow-active", default: "#057a7a", wired: true },
   { key: "featuredProductTextColor", cssVar: "--color-featured-fg", default: "#171717", wired: true },
   { key: "brandBackgroundColor", cssVar: "--color-brand-bg", default: "#f4f4f5", wired: true },
   { key: "homeSliderBackgroundColor", cssVar: "--color-slider-bg", default: "#f4f4f5", wired: true },

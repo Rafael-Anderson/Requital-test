@@ -45,8 +45,8 @@ export class UpdateDiscountDto {
   @IsIn(DISCOUNT_APPLIES_TO)
   appliesTo?: DiscountAppliesTo;
 
-  // If provided, replaces the full product/category eligibility set — same
-  // "replace on write" convention as UpdateProductDto.categoryIds.
+  // If provided, replaces the full product/collection eligibility set — same
+  // "replace on write" convention as UpdateProductDto.collectionIds.
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
@@ -59,7 +59,7 @@ export class UpdateDiscountDto {
   @ArrayNotEmpty()
   @Type(() => Number)
   @IsInt({ each: true })
-  categoryIds?: number[];
+  collectionIds?: number[];
 
   @IsOptional()
   @IsInt()

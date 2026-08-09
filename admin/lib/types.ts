@@ -306,40 +306,40 @@ export interface CustomerDetail {
   orders: Order[];
 }
 
-export interface Category {
+export interface Collection {
   id: number;
   name: string;
   slug: string;
   displayOrder: number;
   image: string | null;
   isFeatured: boolean;
-  parentCategoryId: number | null;
+  parentCollectionId: number | null;
 }
 
-export interface CategoryNode extends Category {
-  children: CategoryNode[];
+export interface CollectionNode extends Collection {
+  children: CollectionNode[];
   depth: number;
 }
 
 // Builds a tree from the flat list the API returns. Ignores a
-// parentCategoryId that doesn't resolve to another row in the list (treats
-// it as root) rather than dropping the category — the backend already
+// parentCollectionId that doesn't resolve to another row in the list (treats
+// it as root) rather than dropping the collection — the backend already
 // guarantees valid parents, but this keeps the client-side tree from
-// silently losing a category if it ever doesn't.
-export function buildCategoryTree(categories: Category[]): CategoryNode[] {
-  const byId = new Map<number, CategoryNode>(
-    categories.map((c) => [c.id, { ...c, children: [], depth: 0 }]),
+// silently losing a collection if it ever doesn't.
+export function buildCollectionTree(collections: Collection[]): CollectionNode[] {
+  const byId = new Map<number, CollectionNode>(
+    collections.map((c) => [c.id, { ...c, children: [], depth: 0 }]),
   );
-  const roots: CategoryNode[] = [];
+  const roots: CollectionNode[] = [];
   for (const node of byId.values()) {
-    const parent = node.parentCategoryId !== null ? byId.get(node.parentCategoryId) : undefined;
+    const parent = node.parentCollectionId !== null ? byId.get(node.parentCollectionId) : undefined;
     if (parent) {
       parent.children.push(node);
     } else {
       roots.push(node);
     }
   }
-  const sortAndSetDepth = (nodes: CategoryNode[], depth: number) => {
+  const sortAndSetDepth = (nodes: CollectionNode[], depth: number) => {
     nodes.sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
     for (const node of nodes) {
       node.depth = depth;
@@ -351,21 +351,21 @@ export function buildCategoryTree(categories: Category[]): CategoryNode[] {
 }
 
 // Flattens a tree back to depth-ordered rows, for rendering an indented list.
-export function flattenCategoryTree(nodes: CategoryNode[]): CategoryNode[] {
-  return nodes.flatMap((node) => [node, ...flattenCategoryTree(node.children)]);
+export function flattenCollectionTree(nodes: CollectionNode[]): CollectionNode[] {
+  return nodes.flatMap((node) => [node, ...flattenCollectionTree(node.children)]);
 }
 
-// A category's full descendant id set, used to keep the parent-reassign
+// A collection's full descendant id set, used to keep the parent-reassign
 // dropdown cycle-safe on the client (the backend re-checks this too).
-export function descendantIds(categoryId: number, categories: Category[]): Set<number> {
+export function descendantIds(collectionId: number, collections: Collection[]): Set<number> {
   const childrenOf = new Map<number, number[]>();
-  for (const c of categories) {
-    if (c.parentCategoryId !== null) {
-      childrenOf.set(c.parentCategoryId, [...(childrenOf.get(c.parentCategoryId) ?? []), c.id]);
+  for (const c of collections) {
+    if (c.parentCollectionId !== null) {
+      childrenOf.set(c.parentCollectionId, [...(childrenOf.get(c.parentCollectionId) ?? []), c.id]);
     }
   }
   const result = new Set<number>();
-  const stack = [...(childrenOf.get(categoryId) ?? [])];
+  const stack = [...(childrenOf.get(collectionId) ?? [])];
   while (stack.length) {
     const id = stack.pop()!;
     if (result.has(id)) continue;
@@ -476,8 +476,8 @@ export interface ProductVariant {
 }
 
 // Shape accepted by POST/PATCH /products — distinct from Product (the API
-// response) because category assignment is written as categoryIds, not the
-// expanded Category[] the response returns. Stock is no longer set here —
+// response) because collection assignment is written as collectionIds, not the
+// expanded Collection[] the response returns. Stock is no longer set here —
 // it's per-outlet now (see PATCH /products/stock/bulk-adjust).
 export interface ProductInput {
   name: string;
@@ -501,8 +501,14 @@ export interface ProductInput {
   weightUnit?: WeightUnit;
   dimensions?: string;
   trackInventory?: boolean;
+  // false (default, omitted): this product auto-mirrors as its own shadow
+  // Ingredient — the Inventory card's stock table is what's editable. true:
+  // stock/availability is computed from `ingredients` below against real
+  // Ingredient stock instead — requires at least one row. See Product's own
+  // comment for the toggle-flip semantics.
+  usesIngredients?: boolean;
   status?: string;
-  categoryIds: number[];
+  collectionIds: number[];
   tags?: string[];
   // Replaces the full gallery when provided — images[0] (by `order`)
   // becomes the canonical thumbnail server-side. Omitted leaves the
@@ -522,7 +528,7 @@ export interface ProductInput {
   metaTitle?: string;
   metaDescription?: string;
   // Bill of Materials — product-level default recipe. Replaces the full
-  // set on update when provided (same convention as images/categoryIds);
+  // set on update when provided (same convention as images/collectionIds);
   // omitted leaves it untouched. See ProductIngredientLink.
   ingredients?: { ingredientId: number; quantityPerUnit: number }[];
 }
@@ -553,6 +559,15 @@ export interface Product {
   status: string;
   trackInventory: boolean;
   continueSellingOutOfStock: boolean;
+  // Phase A (Ingredient-Based Stock) — false (default): this product IS its
+  // own atomic stock unit, auto-mirrored as an invisible shadow Ingredient
+  // (see the Inventory card / OutletQuantityTable, unchanged UI). true:
+  // stock/availability is computed from `ingredients` (the recipe) against
+  // real Ingredient stock instead — the Inventory card is replaced by the
+  // Recipe section, and lowStockThreshold below is always null (no single
+  // number across a multi-ingredient recipe; set thresholds per-ingredient
+  // on the Ingredients page instead).
+  usesIngredients: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
   // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
@@ -588,7 +603,7 @@ export interface Product {
   hasVariants: boolean;
   options: ProductOption[];
   variants: ProductVariant[];
-  categories: Category[];
+  collections: Collection[];
   tags: string[];
   // Bill of Materials — this product's own default recipe (applies
   // directly when hasVariants is false; each variant either overrides it
@@ -654,15 +669,22 @@ export interface ScanPreviewResult {
 export interface ScanCommitNewItem {
   name: string;
   price?: number;
-  categoryId?: number;
+  collectionId?: number;
   unit?: string;
 }
 
 export interface ScanCommitItem {
   targetType: "product" | "ingredient";
   matchedId?: number;
+  // Required whenever matchedId resolves to a variant-carrying product —
+  // scanned stock has to land on one specific variant's shadow ingredient.
+  variantId?: number;
   outletId: number;
   quantity: number;
+  // OCR-parsed and merchant-confirmed/edited cost — persisted to the
+  // target's own cost field (product.costPrice / ingredient.costPerUnit)
+  // on commit. Optional — omitted skips price capture for that line.
+  price?: number;
   createNew?: ScanCommitNewItem;
 }
 
@@ -823,7 +845,7 @@ export interface Shop {
   taxDisplayText: string | null;
   productDisplayOrientation: ProductDisplayOrientation;
   productImageZoomEnabled: boolean;
-  showCategoryMenu: boolean;
+  showCollectionMenu: boolean;
   allowPreOrders: boolean;
   customerConfirmationRequired: boolean;
   externalDeliveryEnabled: boolean;
@@ -928,6 +950,9 @@ export interface ThemeSettings {
   colors: Record<string, string> | null;
   // Advanced tab — see HOMEPAGE_LAYOUTS below.
   homepageLayout: HomepageLayout;
+  // Phase C — what the storefront Home tab renders. Always a real value,
+  // same rule as homepageLayout.
+  homeTabMode: HomeTabMode;
   // Theme Customizer v2 — see the enum exports below. Always a real value,
   // same rule as homepageLayout.
   topBarLayout: TopBarLayout;
@@ -953,6 +978,14 @@ export interface ThemeSettings {
 export const HOMEPAGE_LAYOUTS = ["classic", "slideshow", "featured_grid", "grid_first", "custom"] as const;
 export type HomepageLayout = (typeof HOMEPAGE_LAYOUTS)[number];
 
+// Phase C — mirrors backend/src/theme/constants.ts's HOME_TAB_MODES.
+export const HOME_TAB_MODES = ["templates", "collections"] as const;
+export type HomeTabMode = (typeof HOME_TAB_MODES)[number];
+export const HOME_TAB_MODE_OPTIONS: { value: HomeTabMode; label: string }[] = [
+  { value: "templates", label: "Templates" },
+  { value: "collections", label: "Collections grid" },
+];
+
 export interface HomepageLayoutOption {
   key: Exclude<HomepageLayout, "custom">;
   label: string;
@@ -973,7 +1006,7 @@ export const HOMEPAGE_LAYOUT_OPTIONS: HomepageLayoutOption[] = [
   {
     key: "featured_grid",
     label: "Featured Grid",
-    description: "Category tiles up front, so shoppers can jump straight to what they want.",
+    description: "Collection tiles up front, so shoppers can jump straight to what they want.",
   },
   {
     key: "grid_first",
@@ -1066,7 +1099,7 @@ export const FOOTER_DENSITY_OPTIONS: { key: Density; label: string; description:
 export const THEME_COLOR_GROUPS = [
   { key: "ui_button_colors", label: "UI/Button Colors" },
   { key: "background_header_colors", label: "Background/Header Colors" },
-  { key: "product_category_colors", label: "Product/Category Colors" },
+  { key: "product_collection_colors", label: "Product/Collection Colors" },
 ] as const;
 export type ThemeColorGroupKey = (typeof THEME_COLOR_GROUPS)[number]["key"];
 
@@ -1099,8 +1132,8 @@ export const THEME_COLOR_DEFAULTS: Record<string, string> = {
   productNameColor: "#171717",
   priceMainColor: "#71717a",
   priceSecondaryColor: "#a1a1aa",
-  categorySliderArrowColor: "#069494",
-  categorySliderArrowActiveColor: "#057a7a",
+  collectionSliderArrowColor: "#069494",
+  collectionSliderArrowActiveColor: "#057a7a",
   featuredProductTextColor: "#171717",
   brandBackgroundColor: "#f4f4f5",
   homeSliderBackgroundColor: "#f4f4f5",
@@ -1121,15 +1154,15 @@ export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
   { key: "footerBackgroundColor", label: "Footer Background Color", group: "background_header_colors", wired: true },
   { key: "footerTextColor", label: "Footer Text Color", group: "background_header_colors", wired: true },
   { key: "featuredBackgroundColor", label: "Featured Background Color", group: "background_header_colors", wired: true },
-  { key: "productNameColor", label: "Product Name Color", group: "product_category_colors", wired: true },
-  { key: "priceMainColor", label: "Price Main Color", group: "product_category_colors", wired: true },
-  { key: "priceSecondaryColor", label: "Price Secondary Color", group: "product_category_colors", wired: true },
-  { key: "categorySliderArrowColor", label: "Category Slider Arrow Color (mobile view)", group: "product_category_colors", wired: true },
-  { key: "categorySliderArrowActiveColor", label: "Category Slider Arrow Active Color (mobile view)", group: "product_category_colors", wired: true },
-  { key: "featuredProductTextColor", label: "Featured Product Text Color", group: "product_category_colors", wired: true },
-  { key: "brandBackgroundColor", label: "Brand Background Color", group: "product_category_colors", wired: true },
-  { key: "homeSliderBackgroundColor", label: "Home Slider Background Color", group: "product_category_colors", wired: true },
-  { key: "homeSliderColor", label: "Home Slider Color", group: "product_category_colors", wired: true },
+  { key: "productNameColor", label: "Product Name Color", group: "product_collection_colors", wired: true },
+  { key: "priceMainColor", label: "Price Main Color", group: "product_collection_colors", wired: true },
+  { key: "priceSecondaryColor", label: "Price Secondary Color", group: "product_collection_colors", wired: true },
+  { key: "collectionSliderArrowColor", label: "Collection Slider Arrow Color (mobile view)", group: "product_collection_colors", wired: true },
+  { key: "collectionSliderArrowActiveColor", label: "Collection Slider Arrow Active Color (mobile view)", group: "product_collection_colors", wired: true },
+  { key: "featuredProductTextColor", label: "Featured Product Text Color", group: "product_collection_colors", wired: true },
+  { key: "brandBackgroundColor", label: "Brand Background Color", group: "product_collection_colors", wired: true },
+  { key: "homeSliderBackgroundColor", label: "Home Slider Background Color", group: "product_collection_colors", wired: true },
+  { key: "homeSliderColor", label: "Home Slider Color", group: "product_collection_colors", wired: true },
 ];
 
 export interface SeoSettings {
@@ -1368,14 +1401,14 @@ export interface PaginatedAffiliateOrders {
 
 // --- Bio Links — mirrors backend/src/bio-links/bio-link-constants.ts by hand. ---
 
-export const BIO_LINK_TYPES = ["EXTERNAL_URL", "PRODUCT", "CATEGORY", "COLLECTION", "SOCIAL_ICON"] as const;
+export const BIO_LINK_TYPES = ["EXTERNAL_URL", "PRODUCT", "COLLECTION", "TEMPLATE", "SOCIAL_ICON"] as const;
 export type BioLinkType = (typeof BIO_LINK_TYPES)[number];
 
 export const BIO_LINK_TYPE_LABELS: Record<BioLinkType, string> = {
   EXTERNAL_URL: "External URL",
   PRODUCT: "Product",
-  CATEGORY: "Category",
   COLLECTION: "Collection",
+  TEMPLATE: "Template",
   SOCIAL_ICON: "Social Icon",
 };
 
@@ -1411,10 +1444,10 @@ export interface BioLink {
   url: string | null;
   productId: number | null;
   productName: string | null;
-  categoryId: number | null;
-  categoryName: string | null;
   collectionId: number | null;
-  collectionTitle: string | null;
+  collectionName: string | null;
+  templateId: number | null;
+  templateTitle: string | null;
   socialPlatform: BioLinkSocialPlatform | null;
   order: number;
   active: boolean;
@@ -1444,12 +1477,12 @@ export const DISCOUNT_TYPE_LABELS: Record<DiscountType, string> = {
   FREE_SHIPPING: "Free shipping",
 };
 
-export const DISCOUNT_APPLIES_TO = ["ALL_PRODUCTS", "SPECIFIC_PRODUCTS", "SPECIFIC_CATEGORIES"] as const;
+export const DISCOUNT_APPLIES_TO = ["ALL_PRODUCTS", "SPECIFIC_PRODUCTS", "SPECIFIC_COLLECTIONS"] as const;
 export type DiscountAppliesTo = (typeof DISCOUNT_APPLIES_TO)[number];
 export const DISCOUNT_APPLIES_TO_LABELS: Record<DiscountAppliesTo, string> = {
   ALL_PRODUCTS: "All products",
   SPECIFIC_PRODUCTS: "Specific products",
-  SPECIFIC_CATEGORIES: "Specific categories",
+  SPECIFIC_COLLECTIONS: "Specific collections",
 };
 
 export interface Discount {
@@ -1460,7 +1493,7 @@ export interface Discount {
   minPurchaseAmount: string | null;
   appliesTo: DiscountAppliesTo;
   products: { id: number; name: string }[];
-  categories: { id: number; name: string }[];
+  collections: { id: number; name: string }[];
   usageLimit: number | null;
   usageLimitPerCustomer: number | null;
   startsAt: string | null;
@@ -1478,7 +1511,7 @@ export interface DiscountInput {
   minPurchaseAmount?: number;
   appliesTo?: DiscountAppliesTo;
   productIds?: number[];
-  categoryIds?: number[];
+  collectionIds?: number[];
   usageLimit?: number;
   usageLimitPerCustomer?: number;
   startsAt?: string;
@@ -1611,7 +1644,7 @@ export interface StockMovement {
 // Deliberately a much lighter shape than Product — no sku-for-sale/
 // variants/SEO/publishing fields exist on this model at all (see backend
 // schema.prisma's comment on `ingredient`). image/description/costPerUnit/
-// supplier/category bring it closer to Product's own level of detail
+// supplier/collection bring it closer to Product's own level of detail
 // without copying fields that genuinely don't apply (no price, no SEO).
 export interface Ingredient {
   id: number;
@@ -1632,7 +1665,7 @@ export interface Ingredient {
   lowStockThreshold: number | null;
 }
 
-// Flat — no parent/tree, unlike Category (see backend
+// Flat — no parent/tree, unlike Collection (see backend
 // ingredientcategory's schema comment for why).
 export interface IngredientCategory {
   id: number;
@@ -1681,39 +1714,65 @@ export interface PaginatedStockMovements {
   pageSize: number;
 }
 
-// --- Collections — mirrors backend/src/collections/collection-constants.ts by hand. ---
+// --- Templates — mirrors backend/src/templates/template-constants.ts by hand. ---
 
-export const COLLECTION_TYPES = ["MANUAL", "RULE_BASED"] as const;
-export type CollectionType = (typeof COLLECTION_TYPES)[number];
+export const TEMPLATE_TYPES = ["MANUAL", "RULE_BASED", "COLLECTION_GROUP"] as const;
+export type TemplateType = (typeof TEMPLATE_TYPES)[number];
 
-export const COLLECTION_TYPE_LABELS: Record<CollectionType, string> = {
+export const TEMPLATE_TYPE_LABELS: Record<TemplateType, string> = {
   MANUAL: "Manual (pick products yourself)",
   RULE_BASED: "Rule-based (auto-updates)",
+  COLLECTION_GROUP: "Collection group (storefront homepage section)",
 };
 
-// Every field ANDed together — see backend CollectionsService.resolveProductIds.
-export interface CollectionRules {
-  categoryId?: number;
+// Every field ANDed together — see backend TemplatesService.resolveProductIds.
+export interface TemplateRules {
+  collectionId?: number;
   tagName?: string;
   minPrice?: number;
   maxPrice?: number;
   createdWithinDays?: number;
 }
 
-export interface Collection {
+export interface Template {
   id: number;
   title: string;
   slug: string;
   description: string | null;
   image: string | null;
-  type: CollectionType;
-  rules: CollectionRules | null;
+  type: TemplateType;
+  rules: TemplateRules | null;
   isActive: boolean;
   displayOrder: number;
   productCount: number;
   createdAt: string;
-  // Only present on the single-collection detail fetch.
+  // Only present on the single-template detail fetch.
   productIds?: number[];
+  // Only present on the single-template detail fetch, COLLECTION_GROUP only.
+  collections?: { collectionId: number; sortOrder: number }[];
+}
+
+// --- Menu (Phase C) — the storefront top bar's merchant-configured nav. ---
+
+export const MENU_ITEM_TYPES = ["LINK", "DROPDOWN"] as const;
+export type MenuItemType = (typeof MENU_ITEM_TYPES)[number];
+
+export interface MenuItemCollectionRef {
+  collectionId: number;
+  sortOrder: number;
+  collection: { id: number; name: string; slug: string } | null;
+}
+
+export interface MenuItem {
+  id: number;
+  label: string;
+  type: MenuItemType;
+  displayOrder: number;
+  // LINK only.
+  collectionId: number | null;
+  collection: { id: number; name: string; slug: string } | null;
+  // DROPDOWN only.
+  collections: MenuItemCollectionRef[];
 }
 
 export interface AbandonedCart {

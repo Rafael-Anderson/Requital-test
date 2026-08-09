@@ -72,19 +72,19 @@ describe('Global search (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId };
+    return { adminToken, outletId, collectionId };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     name: string,
   ) {
     const res = await request(app.getHttpServer())
@@ -95,7 +95,7 @@ describe('Global search (e2e)', () => {
         price: 10,
         thumbnail: 'https://example.com/x.jpg',
         sku: `SRCH-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     return body<IdRow>(res);
@@ -124,12 +124,12 @@ describe('Global search (e2e)', () => {
   }
 
   it('finds products by name and by SKU, orders by customer name, customers by name/phone', async () => {
-    const { adminToken, categoryId, outletId } =
+    const { adminToken, collectionId, outletId } =
       await setupShop('search-basic');
     const uniqueTag = `Zephyr${runId}`;
     const product = await createProduct(
       adminToken,
-      categoryId,
+      collectionId,
       `${uniqueTag} Widget`,
     );
     await createOrder(
@@ -152,11 +152,11 @@ describe('Global search (e2e)', () => {
   });
 
   it('finds an order by its numeric id', async () => {
-    const { adminToken, categoryId, outletId } =
+    const { adminToken, collectionId, outletId } =
       await setupShop('search-by-id');
     const product = await createProduct(
       adminToken,
-      categoryId,
+      collectionId,
       'Search Order ID Item',
     );
     const order = await createOrder(
@@ -175,11 +175,11 @@ describe('Global search (e2e)', () => {
     );
   });
 
-  it('caps each category at 5 results', async () => {
-    const { adminToken, categoryId } = await setupShop('search-cap');
+  it('caps each collection at 5 results', async () => {
+    const { adminToken, collectionId } = await setupShop('search-cap');
     const tag = `CapTest${runId}`;
     for (let i = 0; i < 8; i++) {
-      await createProduct(adminToken, categoryId, `${tag} Item ${i}`);
+      await createProduct(adminToken, collectionId, `${tag} Item ${i}`);
     }
     const res = await request(app.getHttpServer())
       .get(`/search?q=${tag}`)
@@ -188,7 +188,7 @@ describe('Global search (e2e)', () => {
     expect(body<SearchResult>(res).products.length).toBe(5);
   });
 
-  it('returns empty categories for an empty query rather than erroring', async () => {
+  it('returns empty collections for an empty query rather than erroring', async () => {
     const { adminToken } = await setupShop('search-empty');
     const res = await request(app.getHttpServer())
       .get('/search?q=')
@@ -205,7 +205,7 @@ describe('Global search (e2e)', () => {
       const sharedTag = `Shared${runId}`;
       await createProduct(
         shopA.adminToken,
-        shopA.categoryId,
+        shopA.collectionId,
         `${sharedTag} Product`,
       );
 
@@ -217,13 +217,13 @@ describe('Global search (e2e)', () => {
     });
 
     it('branch/order_manager never see customers in search results, even with a matching name', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'search-role-customers',
       );
       const tag = `RoleCust${runId}`;
       const product = await createProduct(
         adminToken,
-        categoryId,
+        collectionId,
         `${tag} Item`,
       );
       await createOrder(adminToken, outletId, product.id, `${tag} Customer`);
@@ -257,7 +257,7 @@ describe('Global search (e2e)', () => {
     });
 
     it("a branch user's order search is pinned to their own outlet", async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'search-branch-outlet',
       );
       const secondOutlet = await request(app.getHttpServer())
@@ -270,7 +270,7 @@ describe('Global search (e2e)', () => {
       const tag = `OutletScope${runId}`;
       const product = await createProduct(
         adminToken,
-        categoryId,
+        collectionId,
         `${tag} Item`,
       );
       await createOrder(

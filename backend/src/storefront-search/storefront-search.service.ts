@@ -22,7 +22,7 @@ interface SearchDoc {
   sku: string;
   description: string;
   tags: string;
-  collections: string;
+  templates: string;
 }
 
 export interface SearchResult {
@@ -135,13 +135,13 @@ export class StorefrontSearchService {
         description: true,
         shortSummary: true,
         producttag: { select: { tag: { select: { name: true } } } },
-        // Only MANUAL-collection membership is indexed here — a
-        // RULE_BASED collection's membership is computed live (see
-        // collection's own schema comment) and isn't worth re-evaluating
+        // Only MANUAL-template membership is indexed here — a
+        // RULE_BASED template's membership is computed live (see
+        // template's own schema comment) and isn't worth re-evaluating
         // per product on every search; a shop's manually curated
-        // collections (the common case) are still fully searchable.
-        collectionproduct: {
-          select: { collection: { select: { title: true } } },
+        // templates (the common case) are still fully searchable.
+        templateproduct: {
+          select: { template: { select: { title: true } } },
         },
       },
     });
@@ -154,7 +154,7 @@ export class StorefrontSearchService {
       sku: p.sku,
       description: [p.shortSummary, p.description].filter(Boolean).join(' '),
       tags: p.producttag.map((t) => t.tag.name).join(' '),
-      collections: p.collectionproduct.map((c) => c.collection.title).join(' '),
+      templates: p.templateproduct.map((c) => c.template.title).join(' '),
     }));
   }
 
@@ -171,7 +171,7 @@ export class StorefrontSearchService {
         d.sku.toLowerCase().includes(q) ||
         d.description.toLowerCase().includes(q) ||
         d.tags.toLowerCase().includes(q) ||
-        d.collections.toLowerCase().includes(q),
+        d.templates.toLowerCase().includes(q),
     );
     if (exactMatches.length > 0) {
       return {
@@ -187,7 +187,7 @@ export class StorefrontSearchService {
       keys: [
         { name: 'name', weight: 3 },
         { name: 'tags', weight: 2 },
-        { name: 'collections', weight: 1.5 },
+        { name: 'templates', weight: 1.5 },
         { name: 'sku', weight: 1 },
         { name: 'description', weight: 1 },
       ],

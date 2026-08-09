@@ -12,7 +12,8 @@ import { BioLinksModule } from '../bio-links/bio-links.module';
 import { ProductsModule } from '../products/products.module';
 import { DiscountsModule } from '../discounts/discounts.module';
 import { OrderNotificationsModule } from '../orders/order-notifications.module';
-import { CollectionsModule } from '../collections/collections.module';
+import { TemplatesModule } from '../templates/templates.module';
+import { MenuModule } from '../menu/menu.module';
 import { AbandonedCartsModule } from '../abandoned-carts/abandoned-carts.module';
 import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { PolicyPagesModule } from '../policy-pages/policy-pages.module';
@@ -26,7 +27,8 @@ import { PolicyPagesModule } from '../policy-pages/policy-pages.module';
     ProductsModule,
     DiscountsModule,
     OrderNotificationsModule,
-    CollectionsModule,
+    TemplatesModule,
+    MenuModule,
     AbandonedCartsModule,
     GiftCardsModule,
     PolicyPagesModule,

@@ -37,12 +37,12 @@ export class UpdateBioLinkDto {
   @IsOptional()
   @IsInt()
   @IsPositive()
-  categoryId?: number;
+  collectionId?: number;
 
   @IsOptional()
   @IsInt()
   @IsPositive()
-  collectionId?: number;
+  templateId?: number;
 
   @IsOptional()
   @IsIn(BIO_LINK_SOCIAL_PLATFORMS)

@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -23,7 +22,8 @@ import { ProductsService } from '../products/products.service';
 import { buildVariantLabel } from '../products/variant-generator';
 import { DiscountsService } from '../discounts/discounts.service';
 import { OrderNotificationsService } from '../orders/order-notifications.service';
-import { CollectionsService } from '../collections/collections.service';
+import { TemplatesService } from '../templates/templates.service';
+import { MenuService } from '../menu/menu.service';
 import { AbandonedCartsService } from '../abandoned-carts/abandoned-carts.service';
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import type { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
@@ -81,7 +81,8 @@ export class PublicService {
     private readonly productsService: ProductsService,
     private readonly discountsService: DiscountsService,
     private readonly orderNotificationsService: OrderNotificationsService,
-    private readonly collectionsService: CollectionsService,
+    private readonly templatesService: TemplatesService,
+    private readonly menuService: MenuService,
     private readonly abandonedCartsService: AbandonedCartsService,
     private readonly giftCardsService: GiftCardsService,
     private readonly policyPagesService: PolicyPagesService,
@@ -165,7 +166,7 @@ export class PublicService {
       // storefront itself can render a "Coming soon" placeholder with the
       // shop's own branding for an unpublished shop, rather than the shop
       // being unreachable outright — see ShopLayoutClient. Every other
-      // content-serving endpoint below (products/categories/outlets/
+      // content-serving endpoint below (products/collections/outlets/
       // checkout) is still hard-gated server-side via assertPublished,
       // regardless of what this field says client-side.
       published: shop.published,
@@ -194,7 +195,7 @@ export class PublicService {
       socialLinks: shop.socialLinks,
       productDisplayOrientation: shop.productDisplayOrientation,
       productImageZoomEnabled: shop.productImageZoomEnabled,
-      showCategoryMenu: shop.showCategoryMenu,
+      showCollectionMenu: shop.showCollectionMenu,
       taxRate: shop.taxRate,
       taxInclusive: shop.taxInclusive,
       taxDisplayText: shop.taxDisplayText,
@@ -248,6 +249,9 @@ export class PublicService {
       // than resolving defaults server-side like ogImage's fallback chain.
       colors: (theme?.colors as Record<string, string> | null) ?? null,
       homepageLayout: theme?.homepageLayout ?? 'classic',
+      // Phase C — see theme/constants.ts. Same "always a real value,
+      // defaults to current behavior" rule as homepageLayout.
+      homeTabMode: theme?.homeTabMode ?? 'templates',
       // Theme Customizer v2 — see theme/constants.ts. Same "always a real
       // value, defaults to current behavior" rule as homepageLayout.
       topBarLayout: theme?.topBarLayout ?? 'logo_left',
@@ -291,13 +295,90 @@ export class PublicService {
     return shops.map((s) => ({ slug: s.subdomain, updatedAt: s.updatedAt }));
   }
 
-  async listCategories(shopSlug: string) {
+  async listCollections(shopSlug: string) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    return this.prisma.category.findMany({
+    return this.prisma.collection.findMany({
       where: { shopId: shop.id },
       orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
     });
+  }
+
+  // Collection (taxonomy node) detail page — /[shop]/collections/[slug].
+  // Reuses the same publicProductInclude/toProductResponse shape
+  // listProducts already returns, filtered the same way listProducts'
+  // collectionId param already is.
+  async getCollectionBySlug(
+    shopSlug: string,
+    slug: string,
+    outletId?: number,
+  ) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    const collection = await this.prisma.collection.findFirst({
+      where: { shopId: shop.id, slug },
+    });
+    if (!collection) {
+      throw new NotFoundException(`Collection '${slug}' not found`);
+    }
+    const products = await this.prisma.product.findMany({
+      where: {
+        shopId: shop.id,
+        status: 'Available',
+        productcollection: { some: { collectionId: collection.id } },
+      },
+      include: this.publicProductInclude(outletId),
+      orderBy: { id: 'asc' },
+    });
+    return {
+      id: collection.id,
+      name: collection.name,
+      slug: collection.slug,
+      image: collection.image,
+      products: products.map((p) => this.toProductResponse(p)),
+    };
+  }
+
+  // Storefront Home tab, 'templates' mode (see themesettings.homeTabMode) —
+  // one section per active Template, each with its own resolved (and
+  // capped) product list. Shop-scale template counts make resolving every
+  // one on every homepage request cheap enough not to need caching.
+  async getHomepageTemplates(shopSlug: string, outletId?: number) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    const templates = await this.prisma.template.findMany({
+      where: { shopId: shop.id, isActive: true },
+      orderBy: [{ displayOrder: 'asc' }, { title: 'asc' }],
+    });
+    const HOMEPAGE_SECTION_PRODUCT_CAP = 12;
+    return Promise.all(
+      templates.map(async (template) => {
+        const productIds = (
+          await this.templatesService.resolveProductIds(shop.id, template)
+        ).slice(0, HOMEPAGE_SECTION_PRODUCT_CAP);
+        const products = await this.prisma.product.findMany({
+          where: { id: { in: productIds }, shopId: shop.id, status: 'Available' },
+          include: this.publicProductInclude(outletId),
+        });
+        const byId = new Map(products.map((p) => [p.id, p]));
+        const ordered = productIds
+          .map((id) => byId.get(id))
+          .filter((p): p is NonNullable<typeof p> => !!p);
+        return {
+          id: template.id,
+          title: template.title,
+          slug: template.slug,
+          description: template.description,
+          products: ordered.map((p) => this.toProductResponse(p)),
+        };
+      }),
+    );
+  }
+
+  async getMenu(shopSlug: string) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    return this.menuService.listPublic(shop.id);
   }
 
   async listBioLinks(shopSlug: string) {
@@ -315,27 +396,27 @@ export class PublicService {
     return this.bioLinksService.getPublicPageConfig(shop.id);
   }
 
-  async listCollections(shopSlug: string) {
+  async listTemplates(shopSlug: string) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    return this.collectionsService.listPublic(shop.id);
+    return this.templatesService.listPublic(shop.id);
   }
 
   // Product formatting reuses toProductResponse/publicProductInclude
   // (the exact same shape listProducts/getProduct return) rather than
-  // CollectionsService duplicating that — it only ever resolves an ordered
+  // TemplatesService duplicating that — it only ever resolves an ordered
   // productId list (MANUAL's own order, or RULE_BASED's newest-first), see
   // its own resolveProductIds. findMany doesn't preserve `id IN (...)`
   // order, so results are re-sorted here to match.
-  async getCollection(shopSlug: string, slug: string, outletId?: number) {
+  async getTemplate(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const resolved = await this.collectionsService.getPublicBySlug(
+    const resolved = await this.templatesService.getPublicBySlug(
       shop.id,
       slug,
     );
     if (!resolved) {
-      throw new NotFoundException(`Collection '${slug}' not found`);
+      throw new NotFoundException(`Template '${slug}' not found`);
     }
     const { summary, productIds } = resolved;
 
@@ -361,7 +442,7 @@ export class PublicService {
   async listProducts(
     shopSlug: string,
     outletId?: number,
-    categoryId?: number,
+    collectionId?: number,
     isCheckoutAddon?: boolean,
   ) {
     const shop = await this.resolveShop(shopSlug);
@@ -370,8 +451,8 @@ export class PublicService {
       where: {
         shopId: shop.id,
         status: 'Available',
-        ...(categoryId !== undefined && {
-          productcategory: { some: { categoryId } },
+        ...(collectionId !== undefined && {
+          productcollection: { some: { collectionId } },
         }),
         ...(isCheckoutAddon !== undefined && { isCheckoutAddon }),
       },
@@ -411,35 +492,35 @@ export class PublicService {
     return this.toProductResponse(product);
   }
 
-  // Collection-first, same-category fallback — see RelatedProducts.tsx on
-  // the storefront and CollectionsService.findRelatedProductIds for why this
-  // didn't exist before Phase 8.4 (no product -> collection reverse lookup
-  // on the backend, only collection -> products).
+  // Template-first, same-collection fallback — see RelatedProducts.tsx on
+  // the storefront and TemplatesService.findRelatedProductIds for why this
+  // didn't exist before Phase 8.4 (no product -> template reverse lookup
+  // on the backend, only template -> products).
   async getRelatedProducts(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     const product = await this.prisma.product.findFirst({
       where: { slug, shopId: shop.id, status: 'Available' },
-      include: { productcategory: true },
+      include: { productcollection: true },
     });
     if (!product) {
       throw new NotFoundException(`Product '${slug}' not found`);
     }
 
-    let relatedIds = await this.collectionsService.findRelatedProductIds(
+    let relatedIds = await this.templatesService.findRelatedProductIds(
       shop.id,
       product.id,
     );
 
     if (relatedIds.length === 0) {
-      const categoryId = product.productcategory[0]?.categoryId;
-      if (categoryId !== undefined) {
+      const collectionId = product.productcollection[0]?.collectionId;
+      if (collectionId !== undefined) {
         const rows = await this.prisma.product.findMany({
           where: {
             shopId: shop.id,
             status: 'Available',
             id: { not: product.id },
-            productcategory: { some: { categoryId } },
+            productcollection: { some: { collectionId } },
           },
           select: { id: true },
           take: 4,
@@ -463,7 +544,7 @@ export class PublicService {
 
   private publicProductInclude(outletId: number | undefined) {
     return {
-      productcategory: { include: { category: true } },
+      productcollection: { include: { collection: true } },
       productimage: { orderBy: { order: 'asc' as const } },
       productattribute: { orderBy: { order: 'asc' as const } },
       productfaq: { orderBy: { order: 'asc' as const } },
@@ -478,21 +559,36 @@ export class PublicService {
           optionValue1: true,
           optionValue2: true,
           optionValue3: true,
+          // Only ever a shadow ingredient's stock (see
+          // ingredient.shadowVariantId's schema comment) — null for a
+          // usesIngredients:true variant, which never surfaces its real
+          // recipe/ingredient stock to a shopper. Selecting only
+          // stockQuantity keeps the ingredient's own id/name out of this
+          // response entirely, preserving the "no ingredient identity ever
+          // leaks to /public" invariant.
           ...(outletId !== undefined && {
-            outletvariantstock: {
-              where: { outletId },
-              select: { stockQuantity: true },
+            shadowIngredient: {
+              select: {
+                outletingredientstock: {
+                  where: { outletId },
+                  select: { stockQuantity: true },
+                },
+              },
             },
           }),
         },
       },
       ...(outletId !== undefined && {
-        outletstock: {
-          where: { outletId },
-          select: { stockQuantity: true },
+        shadowIngredient: {
+          select: {
+            outletingredientstock: {
+              where: { outletId },
+              select: { stockQuantity: true },
+            },
+          },
         },
       }),
-    };
+    } satisfies Prisma.productInclude;
   }
 
   async listOutlets(shopSlug: string) {
@@ -827,92 +923,25 @@ export class PublicService {
     );
 
     const order = await this.prisma.$transaction(async (tx) => {
-      for (const { product, variant, quantity } of resolvedItems) {
-        // A gift card is never physical inventory — trackInventory should
-        // already be false on a gift-card product, but this is a defensive
-        // second guard, not the only one, since nothing about "stock" is
-        // meaningful for a digital gift card regardless of how that flag
-        // happens to be set.
-        if (!product.trackInventory || product.isGiftCard) continue;
-        // Reserved at the moment the storefront customer checks out, not
-        // deferred to merchant confirmation like the admin-entered order
-        // flow — a real customer transaction needs the stock guarantee
-        // immediately. The CAS-style `stockQuantity >= quantity` guard in
-        // the WHERE clause means two concurrent checkouts for the last unit
-        // can't both succeed: only one UPDATE matches, the other gets
-        // count 0. See orders.service.ts's channel === 'storefront' checks
-        // for why the confirm-time decrement is skipped for these orders,
-        // and why cancelling a still-pending one restocks immediately.
-        // A variant-bearing product decrements its own outletvariantstock
-        // row instead of the parent product's outletstock (which stays
-        // untouched/unused once a product has variants — see schema.prisma).
-        // continueSellingOutOfStock skips the floor guard entirely (stock
-        // may go negative) rather than blocking the sale.
-        if (product.continueSellingOutOfStock) {
-          if (variant) {
-            await tx.outletvariantstock.upsert({
-              where: {
-                outletId_variantId: {
-                  outletId: outlet.id,
-                  variantId: variant.id,
-                },
-              },
-              update: { stockQuantity: { decrement: quantity } },
-              create: {
-                outletId: outlet.id,
-                variantId: variant.id,
-                stockQuantity: -quantity,
-              },
-            });
-          } else {
-            await tx.outletstock.upsert({
-              where: {
-                outletId_productId: {
-                  outletId: outlet.id,
-                  productId: product.id,
-                },
-              },
-              update: { stockQuantity: { decrement: quantity } },
-              create: {
-                outletId: outlet.id,
-                productId: product.id,
-                stockQuantity: -quantity,
-              },
-            });
-          }
-          continue;
-        }
-        const result = variant
-          ? await tx.outletvariantstock.updateMany({
-              where: {
-                outletId: outlet.id,
-                variantId: variant.id,
-                stockQuantity: { gte: quantity },
-              },
-              data: { stockQuantity: { decrement: quantity } },
-            })
-          : await tx.outletstock.updateMany({
-              where: {
-                outletId: outlet.id,
-                productId: product.id,
-                stockQuantity: { gte: quantity },
-              },
-              data: { stockQuantity: { decrement: quantity } },
-            });
-        if (result.count === 0) {
-          throw new ConflictException(`${product.name} is out of stock`);
-        }
-      }
-
-      // Bill of Materials — same immediate-reservation trigger as the stock
-      // loop just above, not a second/deferred point: a real customer
-      // transaction needs both the product AND ingredient stock guarantee
-      // right now. throwOnInsufficientStock: true for the same reason the
-      // product-stock CAS above throws — an insufficient ingredient blocks
-      // this checkout outright rather than silently overselling it.
-      // actorUserId: null — no authenticated staff user exists on this
-      // anonymous storefront path (see stockmovement.actorUserId's schema
-      // comment).
+      // Reserved at the moment the storefront customer checks out, not
+      // deferred to merchant confirmation like the admin-entered order flow
+      // — a real customer transaction needs the stock guarantee
+      // immediately. Every product/variant resolves through
+      // consumeForOrderItems now (Phase A: shadow or real recipe) — the
+      // CAS-style `stockQuantity >= quantity` guard means two concurrent
+      // checkouts for the last unit can't both succeed: only one UPDATE
+      // matches, the other gets count 0 and this throws. See
+      // orders.service.ts's channel === 'storefront' checks for why the
+      // confirm-time decrement is skipped for these orders, and why
+      // cancelling a still-pending one restocks immediately.
+      // continueSellingOutOfStock/an untracked product skip the floor guard
+      // entirely (stock may go negative) via the item's own allowNegative
+      // flag rather than blocking the sale — see resolveOrderItems. A gift
+      // card is never physical inventory (isGiftCard filtered out below);
+      // trackInventory should already be false on one regardless, but this
+      // is a defensive second guard, not the only one. actorUserId: null —
+      // no authenticated staff user exists on this anonymous storefront
+      // path (see stockmovement.actorUserId's schema comment).
       const ingredientsConsumed =
         await this.productsService.consumeForOrderItems(
           tx,
@@ -920,10 +949,11 @@ export class PublicService {
           outlet.id,
           resolvedItems
             .filter(({ product }) => !product.isGiftCard)
-            .map(({ product, variant, quantity }) => ({
+            .map(({ product, variant, quantity, allowNegative }) => ({
               productId: product.id,
               variantId: variant?.id ?? null,
               quantity,
+              allowNegative,
             })),
           -1,
           { throwOnInsufficientStock: true, actorUserId: null },
@@ -1296,7 +1326,7 @@ export class PublicService {
     return shop;
   }
 
-  // Every content-serving endpoint (products/categories/outlets/checkout)
+  // Every content-serving endpoint (products/collections/outlets/checkout)
   // is blocked for an unpublished shop — a 404 here reads identically to
   // "shop doesn't exist" for these endpoints, which is intentional: nothing
   // about an unpublished shop's real content should be reachable at all,
@@ -1322,13 +1352,13 @@ export class PublicService {
 
   private toProductResponse(product: PublicProductRow) {
     const {
-      productcategory,
+      productcollection,
       productimage,
       productattribute,
       productfaq,
       productoption,
       productvariant,
-      outletstock,
+      shadowIngredient,
       metaTitle,
       metaDescription,
       description,
@@ -1337,7 +1367,7 @@ export class PublicService {
     return {
       ...rest,
       description,
-      categories: productcategory.map((pc) => pc.category),
+      collections: productcollection.map((pc) => pc.collection),
       images: productimage.map((i) => ({
         id: i.id,
         url: i.url,
@@ -1383,13 +1413,17 @@ export class PublicService {
           v.optionValue2?.value,
           v.optionValue3?.value,
         ]),
-        stockQuantity: v.outletvariantstock?.[0]?.stockQuantity ?? null,
+        stockQuantity:
+          v.shadowIngredient?.outletingredientstock?.[0]?.stockQuantity ?? null,
       })),
       // Same convention as the admin ProductsService: null when no outlet
-      // was resolved for this request, or when trackInventory is off and no
-      // stock row was ever created — distinct from 0, which means the
-      // outlet genuinely has none in stock right now.
-      stockQuantity: outletstock?.[0]?.stockQuantity ?? null,
+      // was resolved for this request, when trackInventory is off and no
+      // stock row was ever created, or when this product uses a recipe
+      // (shadowIngredient is null — a recipe's real availability never
+      // surfaces to the storefront, same as before Phase A) — distinct from
+      // 0, which means the outlet genuinely has none in stock right now.
+      stockQuantity:
+        shadowIngredient?.outletingredientstock?.[0]?.stockQuantity ?? null,
       // Fallback chain lives here (not client-side) so every consumer of
       // this API — the storefront's generateMetadata included — gets an
       // already-sensible title/description without duplicating the logic.
@@ -1402,7 +1436,7 @@ export class PublicService {
 type PublicProductRow = Omit<
   Prisma.productGetPayload<{
     include: {
-      productcategory: { include: { category: true } };
+      productcollection: { include: { collection: true } };
       productimage: true;
       productattribute: true;
       productfaq: true;
@@ -1419,7 +1453,16 @@ type PublicProductRow = Omit<
   }>,
   'productvariant'
 > & {
-  outletstock?: { stockQuantity: number }[];
+  // Prisma's payload-inference generics can't narrow a relation whose
+  // include shape is computed dynamically (publicProductInclude branches on
+  // outletId) rather than passed as an inline literal — same known
+  // limitation this codebase's own `(response as any).stockByOutlet` cast
+  // in products.service.ts already works around. Loosely typed here (only
+  // ever actually shaped `{ outletingredientstock: {...}[] } | null` at
+  // runtime, per publicProductInclude's own `select`) rather than fighting
+  // Prisma's generics for a field this method reads exactly once.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shadowIngredient?: any;
   productvariant: (Prisma.productvariantGetPayload<{
     include: {
       image: true;
@@ -1427,5 +1470,8 @@ type PublicProductRow = Omit<
       optionValue2: true;
       optionValue3: true;
     };
-  }> & { outletvariantstock?: { stockQuantity: number }[] })[];
+  }> & {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    shadowIngredient?: any;
+  })[];
 };

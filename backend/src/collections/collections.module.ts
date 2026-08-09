@@ -8,6 +8,5 @@ import { StorageModule } from '../storage/storage.module';
   imports: [AuditLogModule, StorageModule],
   controllers: [CollectionsController],
   providers: [CollectionsService],
-  exports: [CollectionsService],
 })
 export class CollectionsModule {}

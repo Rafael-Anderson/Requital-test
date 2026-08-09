@@ -2,18 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History, Layers, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getShop } from "@/lib/api";
 import PageShell from "@/components/ui/PageShell";
 
-// Categories, Discounts, and Gift Cards moved under Products as tabs (see
-// ProductsTabs); Draft Orders and Abandoned Carts moved under Orders as tabs
-// (see OrdersTabs) — each is a sub-view of the app it extends, not a peer
-// section on its own. Products and Inventory used to be one combined app
-// (product catalog + ingredient/stock tabs all under /inventory); Phase A
-// made Ingredient the atomic stock unit, so they're now split: Products is
-// the catalog, Inventory is stock/ingredients only.
+// Collections, Templates, Discounts, and Gift Cards moved under Products as
+// tabs (see ProductsTabs); Draft Orders and Abandoned Carts moved under
+// Orders as tabs (see OrdersTabs) — each is a sub-view of the app it
+// extends, not a peer section on its own. Products and Inventory used to be
+// one combined app (product catalog + ingredient/stock tabs all under
+// /inventory); Phase A made Ingredient the atomic stock unit, so they're
+// now split: Products is the catalog, Inventory is stock/ingredients only.
 const SECTIONS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Orders", icon: ClipboardList },
@@ -33,7 +33,6 @@ const ADMIN_SECTIONS = [
   { href: "/theme", label: "Theme", icon: Palette },
   { href: "/affiliate", label: "Affiliate", icon: Share2 },
   { href: "/bio-links", label: "Bio Links", icon: Link2 },
-  { href: "/collections", label: "Collections", icon: Layers },
   { href: "/activity-log", label: "Activity Log", icon: History },
   { href: "/jobs", label: "Failed Jobs", icon: AlertTriangle },
 ];

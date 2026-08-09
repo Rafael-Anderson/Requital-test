@@ -115,12 +115,12 @@ describe('Discounts (e2e)', () => {
       })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -130,7 +130,7 @@ describe('Discounts (e2e)', () => {
         price: 100,
         thumbnail: 'https://example.com/widget.jpg',
         sku: `WIDGET-${slug}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     const productId = body<IdRow>(product).id;
@@ -141,7 +141,7 @@ describe('Discounts (e2e)', () => {
       .send({ published: true })
       .expect(200);
 
-    return { adminToken, outletId, categoryId, productId, slug };
+    return { adminToken, outletId, collectionId, productId, slug };
   }
 
   async function createDiscount(
@@ -343,7 +343,7 @@ describe('Discounts (e2e)', () => {
     });
 
     it('per_customer_limit_reached once a customer has redeemed the cap', async () => {
-      const { adminToken, outletId, categoryId, slug } =
+      const { adminToken, outletId, collectionId, slug } =
         await setupShop('reason-percustomer');
       const productRes = await request(app.getHttpServer())
         .post('/products')
@@ -353,7 +353,7 @@ describe('Discounts (e2e)', () => {
           price: 40,
           thumbnail: 'https://example.com/c.jpg',
           sku: `CAP-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
@@ -430,7 +430,7 @@ describe('Discounts (e2e)', () => {
 
   describe('order integration — snapshot fields and totals', () => {
     it('PERCENTAGE discount reduces the order total and snapshots discountCode/discountAmount/discountId', async () => {
-      const { adminToken, outletId, categoryId, slug } =
+      const { adminToken, outletId, collectionId, slug } =
         await setupShop('order-percent');
       const productRes = await request(app.getHttpServer())
         .post('/products')
@@ -440,7 +440,7 @@ describe('Discounts (e2e)', () => {
           price: 100,
           thumbnail: 'https://example.com/p.jpg',
           sku: `PCT-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
@@ -475,7 +475,7 @@ describe('Discounts (e2e)', () => {
     });
 
     it('FIXED_AMOUNT and FREE_SHIPPING apply correctly, and an invalid code rejects checkout', async () => {
-      const { adminToken, outletId, categoryId, slug } =
+      const { adminToken, outletId, collectionId, slug } =
         await setupShop('order-fixed');
       const productRes = await request(app.getHttpServer())
         .post('/products')
@@ -485,7 +485,7 @@ describe('Discounts (e2e)', () => {
           price: 100,
           thumbnail: 'https://example.com/i.jpg',
           sku: `FIX-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(productRes).id;
@@ -551,7 +551,7 @@ describe('Discounts (e2e)', () => {
 
   describe('race condition — usageLimit enforced under concurrency', () => {
     it('N concurrent orders against usageLimit 1: exactly one succeeds', async () => {
-      const { adminToken, outletId, categoryId, slug } =
+      const { adminToken, outletId, collectionId, slug } =
         await setupShop('race');
       const productRes = await request(app.getHttpServer())
         .post('/products')
@@ -561,7 +561,7 @@ describe('Discounts (e2e)', () => {
           price: 50,
           thumbnail: 'https://example.com/r.jpg',
           sku: `RACE-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
         })
         .expect(201);
       const productId = body<IdRow>(productRes).id;

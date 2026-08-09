@@ -47,7 +47,7 @@ export class ScanController {
   }
 
   // Reuses the image-upload pipeline (StorageService, same magic-byte
-  // sniffing/size guard/shop-scoping as products/categories/seo) — the file
+  // sniffing/size guard/shop-scoping as products/collections/seo) — the file
   // is kept either way since POST /scan/commit needs its URL for the
   // scanbatch audit row if the merchant confirms.
   @Post('preview')

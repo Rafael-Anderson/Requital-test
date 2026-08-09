@@ -8,7 +8,7 @@ export type DiscountType = (typeof DISCOUNT_TYPES)[number];
 export const DISCOUNT_APPLIES_TO = [
   'ALL_PRODUCTS',
   'SPECIFIC_PRODUCTS',
-  'SPECIFIC_CATEGORIES',
+  'SPECIFIC_COLLECTIONS',
 ] as const;
 export type DiscountAppliesTo = (typeof DISCOUNT_APPLIES_TO)[number];
 

@@ -8,10 +8,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("ProductsTabs", () => {
-  it("renders all four tabs with the correct hrefs", () => {
+  it("renders all five tabs with the correct hrefs", () => {
     render(<ProductsTabs />);
     expect(screen.getByText("Products").closest("a")).toHaveAttribute("href", "/products");
-    expect(screen.getByText("Categories").closest("a")).toHaveAttribute("href", "/products/categories");
+    expect(screen.getByText("Collections").closest("a")).toHaveAttribute("href", "/products/categories");
+    expect(screen.getByText("Templates").closest("a")).toHaveAttribute("href", "/products/templates");
     expect(screen.getByText("Discounts").closest("a")).toHaveAttribute("href", "/products/discounts");
     expect(screen.getByText("Gift Cards").closest("a")).toHaveAttribute("href", "/products/gift-cards");
   });

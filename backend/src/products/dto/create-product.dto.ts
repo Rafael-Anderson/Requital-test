@@ -198,9 +198,18 @@ export class CreateProductDto {
   @IsBoolean()
   trackInventory?: boolean;
 
-  // Stock counts live per-outlet now (see outletstock), not on the catalog
-  // entry — set them via PATCH /products/stock/bulk-adjust after creating
-  // the product.
+  // Stock counts live per-outlet now (see outletingredientstock), not on
+  // the catalog entry — set them via PATCH /products/stock/bulk-adjust
+  // after creating the product.
+
+  // false (default, omitted): this product auto-mirrors as its own shadow
+  // Ingredient — zero behavior change from before this feature, stock set
+  // via the bulk-adjust endpoint above. true: stock/availability is
+  // computed from `ingredients` below against real Ingredient stock
+  // instead — requires at least one row (see ProductsService.create).
+  @IsOptional()
+  @IsBoolean()
+  usesIngredients?: boolean;
 
   // Gift Cards — see schema.prisma's comment on product.isGiftCard. `price`
   // above still has to be set (a positive placeholder) to satisfy the
@@ -236,7 +245,7 @@ export class CreateProductDto {
   // this feature) means "no recipe defined," fully backward compatible —
   // ProductsService.consumeForOrderItems is simply a no-op for this
   // product. Full-replace on update, same convention as images/
-  // categoryIds/tags — see ProductsService.replaceProductIngredients.
+  // collectionIds/tags — see ProductsService.replaceProductIngredients.
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -271,14 +280,14 @@ export class CreateProductDto {
   @Type(() => ProductFaqInput)
   faqs?: ProductFaqInput[];
 
-  // At least one category is required (SRS FR-4.2).
+  // At least one collection is required (SRS FR-4.2).
   @IsArray()
   @ArrayNotEmpty()
   @Type(() => Number)
   @IsInt({ each: true })
-  categoryIds: number[];
+  collectionIds: number[];
 
-  // Free-form tags, e.g. "roses", "boxes" (SRS FR-4.2, distinct from category).
+  // Free-form tags, e.g. "roses", "boxes" (SRS FR-4.2, distinct from collection).
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

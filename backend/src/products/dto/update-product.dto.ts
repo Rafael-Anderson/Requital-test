@@ -140,6 +140,13 @@ export class UpdateProductDto {
   @IsBoolean()
   trackInventory?: boolean;
 
+  // Toggle-flip — see CreateProductDto's own comment and
+  // ProductsService.update's toggling-to-recipe/toggling-to-shadow
+  // handling. Omitted leaves the product's current mode untouched.
+  @IsOptional()
+  @IsBoolean()
+  usesIngredients?: boolean;
+
   // Gift Cards — see CreateProductDto's own comment.
   @IsOptional()
   @IsBoolean()
@@ -166,7 +173,7 @@ export class UpdateProductDto {
   // Bill of Materials — see CreateProductDto's own comment. If provided
   // (even an empty array), replaces the full product-level default recipe;
   // omitted leaves it untouched — same "replaces the full set" convention
-  // as images/categoryIds/tags below.
+  // as images/collectionIds/tags below.
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -174,7 +181,7 @@ export class UpdateProductDto {
   ingredients?: ProductIngredientInput[];
 
   // If provided (even an empty array), replaces the full gallery — same
-  // "replaces the full set" convention as categoryIds/tags below. Omitted
+  // "replaces the full set" convention as collectionIds/tags below. Omitted
   // leaves the existing gallery and thumbnail untouched.
   @IsOptional()
   @IsArray()
@@ -197,13 +204,13 @@ export class UpdateProductDto {
   @Type(() => ProductFaqInput)
   faqs?: ProductFaqInput[];
 
-  // If provided, replaces the full category set — must stay non-empty.
+  // If provided, replaces the full collection set — must stay non-empty.
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
   @Type(() => Number)
   @IsInt({ each: true })
-  categoryIds?: number[];
+  collectionIds?: number[];
 
   // If provided, replaces the full tag set.
   @IsOptional()

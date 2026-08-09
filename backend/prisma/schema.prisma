@@ -371,6 +371,19 @@ model product {
   // Whether checkout still accepts orders once trackInventory'd stock hits
   // zero — mirrors Shopify's "continue selling when out of stock".
   continueSellingOutOfStock Boolean             @default(false)
+  // false (default): this product IS its own atomic stock unit — a single
+  // shadow `ingredient` row (or one per variant, see productvariant.shadowIngredient)
+  // is auto-provisioned/kept in sync (name/image/trackInventory) by
+  // ProductsService and carries the real outletingredientstock row; the
+  // merchant never sees or manages that ingredient directly (excluded from
+  // GET /ingredients). true: stock/availability is computed from a
+  // merchant-authored productingredient recipe against real Ingredient
+  // stock instead — see ProductsService.computeIngredientAvailability. See
+  // ProductsService's shadow-provisioning methods for the toggle-flip
+  // semantics (false->true deletes the shadow and requires a non-empty
+  // recipe in the same request; true->false deletes the recipe and
+  // reprovisions a shadow).
+  usesIngredients           Boolean             @default(false)
   chargeTax                 Boolean             @default(true)
   // When true, offered in the storefront checkout's "would you like to add
   // any extras?" popup for carts that don't already contain it.
@@ -404,7 +417,7 @@ model product {
   giftCardCustomAmountMin   Decimal?
   giftCardCustomAmountMax   Decimal?
   // Organization sidebar fields — free text, no dedicated lookup tables
-  // (matches how tag/category already work: shop-scoped, no cross-shop
+  // (matches how tag/collection already work: shop-scoped, no cross-shop
   // sharing). Collections were explicitly out of scope (no such model exists
   // in this schema; task said to flag rather than build one from scratch).
   vendor                    String?
@@ -422,7 +435,7 @@ model product {
   // Unlike sku, name collisions are common (two "Chocolate Cake" products),
   // so auto-generation disambiguates with a numeric suffix rather than
   // failing; an explicitly-chosen slug that collides still hard-rejects,
-  // same as category slugs.
+  // same as collection slugs.
   slug                      String
   metaTitle                 String?
   metaDescription           String?             @db.Text
@@ -432,15 +445,15 @@ model product {
   productattribute          productattribute[]
   productfaq                productfaq[]
   productoption             productoption[]
-  productcategory           productcategory[]
+  productcollection         productcollection[]
   producttag                producttag[]
   orderitem                 orderitem[]
-  outletstock               outletstock[]
+  shadowIngredient          ingredient?         @relation("ProductShadowIngredient")
   biolink                   biolink[]
   discountproduct           discountproduct[]
   draftorderitem            draftorderitem[]
   stockmovement             stockmovement[]
-  collectionproduct         collectionproduct[]
+  templateproduct           templateproduct[]
   productingredient         productingredient[]
   notifysubscription        notifysubscription[]
 
@@ -528,8 +541,8 @@ model productfaq {
 
 // A product with zero productoption rows behaves exactly as before this
 // feature existed (single implicit variant — product-level price/sku/
-// outletstock). Options only appear once a merchant explicitly adds one via
-// PUT /products/:id/options.
+// shadow-ingredient stock). Options only appear once a merchant explicitly
+// adds one via PUT /products/:id/options.
 model productoption {
   id                 Int                  @id @default(autoincrement())
   productId          Int
@@ -554,36 +567,39 @@ model productoptionvalue {
   @@index([optionId], map: "ProductOptionValue_optionId_fkey")
 }
 
-model category {
-  id               Int                @id @default(autoincrement())
-  shopId           Int
-  name             String
-  slug             String
-  displayOrder     Int                @default(0)
-  image            String?
-  isFeatured       Boolean            @default(false)
-  parentCategoryId Int?
-  createdAt        DateTime           @default(now())
-  shop             shop               @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Category_shopId_fkey")
-  parent           category?          @relation("CategoryToParent", fields: [parentCategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Category_parentCategoryId_fkey")
-  children         category[]         @relation("CategoryToParent")
-  productcategory  productcategory[]
-  biolink          biolink[]
-  discountcategory discountcategory[]
+model collection {
+  id                 Int                  @id @default(autoincrement())
+  shopId             Int
+  name               String
+  slug               String
+  displayOrder       Int                  @default(0)
+  image              String?
+  isFeatured         Boolean              @default(false)
+  parentCollectionId Int?
+  createdAt          DateTime             @default(now())
+  shop               shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Collection_shopId_fkey")
+  parent             collection?          @relation("CollectionToParent", fields: [parentCollectionId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Collection_parentCollectionId_fkey")
+  children           collection[]         @relation("CollectionToParent")
+  productcollection  productcollection[]
+  biolink            biolink[]
+  discountcollection discountcollection[]
+  templatecollection templatecollection[]
+  menuitem           menuitem[]
+  menuitemcollection menuitemcollection[]
 
-  @@unique([shopId, slug], map: "Category_shopId_slug_key")
-  @@index([shopId], map: "Category_shopId_fkey")
-  @@index([parentCategoryId], map: "Category_parentCategoryId_fkey")
+  @@unique([shopId, slug], map: "Collection_shopId_slug_key")
+  @@index([shopId], map: "Collection_shopId_fkey")
+  @@index([parentCollectionId], map: "Collection_parentCollectionId_fkey")
 }
 
-model productcategory {
-  productId  Int
-  categoryId Int
-  product    product  @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductCategory_productId_fkey")
-  category   category @relation(fields: [categoryId], references: [id], onDelete: Cascade, map: "ProductCategory_categoryId_fkey")
+model productcollection {
+  productId    Int
+  collectionId Int
+  product      product    @relation(fields: [productId], references: [id], onDelete: Cascade, map: "ProductCollection_productId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "ProductCollection_collectionId_fkey")
 
-  @@id([productId, categoryId])
-  @@index([categoryId], map: "ProductCategory_categoryId_fkey")
+  @@id([productId, collectionId])
+  @@index([collectionId], map: "ProductCollection_collectionId_fkey")
 }
 
 model tag {
@@ -632,7 +648,7 @@ model productvariant {
   optionValue1       productoptionvalue?  @relation("VariantOptionValue1", fields: [optionValue1Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue1Id_fkey")
   optionValue2       productoptionvalue?  @relation("VariantOptionValue2", fields: [optionValue2Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue2Id_fkey")
   optionValue3       productoptionvalue?  @relation("VariantOptionValue3", fields: [optionValue3Id], references: [id], onDelete: SetNull, map: "ProductVariant_optionValue3Id_fkey")
-  outletvariantstock outletvariantstock[]
+  shadowIngredient   ingredient?          @relation("VariantShadowIngredient")
   orderitem          orderitem[]
   draftorderitem     draftorderitem[]
   stockmovement      stockmovement[]
@@ -645,30 +661,6 @@ model productvariant {
   @@index([optionValue1Id], map: "ProductVariant_optionValue1Id_fkey")
   @@index([optionValue2Id], map: "ProductVariant_optionValue2Id_fkey")
   @@index([optionValue3Id], map: "ProductVariant_optionValue3Id_fkey")
-}
-
-// Per-outlet stock for a variant-bearing product — parallel to outletstock
-// (product-level), not an overload of it: a variant product's rows live
-// here keyed by variantId instead, so the two never collide and every
-// existing outletstock caller (bulk-adjust, order creation for non-variant
-// products) stays untouched.
-model outletvariantstock {
-  outletId          Int
-  variantId         Int
-  stockQuantity     Int            @default(0)
-  // Nullable, no default — null means "no alert configured" (off), not
-  // "alert at 0." Per-outlet, not per-product-total: a merchant needs to
-  // know a *specific branch* is running low, not that a sum across five
-  // branches dipped — see the Low Stock Alerts task's own reasoning. See
-  // ProductsService.setLowStockThreshold for the write path (there's no
-  // dedicated admin UI field elsewhere; this was previously a dead,
-  // always-0 column with no way to ever set it away from the default).
-  lowStockThreshold Int?
-  outlet            outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletVariantStock_outletId_fkey")
-  variant           productvariant @relation(fields: [variantId], references: [id], onDelete: Cascade, map: "OutletVariantStock_variantId_fkey")
-
-  @@id([outletId, variantId])
-  @@index([variantId], map: "OutletVariantStock_variantId_fkey")
 }
 
 model shop {
@@ -751,7 +743,7 @@ model shop {
   taxDisplayText                String?
   productDisplayOrientation     String  @default("grid")
   productImageZoomEnabled       Boolean @default(true)
-  showCategoryMenu              Boolean @default(true)
+  showCollectionMenu            Boolean @default(true)
   allowPreOrders                Boolean @default(false)
   customerConfirmationRequired  Boolean @default(false)
   externalDeliveryEnabled       Boolean @default(false)
@@ -848,7 +840,7 @@ model shop {
 
   order               order[]
   product             product[]
-  category            category[]
+  collection          collection[]
   tag                 tag[]
   themesettings       themesettings?
   shopseosettings     shopseosettings?
@@ -868,7 +860,8 @@ model shop {
   ingredient          ingredient[]
   ingredientcategory  ingredientcategory[]
   branchrole          branchrole[]
-  collection          collection[]
+  template            template[]
+  menuitem            menuitem[]
   scansettings        scansettings?
   abandonedcart       abandonedcart[]
   giftcard            giftcard[]
@@ -924,7 +917,7 @@ model bannerimage {
 
 // Link-in-bio page (Dukany parity) — a per-shop, publicly shareable list of
 // links at storefront /:shopSlug/bio. `type` picks which of
-// url/productId/categoryId/socialPlatform is meaningful; the other three are
+// url/productId/collectionId/templateId/socialPlatform is meaningful; the other four are
 // always null (enforced in BioLinksService, not a DB constraint — same
 // convention as every other discriminated-field model in this schema, e.g.
 // shoppaymentprovider's provider-keyed credentials). Plain String columns
@@ -935,7 +928,7 @@ model bannerimage {
 model biolink {
   id             Int         @id @default(autoincrement())
   shopId         Int
-  // 'EXTERNAL_URL' | 'PRODUCT' | 'CATEGORY' | 'COLLECTION' | 'SOCIAL_ICON'
+  // 'EXTERNAL_URL' | 'PRODUCT' | 'COLLECTION' | 'TEMPLATE' | 'SOCIAL_ICON'
   type           String
   // Display text. Not required for SOCIAL_ICON (falls back to the platform's
   // display name at read time — see BioLinksService.resolveDisplayLabel).
@@ -949,10 +942,10 @@ model biolink {
   // productId is null. See the task's own "hide from public, stays active
   // in admin" default.
   productId      Int?
-  // CATEGORY only. Same SetNull reasoning as productId.
-  categoryId     Int?
   // COLLECTION only. Same SetNull reasoning as productId.
   collectionId   Int?
+  // TEMPLATE only. Same SetNull reasoning as productId.
+  templateId     Int?
   // SOCIAL_ICON only — one of BIO_LINK_SOCIAL_PLATFORMS (bio-link-constants.ts).
   // No URL is stored here: the actual link is resolved at click time from
   // shop.socialLinks[socialPlatform], or from shop.whatsappNumber for the
@@ -970,13 +963,13 @@ model biolink {
   updatedAt      DateTime    @default(now()) @updatedAt
   shop           shop        @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BioLink_shopId_fkey")
   product        product?    @relation(fields: [productId], references: [id], onDelete: SetNull, map: "BioLink_productId_fkey")
-  category       category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "BioLink_categoryId_fkey")
   collection     collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "BioLink_collectionId_fkey")
+  template       template?   @relation(fields: [templateId], references: [id], onDelete: SetNull, map: "BioLink_templateId_fkey")
 
   @@index([shopId], map: "BioLink_shopId_fkey")
   @@index([productId], map: "BioLink_productId_fkey")
-  @@index([categoryId], map: "BioLink_categoryId_fkey")
   @@index([collectionId], map: "BioLink_collectionId_fkey")
+  @@index([templateId], map: "BioLink_templateId_fkey")
 }
 
 // Page-level config for the bio-link page (/:shopSlug/bio), decoupled from
@@ -1005,33 +998,41 @@ model biolinkpageconfig {
   shop            shop    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "BioLinkPageConfig_shopId_fkey")
 }
 
-// Marketing-driven product groupings that cut across the category tree
+// Marketing-driven product groupings that cut across the collection tree
 // ("Summer Sale", "New Arrivals", "Under 50 AED") — deliberately a real,
-// separate model from `category` rather than a Product boolean/tag array.
+// separate model from `collection` rather than a Product boolean/tag array.
 // Decision (see the task this was built under): a lightweight
 // tag/boolean alternative was evaluated first and rejected because the two
 // concrete capabilities actually asked for — RULE_BASED dynamic membership
-// (auto-include by category/tag/price/recency) and MANUAL per-product
+// (auto-include by collection/tag/price/recency) and MANUAL per-product
 // ordering within the group — can't be expressed by a static tag without
 // effectively rebuilding a worse version of this model anyway (a tag has no
 // order field, and "auto-update membership as prices change" needs real
 // query-time rule evaluation, not a value someone remembers to reapply).
-// Categories stay a single hierarchical taxonomy for browse navigation;
+// Collections stay a single hierarchical taxonomy for browse navigation;
 // mixing one-off campaigns into that tree (a "Summer Sale" sibling of
-// "Bouquets") would pollute it for every merchant who doesn't use collections.
-model collection {
+// "Bouquets") would pollute it for every merchant who doesn't use templates.
+//
+// Phase C addition: a third type, COLLECTION_GROUP, has no templateproduct
+// rows and no rules — membership is a curated list of Collections
+// (templatecollection, ordered by sortOrder), and its effective product list
+// is the union of every member Collection's own resolved products (see
+// TemplatesService.resolveProductIds). This is what powers the storefront
+// homepage's Template sections ("named group of Collections").
+model template {
   id                Int                 @id @default(autoincrement())
   shopId            Int
   title             String
   slug              String
   description       String?             @db.Text
   image             String?
-  // 'MANUAL' | 'RULE_BASED' — MANUAL membership lives in collectionproduct
-  // (with per-product sortOrder); RULE_BASED has no collectionproduct rows
-  // at all, membership is computed at read time from `rules` against the
-  // live product table (see CollectionsService.resolveProductIds).
+  // 'MANUAL' | 'RULE_BASED' | 'COLLECTION_GROUP' — MANUAL membership lives in
+  // templateproduct (with per-product sortOrder); RULE_BASED has no
+  // templateproduct rows at all, membership is computed at read time from
+  // `rules` against the live product table; COLLECTION_GROUP membership
+  // lives in templatecollection (see TemplatesService.resolveProductIds).
   type              String
-  // RULE_BASED only, null for MANUAL. Shape: { categoryId?, tagName?,
+  // RULE_BASED only, null otherwise. Shape: { collectionId?, tagName?,
   // minPrice?, maxPrice?, createdWithinDays? } — every set field is ANDed.
   // Deliberately this small, fixed shape (not a generic condition-builder)
   // — it's enough to express every example the task named ("Summer Sale" =
@@ -1041,25 +1042,77 @@ model collection {
   isActive          Boolean             @default(true)
   displayOrder      Int                 @default(0)
   createdAt         DateTime            @default(now())
-  shop              shop                @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Collection_shopId_fkey")
-  collectionproduct collectionproduct[]
+  shop              shop                @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Template_shopId_fkey")
+  templateproduct   templateproduct[]
+  templatecollection templatecollection[]
   biolink           biolink[]
 
-  @@unique([shopId, slug], map: "Collection_shopId_slug_key")
-  @@index([shopId], map: "Collection_shopId_fkey")
+  @@unique([shopId, slug], map: "Template_shopId_slug_key")
+  @@index([shopId], map: "Template_shopId_fkey")
 }
 
-// MANUAL-collection membership + manual display order. Not used for
-// RULE_BASED collections at all (see the `collection.type` comment).
-model collectionproduct {
-  collectionId Int
-  productId    Int
-  sortOrder    Int        @default(0)
-  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "CollectionProduct_collectionId_fkey")
-  product      product    @relation(fields: [productId], references: [id], onDelete: Cascade, map: "CollectionProduct_productId_fkey")
+// MANUAL-template membership + manual display order. Not used for
+// RULE_BASED or COLLECTION_GROUP templates at all (see `template.type`).
+model templateproduct {
+  templateId Int
+  productId  Int
+  sortOrder  Int      @default(0)
+  template   template @relation(fields: [templateId], references: [id], onDelete: Cascade, map: "TemplateProduct_templateId_fkey")
+  product    product  @relation(fields: [productId], references: [id], onDelete: Cascade, map: "TemplateProduct_productId_fkey")
 
-  @@id([collectionId, productId])
-  @@index([productId], map: "CollectionProduct_productId_fkey")
+  @@id([templateId, productId])
+  @@index([productId], map: "TemplateProduct_productId_fkey")
+}
+
+// COLLECTION_GROUP-template membership: which Collections a Template groups
+// together on the storefront homepage, in what order. Not used for MANUAL or
+// RULE_BASED templates (see `template.type`).
+model templatecollection {
+  templateId   Int
+  collectionId Int
+  sortOrder    Int        @default(0)
+  template     template   @relation(fields: [templateId], references: [id], onDelete: Cascade, map: "TemplateCollection_templateId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "TemplateCollection_collectionId_fkey")
+
+  @@id([templateId, collectionId])
+  @@index([collectionId], map: "TemplateCollection_collectionId_fkey")
+}
+
+// Storefront top-bar "Menu" (Phase C) — a merchant-ordered list of nav items,
+// each either a direct link to one Collection or a Dropdown exposing several.
+// LINK rows use `collectionId` directly and have no menuitemcollection rows;
+// DROPDOWN rows use menuitemcollection for their member list and leave
+// collectionId null — same discriminated-fields shape bio-links already uses
+// for its own type union (see BioLinksService's assertFieldsMatchType).
+model menuitem {
+  id                 Int                  @id @default(autoincrement())
+  shopId             Int
+  label              String
+  // 'LINK' | 'DROPDOWN'
+  type               String
+  // LINK only.
+  collectionId       Int?
+  displayOrder       Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  shop               shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "MenuItem_shopId_fkey")
+  collection         collection?          @relation(fields: [collectionId], references: [id], onDelete: SetNull, map: "MenuItem_collectionId_fkey")
+  menuitemcollection menuitemcollection[]
+
+  @@index([shopId], map: "MenuItem_shopId_fkey")
+  @@index([collectionId], map: "MenuItem_collectionId_fkey")
+}
+
+// DROPDOWN-menuitem membership: which Collections show in the hover panel,
+// in what order. Not used for LINK menu items.
+model menuitemcollection {
+  menuItemId   Int
+  collectionId Int
+  sortOrder    Int      @default(0)
+  menuitem     menuitem @relation(fields: [menuItemId], references: [id], onDelete: Cascade, map: "MenuItemCollection_menuItemId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "MenuItemCollection_collectionId_fkey")
+
+  @@id([menuItemId, collectionId])
+  @@index([collectionId], map: "MenuItemCollection_collectionId_fkey")
 }
 
 // Referral/affiliate marketing (Shopify-style): a merchant-managed roster of
@@ -1087,7 +1140,7 @@ model affiliatecode {
   affiliateId     Int
   code            String
   // What the code applies to — free text (e.g. "All Products" or a specific
-  // product/category name typed by the merchant), not a real product/category
+  // product/collection name typed by the merchant), not a real product/collection
   // relation. Deliberately simple per the task's own scoping.
   promotionFor    String           @default("All Products")
   // approved | pending | blocked
@@ -1258,7 +1311,7 @@ model customerauthtoken {
   @@index([customerId, purpose], map: "CustomerAuthToken_customerId_purpose_idx")
 }
 
-// A shop's physical branch. Products/categories are NOT outlet-scoped (one
+// A shop's physical branch. Products/collections are NOT outlet-scoped (one
 // shared catalog across branches) — only orders and stock levels are.
 model outlet {
   id                    Int                     @id @default(autoincrement())
@@ -1303,8 +1356,6 @@ model outlet {
   shop                  shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Outlet_shopId_fkey")
   order                 order[]
   user                  user[]
-  outletstock           outletstock[]
-  outletvariantstock    outletvariantstock[]
   outletingredientstock outletingredientstock[]
   deliveryzone          deliveryzone[]
   draftorder            draftorder[]
@@ -1338,28 +1389,27 @@ model deliveryzone {
 // Product.stockQuantity/lowStockThreshold columns — the catalog stays
 // shared, but how many units sit at each branch (and each branch's reorder
 // threshold) genuinely differs, so it lives on the join, not the product.
-model outletstock {
-  outletId          Int
-  productId         Int
-  stockQuantity     Int     @default(0)
-  // See outletvariantstock.lowStockThreshold's comment — nullable/off by
-  // default, per-outlet.
-  lowStockThreshold Int?
-  outlet            outlet  @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletStock_outletId_fkey")
-  product           product @relation(fields: [productId], references: [id], onDelete: Cascade, map: "OutletStock_productId_fkey")
-
-  @@id([outletId, productId])
-  @@index([productId], map: "OutletStock_productId_fkey")
-}
-
 // Raw material/component a merchant tracks stock of but never sells —
 // deliberately a separate model from `product`, not a `product.isIngredient`
 // flag: the field sets genuinely differ (no price/sku-for-sale/variants/SEO/
-// publishing here), and keeping it separate means an ingredient can never
-// leak onto the storefront through a Product query somewhere that wasn't
-// updated to filter it out — there's structurally no code path from
-// src/public to this table at all (see IngredientsModule; not imported by
-// PublicModule, no route under /public references it).
+// publishing here), and keeping it separate means a *merchant-authored*
+// ingredient can never leak onto the storefront through a Product query
+// somewhere that wasn't updated to filter it out — there's structurally no
+// code path from src/public to this table at all (see IngredientsModule;
+// not imported by PublicModule, no route under /public references it).
+//
+// shadowProductId/shadowVariantId (Phase A, ingredient-backed stock): at
+// most one of the two is ever set, marking a row as an internal,
+// auto-provisioned mirror of a `usesIngredients: false` product/variant
+// rather than a real ingredient a merchant created — ProductsService
+// creates/syncs/deletes these (name/image/trackInventory kept in sync,
+// stock lives on its outletingredientstock row exactly like a real
+// ingredient's does) and IngredientsService.findAll excludes them, so they
+// never appear on the Ingredients admin page. "Never both set" is an
+// app-level invariant, not a DB constraint, same convention as
+// stockmovement's own productId/ingredientId exclusivity below — the DB
+// only needs to (and does, via @unique) guarantee a product/variant never
+// has more than one shadow.
 model ingredient {
   id                    Int                     @id @default(autoincrement())
   shopId                Int
@@ -1377,7 +1427,7 @@ model ingredient {
   // Single image, not a productimage-style gallery — ingredients have no
   // multi-photo/reorder use case anywhere in this app (no storefront
   // exposure, no variant-level image override to sync). Same "one field is
-  // enough" reasoning category.image already uses.
+  // enough" reasoning collection.image already uses.
   image                 String?
   description           String?                 @db.Text
   // Decimal like product.costPrice, not Int like ingredient stock — cost
@@ -1390,9 +1440,13 @@ model ingredient {
   // justify a real table; a name/contact string is what merchants asked for.
   supplier              String?
   categoryId            Int?
+  shadowProductId       Int?                    @unique
+  shadowVariantId       Int?                    @unique
   createdAt             DateTime                @default(now())
   shop                  shop                    @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Ingredient_shopId_fkey")
   category              ingredientcategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull, map: "Ingredient_categoryId_fkey")
+  shadowProduct         product?                @relation("ProductShadowIngredient", fields: [shadowProductId], references: [id], onDelete: Cascade, map: "Ingredient_shadowProductId_fkey")
+  shadowVariant         productvariant?         @relation("VariantShadowIngredient", fields: [shadowVariantId], references: [id], onDelete: Cascade, map: "Ingredient_shadowVariantId_fkey")
   outletingredientstock outletingredientstock[]
   stockmovement         stockmovement[]
   productingredient     productingredient[]
@@ -1401,11 +1455,11 @@ model ingredient {
   @@index([categoryId], map: "Ingredient_categoryId_fkey")
 }
 
-// Flat (no parent/tree) unlike `category` — ingredient categories are a
+// Flat (no parent/tree) unlike `collection` — ingredient categories are a
 // purely internal inventory-organization concept with no storefront
 // navigation use case (ingredients themselves are structurally unreachable
 // from /public, see `ingredient`'s own comment), so the unlimited-depth
-// tree/cycle-guard machinery `category` needs for storefront nav menus
+// tree/cycle-guard machinery `collection` needs for storefront nav menus
 // would be pure overhead here.
 model ingredientcategory {
   id         Int          @id @default(autoincrement())
@@ -1463,15 +1517,20 @@ model useroutletrole {
   @@index([branchRoleId], map: "UserOutletRole_branchRoleId_fkey")
 }
 
-// Per-outlet stock count for an ingredient — parallel to outletstock
-// (product-level), not an overload of it, same reasoning as
-// outletvariantstock existing alongside outletstock instead of reusing it.
+// Per-outlet stock count for an ingredient — the only stock-quantity table
+// in this schema (Phase A retired the earlier, separate outletstock/
+// outletvariantstock product/variant-level tables; a usesIngredients:false
+// product's stock lives here too, on its auto-provisioned shadow
+// ingredient's row — see ingredient.shadowProductId/shadowVariantId).
 model outletingredientstock {
   outletId          Int
   ingredientId      Int
   stockQuantity     Int        @default(0)
-  // See outletvariantstock.lowStockThreshold's comment — nullable/off by
-  // default, per-outlet.
+  // Nullable, no default — null means "no alert configured" (off), not
+  // "alert at 0." Per-outlet, not per-ingredient-total: a merchant needs to
+  // know a *specific branch* is running low, not that a sum across five
+  // branches dipped. See ProductsService.setLowStockThreshold for the write
+  // path.
   lowStockThreshold Int?
   outlet            outlet     @relation(fields: [outletId], references: [id], onDelete: Cascade, map: "OutletIngredientStock_outletId_fkey")
   ingredient        ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade, map: "OutletIngredientStock_ingredientId_fkey")
@@ -1522,7 +1581,7 @@ model productingredient {
   // DB constraint" convention already used for stockmovement's own
   // productId/ingredientId exclusivity below. In practice this table is
   // always fully replaced per product/variant (delete-all-then-recreate,
-  // same convention as product images/categories/tags), never incrementally
+  // same convention as product images/collections/tags), never incrementally
   // upserted, so there's no concurrent-insert race for this index to guard
   // against in the first place.
   @@unique([productId, variantId, ingredientId], map: "ProductIngredient_product_variant_ingredient_key")
@@ -1547,15 +1606,21 @@ model productingredient {
 //     `toOutletId` null. Always `ingredientId` set, `productId`/`variantId`
 //     null — see ProductsService.consumeForOrderItems.
 // This table is an audit trail, not a source of truth for current stock —
-// outletstock/outletvariantstock remain that; this only ever gets inserted
-// into, alongside (same transaction as) the real stock mutation.
-// productId/ingredientId: exactly one set, never both/neither — enforced in
+// outletingredientstock remains that; this only ever gets inserted into,
+// alongside (same transaction as) the real stock mutation.
+// productId/ingredientId: exactly one set, never both/neither for a row
+// describing a REAL (merchant-created, non-shadow) ingredient — enforced in
 // ProductsService/IngredientsService (whichever creates the row), same
 // app-level-not-DB-constraint convention as every other discriminated-field
-// model in this schema (see biolink's type/url/productId/categoryId comment
-// above). Both nullable rather than a separate ingredientstockmovement
-// table — a merchant wants one Movement History timeline mixing products
-// and ingredients (same reasoning the original ADJUSTMENT/TRANSFER comment
+// model in this schema (see biolink's type/url/productId/collectionId comment
+// above). EXCEPTION (Phase A): a write resolved through a
+// usesIngredients:false product/variant's shadow ingredient sets BOTH
+// productId(+variantId) AND ingredientId on the row — deliberately, so
+// listStockMovements' existing productId/variantId filter and product-name
+// response mapping keep working unmodified for shadow-backed products. Both
+// columns nullable rather than a separate ingredientstockmovement table — a
+// merchant wants one Movement History timeline mixing products and
+// ingredients (same reasoning the original ADJUSTMENT/TRANSFER comment
 // below gives for sharing one table instead of two).
 model stockmovement {
   id           Int             @id @default(autoincrement())
@@ -1708,6 +1773,12 @@ model themesettings {
   // existing (only) behavior, so this ships as a no-op for every shop that
   // never touches the Advanced tab.
   homepageLayout           String   @default("classic")
+  // Phase C — what the storefront's "Home" tab (formerly "All") renders:
+  // 'templates' (default) shows the Template sections computed from active
+  // Templates' resolved products; 'collections' shows a flat grid of
+  // top-level Collections instead, for merchants who prefer that. Same
+  // closed-enum-string convention as homepageLayout above.
+  homeTabMode              String   @default("templates")
   // Theme Customizer v2 — curated per-page-type layout presets and global
   // chrome/icon/button styling, all following the exact same "VARCHAR enum
   // string, NOT NULL DEFAULT <current behavior>" shape as homepageLayout
@@ -1861,7 +1932,7 @@ model discount {
   updatedAt             DateTime             @default(now()) @updatedAt
   shop                  shop                 @relation(fields: [shopId], references: [id], onDelete: Cascade, map: "Discount_shopId_fkey")
   discountproduct       discountproduct[]
-  discountcategory      discountcategory[]
+  discountcollection    discountcollection[]
   discountredemption    discountredemption[]
   order                 order[]
   draftorder            draftorder[]
@@ -1880,14 +1951,14 @@ model discountproduct {
   @@index([productId], map: "DiscountProduct_productId_fkey")
 }
 
-model discountcategory {
-  discountId Int
-  categoryId Int
-  discount   discount @relation(fields: [discountId], references: [id], onDelete: Cascade, map: "DiscountCategory_discountId_fkey")
-  category   category @relation(fields: [categoryId], references: [id], onDelete: Cascade, map: "DiscountCategory_categoryId_fkey")
+model discountcollection {
+  discountId   Int
+  collectionId Int
+  discount     discount   @relation(fields: [discountId], references: [id], onDelete: Cascade, map: "DiscountCollection_discountId_fkey")
+  collection   collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, map: "DiscountCollection_collectionId_fkey")
 
-  @@id([discountId, categoryId])
-  @@index([categoryId], map: "DiscountCategory_categoryId_fkey")
+  @@id([discountId, collectionId])
+  @@index([collectionId], map: "DiscountCollection_collectionId_fkey")
 }
 
 // One row per successful redemption — an audit trail, and specifically what

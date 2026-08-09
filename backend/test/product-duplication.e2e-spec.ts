@@ -46,7 +46,7 @@ interface ProductRow {
   options: OptionRow[];
   variants: VariantRow[];
   images: { id: number; url: string; order: number }[];
-  categories: { id: number }[];
+  collections: { id: number }[];
   stockQuantity: number | null;
 }
 
@@ -100,19 +100,19 @@ describe('Product duplication (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId };
+    return { adminToken, outletId, collectionId };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -123,7 +123,7 @@ describe('Product duplication (e2e)', () => {
         price: 100,
         thumbnail: 'https://example.com/original.jpg',
         sku: `DUP-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         status: 'Available',
         ...overrides,
       })
@@ -132,9 +132,9 @@ describe('Product duplication (e2e)', () => {
   }
 
   describe('simple product (no variants)', () => {
-    it('copies title/description/pricing/category, leaves sku suffixed + barcode blank, forces status to Draft, never copies stock', async () => {
-      const { adminToken, outletId, categoryId } = await setupShop('simple');
-      const original = await createProduct(adminToken, categoryId, {
+    it('copies title/description/pricing/collection, leaves sku suffixed + barcode blank, forces status to Draft, never copies stock', async () => {
+      const { adminToken, outletId, collectionId } = await setupShop('simple');
+      const original = await createProduct(adminToken, collectionId, {
         description: 'The original description',
         price: 42.5,
         compareAtPrice: 60,
@@ -162,7 +162,7 @@ describe('Product duplication (e2e)', () => {
       expect(copy.name).toBe(`${original.name} (Copy)`);
       expect(copy.description).toBe('The original description');
       expect(copy.price).toBe('42.5');
-      expect(copy.categories.map((c) => c.id)).toEqual([categoryId]);
+      expect(copy.collections.map((c) => c.id)).toEqual([collectionId]);
       expect(copy.thumbnail).toBe(original.thumbnail);
 
       // SKU: not verbatim (would collide with the @@unique([shopId, sku])
@@ -191,8 +191,8 @@ describe('Product duplication (e2e)', () => {
     });
 
     it('duplicating the same product twice does not collide on sku/slug', async () => {
-      const { adminToken, categoryId } = await setupShop('twice');
-      const original = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('twice');
+      const original = await createProduct(adminToken, collectionId);
 
       const first = await request(app.getHttpServer())
         .post(`/products/${original.id}/duplicate`)
@@ -212,8 +212,8 @@ describe('Product duplication (e2e)', () => {
 
   describe('variants/options + media', () => {
     it('deep-copies options, variants (price copied, sku/barcode blank), and re-links variant images to the new copies', async () => {
-      const { adminToken, categoryId } = await setupShop('variants');
-      const original = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('variants');
+      const original = await createProduct(adminToken, collectionId, {
         price: 30,
         images: [
           { url: 'https://example.com/red.jpg', order: 0 },
@@ -291,7 +291,7 @@ describe('Product duplication (e2e)', () => {
     it("an admin from shop B cannot duplicate shop A's product", async () => {
       const shopA = await setupShop('tenant-a');
       const shopB = await setupShop('tenant-b');
-      const productA = await createProduct(shopA.adminToken, shopA.categoryId);
+      const productA = await createProduct(shopA.adminToken, shopA.collectionId);
 
       await request(app.getHttpServer())
         .post(`/products/${productA.id}/duplicate`)
@@ -300,8 +300,8 @@ describe('Product duplication (e2e)', () => {
     });
 
     it('a non-admin role cannot duplicate a product (same gate as create/update/delete)', async () => {
-      const { adminToken, categoryId } = await setupShop('role-gate');
-      const product = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('role-gate');
+      const product = await createProduct(adminToken, collectionId);
       const staffEmail = `role-gate-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')

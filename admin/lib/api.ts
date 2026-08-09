@@ -17,10 +17,10 @@ import type {
   BioLinkType,
   BioPageConfig,
   BusinessHours,
-  Category,
   Collection,
-  CollectionRules,
-  CollectionType,
+  Template,
+  TemplateRules,
+  TemplateType,
   Discount,
   DiscountInput,
   DraftOrder,
@@ -40,6 +40,8 @@ import type {
   Invoice,
   InvoiceType,
   IngredientCategory,
+  MenuItem,
+  MenuItemType,
   MonthlyReportFilters,
   Order,
   Outlet,
@@ -93,7 +95,7 @@ const ACCESS_TOKEN_KEY = "requital_admin_access_token";
 const REFRESH_TOKEN_KEY = "requital_admin_refresh_token";
 
 // Uploaded images are stored as paths relative to the backend
-// (/uploads/products/..., /uploads/categories/...), but the admin app runs
+// (/uploads/products/..., /uploads/collections/...), but the admin app runs
 // on its own origin/port — a bare relative <img src> resolves against the
 // admin origin and 404s. Absolute URLs (seed data uses some) and blob:
 // object-URLs (fresh local previews) are left untouched.
@@ -529,6 +531,36 @@ export function uploadThemeImage(file: File) {
   const formData = new FormData();
   formData.append("file", file);
   return apiFetch<{ url: string }>("/theme/upload", { method: "POST", body: formData });
+}
+
+// --- Menu (Phase C) — the storefront top bar's merchant-configured nav. ---
+
+export function listMenuItems() {
+  return apiFetch<MenuItem[]>("/menu-items");
+}
+
+export interface MenuItemInput {
+  label: string;
+  type: MenuItemType;
+  collectionId?: number;
+  collections?: { collectionId: number; sortOrder: number }[];
+  displayOrder?: number;
+}
+
+export function createMenuItem(data: MenuItemInput) {
+  return apiFetch<MenuItem>("/menu-items", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateMenuItem(id: number, data: Partial<MenuItemInput>) {
+  return apiFetch<MenuItem>(`/menu-items/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteMenuItem(id: number) {
+  return apiFetch<{ id: number; deleted: boolean }>(`/menu-items/${id}`, { method: "DELETE" });
+}
+
+export function reorderMenuItems(ids: number[]) {
+  return apiFetch<MenuItem[]>("/menu-items/reorder", { method: "PATCH", body: JSON.stringify({ ids }) });
 }
 
 export function getSeo() {
@@ -1064,65 +1096,17 @@ export function updateVariant(productId: number, variantId: number, data: Update
   });
 }
 
-export function listCategories() {
-  return apiFetch<Category[]>("/categories");
-}
-
-export interface CategoryInput {
-  name: string;
-  slug?: string;
-  parentCategoryId?: number | null;
-  displayOrder?: number;
-  image?: string | null;
-  isFeatured?: boolean;
-}
-
-export function uploadCategoryImage(file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-  return apiFetch<{ url: string }>("/categories/upload", {
-    method: "POST",
-    body: formData,
-  });
-}
-
-export function createCategory(data: CategoryInput) {
-  return apiFetch<Category>("/categories", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export function updateCategory(id: number, data: Partial<CategoryInput>) {
-  return apiFetch<Category>(`/categories/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteCategory(id: number) {
-  return apiFetch<{ id: number; deleted: boolean }>(`/categories/${id}`, {
-    method: "DELETE",
-  });
-}
-
 export function listCollections() {
   return apiFetch<Collection[]>("/collections");
 }
 
-export function getCollection(id: number) {
-  return apiFetch<Collection>(`/collections/${id}`);
-}
-
 export interface CollectionInput {
-  title: string;
+  name: string;
   slug?: string;
-  description?: string;
-  image?: string | null;
-  type: CollectionType;
-  rules?: CollectionRules;
-  isActive?: boolean;
+  parentCollectionId?: number | null;
   displayOrder?: number;
+  image?: string | null;
+  isFeatured?: boolean;
 }
 
 export function uploadCollectionImage(file: File) {
@@ -1154,10 +1138,72 @@ export function deleteCollection(id: number) {
   });
 }
 
-export function setCollectionProducts(id: number, products: { productId: number; sortOrder: number }[]) {
-  return apiFetch<Collection>(`/collections/${id}/products`, {
+export function reorderCollections(ids: number[]) {
+  return apiFetch<Collection[]>("/collections/reorder", {
+    method: "PATCH",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export function listTemplates() {
+  return apiFetch<Template[]>("/templates");
+}
+
+export function getTemplate(id: number) {
+  return apiFetch<Template>(`/templates/${id}`);
+}
+
+export interface TemplateInput {
+  title: string;
+  slug?: string;
+  description?: string;
+  image?: string | null;
+  type: TemplateType;
+  rules?: TemplateRules;
+  isActive?: boolean;
+  displayOrder?: number;
+}
+
+export function uploadTemplateImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<{ url: string }>("/templates/upload", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function createTemplate(data: TemplateInput) {
+  return apiFetch<Template>("/templates", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateTemplate(id: number, data: Partial<TemplateInput>) {
+  return apiFetch<Template>(`/templates/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteTemplate(id: number) {
+  return apiFetch<{ id: number; deleted: boolean }>(`/templates/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function setTemplateProducts(id: number, products: { productId: number; sortOrder: number }[]) {
+  return apiFetch<Template>(`/templates/${id}/products`, {
     method: "PUT",
     body: JSON.stringify({ products }),
+  });
+}
+
+export function setTemplateCollections(id: number, collections: { collectionId: number; sortOrder: number }[]) {
+  return apiFetch<Template>(`/templates/${id}/collections`, {
+    method: "PUT",
+    body: JSON.stringify({ collections }),
   });
 }
 
@@ -1416,8 +1462,8 @@ export interface BioLinkInput {
   label?: string;
   url?: string;
   productId?: number;
-  categoryId?: number;
   collectionId?: number;
+  templateId?: number;
   socialPlatform?: BioLinkSocialPlatform;
   active?: boolean;
 }
@@ -1498,7 +1544,7 @@ export function validateDiscount(data: {
   code: string;
   cartSubtotal: number;
   productIds?: number[];
-  categoryIds?: number[];
+  collectionIds?: number[];
   customerId?: number;
 }) {
   return apiFetch<ValidateDiscountResult>("/shop/discounts/validate", {

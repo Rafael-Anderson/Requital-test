@@ -131,14 +131,14 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId, slug };
+    return { adminToken, outletId, collectionId, slug };
   }
 
   // Publishing requires the readiness bar (outlet + at least one product
@@ -180,7 +180,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -192,7 +192,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         thumbnail: 'https://example.com/bouquet.jpg',
         sku: `BOM-${runId}-${Math.random().toString(36).slice(2, 8)}`,
         trackInventory: true,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         ...overrides,
       })
       .expect(201);
@@ -236,11 +236,11 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('recipe CRUD + variant-override resolution', () => {
     it('a product created with a recipe returns it, and updating replaces the full set', async () => {
-      const { adminToken, categoryId } = await setupShop('crud');
+      const { adminToken, collectionId } = await setupShop('crud');
       const rose = await createIngredient(adminToken, 'Rose');
       const box = await createIngredient(adminToken, 'Box');
 
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       expect(product.ingredients).toHaveLength(1);
@@ -292,7 +292,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
           price: 50,
           thumbnail: 'https://example.com/x.jpg',
           sku: `BOM-XTENANT-${runId}`,
-          categoryIds: [shopA.categoryId],
+          collectionIds: [shopA.collectionId],
           ingredients: [
             { ingredientId: foreignIngredient, quantityPerUnit: 1 },
           ],
@@ -302,7 +302,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('rejects the same ingredient linked twice in one recipe submission', async () => {
-      const { adminToken, categoryId } = await setupShop('dup');
+      const { adminToken, collectionId } = await setupShop('dup');
       const rose = await createIngredient(adminToken, 'Rose');
       const res = await request(app.getHttpServer())
         .post('/products')
@@ -312,7 +312,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
           price: 50,
           thumbnail: 'https://example.com/x.jpg',
           sku: `BOM-DUP-${runId}`,
-          categoryIds: [categoryId],
+          collectionIds: [collectionId],
           ingredients: [
             { ingredientId: rose, quantityPerUnit: 6 },
             { ingredientId: rose, quantityPerUnit: 10 },
@@ -323,12 +323,12 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('a variant override wins for that variant; a variant with no override falls back to the product default', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('override');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 1000);
 
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
       const withOptions = await request(app.getHttpServer())
@@ -353,17 +353,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         expect.objectContaining({ ingredientId: rose, quantityPerUnit: 10 }),
       ]);
 
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({
-          outletId,
-          adjustments: [
-            { productId: product.id, variantId: small.id, delta: 10 },
-            { productId: product.id, variantId: large.id, delta: 10 },
-          ],
-        })
-        .expect(200);
+      // Phase A: a usesIngredients:true product/variant has no settable
+      // direct stock of its own anymore (bulk-adjust rejects it, see
+      // resolveShadowStockTarget) — availability is purely ingredient-
+      // derived, already set via setIngredientStock above.
       await publishShop(adminToken);
 
       // Ordering one of each must consume 6 (Small, product default) + 10
@@ -391,18 +384,13 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('consumption fires at the same trigger points as product stock, gated by the toggle', () => {
     it('storefront checkout (immediate reservation) consumes the recipe and logs a CONSUMED movement', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('consume-immediate');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       const created = await request(app.getHttpServer())
@@ -436,10 +424,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       );
     });
 
-    it('a product/variant with no recipe defined consumes nothing — fully backward compatible', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+    it('a product with no merchant-authored recipe consumes only its own shadow ingredient, never a real one', async () => {
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('no-recipe');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await request(app.getHttpServer())
         .patch('/products/stock/bulk-adjust')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -452,27 +440,33 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .send(storefrontOrderPayload(outletId, product.id))
         .expect(201);
 
+      // Phase A: every product resolves through consumeForOrderItems now,
+      // even one with no merchant-authored recipe — its own auto-provisioned
+      // shadow ingredient is what actually gets the CONSUMED row. This is
+      // the single stock-decrement mechanism replacing the old, separate
+      // (non-CONSUMED) product-stock write path — not a real Ingredient's
+      // stock, still never touched for a plain product like this one.
       const movements = await request(app.getHttpServer())
         .get('/products/stock/movements')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ type: 'CONSUMED' })
         .expect(200);
-      expect(body<MovementList>(movements).data).toHaveLength(0);
+      const rows = body<MovementList>(movements).data;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        productId: product.id,
+        delta: -1,
+      });
     });
 
     it('respects the shop toggle: off means no deduction even though a recipe is linked', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('toggle-off');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       await request(app.getHttpServer())
@@ -499,18 +493,13 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('a deferred admin order consumes at the pending->confirmed transition, not at creation', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('consume-confirm');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
 
       const created = await request(app.getHttpServer())
         .post('/orders')
@@ -548,18 +537,13 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     });
 
     it('cancelling a still-pending immediate-reservation order restocks ingredients immediately', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('cancel-immediate');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 100);
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 6 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       const created = await request(app.getHttpServer())
@@ -587,23 +571,18 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe("effective availability (informational, doesn't gate checkout)", () => {
     it('makeableQuantity/limitedByIngredient reflect the binding ingredient at the resolved outlet', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('availability');
       const rose = await createIngredient(adminToken, 'Rose');
       const box = await createIngredient(adminToken, 'Box');
       await setIngredientStock(adminToken, rose, outletId, 25); // 25 / 10 = 2 makeable
       await setIngredientStock(adminToken, box, outletId, 100); // 100 / 1 = 100 makeable — not the binding one
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [
           { ingredientId: rose, quantityPerUnit: 10 },
           { ingredientId: box, quantityPerUnit: 1 },
         ],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 20 }] })
-        .expect(200);
       await publishShop(adminToken);
 
       const res = await request(app.getHttpServer())
@@ -615,12 +594,12 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       expect(fetched.makeableQuantity).toBe(2);
       expect(fetched.limitedByIngredient).toBe('Rose');
 
-      // Doesn't gate anything — a 3rd unit would need 30 roses (only 25
-      // in stock), but checkout still only ever enforces the recipe at the
-      // point it's actually consumed (throwing there, see the race test
-      // below), never as a pre-emptive block on how many units can be
-      // ordered based on makeableQuantity. Ordering within product stock
-      // (20) but above what's "makeable" (2) still succeeds here.
+      // makeableQuantity/limitedByIngredient are a read-side display only —
+      // checkout itself enforces the recipe by actually attempting the
+      // decrement at consumption time (throwing there if insufficient, see
+      // the race test below), never as a separate pre-emptive block based
+      // on this displayed number. Ordering 1 (within what's makeable here)
+      // still succeeds normally.
       await request(app.getHttpServer())
         .post(`/public/${slug}/orders`)
         .send(
@@ -634,18 +613,13 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
 
   describe('race safety: concurrent orders against a nearly-depleted ingredient', () => {
     it('two concurrent storefront orders racing a recipe that only one can fully cover never overdraw the ingredient', async () => {
-      const { adminToken, categoryId, outletId, slug } =
+      const { adminToken, collectionId, outletId, slug } =
         await setupShop('bom-race');
       const rose = await createIngredient(adminToken, 'Rose');
       await setIngredientStock(adminToken, rose, outletId, 10); // exactly one order's worth (quantityPerUnit 10)
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         ingredients: [{ ingredientId: rose, quantityPerUnit: 10 }],
       });
-      await request(app.getHttpServer())
-        .patch('/products/stock/bulk-adjust')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ outletId, adjustments: [{ productId: product.id, delta: 50 }] }) // plenty of product stock — the ingredient is the real constraint
-        .expect(200);
       await publishShop(adminToken);
 
       const attempt = () =>

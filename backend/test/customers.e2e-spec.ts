@@ -100,8 +100,8 @@ describe('Customers (e2e)', () => {
       .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
@@ -113,7 +113,7 @@ describe('Customers (e2e)', () => {
         price: 50,
         thumbnail: 'https://example.com/rose.jpg',
         sku: `ROSE-${slugPrefix}-${runId}`,
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
       })
       .expect(201);
 

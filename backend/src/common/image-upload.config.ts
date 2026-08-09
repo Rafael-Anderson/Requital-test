@@ -10,8 +10,8 @@ import { memoryStorage } from 'multer';
 // before an oversized file ever fully buffers in memory); StorageService's
 // own size check is defense-in-depth on top of this, not a replacement.
 //
-// Shared by every image-upload endpoint (products, categories, ingredients,
-// theme, bio-links, shop, seo, scan, collections) — same "one config, every
+// Shared by every image-upload endpoint (products, collections, ingredients,
+// theme, bio-links, shop, seo, scan, templates) — same "one config, every
 // call site" shape as before this phase, just without a subdir parameter:
 // which feature/subdirectory a file belongs under is now StorageService's
 // concern (passed explicitly at the call site), not baked into multer's

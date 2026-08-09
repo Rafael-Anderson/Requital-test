@@ -83,7 +83,7 @@ export class UpdateDraftOrderDto {
   notes?: string;
 
   // If provided, replaces the full item list — same convention as
-  // UpdateProductDto.categoryIds.
+  // UpdateProductDto.collectionIds.
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()

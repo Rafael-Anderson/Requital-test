@@ -226,7 +226,7 @@ describe('Footer/announcement/banners (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           images: [
-            { url: '/uploads/theme/promo.jpg', linkUrl: '/collections/sale' },
+            { url: '/uploads/theme/promo.jpg', linkUrl: '/templates/sale' },
           ],
         })
         .expect(200);
@@ -237,7 +237,7 @@ describe('Footer/announcement/banners (e2e)', () => {
         .expect(200);
       expect(
         body<{ images: { linkUrl: string | null }[] }>(res).images[0].linkUrl,
-      ).toBe('/collections/sale');
+      ).toBe('/templates/sale');
     });
 
     it('tenant isolation: shop A saving banners never appears in shop B', async () => {

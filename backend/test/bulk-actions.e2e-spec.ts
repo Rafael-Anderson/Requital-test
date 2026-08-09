@@ -97,19 +97,19 @@ describe('Bulk actions: products + orders (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId, slug };
+    return { adminToken, outletId, collectionId, slug };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -120,7 +120,7 @@ describe('Bulk actions: products + orders (e2e)', () => {
         price: 10,
         thumbnail: 'https://example.com/x.jpg',
         sku: `BULK-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         status: 'Available',
         ...overrides,
       })
@@ -151,10 +151,10 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
   describe('products: bulk status', () => {
     it('updates only the requested, shop-owned products', async () => {
-      const { adminToken, categoryId } = await setupShop('bulk-status');
-      const p1 = await createProduct(adminToken, categoryId);
-      const p2 = await createProduct(adminToken, categoryId);
-      const p3 = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('bulk-status');
+      const p1 = await createProduct(adminToken, collectionId);
+      const p2 = await createProduct(adminToken, collectionId);
+      const p3 = await createProduct(adminToken, collectionId);
 
       const res = await request(app.getHttpServer())
         .patch('/products/bulk-status')
@@ -180,11 +180,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
       const shopB = await setupShop('bulk-status-b');
       const ownProduct = await createProduct(
         shopA.adminToken,
-        shopA.categoryId,
+        shopA.collectionId,
       );
       const foreignProduct = await createProduct(
         shopB.adminToken,
-        shopB.categoryId,
+        shopB.collectionId,
       );
 
       const res = await request(app.getHttpServer())
@@ -207,9 +207,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('is admin-only — branch and viewer are rejected', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('bulk-status-role');
-      const p1 = await createProduct(adminToken, categoryId);
+      const p1 = await createProduct(adminToken, collectionId);
       const staffEmail = `bulk-status-role-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')
@@ -238,9 +238,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
   describe('products: bulk delete', () => {
     it('deletes the requested products and reports per-item success', async () => {
-      const { adminToken, categoryId } = await setupShop('bulk-delete');
-      const p1 = await createProduct(adminToken, categoryId);
-      const p2 = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId } = await setupShop('bulk-delete');
+      const p1 = await createProduct(adminToken, collectionId);
+      const p2 = await createProduct(adminToken, collectionId);
 
       const res = await request(app.getHttpServer())
         .delete('/products/bulk-delete')
@@ -258,11 +258,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('a product with order history fails individually without blocking the rest of the batch', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'bulk-delete-partial',
       );
-      const ordered = await createProduct(adminToken, categoryId);
-      const clean = await createProduct(adminToken, categoryId);
+      const ordered = await createProduct(adminToken, collectionId);
+      const clean = await createProduct(adminToken, collectionId);
       await createOrder(adminToken, outletId, ordered.id);
 
       const res = await request(app.getHttpServer())
@@ -293,7 +293,7 @@ describe('Bulk actions: products + orders (e2e)', () => {
       const shopB = await setupShop('bulk-delete-b');
       const foreignProduct = await createProduct(
         shopB.adminToken,
-        shopB.categoryId,
+        shopB.collectionId,
       );
 
       const res = await request(app.getHttpServer())
@@ -315,9 +315,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
   describe('orders: bulk status', () => {
     it('advances multiple orders through a valid transition in one call', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('bulk-order-status');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       const o1 = await createOrder(adminToken, outletId, product.id);
       const o2 = await createOrder(adminToken, outletId, product.id);
 
@@ -331,9 +331,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('skips orders where the transition is invalid rather than forcing it (no skipping required steps)', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('bulk-order-invalid');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       const pending = await createOrder(adminToken, outletId, product.id);
       const confirmed = await createOrder(adminToken, outletId, product.id);
       await request(app.getHttpServer())
@@ -368,7 +368,7 @@ describe('Bulk actions: products + orders (e2e)', () => {
     it('adversarial: cannot bulk-update an order belonging to another shop', async () => {
       const shopA = await setupShop('bulk-order-a');
       const shopB = await setupShop('bulk-order-b');
-      const productB = await createProduct(shopB.adminToken, shopB.categoryId);
+      const productB = await createProduct(shopB.adminToken, shopB.collectionId);
       const orderB = await createOrder(
         shopB.adminToken,
         shopB.outletId,
@@ -390,9 +390,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('viewer cannot bulk-update order status', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('bulk-order-viewer');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       const order = await createOrder(adminToken, outletId, product.id);
       const staffEmail = `bulk-order-viewer-staff-${runId}@test.com`;
       await request(app.getHttpServer())
@@ -421,9 +421,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
 
   describe('products: bulk price update', () => {
     it('applies a percentage increase, recomputed server-side from the current price', async () => {
-      const { adminToken, categoryId } = await setupShop('bulk-price-pct');
-      const p1 = await createProduct(adminToken, categoryId, { price: 100 });
-      const p2 = await createProduct(adminToken, categoryId, { price: 50 });
+      const { adminToken, collectionId } = await setupShop('bulk-price-pct');
+      const p1 = await createProduct(adminToken, collectionId, { price: 100 });
+      const p2 = await createProduct(adminToken, collectionId, { price: 50 });
 
       const res = await request(app.getHttpServer())
         .patch('/products/bulk-price')
@@ -451,8 +451,8 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('applies a fixed-amount decrease to compareAtPrice', async () => {
-      const { adminToken, categoryId } = await setupShop('bulk-price-fixed');
-      const p1 = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('bulk-price-fixed');
+      const p1 = await createProduct(adminToken, collectionId, {
         price: 40,
         compareAtPrice: 60,
       });
@@ -476,11 +476,11 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('skips (does not clamp) a product whose compareAtPrice is unset, and one that would go below zero', async () => {
-      const { adminToken, categoryId } = await setupShop('bulk-price-skip');
-      const noCompareAt = await createProduct(adminToken, categoryId, {
+      const { adminToken, collectionId } = await setupShop('bulk-price-skip');
+      const noCompareAt = await createProduct(adminToken, collectionId, {
         price: 20,
       });
-      const wouldGoNegative = await createProduct(adminToken, categoryId, {
+      const wouldGoNegative = await createProduct(adminToken, collectionId, {
         price: 10,
       });
 
@@ -519,8 +519,8 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('adversarial: a client-supplied "newPrice" cannot smuggle an arbitrary price — only value/mode/field are honored', async () => {
-      const { adminToken, categoryId } = await setupShop('bulk-price-tamper');
-      const p1 = await createProduct(adminToken, categoryId, { price: 100 });
+      const { adminToken, collectionId } = await setupShop('bulk-price-tamper');
+      const p1 = await createProduct(adminToken, collectionId, { price: 100 });
 
       await request(app.getHttpServer())
         .patch('/products/bulk-price')
@@ -543,7 +543,7 @@ describe('Bulk actions: products + orders (e2e)', () => {
       const shopB = await setupShop('bulk-price-b');
       const foreignProduct = await createProduct(
         shopB.adminToken,
-        shopB.categoryId,
+        shopB.collectionId,
         { price: 100 },
       );
 
@@ -567,9 +567,9 @@ describe('Bulk actions: products + orders (e2e)', () => {
     });
 
     it('is admin-only', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('bulk-price-role');
-      const p1 = await createProduct(adminToken, categoryId, { price: 100 });
+      const p1 = await createProduct(adminToken, collectionId, { price: 100 });
       const staffEmail = `bulk-price-role-staff-${runId}@test.com`;
       await request(app.getHttpServer())
         .post('/auth/branch-users')

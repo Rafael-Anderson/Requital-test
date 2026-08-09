@@ -31,9 +31,46 @@ export class PublicController {
   }
 
   @Public()
-  @Get('categories')
-  listCategories(@Param('shopSlug') shopSlug: string) {
-    return this.publicService.listCategories(shopSlug);
+  @Get('collections')
+  listCollections(@Param('shopSlug') shopSlug: string) {
+    return this.publicService.listCollections(shopSlug);
+  }
+
+  // Collection (taxonomy node) detail page, /[shop]/collections/[slug] —
+  // replaces the pre-Phase-C curated-list detail that used to live at this
+  // same URL (now served by GET templates/:slug instead).
+  @Public()
+  @Get('collections/:slug')
+  getCollectionBySlug(
+    @Param('shopSlug') shopSlug: string,
+    @Param('slug') slug: string,
+    @Query('outletId') outletId?: string,
+  ) {
+    return this.publicService.getCollectionBySlug(
+      shopSlug,
+      slug,
+      outletId ? Number(outletId) : undefined,
+    );
+  }
+
+  // Storefront Home tab, 'templates' mode.
+  @Public()
+  @Get('homepage-templates')
+  getHomepageTemplates(
+    @Param('shopSlug') shopSlug: string,
+    @Query('outletId') outletId?: string,
+  ) {
+    return this.publicService.getHomepageTemplates(
+      shopSlug,
+      outletId ? Number(outletId) : undefined,
+    );
+  }
+
+  // Storefront top-bar "Menu" — direct Collection links + Dropdowns.
+  @Public()
+  @Get('menu')
+  getMenu(@Param('shopSlug') shopSlug: string) {
+    return this.publicService.getMenu(shopSlug);
   }
 
   @Public()
@@ -49,19 +86,19 @@ export class PublicController {
   }
 
   @Public()
-  @Get('collections')
-  listCollections(@Param('shopSlug') shopSlug: string) {
-    return this.publicService.listCollections(shopSlug);
+  @Get('templates')
+  listTemplates(@Param('shopSlug') shopSlug: string) {
+    return this.publicService.listTemplates(shopSlug);
   }
 
   @Public()
-  @Get('collections/:slug')
-  getCollection(
+  @Get('templates/:slug')
+  getTemplate(
     @Param('shopSlug') shopSlug: string,
     @Param('slug') slug: string,
     @Query('outletId') outletId?: string,
   ) {
-    return this.publicService.getCollection(
+    return this.publicService.getTemplate(
       shopSlug,
       slug,
       outletId ? Number(outletId) : undefined,
@@ -73,13 +110,13 @@ export class PublicController {
   listProducts(
     @Param('shopSlug') shopSlug: string,
     @Query('outletId') outletId?: string,
-    @Query('categoryId') categoryId?: string,
+    @Query('collectionId') collectionId?: string,
     @Query('isCheckoutAddon') isCheckoutAddon?: string,
   ) {
     return this.publicService.listProducts(
       shopSlug,
       outletId ? Number(outletId) : undefined,
-      categoryId ? Number(categoryId) : undefined,
+      collectionId ? Number(collectionId) : undefined,
       isCheckoutAddon !== undefined ? isCheckoutAddon === 'true' : undefined,
     );
   }

@@ -19,6 +19,7 @@ import {
   DENSITY_OPTIONS,
   FONT_CHOICES,
   FOOTER_LAYOUTS,
+  HOME_TAB_MODES,
   ICON_STYLES,
   PDP_LAYOUTS,
   SELECTABLE_HOMEPAGE_LAYOUTS,
@@ -33,6 +34,7 @@ import type {
   FontChoice,
   FooterLayout,
   HomepageLayout,
+  HomeTabMode,
   IconStyle,
   PdpLayout,
   TopBarLayout,
@@ -150,6 +152,12 @@ export class UpdateThemeDto {
   @IsOptional()
   @IsIn(SELECTABLE_HOMEPAGE_LAYOUTS)
   homepageLayout?: HomepageLayout;
+
+  // Phase C — what the storefront Home tab renders (Template sections, the
+  // default, or a flat grid of top-level Collections).
+  @IsOptional()
+  @IsIn(HOME_TAB_MODES)
+  homeTabMode?: HomeTabMode;
 
   // Theme Customizer v2 — see theme/constants.ts for what each enum means
   // and storefront lib/{layout,icon-style,button-style}.ts for where it's

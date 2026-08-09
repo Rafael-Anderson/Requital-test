@@ -8,7 +8,7 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
-// Flat — just a name, unlike CategoryFormModal (no slug/parent/image/
+// Flat — just a name, unlike CollectionFormModal (no slug/parent/image/
 // featured toggle — see ingredientcategory's schema comment for why).
 export default function IngredientCategoryFormModal({
   category,

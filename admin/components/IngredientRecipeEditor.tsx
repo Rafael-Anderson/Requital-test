@@ -16,7 +16,7 @@ export interface RecipeRowDraft {
 // recipe (VariantEditModal). Purely a controlled list editor (rows/onChange)
 // with no save button of its own — the caller submits `rows` alongside the
 // rest of its own form, same as every other "replaces the full set on save"
-// list on this form (categories, tags, images).
+// list on this form (collections, tags, images).
 export default function IngredientRecipeEditor({
   ingredients,
   categories,

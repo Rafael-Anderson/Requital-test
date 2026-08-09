@@ -10,7 +10,7 @@ type Variant = "wide" | "medium" | "narrow";
 // (see ShopLayoutClient — <main> itself is now full-bleed with no width
 // constraint of its own, so a hero section can render truly edge to edge).
 //
-// - "wide": product-browsing pages (homepage grid, PDP, collections) — full
+// - "wide": product-browsing pages (homepage grid, PDP, templates) — full
 //   available width up to a wide cap.
 // - "medium": single-column transactional/account content (cart, checkout,
 //   account dashboard, order history/detail) — narrower than "wide" (a

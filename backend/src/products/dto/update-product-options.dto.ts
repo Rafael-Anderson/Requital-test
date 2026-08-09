@@ -24,7 +24,7 @@ class ProductOptionInput {
   values: string[];
 }
 
-// Full replace, same convention as categoryIds/tags on UpdateProductDto — an
+// Full replace, same convention as collectionIds/tags on UpdateProductDto — an
 // empty array removes all options and reverts the product to a single
 // implicit variant (deletes every productoption/productvariant row for it).
 export class UpdateProductOptionsDto {

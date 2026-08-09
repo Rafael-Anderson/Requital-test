@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
-import { getCollection, resolveImageUrl } from "@/lib/api";
+import { getCollectionBySlug, resolveImageUrl } from "@/lib/api";
 import type { CollectionDetail } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 
+// Collection (taxonomy node) detail — /[shop]/collections/[slug]. Repurposed
+// from the pre-Phase-C curated-list detail that used to live at this same
+// URL (now served by /[shop]'s Template homepage sections + getTemplate
+// instead — see lib/api.ts).
 export default function CollectionPage() {
   const params = useParams<{ shop: string; slug: string }>();
   const { shopSlug, shop, outlets, loading: shopLoading, error: shopError } = useShop();
@@ -18,7 +22,7 @@ export default function CollectionPage() {
 
   useEffect(() => {
     if (shopLoading) return;
-    getCollection(shopSlug, params.slug, defaultOutletId)
+    getCollectionBySlug(shopSlug, params.slug, defaultOutletId)
       .then(setCollection)
       .catch((err) => setError(err instanceof Error ? err.message : "Collection not found"));
   }, [shopSlug, params.slug, defaultOutletId, shopLoading]);
@@ -40,8 +44,7 @@ export default function CollectionPage() {
         <img src={bannerImage} alt="" className="w-full aspect-[3/1] sm:aspect-[4/1] object-cover" />
       )}
       <StorefrontPageShell variant="wide">
-        <h1 className="text-2xl font-semibold mb-1">{collection.title}</h1>
-        {collection.description && <p className="text-zinc-500 mb-4">{collection.description}</p>}
+        <h1 className="text-2xl font-semibold mb-4">{collection.name}</h1>
 
         {collection.products.length === 0 ? (
           <p className="text-zinc-500">No products in this collection yet.</p>

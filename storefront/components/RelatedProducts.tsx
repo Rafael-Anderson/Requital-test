@@ -6,10 +6,10 @@ import { getRelatedProducts } from "@/lib/api";
 import type { Product } from "@/lib/types";
 import ProductCard from "./ProductCard";
 
-// Collection-first, same-category fallback — computed server-side by
-// PublicService.getRelatedProducts (Phase 8.4). A product -> collection
+// Template-first, same-collection fallback — computed server-side by
+// PublicService.getRelatedProducts (Phase 8.4). A product -> template
 // reverse lookup didn't exist on the backend before this; see
-// CollectionsService.findRelatedProductIds for how it's resolved.
+// TemplatesService.findRelatedProductIds for how it's resolved.
 export default function RelatedProducts({
   productSlug,
   excludeProductId,

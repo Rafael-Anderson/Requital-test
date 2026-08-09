@@ -133,93 +133,64 @@ export class LowStockDigestService {
   // already updates this same column, so there's nothing separate to hook
   // — a background poll re-deriving the same comparison on a schedule
   // (this digest) is correct without also needing a write-time side effect.
+  // Phase A: a single query against outletingredientstock — the only stock
+  // table now — replaces the three parallel product/variant/ingredient
+  // queries this used before. A shadow-backed product/variant's row
+  // resolves its label through ingredient.shadowProduct/shadowVariant; a
+  // real merchant-created ingredient (both null) uses its own name.
   private async collectLowStockLines(shopId: number): Promise<LowStockLine[]> {
-    const [products, variants, ingredients] = await Promise.all([
-      this.prisma.outletstock.findMany({
-        where: { lowStockThreshold: { not: null }, product: { shopId } },
-        select: {
-          stockQuantity: true,
-          lowStockThreshold: true,
-          product: { select: { name: true } },
-          outlet: { select: { name: true } },
-        },
-      }),
-      this.prisma.outletvariantstock.findMany({
-        where: {
-          lowStockThreshold: { not: null },
-          variant: { product: { shopId } },
-        },
-        select: {
-          stockQuantity: true,
-          lowStockThreshold: true,
-          variant: {
-            select: {
-              product: { select: { name: true } },
-              optionValue1: { select: { value: true } },
-              optionValue2: { select: { value: true } },
-              optionValue3: { select: { value: true } },
+    const rows = await this.prisma.outletingredientstock.findMany({
+      where: { lowStockThreshold: { not: null }, ingredient: { shopId } },
+      select: {
+        stockQuantity: true,
+        lowStockThreshold: true,
+        outlet: { select: { name: true } },
+        ingredient: {
+          select: {
+            name: true,
+            shadowProduct: { select: { name: true } },
+            shadowVariant: {
+              select: {
+                product: { select: { name: true } },
+                optionValue1: { select: { value: true } },
+                optionValue2: { select: { value: true } },
+                optionValue3: { select: { value: true } },
+              },
             },
           },
-          outlet: { select: { name: true } },
         },
-      }),
-      this.prisma.outletingredientstock.findMany({
-        where: { lowStockThreshold: { not: null }, ingredient: { shopId } },
-        select: {
-          stockQuantity: true,
-          lowStockThreshold: true,
-          ingredient: { select: { name: true } },
-          outlet: { select: { name: true } },
-        },
-      }),
-    ]);
+      },
+    });
 
     const lines: LowStockLine[] = [];
-    for (const row of products) {
+    for (const row of rows) {
       if (
-        row.lowStockThreshold !== null &&
-        row.stockQuantity <= row.lowStockThreshold
+        row.lowStockThreshold === null ||
+        row.stockQuantity > row.lowStockThreshold
       ) {
-        lines.push({
-          label: row.product.name,
-          outletName: row.outlet.name,
-          stockQuantity: row.stockQuantity,
-          lowStockThreshold: row.lowStockThreshold,
-        });
+        continue;
       }
-    }
-    for (const row of variants) {
-      if (
-        row.lowStockThreshold !== null &&
-        row.stockQuantity <= row.lowStockThreshold
-      ) {
-        const label = buildVariantLabel([
-          row.variant.optionValue1?.value,
-          row.variant.optionValue2?.value,
-          row.variant.optionValue3?.value,
+      let label: string;
+      if (row.ingredient.shadowVariant) {
+        const variantLabel = buildVariantLabel([
+          row.ingredient.shadowVariant.optionValue1?.value,
+          row.ingredient.shadowVariant.optionValue2?.value,
+          row.ingredient.shadowVariant.optionValue3?.value,
         ]);
-        lines.push({
-          label: label
-            ? `${row.variant.product.name} (${label})`
-            : row.variant.product.name,
-          outletName: row.outlet.name,
-          stockQuantity: row.stockQuantity,
-          lowStockThreshold: row.lowStockThreshold,
-        });
+        label = variantLabel
+          ? `${row.ingredient.shadowVariant.product.name} (${variantLabel})`
+          : row.ingredient.shadowVariant.product.name;
+      } else if (row.ingredient.shadowProduct) {
+        label = row.ingredient.shadowProduct.name;
+      } else {
+        label = row.ingredient.name;
       }
-    }
-    for (const row of ingredients) {
-      if (
-        row.lowStockThreshold !== null &&
-        row.stockQuantity <= row.lowStockThreshold
-      ) {
-        lines.push({
-          label: row.ingredient.name,
-          outletName: row.outlet.name,
-          stockQuantity: row.stockQuantity,
-          lowStockThreshold: row.lowStockThreshold,
-        });
-      }
+      lines.push({
+        label,
+        outletName: row.outlet.name,
+        stockQuantity: row.stockQuantity,
+        lowStockThreshold: row.lowStockThreshold,
+      });
     }
     return lines;
   }

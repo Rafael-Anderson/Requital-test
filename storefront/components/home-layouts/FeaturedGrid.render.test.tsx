@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import FeaturedGrid from "./FeaturedGrid";
-import type { Category } from "@/lib/types";
+import type { Collection } from "@/lib/types";
 
 afterEach(cleanup);
 
@@ -12,27 +12,27 @@ vi.mock("@/lib/shop-context", () => ({
   useShop: () => ({ shop: null, shopSlug: "test-shop" }),
 }));
 
-function category(id: number): Category {
+function collection(id: number): Collection {
   return {
     id,
-    name: `Category ${id}`,
-    slug: `category-${id}`,
+    name: `Collection ${id}`,
+    slug: `collection-${id}`,
     displayOrder: id,
     image: null,
     isFeatured: false,
-    parentCategoryId: null,
+    parentCollectionId: null,
   };
 }
 
 function renderGrid(count: number) {
-  const categories = Array.from({ length: count }, (_, i) => category(i + 1));
+  const collections = Array.from({ length: count }, (_, i) => collection(i + 1));
   return render(
-    <FeaturedGrid shopSlug="test-shop" bannerUrl={null} heroText={null} categories={categories} />,
+    <FeaturedGrid shopSlug="test-shop" bannerUrl={null} heroText={null} collections={collections} />,
   );
 }
 
 describe("FeaturedGrid structure", () => {
-  it("renders no tile container at all with 0 categories", () => {
+  it("renders no tile container at all with 0 collections", () => {
     const { container } = renderGrid(0);
     expect(container.querySelectorAll("a")).toHaveLength(0);
   });

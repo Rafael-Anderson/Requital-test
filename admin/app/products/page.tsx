@@ -10,16 +10,16 @@ import {
   confirmImportProducts,
   deleteProduct,
   duplicateProduct,
-  listCategories,
+  listCollections,
   listProducts,
   previewImportProducts,
   updateProductAvailability,
 } from "@/lib/api";
 import {
-  buildCategoryTree,
-  flattenCategoryTree,
+  buildCollectionTree,
+  flattenCollectionTree,
   PRODUCT_STATUS_LABELS,
-  type Category,
+  type Collection,
   type Product,
 } from "@/lib/types";
 import TransferStockModal from "@/components/TransferStockModal";
@@ -56,11 +56,11 @@ function InventoryPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[] | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  // Seeded from ?category=<id> so homepage shortcut tiles can deep-link into
+  const [collections, setCollections] = useState<Collection[]>([]);
+  // Seeded from ?collection=<id> so homepage shortcut tiles can deep-link into
   // an already-filtered list; purely the initial value — changing the
   // dropdown afterward doesn't write back to the URL.
-  const [categoryFilter, setCategoryFilter] = useState(searchParams.get("category") ?? "");
+  const [collectionFilter, setCollectionFilter] = useState(searchParams.get("collection") ?? "");
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [transferringProduct, setTransferringProduct] = useState<Product | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
@@ -71,12 +71,12 @@ function InventoryPageContent() {
 
   const refresh = useCallback(async () => {
     try {
-      const [productList, categoryList] = await Promise.all([
+      const [productList, collectionList] = await Promise.all([
         listProducts(selectedOutletId ?? undefined),
-        listCategories(),
+        listCollections(),
       ]);
       setProducts(productList);
-      setCategories(categoryList);
+      setCollections(collectionList);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load products");
@@ -87,13 +87,13 @@ function InventoryPageContent() {
     refresh();
   }, [refresh]);
 
-  const categoryRows = useMemo(() => flattenCategoryTree(buildCategoryTree(categories)), [categories]);
+  const collectionRows = useMemo(() => flattenCollectionTree(buildCollectionTree(collections)), [collections]);
   const visibleProducts = useMemo(() => {
     if (!products) return null;
     let result = products;
-    if (categoryFilter) {
-      const id = Number(categoryFilter);
-      result = result.filter((p) => p.categories.some((c) => c.id === id));
+    if (collectionFilter) {
+      const id = Number(collectionFilter);
+      result = result.filter((p) => p.collections.some((c) => c.id === id));
     }
     if (lowStockOnly) {
       result = result.filter(
@@ -105,7 +105,7 @@ function InventoryPageContent() {
       );
     }
     return result;
-  }, [products, categoryFilter, lowStockOnly]);
+  }, [products, collectionFilter, lowStockOnly]);
 
   const visibleIds = useMemo(() => (visibleProducts ?? []).map((p) => p.id), [visibleProducts]);
   const selection = useRowSelection(visibleIds);
@@ -214,7 +214,7 @@ function InventoryPageContent() {
         p.vendor ?? "",
         p.productType ?? "",
         p.thumbnail,
-        p.categories.map((c) => c.name).join("; "),
+        p.collections.map((c) => c.name).join("; "),
         p.tags.join("; "),
       ];
       // A variant-bearing product's own Stock column is meaningless (stock
@@ -245,7 +245,7 @@ function InventoryPageContent() {
         "Vendor",
         "Product Type",
         "Thumbnail URL",
-        "Categories",
+        "Collections",
         "Tags",
         "Variant",
         "Variant SKU",
@@ -267,12 +267,12 @@ function InventoryPageContent() {
         <h1 className="text-2xl font-semibold">Inventory</h1>
         <div className="flex items-center gap-2">
           <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            value={collectionFilter}
+            onChange={(e) => setCollectionFilter(e.target.value)}
             className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
           >
-            <option value="">All categories</option>
-            {categoryRows.map((c) => (
+            <option value="">All collections</option>
+            {collectionRows.map((c) => (
               <option key={c.id} value={c.id}>
                 {"— ".repeat(c.depth)}
                 {c.name}
@@ -371,7 +371,7 @@ function InventoryPageContent() {
             <TH className="w-20">Price</TH>
             <TH className="w-20">SKU</TH>
             <TH className="w-24">Total sales</TH>
-            <TH className="w-56">Categories</TH>
+            <TH className="w-56">Collections</TH>
             <TH className="w-28">Status</TH>
             <TH className="w-24">Stock</TH>
             <TH className="w-10"></TH>
@@ -424,7 +424,7 @@ function InventoryPageContent() {
                   <TD className="text-zinc-500">{p.sku}</TD>
                   <TD className="text-zinc-500">{p.totalSold} sold</TD>
                   <TD className="text-xs text-zinc-500">
-                    {p.categories.length > 0 ? p.categories.map((c) => c.name).join(", ") : "—"}
+                    {p.collections.length > 0 ? p.collections.map((c) => c.name).join(", ") : "—"}
                   </TD>
                   <TD>
                     <button

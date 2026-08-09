@@ -17,7 +17,7 @@ import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 
 // "Promotion For" is deliberately free text ("All Products" default, or
-// whatever the merchant types) rather than a real product/category link —
+// whatever the merchant types) rather than a real product/collection link —
 // see the task's own scoping note.
 export default function AffiliateCodeFormModal({
   affiliateCode,

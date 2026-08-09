@@ -57,7 +57,7 @@ function ingredientSelectFor(outletId: number | undefined) {
     ...(outletId !== undefined && {
       outletingredientstock: {
         where: { outletId },
-        select: { stockQuantity: true },
+        select: { stockQuantity: true, lowStockThreshold: true },
       },
     }),
   } satisfies Prisma.ingredientSelect;
@@ -75,12 +75,6 @@ function variantIncludeFor(outletId: number | undefined) {
       include: { ingredient: { select: ingredientSelectFor(outletId) } },
       orderBy: { id: 'asc' },
     },
-    ...(outletId !== undefined && {
-      outletvariantstock: {
-        where: { outletId },
-        select: { stockQuantity: true, lowStockThreshold: true },
-      },
-    }),
   } satisfies Prisma.productvariantInclude;
 }
 
@@ -96,7 +90,7 @@ function productIngredientIncludeFor(outletId: number | undefined) {
 }
 
 const productInclude = {
-  productcategory: { include: { category: true } },
+  productcollection: { include: { collection: true } },
   producttag: { include: { tag: true } },
   productimage: { orderBy: { order: 'asc' } },
   productattribute: { orderBy: { order: 'asc' } },
@@ -114,16 +108,9 @@ const productInclude = {
 
 type ProductWithRelations = Prisma.productGetPayload<{
   include: typeof productInclude;
-}> & {
-  outletstock?: { stockQuantity: number; lowStockThreshold: number | null }[];
-};
+}>;
 
-type VariantWithRelations = ProductWithRelations['productvariant'][number] & {
-  outletvariantstock?: {
-    stockQuantity: number;
-    lowStockThreshold: number | null;
-  }[];
-};
+type VariantWithRelations = ProductWithRelations['productvariant'][number];
 
 interface UnitsSoldRow {
   productId: number;
@@ -159,7 +146,7 @@ interface ResolvedProductGroup {
     chargeTax?: boolean;
     vendor?: string;
     productType?: string;
-    categoryIds?: number[];
+    collectionIds?: number[];
     tagNames?: string[];
   };
   stock?: number;
@@ -231,7 +218,20 @@ export class ProductsService {
   }
 
   async create(ctx: TenantContext, dto: CreateProductDto) {
-    await this.assertCategoriesBelongToShop(ctx, dto.categoryIds);
+    await this.assertCollectionsBelongToShop(ctx, dto.collectionIds);
+    // Inferred, not just defaulted to false, when the caller doesn't touch
+    // this field at all: submitting a non-empty `ingredients` array without
+    // ever mentioning `usesIngredients` is exactly what every pre-Phase-A
+    // caller (and every existing BOM e2e fixture) does, and it has to keep
+    // meaning "this product has a recipe" — an explicit `usesIngredients`
+    // always wins over the inference either way.
+    const usesIngredients =
+      dto.usesIngredients ?? (dto.ingredients?.length ?? 0) > 0;
+    if (usesIngredients && !dto.ingredients?.length) {
+      throw new BadRequestException(
+        'A product using a recipe needs at least one ingredient',
+      );
+    }
     if (dto.ingredients) {
       await this.assertIngredientLinksValid(ctx, dto.ingredients);
     }
@@ -247,81 +247,96 @@ export class ProductsService {
     const thumbnail = this.resolveFeaturedThumbnail(dto.images, dto.thumbnail);
 
     try {
-      const product = await this.prisma.product.create({
-        data: {
-          shopId: ctx.shopId,
-          name: dto.name,
-          price: dto.price,
-          compareAtPrice: dto.compareAtPrice,
-          thumbnail,
-          sku: dto.sku,
-          barcode: dto.barcode,
-          slug,
-          metaTitle: dto.metaTitle,
-          metaDescription: dto.metaDescription,
-          description: dto.description,
-          shortSummary: dto.shortSummary,
-          longSummary: dto.longSummary,
-          costPrice: dto.costPrice,
-          status: dto.status ?? 'Available',
-          trackInventory: dto.trackInventory ?? false,
-          continueSellingOutOfStock: dto.continueSellingOutOfStock ?? false,
-          chargeTax: dto.chargeTax ?? true,
-          isCheckoutAddon: dto.isCheckoutAddon ?? false,
-          showVariants: dto.showVariants ?? false,
-          showAttributes: dto.showAttributes ?? false,
-          showFaqs: dto.showFaqs ?? false,
-          vendor: dto.vendor,
-          productType: dto.productType,
-          physicalProduct: dto.physicalProduct ?? true,
-          weight: dto.weight,
-          weightUnit: dto.weightUnit ?? 'kg',
-          dimensions: dto.dimensions,
-          isGiftCard: dto.isGiftCard ?? false,
-          giftCardDenominations: dto.giftCardDenominations,
-          giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
-          giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
-          productimage: dto.images?.length
-            ? {
-                create: dto.images.map((img, i) => ({
-                  url: img.url,
-                  order: img.order ?? i,
-                })),
-              }
-            : undefined,
-          productattribute: dto.attributes?.length
-            ? {
-                create: dto.attributes.map((a, i) => ({
-                  name: a.name.trim(),
-                  value: a.value.trim(),
-                  order: a.order ?? i,
-                })),
-              }
-            : undefined,
-          productfaq: dto.faqs?.length
-            ? {
-                create: dto.faqs.map((f, i) => ({
-                  question: f.question.trim(),
-                  answer: f.answer.trim(),
-                  order: f.order ?? i,
-                })),
-              }
-            : undefined,
-          productcategory: {
-            create: dto.categoryIds.map((categoryId) => ({ categoryId })),
-          },
-          producttag: { create: tagIds.map((tagId) => ({ tagId })) },
-          ...(dto.ingredients?.length && {
-            productingredient: {
-              create: dto.ingredients.map((i) => ({
-                shopId: ctx.shopId,
-                ingredientId: i.ingredientId,
-                quantityPerUnit: i.quantityPerUnit,
-              })),
+      const product = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.product.create({
+          data: {
+            shopId: ctx.shopId,
+            name: dto.name,
+            price: dto.price,
+            compareAtPrice: dto.compareAtPrice,
+            thumbnail,
+            sku: dto.sku,
+            barcode: dto.barcode,
+            slug,
+            metaTitle: dto.metaTitle,
+            metaDescription: dto.metaDescription,
+            description: dto.description,
+            shortSummary: dto.shortSummary,
+            longSummary: dto.longSummary,
+            costPrice: dto.costPrice,
+            status: dto.status ?? 'Available',
+            trackInventory: dto.trackInventory ?? false,
+            continueSellingOutOfStock: dto.continueSellingOutOfStock ?? false,
+            chargeTax: dto.chargeTax ?? true,
+            isCheckoutAddon: dto.isCheckoutAddon ?? false,
+            showVariants: dto.showVariants ?? false,
+            showAttributes: dto.showAttributes ?? false,
+            showFaqs: dto.showFaqs ?? false,
+            usesIngredients,
+            vendor: dto.vendor,
+            productType: dto.productType,
+            physicalProduct: dto.physicalProduct ?? true,
+            weight: dto.weight,
+            weightUnit: dto.weightUnit ?? 'kg',
+            dimensions: dto.dimensions,
+            isGiftCard: dto.isGiftCard ?? false,
+            giftCardDenominations: dto.giftCardDenominations,
+            giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
+            giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
+            productimage: dto.images?.length
+              ? {
+                  create: dto.images.map((img, i) => ({
+                    url: img.url,
+                    order: img.order ?? i,
+                  })),
+                }
+              : undefined,
+            productattribute: dto.attributes?.length
+              ? {
+                  create: dto.attributes.map((a, i) => ({
+                    name: a.name.trim(),
+                    value: a.value.trim(),
+                    order: a.order ?? i,
+                  })),
+                }
+              : undefined,
+            productfaq: dto.faqs?.length
+              ? {
+                  create: dto.faqs.map((f, i) => ({
+                    question: f.question.trim(),
+                    answer: f.answer.trim(),
+                    order: f.order ?? i,
+                  })),
+                }
+              : undefined,
+            productcollection: {
+              create: dto.collectionIds.map((collectionId) => ({ collectionId })),
             },
-          }),
-        },
-        include: productInclude,
+            producttag: { create: tagIds.map((tagId) => ({ tagId })) },
+            ...(usesIngredients &&
+              dto.ingredients?.length && {
+                productingredient: {
+                  create: dto.ingredients.map((i) => ({
+                    shopId: ctx.shopId,
+                    ingredientId: i.ingredientId,
+                    quantityPerUnit: i.quantityPerUnit,
+                  })),
+                },
+              }),
+          },
+        });
+        if (!usesIngredients) {
+          await this.provisionShadowForProduct(tx, ctx, created.id, {
+            name: created.name,
+            thumbnail: created.thumbnail,
+            trackInventory: created.trackInventory,
+            costPrice: created.costPrice,
+          });
+        }
+        return tx.product.findUniqueOrThrow({
+          where: { id: created.id },
+          include: productInclude,
+        });
       });
       return this.toResponse(product);
     } catch (error) {
@@ -332,8 +347,8 @@ export class ProductsService {
   // Deep-copies title/description/pricing/organization + every variant and
   // option, and references the same image URLs rather than re-uploading —
   // but deliberately does NOT copy: sku (unique per shop — see below),
-  // barcode, slug (both regenerated fresh), or any stock/outletstock rows
-  // (a copy always starts at zero/untracked, same as a brand-new product;
+  // barcode, slug (both regenerated fresh), or any stock/recipe rows (a
+  // copy always starts at zero/untracked, same as a brand-new product;
   // duplicating live counts would be actively wrong — two products both
   // claiming to have the original's stock). New copy always lands as
   // status: 'Unavailable' (shown to merchants as "Draft" — see
@@ -396,9 +411,9 @@ export class ProductsService {
                 order: img.order,
               })),
             },
-            productcategory: {
-              create: original.productcategory.map((pc) => ({
-                categoryId: pc.categoryId,
+            productcollection: {
+              create: original.productcollection.map((pc) => ({
+                collectionId: pc.collectionId,
               })),
             },
             producttag: {
@@ -446,7 +461,7 @@ export class ProductsService {
         }
 
         for (const variant of original.productvariant) {
-          await tx.productvariant.create({
+          const newVariant = await tx.productvariant.create({
             data: {
               productId: newProduct.id,
               // Left blank — no uniqueness constraint on variant sku/barcode
@@ -469,6 +484,24 @@ export class ProductsService {
                 : null,
             },
           });
+          // A duplicate never copies the original's recipe/stock (same
+          // "always starts at zero/untracked" reasoning as everywhere else
+          // in this method) — it's always usesIngredients:false, so every
+          // variant needs its own fresh shadow ingredient.
+          await this.provisionShadowForVariant(tx, ctx, newProduct.id, newVariant.id, {
+            name: newProduct.name,
+            thumbnail: newProduct.thumbnail,
+            trackInventory: newProduct.trackInventory,
+            costPrice: newProduct.costPrice,
+          });
+        }
+        if (original.productvariant.length === 0) {
+          await this.provisionShadowForProduct(tx, ctx, newProduct.id, {
+            name: newProduct.name,
+            thumbnail: newProduct.thumbnail,
+            trackInventory: newProduct.trackInventory,
+            costPrice: newProduct.costPrice,
+          });
         }
 
         return tx.product.findUniqueOrThrow({
@@ -485,11 +518,35 @@ export class ProductsService {
   async update(ctx: TenantContext, id: number, dto: UpdateProductDto) {
     const current = await this.findRaw(ctx, id);
 
-    if (dto.categoryIds) {
-      await this.assertCategoriesBelongToShop(ctx, dto.categoryIds);
+    if (dto.collectionIds) {
+      await this.assertCollectionsBelongToShop(ctx, dto.collectionIds);
     }
-    if (dto.ingredients) {
-      await this.assertIngredientLinksValid(ctx, dto.ingredients);
+    // Toggle-flip bookkeeping — see the shadow-provisioning methods below.
+    // "current" is this product's state before this save; "next" is what it
+    // will be once this save lands (dto field omitted = unchanged). Same
+    // inference as create(): submitting a non-empty `ingredients` array
+    // without ever mentioning `usesIngredients` auto-upgrades a still-shadow
+    // product into recipe mode (pre-Phase-A callers always could) — an
+    // explicit `usesIngredients` always wins over the inference either way.
+    const nextUsesIngredients =
+      dto.usesIngredients ??
+      (current.usesIngredients || (dto.ingredients?.length ?? 0) > 0);
+    const togglingToRecipe = !current.usesIngredients && nextUsesIngredients;
+    const togglingToShadow = current.usesIngredients && !nextUsesIngredients;
+    if (togglingToRecipe && !dto.ingredients?.length) {
+      throw new BadRequestException(
+        'A product using a recipe needs at least one ingredient',
+      );
+    }
+    // A usesIngredients:false product's recipe is the auto-managed shadow
+    // link — never client-editable — so a stray dto.ingredients sent while
+    // staying/going into shadow mode is ignored rather than trusted. Same
+    // "the check lives where the decision is made, not per caller"
+    // reasoning as every other toggle-bypass guardrail in this codebase.
+    const applyIngredientsReplace =
+      nextUsesIngredients && dto.ingredients !== undefined;
+    if (applyIngredientsReplace) {
+      await this.assertIngredientLinksValid(ctx, dto.ingredients!);
     }
     const tagIds =
       dto.tags !== undefined
@@ -502,8 +559,8 @@ export class ProductsService {
 
     try {
       const product = await this.prisma.$transaction(async (tx) => {
-        if (dto.categoryIds) {
-          await tx.productcategory.deleteMany({ where: { productId: id } });
+        if (dto.collectionIds) {
+          await tx.productcollection.deleteMany({ where: { productId: id } });
         }
         if (tagIds !== undefined) {
           await tx.producttag.deleteMany({ where: { productId: id } });
@@ -554,7 +611,7 @@ export class ProductsService {
             }
           }
         }
-        if (dto.ingredients !== undefined) {
+        if (applyIngredientsReplace) {
           await tx.productingredient.deleteMany({
             where: { productId: id, variantId: null },
           });
@@ -589,7 +646,7 @@ export class ProductsService {
             });
           }
         }
-        return tx.product.update({
+        const updated = await tx.product.update({
           where: { id },
           data: {
             name: dto.name,
@@ -612,6 +669,7 @@ export class ProductsService {
             showVariants: dto.showVariants,
             showAttributes: dto.showAttributes,
             showFaqs: dto.showFaqs,
+            usesIngredients: dto.usesIngredients,
             vendor: dto.vendor,
             productType: dto.productType,
             physicalProduct: dto.physicalProduct,
@@ -622,19 +680,19 @@ export class ProductsService {
             giftCardDenominations: dto.giftCardDenominations,
             giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
             giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
-            ...(dto.categoryIds && {
-              productcategory: {
-                create: dto.categoryIds.map((categoryId) => ({
-                  categoryId,
+            ...(dto.collectionIds && {
+              productcollection: {
+                create: dto.collectionIds.map((collectionId) => ({
+                  collectionId,
                 })),
               },
             }),
             ...(tagIds !== undefined && {
               producttag: { create: tagIds.map((tagId) => ({ tagId })) },
             }),
-            ...(dto.ingredients !== undefined && {
+            ...(applyIngredientsReplace && {
               productingredient: {
-                create: dto.ingredients.map((i) => ({
+                create: dto.ingredients!.map((i) => ({
                   shopId: ctx.shopId,
                   ingredientId: i.ingredientId,
                   quantityPerUnit: i.quantityPerUnit,
@@ -642,6 +700,59 @@ export class ProductsService {
               },
             }),
           },
+          include: { productvariant: { select: { id: true } } },
+        });
+
+        // Bill of Materials (Phase A) toggle-flip side effects — see the
+        // shadow-provisioning methods below.
+        if (togglingToRecipe) {
+          await this.deleteShadowForProduct(tx, id);
+          const variantIds = updated.productvariant.map((v) => v.id);
+          if (variantIds.length > 0) {
+            await this.deleteShadowsForVariants(tx, variantIds);
+          }
+        } else if (togglingToShadow) {
+          await tx.productingredient.deleteMany({ where: { productId: id } });
+          if (updated.productvariant.length > 0) {
+            for (const v of updated.productvariant) {
+              await this.provisionShadowForVariant(tx, ctx, id, v.id, {
+                name: updated.name,
+                thumbnail: updated.thumbnail,
+                trackInventory: updated.trackInventory,
+                costPrice: updated.costPrice,
+              });
+            }
+          } else {
+            await this.provisionShadowForProduct(tx, ctx, id, {
+              name: updated.name,
+              thumbnail: updated.thumbnail,
+              trackInventory: updated.trackInventory,
+              costPrice: updated.costPrice,
+            });
+          }
+        } else if (!nextUsesIngredients) {
+          // Staying in shadow mode — keep the shadow ingredient(s)' display
+          // fields synced with whatever actually changed on this save.
+          await this.syncShadowMeta(
+            tx,
+            { shadowProductId: id },
+            { name: dto.name, thumbnail, trackInventory: dto.trackInventory },
+          );
+          if (updated.productvariant.length > 0) {
+            await this.syncShadowMeta(
+              tx,
+              {
+                shadowVariantId: {
+                  in: updated.productvariant.map((v) => v.id),
+                },
+              },
+              { name: dto.name, thumbnail, trackInventory: dto.trackInventory },
+            );
+          }
+        }
+
+        return tx.product.findUniqueOrThrow({
+          where: { id },
           include: productInclude,
         });
       });
@@ -746,11 +857,22 @@ export class ProductsService {
 
     if (cleanedOptions.length === 0) {
       // Wipe path — reverts to a single implicit variant, same as a product
-      // that never had options.
-      await this.prisma.$transaction([
-        this.prisma.productvariant.deleteMany({ where: { productId: id } }),
-        this.prisma.productoption.deleteMany({ where: { productId: id } }),
-      ]);
+      // that never had options. Deleting every variant cascades away their
+      // shadow ingredients too (ON DELETE CASCADE) — a usesIngredients:false
+      // product now needs a fresh product-level shadow to have anywhere for
+      // its stock to live again.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.productvariant.deleteMany({ where: { productId: id } });
+        await tx.productoption.deleteMany({ where: { productId: id } });
+        if (!product.usesIngredients) {
+          await this.provisionShadowForProduct(tx, ctx, id, {
+            name: product.name,
+            thumbnail: product.thumbnail,
+            trackInventory: product.trackInventory,
+            costPrice: product.costPrice,
+          });
+        }
+      });
       return this.findOne(ctx, id);
     }
 
@@ -861,7 +983,7 @@ export class ProductsService {
           }
           continue;
         }
-        await tx.productvariant.create({
+        const created = await tx.productvariant.create({
           data: {
             productId: id,
             optionValue1Id: combo[0],
@@ -877,6 +999,30 @@ export class ProductsService {
             weight: product.weight,
           },
         });
+        // A newly-generated variant of a usesIngredients:false product
+        // needs its own shadow ingredient (Bill of Materials, Phase A) —
+        // exactly like a freshly-created non-variant product does in
+        // create(). staleVariantIds' deletion above needs no matching
+        // cleanup call: ingredient.shadowVariantId's own ON DELETE CASCADE
+        // already removes the shadow when the variant row itself is gone.
+        if (!product.usesIngredients) {
+          await this.provisionShadowForVariant(tx, ctx, id, created.id, {
+            name: product.name,
+            thumbnail: product.thumbnail,
+            trackInventory: product.trackInventory,
+            costPrice: product.costPrice,
+          });
+        }
+      }
+
+      // A product transitioning from zero options to real variants for the
+      // first time may still be carrying the product-level shadow it got
+      // at creation (see create()) — a variant-carrying product only ever
+      // has per-variant shadows (see ingredient.shadowVariantId's schema
+      // comment), so that now-stale product-level one must go. No-op once
+      // the product already has variants on every subsequent save.
+      if (!product.usesIngredients) {
+        await this.deleteShadowForProduct(tx, id);
       }
     });
 
@@ -891,7 +1037,7 @@ export class ProductsService {
     variantId: number,
     dto: UpdateVariantDto,
   ) {
-    await this.findRaw(ctx, productId);
+    const product = await this.findRaw(ctx, productId);
     const variant = await this.prisma.productvariant.findFirst({
       where: { id: variantId, productId },
     });
@@ -908,11 +1054,21 @@ export class ProductsService {
         );
       }
     }
-    if (dto.ingredients) {
-      await this.assertIngredientLinksValid(ctx, dto.ingredients);
+    // A usesIngredients:false product's variant has no merchant-editable
+    // recipe — only its own auto-managed shadow link, which lives in this
+    // exact (productId, variantId) row set. Without this guard, a stray
+    // dto.ingredients here would delete that shadow link via the same
+    // deleteMany the real-override path uses below, orphaning the shadow
+    // ingredient and breaking this variant's stock resolution entirely —
+    // same "ignore, don't corrupt" rule update() applies for the
+    // product-level case.
+    const applyIngredientsReplace =
+      product.usesIngredients && dto.ingredients !== undefined;
+    if (applyIngredientsReplace) {
+      await this.assertIngredientLinksValid(ctx, dto.ingredients!);
     }
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (dto.ingredients !== undefined) {
+      if (applyIngredientsReplace) {
         await tx.productingredient.deleteMany({
           where: { productId, variantId },
         });
@@ -926,9 +1082,9 @@ export class ProductsService {
           compareAtPrice: dto.compareAtPrice,
           weight: dto.weight,
           imageId: dto.imageId,
-          ...(dto.ingredients !== undefined && {
+          ...(applyIngredientsReplace && {
             productingredient: {
-              create: dto.ingredients.map((i) => ({
+              create: dto.ingredients!.map((i) => ({
                 shopId: ctx.shopId,
                 productId,
                 ingredientId: i.ingredientId,
@@ -951,7 +1107,11 @@ export class ProductsService {
         include: { ingredient: { select: ingredientSelectFor(undefined) } },
         orderBy: { id: 'asc' },
       });
-    return this.toVariantResponse(updated, productDefaultIngredients);
+    return this.toVariantResponse(
+      updated,
+      productDefaultIngredients,
+      product.usesIngredients,
+    );
   }
 
   async adjustStock(ctx: TenantContext, dto: AdjustStockDto) {
@@ -974,135 +1134,84 @@ export class ProductsService {
       'products.manage_stock',
     );
 
-    const productIds = [...new Set(dto.adjustments.map((a) => a.productId))];
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, shopId: ctx.shopId },
-    });
-    if (products.length !== productIds.length) {
-      throw new BadRequestException(
-        'One or more productIds are invalid for this shop',
-      );
-    }
+    // Resolves every adjustment's shadow ingredient up front — also
+    // verifies shop/product/variant ownership and rejects a
+    // usesIngredients:true product target (see resolveShadowStockTarget).
+    const resolved = await Promise.all(
+      dto.adjustments.map(async (a) => ({
+        delta: a.delta,
+        target: await this.resolveShadowStockTarget(ctx, {
+          productId: a.productId,
+          variantId: a.variantId,
+        }),
+      })),
+    );
 
-    const variantAdjustments = dto.adjustments.filter(
-      (a) => a.variantId !== undefined,
-    );
-    if (variantAdjustments.length > 0) {
-      const variantIds = [
-        ...new Set(variantAdjustments.map((a) => a.variantId!)),
-      ];
-      const variants = await this.prisma.productvariant.findMany({
-        where: { id: { in: variantIds }, productId: { in: productIds } },
-      });
-      const variantsById = new Map(variants.map((v) => [v.id, v]));
-      for (const a of variantAdjustments) {
-        const variant = variantsById.get(a.variantId!);
-        if (!variant || variant.productId !== a.productId) {
-          throw new BadRequestException(
-            'One or more variantIds are invalid for the given product',
-          );
-        }
-      }
-    }
-
-    const productLevel = dto.adjustments.filter(
-      (a) => a.variantId === undefined,
-    );
-    const currentProductStock = await this.prisma.outletstock.findMany({
-      where: {
-        outletId,
-        productId: { in: productLevel.map((a) => a.productId) },
-      },
+    const ingredientIds = resolved.map((r) => r.target.ingredientId);
+    const currentStock = await this.prisma.outletingredientstock.findMany({
+      where: { outletId, ingredientId: { in: ingredientIds } },
     });
-    const currentByProduct = new Map(
-      currentProductStock.map((s) => [s.productId, s.stockQuantity]),
+    const currentByIngredient = new Map(
+      currentStock.map((s) => [s.ingredientId, s.stockQuantity]),
     );
-    for (const { productId, delta } of productLevel) {
-      const current = currentByProduct.get(productId) ?? 0;
+    for (const { delta, target } of resolved) {
+      const current = currentByIngredient.get(target.ingredientId) ?? 0;
       if (current + delta < 0) {
         throw new BadRequestException(
-          `Adjustment would take product ${productId} below zero stock at this outlet`,
+          `Adjustment would take product ${target.productId} below zero stock at this outlet`,
         );
       }
     }
 
-    const currentVariantStock = await this.prisma.outletvariantstock.findMany({
-      where: {
-        outletId,
-        variantId: { in: variantAdjustments.map((a) => a.variantId!) },
-      },
-    });
-    const currentByVariant = new Map(
-      currentVariantStock.map((s) => [s.variantId, s.stockQuantity]),
+    await this.prisma.$transaction(
+      resolved.map(({ delta, target }) =>
+        this.prisma.outletingredientstock.upsert({
+          where: {
+            outletId_ingredientId: { outletId, ingredientId: target.ingredientId },
+          },
+          update: { stockQuantity: { increment: delta } },
+          create: { outletId, ingredientId: target.ingredientId, stockQuantity: delta },
+        }),
+      ),
     );
-    for (const { variantId, delta } of variantAdjustments) {
-      const current = currentByVariant.get(variantId!) ?? 0;
-      if (current + delta < 0) {
-        throw new BadRequestException(
-          `Adjustment would take variant ${variantId} below zero stock at this outlet`,
-        );
-      }
-    }
-
-    await this.prisma.$transaction([
-      ...productLevel.map(({ productId, delta }) =>
-        this.prisma.outletstock.upsert({
-          where: { outletId_productId: { outletId, productId } },
-          update: { stockQuantity: { increment: delta } },
-          create: { outletId, productId, stockQuantity: delta },
-        }),
-      ),
-      ...variantAdjustments.map(({ variantId, delta }) =>
-        this.prisma.outletvariantstock.upsert({
-          where: { outletId_variantId: { outletId, variantId: variantId! } },
-          update: { stockQuantity: { increment: delta } },
-          create: { outletId, variantId: variantId!, stockQuantity: delta },
-        }),
-      ),
-    ]);
 
     // Back-in-stock notify — fire (not awaited) for every product/variant
     // whose stock just crossed 0 -> positive at this outlet. Not awaited so
     // a slow/failing email batch never delays the stock-adjustment response.
-    const variantProductById = new Map(
-      variantAdjustments.map((a) => [a.variantId!, a.productId]),
-    );
-    for (const { productId, delta } of productLevel) {
-      const before = currentByProduct.get(productId) ?? 0;
-      if (before <= 0 && before + delta > 0) {
-        this.notifySubscriptionsService
-          .triggerForProduct(ctx.shopId, productId)
-          .catch(() => {});
-      }
-    }
-    for (const { variantId, delta } of variantAdjustments) {
-      const before = currentByVariant.get(variantId!) ?? 0;
+    for (const { delta, target } of resolved) {
+      const before = currentByIngredient.get(target.ingredientId) ?? 0;
       if (before <= 0 && before + delta > 0) {
         this.notifySubscriptionsService
           .triggerForProduct(
             ctx.shopId,
-            variantProductById.get(variantId!)!,
-            variantId,
+            target.productId!,
+            target.variantId ?? undefined,
           )
           .catch(() => {});
       }
     }
 
+    const stockRows = await this.prisma.outletingredientstock.findMany({
+      where: { outletId, ingredientId: { in: ingredientIds } },
+      select: { ingredientId: true, stockQuantity: true },
+    });
+    const stockByIngredient = new Map(
+      stockRows.map((s) => [s.ingredientId, s.stockQuantity]),
+    );
+
     return {
-      products: await this.prisma.outletstock.findMany({
-        where: {
-          outletId,
-          productId: { in: productLevel.map((a) => a.productId) },
-        },
-        select: { productId: true, stockQuantity: true },
-      }),
-      variants: await this.prisma.outletvariantstock.findMany({
-        where: {
-          outletId,
-          variantId: { in: variantAdjustments.map((a) => a.variantId!) },
-        },
-        select: { variantId: true, stockQuantity: true },
-      }),
+      products: resolved
+        .filter((r) => r.target.variantId === null)
+        .map((r) => ({
+          productId: r.target.productId,
+          stockQuantity: stockByIngredient.get(r.target.ingredientId) ?? 0,
+        })),
+      variants: resolved
+        .filter((r) => r.target.variantId !== null)
+        .map((r) => ({
+          variantId: r.target.variantId,
+          stockQuantity: stockByIngredient.get(r.target.ingredientId) ?? 0,
+        })),
     };
   }
 
@@ -1120,7 +1229,6 @@ export class ProductsService {
         'fromOutletId and toOutletId must be different',
       );
     }
-    this.assertStockTarget(dto);
 
     const [fromOutlet, toOutlet] = await Promise.all([
       this.prisma.outlet.findFirst({
@@ -1136,143 +1244,60 @@ export class ProductsService {
       );
     }
 
-    if (dto.ingredientId) {
-      await this.assertIngredientBelongsToShop(ctx, dto.ingredientId);
-    } else {
-      const product = await this.prisma.product.findFirst({
-        where: { id: dto.productId, shopId: ctx.shopId },
-      });
-      if (!product) {
-        throw new NotFoundException(`Product ${dto.productId} not found`);
-      }
-      if (dto.variantId) {
-        const variant = await this.prisma.productvariant.findFirst({
-          where: { id: dto.variantId, productId: dto.productId },
-        });
-        if (!variant) {
-          throw new BadRequestException(
-            'variantId is invalid for this product',
-          );
-        }
-      }
-    }
+    const resolved = await this.resolveShadowStockTarget(ctx, dto);
 
     // Read for the back-in-stock notify check below — a plain read before
     // the transaction is fine here (unlike the CAS decrement/increment
     // itself): worst case under true concurrency is a missed or extra
     // notify trigger, never an incorrect stock quantity.
-    const destinationBefore = dto.ingredientId
-      ? null
-      : dto.variantId
-        ? ((
-            await this.prisma.outletvariantstock.findUnique({
-              where: {
-                outletId_variantId: {
-                  outletId: dto.toOutletId,
-                  variantId: dto.variantId,
-                },
-              },
-            })
-          )?.stockQuantity ?? 0)
-        : ((
-            await this.prisma.outletstock.findUnique({
-              where: {
-                outletId_productId: {
-                  outletId: dto.toOutletId,
-                  productId: dto.productId!,
-                },
-              },
-            })
-          )?.stockQuantity ?? 0);
+    const destinationBefore =
+      (
+        await this.prisma.outletingredientstock.findUnique({
+          where: {
+            outletId_ingredientId: {
+              outletId: dto.toOutletId,
+              ingredientId: resolved.ingredientId,
+            },
+          },
+        })
+      )?.stockQuantity ?? 0;
 
     await this.prisma.$transaction(async (tx) => {
-      const decremented = dto.ingredientId
-        ? await tx.outletingredientstock.updateMany({
-            where: {
-              outletId: dto.fromOutletId,
-              ingredientId: dto.ingredientId,
-              stockQuantity: { gte: dto.quantity },
-            },
-            data: { stockQuantity: { decrement: dto.quantity } },
-          })
-        : dto.variantId
-          ? await tx.outletvariantstock.updateMany({
-              where: {
-                outletId: dto.fromOutletId,
-                variantId: dto.variantId,
-                stockQuantity: { gte: dto.quantity },
-              },
-              data: { stockQuantity: { decrement: dto.quantity } },
-            })
-          : await tx.outletstock.updateMany({
-              where: {
-                outletId: dto.fromOutletId,
-                productId: dto.productId,
-                stockQuantity: { gte: dto.quantity },
-              },
-              data: { stockQuantity: { decrement: dto.quantity } },
-            });
+      const decremented = await tx.outletingredientstock.updateMany({
+        where: {
+          outletId: dto.fromOutletId,
+          ingredientId: resolved.ingredientId,
+          stockQuantity: { gte: dto.quantity },
+        },
+        data: { stockQuantity: { decrement: dto.quantity } },
+      });
       if (decremented.count === 0) {
         throw new ConflictException(
           'Not enough stock at the source outlet for this transfer',
         );
       }
 
-      if (dto.ingredientId) {
-        await tx.outletingredientstock.upsert({
-          where: {
-            outletId_ingredientId: {
-              outletId: dto.toOutletId,
-              ingredientId: dto.ingredientId,
-            },
-          },
-          update: { stockQuantity: { increment: dto.quantity } },
-          create: {
+      await tx.outletingredientstock.upsert({
+        where: {
+          outletId_ingredientId: {
             outletId: dto.toOutletId,
-            ingredientId: dto.ingredientId,
-            stockQuantity: dto.quantity,
+            ingredientId: resolved.ingredientId,
           },
-        });
-      } else if (dto.variantId) {
-        await tx.outletvariantstock.upsert({
-          where: {
-            outletId_variantId: {
-              outletId: dto.toOutletId,
-              variantId: dto.variantId,
-            },
-          },
-          update: { stockQuantity: { increment: dto.quantity } },
-          create: {
-            outletId: dto.toOutletId,
-            variantId: dto.variantId,
-            stockQuantity: dto.quantity,
-          },
-        });
-      } else {
-        // assertStockTarget already guarantees productId is set on this
-        // (non-ingredient, non-variant) branch.
-        await tx.outletstock.upsert({
-          where: {
-            outletId_productId: {
-              outletId: dto.toOutletId,
-              productId: dto.productId!,
-            },
-          },
-          update: { stockQuantity: { increment: dto.quantity } },
-          create: {
-            outletId: dto.toOutletId,
-            productId: dto.productId!,
-            stockQuantity: dto.quantity,
-          },
-        });
-      }
+        },
+        update: { stockQuantity: { increment: dto.quantity } },
+        create: {
+          outletId: dto.toOutletId,
+          ingredientId: resolved.ingredientId,
+          stockQuantity: dto.quantity,
+        },
+      });
 
       await tx.stockmovement.create({
         data: {
           shopId: ctx.shopId,
-          productId: dto.ingredientId ? null : dto.productId,
-          variantId: dto.ingredientId ? null : dto.variantId,
-          ingredientId: dto.ingredientId ?? null,
+          productId: resolved.productId,
+          variantId: resolved.variantId,
+          ingredientId: resolved.ingredientId,
           type: 'TRANSFER',
           reason: null,
           delta: dto.quantity,
@@ -1284,20 +1309,17 @@ export class ProductsService {
       });
     });
 
-    if (destinationBefore !== null && destinationBefore <= 0) {
+    if (resolved.productId !== null && destinationBefore <= 0) {
       this.notifySubscriptionsService
-        .triggerForProduct(ctx.shopId, dto.productId!, dto.variantId)
+        .triggerForProduct(
+          ctx.shopId,
+          resolved.productId,
+          resolved.variantId ?? undefined,
+        )
         .catch(() => {});
     }
 
-    return this.getStockSnapshot(
-      {
-        productId: dto.productId,
-        variantId: dto.variantId,
-        ingredientId: dto.ingredientId,
-      },
-      [dto.fromOutletId, dto.toOutletId],
-    );
+    return this.getStockSnapshot(resolved, [dto.fromOutletId, dto.toOutletId]);
   }
 
   // Reason-coded replacement for a raw quantity edit — every adjustment is
@@ -1309,7 +1331,6 @@ export class ProductsService {
     ctx: TenantContext,
     dto: AdjustStockWithReasonDto,
   ) {
-    this.assertStockTarget(dto);
     const outletId = ctx.role === 'branch' ? ctx.outletId! : dto.outletId;
     if (outletId === undefined) {
       throw new BadRequestException('outletId is required');
@@ -1326,103 +1347,38 @@ export class ProductsService {
       'products.manage_stock',
     );
 
-    if (dto.ingredientId) {
-      await this.assertIngredientBelongsToShop(ctx, dto.ingredientId);
-    } else {
-      const product = await this.prisma.product.findFirst({
-        where: { id: dto.productId, shopId: ctx.shopId },
-      });
-      if (!product) {
-        throw new NotFoundException(`Product ${dto.productId} not found`);
-      }
-      if (dto.variantId) {
-        const variant = await this.prisma.productvariant.findFirst({
-          where: { id: dto.variantId, productId: dto.productId },
-        });
-        if (!variant) {
-          throw new BadRequestException(
-            'variantId is invalid for this product',
-          );
-        }
-      }
-    }
+    const resolved = await this.resolveShadowStockTarget(ctx, dto);
 
     await this.prisma.$transaction(async (tx) => {
       if (dto.delta < 0) {
-        const result = dto.ingredientId
-          ? await tx.outletingredientstock.updateMany({
-              where: {
-                outletId,
-                ingredientId: dto.ingredientId,
-                stockQuantity: { gte: -dto.delta },
-              },
-              data: { stockQuantity: { decrement: -dto.delta } },
-            })
-          : dto.variantId
-            ? await tx.outletvariantstock.updateMany({
-                where: {
-                  outletId,
-                  variantId: dto.variantId,
-                  stockQuantity: { gte: -dto.delta },
-                },
-                data: { stockQuantity: { decrement: -dto.delta } },
-              })
-            : await tx.outletstock.updateMany({
-                where: {
-                  outletId,
-                  productId: dto.productId,
-                  stockQuantity: { gte: -dto.delta },
-                },
-                data: { stockQuantity: { decrement: -dto.delta } },
-              });
+        const result = await tx.outletingredientstock.updateMany({
+          where: {
+            outletId,
+            ingredientId: resolved.ingredientId,
+            stockQuantity: { gte: -dto.delta },
+          },
+          data: { stockQuantity: { decrement: -dto.delta } },
+        });
         if (result.count === 0) {
           throw new ConflictException(
             'Adjustment would take stock below zero at this outlet',
           );
         }
       } else if (dto.delta > 0) {
-        if (dto.ingredientId) {
-          await tx.outletingredientstock.upsert({
-            where: {
-              outletId_ingredientId: {
-                outletId,
-                ingredientId: dto.ingredientId,
-              },
-            },
-            update: { stockQuantity: { increment: dto.delta } },
-            create: {
+        await tx.outletingredientstock.upsert({
+          where: {
+            outletId_ingredientId: {
               outletId,
-              ingredientId: dto.ingredientId,
-              stockQuantity: dto.delta,
+              ingredientId: resolved.ingredientId,
             },
-          });
-        } else if (dto.variantId) {
-          await tx.outletvariantstock.upsert({
-            where: {
-              outletId_variantId: { outletId, variantId: dto.variantId },
-            },
-            update: { stockQuantity: { increment: dto.delta } },
-            create: {
-              outletId,
-              variantId: dto.variantId,
-              stockQuantity: dto.delta,
-            },
-          });
-        } else {
-          // assertStockTarget already guarantees productId is set on this
-          // (non-ingredient, non-variant) branch.
-          await tx.outletstock.upsert({
-            where: {
-              outletId_productId: { outletId, productId: dto.productId! },
-            },
-            update: { stockQuantity: { increment: dto.delta } },
-            create: {
-              outletId,
-              productId: dto.productId!,
-              stockQuantity: dto.delta,
-            },
-          });
-        }
+          },
+          update: { stockQuantity: { increment: dto.delta } },
+          create: {
+            outletId,
+            ingredientId: resolved.ingredientId,
+            stockQuantity: dto.delta,
+          },
+        });
       }
       // delta === 0 is a valid "recount confirmed the existing number, no
       // change" adjustment — still logged below, no stock mutation needed.
@@ -1430,9 +1386,9 @@ export class ProductsService {
       await tx.stockmovement.create({
         data: {
           shopId: ctx.shopId,
-          productId: dto.ingredientId ? null : dto.productId,
-          variantId: dto.ingredientId ? null : dto.variantId,
-          ingredientId: dto.ingredientId ?? null,
+          productId: resolved.productId,
+          variantId: resolved.variantId,
+          ingredientId: resolved.ingredientId,
           type: 'ADJUSTMENT',
           reason: dto.reason,
           delta: dto.delta,
@@ -1444,14 +1400,7 @@ export class ProductsService {
       });
     });
 
-    return this.getStockSnapshot(
-      {
-        productId: dto.productId,
-        variantId: dto.variantId,
-        ingredientId: dto.ingredientId,
-      },
-      [outletId],
-    );
+    return this.getStockSnapshot(resolved, [outletId]);
   }
 
   // Sets (or clears, via null) the reorder alert threshold on the relevant
@@ -1463,7 +1412,6 @@ export class ProductsService {
   // so a merchant can set a threshold before ever adjusting quantity at a
   // given outlet.
   async setLowStockThreshold(ctx: TenantContext, dto: SetLowStockThresholdDto) {
-    this.assertStockTarget(dto);
     const outletId = ctx.role === 'branch' ? ctx.outletId! : dto.outletId;
     if (outletId === undefined) {
       throw new BadRequestException('outletId is required');
@@ -1480,67 +1428,236 @@ export class ProductsService {
       'products.manage_stock',
     );
 
-    if (dto.ingredientId) {
-      await this.assertIngredientBelongsToShop(ctx, dto.ingredientId);
-      await this.prisma.outletingredientstock.upsert({
-        where: {
-          outletId_ingredientId: { outletId, ingredientId: dto.ingredientId },
-        },
-        update: { lowStockThreshold: dto.lowStockThreshold },
-        create: {
-          outletId,
-          ingredientId: dto.ingredientId,
-          lowStockThreshold: dto.lowStockThreshold,
-        },
-      });
-    } else {
-      const product = await this.prisma.product.findFirst({
-        where: { id: dto.productId, shopId: ctx.shopId },
-      });
-      if (!product) {
-        throw new NotFoundException(`Product ${dto.productId} not found`);
-      }
-      if (dto.variantId) {
-        const variant = await this.prisma.productvariant.findFirst({
-          where: { id: dto.variantId, productId: dto.productId },
-        });
-        if (!variant) {
-          throw new BadRequestException(
-            'variantId is invalid for this product',
-          );
-        }
-        await this.prisma.outletvariantstock.upsert({
-          where: { outletId_variantId: { outletId, variantId: dto.variantId } },
-          update: { lowStockThreshold: dto.lowStockThreshold },
-          create: {
-            outletId,
-            variantId: dto.variantId,
-            lowStockThreshold: dto.lowStockThreshold,
-          },
-        });
-      } else {
-        await this.prisma.outletstock.upsert({
-          where: {
-            outletId_productId: { outletId, productId: dto.productId! },
-          },
-          update: { lowStockThreshold: dto.lowStockThreshold },
-          create: {
-            outletId,
-            productId: dto.productId!,
-            lowStockThreshold: dto.lowStockThreshold,
-          },
-        });
-      }
-    }
-
-    return this.getStockSnapshot(
-      {
-        productId: dto.productId,
-        variantId: dto.variantId,
-        ingredientId: dto.ingredientId,
+    const resolved = await this.resolveShadowStockTarget(ctx, dto);
+    await this.prisma.outletingredientstock.upsert({
+      where: {
+        outletId_ingredientId: { outletId, ingredientId: resolved.ingredientId },
       },
-      [outletId],
-    );
+      update: { lowStockThreshold: dto.lowStockThreshold },
+      create: {
+        outletId,
+        ingredientId: resolved.ingredientId,
+        lowStockThreshold: dto.lowStockThreshold,
+      },
+    });
+
+    return this.getStockSnapshot(resolved, [outletId]);
+  }
+
+  // Bill of Materials (Phase A) — auto-provisions the invisible 1:1 shadow
+  // Ingredient + quantityPerUnit:1 recipe row backing a usesIngredients:false
+  // product's own stock (see ingredient.shadowProductId's schema comment).
+  // Idempotent — a no-op if a shadow already exists for this product, so
+  // it's safe to call from create()/update() without separately tracking
+  // whether one was already provisioned. Not private — ScanService's
+  // scan-to-stock flow (its own product-creation path) reuses this exact
+  // provisioning logic rather than duplicating it.
+  async provisionShadowForProduct(
+    tx: Prisma.TransactionClient,
+    ctx: TenantContext,
+    productId: number,
+    meta: {
+      name: string;
+      thumbnail: string;
+      trackInventory: boolean;
+      costPrice: Prisma.Decimal | null;
+    },
+  ): Promise<void> {
+    const existing = await tx.ingredient.findFirst({
+      where: { shadowProductId: productId },
+      select: { id: true },
+    });
+    if (existing) return;
+    const shadow = await tx.ingredient.create({
+      data: {
+        shopId: ctx.shopId,
+        name: meta.name,
+        unit: 'unit',
+        trackInventory: meta.trackInventory,
+        image: meta.thumbnail,
+        costPerUnit: meta.costPrice,
+        shadowProductId: productId,
+      },
+    });
+    await tx.productingredient.create({
+      data: {
+        shopId: ctx.shopId,
+        productId,
+        variantId: null,
+        ingredientId: shadow.id,
+        quantityPerUnit: 1,
+      },
+    });
+  }
+
+  // Same as provisionShadowForProduct but for one variant of a
+  // usesIngredients:false, variant-carrying product — one shadow ingredient
+  // PER VARIANT, never one at the product level once a product has
+  // variants (mirrors how variant stock was always independent of the
+  // parent product's own stock before Phase A).
+  private async provisionShadowForVariant(
+    tx: Prisma.TransactionClient,
+    ctx: TenantContext,
+    productId: number,
+    variantId: number,
+    meta: {
+      name: string;
+      thumbnail: string;
+      trackInventory: boolean;
+      costPrice: Prisma.Decimal | null;
+    },
+  ): Promise<void> {
+    const existing = await tx.ingredient.findFirst({
+      where: { shadowVariantId: variantId },
+      select: { id: true },
+    });
+    if (existing) return;
+    const shadow = await tx.ingredient.create({
+      data: {
+        shopId: ctx.shopId,
+        name: meta.name,
+        unit: 'unit',
+        trackInventory: meta.trackInventory,
+        image: meta.thumbnail,
+        costPerUnit: meta.costPrice,
+        shadowVariantId: variantId,
+      },
+    });
+    await tx.productingredient.create({
+      data: {
+        shopId: ctx.shopId,
+        productId,
+        variantId,
+        ingredientId: shadow.id,
+        quantityPerUnit: 1,
+      },
+    });
+  }
+
+  // Keeps a usesIngredients:false product's/variant's shadow ingredient
+  // display fields in sync with whatever actually changed on this save —
+  // no-op (and cheap: a single updateMany, not a loop) when nothing in
+  // `meta` changed, and a no-op when no shadow exists for `where` (e.g.
+  // called for a product with zero variants against a shadowVariantId
+  // filter that matches nothing).
+  private async syncShadowMeta(
+    tx: Prisma.TransactionClient,
+    where: { shadowProductId: number } | { shadowVariantId: { in: number[] } },
+    meta: { name?: string; thumbnail?: string; trackInventory?: boolean },
+  ): Promise<void> {
+    const data: Prisma.ingredientUpdateManyMutationInput = {};
+    if (meta.name !== undefined) data.name = meta.name;
+    if (meta.thumbnail !== undefined) data.image = meta.thumbnail;
+    if (meta.trackInventory !== undefined)
+      data.trackInventory = meta.trackInventory;
+    if (Object.keys(data).length === 0) return;
+    await tx.ingredient.updateMany({ where, data });
+  }
+
+  // Deletes a product's shadow ingredient — cascades to its
+  // outletingredientstock/productingredient/stockmovement rows. Only ever
+  // called for the usesIngredients false->true toggle flip; an actual
+  // product deletion relies on ingredient.shadowProductId's own ON DELETE
+  // CASCADE instead (see remove()).
+  private async deleteShadowForProduct(
+    tx: Prisma.TransactionClient,
+    productId: number,
+  ): Promise<void> {
+    await tx.ingredient.deleteMany({ where: { shadowProductId: productId } });
+  }
+
+  // Same as deleteShadowForProduct but for every variant in the list — used
+  // for the false->true toggle flip on a variant-carrying product (each
+  // variant's own shadow is torn down, not just the product-level one,
+  // since a variant-carrying usesIngredients:false product never has a
+  // product-level shadow to begin with).
+  private async deleteShadowsForVariants(
+    tx: Prisma.TransactionClient,
+    variantIds: number[],
+  ): Promise<void> {
+    if (variantIds.length === 0) return;
+    await tx.ingredient.deleteMany({
+      where: { shadowVariantId: { in: variantIds } },
+    });
+  }
+
+  // The single place every stock-mutation endpoint (transferStock,
+  // adjustStockWithReason, setLowStockThreshold, adjustStock/bulk) resolves
+  // a caller-supplied {productId, variantId?} or {ingredientId} target down
+  // to the one outletingredientstock row that's actually authoritative —
+  // the structural fix for the "toggle check lives in a caller instead of
+  // the shared function" bug class this codebase has hit before (see
+  // consumeForOrderItems's own comment on AbandonedCartsService/
+  // LowStockDigestService): a usesIngredients:true product is rejected
+  // here, once, rather than relying on every call site to separately
+  // remember to check it. Folds in assertStockTarget's own XOR checks so
+  // callers no longer need to call that separately. Not private — reused
+  // by ScanService for the same reason.
+  async resolveShadowStockTarget(
+    ctx: TenantContext,
+    target: { productId?: number; variantId?: number; ingredientId?: number },
+    // Defaults to the plain (non-transactional) client — pass the open `tx`
+    // explicitly when resolving mid-transaction (see applyImportStock),
+    // otherwise a just-created-in-this-tx row wouldn't be visible yet to a
+    // separate connection.
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<{
+    ingredientId: number;
+    productId: number | null;
+    variantId: number | null;
+  }> {
+    this.assertStockTarget(target);
+    if (target.ingredientId) {
+      const ingredient = await client.ingredient.findFirst({
+        where: { id: target.ingredientId, shopId: ctx.shopId },
+        select: { id: true },
+      });
+      if (!ingredient) {
+        throw new NotFoundException(`Ingredient ${target.ingredientId} not found`);
+      }
+      return { ingredientId: target.ingredientId, productId: null, variantId: null };
+    }
+    const product = await client.product.findFirst({
+      where: { id: target.productId, shopId: ctx.shopId },
+      select: { id: true, usesIngredients: true },
+    });
+    if (!product) {
+      throw new NotFoundException(`Product ${target.productId} not found`);
+    }
+    if (product.usesIngredients) {
+      throw new BadRequestException(
+        'This product uses a recipe — adjust the individual ingredient stock instead',
+      );
+    }
+    if (target.variantId) {
+      const variant = await client.productvariant.findFirst({
+        where: { id: target.variantId, productId: product.id },
+        select: { id: true },
+      });
+      if (!variant) {
+        throw new BadRequestException('variantId is invalid for this product');
+      }
+      const shadow = await client.ingredient.findFirst({
+        where: { shadowVariantId: variant.id },
+        select: { id: true },
+      });
+      if (!shadow) {
+        throw new BadRequestException(
+          `Variant ${variant.id} has no stock record`,
+        );
+      }
+      return { ingredientId: shadow.id, productId: product.id, variantId: variant.id };
+    }
+    const shadow = await client.ingredient.findFirst({
+      where: { shadowProductId: product.id },
+      select: { id: true },
+    });
+    if (!shadow) {
+      throw new BadRequestException(
+        `Product ${product.id} has no stock record`,
+      );
+    }
+    return { ingredientId: shadow.id, productId: product.id, variantId: null };
   }
 
   // Exactly one of productId/ingredientId, never both, never neither;
@@ -1701,49 +1818,36 @@ export class ProductsService {
     };
   }
 
+  // Takes an already-resolved target (see resolveShadowStockTarget) and
+  // reshapes the one real outletingredientstock query back into whichever
+  // response envelope the original request implied — {products:[...]} /
+  // {variants:[...]} / {ingredients:[...]} — so every caller's existing
+  // FE-facing response shape stays unchanged even though there's only one
+  // stock table underneath now.
   private async getStockSnapshot(
-    target: { productId?: number; variantId?: number; ingredientId?: number },
+    target: {
+      ingredientId: number;
+      productId: number | null;
+      variantId: number | null;
+    },
     outletIds: number[],
   ) {
-    if (target.ingredientId) {
+    const rows = await this.prisma.outletingredientstock.findMany({
+      where: { ingredientId: target.ingredientId, outletId: { in: outletIds } },
+      select: { outletId: true, stockQuantity: true, lowStockThreshold: true },
+    });
+    if (target.variantId !== null) {
       return {
-        ingredients: await this.prisma.outletingredientstock.findMany({
-          where: {
-            ingredientId: target.ingredientId,
-            outletId: { in: outletIds },
-          },
-          select: {
-            outletId: true,
-            ingredientId: true,
-            stockQuantity: true,
-            lowStockThreshold: true,
-          },
-        }),
+        variants: rows.map((r) => ({ ...r, variantId: target.variantId })),
       };
     }
-    if (target.variantId) {
+    if (target.productId !== null) {
       return {
-        variants: await this.prisma.outletvariantstock.findMany({
-          where: { variantId: target.variantId, outletId: { in: outletIds } },
-          select: {
-            outletId: true,
-            variantId: true,
-            stockQuantity: true,
-            lowStockThreshold: true,
-          },
-        }),
+        products: rows.map((r) => ({ ...r, productId: target.productId })),
       };
     }
     return {
-      products: await this.prisma.outletstock.findMany({
-        where: { productId: target.productId, outletId: { in: outletIds } },
-        select: {
-          outletId: true,
-          productId: true,
-          stockQuantity: true,
-          lowStockThreshold: true,
-        },
-      }),
+      ingredients: rows.map((r) => ({ ...r, ingredientId: target.ingredientId })),
     };
   }
 
@@ -1984,25 +2088,40 @@ export class ProductsService {
               status: group.data.status ?? 'Available',
               trackInventory: group.data.trackInventory ?? false,
               chargeTax: group.data.chargeTax ?? true,
-              productcategory: {
-                create: (group.data.categoryIds ?? []).map((categoryId) => ({
-                  categoryId,
+              productcollection: {
+                create: (group.data.collectionIds ?? []).map((collectionId) => ({
+                  collectionId,
                 })),
               },
               producttag: { create: tagIds.map((tagId) => ({ tagId })) },
             },
-            select: { id: true },
+            select: {
+              id: true,
+              name: true,
+              thumbnail: true,
+              trackInventory: true,
+              costPrice: true,
+            },
           });
           productId = newProduct.id;
           created += 1;
+          // CSV import never creates a recipe (usesIngredients stays the
+          // schema default, false) or variants for a new product — always
+          // a product-level shadow.
+          await this.provisionShadowForProduct(tx, ctx, newProduct.id, {
+            name: newProduct.name,
+            thumbnail: newProduct.thumbnail,
+            trackInventory: newProduct.trackInventory,
+            costPrice: newProduct.costPrice,
+          });
         } else {
           productId = group.productId!;
-          if (group.data.categoryIds) {
-            await tx.productcategory.deleteMany({ where: { productId } });
-            await tx.productcategory.createMany({
-              data: group.data.categoryIds.map((categoryId) => ({
+          if (group.data.collectionIds) {
+            await tx.productcollection.deleteMany({ where: { productId } });
+            await tx.productcollection.createMany({
+              data: group.data.collectionIds.map((collectionId) => ({
                 productId,
-                categoryId,
+                collectionId,
               })),
             });
           }
@@ -2036,6 +2155,17 @@ export class ProductsService {
             },
           });
           updated += 1;
+          // No-op for a variant-carrying or recipe product (no matching
+          // shadowProductId row) — see syncShadowMeta's own comment.
+          await this.syncShadowMeta(
+            tx,
+            { shadowProductId: productId },
+            {
+              name: group.data.name,
+              thumbnail: group.data.thumbnail,
+              trackInventory: group.data.trackInventory,
+            },
+          );
         }
 
         if (group.stock !== undefined && outletId !== undefined) {
@@ -2117,66 +2247,50 @@ export class ProductsService {
       stock: number;
     },
   ): Promise<{ crossedToPositive: boolean }> {
-    const before = target.variantId
-      ? ((
-          await tx.outletvariantstock.findUnique({
-            where: {
-              outletId_variantId: {
-                outletId: target.outletId,
-                variantId: target.variantId,
-              },
-            },
-          })
-        )?.stockQuantity ?? 0)
-      : ((
-          await tx.outletstock.findUnique({
-            where: {
-              outletId_productId: {
-                outletId: target.outletId,
-                productId: target.productId!,
-              },
-            },
-          })
-        )?.stockQuantity ?? 0);
+    // Passes `tx` explicitly — this runs mid-transaction inside
+    // confirmImportProducts, sometimes against a product created earlier in
+    // this very transaction, so resolution must see uncommitted writes.
+    // Rejecting a usesIngredients:true product's Stock column happens
+    // earlier, in classifyImportRows, so resolved here is always a shadow.
+    const resolved = await this.resolveShadowStockTarget(
+      ctx,
+      { productId: target.productId, variantId: target.variantId },
+      tx,
+    );
 
-    if (target.variantId) {
-      await tx.outletvariantstock.upsert({
-        where: {
-          outletId_variantId: {
-            outletId: target.outletId,
-            variantId: target.variantId,
+    const before =
+      (
+        await tx.outletingredientstock.findUnique({
+          where: {
+            outletId_ingredientId: {
+              outletId: target.outletId,
+              ingredientId: resolved.ingredientId,
+            },
           },
-        },
-        update: { stockQuantity: target.stock },
-        create: {
+        })
+      )?.stockQuantity ?? 0;
+
+    await tx.outletingredientstock.upsert({
+      where: {
+        outletId_ingredientId: {
           outletId: target.outletId,
-          variantId: target.variantId,
-          stockQuantity: target.stock,
+          ingredientId: resolved.ingredientId,
         },
-      });
-    } else {
-      await tx.outletstock.upsert({
-        where: {
-          outletId_productId: {
-            outletId: target.outletId,
-            productId: target.productId!,
-          },
-        },
-        update: { stockQuantity: target.stock },
-        create: {
-          outletId: target.outletId,
-          productId: target.productId!,
-          stockQuantity: target.stock,
-        },
-      });
-    }
+      },
+      update: { stockQuantity: target.stock },
+      create: {
+        outletId: target.outletId,
+        ingredientId: resolved.ingredientId,
+        stockQuantity: target.stock,
+      },
+    });
 
     await tx.stockmovement.create({
       data: {
         shopId: ctx.shopId,
-        productId: target.variantId ? null : target.productId,
-        variantId: target.variantId ?? null,
-        ingredientId: null,
+        productId: resolved.productId,
+        variantId: resolved.variantId,
+        ingredientId: resolved.ingredientId,
         type: 'IMPORT',
         reason: null,
         delta: target.stock - before,
@@ -2233,20 +2347,20 @@ export class ProductsService {
     const results: ImportRowResult[] = [];
     const groups: ResolvedProductGroup[] = [];
 
-    const allCategoryNames = new Set<string>();
+    const allCollectionNames = new Set<string>();
     rawRows.forEach((raw) =>
-      splitList(raw['Categories'] ?? '').forEach((n) =>
-        allCategoryNames.add(n),
+      splitList(raw['Collections'] ?? '').forEach((n) =>
+        allCollectionNames.add(n),
       ),
     );
-    const categoryRows = allCategoryNames.size
-      ? await this.prisma.category.findMany({
-          where: { shopId: ctx.shopId, name: { in: [...allCategoryNames] } },
+    const collectionRows = allCollectionNames.size
+      ? await this.prisma.collection.findMany({
+          where: { shopId: ctx.shopId, name: { in: [...allCollectionNames] } },
           select: { id: true, name: true },
         })
       : [];
-    const categoryIdByName = new Map(
-      categoryRows.map((c) => [c.name.toLowerCase(), c.id]),
+    const collectionIdByName = new Map(
+      collectionRows.map((c) => [c.name.toLowerCase(), c.id]),
     );
 
     let autoHandle = 0;
@@ -2279,7 +2393,7 @@ export class ProductsService {
       const chargeTax = parseImportBoolean(raw['Charge Tax'] ?? '');
       const status = raw['Status']?.trim() || undefined;
       const thumbnail = raw['Thumbnail URL']?.trim() || undefined;
-      const categoryNames = splitList(raw['Categories'] ?? '');
+      const collectionNames = splitList(raw['Collections'] ?? '');
       const tagNames = raw['Tags']?.trim() ? splitList(raw['Tags']) : undefined;
 
       if (!name) errors.push('Name is required');
@@ -2298,28 +2412,37 @@ export class ProductsService {
       if (status && !(PRODUCT_STATUSES as readonly string[]).includes(status))
         errors.push(`Unknown status: ${status}`);
 
-      const categoryIds: number[] = [];
-      for (const catName of categoryNames) {
-        const id = categoryIdByName.get(catName.toLowerCase());
+      const collectionIds: number[] = [];
+      for (const catName of collectionNames) {
+        const id = collectionIdByName.get(catName.toLowerCase());
         if (id === undefined) {
-          errors.push(`Unknown category: ${catName}`);
+          errors.push(`Unknown collection: ${catName}`);
         } else {
-          categoryIds.push(id);
+          collectionIds.push(id);
         }
       }
 
       const existing = sku
         ? await this.prisma.product.findFirst({
             where: { shopId: ctx.shopId, sku },
-            select: { id: true },
+            select: { id: true, usesIngredients: true },
           })
         : name
           ? await this.prisma.product.findFirst({
               where: { shopId: ctx.shopId, name },
-              select: { id: true },
+              select: { id: true, usesIngredients: true },
             })
           : null;
       const action: ImportAction = existing ? 'update' : 'create';
+
+      // A recipe product has no single stock number to absolute-set — see
+      // applyImportStock's own comment on why this stays a bespoke
+      // absolute-set rather than routing through consumeForOrderItems.
+      if (existing?.usesIngredients && raw['Stock']?.trim()) {
+        errors.push(
+          'This product uses a recipe — set ingredient stock directly instead',
+        );
+      }
 
       if (action === 'create') {
         if (!sku) errors.push('SKU is required to create a new product');
@@ -2327,9 +2450,9 @@ export class ProductsService {
           errors.push('Price is required to create a new product');
         if (!thumbnail)
           errors.push('Thumbnail URL is required to create a new product');
-        if (categoryIds.length === 0)
+        if (collectionIds.length === 0)
           errors.push(
-            'At least one category is required to create a new product',
+            'At least one collection is required to create a new product',
           );
         if (sku) {
           if (usedNewSkus.has(sku))
@@ -2365,7 +2488,7 @@ export class ProductsService {
           chargeTax,
           vendor: raw['Vendor']?.trim() || undefined,
           productType: raw['Product Type']?.trim() || undefined,
-          categoryIds: categoryNames.length > 0 ? categoryIds : undefined,
+          collectionIds: collectionNames.length > 0 ? collectionIds : undefined,
           tagNames,
         },
         stock: variantRows.length === 0 ? stock : undefined,
@@ -2417,6 +2540,11 @@ export class ProductsService {
           vErrors.push('Variant Compare At Price is not a number');
         if (vraw['Stock'] && Number.isNaN(vStock))
           vErrors.push('Stock is not a number');
+        if (existing?.usesIngredients && vraw['Stock']?.trim()) {
+          vErrors.push(
+            'This product uses a recipe — set ingredient stock directly instead',
+          );
+        }
 
         const variantAction: ImportAction =
           vErrors.length > 0 ? 'reject' : 'update';
@@ -2464,12 +2592,6 @@ export class ProductsService {
         include: variantIncludeFor(outletId),
       },
       productingredient: productIngredientIncludeFor(outletId),
-      ...(outletId !== undefined && {
-        outletstock: {
-          where: { outletId },
-          select: { stockQuantity: true, lowStockThreshold: true },
-        },
-      }),
     };
   }
 
@@ -2482,17 +2604,17 @@ export class ProductsService {
     return sorted[0].url;
   }
 
-  private async assertCategoriesBelongToShop(
+  private async assertCollectionsBelongToShop(
     ctx: TenantContext,
-    categoryIds: number[],
+    collectionIds: number[],
   ) {
-    const uniqueIds = [...new Set(categoryIds)];
-    const count = await this.prisma.category.count({
+    const uniqueIds = [...new Set(collectionIds)];
+    const count = await this.prisma.collection.count({
       where: { id: { in: uniqueIds }, shopId: ctx.shopId },
     });
     if (count !== uniqueIds.length) {
       throw new BadRequestException(
-        'One or more categoryIds are invalid for this shop',
+        'One or more collectionIds are invalid for this shop',
       );
     }
   }
@@ -2502,7 +2624,7 @@ export class ProductsService {
   // duplicate product names are common (two "Chocolate Cake" products) and
   // shouldn't block creation. Only used on create's auto-generate path; an
   // explicitly-provided slug (create or update) is used as-is and relies on
-  // the DB unique constraint to reject a real collision, same as categories.
+  // the DB unique constraint to reject a real collision, same as collections.
   private async resolveUniqueSlug(
     shopId: number,
     base: string,
@@ -2556,7 +2678,7 @@ export class ProductsService {
 
   private toResponse(product: ProductWithRelations, totalSold = 0) {
     const {
-      productcategory,
+      productcollection,
       producttag,
       productimage,
       productattribute,
@@ -2564,10 +2686,8 @@ export class ProductsService {
       productoption,
       productvariant,
       productingredient,
-      outletstock,
       ...rest
     } = product;
-    const stock = outletstock?.[0];
     const options = productoption.map((o) => ({
       id: o.id,
       name: o.name,
@@ -2578,13 +2698,22 @@ export class ProductsService {
         order: v.order,
       })),
     }));
-    const ingredients = productingredient.map((pi) =>
-      this.toIngredientLinkResponse(pi),
-    );
     const availability = this.computeIngredientAvailability(productingredient);
+    // A usesIngredients:false product's own recipe is always exactly its
+    // one auto-managed shadow row (quantityPerUnit: 1) — never shown to the
+    // merchant as "ingredients" (see ingredient.shadowProductId's schema
+    // comment); the shadow row's own outletingredientstock.lowStockThreshold
+    // is this product's real low-stock alert setting. A usesIngredients:true
+    // product has no single meaningful threshold across a multi-ingredient
+    // recipe — merchants set thresholds per-ingredient on the Ingredients
+    // page instead, so this is permanently null here.
+    const lowStockThreshold = rest.usesIngredients
+      ? null
+      : (productingredient[0]?.ingredient.outletingredientstock?.[0]
+          ?.lowStockThreshold ?? null);
     return {
       ...rest,
-      categories: productcategory.map((pc) => pc.category),
+      collections: productcollection.map((pc) => pc.collection),
       tags: producttag.map((pt) => pt.tag.name),
       images: productimage.map((i) => ({
         id: i.id,
@@ -2606,24 +2735,32 @@ export class ProductsService {
       hasVariants: options.length > 0,
       options,
       variants: productvariant.map((v) =>
-        this.toVariantResponse(v, productingredient),
+        this.toVariantResponse(v, productingredient, rest.usesIngredients),
       ),
-      // null when no outlet was resolved for this request (e.g. an admin
-      // viewing the catalog without picking a branch) — distinct from 0,
-      // which means "this outlet genuinely has none in stock".
-      stockQuantity: stock?.stockQuantity ?? null,
-      lowStockThreshold: stock?.lowStockThreshold ?? null,
+      // Ingredient-derived (Phase A) — makeableQuantity below is now the
+      // SAME computation, since a shadow product's "recipe" is always
+      // exactly one ingredient at quantityPerUnit 1 (floor(stock/1) =
+      // stock). null when no outlet was resolved for this request (e.g. an
+      // admin viewing the catalog without picking a branch) — distinct from
+      // 0, which means "this outlet genuinely has none in stock".
+      stockQuantity: availability.makeableQuantity,
+      lowStockThreshold,
       totalSold,
-      // Bill of Materials — this product's own default recipe (variantId:
-      // null rows only; see productIngredientIncludeFor). A variant's
-      // effective recipe (its own override, or this same default) is on
-      // each variant response instead — see toVariantResponse.
-      ingredients,
-      // Informational only — never gates checkout/cart in this pass (see
-      // ProductsService.consumeForOrderItems's own comment on why enforcing
-      // this at sale time is deliberately deferred). null when no recipe is
-      // defined at all (unconstrained, today's behavior unchanged) or when
-      // no outlet was resolved for this request.
+      // This product's own default recipe (variantId: null rows only; see
+      // productIngredientIncludeFor) — empty for a usesIngredients:false
+      // product, whose one row is its own internal shadow link, never
+      // merchant-authored/editable. A variant's effective recipe (its own
+      // override, or this same default) is on each variant response
+      // instead — see toVariantResponse.
+      ingredients: rest.usesIngredients
+        ? productingredient.map((pi) => this.toIngredientLinkResponse(pi))
+        : [],
+      // Ingredient-stock-derived, same computation as stockQuantity above —
+      // kept as a separate field for the admin UI's existing
+      // "makeableQuantity < stockQuantity" amber-warning comparison
+      // (structurally always equal for a shadow product now; only a real
+      // multi-ingredient recipe can ever differ). null when no recipe row
+      // exists at all, or no outlet was resolved for this request.
       makeableQuantity: availability.makeableQuantity,
       limitedByIngredient: availability.limitedByIngredient,
     };
@@ -2632,10 +2769,12 @@ export class ProductsService {
   private toVariantResponse(
     v: VariantWithRelations,
     productDefaultIngredients: ProductWithRelations['productingredient'],
+    usesIngredients: boolean,
   ) {
-    const stock = v.outletvariantstock?.[0];
-    // A variant with its own override rows uses exactly those; one with
-    // none inherits the product-level default wholesale (not merged
+    // A variant with its own override rows (its own shadow, when
+    // usesIngredients:false and this product has variants, or a real
+    // merchant-authored override) uses exactly those; one with none
+    // inherits the product-level default wholesale (not merged
     // ingredient-by-ingredient — setting ANY override row for a variant
     // means that variant's recipe is now fully described by its own rows).
     const effectiveIngredientRows =
@@ -2645,6 +2784,10 @@ export class ProductsService {
     const availability = this.computeIngredientAvailability(
       effectiveIngredientRows,
     );
+    const lowStockThreshold = usesIngredients
+      ? null
+      : (v.productingredient[0]?.ingredient.outletingredientstock?.[0]
+          ?.lowStockThreshold ?? null);
     return {
       id: v.id,
       sku: v.sku,
@@ -2663,15 +2806,16 @@ export class ProductsService {
         v.optionValue2?.value,
         v.optionValue3?.value,
       ]),
-      stockQuantity: stock?.stockQuantity ?? null,
-      lowStockThreshold: stock?.lowStockThreshold ?? null,
+      stockQuantity: availability.makeableQuantity,
+      lowStockThreshold,
       // This variant's own override rows only (empty when it has none and
-      // simply inherits the product default) — distinct from the effective
-      // recipe used for makeableQuantity below, which falls back to the
-      // product default when this list is empty.
-      ingredientOverrides: v.productingredient.map((pi) =>
-        this.toIngredientLinkResponse(pi),
-      ),
+      // simply inherits the product default), and never the internal
+      // shadow row for a usesIngredients:false variant — same "never shown
+      // as a merchant-editable ingredient" reasoning as toResponse's
+      // `ingredients` field above.
+      ingredientOverrides: usesIngredients
+        ? v.productingredient.map((pi) => this.toIngredientLinkResponse(pi))
+        : [],
       makeableQuantity: availability.makeableQuantity,
       limitedByIngredient: availability.limitedByIngredient,
     };
@@ -2730,9 +2874,10 @@ export class ProductsService {
   // every item references a real product for this shop, that variant-bearing
   // products get a variantId (and non-variant ones don't), and resolves the
   // effective price + a human-readable variantLabel snapshot for each line.
-  // Doesn't touch stock — callers decrement outletstock/outletvariantstock
-  // themselves (storefront checkout needs a CAS guard, admin-entered orders
-  // defer the decrement to confirmation — see orders.service.ts).
+  // Doesn't touch stock — callers pass the resolved items (incl. the
+  // allowNegative flag below) into consumeForOrderItems themselves
+  // (storefront checkout needs a CAS guard, admin-entered orders defer the
+  // decrement to confirmation — see orders.service.ts).
   async resolveOrderItems(
     shopId: number,
     items: {
@@ -2839,6 +2984,12 @@ export class ProductsService {
               variant.optionValue3?.value,
             ])
           : null,
+        // Threaded into consumeForOrderItems so a product/variant that
+        // opted out of stock tracking entirely, or explicitly allows
+        // overselling, never blocks (or is blocked by) a stricter sibling
+        // item in the same cart — see consumeForOrderItems's own comment on
+        // why this has to be per-item, not one flag for the whole call.
+        allowNegative: !product.trackInventory || product.continueSellingOutOfStock,
       };
     });
   }
@@ -2872,9 +3023,40 @@ export class ProductsService {
     tx: Prisma.TransactionClient,
     shopId: number,
     outletId: number,
-    items: { productId: number; variantId: number | null; quantity: number }[],
+    items: {
+      productId: number;
+      variantId: number | null;
+      quantity: number;
+      // Per-item, not one flag for the whole call — a product that opted
+      // out of stock tracking (trackInventory: false) or explicitly allows
+      // overselling (continueSellingOutOfStock) must never block, and must
+      // never BE blocked by, a stricter sibling item in the same
+      // cart/order. Defaults false when the caller doesn't resolve it via
+      // resolveOrderItems (every restock/return caller — going negative was
+      // never possible to guard against on a restock anyway).
+      allowNegative?: boolean;
+    }[],
     direction: 1 | -1,
-    options: { throwOnInsufficientStock: boolean; actorUserId: number | null },
+    options: {
+      throwOnInsufficientStock: boolean;
+      actorUserId: number | null;
+      // 'CONSUMED' (default) for every order-lifecycle caller; 'RETURN' for
+      // ReturnsService so a customer return stays distinguishable from an
+      // order cancellation in Movement History, same audit-trail
+      // distinction this table already draws between ADJUSTMENT/TRANSFER.
+      movementType?: string;
+      // Defaults to null (every order-lifecycle caller). ReturnsService
+      // passes a real note referencing which return caused the restock —
+      // same audit-trail detail its own direct outletstock/outletvariantstock
+      // upsert used to carry before Phase A collapsed onto this function.
+      note?: string | null;
+      // Defaults to null. ReturnsService passes the return's own reason —
+      // same field its own inline stockmovement.create already populated
+      // for a RETURN row before Phase A (a deliberate, pre-existing
+      // deviation from this column's "ADJUSTMENT only" schema comment, not
+      // introduced here).
+      reason?: string | null;
+    },
   ): Promise<boolean> {
     if (direction === -1) {
       const shop = await tx.shop.findUniqueOrThrow({
@@ -2888,7 +3070,16 @@ export class ProductsService {
     if (productIds.length === 0) return false;
     const recipeRows = await tx.productingredient.findMany({
       where: { productId: { in: productIds } },
-      include: { ingredient: { select: { name: true, trackInventory: true } } },
+      include: {
+        ingredient: {
+          select: {
+            name: true,
+            trackInventory: true,
+            shadowProductId: true,
+            shadowVariantId: true,
+          },
+        },
+      },
     });
     if (recipeRows.length === 0) return false;
 
@@ -2898,6 +3089,7 @@ export class ProductsService {
         rowsByProduct.set(row.productId, []);
       rowsByProduct.get(row.productId)!.push(row);
     }
+    const movementType = options.movementType ?? 'CONSUMED';
 
     let consumedAnything = false;
     for (const item of items) {
@@ -2913,7 +3105,11 @@ export class ProductsService {
         const delta = direction * totalQty;
         consumedAnything = true;
 
-        if (direction === -1 && options.throwOnInsufficientStock) {
+        if (
+          direction === -1 &&
+          options.throwOnInsufficientStock &&
+          !item.allowNegative
+        ) {
           const result = await tx.outletingredientstock.updateMany({
             where: {
               outletId,
@@ -2949,18 +3145,27 @@ export class ProductsService {
           });
         }
 
+        // Shadow-resolved (Phase A): set productId/variantId alongside
+        // ingredientId so Movement History's existing productId filter
+        // keeps working for a usesIngredients:false product/variant — see
+        // stockmovement's own schema comment on this exception. A REAL
+        // ingredient consumed by a multi-ingredient recipe keeps the
+        // original ingredientId-only shape.
+        const isShadow =
+          row.ingredient.shadowProductId !== null ||
+          row.ingredient.shadowVariantId !== null;
         await tx.stockmovement.create({
           data: {
             shopId,
-            productId: null,
-            variantId: null,
+            productId: isShadow ? item.productId : null,
+            variantId: isShadow ? row.variantId : null,
             ingredientId: row.ingredientId,
-            type: 'CONSUMED',
-            reason: null,
+            type: movementType,
+            reason: options.reason ?? null,
             delta,
             outletId,
             toOutletId: null,
-            note: null,
+            note: options.note ?? null,
             actorUserId: options.actorUserId,
           },
         });
@@ -3025,13 +3230,33 @@ export class ProductsService {
       orderBy: { id: 'asc' },
     });
 
-    const productStock = await this.prisma.outletstock.findMany({
-      where: { productId: response.id },
-      select: { outletId: true, stockQuantity: true },
-    });
-    const productStockByOutlet = new Map(
-      productStock.map((s) => [s.outletId, s.stockQuantity]),
-    );
+    // A usesIngredients:true product has no single stock number per outlet
+    // across a multi-ingredient recipe — same "no per-product low-stock
+    // alerting" boundary as toResponse's lowStockThreshold. Per-ingredient
+    // breakdown is still available via the Ingredients page.
+    if ((response as any).usesIngredients) {
+      (response as any).stockByOutlet = [];
+      for (const v of response.variants as any[]) v.stockByOutlet = [];
+      return;
+    }
+
+    const productShadow =
+      response.variants.length === 0
+        ? await this.prisma.ingredient.findFirst({
+            where: { shadowProductId: response.id },
+            select: { id: true },
+          })
+        : null;
+    const productStockByOutlet = productShadow
+      ? new Map(
+          (
+            await this.prisma.outletingredientstock.findMany({
+              where: { ingredientId: productShadow.id },
+              select: { outletId: true, stockQuantity: true },
+            })
+          ).map((s) => [s.outletId, s.stockQuantity]),
+        )
+      : new Map<number, number>();
     (response as any).stockByOutlet = outlets.map((o) => ({
       outletId: o.id,
       outletName: o.name,
@@ -3040,18 +3265,31 @@ export class ProductsService {
 
     if (response.variants.length === 0) return;
     const variantIds = response.variants.map((v) => v.id);
-    const variantStock = await this.prisma.outletvariantstock.findMany({
-      where: { variantId: { in: variantIds } },
-      select: { outletId: true, variantId: true, stockQuantity: true },
+    const variantShadows = await this.prisma.ingredient.findMany({
+      where: { shadowVariantId: { in: variantIds } },
+      select: { id: true, shadowVariantId: true },
     });
-    const byVariant = new Map<number, Map<number, number>>();
+    const shadowIngredientIdByVariant = new Map(
+      variantShadows.map((s) => [s.shadowVariantId!, s.id]),
+    );
+    const variantStock = variantShadows.length
+      ? await this.prisma.outletingredientstock.findMany({
+          where: { ingredientId: { in: variantShadows.map((s) => s.id) } },
+          select: { outletId: true, ingredientId: true, stockQuantity: true },
+        })
+      : [];
+    const byIngredient = new Map<number, Map<number, number>>();
     for (const row of variantStock) {
-      if (!byVariant.has(row.variantId))
-        byVariant.set(row.variantId, new Map());
-      byVariant.get(row.variantId)!.set(row.outletId, row.stockQuantity);
+      if (!byIngredient.has(row.ingredientId))
+        byIngredient.set(row.ingredientId, new Map());
+      byIngredient.get(row.ingredientId)!.set(row.outletId, row.stockQuantity);
     }
     for (const v of response.variants as any[]) {
-      const m = byVariant.get(v.id) ?? new Map();
+      const shadowIngredientId = shadowIngredientIdByVariant.get(v.id);
+      const m =
+        (shadowIngredientId !== undefined &&
+          byIngredient.get(shadowIngredientId)) ||
+        new Map<number, number>();
       v.stockByOutlet = outlets.map((o) => ({
         outletId: o.id,
         outletName: o.name,

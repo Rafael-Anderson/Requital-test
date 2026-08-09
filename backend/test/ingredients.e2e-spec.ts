@@ -287,8 +287,8 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
     it('rejects a stock request with both productId and ingredientId', async () => {
       const { adminToken, outletA } = await setupShop('validation-both');
       const ingredient = await createIngredient(adminToken, 'Both Test');
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'General' })
         .expect(201);
@@ -300,7 +300,7 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
           price: 10,
           thumbnail: 'https://example.com/x.jpg',
           sku: `BOTH-${runId}`,
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
 
@@ -498,10 +498,10 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
   describe('never reachable via any public/storefront endpoint', () => {
     it("a published shop's public product listing never includes an ingredient, and creating one does not affect it", async () => {
       const { adminToken, slug } = await setupShop('public-leak');
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Public category' })
+        .send({ name: 'Public collection' })
         .expect(201);
       await request(app.getHttpServer())
         .post('/products')
@@ -512,7 +512,7 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
           thumbnail: 'https://example.com/x.jpg',
           sku: `PUBLEAK-${runId}`,
           status: 'Available',
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
       const outlets = await request(app.getHttpServer())
@@ -592,7 +592,7 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       expect(Number(ingredient.costPerUnit)).toBe(2.5);
       expect(ingredient.supplier).toBe('Dubai Flower Market');
 
-      // Explicit null clears each field — same convention as CategoryDto.
+      // Explicit null clears each field — same convention as CollectionDto.
       const updated = await request(app.getHttpServer())
         .patch(`/shop/ingredients/${ingredient.id}`)
         .set('Authorization', `Bearer ${adminToken}`)

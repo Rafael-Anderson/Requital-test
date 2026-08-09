@@ -6,6 +6,7 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { getShadowStockQuantity } from './helpers/stock';
 
 interface AuthResponse {
   accessToken: string;
@@ -100,12 +101,12 @@ describe('Draft Orders (e2e)', () => {
       })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -115,13 +116,13 @@ describe('Draft Orders (e2e)', () => {
         price: 80,
         thumbnail: 'https://example.com/item.jpg',
         sku: `DRAFT-${slug}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
       })
       .expect(201);
     const productId = body<IdRow>(product).id;
 
-    return { adminToken, outletId, categoryId, productId, slug };
+    return { adminToken, outletId, collectionId, productId, slug };
   }
 
   function draftPayload(
@@ -249,10 +250,10 @@ describe('Draft Orders (e2e)', () => {
       expect(order?.paymentStatus).toBe('paid');
       expect(order?.channel).toBe('draft_order');
 
-      const stock = await prisma.outletstock.findUnique({
-        where: { outletId_productId: { outletId, productId } },
+      const stock = await getShadowStockQuantity(prisma, outletId, {
+        productId,
       });
-      expect(stock?.stockQuantity).toBe(2); // 5 - 3, reserved immediately, same as storefront checkout
+      expect(stock).toBe(2); // 5 - 3, reserved immediately, same as storefront checkout
     });
 
     it('rejects completing a draft with no items', async () => {
@@ -310,10 +311,10 @@ describe('Draft Orders (e2e)', () => {
       const statuses = [resA.status, resB.status].sort();
       expect(statuses).toEqual([201, 409]);
 
-      const finalStock = await prisma.outletstock.findUnique({
-        where: { outletId_productId: { outletId, productId } },
+      const finalStock = await getShadowStockQuantity(prisma, outletId, {
+        productId,
       });
-      expect(finalStock?.stockQuantity).toBe(0);
+      expect(finalStock).toBe(0);
     });
   });
 
@@ -410,10 +411,10 @@ describe('Draft Orders (e2e)', () => {
       );
       const orderId = sent.draftOrder.convertedOrderId!;
 
-      const stockAfterReserve = await prisma.outletstock.findUnique({
-        where: { outletId_productId: { outletId, productId } },
+      const stockAfterReserve = await getShadowStockQuantity(prisma, outletId, {
+        productId,
       });
-      expect(stockAfterReserve?.stockQuantity).toBe(3); // 5 - 2
+      expect(stockAfterReserve).toBe(3); // 5 - 2
 
       await request(app.getHttpServer())
         .patch(`/shop/draft-orders/${draft.id}/cancel`)
@@ -423,10 +424,10 @@ describe('Draft Orders (e2e)', () => {
       const order = await prisma.order.findUnique({ where: { id: orderId } });
       expect(order?.status).toBe('cancelled');
 
-      const stockAfterCancel = await prisma.outletstock.findUnique({
-        where: { outletId_productId: { outletId, productId } },
+      const stockAfterCancel = await getShadowStockQuantity(prisma, outletId, {
+        productId,
       });
-      expect(stockAfterCancel?.stockQuantity).toBe(5); // restocked
+      expect(stockAfterCancel).toBe(5); // restocked
     });
   });
 

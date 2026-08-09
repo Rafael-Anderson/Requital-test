@@ -1,27 +1,23 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
+  IsPositive,
   IsString,
   Matches,
-  Min,
   MaxLength,
-  ValidateNested,
+  Min,
 } from 'class-validator';
-import { COLLECTION_TYPES, type CollectionType } from '../collection-constants';
-import { CollectionRulesDto } from './collection-rules.dto';
 
 export class CreateCollectionDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  title: string;
+  name: string;
 
-  // Auto-derived from title if omitted (see CollectionsService — same
-  // convention as category/product slug resolution).
+  // Auto-derived from name if omitted (see CollectionsService.create).
   @IsOptional()
   @IsString()
   @MaxLength(255)
@@ -31,31 +27,23 @@ export class CreateCollectionDto {
   slug?: string;
 
   @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsString()
-  image?: string;
-
-  @IsIn(COLLECTION_TYPES)
-  type: CollectionType;
-
-  // Required (and must have at least one field set) when type is
-  // RULE_BASED, forbidden for MANUAL — enforced in CollectionsService since
-  // it depends on the sibling `type` field.
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CollectionRulesDto)
-  rules?: CollectionRulesDto;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  parentCollectionId?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   displayOrder?: number;
+
+  // URL/path to an already-uploaded image (see POST /collections/upload).
+  @IsOptional()
+  @IsString()
+  image?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
 }

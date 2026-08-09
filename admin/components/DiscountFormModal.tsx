@@ -8,7 +8,7 @@ import {
   DISCOUNT_APPLIES_TO_LABELS,
   DISCOUNT_TYPES,
   DISCOUNT_TYPE_LABELS,
-  type Category,
+  type Collection,
   type Discount,
   type DiscountAppliesTo,
   type DiscountType,
@@ -28,20 +28,20 @@ function randomCode(): string {
   return code;
 }
 
-// Product/category eligibility uses a plain multi-select — same "no
+// Product/collection eligibility uses a plain multi-select — same "no
 // searchable picker exists in this app" reasoning as Bio Links' single-select
-// product/category pickers, just with the `multiple` attribute since a
+// product/collection pickers, just with the `multiple` attribute since a
 // discount can target more than one.
 export default function DiscountFormModal({
   discount,
   products,
-  categories,
+  collections,
   onClose,
   onSaved,
 }: {
   discount: Discount | null;
   products: Product[];
-  categories: Category[];
+  collections: Collection[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -52,7 +52,7 @@ export default function DiscountFormModal({
   const [minPurchaseAmount, setMinPurchaseAmount] = useState(discount?.minPurchaseAmount ?? "");
   const [appliesTo, setAppliesTo] = useState<DiscountAppliesTo>(discount?.appliesTo ?? "ALL_PRODUCTS");
   const [productIds, setProductIds] = useState<Set<number>>(new Set(discount?.products.map((p) => p.id) ?? []));
-  const [categoryIds, setCategoryIds] = useState<Set<number>>(new Set(discount?.categories.map((c) => c.id) ?? []));
+  const [collectionIds, setCollectionIds] = useState<Set<number>>(new Set(discount?.collections.map((c) => c.id) ?? []));
   const [usageLimit, setUsageLimit] = useState(discount?.usageLimit != null ? String(discount.usageLimit) : "");
   const [usageLimitPerCustomer, setUsageLimitPerCustomer] = useState(
     discount?.usageLimitPerCustomer != null ? String(discount.usageLimitPerCustomer) : "",
@@ -82,7 +82,7 @@ export default function DiscountFormModal({
         minPurchaseAmount: minPurchaseAmount ? Number(minPurchaseAmount) : undefined,
         appliesTo,
         productIds: appliesTo === "SPECIFIC_PRODUCTS" ? [...productIds] : undefined,
-        categoryIds: appliesTo === "SPECIFIC_CATEGORIES" ? [...categoryIds] : undefined,
+        collectionIds: appliesTo === "SPECIFIC_COLLECTIONS" ? [...collectionIds] : undefined,
         usageLimit: usageLimit ? Number(usageLimit) : undefined,
         usageLimitPerCustomer: usageLimitPerCustomer ? Number(usageLimitPerCustomer) : undefined,
         startsAt: startsAt || undefined,
@@ -176,15 +176,15 @@ export default function DiscountFormModal({
             </Select>
           )}
 
-          {appliesTo === "SPECIFIC_CATEGORIES" && (
+          {appliesTo === "SPECIFIC_COLLECTIONS" && (
             <Select
-              label="Categories (ctrl/cmd-click to select multiple)"
+              label="Collections (ctrl/cmd-click to select multiple)"
               multiple
-              value={[...categoryIds].map(String)}
-              onChange={(e) => setCategoryIds(new Set(selectedOptions(e)))}
+              value={[...collectionIds].map(String)}
+              onChange={(e) => setCollectionIds(new Set(selectedOptions(e)))}
               className="h-32"
             >
-              {categories.map((c) => (
+              {collections.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>

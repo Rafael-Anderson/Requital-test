@@ -10,8 +10,8 @@ import {
   type BioLink,
   type BioLinkSocialPlatform,
   type BioLinkType,
-  type Category,
   type Collection,
+  type Template,
   type Product,
 } from "@/lib/types";
 import Button from "@/components/ui/Button";
@@ -22,21 +22,21 @@ import Select from "@/components/ui/Select";
 import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 
-// Product/category/collection pickers use the shared Combobox
+// Product/collection/template pickers use the shared Combobox
 // (components/ui/Combobox.tsx) rather than a plain <select> — searchable,
 // so a long catalog stays usable.
 export default function BioLinkFormModal({
   bioLink,
   products,
-  categories,
   collections,
+  templates,
   onClose,
   onSaved,
 }: {
   bioLink: BioLink | null;
   products: Product[];
-  categories: Category[];
   collections: Collection[];
+  templates: Template[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -44,9 +44,9 @@ export default function BioLinkFormModal({
   const [label, setLabel] = useState(bioLink?.label ?? "");
   const [url, setUrl] = useState(bioLink?.url ?? "");
   const [productId, setProductId] = useState(bioLink?.productId != null ? String(bioLink.productId) : "");
-  const [categoryId, setCategoryId] = useState(bioLink?.categoryId != null ? String(bioLink.categoryId) : "");
-  const [collectionId, setCollectionId] = useState(
-    bioLink?.collectionId != null ? String(bioLink.collectionId) : "",
+  const [collectionId, setCollectionId] = useState(bioLink?.collectionId != null ? String(bioLink.collectionId) : "");
+  const [templateId, setTemplateId] = useState(
+    bioLink?.templateId != null ? String(bioLink.templateId) : "",
   );
   const [socialPlatform, setSocialPlatform] = useState<BioLinkSocialPlatform>(
     bioLink?.socialPlatform ?? "instagram",
@@ -58,8 +58,8 @@ export default function BioLinkFormModal({
   function targetValid(): boolean {
     if (type === "EXTERNAL_URL") return !!url.trim();
     if (type === "PRODUCT") return productId !== "";
-    if (type === "CATEGORY") return categoryId !== "";
     if (type === "COLLECTION") return collectionId !== "";
+    if (type === "TEMPLATE") return templateId !== "";
     return true; // SOCIAL_ICON always has a platform selected (dropdown default)
   }
 
@@ -75,8 +75,8 @@ export default function BioLinkFormModal({
         label: label.trim() || undefined,
         ...(type === "EXTERNAL_URL" && { url: url.trim() }),
         ...(type === "PRODUCT" && { productId: Number(productId) }),
-        ...(type === "CATEGORY" && { categoryId: Number(categoryId) }),
         ...(type === "COLLECTION" && { collectionId: Number(collectionId) }),
+        ...(type === "TEMPLATE" && { templateId: Number(templateId) }),
         ...(type === "SOCIAL_ICON" && { socialPlatform }),
       };
       if (bioLink) {
@@ -132,23 +132,23 @@ export default function BioLinkFormModal({
             />
           )}
 
-          {type === "CATEGORY" && (
-            <Combobox
-              label="Category"
-              value={categoryId}
-              onChange={setCategoryId}
-              placeholder="Select a category…"
-              options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
-            />
-          )}
-
           {type === "COLLECTION" && (
             <Combobox
               label="Collection"
               value={collectionId}
               onChange={setCollectionId}
               placeholder="Select a collection…"
-              options={collections.map((c) => ({ value: String(c.id), label: c.title }))}
+              options={collections.map((c) => ({ value: String(c.id), label: c.name }))}
+            />
+          )}
+
+          {type === "TEMPLATE" && (
+            <Combobox
+              label="Template"
+              value={templateId}
+              onChange={setTemplateId}
+              placeholder="Select a template…"
+              options={templates.map((c) => ({ value: String(c.id), label: c.title }))}
             />
           )}
 

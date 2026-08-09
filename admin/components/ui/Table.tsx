@@ -11,7 +11,7 @@
 // text, `aria-label={`Edit ${name}`}`, this exact class pair:
 //   edit/neutral: "p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
 //   delete:       "p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-// (see Products/Ingredients/Categories/Collections for reference). Two other
+// (see Products/Ingredients/Collections/Templates for reference). Two other
 // treatments — a full `Button` with visible text, and a plain underlined
 // text link — existed on different list pages before being converged onto
 // this one; don't reintroduce either for a new list page's row actions.

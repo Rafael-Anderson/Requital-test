@@ -60,12 +60,12 @@ export const SELECTABLE_HOMEPAGE_LAYOUTS = [
 // RelatedProducts is still a plain grid. Every other field that was ever
 // unwired has since been wired to a real element as the corresponding
 // storefront section got built (Featured Grid, Slideshow, and — most
-// recently — PDP's compare-at price, FeaturedGrid's tile label, CategoryNav's
+// recently — PDP's compare-at price, FeaturedGrid's tile label, CollectionNav's
 // mobile scroll arrows, and ClassicHero's fallback background).
 export const THEME_COLOR_GROUPS = [
   { key: 'ui_button_colors', label: 'UI/Button Colors' },
   { key: 'background_header_colors', label: 'Background/Header Colors' },
-  { key: 'product_category_colors', label: 'Product/Category Colors' },
+  { key: 'product_collection_colors', label: 'Product/Collection Colors' },
 ] as const;
 export type ThemeColorGroup = (typeof THEME_COLOR_GROUPS)[number]['key'];
 
@@ -161,7 +161,7 @@ export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
     wired: true,
   },
   // Wired as of the Advanced/homepageLayout task — the "Featured Grid"
-  // layout's category-tile section background. Was inert (no Featured
+  // layout's collection-tile section background. Was inert (no Featured
   // section existed) before that layout was built.
   {
     key: 'featuredBackgroundColor',
@@ -169,50 +169,50 @@ export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
     group: 'background_header_colors',
     wired: true,
   },
-  // --- Product/Category Colors ---
+  // --- Product/Collection Colors ---
   {
     key: 'productNameColor',
     label: 'Product Name Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
   {
     key: 'priceMainColor',
     label: 'Price Main Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
   // Wired for the storefront layout/dead-settings pass — PDP's compare-at-
-  // price line, CategoryNav's mobile scroll-nudge arrows, and FeaturedGrid's
+  // price line, CollectionNav's mobile scroll-nudge arrows, and FeaturedGrid's
   // tile label respectively. See storefront/lib/theme-colors.ts.
   {
     key: 'priceSecondaryColor',
     label: 'Price Secondary Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
   {
-    key: 'categorySliderArrowColor',
-    label: 'Category Slider Arrow Color (mobile view)',
-    group: 'product_category_colors',
+    key: 'collectionSliderArrowColor',
+    label: 'Collection Slider Arrow Color (mobile view)',
+    group: 'product_collection_colors',
     wired: true,
   },
   {
-    key: 'categorySliderArrowActiveColor',
-    label: 'Category Slider Arrow Active Color (mobile view)',
-    group: 'product_category_colors',
+    key: 'collectionSliderArrowActiveColor',
+    label: 'Collection Slider Arrow Active Color (mobile view)',
+    group: 'product_collection_colors',
     wired: true,
   },
   {
     key: 'featuredProductTextColor',
     label: 'Featured Product Text Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
   {
     key: 'brandBackgroundColor',
     label: 'Brand Background Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
   // Wired as of the Advanced/homepageLayout task — the "Slideshow" layout's
@@ -221,13 +221,13 @@ export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
   {
     key: 'homeSliderBackgroundColor',
     label: 'Home Slider Background Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
   {
     key: 'homeSliderColor',
     label: 'Home Slider Color',
-    group: 'product_category_colors',
+    group: 'product_collection_colors',
     wired: true,
   },
 ];
@@ -272,3 +272,8 @@ export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
 // separate columns so a merchant can size them independently.
 export const DENSITY_OPTIONS = ['compact', 'regular', 'spacious'] as const;
 export type Density = (typeof DENSITY_OPTIONS)[number];
+
+// Phase C — what the storefront's Home tab renders: Template sections
+// (grouped product carousels) or a flat grid of top-level Collections.
+export const HOME_TAB_MODES = ['templates', 'collections'] as const;
+export type HomeTabMode = (typeof HOME_TAB_MODES)[number];

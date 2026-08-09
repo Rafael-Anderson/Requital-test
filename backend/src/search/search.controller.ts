@@ -4,7 +4,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 
 // No @Roles restriction — every authenticated role can hit this, but each
-// category inside SearchService.search is independently scoped to match
+// collection inside SearchService.search is independently scoped to match
 // what that role could already see via the real list endpoints (customers
 // silently omitted for branch/order_manager, orders outlet-pinned for
 // branch) — see SearchService for the exact mapping.
