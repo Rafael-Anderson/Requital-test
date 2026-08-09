@@ -118,7 +118,7 @@ export default function VariantEditModal({
           .filter((r) => Number(r.quantityPerUnit) > 0)
           .map((r) => ({ ingredientId: r.ingredientId, quantityPerUnit: Number(r.quantityPerUnit) })),
       });
-      if (product.trackInventory && variant.stockByOutlet) {
+      if (product.trackInventory && !product.usesIngredients && variant.stockByOutlet) {
         await commitStockChanges(variant.stockByOutlet, stockValues, {
           productId: product.id,
           variantId: variant.id,
@@ -303,7 +303,7 @@ export default function VariantEditModal({
             />
           )}
 
-          {product.trackInventory && (
+          {product.trackInventory && !product.usesIngredients && (
             <div>
               <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
                 Inventory
@@ -317,14 +317,6 @@ export default function VariantEditModal({
               ) : (
                 <p className="text-xs text-zinc-400">Stock quantities load once opened from the edit page.</p>
               )}
-              {variant.makeableQuantity !== null &&
-                variant.stockQuantity !== null &&
-                variant.makeableQuantity < variant.stockQuantity && (
-                  <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                    Only {variant.makeableQuantity} can actually be made right now — limited by{" "}
-                    {variant.limitedByIngredient}.
-                  </p>
-                )}
             </div>
           )}
 

@@ -177,11 +177,6 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
     const productId = await createProduct(adminToken, categoryId, rose, 6);
-    await request(app.getHttpServer())
-      .patch('/products/stock/bulk-adjust')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ outletId, adjustments: [{ productId, delta: 50 }] })
-      .expect(200);
 
     const orderId = await createAndConfirmOrder(
       adminToken,
@@ -207,11 +202,6 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
     const productId = await createProduct(adminToken, categoryId, rose, 6);
-    await request(app.getHttpServer())
-      .patch('/products/stock/bulk-adjust')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ outletId, adjustments: [{ productId, delta: 50 }] })
-      .expect(200);
 
     const orderId = await createAndConfirmOrder(
       adminToken,
@@ -236,11 +226,6 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
     const productId = await createProduct(adminToken, categoryId, rose, 6);
-    await request(app.getHttpServer())
-      .patch('/products/stock/bulk-adjust')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ outletId, adjustments: [{ productId, delta: 50 }] })
-      .expect(200);
 
     const orderId = await createAndConfirmOrder(
       adminToken,
@@ -269,11 +254,6 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
     const productId = await createProduct(adminToken, categoryId, rose, 6);
-    await request(app.getHttpServer())
-      .patch('/products/stock/bulk-adjust')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ outletId, adjustments: [{ productId, delta: 50 }] })
-      .expect(200);
 
     const created = await request(app.getHttpServer())
       .post('/orders')
@@ -306,11 +286,6 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 10); // exactly one unit's worth
     const productId = await createProduct(adminToken, categoryId, rose, 10);
-    await request(app.getHttpServer())
-      .patch('/products/stock/bulk-adjust')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ outletId, adjustments: [{ productId, delta: 50 }] })
-      .expect(200);
 
     const orderId = await createAndConfirmOrder(
       adminToken,
@@ -341,15 +316,6 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       rose,
       6,
     );
-    await request(app.getHttpServer())
-      .patch('/products/stock/bulk-adjust')
-      .set('Authorization', `Bearer ${shopA.adminToken}`)
-      .send({
-        outletId: shopA.outletId,
-        adjustments: [{ productId, delta: 50 }],
-      })
-      .expect(200);
-
     const orderId = await createAndConfirmOrder(
       shopA.adminToken,
       shopA.outletId,

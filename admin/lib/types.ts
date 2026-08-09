@@ -501,6 +501,12 @@ export interface ProductInput {
   weightUnit?: WeightUnit;
   dimensions?: string;
   trackInventory?: boolean;
+  // false (default, omitted): this product auto-mirrors as its own shadow
+  // Ingredient — the Inventory card's stock table is what's editable. true:
+  // stock/availability is computed from `ingredients` below against real
+  // Ingredient stock instead — requires at least one row. See Product's own
+  // comment for the toggle-flip semantics.
+  usesIngredients?: boolean;
   status?: string;
   categoryIds: number[];
   tags?: string[];
@@ -553,6 +559,15 @@ export interface Product {
   status: string;
   trackInventory: boolean;
   continueSellingOutOfStock: boolean;
+  // Phase A (Ingredient-Based Stock) — false (default): this product IS its
+  // own atomic stock unit, auto-mirrored as an invisible shadow Ingredient
+  // (see the Inventory card / OutletQuantityTable, unchanged UI). true:
+  // stock/availability is computed from `ingredients` (the recipe) against
+  // real Ingredient stock instead — the Inventory card is replaced by the
+  // Recipe section, and lowStockThreshold below is always null (no single
+  // number across a multi-ingredient recipe; set thresholds per-ingredient
+  // on the Ingredients page instead).
+  usesIngredients: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
   // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
@@ -661,8 +676,15 @@ export interface ScanCommitNewItem {
 export interface ScanCommitItem {
   targetType: "product" | "ingredient";
   matchedId?: number;
+  // Required whenever matchedId resolves to a variant-carrying product —
+  // scanned stock has to land on one specific variant's shadow ingredient.
+  variantId?: number;
   outletId: number;
   quantity: number;
+  // OCR-parsed and merchant-confirmed/edited cost — persisted to the
+  // target's own cost field (product.costPrice / ingredient.costPerUnit)
+  // on commit. Optional — omitted skips price capture for that line.
+  price?: number;
   createNew?: ScanCommitNewItem;
 }
 

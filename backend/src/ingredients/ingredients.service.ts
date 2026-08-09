@@ -68,6 +68,13 @@ export class IngredientsService {
     const ingredients = await this.prisma.ingredient.findMany({
       where: {
         shopId: ctx.shopId,
+        // Phase A: a usesIngredients:false product/variant's auto-managed
+        // shadow ingredient is never a merchant-manageable ingredient —
+        // excluded here (the single query every other consumer of this
+        // list, incl. CSV export, goes through) rather than filtered by
+        // each caller. See ingredient.shadowProductId's schema comment.
+        shadowProductId: null,
+        shadowVariantId: null,
         ...(categoryId !== undefined && { categoryId }),
       },
       include: includeFor(outletId),
@@ -86,7 +93,7 @@ export class IngredientsService {
       );
     }
     const ingredient = await this.prisma.ingredient.findFirst({
-      where: { id, shopId: ctx.shopId },
+      where: { id, shopId: ctx.shopId, shadowProductId: null, shadowVariantId: null },
       include: includeFor(outletId),
     });
     if (!ingredient) {
@@ -315,7 +322,12 @@ export class IngredientsService {
 
       const existing = name
         ? await this.prisma.ingredient.findFirst({
-            where: { shopId: ctx.shopId, name },
+            where: {
+              shopId: ctx.shopId,
+              name,
+              shadowProductId: null,
+              shadowVariantId: null,
+            },
             select: { id: true },
           })
         : null;
@@ -351,8 +363,11 @@ export class IngredientsService {
   }
 
   private async assertBelongsToShop(ctx: TenantContext, id: number) {
+    // Excludes a shadow ingredient too (see findAll's own comment) — it's
+    // never merchant-editable/deletable through this API, only auto-managed
+    // by ProductsService.
     const ingredient = await this.prisma.ingredient.findFirst({
-      where: { id, shopId: ctx.shopId },
+      where: { id, shopId: ctx.shopId, shadowProductId: null, shadowVariantId: null },
     });
     if (!ingredient) {
       throw new NotFoundException(`Ingredient ${id} not found`);
