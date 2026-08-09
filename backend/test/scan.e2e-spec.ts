@@ -126,14 +126,14 @@ describe('Scan to Stock (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId };
+    return { adminToken, outletId, collectionId };
   }
 
   function preview(adminToken: string) {
@@ -206,7 +206,7 @@ describe('Scan to Stock (e2e)', () => {
         price: 40,
         thumbnail: 'https://example.com/x.jpg',
         sku: `ISO-${runId}`,
-        categoryIds: [shopA.categoryId],
+        collectionIds: [shopA.collectionId],
       })
       .expect(201);
 
@@ -239,7 +239,7 @@ describe('Scan to Stock (e2e)', () => {
   });
 
   it('creates a new Product and a new Ingredient end-to-end on commit', async () => {
-    const { adminToken, outletId, categoryId } = await setupShop('scan-create');
+    const { adminToken, outletId, collectionId } = await setupShop('scan-create');
 
     const res = await request(app.getHttpServer())
       .post('/scan/commit')
@@ -251,7 +251,7 @@ describe('Scan to Stock (e2e)', () => {
             targetType: 'product',
             outletId,
             quantity: 12,
-            createNew: { name: 'Scanned New Rose', price: 22, categoryId },
+            createNew: { name: 'Scanned New Rose', price: 22, collectionId },
           },
           {
             targetType: 'ingredient',
@@ -289,7 +289,7 @@ describe('Scan to Stock (e2e)', () => {
   });
 
   it('applies a RECEIVED StockMovement for a matched item — adds to existing stock, never overwrites it', async () => {
-    const { adminToken, outletId, categoryId } =
+    const { adminToken, outletId, collectionId } =
       await setupShop('scan-matched');
 
     const product = await request(app.getHttpServer())
@@ -300,7 +300,7 @@ describe('Scan to Stock (e2e)', () => {
         price: 18,
         thumbnail: 'https://example.com/x.jpg',
         sku: `MATCH-${runId}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
       })
       .expect(201);
@@ -359,7 +359,7 @@ describe('Scan to Stock (e2e)', () => {
         price: 20,
         thumbnail: 'https://example.com/x.jpg',
         sku: `TENANT-${runId}`,
-        categoryIds: [shopA.categoryId],
+        collectionIds: [shopA.collectionId],
       })
       .expect(201);
     const productAId = body<ProductRow>(productA).id;
@@ -395,7 +395,7 @@ describe('Scan to Stock (e2e)', () => {
             createNew: {
               name: 'Sneaky Product',
               price: 10,
-              categoryId: shopB.categoryId,
+              collectionId: shopB.collectionId,
             },
           },
         ],

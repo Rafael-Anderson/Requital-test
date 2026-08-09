@@ -6,7 +6,7 @@ import {
   createProduct,
   duplicateProduct,
   getShop,
-  listCategories,
+  listCollections,
   listIngredientCategories,
   listIngredients,
   listOutlets,
@@ -16,7 +16,7 @@ import {
 import { commitStockChanges } from "@/lib/stock";
 import {
   PRODUCT_STATUS_LABELS,
-  type Category,
+  type Collection,
   type Ingredient,
   type IngredientCategory,
   type Product,
@@ -40,7 +40,7 @@ export const FIELD_STEP: Record<string, number> = {
   image: 0,
   sku: 1,
   price: 1,
-  categories: 2,
+  collections: 2,
 };
 
 // All product-form state and save logic, unchanged from the pre-wizard
@@ -88,11 +88,11 @@ export function useProductForm(initialProduct: Product | undefined) {
   const [slug, setSlug] = useState(product?.slug ?? "");
   const [metaTitle, setMetaTitle] = useState(product?.metaTitle ?? "");
   const [metaDescription, setMetaDescription] = useState(product?.metaDescription ?? "");
-  const [categoryIds, setCategoryIds] = useState<Set<number>>(
-    new Set(product?.categories.map((c) => c.id) ?? []),
+  const [collectionIds, setCollectionIds] = useState<Set<number>>(
+    new Set(product?.collections.map((c) => c.id) ?? []),
   );
 
-  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [collections, setCollections] = useState<Collection[] | null>(null);
   const [productEditorMode, setProductEditorMode] = useState<"simple" | "advanced">("simple");
   const [showVariants, setShowVariants] = useState(product?.showVariants ?? false);
   const [showAttributes, setShowAttributes] = useState(product?.showAttributes ?? false);
@@ -117,9 +117,9 @@ export function useProductForm(initialProduct: Product | undefined) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    listCategories()
-      .then(setCategories)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load categories"));
+    listCollections()
+      .then(setCollections)
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load collections"));
     getShop()
       .then((s) => {
         setProductEditorMode(s.productEditorMode ?? "simple");
@@ -152,8 +152,8 @@ export function useProductForm(initialProduct: Product | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function toggleCategory(id: number) {
-    setCategoryIds((prev) => {
+  function toggleCollection(id: number) {
+    setCollectionIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -173,7 +173,7 @@ export function useProductForm(initialProduct: Product | undefined) {
   }
 
   // Gate for the wizard's Step 1 "Next" button — only Title is required to
-  // advance. The full set of required fields (name/sku/price/image/category)
+  // advance. The full set of required fields (name/sku/price/image/collection)
   // is still enforced at final submit time, unchanged from the old form.
   function validateStep1(): boolean {
     if (!name.trim()) {
@@ -199,7 +199,7 @@ export function useProductForm(initialProduct: Product | undefined) {
     if (!sku.trim()) nextFieldErrors.sku = "SKU is required";
     if (!price) nextFieldErrors.price = "Price is required";
     if (images.length === 0) nextFieldErrors.image = "At least one image is required";
-    if (categoryIds.size === 0) nextFieldErrors.categories = "Select at least one category";
+    if (collectionIds.size === 0) nextFieldErrors.collections = "Select at least one collection";
     return nextFieldErrors;
   }
 
@@ -245,7 +245,7 @@ export function useProductForm(initialProduct: Product | undefined) {
         vendor: vendor || undefined,
         productType: productType || undefined,
         tags,
-        categoryIds: [...categoryIds],
+        collectionIds: [...collectionIds],
         slug: slug || undefined,
         metaTitle: metaTitle || undefined,
         metaDescription: metaDescription || undefined,
@@ -321,8 +321,8 @@ export function useProductForm(initialProduct: Product | undefined) {
     slug, setSlug,
     metaTitle, setMetaTitle,
     metaDescription, setMetaDescription,
-    categoryIds, toggleCategory,
-    categories,
+    collectionIds, toggleCollection,
+    collections,
     productEditorMode,
     showVariants, setShowVariants,
     showAttributes, setShowAttributes,

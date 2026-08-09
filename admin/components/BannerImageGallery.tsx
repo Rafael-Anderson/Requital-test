@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 // component's own comment — no existing component supported more than one
 // image before it was built) plus one addition: each slide can carry its
 // own optional CTA link, since a slideshow slide (unlike a product photo)
-// is often meant to be clicked through to a collection/promo.
+// is often meant to be clicked through to a template/promo.
 export default function BannerImageGallery({
   images,
   onChange,
@@ -80,7 +80,7 @@ export default function BannerImageGallery({
               <input
                 value={img.linkUrl ?? ""}
                 onChange={(e) => handleLinkChange(i, e.target.value)}
-                placeholder="Optional link (e.g. /collections/sale) — leave blank for no click-through"
+                placeholder="Optional link (e.g. /templates/sale) — leave blank for no click-through"
                 className="flex-1 h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               />
               <button

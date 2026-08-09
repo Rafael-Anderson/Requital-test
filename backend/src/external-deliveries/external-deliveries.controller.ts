@@ -14,7 +14,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 
 // Admin-only, same as every other write path this session added a role
-// guard to (Products/Categories structural edits) — logging what was paid
+// guard to (Products/Collections structural edits) — logging what was paid
 // to a courier is a business-financial record, not a branch day-to-day
 // stock action.
 @Roles('admin')

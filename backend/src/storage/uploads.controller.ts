@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 
 // Shared delete surface for every image upload endpoint (products,
-// categories, collections, ingredients, theme, bio-links, shop, seo, scan)
+// collections, templates, ingredients, theme, bio-links, shop, seo, scan)
 // — same "one shared thing, parameterized by call site" shape
 // createImageUploadOptions already used for uploads themselves. Same
 // admin-only tier every one of those upload endpoints already is (see each

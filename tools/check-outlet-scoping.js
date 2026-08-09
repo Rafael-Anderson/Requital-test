@@ -80,7 +80,9 @@ const ALLOWLIST = [
   // shopSlug -> shop.id, same reasoning as the products.service.ts include
   // builders above. A foreign outletId yields an empty nested stock read,
   // never another shop's product data.
-  "public/public.service.ts:getCollection",
+  "public/public.service.ts:getTemplate",
+  "public/public.service.ts:getCollectionBySlug",
+  "public/public.service.ts:getHomepageTemplates",
   "public/public.service.ts:listProducts",
   "public/public.service.ts:getProduct",
   "public/public.service.ts:getProductBySlug",

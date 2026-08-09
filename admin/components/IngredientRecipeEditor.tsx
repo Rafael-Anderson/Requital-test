@@ -16,26 +16,26 @@ export interface RecipeRowDraft {
 // recipe (VariantEditModal). Purely a controlled list editor (rows/onChange)
 // with no save button of its own — the caller submits `rows` alongside the
 // rest of its own form, same as every other "replaces the full set on save"
-// list on this form (categories, tags, images).
+// list on this form (collections, tags, images).
 export default function IngredientRecipeEditor({
   ingredients,
-  categories,
+  collections,
   rows,
   onChange,
 }: {
   ingredients: Ingredient[];
-  categories: IngredientCategory[];
+  collections: IngredientCategory[];
   rows: RecipeRowDraft[];
   onChange: (rows: RecipeRowDraft[]) => void;
 }) {
   // Filters which ingredients are offered in the row dropdowns/"Add
   // ingredient" below — a picker convenience for shops with a large
   // ingredient list, not a constraint on what's already in `rows` (an
-  // existing row keeps its ingredient selected even if its category is
+  // existing row keeps its ingredient selected even if its collection is
   // filtered out, same as any filter-doesn't-hide-existing-selections UX).
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [collectionFilter, setCollectionFilter] = useState("");
   const filteredIngredients =
-    categoryFilter === "" ? ingredients : ingredients.filter((i) => i.categoryId === Number(categoryFilter));
+    collectionFilter === "" ? ingredients : ingredients.filter((i) => i.collectionId === Number(collectionFilter));
 
   function addRow() {
     const used = new Set(rows.map((r) => r.ingredientId));
@@ -66,19 +66,19 @@ export default function IngredientRecipeEditor({
 
   return (
     <div className="space-y-2">
-      {categories.length > 0 && (
+      {collections.length > 0 && (
         <div className="w-48">
           <Combobox
-            value={categoryFilter}
-            onChange={setCategoryFilter}
-            placeholder="All categories"
-            options={[{ value: "", label: "All categories" }, ...categories.map((c) => ({ value: String(c.id), label: c.name }))]}
+            value={collectionFilter}
+            onChange={setCollectionFilter}
+            placeholder="All collections"
+            options={[{ value: "", label: "All collections" }, ...collections.map((c) => ({ value: String(c.id), label: c.name }))]}
           />
         </div>
       )}
       {rows.map((row, index) => {
         // A row's already-selected ingredient always stays in its own
-        // dropdown even if the category filter would otherwise exclude it —
+        // dropdown even if the collection filter would otherwise exclude it —
         // the filter narrows what's offered when picking, it never hides an
         // existing selection out from under the row.
         const selected = ingredients.find((i) => i.id === row.ingredientId);

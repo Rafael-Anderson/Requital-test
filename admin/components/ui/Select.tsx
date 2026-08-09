@@ -8,7 +8,7 @@
 // UI, and screen-reader semantics all come free from the platform, matching
 // shadcn's own SelectTrigger/SelectContent visual contract (trigger height,
 // chevron, focus ring) without reimplementing what <select> already does.
-// For a searchable picker (long product/category/outlet lists), use
+// For a searchable picker (long product/collection/outlet lists), use
 // Combobox.tsx instead — <select> has no search.
 import { forwardRef, useId, type ReactNode, type SelectHTMLAttributes } from "react";
 import { ChevronDown } from "lucide-react";

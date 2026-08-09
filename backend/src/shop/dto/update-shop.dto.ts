@@ -150,7 +150,7 @@ export class UpdateShopDto {
 
   @IsOptional()
   @IsBoolean()
-  showCategoryMenu?: boolean;
+  showCollectionMenu?: boolean;
 
   @IsOptional()
   @IsBoolean()

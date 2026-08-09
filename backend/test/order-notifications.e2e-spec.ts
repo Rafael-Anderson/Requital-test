@@ -172,8 +172,8 @@ describe('Order status customer email notifications (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
@@ -185,7 +185,7 @@ describe('Order status customer email notifications (e2e)', () => {
         price: 25,
         thumbnail: 'https://example.com/x.jpg',
         sku: `NOTIFY-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
         trackInventory: false,
       })
       .expect(201);
@@ -378,10 +378,10 @@ describe('Order status customer email notifications (e2e)', () => {
       .send({ pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Storefront category' })
+      .send({ name: 'Storefront collection' })
       .expect(201);
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -392,7 +392,7 @@ describe('Order status customer email notifications (e2e)', () => {
         thumbnail: 'https://example.com/x.jpg',
         sku: `NOTIFY-SF-${runId}`,
         status: 'Available',
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
       })
       .expect(201);
 
@@ -750,10 +750,10 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
       .send({ pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Nonblocking category' })
+      .send({ name: 'Nonblocking collection' })
       .expect(201);
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -764,7 +764,7 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
         thumbnail: 'https://example.com/x.jpg',
         sku: `NONBLOCK-${slug}`,
         status: 'Available',
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
       })
       .expect(201);
 

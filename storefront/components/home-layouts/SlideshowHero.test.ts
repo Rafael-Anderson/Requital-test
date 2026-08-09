@@ -10,13 +10,13 @@ describe("buildSlides", () => {
   it("uses real uploaded banners, in order, ignoring products entirely when any exist", () => {
     const slides = buildSlides(
       [
-        { url: "/uploads/theme/banner1.jpg", linkUrl: "/collections/sale" },
+        { url: "/uploads/theme/banner1.jpg", linkUrl: "/templates/sale" },
         { url: "/uploads/theme/banner2.jpg", linkUrl: null },
       ],
       [product({ id: 1, name: "A" })],
     );
     expect(slides).toEqual([
-      { image: "http://localhost:3000/uploads/theme/banner1.jpg", label: null, linkUrl: "/collections/sale" },
+      { image: "http://localhost:3000/uploads/theme/banner1.jpg", label: null, linkUrl: "/templates/sale" },
       { image: "http://localhost:3000/uploads/theme/banner2.jpg", label: null, linkUrl: null },
     ]);
   });

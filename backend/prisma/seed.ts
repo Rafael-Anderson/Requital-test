@@ -38,12 +38,12 @@ async function main() {
     },
   });
 
-  const flowers = await prisma.category.upsert({
+  const flowers = await prisma.collection.upsert({
     where: { id: 1 },
     update: {},
     create: { id: 1, shopId: shop.id, name: 'Flowers', slug: 'flowers' },
   });
-  const gifts = await prisma.category.upsert({
+  const gifts = await prisma.collection.upsert({
     where: { id: 2 },
     update: {},
     create: { id: 2, shopId: shop.id, name: 'Gifts', slug: 'gifts' },
@@ -72,7 +72,7 @@ async function main() {
       thumbnail: 'https://example.com/images/red-rose-bouquet.jpg',
       shortSummary: 'A dozen fresh red roses.',
       status: 'Available',
-      productcategory: { create: [{ categoryId: flowers.id }] },
+      productcollection: { create: [{ collectionId: flowers.id }] },
       producttag: { create: [{ tagId: rosesTag.id }] },
     },
   });
@@ -89,7 +89,7 @@ async function main() {
       thumbnail: 'https://example.com/images/chocolate-gift-box.jpg',
       shortSummary: 'Assorted chocolates in a keepsake box.',
       status: 'Available',
-      productcategory: { create: [{ categoryId: gifts.id }] },
+      productcollection: { create: [{ collectionId: gifts.id }] },
       producttag: { create: [{ tagId: boxesTag.id }] },
     },
   });

@@ -5,7 +5,7 @@ import { useToast } from "@/components/ui/Toast";
 
 const UNDO_WINDOW_MS = 6000;
 
-// Optimistic "delete with Undo" for Products/Categories/Discounts/Bio
+// Optimistic "delete with Undo" for Products/Collections/Discounts/Bio
 // Links. The row disappears from the UI immediately; the real DELETE
 // request is deferred until the undo window closes. No backend soft-delete
 // needed — if Undo is clicked, the API call simply never happens. Bulk

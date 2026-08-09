@@ -10,7 +10,7 @@ const TABS: { id: OutletEditTab; label: string; sublabel: string; icon: typeof I
   { id: "address", label: "Address", sublabel: "Location & coordinates", icon: MapPin },
   { id: "delivery", label: "Delivery", sublabel: "Radius & availability", icon: Truck },
   { id: "deliveryArea", label: "Delivery Area", sublabel: "Zones & coverage", icon: Map },
-  { id: "pickup", label: "Pickup", sublabel: "In-store collection", icon: Package },
+  { id: "pickup", label: "Pickup", sublabel: "In-store template", icon: Package },
   { id: "qr", label: "QR", sublabel: "Storefront QR code", icon: QrCode },
 ];
 

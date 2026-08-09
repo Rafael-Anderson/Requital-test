@@ -12,7 +12,7 @@ import {
 // ProductsService (see assertStockTarget) rather than a custom
 // class-validator decorator, same "invariant enforced in the service, not
 // the DTO" convention as every other discriminated-field shape in this
-// codebase (e.g. BioLinksService's type/url/productId/categoryId).
+// codebase (e.g. BioLinksService's type/url/productId/collectionId).
 export class TransferStockDto {
   @IsOptional()
   @IsInt()

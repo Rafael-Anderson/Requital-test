@@ -10,7 +10,7 @@ import { StorageModule } from '../storage/storage.module';
   controllers: [BioLinksController, PublicBioLinksController],
   providers: [BioLinksService],
   // PublicModule needs this too — the shop-scoped public list route lives on
-  // PublicController (mirrors categories/products/outlets exactly), which
+  // PublicController (mirrors collections/products/outlets exactly), which
   // delegates the actual resolution to this service after its own
   // resolveShop/assertPublished checks.
   exports: [BioLinksService],

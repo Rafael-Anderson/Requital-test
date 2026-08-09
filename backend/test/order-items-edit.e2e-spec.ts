@@ -91,19 +91,19 @@ describe('Order item editing after placement (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId };
+    return { adminToken, outletId, collectionId };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     overrides: Record<string, unknown> = {},
   ) {
     const res = await request(app.getHttpServer())
@@ -114,7 +114,7 @@ describe('Order item editing after placement (e2e)', () => {
         price: 20,
         thumbnail: 'https://example.com/x.jpg',
         sku: `EDIT-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
         ...overrides,
       })
@@ -171,9 +171,9 @@ describe('Order item editing after placement (e2e)', () => {
 
   describe('editable status window', () => {
     it('rejects edits once the order is preparing or beyond', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('edit-status-window');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
       await request(app.getHttpServer())
         .patch(`/orders/${order.id}/status`)
@@ -194,12 +194,12 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('allows edits while pending and while confirmed', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('edit-status-ok');
       // Not stock-tracked — this test is only about the status-window gate,
       // not stock semantics (covered separately below), so a quantity
       // increase past confirm must succeed regardless of stock levels.
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         trackInventory: false,
       });
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
@@ -226,10 +226,10 @@ describe('Order item editing after placement (e2e)', () => {
 
   describe('stock reservation semantics', () => {
     it('a still-pending, admin-channel order has NOT reserved stock yet — editing its quantity touches no stock', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'edit-pending-no-reserve',
       );
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
       // Nothing decremented yet — pending, non-immediate channel.
@@ -246,10 +246,10 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('increasing quantity on a confirmed order atomically decrements the extra amount', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'edit-confirmed-increase',
       );
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
       await request(app.getHttpServer())
@@ -270,10 +270,10 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('decreasing quantity on a confirmed order releases stock back', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop(
+      const { adminToken, collectionId, outletId } = await setupShop(
         'edit-confirmed-decrease',
       );
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 5);
       await request(app.getHttpServer())
@@ -293,10 +293,10 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('removing an item from a confirmed order fully releases its stock, and adding a new item decrements it', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('edit-add-remove');
-      const p1 = await createProduct(adminToken, categoryId);
-      const p2 = await createProduct(adminToken, categoryId);
+      const p1 = await createProduct(adminToken, collectionId);
+      const p2 = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, p1.id, 10);
       await seedStock(adminToken, outletId, p2.id, 10);
       const order = await createAdminOrder(adminToken, outletId, p1.id, 4);
@@ -319,9 +319,9 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('rejects an increase beyond available stock (409) and leaves everything unchanged', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('edit-insufficient');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 5);
       const order = await createAdminOrder(adminToken, outletId, product.id, 2);
       await request(app.getHttpServer())
@@ -347,8 +347,8 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('race: two concurrent quantity-increase edits on a confirmed order, only enough stock for one', async () => {
-      const { adminToken, categoryId, outletId } = await setupShop('edit-race');
-      const product = await createProduct(adminToken, categoryId);
+      const { adminToken, collectionId, outletId } = await setupShop('edit-race');
+      const product = await createProduct(adminToken, collectionId);
       await seedStock(adminToken, outletId, product.id, 10);
       const order = await createAdminOrder(adminToken, outletId, product.id, 1);
       await request(app.getHttpServer())
@@ -382,9 +382,9 @@ describe('Order item editing after placement (e2e)', () => {
 
   describe('discount interaction', () => {
     it('drops a discount that no longer meets its minimum purchase after items shrink', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('edit-discount-min');
-      const product = await createProduct(adminToken, categoryId, {
+      const product = await createProduct(adminToken, collectionId, {
         price: 100,
       });
       const discount = await request(app.getHttpServer())
@@ -433,7 +433,7 @@ describe('Order item editing after placement (e2e)', () => {
     it("cannot edit another shop's order", async () => {
       const shopA = await setupShop('edit-tenant-a');
       const shopB = await setupShop('edit-tenant-b');
-      const productA = await createProduct(shopA.adminToken, shopA.categoryId);
+      const productA = await createProduct(shopA.adminToken, shopA.collectionId);
       const orderA = await createAdminOrder(
         shopA.adminToken,
         shopA.outletId,
@@ -449,9 +449,9 @@ describe('Order item editing after placement (e2e)', () => {
     });
 
     it('viewer cannot edit order items; branch and order_manager can', async () => {
-      const { adminToken, categoryId, outletId } =
+      const { adminToken, collectionId, outletId } =
         await setupShop('edit-role-gate');
-      const product = await createProduct(adminToken, categoryId);
+      const product = await createProduct(adminToken, collectionId);
       const order = await createAdminOrder(adminToken, outletId, product.id, 1);
 
       const viewerEmail = `edit-role-gate-viewer-${runId}@test.com`;

@@ -89,19 +89,19 @@ describe('Audit log (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, adminEmail, outletId, categoryId };
+    return { adminToken, adminEmail, outletId, collectionId };
   }
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     price = 50,
   ) {
     const res = await request(app.getHttpServer())
@@ -112,7 +112,7 @@ describe('Audit log (e2e)', () => {
         price,
         thumbnail: 'https://example.com/x.jpg',
         sku: `AUDIT-${runId}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     return body<ProductRow>(res);
@@ -135,8 +135,8 @@ describe('Audit log (e2e)', () => {
   });
 
   it('logs a product price change with before/after', async () => {
-    const { adminToken, categoryId } = await setupShop('audit-price');
-    const product = await createProduct(adminToken, categoryId, 50);
+    const { adminToken, collectionId } = await setupShop('audit-price');
+    const product = await createProduct(adminToken, collectionId, 50);
 
     await request(app.getHttpServer())
       .patch(`/products/${product.id}`)
@@ -157,8 +157,8 @@ describe('Audit log (e2e)', () => {
   });
 
   it('does NOT log an update that leaves price unchanged', async () => {
-    const { adminToken, categoryId } = await setupShop('audit-price-unchanged');
-    const product = await createProduct(adminToken, categoryId, 50);
+    const { adminToken, collectionId } = await setupShop('audit-price-unchanged');
+    const product = await createProduct(adminToken, collectionId, 50);
 
     await request(app.getHttpServer())
       .patch(`/products/${product.id}`)
@@ -178,8 +178,8 @@ describe('Audit log (e2e)', () => {
   });
 
   it('logs a product delete and a product status change', async () => {
-    const { adminToken, categoryId } = await setupShop('audit-delete-status');
-    const product = await createProduct(adminToken, categoryId);
+    const { adminToken, collectionId } = await setupShop('audit-delete-status');
+    const product = await createProduct(adminToken, collectionId);
 
     await request(app.getHttpServer())
       .patch(`/products/${product.id}/availability`)
@@ -203,10 +203,10 @@ describe('Audit log (e2e)', () => {
   });
 
   it('logs bulk status, bulk delete, and bulk price actions as one summary row each', async () => {
-    const { adminToken, categoryId } = await setupShop('audit-bulk');
-    const p1 = await createProduct(adminToken, categoryId);
-    const p2 = await createProduct(adminToken, categoryId);
-    const p3 = await createProduct(adminToken, categoryId);
+    const { adminToken, collectionId } = await setupShop('audit-bulk');
+    const p1 = await createProduct(adminToken, collectionId);
+    const p2 = await createProduct(adminToken, collectionId);
+    const p3 = await createProduct(adminToken, collectionId);
 
     await request(app.getHttpServer())
       .patch('/products/bulk-status')
@@ -252,9 +252,9 @@ describe('Audit log (e2e)', () => {
   });
 
   it('logs an order status change', async () => {
-    const { adminToken, categoryId, outletId } =
+    const { adminToken, collectionId, outletId } =
       await setupShop('audit-order-status');
-    const product = await createProduct(adminToken, categoryId);
+    const product = await createProduct(adminToken, collectionId);
     const order = await request(app.getHttpServer())
       .post('/orders')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -286,18 +286,18 @@ describe('Audit log (e2e)', () => {
     expect(entry?.action).toBe('order.status_changed');
   });
 
-  it('logs a category delete, a discount delete, and a bio link delete', async () => {
-    const { adminToken, categoryId } = await setupShop('audit-other-deletes');
+  it('logs a collection delete, a discount delete, and a bio link delete', async () => {
+    const { adminToken, collectionId } = await setupShop('audit-other-deletes');
 
-    // Category delete (needs its own, unassigned category to avoid the
+    // Collection delete (needs its own, unassigned collection to avoid the
     // "has products assigned" guard).
     const cat2 = await request(app.getHttpServer())
-      .post('/categories')
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'Deletable Category' })
+      .send({ name: 'Deletable Collection' })
       .expect(201);
     await request(app.getHttpServer())
-      .delete(`/categories/${body<IdRow>(cat2).id}`)
+      .delete(`/collections/${body<IdRow>(cat2).id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
@@ -337,17 +337,17 @@ describe('Audit log (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     const actions = body<AuditLogList>(logs).data.map((l) => l.action);
-    expect(actions).toContain('category.deleted');
+    expect(actions).toContain('collection.deleted');
     expect(actions).toContain('discount.deleted');
     expect(actions).toContain('biolink.deleted');
-    void categoryId;
+    void collectionId;
   });
 
   describe('list endpoint: filters, pagination, tenant isolation, role gate', () => {
     it('filters by actorUserId and paginates', async () => {
-      const { adminToken, categoryId } = await setupShop('audit-filter-actor');
+      const { adminToken, collectionId } = await setupShop('audit-filter-actor');
       for (let i = 0; i < 3; i++) {
-        const p = await createProduct(adminToken, categoryId);
+        const p = await createProduct(adminToken, collectionId);
         await request(app.getHttpServer())
           .delete(`/products/${p.id}`)
           .set('Authorization', `Bearer ${adminToken}`)
@@ -372,7 +372,7 @@ describe('Audit log (e2e)', () => {
     it("adversarial: shop B never sees shop A's audit log entries", async () => {
       const shopA = await setupShop('audit-tenant-a');
       const shopB = await setupShop('audit-tenant-b');
-      const product = await createProduct(shopA.adminToken, shopA.categoryId);
+      const product = await createProduct(shopA.adminToken, shopA.collectionId);
       await request(app.getHttpServer())
         .delete(`/products/${product.id}`)
         .set('Authorization', `Bearer ${shopA.adminToken}`)

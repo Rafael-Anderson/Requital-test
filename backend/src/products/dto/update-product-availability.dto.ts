@@ -5,7 +5,7 @@ import type { ProductStatus } from './create-product.dto';
 // Deliberately the only field this endpoint accepts — see
 // products.controller.ts for why this is split out from UpdateProductDto:
 // a branch user is allowed to flip a product's availability (their outlet's
-// day-to-day reality) but must not be able to sneak a name/price/category
+// day-to-day reality) but must not be able to sneak a name/price/collection
 // change through the same request.
 export class UpdateProductAvailabilityDto {
   @IsIn(PRODUCT_STATUSES)

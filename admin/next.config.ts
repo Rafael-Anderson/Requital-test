@@ -33,8 +33,16 @@ const nextConfig: NextConfig = {
   // Categories moved from its own top-level page into a tab under
   // Inventory — kept as a real redirect (not a client-side stub page) so
   // any bookmarked/shared /categories link still lands correctly.
+  // /collections (the old curated-grouping model) was renamed to /templates
+  // as part of the Phase C Categories→Collections/Collections→Templates
+  // terminology swap — same reasoning, real redirect for old bookmarks.
   async redirects() {
-    return [{ source: "/categories", destination: "/inventory/categories", permanent: true }];
+    return [
+      { source: "/categories", destination: "/inventory/categories", permanent: true },
+      { source: "/collections", destination: "/templates", permanent: true },
+      { source: "/collections/new", destination: "/templates/new", permanent: true },
+      { source: "/collections/:id/edit", destination: "/templates/:id/edit", permanent: true },
+    ];
   },
   async headers() {
     return [

@@ -1,25 +1,21 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
-  Min,
   MaxLength,
-  ValidateNested,
+  Min,
 } from 'class-validator';
-import { COLLECTION_TYPES, type CollectionType } from '../collection-constants';
-import { CollectionRulesDto } from './collection-rules.dto';
 
 export class UpdateCollectionDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  title?: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
@@ -29,32 +25,29 @@ export class UpdateCollectionDto {
   })
   slug?: string;
 
+  // Explicit null moves the collection to the root (no parent); undefined
+  // means "leave unchanged" — IsOptional only skips validation on those two,
+  // so null still reaches the service as a real value.
   @IsOptional()
-  @IsString()
-  description?: string;
-
-  // Explicit null clears the image; undefined leaves it unchanged — same
-  // convention as CategoryFormModal's image field.
-  @IsOptional()
-  @IsString()
-  image?: string | null;
-
-  @IsOptional()
-  @IsIn(COLLECTION_TYPES)
-  type?: CollectionType;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CollectionRulesDto)
-  rules?: CollectionRulesDto;
-
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @Transform(({ value }: { value: unknown }) =>
+    value === null || value === undefined ? value : Number(value),
+  )
+  @IsInt()
+  parentCollectionId?: number | null;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   displayOrder?: number;
+
+  // Explicit null clears the image; undefined leaves it unchanged — same
+  // convention as parentCollectionId above.
+  @IsOptional()
+  @IsString()
+  image?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isFeatured?: boolean;
 }

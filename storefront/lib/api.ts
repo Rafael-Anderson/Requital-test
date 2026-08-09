@@ -2,9 +2,12 @@ import type {
   AbandonedCartItemInput,
   BioLink,
   BioPageConfig,
-  Category,
+  Collection,
   CollectionDetail,
-  CollectionSummary,
+  HomepageTemplateSection,
+  MenuItem,
+  TemplateDetail,
+  TemplateSummary,
   CreateOrderPayload,
   CreateOrderResponse,
   Customer,
@@ -99,18 +102,37 @@ export function listShopsForSitemap() {
   return get<{ slug: string; updatedAt: string }[]>(`/public/shops/sitemap`);
 }
 
-export function listCategories(shopSlug: string) {
-  return get<Category[]>(`/public/${shopSlug}/categories`);
-}
-
 export function listCollections(shopSlug: string) {
-  return get<CollectionSummary[]>(`/public/${shopSlug}/collections`);
+  return get<Collection[]>(`/public/${shopSlug}/collections`);
 }
 
-export async function getCollection(shopSlug: string, slug: string, outletId?: number) {
+// Collection (taxonomy node) detail page — /[shop]/collections/[slug].
+export async function getCollectionBySlug(shopSlug: string, slug: string, outletId?: number) {
   const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
   const collection = await get<CollectionDetail>(`/public/${shopSlug}/collections/${slug}${qs}`);
   return { ...collection, products: collection.products.map(resolveProductImage) };
+}
+
+export function listTemplates(shopSlug: string) {
+  return get<TemplateSummary[]>(`/public/${shopSlug}/templates`);
+}
+
+export async function getTemplate(shopSlug: string, slug: string, outletId?: number) {
+  const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
+  const template = await get<TemplateDetail>(`/public/${shopSlug}/templates/${slug}${qs}`);
+  return { ...template, products: template.products.map(resolveProductImage) };
+}
+
+// Storefront Home tab, 'templates' mode.
+export async function getHomepageTemplates(shopSlug: string, outletId?: number) {
+  const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
+  const sections = await get<HomepageTemplateSection[]>(`/public/${shopSlug}/homepage-templates${qs}`);
+  return sections.map((s) => ({ ...s, products: s.products.map(resolveProductImage) }));
+}
+
+// Storefront top-bar "Menu" — direct Collection links + Dropdowns.
+export function getMenu(shopSlug: string) {
+  return get<MenuItem[]>(`/public/${shopSlug}/menu`);
 }
 
 export function getBioLinks(shopSlug: string) {
@@ -145,12 +167,12 @@ function resolveProductImage(p: Product): Product {
 export async function listProducts(
   shopSlug: string,
   outletId?: number,
-  categoryId?: number,
+  collectionId?: number,
   isCheckoutAddon?: boolean,
 ) {
   const params = new URLSearchParams();
   if (outletId !== undefined) params.set("outletId", String(outletId));
-  if (categoryId !== undefined) params.set("categoryId", String(categoryId));
+  if (collectionId !== undefined) params.set("collectionId", String(collectionId));
   if (isCheckoutAddon !== undefined) params.set("isCheckoutAddon", String(isCheckoutAddon));
   const qs = params.toString();
   const products = await get<Product[]>(`/public/${shopSlug}/products${qs ? `?${qs}` : ""}`);
@@ -172,7 +194,7 @@ export async function getProductBySlug(shopSlug: string, slug: string, outletId?
   return resolveProductImage(product);
 }
 
-// Collection-first, same-category fallback — see RelatedProducts.tsx and
+// Template-first, same-collection fallback — see RelatedProducts.tsx and
 // the backend's PublicService.getRelatedProducts (Phase 8.4).
 export async function getRelatedProducts(shopSlug: string, slug: string, outletId?: number) {
   const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
@@ -205,7 +227,7 @@ export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
 
 export function validateDiscount(
   shopSlug: string,
-  data: { code: string; cartSubtotal: number; productIds?: number[]; categoryIds?: number[] },
+  data: { code: string; cartSubtotal: number; productIds?: number[]; collectionIds?: number[] },
 ) {
   return post<ValidateDiscountResult>(`/public/${shopSlug}/discounts/validate`, data);
 }

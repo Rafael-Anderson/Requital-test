@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-// Lightweight quick-create — name+price+category for a Product, name+unit
+// Lightweight quick-create — name+price+collection for a Product, name+unit
 // for an Ingredient (see CommitScanItemDto.targetType for which fields
 // apply). Full editing happens afterward in the normal product/ingredient
 // pages, same as any other quick-create-then-refine flow in this app.
@@ -32,7 +32,7 @@ export class CommitScanNewItemDto {
   @Type(() => Number)
   @IsInt()
   @IsPositive()
-  categoryId?: number;
+  collectionId?: number;
 
   @IsOptional()
   @IsString()

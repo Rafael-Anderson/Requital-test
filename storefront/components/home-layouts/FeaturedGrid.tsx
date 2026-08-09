@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { resolveImageUrl } from "@/lib/api";
-import type { Category } from "@/lib/types";
+import type { Collection } from "@/lib/types";
 import ClassicHero from "./ClassicHero";
 
 // Pure (no DOM) so the filter/sort itself is directly testable. Shows every
-// top-level category (same set CategoryNav already fetches), not just ones
+// top-level collection (same set CollectionNav already fetches), not just ones
 // marked isFeatured — filtering to isFeatured would render an empty,
 // broken-looking section for the many shops that have never touched that
-// flag. Featured categories are just sorted first as a light nod to it.
-export function selectTiles(categories: Category[]): Category[] {
-  return categories
-    .filter((c) => c.parentCategoryId === null)
+// flag. Featured collections are just sorted first as a light nod to it.
+export function selectTiles(collections: Collection[]): Collection[] {
+  return collections
+    .filter((c) => c.parentCollectionId === null)
     .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || a.displayOrder - b.displayOrder);
 }
 
@@ -35,19 +35,19 @@ export function tileClassName(count: number, index: number): string {
 }
 
 // "Featured Grid" layout — the same banner/heroText top strip as Classic,
-// plus a prominent grid of category tiles above the product listing.
+// plus a prominent grid of collection tiles above the product listing.
 export default function FeaturedGrid({
   shopSlug,
   bannerUrl,
   heroText,
-  categories,
+  collections,
 }: {
   shopSlug: string;
   bannerUrl: string | null;
   heroText: string | null;
-  categories: Category[];
+  collections: Collection[];
 }) {
-  const topLevel = selectTiles(categories);
+  const topLevel = selectTiles(collections);
 
   return (
     <>
@@ -58,7 +58,7 @@ export default function FeaturedGrid({
             {topLevel.map((c, i) => (
               <Link
                 key={c.id}
-                href={`/${shopSlug}?category=${c.id}`}
+                href={`/${shopSlug}/collections/${c.slug}`}
                 className={`group rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-stroke ${tileClassName(topLevel.length, i)}`}
               >
                 <div className="aspect-square bg-black/5 overflow-hidden">

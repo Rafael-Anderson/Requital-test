@@ -18,7 +18,7 @@ const EMPTY_CONFIG: BioPageConfig = {
 // Uses the shop's own Theme (bg-accent/text-accent-foreground/border-stroke
 // etc, applied via ShopProvider — see lib/shop-context.tsx), not any
 // admin-panel styling. Rendered inside the standard ShopLayoutClient
-// wrapper (same Header/CategoryNav every storefront page gets), so it
+// wrapper (same Header/CollectionNav every storefront page gets), so it
 // automatically inherits the "Coming soon" gating for an unpublished shop
 // — see ShopLayoutClient's Body component — with no extra code needed here.
 export default function BioPage() {
@@ -96,10 +96,10 @@ export default function BioPage() {
             const thumbnail =
               link.type === "PRODUCT"
                 ? link.product?.thumbnail
-                : link.type === "CATEGORY"
-                  ? link.category?.image
-                  : link.type === "COLLECTION"
-                    ? link.collection?.image
+                : link.type === "COLLECTION"
+                  ? link.collection?.image
+                  : link.type === "TEMPLATE"
+                    ? link.template?.image
                     : null;
             const resolvedThumbnail = resolveImageUrl(thumbnail);
             return (

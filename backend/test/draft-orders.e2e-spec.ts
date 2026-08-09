@@ -100,12 +100,12 @@ describe('Draft Orders (e2e)', () => {
       })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -115,13 +115,13 @@ describe('Draft Orders (e2e)', () => {
         price: 80,
         thumbnail: 'https://example.com/item.jpg',
         sku: `DRAFT-${slug}-${Math.random().toString(36).slice(2, 8)}`,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
       })
       .expect(201);
     const productId = body<IdRow>(product).id;
 
-    return { adminToken, outletId, categoryId, productId, slug };
+    return { adminToken, outletId, collectionId, productId, slug };
   }
 
   function draftPayload(

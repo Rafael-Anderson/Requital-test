@@ -3,7 +3,7 @@ import { API_URL } from './urls';
 // Deterministic in *shape*, not in exact ids/subdomain — every run gets a
 // fresh shop (subdomain suffixed with the run's own timestamp) so repeated
 // CI runs against the same long-lived MySQL instance never collide on a
-// unique subdomain/SKU/email. The fixture graph itself (1 category, 1
+// unique subdomain/SKU/email. The fixture graph itself (1 collection, 1
 // simple product, 1 variant product with 2 variants, the default outlet
 // from signup, 1 customer + 1 pending order) is identical every run.
 export interface SeedVariant {
@@ -18,7 +18,7 @@ export interface SeedState {
   adminEmail: string;
   adminPassword: string;
   outletId: number;
-  categoryId: number;
+  collectionId: number;
   simpleProduct: { id: number; slug: string; name: string; sku: string };
   variantProduct: {
     id: number;
@@ -99,12 +99,12 @@ export async function seedShop(): Promise<SeedState> {
     accessToken,
   );
 
-  const category = await api<{ id: number }>(
-    '/categories',
+  const collection = await api<{ id: number }>(
+    '/collections',
     { method: 'POST', body: JSON.stringify({ name: 'Flowers' }) },
     accessToken,
   );
-  const categoryId = category.id;
+  const collectionId = collection.id;
 
   const simpleProductRaw = await api<{
     id: number;
@@ -121,7 +121,7 @@ export async function seedShop(): Promise<SeedState> {
         thumbnail: 'https://placehold.co/400x400.png',
         sku: `PW-SIMPLE-${runId}`,
         status: 'Available',
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
       }),
     },
@@ -143,7 +143,7 @@ export async function seedShop(): Promise<SeedState> {
         thumbnail: 'https://placehold.co/400x400.png',
         sku: `PW-VARIANT-${runId}`,
         status: 'Available',
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         trackInventory: true,
       }),
     },
@@ -225,7 +225,7 @@ export async function seedShop(): Promise<SeedState> {
     adminEmail,
     adminPassword,
     outletId,
-    categoryId,
+    collectionId,
     simpleProduct: {
       id: simpleProductRaw.id,
       slug: simpleProductRaw.slug,

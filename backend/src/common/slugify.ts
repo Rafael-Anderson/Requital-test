@@ -4,5 +4,5 @@ export function slugify(input: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return slug || `category-${Date.now()}`;
+  return slug || `collection-${Date.now()}`;
 }

@@ -184,7 +184,7 @@ describe('Roles & permissions granularity (e2e)', () => {
         .send({ name: 'x' })
         .expect(403);
       await request(app.getHttpServer())
-        .post('/categories')
+        .post('/collections')
         .set('Authorization', `Bearer ${omToken}`)
         .send({ name: 'x' })
         .expect(403);

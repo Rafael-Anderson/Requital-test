@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { deleteDiscount, listCategories, listDiscounts, listProducts, updateDiscount } from "@/lib/api";
-import { DISCOUNT_TYPE_LABELS, type Category, type Discount, type Product } from "@/lib/types";
+import { deleteDiscount, listCollections, listDiscounts, listProducts, updateDiscount } from "@/lib/api";
+import { DISCOUNT_TYPE_LABELS, type Collection, type Discount, type Product } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
@@ -26,20 +26,20 @@ export default function DiscountsPage() {
   const deleteWithUndo = useUndoableDelete();
   const [discounts, setDiscounts] = useState<Discount[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Discount | null | "new">(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [discountList, productList, categoryList] = await Promise.all([
+      const [discountList, productList, collectionList] = await Promise.all([
         listDiscounts(),
         listProducts(),
-        listCategories(),
+        listCollections(),
       ]);
       setDiscounts(discountList);
       setProducts(productList);
-      setCategories(categoryList);
+      setCollections(collectionList);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load discounts");
@@ -162,7 +162,7 @@ export default function DiscountsPage() {
         <DiscountFormModal
           discount={editing === "new" ? null : editing}
           products={products}
-          categories={categories}
+          collections={collections}
           onClose={() => setEditing(null)}
           onSaved={refresh}
         />

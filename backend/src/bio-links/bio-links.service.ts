@@ -29,8 +29,8 @@ const PLATFORM_LABELS: Record<string, string> = {
 interface TargetFields {
   url?: string | null;
   productId?: number | null;
-  categoryId?: number | null;
   collectionId?: number | null;
+  templateId?: number | null;
   socialPlatform?: string | null;
 }
 
@@ -38,8 +38,8 @@ const bioLinkInclude = {
   product: {
     select: { id: true, name: true, slug: true, thumbnail: true, status: true },
   },
-  category: { select: { id: true, name: true, slug: true, image: true } },
-  collection: {
+  collection: { select: { id: true, name: true, slug: true, image: true } },
+  template: {
     select: { id: true, title: true, slug: true, image: true, isActive: true },
   },
 } satisfies Prisma.biolinkInclude;
@@ -67,10 +67,10 @@ export class BioLinksService {
     this.assertLabelPresent(dto.type, dto.label);
     if (dto.productId)
       await this.assertProductBelongsToShop(ctx, dto.productId);
-    if (dto.categoryId)
-      await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
     if (dto.collectionId)
       await this.assertCollectionBelongsToShop(ctx, dto.collectionId);
+    if (dto.templateId)
+      await this.assertTemplateBelongsToShop(ctx, dto.templateId);
 
     const { _max } = await this.prisma.biolink.aggregate({
       where: { shopId: ctx.shopId },
@@ -104,8 +104,8 @@ export class BioLinksService {
       dto.type !== undefined ||
       dto.url !== undefined ||
       dto.productId !== undefined ||
-      dto.categoryId !== undefined ||
       dto.collectionId !== undefined ||
+      dto.templateId !== undefined ||
       dto.socialPlatform !== undefined;
 
     const effectiveType = dto.type ?? (existing.type as BioLinkType);
@@ -123,22 +123,22 @@ export class BioLinksService {
         ? {
             url: dto.url,
             productId: dto.productId,
-            categoryId: dto.categoryId,
             collectionId: dto.collectionId,
+            templateId: dto.templateId,
             socialPlatform: dto.socialPlatform,
           }
         : {
             url: dto.url !== undefined ? dto.url : existing.url,
             productId:
               dto.productId !== undefined ? dto.productId : existing.productId,
-            categoryId:
-              dto.categoryId !== undefined
-                ? dto.categoryId
-                : existing.categoryId,
             collectionId:
               dto.collectionId !== undefined
                 ? dto.collectionId
                 : existing.collectionId,
+            templateId:
+              dto.templateId !== undefined
+                ? dto.templateId
+                : existing.templateId,
             socialPlatform:
               dto.socialPlatform !== undefined
                 ? dto.socialPlatform
@@ -153,10 +153,10 @@ export class BioLinksService {
 
     if (targetData.productId)
       await this.assertProductBelongsToShop(ctx, targetData.productId);
-    if (targetData.categoryId)
-      await this.assertCategoryBelongsToShop(ctx, targetData.categoryId);
     if (targetData.collectionId)
       await this.assertCollectionBelongsToShop(ctx, targetData.collectionId);
+    if (targetData.templateId)
+      await this.assertTemplateBelongsToShop(ctx, targetData.templateId);
 
     const updated = await this.prisma.biolink.update({
       where: { id },
@@ -261,7 +261,7 @@ export class BioLinksService {
   }
 
   // Active links only, each resolved to display-ready data — a
-  // product/category that's been deleted or made unavailable is silently
+  // product/collection that's been deleted or made unavailable is silently
   // excluded rather than surfaced broken (see the task's own default: hide
   // from the public response, but the row stays active/visible in admin).
   async listPublic(shop: {
@@ -281,8 +281,8 @@ export class BioLinksService {
       type: string;
       label: string;
       product?: { name: string; slug: string; thumbnail: string } | null;
-      category?: { name: string; slug: string; image: string | null } | null;
-      collection?: { title: string; slug: string; image: string | null } | null;
+      collection?: { name: string; slug: string; image: string | null } | null;
+      template?: { title: string; slug: string; image: string | null } | null;
       socialPlatform?: string | null;
     }> = [];
 
@@ -299,28 +299,28 @@ export class BioLinksService {
             thumbnail: link.product.thumbnail,
           },
         });
-      } else if (link.type === 'CATEGORY') {
-        if (!link.category) continue;
-        result.push({
-          id: link.id,
-          type: link.type,
-          label: link.label ?? link.category.name,
-          category: {
-            name: link.category.name,
-            slug: link.category.slug,
-            image: link.category.image,
-          },
-        });
       } else if (link.type === 'COLLECTION') {
-        if (!link.collection || !link.collection.isActive) continue;
+        if (!link.collection) continue;
         result.push({
           id: link.id,
           type: link.type,
-          label: link.label ?? link.collection.title,
+          label: link.label ?? link.collection.name,
           collection: {
-            title: link.collection.title,
+            name: link.collection.name,
             slug: link.collection.slug,
             image: link.collection.image,
+          },
+        });
+      } else if (link.type === 'TEMPLATE') {
+        if (!link.template || !link.template.isActive) continue;
+        result.push({
+          id: link.id,
+          type: link.type,
+          label: link.label ?? link.template.title,
+          template: {
+            title: link.template.title,
+            slug: link.template.slug,
+            image: link.template.image,
           },
         });
       } else if (link.type === 'SOCIAL_ICON') {
@@ -348,7 +348,7 @@ export class BioLinksService {
   // atomically bumps clickCount — the increment and the redirect-target
   // lookup both happen here so the controller stays a thin @Redirect()
   // wrapper. Only 'inactive' or 'shop not published' reject outright (per
-  // the task); if the specific product/category target has since vanished,
+  // the task); if the specific product/collection target has since vanished,
   // a real visitor who already had the click counted still lands somewhere
   // sensible (the shop's homepage) rather than a dead end — the task didn't
   // specify this edge case for the click endpoint specifically (only for the
@@ -356,7 +356,7 @@ export class BioLinksService {
   async resolveClickTarget(id: number): Promise<string> {
     const link = await this.prisma.biolink.findUnique({
       where: { id },
-      include: { shop: true, product: true, category: true, collection: true },
+      include: { shop: true, product: true, collection: true, template: true },
     });
     if (!link || !link.active || !link.shop.published) {
       throw new NotFoundException('Bio link not found');
@@ -375,11 +375,11 @@ export class BioLinksService {
         return link.product && link.product.status === 'Available'
           ? `${base}/products/${link.product.slug}`
           : base;
-      case 'CATEGORY':
-        return link.category ? `${base}?category=${link.category.id}` : base;
       case 'COLLECTION':
-        return link.collection && link.collection.isActive
-          ? `${base}/collections/${link.collection.slug}`
+        return link.collection ? `${base}?collection=${link.collection.id}` : base;
+      case 'TEMPLATE':
+        return link.template && link.template.isActive
+          ? `${base}/templates/${link.template.slug}`
           : base;
       case 'SOCIAL_ICON':
         return this.resolveSocialUrl(link.shop, link.socialPlatform) ?? base;
@@ -442,10 +442,10 @@ export class BioLinksService {
       url: link.url,
       productId: link.productId,
       productName: link.product?.name ?? null,
-      categoryId: link.categoryId,
-      categoryName: link.category?.name ?? null,
       collectionId: link.collectionId,
-      collectionTitle: link.collection?.title ?? null,
+      collectionName: link.collection?.name ?? null,
+      templateId: link.templateId,
+      templateTitle: link.template?.title ?? null,
       socialPlatform: link.socialPlatform,
       order: link.order,
       active: link.active,
@@ -463,8 +463,8 @@ export class BioLinksService {
       [
         ['url', fields.url],
         ['productId', fields.productId],
-        ['categoryId', fields.categoryId],
         ['collectionId', fields.collectionId],
+        ['templateId', fields.templateId],
         ['socialPlatform', fields.socialPlatform],
       ] as const
     ).filter(([, v]) => v !== undefined && v !== null);
@@ -472,7 +472,7 @@ export class BioLinksService {
     const expectedKey = BIO_LINK_TARGET_FIELD[type];
     if (present.length !== 1 || present[0][0] !== expectedKey) {
       throw new BadRequestException(
-        `type '${type}' requires exactly '${expectedKey}' to be set, and no other target field (url/productId/categoryId/collectionId/socialPlatform)`,
+        `type '${type}' requires exactly '${expectedKey}' to be set, and no other target field (url/productId/collectionId/templateId/socialPlatform)`,
       );
     }
   }
@@ -493,9 +493,9 @@ export class BioLinksService {
     return {
       url: type === 'EXTERNAL_URL' ? (fields.url ?? null) : null,
       productId: type === 'PRODUCT' ? (fields.productId ?? null) : null,
-      categoryId: type === 'CATEGORY' ? (fields.categoryId ?? null) : null,
-      collectionId:
-        type === 'COLLECTION' ? (fields.collectionId ?? null) : null,
+      collectionId: type === 'COLLECTION' ? (fields.collectionId ?? null) : null,
+      templateId:
+        type === 'TEMPLATE' ? (fields.templateId ?? null) : null,
       socialPlatform:
         type === 'SOCIAL_ICON' ? (fields.socialPlatform ?? null) : null,
     };
@@ -523,18 +523,6 @@ export class BioLinksService {
     }
   }
 
-  private async assertCategoryBelongsToShop(
-    ctx: TenantContext,
-    categoryId: number,
-  ) {
-    const category = await this.prisma.category.findFirst({
-      where: { id: categoryId, shopId: ctx.shopId },
-    });
-    if (!category) {
-      throw new NotFoundException(`Category ${categoryId} not found`);
-    }
-  }
-
   private async assertCollectionBelongsToShop(
     ctx: TenantContext,
     collectionId: number,
@@ -544,6 +532,18 @@ export class BioLinksService {
     });
     if (!collection) {
       throw new NotFoundException(`Collection ${collectionId} not found`);
+    }
+  }
+
+  private async assertTemplateBelongsToShop(
+    ctx: TenantContext,
+    templateId: number,
+  ) {
+    const template = await this.prisma.template.findFirst({
+      where: { id: templateId, shopId: ctx.shopId },
+    });
+    if (!template) {
+      throw new NotFoundException(`Template ${templateId} not found`);
     }
   }
 }

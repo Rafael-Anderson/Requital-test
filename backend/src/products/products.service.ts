@@ -96,7 +96,7 @@ function productIngredientIncludeFor(outletId: number | undefined) {
 }
 
 const productInclude = {
-  productcategory: { include: { category: true } },
+  productcollection: { include: { collection: true } },
   producttag: { include: { tag: true } },
   productimage: { orderBy: { order: 'asc' } },
   productattribute: { orderBy: { order: 'asc' } },
@@ -159,7 +159,7 @@ interface ResolvedProductGroup {
     chargeTax?: boolean;
     vendor?: string;
     productType?: string;
-    categoryIds?: number[];
+    collectionIds?: number[];
     tagNames?: string[];
   };
   stock?: number;
@@ -231,7 +231,7 @@ export class ProductsService {
   }
 
   async create(ctx: TenantContext, dto: CreateProductDto) {
-    await this.assertCategoriesBelongToShop(ctx, dto.categoryIds);
+    await this.assertCollectionsBelongToShop(ctx, dto.collectionIds);
     if (dto.ingredients) {
       await this.assertIngredientLinksValid(ctx, dto.ingredients);
     }
@@ -307,8 +307,8 @@ export class ProductsService {
                 })),
               }
             : undefined,
-          productcategory: {
-            create: dto.categoryIds.map((categoryId) => ({ categoryId })),
+          productcollection: {
+            create: dto.collectionIds.map((collectionId) => ({ collectionId })),
           },
           producttag: { create: tagIds.map((tagId) => ({ tagId })) },
           ...(dto.ingredients?.length && {
@@ -396,9 +396,9 @@ export class ProductsService {
                 order: img.order,
               })),
             },
-            productcategory: {
-              create: original.productcategory.map((pc) => ({
-                categoryId: pc.categoryId,
+            productcollection: {
+              create: original.productcollection.map((pc) => ({
+                collectionId: pc.collectionId,
               })),
             },
             producttag: {
@@ -485,8 +485,8 @@ export class ProductsService {
   async update(ctx: TenantContext, id: number, dto: UpdateProductDto) {
     const current = await this.findRaw(ctx, id);
 
-    if (dto.categoryIds) {
-      await this.assertCategoriesBelongToShop(ctx, dto.categoryIds);
+    if (dto.collectionIds) {
+      await this.assertCollectionsBelongToShop(ctx, dto.collectionIds);
     }
     if (dto.ingredients) {
       await this.assertIngredientLinksValid(ctx, dto.ingredients);
@@ -502,8 +502,8 @@ export class ProductsService {
 
     try {
       const product = await this.prisma.$transaction(async (tx) => {
-        if (dto.categoryIds) {
-          await tx.productcategory.deleteMany({ where: { productId: id } });
+        if (dto.collectionIds) {
+          await tx.productcollection.deleteMany({ where: { productId: id } });
         }
         if (tagIds !== undefined) {
           await tx.producttag.deleteMany({ where: { productId: id } });
@@ -622,10 +622,10 @@ export class ProductsService {
             giftCardDenominations: dto.giftCardDenominations,
             giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
             giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
-            ...(dto.categoryIds && {
-              productcategory: {
-                create: dto.categoryIds.map((categoryId) => ({
-                  categoryId,
+            ...(dto.collectionIds && {
+              productcollection: {
+                create: dto.collectionIds.map((collectionId) => ({
+                  collectionId,
                 })),
               },
             }),
@@ -1984,9 +1984,9 @@ export class ProductsService {
               status: group.data.status ?? 'Available',
               trackInventory: group.data.trackInventory ?? false,
               chargeTax: group.data.chargeTax ?? true,
-              productcategory: {
-                create: (group.data.categoryIds ?? []).map((categoryId) => ({
-                  categoryId,
+              productcollection: {
+                create: (group.data.collectionIds ?? []).map((collectionId) => ({
+                  collectionId,
                 })),
               },
               producttag: { create: tagIds.map((tagId) => ({ tagId })) },
@@ -1997,12 +1997,12 @@ export class ProductsService {
           created += 1;
         } else {
           productId = group.productId!;
-          if (group.data.categoryIds) {
-            await tx.productcategory.deleteMany({ where: { productId } });
-            await tx.productcategory.createMany({
-              data: group.data.categoryIds.map((categoryId) => ({
+          if (group.data.collectionIds) {
+            await tx.productcollection.deleteMany({ where: { productId } });
+            await tx.productcollection.createMany({
+              data: group.data.collectionIds.map((collectionId) => ({
                 productId,
-                categoryId,
+                collectionId,
               })),
             });
           }
@@ -2233,20 +2233,20 @@ export class ProductsService {
     const results: ImportRowResult[] = [];
     const groups: ResolvedProductGroup[] = [];
 
-    const allCategoryNames = new Set<string>();
+    const allCollectionNames = new Set<string>();
     rawRows.forEach((raw) =>
-      splitList(raw['Categories'] ?? '').forEach((n) =>
-        allCategoryNames.add(n),
+      splitList(raw['Collections'] ?? '').forEach((n) =>
+        allCollectionNames.add(n),
       ),
     );
-    const categoryRows = allCategoryNames.size
-      ? await this.prisma.category.findMany({
-          where: { shopId: ctx.shopId, name: { in: [...allCategoryNames] } },
+    const collectionRows = allCollectionNames.size
+      ? await this.prisma.collection.findMany({
+          where: { shopId: ctx.shopId, name: { in: [...allCollectionNames] } },
           select: { id: true, name: true },
         })
       : [];
-    const categoryIdByName = new Map(
-      categoryRows.map((c) => [c.name.toLowerCase(), c.id]),
+    const collectionIdByName = new Map(
+      collectionRows.map((c) => [c.name.toLowerCase(), c.id]),
     );
 
     let autoHandle = 0;
@@ -2279,7 +2279,7 @@ export class ProductsService {
       const chargeTax = parseImportBoolean(raw['Charge Tax'] ?? '');
       const status = raw['Status']?.trim() || undefined;
       const thumbnail = raw['Thumbnail URL']?.trim() || undefined;
-      const categoryNames = splitList(raw['Categories'] ?? '');
+      const collectionNames = splitList(raw['Collections'] ?? '');
       const tagNames = raw['Tags']?.trim() ? splitList(raw['Tags']) : undefined;
 
       if (!name) errors.push('Name is required');
@@ -2298,13 +2298,13 @@ export class ProductsService {
       if (status && !(PRODUCT_STATUSES as readonly string[]).includes(status))
         errors.push(`Unknown status: ${status}`);
 
-      const categoryIds: number[] = [];
-      for (const catName of categoryNames) {
-        const id = categoryIdByName.get(catName.toLowerCase());
+      const collectionIds: number[] = [];
+      for (const catName of collectionNames) {
+        const id = collectionIdByName.get(catName.toLowerCase());
         if (id === undefined) {
-          errors.push(`Unknown category: ${catName}`);
+          errors.push(`Unknown collection: ${catName}`);
         } else {
-          categoryIds.push(id);
+          collectionIds.push(id);
         }
       }
 
@@ -2327,9 +2327,9 @@ export class ProductsService {
           errors.push('Price is required to create a new product');
         if (!thumbnail)
           errors.push('Thumbnail URL is required to create a new product');
-        if (categoryIds.length === 0)
+        if (collectionIds.length === 0)
           errors.push(
-            'At least one category is required to create a new product',
+            'At least one collection is required to create a new product',
           );
         if (sku) {
           if (usedNewSkus.has(sku))
@@ -2365,7 +2365,7 @@ export class ProductsService {
           chargeTax,
           vendor: raw['Vendor']?.trim() || undefined,
           productType: raw['Product Type']?.trim() || undefined,
-          categoryIds: categoryNames.length > 0 ? categoryIds : undefined,
+          collectionIds: collectionNames.length > 0 ? collectionIds : undefined,
           tagNames,
         },
         stock: variantRows.length === 0 ? stock : undefined,
@@ -2482,17 +2482,17 @@ export class ProductsService {
     return sorted[0].url;
   }
 
-  private async assertCategoriesBelongToShop(
+  private async assertCollectionsBelongToShop(
     ctx: TenantContext,
-    categoryIds: number[],
+    collectionIds: number[],
   ) {
-    const uniqueIds = [...new Set(categoryIds)];
-    const count = await this.prisma.category.count({
+    const uniqueIds = [...new Set(collectionIds)];
+    const count = await this.prisma.collection.count({
       where: { id: { in: uniqueIds }, shopId: ctx.shopId },
     });
     if (count !== uniqueIds.length) {
       throw new BadRequestException(
-        'One or more categoryIds are invalid for this shop',
+        'One or more collectionIds are invalid for this shop',
       );
     }
   }
@@ -2502,7 +2502,7 @@ export class ProductsService {
   // duplicate product names are common (two "Chocolate Cake" products) and
   // shouldn't block creation. Only used on create's auto-generate path; an
   // explicitly-provided slug (create or update) is used as-is and relies on
-  // the DB unique constraint to reject a real collision, same as categories.
+  // the DB unique constraint to reject a real collision, same as collections.
   private async resolveUniqueSlug(
     shopId: number,
     base: string,
@@ -2556,7 +2556,7 @@ export class ProductsService {
 
   private toResponse(product: ProductWithRelations, totalSold = 0) {
     const {
-      productcategory,
+      productcollection,
       producttag,
       productimage,
       productattribute,
@@ -2584,7 +2584,7 @@ export class ProductsService {
     const availability = this.computeIngredientAvailability(productingredient);
     return {
       ...rest,
-      categories: productcategory.map((pc) => pc.category),
+      collections: productcollection.map((pc) => pc.collection),
       tags: producttag.map((pt) => pt.tag.name),
       images: productimage.map((i) => ({
         id: i.id,

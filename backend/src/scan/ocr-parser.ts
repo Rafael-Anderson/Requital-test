@@ -38,7 +38,7 @@ export interface ParsedLineItem {
 }
 
 // Case-insensitive substring match, same convention as CSV import's
-// category/tag matching elsewhere in this codebase — a merchant thinks in
+// collection/tag matching elsewhere in this codebase — a merchant thinks in
 // "does this word appear", not regex.
 export function filterLines(
   rawText: string,

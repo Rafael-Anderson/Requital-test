@@ -136,8 +136,8 @@ describe('Reports (e2e)', () => {
       .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
       .expect(200);
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
@@ -149,7 +149,7 @@ describe('Reports (e2e)', () => {
         price: 20,
         thumbnail: 'https://example.com/rose.jpg',
         sku: `ROSE-${slugPrefix}-${runId}`,
-        categoryIds: [body<IdRow>(category).id],
+        collectionIds: [body<IdRow>(collection).id],
       })
       .expect(201);
 
@@ -408,10 +408,10 @@ describe('Reports (e2e)', () => {
 
     it('search matches by product name; sorting by totalSalePrice orders the higher earner first', async () => {
       const shop = await setupShop('product-sort');
-      const category = await request(app.getHttpServer())
-        .post('/categories')
+      const collection = await request(app.getHttpServer())
+        .post('/collections')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ name: 'Second Category' })
+        .send({ name: 'Second Collection' })
         .expect(201);
       const secondProduct = await request(app.getHttpServer())
         .post('/products')
@@ -421,7 +421,7 @@ describe('Reports (e2e)', () => {
           price: 5,
           thumbnail: 'https://example.com/filler.jpg',
           sku: `FILLER-${runId}`,
-          categoryIds: [body<IdRow>(category).id],
+          collectionIds: [body<IdRow>(collection).id],
         })
         .expect(201);
       const secondProductId = body<IdRow>(secondProduct).id;

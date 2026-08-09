@@ -18,7 +18,7 @@ export const PRODUCT_IMPORT_HEADERS = [
   'Vendor',
   'Product Type',
   'Thumbnail URL',
-  'Categories',
+  'Collections',
   'Tags',
   'Variant',
   'Variant SKU',

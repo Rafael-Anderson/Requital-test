@@ -30,7 +30,7 @@ export function CardSkeleton() {
 }
 
 // Shared shape for loading.tsx on any list/table page (Inventory,
-// Customers, Collections, Discounts, Affiliate, Bio Links, Activity Log,
+// Customers, Templates, Discounts, Affiliate, Bio Links, Activity Log,
 // Outlets/Users settings, Reports, ...) — title + optional create button,
 // optional tabs, optional search bar, then a header row + TableSkeleton
 // body, matching the real Table/THead/TR shape those pages render into.

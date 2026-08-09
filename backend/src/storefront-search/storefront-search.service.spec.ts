@@ -14,7 +14,7 @@ function fakeProduct(overrides: Record<string, unknown> = {}) {
     description: 'A lovely bouquet',
     shortSummary: null,
     producttag: [],
-    collectionproduct: [],
+    templateproduct: [],
     ...overrides,
   };
 }

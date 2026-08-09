@@ -104,12 +104,12 @@ describe('Low Stock Alerts (e2e)', () => {
       outletIds.push(body<IdRow>(created).id);
     }
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'General' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
     const product = await request(app.getHttpServer())
       .post('/products')
@@ -120,7 +120,7 @@ describe('Low Stock Alerts (e2e)', () => {
         thumbnail: 'https://example.com/x.jpg',
         sku: `LS-${runId}-${Math.random().toString(36).slice(2, 8)}`,
         trackInventory: true,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
       })
       .expect(201);
     const productId = body<IdRow>(product).id;

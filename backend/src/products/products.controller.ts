@@ -39,7 +39,7 @@ import type { TenantContext } from '../common/tenant-context';
 // Reads, per-outlet stock adjustment, and the availability toggle stay open
 // to any authenticated role — a branch user managing their own outlet's
 // day-to-day stock/availability reality is normal. Everything that edits
-// the shared catalog *structure* (name, price, images, category
+// the shared catalog *structure* (name, price, images, collection
 // assignment, create/delete) is admin-only, same as Outlets/DeliveryZones.
 @Controller('products')
 export class ProductsController {

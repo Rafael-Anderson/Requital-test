@@ -87,7 +87,7 @@ function ContactList({ shop, center = false }: { shop: Shop; center?: boolean })
 // Fixed structure, configurable content — not a drag-and-drop section
 // builder (explicitly out of scope). Renders as a direct sibling of
 // StorefrontPageShell content in ShopLayoutClient, full-bleed, same "own
-// background/width, contained inner row" pattern as TopBar/CategoryNav.
+// background/width, contained inner row" pattern as TopBar/CollectionNav.
 // Two real arrangements (footerLayout) — "columns" (the original, brand/
 // links/social+contact side by side) and "centered" (a single simplified
 // stacked column) — each independently sized via footerDensity.

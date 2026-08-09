@@ -83,14 +83,14 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       .expect(200);
     const outletId = body<OutletRow[]>(outlets)[0].id;
 
-    const category = await request(app.getHttpServer())
-      .post('/categories')
+    const collection = await request(app.getHttpServer())
+      .post('/collections')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'Flowers' })
       .expect(201);
-    const categoryId = body<IdRow>(category).id;
+    const collectionId = body<IdRow>(collection).id;
 
-    return { adminToken, outletId, categoryId, slug };
+    return { adminToken, outletId, collectionId, slug };
   }
 
   async function createIngredient(adminToken: string, name: string) {
@@ -117,7 +117,7 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
 
   async function createProduct(
     adminToken: string,
-    categoryId: number,
+    collectionId: number,
     ingredientId: number,
     quantityPerUnit: number,
   ) {
@@ -130,7 +130,7 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
         thumbnail: 'https://example.com/bouquet.jpg',
         sku: `BOMEDIT-${runId}-${Math.random().toString(36).slice(2, 8)}`,
         trackInventory: true,
-        categoryIds: [categoryId],
+        collectionIds: [collectionId],
         ingredients: [{ ingredientId, quantityPerUnit }],
       })
       .expect(201);
@@ -173,10 +173,10 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   }
 
   it('increasing quantity on a confirmed order deducts only the delta from ingredient stock', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('increase');
+    const { adminToken, collectionId, outletId } = await setupShop('increase');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
-    const productId = await createProduct(adminToken, categoryId, rose, 6);
+    const productId = await createProduct(adminToken, collectionId, rose, 6);
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -203,10 +203,10 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('decreasing quantity on a confirmed order returns only the delta to ingredient stock', async () => {
-    const { adminToken, categoryId, outletId } = await setupShop('decrease');
+    const { adminToken, collectionId, outletId } = await setupShop('decrease');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
-    const productId = await createProduct(adminToken, categoryId, rose, 6);
+    const productId = await createProduct(adminToken, collectionId, rose, 6);
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -231,11 +231,11 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('cancelling after an edit returns exactly the currently-reserved ingredient stock, not the original amount', async () => {
-    const { adminToken, categoryId, outletId } =
+    const { adminToken, collectionId, outletId } =
       await setupShop('cancel-after-edit');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
-    const productId = await createProduct(adminToken, categoryId, rose, 6);
+    const productId = await createProduct(adminToken, collectionId, rose, 6);
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -264,11 +264,11 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('editing a still-pending order does not touch ingredient stock at all', async () => {
-    const { adminToken, categoryId, outletId } =
+    const { adminToken, collectionId, outletId } =
       await setupShop('pending-edit');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 1000);
-    const productId = await createProduct(adminToken, categoryId, rose, 6);
+    const productId = await createProduct(adminToken, collectionId, rose, 6);
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -301,11 +301,11 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   });
 
   it('a quantity increase that would take ingredient stock negative warns but still saves', async () => {
-    const { adminToken, categoryId, outletId } =
+    const { adminToken, collectionId, outletId } =
       await setupShop('negative-warn');
     const rose = await createIngredient(adminToken, 'Rose');
     await setIngredientStock(adminToken, rose, outletId, 10); // exactly one unit's worth
-    const productId = await createProduct(adminToken, categoryId, rose, 10);
+    const productId = await createProduct(adminToken, collectionId, rose, 10);
     await request(app.getHttpServer())
       .patch('/products/stock/bulk-adjust')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -337,7 +337,7 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
     await setIngredientStock(shopA.adminToken, rose, shopA.outletId, 1000);
     const productId = await createProduct(
       shopA.adminToken,
-      shopA.categoryId,
+      shopA.collectionId,
       rose,
       6,
     );

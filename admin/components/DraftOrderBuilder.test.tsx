@@ -36,7 +36,7 @@ function renderBuilder() {
   );
 }
 
-// Same trigger-has-no-label-association caveat as CollectionForm.test.tsx.
+// Same trigger-has-no-label-association caveat as TemplateForm.test.tsx.
 function getCombobox(labelText: string) {
   const container = screen.getByText(labelText).closest("div");
   return within(container as HTMLElement).getByRole("combobox");
