@@ -335,7 +335,7 @@ export class DraftOrdersService {
   }
 
   private sumItems(
-    items: { price: Prisma.Decimal | number; quantity: number }[],
+    items: { price: Prisma.Decimal | number | string; quantity: number }[],
   ): number {
     return items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0);
   }

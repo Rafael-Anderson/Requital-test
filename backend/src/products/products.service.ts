@@ -5,8 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService, type QueryParam } from '../database/database.service';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import { buildSetClause } from '../database/update.util';
+import { upsert } from '../database/upsert.util';
+import { trimDecimal } from '../database/decimal.util';
+import type { PoolConnection, Pool, RowDataPacket } from 'mysql2/promise';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { slugify } from '../common/slugify';
@@ -44,77 +50,114 @@ import {
   splitList,
 } from './products-import';
 
-// Bill of Materials — an ingredient's own fields plus (only when an outlet
-// is actually resolved) its live stock at that outlet, needed for the
-// effective-makeable-quantity display. Shared by both the product-level
-// recipe include below and each variant's override include.
-function ingredientSelectFor(outletId: number | undefined) {
-  return {
-    id: true,
-    name: true,
-    unit: true,
-    trackInventory: true,
-    ...(outletId !== undefined && {
-      outletingredientstock: {
-        where: { outletId },
-        select: { stockQuantity: true, lowStockThreshold: true },
-      },
-    }),
-  } satisfies Prisma.ingredientSelect;
+// mysql2 Pool/PoolConnection both expose .query() at the top level; a
+// Prisma TransactionClient never does (its surface is namespaced per
+// model, e.g. `.product.findFirst`) — same detection idiom as
+// JobsService.enqueue's isPoolConnection, used here for the same reason:
+// resolveShadowStockTarget is called both internally (already-converted
+// Phase 4 methods, mysql2) and externally by ScanService (Phase 7, still
+// Prisma) with its own tx.
+function isMysqlRunner(
+  client: Prisma.TransactionClient | PoolConnection | Pool,
+): client is PoolConnection | Pool {
+  return typeof (client as PoolConnection).query === 'function';
 }
 
-function variantIncludeFor(outletId: number | undefined) {
-  return {
-    image: true,
-    optionValue1: true,
-    optionValue2: true,
-    optionValue3: true,
-    // This variant's own recipe override rows (not the product-level
-    // defaults — those are fetched separately, see productIngredientIncludeFor).
-    productingredient: {
-      include: { ingredient: { select: ingredientSelectFor(outletId) } },
-      orderBy: { id: 'asc' },
-    },
-  } satisfies Prisma.productvariantInclude;
-}
-
-// Product-level default recipe rows only (variantId: null) — a variant's
-// own override rows come from its own nested productingredient include
-// above, never from this one.
-function productIngredientIncludeFor(outletId: number | undefined) {
-  return {
-    where: { variantId: null },
-    include: { ingredient: { select: ingredientSelectFor(outletId) } },
-    orderBy: { id: 'asc' },
-  } satisfies Prisma.productInclude['productingredient'];
-}
-
-const productInclude = {
-  productcollection: { include: { collection: true } },
-  producttag: { include: { tag: true } },
-  productimage: { orderBy: { order: 'asc' } },
-  productattribute: { orderBy: { order: 'asc' } },
-  productfaq: { orderBy: { order: 'asc' } },
-  productoption: {
-    orderBy: { order: 'asc' },
-    include: { productoptionvalue: { orderBy: { order: 'asc' } } },
-  },
-  productvariant: {
-    orderBy: { order: 'asc' },
-    include: variantIncludeFor(undefined),
-  },
-  productingredient: productIngredientIncludeFor(undefined),
-} satisfies Prisma.productInclude;
-
-type ProductWithRelations = Prisma.productGetPayload<{
-  include: typeof productInclude;
-}>;
-
-type VariantWithRelations = ProductWithRelations['productvariant'][number];
-
-interface UnitsSoldRow {
+interface IngredientLinkRow extends RowDataPacket {
+  id: number;
   productId: number;
-  unitsSold: bigint | null;
+  variantId: number | null;
+  ingredientId: number;
+  quantityPerUnit: number;
+  ingredientName: string;
+  ingredientUnit: string;
+  ingredientTrackInventory: boolean;
+  stockQuantity: number | null;
+  lowStockThreshold: number | null;
+}
+
+interface VariantRow extends RowDataPacket {
+  id: number;
+  productId: number;
+  sku: string | null;
+  barcode: string | null;
+  price: string | null;
+  compareAtPrice: string | null;
+  weight: string | null;
+  imageId: number | null;
+  imageUrl: string | null;
+  order: number;
+  optionValue1Id: number | null;
+  optionValue1Value: string | null;
+  optionValue2Id: number | null;
+  optionValue2Value: string | null;
+  optionValue3Id: number | null;
+  optionValue3Value: string | null;
+  createdAt: Date;
+}
+
+interface AssembledIngredientLink {
+  id: number;
+  productId: number;
+  variantId: number | null;
+  ingredientId: number;
+  quantityPerUnit: number;
+  ingredient: {
+    name: string;
+    unit: string;
+    trackInventory: boolean;
+    outletingredientstock?: { stockQuantity: number; lowStockThreshold: number | null }[];
+  };
+}
+
+interface AssembledVariant {
+  id: number;
+  sku: string | null;
+  barcode: string | null;
+  price: string | null;
+  compareAtPrice: string | null;
+  weight: string | null;
+  imageId: number | null;
+  image: { url: string } | null;
+  order: number;
+  optionValue1Id: number | null;
+  optionValue1: { value: string } | null;
+  optionValue2Id: number | null;
+  optionValue2: { value: string } | null;
+  optionValue3Id: number | null;
+  optionValue3: { value: string } | null;
+  productingredient: AssembledIngredientLink[];
+}
+
+interface AssembledProduct {
+  [key: string]: unknown;
+  id: number;
+  shopId: number;
+  name: string;
+  price: string;
+  compareAtPrice: string | null;
+  thumbnail: string;
+  sku: string;
+  status: string;
+  usesIngredients: boolean;
+  productcollection: { collection: RowDataPacket }[];
+  producttag: { tag: { name: string } }[];
+  productimage: { id: number; url: string; order: number }[];
+  productattribute: { id: number; name: string; value: string; order: number }[];
+  productfaq: { id: number; question: string; answer: string; order: number }[];
+  productoption: {
+    id: number;
+    name: string;
+    order: number;
+    productoptionvalue: { id: number; value: string; order: number }[];
+  }[];
+  productvariant: AssembledVariant[];
+  productingredient: AssembledIngredientLink[];
+}
+
+interface UnitsSoldRow extends RowDataPacket {
+  productId: number;
+  unitsSold: string | null;
 }
 
 // CSV import working types — see products-import.ts for the header
@@ -156,6 +199,11 @@ interface ResolvedProductGroup {
 @Injectable()
 export class ProductsService {
   constructor(
+    private readonly db: DatabaseService,
+    // Kept only for consumeForOrderItems (called exclusively by
+    // not-yet-converted Phase 5 modules — orders/public/returns — with
+    // their own Prisma tx) and resolveShadowStockTarget's legacy branch
+    // (ScanService, Phase 7). Remove once both phases convert.
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
     private readonly branchRolesService: BranchRolesService,
@@ -175,17 +223,15 @@ export class ProductsService {
         'products.view',
       );
     }
-    const products = await this.prisma.product.findMany({
-      where: { shopId: ctx.shopId },
-      include: this.includeFor(outletId),
-      orderBy: { id: 'asc' },
-    });
-    const soldByProduct = await this.getUnitsSoldByProduct(
-      ctx.shopId,
-      products.map((p) => p.id),
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE shopId = ? ORDER BY id ASC`,
+      [ctx.shopId],
     );
-    return products.map((product) =>
-      this.toResponse(product, soldByProduct.get(product.id) ?? 0),
+    const ids = rows.map((r) => r.id as number);
+    const products = await this.loadProductsWithRelations(ids, outletId);
+    const soldByProduct = await this.getUnitsSoldByProduct(ctx.shopId, ids);
+    return ids.map((id) =>
+      this.toResponse(products.get(id)!, soldByProduct.get(id) ?? 0),
     );
   }
 
@@ -203,14 +249,15 @@ export class ProductsService {
         'products.view',
       );
     }
-    const product = await this.prisma.product.findFirst({
-      where: { id, shopId: ctx.shopId },
-      include: this.includeFor(outletId),
-    });
-    if (!product) {
+    const ownRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (ownRows.length === 0) {
       throw new NotFoundException(`Product ${id} not found`);
     }
-    const response = this.toResponse(product);
+    const products = await this.loadProductsWithRelations([id], outletId);
+    const response = this.toResponse(products.get(id)!);
     if (allOutlets) {
       await this.attachOutletStockBreakdown(ctx.shopId, response);
     }
@@ -246,102 +293,136 @@ export class ProductsService {
       dto.slug ?? (await this.resolveUniqueSlug(ctx.shopId, dto.name));
     const thumbnail = this.resolveFeaturedThumbnail(dto.images, dto.thumbnail);
 
+    let productId: number;
     try {
-      const product = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.product.create({
-          data: {
-            shopId: ctx.shopId,
-            name: dto.name,
-            price: dto.price,
-            compareAtPrice: dto.compareAtPrice,
+      productId = await this.db.transaction(async (conn) => {
+        const [result] = await conn.query(
+          `INSERT INTO product (
+            shopId, name, price, compareAtPrice, thumbnail, sku, barcode, slug,
+            metaTitle, metaDescription, description, shortSummary, longSummary,
+            costPrice, status, trackInventory, continueSellingOutOfStock, chargeTax,
+            isCheckoutAddon, showVariants, showAttributes, showFaqs, usesIngredients,
+            vendor, productType, physicalProduct, weight, weightUnit, dimensions,
+            isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            dto.name,
+            dto.price,
+            dto.compareAtPrice ?? null,
             thumbnail,
-            sku: dto.sku,
-            barcode: dto.barcode,
+            dto.sku,
+            dto.barcode ?? null,
             slug,
-            metaTitle: dto.metaTitle,
-            metaDescription: dto.metaDescription,
-            description: dto.description,
-            shortSummary: dto.shortSummary,
-            longSummary: dto.longSummary,
-            costPrice: dto.costPrice,
-            status: dto.status ?? 'Available',
-            trackInventory: dto.trackInventory ?? false,
-            continueSellingOutOfStock: dto.continueSellingOutOfStock ?? false,
-            chargeTax: dto.chargeTax ?? true,
-            isCheckoutAddon: dto.isCheckoutAddon ?? false,
-            showVariants: dto.showVariants ?? false,
-            showAttributes: dto.showAttributes ?? false,
-            showFaqs: dto.showFaqs ?? false,
+            dto.metaTitle ?? null,
+            dto.metaDescription ?? null,
+            dto.description ?? null,
+            dto.shortSummary ?? null,
+            dto.longSummary ?? null,
+            dto.costPrice ?? null,
+            dto.status ?? 'Available',
+            dto.trackInventory ?? false,
+            dto.continueSellingOutOfStock ?? false,
+            dto.chargeTax ?? true,
+            dto.isCheckoutAddon ?? false,
+            dto.showVariants ?? false,
+            dto.showAttributes ?? false,
+            dto.showFaqs ?? false,
             usesIngredients,
-            vendor: dto.vendor,
-            productType: dto.productType,
-            physicalProduct: dto.physicalProduct ?? true,
-            weight: dto.weight,
-            weightUnit: dto.weightUnit ?? 'kg',
-            dimensions: dto.dimensions,
-            isGiftCard: dto.isGiftCard ?? false,
-            giftCardDenominations: dto.giftCardDenominations,
-            giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
-            giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
-            productimage: dto.images?.length
-              ? {
-                  create: dto.images.map((img, i) => ({
-                    url: img.url,
-                    order: img.order ?? i,
-                  })),
-                }
-              : undefined,
-            productattribute: dto.attributes?.length
-              ? {
-                  create: dto.attributes.map((a, i) => ({
-                    name: a.name.trim(),
-                    value: a.value.trim(),
-                    order: a.order ?? i,
-                  })),
-                }
-              : undefined,
-            productfaq: dto.faqs?.length
-              ? {
-                  create: dto.faqs.map((f, i) => ({
-                    question: f.question.trim(),
-                    answer: f.answer.trim(),
-                    order: f.order ?? i,
-                  })),
-                }
-              : undefined,
-            productcollection: {
-              create: dto.collectionIds.map((collectionId) => ({ collectionId })),
-            },
-            producttag: { create: tagIds.map((tagId) => ({ tagId })) },
-            ...(usesIngredients &&
-              dto.ingredients?.length && {
-                productingredient: {
-                  create: dto.ingredients.map((i) => ({
-                    shopId: ctx.shopId,
-                    ingredientId: i.ingredientId,
-                    quantityPerUnit: i.quantityPerUnit,
-                  })),
-                },
-              }),
-          },
-        });
+            dto.vendor ?? null,
+            dto.productType ?? null,
+            dto.physicalProduct ?? true,
+            dto.weight ?? null,
+            dto.weightUnit ?? 'kg',
+            dto.dimensions ?? null,
+            dto.isGiftCard ?? false,
+            dto.giftCardDenominations ? JSON.stringify(dto.giftCardDenominations) : null,
+            dto.giftCardCustomAmountMin ?? null,
+            dto.giftCardCustomAmountMax ?? null,
+          ],
+        );
+        const newId = (result as { insertId: number }).insertId;
+
+        if (dto.images?.length) {
+          const placeholders = dto.images.map(() => '(?, ?, ?)').join(', ');
+          const params = dto.images.flatMap((img, i) => [
+            newId,
+            img.url,
+            img.order ?? i,
+          ]);
+          await conn.query(
+            `INSERT INTO productimage (productId, url, \`order\`) VALUES ${placeholders}`,
+            params,
+          );
+        }
+        if (dto.attributes?.length) {
+          const placeholders = dto.attributes.map(() => '(?, ?, ?, ?)').join(', ');
+          const params = dto.attributes.flatMap((a, i) => [
+            newId,
+            a.name.trim(),
+            a.value.trim(),
+            a.order ?? i,
+          ]);
+          await conn.query(
+            `INSERT INTO productattribute (productId, name, value, \`order\`) VALUES ${placeholders}`,
+            params,
+          );
+        }
+        if (dto.faqs?.length) {
+          const placeholders = dto.faqs.map(() => '(?, ?, ?, ?)').join(', ');
+          const params = dto.faqs.flatMap((f, i) => [
+            newId,
+            f.question.trim(),
+            f.answer.trim(),
+            f.order ?? i,
+          ]);
+          await conn.query(
+            `INSERT INTO productfaq (productId, question, answer, \`order\`) VALUES ${placeholders}`,
+            params,
+          );
+        }
+        const collectionPlaceholders = dto.collectionIds.map(() => '(?, ?)').join(', ');
+        await conn.query(
+          `INSERT INTO productcollection (productId, collectionId) VALUES ${collectionPlaceholders}`,
+          dto.collectionIds.flatMap((collectionId) => [newId, collectionId]),
+        );
+        if (tagIds.length > 0) {
+          const tagPlaceholders = tagIds.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO producttag (productId, tagId) VALUES ${tagPlaceholders}`,
+            tagIds.flatMap((tagId) => [newId, tagId]),
+          );
+        }
+        if (usesIngredients && dto.ingredients?.length) {
+          const placeholders = dto.ingredients.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+          const params = dto.ingredients.flatMap((i) => [
+            ctx.shopId,
+            newId,
+            null,
+            i.ingredientId,
+            i.quantityPerUnit,
+            new Date(),
+          ]);
+          await conn.query(
+            `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt) VALUES ${placeholders}`,
+            params,
+          );
+        }
         if (!usesIngredients) {
-          await this.provisionShadowForProduct(tx, ctx, created.id, {
-            name: created.name,
-            thumbnail: created.thumbnail,
-            trackInventory: created.trackInventory,
-            costPrice: created.costPrice,
+          await this.provisionShadowForProduct(conn, ctx, newId, {
+            name: dto.name,
+            thumbnail,
+            trackInventory: dto.trackInventory ?? false,
+            costPrice: dto.costPrice ?? null,
           });
         }
-        return tx.product.findUniqueOrThrow({
-          where: { id: created.id },
-          include: productInclude,
-        });
+        return newId;
       });
-      return this.toResponse(product);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
+    const products = await this.loadProductsWithRelations([productId], undefined);
+    return this.toResponse(products.get(productId)!);
   }
 
   // Deep-copies title/description/pricing/organization + every variant and
@@ -355,10 +436,15 @@ export class ProductsService {
   // PRODUCT_STATUS_LABELS in the admin frontend) regardless of the
   // original's status, so a duplicate never goes live by accident.
   async duplicate(ctx: TenantContext, id: number) {
-    const original = await this.prisma.product.findFirst({
-      where: { id, shopId: ctx.shopId },
-      include: productInclude,
-    });
+    const ownRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (ownRows.length === 0) {
+      throw new NotFoundException(`Product ${id} not found`);
+    }
+    const originals = await this.loadProductsWithRelations([id], undefined);
+    const original = originals.get(id);
     if (!original) {
       throw new NotFoundException(`Product ${id} not found`);
     }
@@ -373,122 +459,150 @@ export class ProductsService {
     // constraint, so those genuinely are left blank.
     const newSku = `${original.sku}-COPY-${randomUUID().slice(0, 6).toUpperCase()}`;
 
+    let newProductId: number;
     try {
-      const created = await this.prisma.$transaction(async (tx) => {
-        const newProduct = await tx.product.create({
-          data: {
-            shopId: ctx.shopId,
-            name: newName,
-            description: original.description,
-            shortSummary: original.shortSummary,
-            longSummary: original.longSummary,
-            thumbnail: original.thumbnail,
-            price: original.price,
-            compareAtPrice: original.compareAtPrice,
-            costPrice: original.costPrice,
-            sku: newSku,
-            barcode: null,
-            status: 'Unavailable',
-            trackInventory: original.trackInventory,
-            continueSellingOutOfStock: original.continueSellingOutOfStock,
-            chargeTax: original.chargeTax,
-            isCheckoutAddon: original.isCheckoutAddon,
-            showVariants: original.showVariants,
-            showAttributes: original.showAttributes,
-            showFaqs: original.showFaqs,
-            vendor: original.vendor,
-            productType: original.productType,
-            physicalProduct: original.physicalProduct,
-            weight: original.weight,
-            weightUnit: original.weightUnit,
-            dimensions: original.dimensions,
-            slug: newSlug,
-            metaTitle: original.metaTitle,
-            metaDescription: original.metaDescription,
-            productimage: {
-              create: original.productimage.map((img) => ({
-                url: img.url,
-                order: img.order,
-              })),
-            },
-            productcollection: {
-              create: original.productcollection.map((pc) => ({
-                collectionId: pc.collectionId,
-              })),
-            },
-            producttag: {
-              create: original.producttag.map((pt) => ({ tagId: pt.tagId })),
-            },
-          },
-          include: { productimage: true },
-        });
+      newProductId = await this.db.transaction(async (conn) => {
+        const [result] = await conn.query(
+          `INSERT INTO product (
+            shopId, name, description, shortSummary, longSummary, thumbnail, price,
+            compareAtPrice, costPrice, sku, barcode, status, trackInventory,
+            continueSellingOutOfStock, chargeTax, isCheckoutAddon, showVariants,
+            showAttributes, showFaqs, vendor, productType, physicalProduct, weight,
+            weightUnit, dimensions, slug, metaTitle, metaDescription
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            newName,
+            original.description,
+            original.shortSummary,
+            original.longSummary,
+            original.thumbnail,
+            original.price,
+            original.compareAtPrice,
+            original.costPrice,
+            newSku,
+            null,
+            'Unavailable',
+            original.trackInventory,
+            original.continueSellingOutOfStock,
+            original.chargeTax,
+            original.isCheckoutAddon,
+            original.showVariants,
+            original.showAttributes,
+            original.showFaqs,
+            original.vendor,
+            original.productType,
+            original.physicalProduct,
+            original.weight,
+            original.weightUnit,
+            original.dimensions,
+            newSlug,
+            original.metaTitle,
+            original.metaDescription,
+          ],
+        );
+        const newProduct = {
+          id: (result as { insertId: number }).insertId,
+          name: newName,
+          thumbnail: original.thumbnail as string,
+          trackInventory: original.trackInventory as boolean,
+          costPrice: original.costPrice as string | null,
+        };
 
         // Match by `order` (copied 1:1 from the original above) rather than
-        // array position — Prisma doesn't guarantee nested-create return
-        // order matches input order.
-        const imageIdByOrder = new Map(
-          newProduct.productimage.map((img) => [img.order, img.id]),
-        );
+        // array position — id-preserving isn't guaranteed insert-order.
+        const imageIdByOrder = new Map<number, number>();
+        if (original.productimage.length > 0) {
+          const placeholders = original.productimage.map(() => '(?, ?, ?)').join(', ');
+          const params = original.productimage.flatMap((img) => [
+            newProduct.id,
+            img.url,
+            img.order,
+          ]);
+          await conn.query(
+            `INSERT INTO productimage (productId, url, \`order\`) VALUES ${placeholders}`,
+            params,
+          );
+          const [newImages] = await conn.query<RowDataPacket[]>(
+            `SELECT id, \`order\` FROM productimage WHERE productId = ?`,
+            [newProduct.id],
+          );
+          for (const img of newImages) {
+            imageIdByOrder.set(img.order as number, img.id as number);
+          }
+        }
         const newImageIdFor = (oldImageId: number | null) => {
           if (oldImageId === null) return null;
-          const oldOrder = original.productimage.find(
-            (img) => img.id === oldImageId,
-          )?.order;
-          return oldOrder === undefined
-            ? null
-            : (imageIdByOrder.get(oldOrder) ?? null);
+          const oldOrder = original.productimage.find((img) => img.id === oldImageId)?.order;
+          return oldOrder === undefined ? null : (imageIdByOrder.get(oldOrder) ?? null);
         };
+
+        if (original.productcollection.length > 0) {
+          const placeholders = original.productcollection.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO productcollection (productId, collectionId) VALUES ${placeholders}`,
+            original.productcollection.flatMap((pc) => [newProduct.id, pc.collection.id]),
+          );
+        }
+        if (original.producttag.length > 0) {
+          // producttag doesn't carry tagId directly in the assembled shape
+          // (only the joined tag.name) — re-resolve by name via the same
+          // upsert-by-name helper used everywhere else tags are written.
+          const tagIds = await this.resolveTagIds(
+            ctx,
+            original.producttag.map((pt) => pt.tag.name),
+          );
+          const placeholders = tagIds.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO producttag (productId, tagId) VALUES ${placeholders}`,
+            tagIds.flatMap((tagId) => [newProduct.id, tagId]),
+          );
+        }
 
         const optionValueIdMap = new Map<number, number>();
         for (const option of original.productoption) {
-          const newOption = await tx.productoption.create({
-            data: {
-              productId: newProduct.id,
-              name: option.name,
-              order: option.order,
-            },
-          });
+          const [optResult] = await conn.query(
+            `INSERT INTO productoption (productId, name, \`order\`) VALUES (?, ?, ?)`,
+            [newProduct.id, option.name, option.order],
+          );
+          const newOptionId = (optResult as { insertId: number }).insertId;
           for (const value of option.productoptionvalue) {
-            const newValue = await tx.productoptionvalue.create({
-              data: {
-                optionId: newOption.id,
-                value: value.value,
-                order: value.order,
-              },
-            });
-            optionValueIdMap.set(value.id, newValue.id);
+            const [valResult] = await conn.query(
+              `INSERT INTO productoptionvalue (optionId, value, \`order\`) VALUES (?, ?, ?)`,
+              [newOptionId, value.value, value.order],
+            );
+            optionValueIdMap.set(value.id, (valResult as { insertId: number }).insertId);
           }
         }
 
         for (const variant of original.productvariant) {
-          const newVariant = await tx.productvariant.create({
-            data: {
-              productId: newProduct.id,
+          const [varResult] = await conn.query(
+            `INSERT INTO productvariant (
+              productId, sku, barcode, price, compareAtPrice, weight, imageId, \`order\`,
+              optionValue1Id, optionValue2Id, optionValue3Id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              newProduct.id,
               // Left blank — no uniqueness constraint on variant sku/barcode
               // (unlike the product-level sku above), so a real blank is safe.
-              sku: null,
-              barcode: null,
-              price: variant.price,
-              compareAtPrice: variant.compareAtPrice,
-              weight: variant.weight,
-              imageId: newImageIdFor(variant.imageId),
-              order: variant.order,
-              optionValue1Id: variant.optionValue1Id
-                ? (optionValueIdMap.get(variant.optionValue1Id) ?? null)
-                : null,
-              optionValue2Id: variant.optionValue2Id
-                ? (optionValueIdMap.get(variant.optionValue2Id) ?? null)
-                : null,
-              optionValue3Id: variant.optionValue3Id
-                ? (optionValueIdMap.get(variant.optionValue3Id) ?? null)
-                : null,
-            },
-          });
+              null,
+              null,
+              variant.price,
+              variant.compareAtPrice,
+              variant.weight,
+              newImageIdFor(variant.imageId),
+              variant.order,
+              variant.optionValue1Id ? (optionValueIdMap.get(variant.optionValue1Id) ?? null) : null,
+              variant.optionValue2Id ? (optionValueIdMap.get(variant.optionValue2Id) ?? null) : null,
+              variant.optionValue3Id ? (optionValueIdMap.get(variant.optionValue3Id) ?? null) : null,
+            ],
+          );
+          const newVariantId = (varResult as { insertId: number }).insertId;
           // A duplicate never copies the original's recipe/stock (same
           // "always starts at zero/untracked" reasoning as everywhere else
           // in this method) — it's always usesIngredients:false, so every
           // variant needs its own fresh shadow ingredient.
-          await this.provisionShadowForVariant(tx, ctx, newProduct.id, newVariant.id, {
+          await this.provisionShadowForVariant(conn, ctx, newProduct.id, newVariantId, {
             name: newProduct.name,
             thumbnail: newProduct.thumbnail,
             trackInventory: newProduct.trackInventory,
@@ -496,7 +610,7 @@ export class ProductsService {
           });
         }
         if (original.productvariant.length === 0) {
-          await this.provisionShadowForProduct(tx, ctx, newProduct.id, {
+          await this.provisionShadowForProduct(conn, ctx, newProduct.id, {
             name: newProduct.name,
             thumbnail: newProduct.thumbnail,
             trackInventory: newProduct.trackInventory,
@@ -504,15 +618,13 @@ export class ProductsService {
           });
         }
 
-        return tx.product.findUniqueOrThrow({
-          where: { id: newProduct.id },
-          include: productInclude,
-        });
+        return newProduct.id;
       });
-      return this.toResponse(created);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
+    const products = await this.loadProductsWithRelations([newProductId], undefined);
+    return this.toResponse(products.get(newProductId)!);
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateProductDto) {
@@ -554,16 +666,17 @@ export class ProductsService {
         : undefined;
     const thumbnail =
       dto.images !== undefined
-        ? this.resolveFeaturedThumbnail(dto.images, current.thumbnail)
+        ? this.resolveFeaturedThumbnail(dto.images, current.thumbnail as string)
         : undefined;
 
+    let product: AssembledProduct;
     try {
-      const product = await this.prisma.$transaction(async (tx) => {
+      await this.db.transaction(async (conn) => {
         if (dto.collectionIds) {
-          await tx.productcollection.deleteMany({ where: { productId: id } });
+          await conn.query(`DELETE FROM productcollection WHERE productId = ?`, [id]);
         }
         if (tagIds !== undefined) {
-          await tx.producttag.deleteMany({ where: { productId: id } });
+          await conn.query(`DELETE FROM producttag WHERE productId = ?`, [id]);
         }
         if (dto.images !== undefined) {
           // Upsert-by-url, not delete-all-then-recreate: the old approach
@@ -578,20 +691,20 @@ export class ProductsService {
           // deleted (SetNull-ing variants that pointed at THOSE, which is
           // correct — the image is really gone) and only genuinely new
           // urls get a new row.
-          const existingImages = await tx.productimage.findMany({
-            where: { productId: id },
-          });
-          const existingByUrl = new Map(
-            existingImages.map((img) => [img.url, img]),
+          const [existingImages] = await conn.query<RowDataPacket[]>(
+            `SELECT * FROM productimage WHERE productId = ?`,
+            [id],
           );
+          const existingByUrl = new Map(existingImages.map((img) => [img.url as string, img]));
           const keepUrls = new Set(dto.images.map((img) => img.url));
           const removedIds = existingImages
-            .filter((img) => !keepUrls.has(img.url))
-            .map((img) => img.id);
+            .filter((img) => !keepUrls.has(img.url as string))
+            .map((img) => img.id as number);
           if (removedIds.length > 0) {
-            await tx.productimage.deleteMany({
-              where: { id: { in: removedIds } },
-            });
+            await conn.query(
+              `DELETE FROM productimage WHERE id IN (${removedIds.map(() => '?').join(', ')})`,
+              removedIds,
+            );
           }
           for (let i = 0; i < dto.images.length; i++) {
             const img = dto.images[i];
@@ -599,187 +712,200 @@ export class ProductsService {
             const existing = existingByUrl.get(img.url);
             if (existing) {
               if (existing.order !== order) {
-                await tx.productimage.update({
-                  where: { id: existing.id },
-                  data: { order },
-                });
+                await conn.query(`UPDATE productimage SET \`order\` = ? WHERE id = ?`, [
+                  order,
+                  existing.id,
+                ]);
               }
             } else {
-              await tx.productimage.create({
-                data: { productId: id, url: img.url, order },
-              });
+              await conn.query(
+                `INSERT INTO productimage (productId, url, \`order\`) VALUES (?, ?, ?)`,
+                [id, img.url, order],
+              );
             }
           }
         }
         if (applyIngredientsReplace) {
-          await tx.productingredient.deleteMany({
-            where: { productId: id, variantId: null },
-          });
+          await conn.query(
+            `DELETE FROM productingredient WHERE productId = ? AND variantId IS NULL`,
+            [id],
+          );
         }
         // Delete-then-recreate, unlike images' id-preserving upsert above —
         // nothing FKs into productattribute/productfaq (no variant.imageId-
         // style dependency on a stable id), so there's no id-stability
         // concern here worth the extra complexity.
         if (dto.attributes !== undefined) {
-          await tx.productattribute.deleteMany({ where: { productId: id } });
+          await conn.query(`DELETE FROM productattribute WHERE productId = ?`, [id]);
           if (dto.attributes.length > 0) {
-            await tx.productattribute.createMany({
-              data: dto.attributes.map((a, i) => ({
-                productId: id,
-                name: a.name.trim(),
-                value: a.value.trim(),
-                order: a.order ?? i,
-              })),
-            });
+            const placeholders = dto.attributes.map(() => '(?, ?, ?, ?)').join(', ');
+            await conn.query(
+              `INSERT INTO productattribute (productId, name, value, \`order\`) VALUES ${placeholders}`,
+              dto.attributes.flatMap((a, i) => [id, a.name.trim(), a.value.trim(), a.order ?? i]),
+            );
           }
         }
         if (dto.faqs !== undefined) {
-          await tx.productfaq.deleteMany({ where: { productId: id } });
+          await conn.query(`DELETE FROM productfaq WHERE productId = ?`, [id]);
           if (dto.faqs.length > 0) {
-            await tx.productfaq.createMany({
-              data: dto.faqs.map((f, i) => ({
-                productId: id,
-                question: f.question.trim(),
-                answer: f.answer.trim(),
-                order: f.order ?? i,
-              })),
-            });
+            const placeholders = dto.faqs.map(() => '(?, ?, ?, ?)').join(', ');
+            await conn.query(
+              `INSERT INTO productfaq (productId, question, answer, \`order\`) VALUES ${placeholders}`,
+              dto.faqs.flatMap((f, i) => [id, f.question.trim(), f.answer.trim(), f.order ?? i]),
+            );
           }
         }
-        const updated = await tx.product.update({
-          where: { id },
-          data: {
-            name: dto.name,
-            price: dto.price,
-            compareAtPrice: dto.compareAtPrice,
-            thumbnail,
-            sku: dto.sku,
-            barcode: dto.barcode,
-            slug: dto.slug,
-            metaTitle: dto.metaTitle,
-            metaDescription: dto.metaDescription,
-            description: dto.description,
-            shortSummary: dto.shortSummary,
-            longSummary: dto.longSummary,
-            costPrice: dto.costPrice,
-            trackInventory: dto.trackInventory,
-            continueSellingOutOfStock: dto.continueSellingOutOfStock,
-            chargeTax: dto.chargeTax,
-            isCheckoutAddon: dto.isCheckoutAddon,
-            showVariants: dto.showVariants,
-            showAttributes: dto.showAttributes,
-            showFaqs: dto.showFaqs,
-            usesIngredients: dto.usesIngredients,
-            vendor: dto.vendor,
-            productType: dto.productType,
-            physicalProduct: dto.physicalProduct,
-            weight: dto.weight,
-            weightUnit: dto.weightUnit,
-            dimensions: dto.dimensions,
-            isGiftCard: dto.isGiftCard,
-            giftCardDenominations: dto.giftCardDenominations,
-            giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
-            giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
-            ...(dto.collectionIds && {
-              productcollection: {
-                create: dto.collectionIds.map((collectionId) => ({
-                  collectionId,
-                })),
-              },
-            }),
-            ...(tagIds !== undefined && {
-              producttag: { create: tagIds.map((tagId) => ({ tagId })) },
-            }),
-            ...(applyIngredientsReplace && {
-              productingredient: {
-                create: dto.ingredients!.map((i) => ({
-                  shopId: ctx.shopId,
-                  ingredientId: i.ingredientId,
-                  quantityPerUnit: i.quantityPerUnit,
-                })),
-              },
-            }),
-          },
-          include: { productvariant: { select: { id: true } } },
+
+        const set = buildSetClause({
+          name: dto.name,
+          price: dto.price,
+          compareAtPrice: dto.compareAtPrice,
+          thumbnail,
+          sku: dto.sku,
+          barcode: dto.barcode,
+          slug: dto.slug,
+          metaTitle: dto.metaTitle,
+          metaDescription: dto.metaDescription,
+          description: dto.description,
+          shortSummary: dto.shortSummary,
+          longSummary: dto.longSummary,
+          costPrice: dto.costPrice,
+          trackInventory: dto.trackInventory,
+          continueSellingOutOfStock: dto.continueSellingOutOfStock,
+          chargeTax: dto.chargeTax,
+          isCheckoutAddon: dto.isCheckoutAddon,
+          showVariants: dto.showVariants,
+          showAttributes: dto.showAttributes,
+          showFaqs: dto.showFaqs,
+          usesIngredients: dto.usesIngredients,
+          vendor: dto.vendor,
+          productType: dto.productType,
+          physicalProduct: dto.physicalProduct,
+          weight: dto.weight,
+          weightUnit: dto.weightUnit,
+          dimensions: dto.dimensions,
+          isGiftCard: dto.isGiftCard,
+          giftCardDenominations: dto.giftCardDenominations
+            ? JSON.stringify(dto.giftCardDenominations)
+            : undefined,
+          giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
+          giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
         });
+        if (set) {
+          await conn.query(`UPDATE product SET ${set.setClause} WHERE id = ?`, [
+            ...set.params,
+            id,
+          ]);
+        }
+        if (dto.collectionIds) {
+          const placeholders = dto.collectionIds.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO productcollection (productId, collectionId) VALUES ${placeholders}`,
+            dto.collectionIds.flatMap((collectionId) => [id, collectionId]),
+          );
+        }
+        if (tagIds !== undefined && tagIds.length > 0) {
+          const placeholders = tagIds.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO producttag (productId, tagId) VALUES ${placeholders}`,
+            tagIds.flatMap((tagId) => [id, tagId]),
+          );
+        }
+        if (applyIngredientsReplace && dto.ingredients!.length > 0) {
+          const placeholders = dto.ingredients!.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt) VALUES ${placeholders}`,
+            dto.ingredients!.flatMap((i) => [
+              ctx.shopId,
+              id,
+              null,
+              i.ingredientId,
+              i.quantityPerUnit,
+              new Date(),
+            ]),
+          );
+        }
+
+        const [variantRows] = await conn.query<RowDataPacket[]>(
+          `SELECT id FROM productvariant WHERE productId = ?`,
+          [id],
+        );
+        const variantIds = variantRows.map((v) => v.id as number);
 
         // Bill of Materials (Phase A) toggle-flip side effects — see the
         // shadow-provisioning methods below.
         if (togglingToRecipe) {
-          await this.deleteShadowForProduct(tx, id);
-          const variantIds = updated.productvariant.map((v) => v.id);
+          await this.deleteShadowForProduct(conn, id);
           if (variantIds.length > 0) {
-            await this.deleteShadowsForVariants(tx, variantIds);
+            await this.deleteShadowsForVariants(conn, variantIds);
           }
         } else if (togglingToShadow) {
-          await tx.productingredient.deleteMany({ where: { productId: id } });
-          if (updated.productvariant.length > 0) {
-            for (const v of updated.productvariant) {
-              await this.provisionShadowForVariant(tx, ctx, id, v.id, {
-                name: updated.name,
-                thumbnail: updated.thumbnail,
-                trackInventory: updated.trackInventory,
-                costPrice: updated.costPrice,
+          await conn.query(`DELETE FROM productingredient WHERE productId = ?`, [id]);
+          const [nameRows] = await conn.query<RowDataPacket[]>(
+            `SELECT name, thumbnail, trackInventory, costPrice FROM product WHERE id = ?`,
+            [id],
+          );
+          const nameRow = nameRows[0];
+          if (variantIds.length > 0) {
+            for (const vId of variantIds) {
+              await this.provisionShadowForVariant(conn, ctx, id, vId, {
+                name: nameRow.name as string,
+                thumbnail: nameRow.thumbnail as string,
+                trackInventory: nameRow.trackInventory as boolean,
+                costPrice: nameRow.costPrice as string | null,
               });
             }
           } else {
-            await this.provisionShadowForProduct(tx, ctx, id, {
-              name: updated.name,
-              thumbnail: updated.thumbnail,
-              trackInventory: updated.trackInventory,
-              costPrice: updated.costPrice,
+            await this.provisionShadowForProduct(conn, ctx, id, {
+              name: nameRow.name as string,
+              thumbnail: nameRow.thumbnail as string,
+              trackInventory: nameRow.trackInventory as boolean,
+              costPrice: nameRow.costPrice as string | null,
             });
           }
         } else if (!nextUsesIngredients) {
           // Staying in shadow mode — keep the shadow ingredient(s)' display
           // fields synced with whatever actually changed on this save.
           await this.syncShadowMeta(
-            tx,
+            conn,
             { shadowProductId: id },
             { name: dto.name, thumbnail, trackInventory: dto.trackInventory },
           );
-          if (updated.productvariant.length > 0) {
+          if (variantIds.length > 0) {
             await this.syncShadowMeta(
-              tx,
-              {
-                shadowVariantId: {
-                  in: updated.productvariant.map((v) => v.id),
-                },
-              },
+              conn,
+              { shadowVariantIdIn: variantIds },
               { name: dto.name, thumbnail, trackInventory: dto.trackInventory },
             );
           }
         }
-
-        return tx.product.findUniqueOrThrow({
-          where: { id },
-          include: productInclude,
-        });
       });
-      if (
-        (dto.price !== undefined &&
-          Number(dto.price) !== Number(current.price)) ||
-        (dto.compareAtPrice !== undefined &&
-          Number(dto.compareAtPrice) !== Number(current.compareAtPrice ?? 0))
-      ) {
-        await this.auditLogService.logCtx(ctx, {
-          action: 'product.price_changed',
-          entityType: 'product',
-          entityId: id,
-          before: {
-            price: current.price,
-            compareAtPrice: current.compareAtPrice,
-          },
-          after: {
-            price: product.price,
-            compareAtPrice: product.compareAtPrice,
-          },
-        });
-      }
-      return this.toResponse(product);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
+    const products = await this.loadProductsWithRelations([id], undefined);
+    product = products.get(id)!;
+    if (
+      (dto.price !== undefined &&
+        Number(dto.price) !== Number(current.price)) ||
+      (dto.compareAtPrice !== undefined &&
+        Number(dto.compareAtPrice) !== Number(current.compareAtPrice ?? 0))
+    ) {
+      await this.auditLogService.logCtx(ctx, {
+        action: 'product.price_changed',
+        entityType: 'product',
+        entityId: id,
+        before: {
+          price: trimDecimal(current.price as string),
+          compareAtPrice: trimDecimal(current.compareAtPrice as string | null),
+        },
+        after: {
+          price: product.price,
+          compareAtPrice: product.compareAtPrice,
+        },
+      });
+    }
+    return this.toResponse(product);
   }
 
   // Deliberately the only thing this touches — see UpdateProductAvailabilityDto
@@ -791,11 +917,12 @@ export class ProductsService {
     dto: UpdateProductAvailabilityDto,
   ) {
     const before = await this.findOne(ctx, id);
-    const product = await this.prisma.product.update({
-      where: { id },
-      data: { status: dto.status },
-      include: productInclude,
-    });
+    await this.db.execute(`UPDATE product SET status = ? WHERE id = ?`, [
+      dto.status,
+      id,
+    ]);
+    const products = await this.loadProductsWithRelations([id], undefined);
+    const product = this.toResponse(products.get(id)!);
     if (before.status !== dto.status) {
       await this.auditLogService.logCtx(ctx, {
         action: 'product.status_changed',
@@ -805,7 +932,7 @@ export class ProductsService {
         after: { status: dto.status },
       });
     }
-    return this.toResponse(product);
+    return product;
   }
 
   // Full replace of the option/value set, reconciling the existing variant
@@ -820,19 +947,41 @@ export class ProductsService {
     id: number,
     dto: UpdateProductOptionsDto,
   ) {
-    const product = await this.prisma.product.findFirst({
-      where: { id, shopId: ctx.shopId },
-      include: {
-        productoption: {
-          orderBy: { order: 'asc' },
-          include: { productoptionvalue: { orderBy: { order: 'asc' } } },
-        },
-        productvariant: true,
-      },
-    });
+    const productRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM product WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    const product = productRows[0];
     if (!product) {
       throw new NotFoundException(`Product ${id} not found`);
     }
+    const optionRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM productoption WHERE productId = ? ORDER BY \`order\` ASC`,
+      [id],
+    );
+    const optionValueRows = optionRows.length
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT * FROM productoptionvalue WHERE optionId IN (${optionRows.map(() => '?').join(', ')}) ORDER BY \`order\` ASC`,
+          optionRows.map((o) => o.id),
+        )
+      : [];
+    const valuesByOption = new Map<number, RowDataPacket[]>();
+    for (const v of optionValueRows) {
+      const list = valuesByOption.get(v.optionId as number) ?? [];
+      list.push(v);
+      valuesByOption.set(v.optionId as number, list);
+    }
+    const existingOptions = optionRows.map((o) => ({
+      id: o.id as number,
+      name: o.name as string,
+      order: o.order as number,
+      productoptionvalue: valuesByOption.get(o.id as number) ?? [],
+    }));
+    const variantRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM productvariant WHERE productId = ?`,
+      [id],
+    );
+
     if (dto.options.length > MAX_PRODUCT_OPTIONS) {
       throw new BadRequestException(
         `A product can have at most ${MAX_PRODUCT_OPTIONS} options`,
@@ -861,15 +1010,15 @@ export class ProductsService {
       // shadow ingredients too (ON DELETE CASCADE) — a usesIngredients:false
       // product now needs a fresh product-level shadow to have anywhere for
       // its stock to live again.
-      await this.prisma.$transaction(async (tx) => {
-        await tx.productvariant.deleteMany({ where: { productId: id } });
-        await tx.productoption.deleteMany({ where: { productId: id } });
+      await this.db.transaction(async (conn) => {
+        await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [id]);
+        await conn.query(`DELETE FROM productoption WHERE productId = ?`, [id]);
         if (!product.usesIngredients) {
-          await this.provisionShadowForProduct(tx, ctx, id, {
-            name: product.name,
-            thumbnail: product.thumbnail,
-            trackInventory: product.trackInventory,
-            costPrice: product.costPrice,
+          await this.provisionShadowForProduct(conn, ctx, id, {
+            name: product.name as string,
+            thumbnail: product.thumbnail as string,
+            trackInventory: product.trackInventory as boolean,
+            costPrice: product.costPrice as string | null,
           });
         }
       });
@@ -886,25 +1035,32 @@ export class ProductsService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       const valueIdsByOption: number[][] = [];
 
       for (let i = 0; i < cleanedOptions.length; i++) {
         const target = cleanedOptions[i];
-        const existingOption = product.productoption[i];
+        const existingOption = existingOptions[i];
 
-        const option = existingOption
-          ? await tx.productoption.update({
-              where: { id: existingOption.id },
-              data: { name: target.name, order: i },
-            })
-          : await tx.productoption.create({
-              data: { productId: id, name: target.name, order: i },
-            });
+        let optionId: number;
+        if (existingOption) {
+          await conn.query(`UPDATE productoption SET name = ?, \`order\` = ? WHERE id = ?`, [
+            target.name,
+            i,
+            existingOption.id,
+          ]);
+          optionId = existingOption.id;
+        } else {
+          const [optResult] = await conn.query(
+            `INSERT INTO productoption (productId, name, \`order\`) VALUES (?, ?, ?)`,
+            [id, target.name, i],
+          );
+          optionId = (optResult as { insertId: number }).insertId;
+        }
 
         const existingValues = existingOption?.productoptionvalue ?? [];
         const existingByValue = new Map(
-          existingValues.map((v) => [v.value.trim().toLowerCase(), v]),
+          existingValues.map((v) => [(v.value as string).trim().toLowerCase(), v]),
         );
         const valueIds: number[] = [];
         for (let j = 0; j < target.values.length; j++) {
@@ -912,62 +1068,65 @@ export class ProductsService {
           const match = existingByValue.get(value.toLowerCase());
           if (match) {
             existingByValue.delete(value.toLowerCase());
-            await tx.productoptionvalue.update({
-              where: { id: match.id },
-              data: { value, order: j },
-            });
-            valueIds.push(match.id);
+            await conn.query(`UPDATE productoptionvalue SET value = ?, \`order\` = ? WHERE id = ?`, [
+              value,
+              j,
+              match.id,
+            ]);
+            valueIds.push(match.id as number);
           } else {
-            const created = await tx.productoptionvalue.create({
-              data: { optionId: option.id, value, order: j },
-            });
-            valueIds.push(created.id);
+            const [valResult] = await conn.query(
+              `INSERT INTO productoptionvalue (optionId, value, \`order\`) VALUES (?, ?, ?)`,
+              [optionId, value, j],
+            );
+            valueIds.push((valResult as { insertId: number }).insertId);
           }
         }
         // Whatever's left in existingByValue is a value that's no longer
         // present — its variants get reconciled away below (their combo key
         // won't be in newComboKeys since this id no longer exists).
-        const removedIds = [...existingByValue.values()].map((v) => v.id);
+        const removedIds = [...existingByValue.values()].map((v) => v.id as number);
         if (removedIds.length > 0) {
-          await tx.productoptionvalue.deleteMany({
-            where: { id: { in: removedIds } },
-          });
+          await conn.query(
+            `DELETE FROM productoptionvalue WHERE id IN (${removedIds.map(() => '?').join(', ')})`,
+            removedIds,
+          );
         }
         valueIdsByOption.push(valueIds);
       }
 
       // Any existing option beyond the new option count is dropped entirely
       // (e.g. product had 3 options, now has 2).
-      const droppedOptionIds = product.productoption
-        .slice(cleanedOptions.length)
-        .map((o) => o.id);
+      const droppedOptionIds = existingOptions.slice(cleanedOptions.length).map((o) => o.id);
       if (droppedOptionIds.length > 0) {
-        await tx.productoption.deleteMany({
-          where: { id: { in: droppedOptionIds } },
-        });
+        await conn.query(
+          `DELETE FROM productoption WHERE id IN (${droppedOptionIds.map(() => '?').join(', ')})`,
+          droppedOptionIds,
+        );
       }
 
       const newCombos = generateVariantCombinations(valueIdsByOption);
       const newComboKeys = new Set(newCombos.map(comboKey));
       const existingByKey = new Map(
-        product.productvariant.map((v) => [
-          comboKey([v.optionValue1Id, v.optionValue2Id, v.optionValue3Id]),
+        variantRows.map((v) => [
+          comboKey([v.optionValue1Id as number | null, v.optionValue2Id as number | null, v.optionValue3Id as number | null]),
           v,
         ]),
       );
 
-      const staleVariantIds = product.productvariant
+      const staleVariantIds = variantRows
         .filter(
           (v) =>
             !newComboKeys.has(
-              comboKey([v.optionValue1Id, v.optionValue2Id, v.optionValue3Id]),
+              comboKey([v.optionValue1Id as number | null, v.optionValue2Id as number | null, v.optionValue3Id as number | null]),
             ),
         )
-        .map((v) => v.id);
+        .map((v) => v.id as number);
       if (staleVariantIds.length > 0) {
-        await tx.productvariant.deleteMany({
-          where: { id: { in: staleVariantIds } },
-        });
+        await conn.query(
+          `DELETE FROM productvariant WHERE id IN (${staleVariantIds.map(() => '?').join(', ')})`,
+          staleVariantIds,
+        );
       }
 
       for (let i = 0; i < newCombos.length; i++) {
@@ -976,29 +1135,32 @@ export class ProductsService {
         const existing = existingByKey.get(key);
         if (existing) {
           if (existing.order !== i) {
-            await tx.productvariant.update({
-              where: { id: existing.id },
-              data: { order: i },
-            });
+            await conn.query(`UPDATE productvariant SET \`order\` = ? WHERE id = ?`, [
+              i,
+              existing.id,
+            ]);
           }
           continue;
         }
-        const created = await tx.productvariant.create({
-          data: {
-            productId: id,
-            optionValue1Id: combo[0],
-            optionValue2Id: combo[1],
-            optionValue3Id: combo[2],
-            order: i,
+        const [createdResult] = await conn.query(
+          `INSERT INTO productvariant (productId, optionValue1Id, optionValue2Id, optionValue3Id, \`order\`, price, compareAtPrice, weight)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            combo[0],
+            combo[1],
+            combo[2],
+            i,
             // New variants inherit the parent product's current price —
             // never a null "unset" price a customer could otherwise buy at
             // (see the resolution fallback in orders/public.service.ts,
             // which still falls back to product.price defensively).
-            price: product.price,
-            compareAtPrice: product.compareAtPrice,
-            weight: product.weight,
-          },
-        });
+            product.price,
+            product.compareAtPrice,
+            product.weight,
+          ],
+        );
+        const createdId = (createdResult as { insertId: number }).insertId;
         // A newly-generated variant of a usesIngredients:false product
         // needs its own shadow ingredient (Bill of Materials, Phase A) —
         // exactly like a freshly-created non-variant product does in
@@ -1006,11 +1168,11 @@ export class ProductsService {
         // cleanup call: ingredient.shadowVariantId's own ON DELETE CASCADE
         // already removes the shadow when the variant row itself is gone.
         if (!product.usesIngredients) {
-          await this.provisionShadowForVariant(tx, ctx, id, created.id, {
-            name: product.name,
-            thumbnail: product.thumbnail,
-            trackInventory: product.trackInventory,
-            costPrice: product.costPrice,
+          await this.provisionShadowForVariant(conn, ctx, id, createdId, {
+            name: product.name as string,
+            thumbnail: product.thumbnail as string,
+            trackInventory: product.trackInventory as boolean,
+            costPrice: product.costPrice as string | null,
           });
         }
       }
@@ -1022,7 +1184,7 @@ export class ProductsService {
       // comment), so that now-stale product-level one must go. No-op once
       // the product already has variants on every subsequent save.
       if (!product.usesIngredients) {
-        await this.deleteShadowForProduct(tx, id);
+        await this.deleteShadowForProduct(conn, id);
       }
     });
 
@@ -1038,17 +1200,19 @@ export class ProductsService {
     dto: UpdateVariantDto,
   ) {
     const product = await this.findRaw(ctx, productId);
-    const variant = await this.prisma.productvariant.findFirst({
-      where: { id: variantId, productId },
-    });
-    if (!variant) {
+    const variantRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM productvariant WHERE id = ? AND productId = ?`,
+      [variantId, productId],
+    );
+    if (variantRows.length === 0) {
       throw new NotFoundException(`Variant ${variantId} not found`);
     }
     if (dto.imageId) {
-      const image = await this.prisma.productimage.findFirst({
-        where: { id: dto.imageId, productId },
-      });
-      if (!image) {
+      const imageRows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM productimage WHERE id = ? AND productId = ?`,
+        [dto.imageId, productId],
+      );
+      if (imageRows.length === 0) {
         throw new BadRequestException(
           'imageId must reference an image already uploaded to this product',
         );
@@ -1058,7 +1222,7 @@ export class ProductsService {
     // recipe — only its own auto-managed shadow link, which lives in this
     // exact (productId, variantId) row set. Without this guard, a stray
     // dto.ingredients here would delete that shadow link via the same
-    // deleteMany the real-override path uses below, orphaning the shadow
+    // delete the real-override path uses below, orphaning the shadow
     // ingredient and breaking this variant's stock resolution entirely —
     // same "ignore, don't corrupt" rule update() applies for the
     // product-level case.
@@ -1067,50 +1231,58 @@ export class ProductsService {
     if (applyIngredientsReplace) {
       await this.assertIngredientLinksValid(ctx, dto.ingredients!);
     }
-    const updated = await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       if (applyIngredientsReplace) {
-        await tx.productingredient.deleteMany({
-          where: { productId, variantId },
-        });
+        await conn.query(
+          `DELETE FROM productingredient WHERE productId = ? AND variantId = ?`,
+          [productId, variantId],
+        );
       }
-      return tx.productvariant.update({
-        where: { id: variantId },
-        data: {
-          sku: dto.sku,
-          barcode: dto.barcode,
-          price: dto.price,
-          compareAtPrice: dto.compareAtPrice,
-          weight: dto.weight,
-          imageId: dto.imageId,
-          ...(applyIngredientsReplace && {
-            productingredient: {
-              create: dto.ingredients!.map((i) => ({
-                shopId: ctx.shopId,
-                productId,
-                ingredientId: i.ingredientId,
-                quantityPerUnit: i.quantityPerUnit,
-              })),
-            },
-          }),
-        },
-        include: variantIncludeFor(undefined),
+      const set = buildSetClause({
+        sku: dto.sku,
+        barcode: dto.barcode,
+        price: dto.price,
+        compareAtPrice: dto.compareAtPrice,
+        weight: dto.weight,
+        imageId: dto.imageId,
       });
+      if (set) {
+        await conn.query(`UPDATE productvariant SET ${set.setClause} WHERE id = ?`, [
+          ...set.params,
+          variantId,
+        ]);
+      }
+      if (applyIngredientsReplace && dto.ingredients!.length > 0) {
+        const placeholders = dto.ingredients!.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+        await conn.query(
+          `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt) VALUES ${placeholders}`,
+          dto.ingredients!.flatMap((i) => [
+            ctx.shopId,
+            productId,
+            variantId,
+            i.ingredientId,
+            i.quantityPerUnit,
+            new Date(),
+          ]),
+        );
+      }
     });
+    const updatedVariants = await this.loadVariantsWithRelations([variantId], undefined);
+    const updated = updatedVariants.get(variantId)!;
     // Needed so the response's makeableQuantity can fall back to the
     // product-level default when this variant has no overrides of its own
     // (same effective-recipe resolution as toResponse's own variant mapping)
     // — no live outlet stock breakdown here (this endpoint isn't
     // outlet-scoped), same as everywhere else on this route today.
-    const productDefaultIngredients =
-      await this.prisma.productingredient.findMany({
-        where: { productId, variantId: null },
-        include: { ingredient: { select: ingredientSelectFor(undefined) } },
-        orderBy: { id: 'asc' },
-      });
+    const productDefaultIngredientRows = await this.loadIngredientLinks(
+      'productId = ? AND variantId IS NULL',
+      [productId],
+      undefined,
+    );
     return this.toVariantResponse(
       updated,
-      productDefaultIngredients,
-      product.usesIngredients,
+      productDefaultIngredientRows.map((r) => this.rowToIngredientLink(r)),
+      product.usesIngredients as boolean,
     );
   }
 
@@ -1122,10 +1294,11 @@ export class ProductsService {
     if (outletId === undefined) {
       throw new BadRequestException('outletId is required');
     }
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: outletId, shopId: ctx.shopId },
-    });
-    if (!outlet) {
+    const outletRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, ctx.shopId],
+    );
+    if (outletRows.length === 0) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
     await this.branchRolesService.assertPermission(
@@ -1148,11 +1321,13 @@ export class ProductsService {
     );
 
     const ingredientIds = resolved.map((r) => r.target.ingredientId);
-    const currentStock = await this.prisma.outletingredientstock.findMany({
-      where: { outletId, ingredientId: { in: ingredientIds } },
-    });
+    const currentStock = await this.db.query<RowDataPacket[]>(
+      `SELECT ingredientId, stockQuantity FROM outletingredientstock
+       WHERE outletId = ? AND ingredientId IN (${ingredientIds.map(() => '?').join(', ')})`,
+      [outletId, ...ingredientIds],
+    );
     const currentByIngredient = new Map(
-      currentStock.map((s) => [s.ingredientId, s.stockQuantity]),
+      currentStock.map((s) => [s.ingredientId as number, s.stockQuantity as number]),
     );
     for (const { delta, target } of resolved) {
       const current = currentByIngredient.get(target.ingredientId) ?? 0;
@@ -1163,17 +1338,20 @@ export class ProductsService {
       }
     }
 
-    await this.prisma.$transaction(
-      resolved.map(({ delta, target }) =>
-        this.prisma.outletingredientstock.upsert({
-          where: {
-            outletId_ingredientId: { outletId, ingredientId: target.ingredientId },
-          },
-          update: { stockQuantity: { increment: delta } },
-          create: { outletId, ingredientId: target.ingredientId, stockQuantity: delta },
-        }),
-      ),
-    );
+    await this.db.transaction(async (conn) => {
+      for (const { delta, target } of resolved) {
+        // upsert() can't express increment-on-conflict (see its own doc
+        // comment) — a direct ON DUPLICATE KEY UPDATE ... = col + VALUES(col)
+        // instead: inserts `delta` for a brand-new row, adds `delta` to an
+        // existing one.
+        await conn.query(
+          `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+          [outletId, target.ingredientId, delta],
+        );
+      }
+    });
 
     // Back-in-stock notify — fire (not awaited) for every product/variant
     // whose stock just crossed 0 -> positive at this outlet. Not awaited so
@@ -1191,12 +1369,13 @@ export class ProductsService {
       }
     }
 
-    const stockRows = await this.prisma.outletingredientstock.findMany({
-      where: { outletId, ingredientId: { in: ingredientIds } },
-      select: { ingredientId: true, stockQuantity: true },
-    });
+    const stockRows = await this.db.query<RowDataPacket[]>(
+      `SELECT ingredientId, stockQuantity FROM outletingredientstock
+       WHERE outletId = ? AND ingredientId IN (${ingredientIds.map(() => '?').join(', ')})`,
+      [outletId, ...ingredientIds],
+    );
     const stockByIngredient = new Map(
-      stockRows.map((s) => [s.ingredientId, s.stockQuantity]),
+      stockRows.map((s) => [s.ingredientId as number, s.stockQuantity as number]),
     );
 
     return {
@@ -1218,11 +1397,11 @@ export class ProductsService {
   // Moves N units of one product/variant from one outlet to another,
   // atomically. Unlike adjustStock above (a read-then-check-then-write, fine
   // for low-concurrency manual admin corrections), this uses the same
-  // CAS-guarded updateMany discipline as checkout's reserveStock
+  // CAS-guarded UPDATE...affectedRows discipline as checkout's reserveStock
   // (orders.service.ts) — the floor check lives in the WHERE clause of the
-  // decrement itself, inside a real interactive $transaction, so two
-  // concurrent transfers of the same source stock can't both succeed past
-  // what's actually there.
+  // decrement itself, inside a real transaction, so two concurrent
+  // transfers of the same source stock can't both succeed past what's
+  // actually there.
   async transferStock(ctx: TenantContext, dto: TransferStockDto) {
     if (dto.fromOutletId === dto.toOutletId) {
       throw new BadRequestException(
@@ -1230,15 +1409,17 @@ export class ProductsService {
       );
     }
 
-    const [fromOutlet, toOutlet] = await Promise.all([
-      this.prisma.outlet.findFirst({
-        where: { id: dto.fromOutletId, shopId: ctx.shopId },
-      }),
-      this.prisma.outlet.findFirst({
-        where: { id: dto.toOutletId, shopId: ctx.shopId },
-      }),
+    const [fromOutletRows, toOutletRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(`SELECT id FROM outlet WHERE id = ? AND shopId = ?`, [
+        dto.fromOutletId,
+        ctx.shopId,
+      ]),
+      this.db.query<RowDataPacket[]>(`SELECT id FROM outlet WHERE id = ? AND shopId = ?`, [
+        dto.toOutletId,
+        ctx.shopId,
+      ]),
     ]);
-    if (!fromOutlet || !toOutlet) {
+    if (fromOutletRows.length === 0 || toOutletRows.length === 0) {
       throw new BadRequestException(
         'fromOutletId/toOutletId is invalid for this shop',
       );
@@ -1250,63 +1431,48 @@ export class ProductsService {
     // the transaction is fine here (unlike the CAS decrement/increment
     // itself): worst case under true concurrency is a missed or extra
     // notify trigger, never an incorrect stock quantity.
-    const destinationBefore =
-      (
-        await this.prisma.outletingredientstock.findUnique({
-          where: {
-            outletId_ingredientId: {
-              outletId: dto.toOutletId,
-              ingredientId: resolved.ingredientId,
-            },
-          },
-        })
-      )?.stockQuantity ?? 0;
+    const destBeforeRows = await this.db.query<RowDataPacket[]>(
+      `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+      [dto.toOutletId, resolved.ingredientId],
+    );
+    const destinationBefore = (destBeforeRows[0]?.stockQuantity as number | undefined) ?? 0;
 
-    await this.prisma.$transaction(async (tx) => {
-      const decremented = await tx.outletingredientstock.updateMany({
-        where: {
-          outletId: dto.fromOutletId,
-          ingredientId: resolved.ingredientId,
-          stockQuantity: { gte: dto.quantity },
-        },
-        data: { stockQuantity: { decrement: dto.quantity } },
-      });
-      if (decremented.count === 0) {
+    await this.db.transaction(async (conn) => {
+      const [decremented] = await conn.query(
+        `UPDATE outletingredientstock SET stockQuantity = stockQuantity - ?
+         WHERE outletId = ? AND ingredientId = ? AND stockQuantity >= ?`,
+        [dto.quantity, dto.fromOutletId, resolved.ingredientId, dto.quantity],
+      );
+      if ((decremented as { affectedRows: number }).affectedRows === 0) {
         throw new ConflictException(
           'Not enough stock at the source outlet for this transfer',
         );
       }
 
-      await tx.outletingredientstock.upsert({
-        where: {
-          outletId_ingredientId: {
-            outletId: dto.toOutletId,
-            ingredientId: resolved.ingredientId,
-          },
-        },
-        update: { stockQuantity: { increment: dto.quantity } },
-        create: {
-          outletId: dto.toOutletId,
-          ingredientId: resolved.ingredientId,
-          stockQuantity: dto.quantity,
-        },
-      });
+      await conn.query(
+        `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+        [dto.toOutletId, resolved.ingredientId, dto.quantity],
+      );
 
-      await tx.stockmovement.create({
-        data: {
-          shopId: ctx.shopId,
-          productId: resolved.productId,
-          variantId: resolved.variantId,
-          ingredientId: resolved.ingredientId,
-          type: 'TRANSFER',
-          reason: null,
-          delta: dto.quantity,
-          outletId: dto.fromOutletId,
-          toOutletId: dto.toOutletId,
-          note: dto.note,
-          actorUserId: ctx.userId,
-        },
-      });
+      await conn.query(
+        `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ctx.shopId,
+          resolved.productId,
+          resolved.variantId,
+          resolved.ingredientId,
+          'TRANSFER',
+          null,
+          dto.quantity,
+          dto.fromOutletId,
+          dto.toOutletId,
+          dto.note ?? null,
+          ctx.userId,
+        ],
+      );
     });
 
     if (resolved.productId !== null && destinationBefore <= 0) {
@@ -1335,10 +1501,11 @@ export class ProductsService {
     if (outletId === undefined) {
       throw new BadRequestException('outletId is required');
     }
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: outletId, shopId: ctx.shopId },
-    });
-    if (!outlet) {
+    const outletRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, ctx.shopId],
+    );
+    if (outletRows.length === 0) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
     await this.branchRolesService.assertPermission(
@@ -1349,96 +1516,46 @@ export class ProductsService {
 
     const resolved = await this.resolveShadowStockTarget(ctx, dto);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       if (dto.delta < 0) {
-        const result = await tx.outletingredientstock.updateMany({
-          where: {
-            outletId,
-            ingredientId: resolved.ingredientId,
-            stockQuantity: { gte: -dto.delta },
-          },
-          data: { stockQuantity: { decrement: -dto.delta } },
-        });
-        if (result.count === 0) {
+        const [result] = await conn.query(
+          `UPDATE outletingredientstock SET stockQuantity = stockQuantity - ?
+           WHERE outletId = ? AND ingredientId = ? AND stockQuantity >= ?`,
+          [-dto.delta, outletId, resolved.ingredientId, -dto.delta],
+        );
+        if ((result as { affectedRows: number }).affectedRows === 0) {
           throw new ConflictException(
             'Adjustment would take stock below zero at this outlet',
           );
         }
       } else if (dto.delta > 0) {
-        await tx.outletingredientstock.upsert({
-          where: {
-            outletId_ingredientId: {
-              outletId,
-              ingredientId: resolved.ingredientId,
-            },
-          },
-          update: { stockQuantity: { increment: dto.delta } },
-          create: {
-            outletId,
-            ingredientId: resolved.ingredientId,
-            stockQuantity: dto.delta,
-          },
-        });
+        await conn.query(
+          `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+          [outletId, resolved.ingredientId, dto.delta],
+        );
       }
       // delta === 0 is a valid "recount confirmed the existing number, no
       // change" adjustment — still logged below, no stock mutation needed.
 
-      await tx.stockmovement.create({
-        data: {
-          shopId: ctx.shopId,
-          productId: resolved.productId,
-          variantId: resolved.variantId,
-          ingredientId: resolved.ingredientId,
-          type: 'ADJUSTMENT',
-          reason: dto.reason,
-          delta: dto.delta,
+      await conn.query(
+        `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ctx.shopId,
+          resolved.productId,
+          resolved.variantId,
+          resolved.ingredientId,
+          'ADJUSTMENT',
+          dto.reason,
+          dto.delta,
           outletId,
-          toOutletId: null,
-          note: dto.note,
-          actorUserId: ctx.userId,
-        },
-      });
-    });
-
-    return this.getStockSnapshot(resolved, [outletId]);
-  }
-
-  // Sets (or clears, via null) the reorder alert threshold on the relevant
-  // per-outlet stock row — a pure config write, no stockmovement log entry
-  // (unlike adjustStockWithReason, nothing about the actual stock quantity
-  // changed) and no CAS guard needed (not a decrement). Upserts the stock
-  // row with stockQuantity: 0 if one doesn't exist yet — same "the row is
-  // created lazily on first touch" precedent as adjustStock's own upserts,
-  // so a merchant can set a threshold before ever adjusting quantity at a
-  // given outlet.
-  async setLowStockThreshold(ctx: TenantContext, dto: SetLowStockThresholdDto) {
-    const outletId = ctx.role === 'branch' ? ctx.outletId! : dto.outletId;
-    if (outletId === undefined) {
-      throw new BadRequestException('outletId is required');
-    }
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: outletId, shopId: ctx.shopId },
-    });
-    if (!outlet) {
-      throw new BadRequestException('outletId is invalid for this shop');
-    }
-    await this.branchRolesService.assertPermission(
-      ctx,
-      outletId,
-      'products.manage_stock',
-    );
-
-    const resolved = await this.resolveShadowStockTarget(ctx, dto);
-    await this.prisma.outletingredientstock.upsert({
-      where: {
-        outletId_ingredientId: { outletId, ingredientId: resolved.ingredientId },
-      },
-      update: { lowStockThreshold: dto.lowStockThreshold },
-      create: {
-        outletId,
-        ingredientId: resolved.ingredientId,
-        lowStockThreshold: dto.lowStockThreshold,
-      },
+          null,
+          dto.note ?? null,
+          ctx.userId,
+        ],
+      );
     });
 
     return this.getStockSnapshot(resolved, [outletId]);
@@ -1452,42 +1569,76 @@ export class ProductsService {
   // whether one was already provisioned. Not private — ScanService's
   // scan-to-stock flow (its own product-creation path) reuses this exact
   // provisioning logic rather than duplicating it.
+  //
+  // Accepts either a mysql2 runner (every caller inside this file) or a
+  // still-Prisma Prisma.TransactionClient (only ScanService, Phase 7,
+  // passes its own tx here) — see isMysqlRunner at the top of this file.
+  // Delete the Prisma branch once Phase 7 converts.
   async provisionShadowForProduct(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection | Prisma.TransactionClient,
     ctx: TenantContext,
     productId: number,
     meta: {
       name: string;
       thumbnail: string;
       trackInventory: boolean;
-      costPrice: Prisma.Decimal | null;
+      costPrice: string | number | Prisma.Decimal | null;
     },
   ): Promise<void> {
-    const existing = await tx.ingredient.findFirst({
-      where: { shadowProductId: productId },
-      select: { id: true },
-    });
-    if (existing) return;
-    const shadow = await tx.ingredient.create({
-      data: {
-        shopId: ctx.shopId,
-        name: meta.name,
-        unit: 'unit',
-        trackInventory: meta.trackInventory,
-        image: meta.thumbnail,
-        costPerUnit: meta.costPrice,
-        shadowProductId: productId,
-      },
-    });
-    await tx.productingredient.create({
-      data: {
-        shopId: ctx.shopId,
+    if (!isMysqlRunner(conn)) {
+      // Legacy Prisma path — see the method's own doc comment.
+      const existing = await conn.ingredient.findFirst({
+        where: { shadowProductId: productId },
+        select: { id: true },
+      });
+      if (existing) return;
+      const shadow = await conn.ingredient.create({
+        data: {
+          shopId: ctx.shopId,
+          name: meta.name,
+          unit: 'unit',
+          trackInventory: meta.trackInventory,
+          image: meta.thumbnail,
+          costPerUnit: meta.costPrice,
+          shadowProductId: productId,
+        },
+      });
+      await conn.productingredient.create({
+        data: {
+          shopId: ctx.shopId,
+          productId,
+          variantId: null,
+          ingredientId: shadow.id,
+          quantityPerUnit: 1,
+        },
+      });
+      return;
+    }
+
+    const [existingRows] = await conn.query<RowDataPacket[]>(
+      `SELECT id FROM ingredient WHERE shadowProductId = ?`,
+      [productId],
+    );
+    if (existingRows.length > 0) return;
+    const [shadowResult] = await conn.query(
+      `INSERT INTO ingredient (shopId, name, unit, trackInventory, image, costPerUnit, shadowProductId)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
+        meta.name,
+        'unit',
+        meta.trackInventory,
+        meta.thumbnail,
+        meta.costPrice !== null ? String(meta.costPrice) : null,
         productId,
-        variantId: null,
-        ingredientId: shadow.id,
-        quantityPerUnit: 1,
-      },
-    });
+      ],
+    );
+    const shadowId = (shadowResult as { insertId: number }).insertId;
+    await conn.query(
+      `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [ctx.shopId, productId, null, shadowId, 1, new Date()],
+    );
   }
 
   // Same as provisionShadowForProduct but for one variant of a
@@ -1496,7 +1647,7 @@ export class ProductsService {
   // variants (mirrors how variant stock was always independent of the
   // parent product's own stock before Phase A).
   private async provisionShadowForVariant(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     ctx: TenantContext,
     productId: number,
     variantId: number,
@@ -1504,54 +1655,64 @@ export class ProductsService {
       name: string;
       thumbnail: string;
       trackInventory: boolean;
-      costPrice: Prisma.Decimal | null;
+      costPrice: string | number | Prisma.Decimal | null;
     },
   ): Promise<void> {
-    const existing = await tx.ingredient.findFirst({
-      where: { shadowVariantId: variantId },
-      select: { id: true },
-    });
-    if (existing) return;
-    const shadow = await tx.ingredient.create({
-      data: {
-        shopId: ctx.shopId,
-        name: meta.name,
-        unit: 'unit',
-        trackInventory: meta.trackInventory,
-        image: meta.thumbnail,
-        costPerUnit: meta.costPrice,
-        shadowVariantId: variantId,
-      },
-    });
-    await tx.productingredient.create({
-      data: {
-        shopId: ctx.shopId,
-        productId,
+    const [existingRows] = await conn.query<RowDataPacket[]>(
+      `SELECT id FROM ingredient WHERE shadowVariantId = ?`,
+      [variantId],
+    );
+    if (existingRows.length > 0) return;
+    const [shadowResult] = await conn.query(
+      `INSERT INTO ingredient (shopId, name, unit, trackInventory, image, costPerUnit, shadowVariantId)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
+        meta.name,
+        'unit',
+        meta.trackInventory,
+        meta.thumbnail,
+        meta.costPrice !== null ? String(meta.costPrice) : null,
         variantId,
-        ingredientId: shadow.id,
-        quantityPerUnit: 1,
-      },
-    });
+      ],
+    );
+    const shadowId = (shadowResult as { insertId: number }).insertId;
+    await conn.query(
+      `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [ctx.shopId, productId, variantId, shadowId, 1, new Date()],
+    );
   }
 
   // Keeps a usesIngredients:false product's/variant's shadow ingredient
   // display fields in sync with whatever actually changed on this save —
-  // no-op (and cheap: a single updateMany, not a loop) when nothing in
-  // `meta` changed, and a no-op when no shadow exists for `where` (e.g.
-  // called for a product with zero variants against a shadowVariantId
-  // filter that matches nothing).
+  // no-op (and cheap: a single UPDATE, not a loop) when nothing in `meta`
+  // changed, and a no-op when no shadow exists for `where` (e.g. called for
+  // a product with zero variants against a shadowVariantId filter that
+  // matches nothing).
   private async syncShadowMeta(
-    tx: Prisma.TransactionClient,
-    where: { shadowProductId: number } | { shadowVariantId: { in: number[] } },
+    conn: PoolConnection,
+    where: { shadowProductId: number } | { shadowVariantIdIn: number[] },
     meta: { name?: string; thumbnail?: string; trackInventory?: boolean },
   ): Promise<void> {
-    const data: Prisma.ingredientUpdateManyMutationInput = {};
-    if (meta.name !== undefined) data.name = meta.name;
-    if (meta.thumbnail !== undefined) data.image = meta.thumbnail;
-    if (meta.trackInventory !== undefined)
-      data.trackInventory = meta.trackInventory;
-    if (Object.keys(data).length === 0) return;
-    await tx.ingredient.updateMany({ where, data });
+    const set = buildSetClause({
+      name: meta.name,
+      image: meta.thumbnail,
+      trackInventory: meta.trackInventory,
+    });
+    if (!set) return;
+    if ('shadowProductId' in where) {
+      await conn.query(`UPDATE ingredient SET ${set.setClause} WHERE shadowProductId = ?`, [
+        ...set.params,
+        where.shadowProductId,
+      ]);
+    } else {
+      if (where.shadowVariantIdIn.length === 0) return;
+      await conn.query(
+        `UPDATE ingredient SET ${set.setClause} WHERE shadowVariantId IN (${where.shadowVariantIdIn.map(() => '?').join(', ')})`,
+        [...set.params, ...where.shadowVariantIdIn],
+      );
+    }
   }
 
   // Deletes a product's shadow ingredient — cascades to its
@@ -1560,10 +1721,10 @@ export class ProductsService {
   // product deletion relies on ingredient.shadowProductId's own ON DELETE
   // CASCADE instead (see remove()).
   private async deleteShadowForProduct(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     productId: number,
   ): Promise<void> {
-    await tx.ingredient.deleteMany({ where: { shadowProductId: productId } });
+    await conn.query(`DELETE FROM ingredient WHERE shadowProductId = ?`, [productId]);
   }
 
   // Same as deleteShadowForProduct but for every variant in the list — used
@@ -1572,13 +1733,14 @@ export class ProductsService {
   // since a variant-carrying usesIngredients:false product never has a
   // product-level shadow to begin with).
   private async deleteShadowsForVariants(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     variantIds: number[],
   ): Promise<void> {
     if (variantIds.length === 0) return;
-    await tx.ingredient.deleteMany({
-      where: { shadowVariantId: { in: variantIds } },
-    });
+    await conn.query(
+      `DELETE FROM ingredient WHERE shadowVariantId IN (${variantIds.map(() => '?').join(', ')})`,
+      variantIds,
+    );
   }
 
   // The single place every stock-mutation endpoint (transferStock,
@@ -1593,34 +1755,89 @@ export class ProductsService {
   // remember to check it. Folds in assertStockTarget's own XOR checks so
   // callers no longer need to call that separately. Not private — reused
   // by ScanService for the same reason.
+  //
+  // Accepts either a mysql2 runner (Pool/PoolConnection — every caller
+  // inside this file) or a still-Prisma Prisma.TransactionClient (only
+  // ScanService, Phase 7, passes its own tx here) — see isMysqlRunner at
+  // the top of this file. Delete the Prisma branch once Phase 7 converts.
   async resolveShadowStockTarget(
     ctx: TenantContext,
     target: { productId?: number; variantId?: number; ingredientId?: number },
-    // Defaults to the plain (non-transactional) client — pass the open `tx`
-    // explicitly when resolving mid-transaction (see applyImportStock),
-    // otherwise a just-created-in-this-tx row wouldn't be visible yet to a
-    // separate connection.
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
+    client: Prisma.TransactionClient | PoolConnection | Pool = this.db.pool,
   ): Promise<{
     ingredientId: number;
     productId: number | null;
     variantId: number | null;
   }> {
     this.assertStockTarget(target);
-    if (target.ingredientId) {
-      const ingredient = await client.ingredient.findFirst({
-        where: { id: target.ingredientId, shopId: ctx.shopId },
+
+    if (!isMysqlRunner(client)) {
+      // Legacy Prisma path — see the method's own doc comment.
+      if (target.ingredientId) {
+        const ingredient = await client.ingredient.findFirst({
+          where: { id: target.ingredientId, shopId: ctx.shopId },
+          select: { id: true },
+        });
+        if (!ingredient) {
+          throw new NotFoundException(`Ingredient ${target.ingredientId} not found`);
+        }
+        return { ingredientId: target.ingredientId, productId: null, variantId: null };
+      }
+      const product = await client.product.findFirst({
+        where: { id: target.productId, shopId: ctx.shopId },
+        select: { id: true, usesIngredients: true },
+      });
+      if (!product) {
+        throw new NotFoundException(`Product ${target.productId} not found`);
+      }
+      if (product.usesIngredients) {
+        throw new BadRequestException(
+          'This product uses a recipe — adjust the individual ingredient stock instead',
+        );
+      }
+      if (target.variantId) {
+        const variant = await client.productvariant.findFirst({
+          where: { id: target.variantId, productId: product.id },
+          select: { id: true },
+        });
+        if (!variant) {
+          throw new BadRequestException('variantId is invalid for this product');
+        }
+        const shadow = await client.ingredient.findFirst({
+          where: { shadowVariantId: variant.id },
+          select: { id: true },
+        });
+        if (!shadow) {
+          throw new BadRequestException(`Variant ${variant.id} has no stock record`);
+        }
+        return { ingredientId: shadow.id, productId: product.id, variantId: variant.id };
+      }
+      const shadow = await client.ingredient.findFirst({
+        where: { shadowProductId: product.id },
         select: { id: true },
       });
-      if (!ingredient) {
+      if (!shadow) {
+        throw new BadRequestException(`Product ${product.id} has no stock record`);
+      }
+      return { ingredientId: shadow.id, productId: product.id, variantId: null };
+    }
+
+    // mysql2 path
+    if (target.ingredientId) {
+      const [rows] = await client.query<RowDataPacket[]>(
+        `SELECT id FROM ingredient WHERE id = ? AND shopId = ?`,
+        [target.ingredientId, ctx.shopId],
+      );
+      if (rows.length === 0) {
         throw new NotFoundException(`Ingredient ${target.ingredientId} not found`);
       }
       return { ingredientId: target.ingredientId, productId: null, variantId: null };
     }
-    const product = await client.product.findFirst({
-      where: { id: target.productId, shopId: ctx.shopId },
-      select: { id: true, usesIngredients: true },
-    });
+    const [productRows] = await client.query<RowDataPacket[]>(
+      `SELECT id, usesIngredients FROM product WHERE id = ? AND shopId = ?`,
+      [target.productId, ctx.shopId],
+    );
+    const product = productRows[0];
     if (!product) {
       throw new NotFoundException(`Product ${target.productId} not found`);
     }
@@ -1630,34 +1847,30 @@ export class ProductsService {
       );
     }
     if (target.variantId) {
-      const variant = await client.productvariant.findFirst({
-        where: { id: target.variantId, productId: product.id },
-        select: { id: true },
-      });
-      if (!variant) {
+      const [variantRows] = await client.query<RowDataPacket[]>(
+        `SELECT id FROM productvariant WHERE id = ? AND productId = ?`,
+        [target.variantId, product.id],
+      );
+      if (variantRows.length === 0) {
         throw new BadRequestException('variantId is invalid for this product');
       }
-      const shadow = await client.ingredient.findFirst({
-        where: { shadowVariantId: variant.id },
-        select: { id: true },
-      });
-      if (!shadow) {
-        throw new BadRequestException(
-          `Variant ${variant.id} has no stock record`,
-        );
-      }
-      return { ingredientId: shadow.id, productId: product.id, variantId: variant.id };
-    }
-    const shadow = await client.ingredient.findFirst({
-      where: { shadowProductId: product.id },
-      select: { id: true },
-    });
-    if (!shadow) {
-      throw new BadRequestException(
-        `Product ${product.id} has no stock record`,
+      const [shadowRows] = await client.query<RowDataPacket[]>(
+        `SELECT id FROM ingredient WHERE shadowVariantId = ?`,
+        [target.variantId],
       );
+      if (shadowRows.length === 0) {
+        throw new BadRequestException(`Variant ${target.variantId} has no stock record`);
+      }
+      return { ingredientId: shadowRows[0].id as number, productId: product.id as number, variantId: target.variantId };
     }
-    return { ingredientId: shadow.id, productId: product.id, variantId: null };
+    const [shadowRows] = await client.query<RowDataPacket[]>(
+      `SELECT id FROM ingredient WHERE shadowProductId = ?`,
+      [product.id],
+    );
+    if (shadowRows.length === 0) {
+      throw new BadRequestException(`Product ${product.id as number} has no stock record`);
+    }
+    return { ingredientId: shadowRows[0].id as number, productId: product.id as number, variantId: null };
   }
 
   // Exactly one of productId/ingredientId, never both, never neither;
@@ -1682,18 +1895,6 @@ export class ProductsService {
     }
   }
 
-  private async assertIngredientBelongsToShop(
-    ctx: TenantContext,
-    ingredientId: number,
-  ) {
-    const ingredient = await this.prisma.ingredient.findFirst({
-      where: { id: ingredientId, shopId: ctx.shopId },
-    });
-    if (!ingredient) {
-      throw new NotFoundException(`Ingredient ${ingredientId} not found`);
-    }
-  }
-
   // Bill of Materials — validates a full recipe submission (product-level
   // default or a single variant's override list) before any writes: every
   // ingredientId must belong to this shop (tenant isolation — a recipe can
@@ -1713,10 +1914,12 @@ export class ProductsService {
         'Each ingredient can only be linked once per recipe',
       );
     }
-    const count = await this.prisma.ingredient.count({
-      where: { id: { in: uniqueIds }, shopId: ctx.shopId },
-    });
-    if (count !== uniqueIds.length) {
+    if (uniqueIds.length === 0) return;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM ingredient WHERE id IN (${uniqueIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [...uniqueIds, ctx.shopId],
+    );
+    if (Number(rows[0].c) !== uniqueIds.length) {
       throw new BadRequestException(
         'One or more ingredientIds are invalid for this shop',
       );
@@ -1740,77 +1943,92 @@ export class ProductsService {
       );
     }
 
-    const where: Prisma.stockmovementWhereInput = {
-      shopId: ctx.shopId,
-      ...(query.productId && { productId: query.productId }),
-      ...(query.variantId && { variantId: query.variantId }),
-      ...(query.ingredientId && { ingredientId: query.ingredientId }),
-      ...(query.type && { type: query.type }),
-      // A branch user is scoped to their own outlet on either side of a
-      // transfer (sender or receiver); an admin filtering by outletId gets
-      // the same OR-on-both-sides treatment so a transfer shows up in
-      // either outlet's history, not just the "outletId" column's literal
-      // meaning of "source".
-      ...(outletScope !== undefined && {
-        OR: [{ outletId: outletScope }, { toOutletId: outletScope }],
-      }),
-    };
+    const conditions = ['sm.shopId = ?'];
+    const params: QueryParam[] = [ctx.shopId];
+    if (query.productId) {
+      conditions.push('sm.productId = ?');
+      params.push(query.productId);
+    }
+    if (query.variantId) {
+      conditions.push('sm.variantId = ?');
+      params.push(query.variantId);
+    }
+    if (query.ingredientId) {
+      conditions.push('sm.ingredientId = ?');
+      params.push(query.ingredientId);
+    }
+    if (query.type) {
+      conditions.push('sm.type = ?');
+      params.push(query.type);
+    }
+    // A branch user is scoped to their own outlet on either side of a
+    // transfer (sender or receiver); an admin filtering by outletId gets
+    // the same OR-on-both-sides treatment so a transfer shows up in
+    // either outlet's history, not just the "outletId" column's literal
+    // meaning of "source".
+    if (outletScope !== undefined) {
+      conditions.push('(sm.outletId = ? OR sm.toOutletId = ?)');
+      params.push(outletScope, outletScope);
+    }
+    const whereClause = conditions.join(' AND ');
 
-    const [total, rows] = await Promise.all([
-      this.prisma.stockmovement.count({ where }),
-      this.prisma.stockmovement.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          product: { select: { id: true, name: true } },
-          variant: {
-            select: {
-              id: true,
-              optionValue1: { select: { value: true } },
-              optionValue2: { select: { value: true } },
-              optionValue3: { select: { value: true } },
-            },
-          },
-          ingredient: { select: { id: true, name: true, unit: true } },
-          outlet: { select: { id: true, name: true } },
-          toOutlet: { select: { id: true, name: true } },
-          actor: { select: { id: true, name: true } },
-        },
-      }),
-    ]);
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM stockmovement sm WHERE ${whereClause}`,
+      params,
+    );
+    const total = Number(countRows[0].c);
+
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT sm.*, p.name AS productName,
+              ov1.value AS variantOptionValue1, ov2.value AS variantOptionValue2, ov3.value AS variantOptionValue3,
+              ing.name AS ingredientName, ing.unit AS ingredientUnit,
+              o.name AS outletName, tOutlet.name AS toOutletName, actor.name AS actorName
+       FROM stockmovement sm
+       LEFT JOIN product p ON p.id = sm.productId
+       LEFT JOIN productvariant v ON v.id = sm.variantId
+       LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
+       LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
+       LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
+       LEFT JOIN ingredient ing ON ing.id = sm.ingredientId
+       JOIN outlet o ON o.id = sm.outletId
+       LEFT JOIN outlet tOutlet ON tOutlet.id = sm.toOutletId
+       LEFT JOIN user actor ON actor.id = sm.actorUserId
+       WHERE ${whereClause}
+       ORDER BY sm.createdAt DESC
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
 
     return {
       data: rows.map((r) => ({
-        id: r.id,
+        id: r.id as number,
         // Exactly one of productId/ingredientId is ever set on a given row —
         // see schema.prisma's comment on the stockmovement model.
-        productId: r.productId,
-        productName: r.product?.name ?? null,
-        variantId: r.variantId,
-        variantLabel: r.variant
+        productId: r.productId as number | null,
+        productName: (r.productName as string | null) ?? null,
+        variantId: r.variantId as number | null,
+        variantLabel: r.variantId
           ? buildVariantLabel([
-              r.variant.optionValue1?.value,
-              r.variant.optionValue2?.value,
-              r.variant.optionValue3?.value,
+              r.variantOptionValue1 as string | undefined,
+              r.variantOptionValue2 as string | undefined,
+              r.variantOptionValue3 as string | undefined,
             ])
           : null,
-        ingredientId: r.ingredientId,
-        ingredientName: r.ingredient?.name ?? null,
-        ingredientUnit: r.ingredient?.unit ?? null,
-        type: r.type,
-        reason: r.reason,
-        delta: r.delta,
-        outletId: r.outletId,
-        outletName: r.outlet.name,
-        toOutletId: r.toOutletId,
-        toOutletName: r.toOutlet?.name ?? null,
-        note: r.note,
+        ingredientId: r.ingredientId as number | null,
+        ingredientName: (r.ingredientName as string | null) ?? null,
+        ingredientUnit: (r.ingredientUnit as string | null) ?? null,
+        type: r.type as string,
+        reason: r.reason as string | null,
+        delta: r.delta as number,
+        outletId: r.outletId as number,
+        outletName: r.outletName as string,
+        toOutletId: r.toOutletId as number | null,
+        toOutletName: (r.toOutletName as string | null) ?? null,
+        note: r.note as string | null,
         // null only for a CONSUMED row auto-generated by an anonymous
         // storefront checkout — see stockmovement.actorUserId's schema comment.
-        actorName: r.actor?.name ?? null,
-        createdAt: r.createdAt,
+        actorName: (r.actorName as string | null) ?? null,
+        createdAt: r.createdAt as Date,
       })),
       total,
       page,
@@ -1832,10 +2050,11 @@ export class ProductsService {
     },
     outletIds: number[],
   ) {
-    const rows = await this.prisma.outletingredientstock.findMany({
-      where: { ingredientId: target.ingredientId, outletId: { in: outletIds } },
-      select: { outletId: true, stockQuantity: true, lowStockThreshold: true },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT outletId, stockQuantity, lowStockThreshold FROM outletingredientstock
+       WHERE ingredientId = ? AND outletId IN (${outletIds.map(() => '?').join(', ')})`,
+      [target.ingredientId, ...outletIds],
+    );
     if (target.variantId !== null) {
       return {
         variants: rows.map((r) => ({ ...r, variantId: target.variantId })),
@@ -1851,14 +2070,56 @@ export class ProductsService {
     };
   }
 
+  // Sets (or clears, via null) the reorder alert threshold on the relevant
+  // per-outlet stock row — a pure config write, no stockmovement log entry
+  // (unlike adjustStockWithReason, nothing about the actual stock quantity
+  // changed) and no CAS guard needed (not a decrement). Upserts the stock
+  // row with stockQuantity: 0 if one doesn't exist yet — same "the row is
+  // created lazily on first touch" precedent as adjustStock's own upserts,
+  // so a merchant can set a threshold before ever adjusting quantity at a
+  // given outlet.
+  async setLowStockThreshold(ctx: TenantContext, dto: SetLowStockThresholdDto) {
+    const outletId = ctx.role === 'branch' ? ctx.outletId! : dto.outletId;
+    if (outletId === undefined) {
+      throw new BadRequestException('outletId is required');
+    }
+    const outletRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, ctx.shopId],
+    );
+    if (outletRows.length === 0) {
+      throw new BadRequestException('outletId is invalid for this shop');
+    }
+    await this.branchRolesService.assertPermission(
+      ctx,
+      outletId,
+      'products.manage_stock',
+    );
+
+    const resolved = await this.resolveShadowStockTarget(ctx, dto);
+    await upsert(
+      this.db.pool,
+      'outletingredientstock',
+      {
+        outletId,
+        ingredientId: resolved.ingredientId,
+        stockQuantity: 0,
+        lowStockThreshold: dto.lowStockThreshold,
+      },
+      ['lowStockThreshold'],
+    );
+
+    return this.getStockSnapshot(resolved, [outletId]);
+  }
+
   // Logs here — not separately in bulkRemove() below, which just calls this
   // in a loop — one row per product either way, single or bulk delete.
   async remove(ctx: TenantContext, id: number) {
     const product = await this.findOne(ctx, id);
     try {
-      await this.prisma.product.delete({ where: { id } });
+      await this.db.execute(`DELETE FROM product WHERE id = ?`, [id]);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
     await this.auditLogService.logCtx(ctx, {
       action: 'product.deleted',
@@ -1869,16 +2130,16 @@ export class ProductsService {
     return { id, deleted: true };
   }
 
-  // A single updateMany scoped to shopId is inherently the tenant-safe
-  // shape for this: any id in `productIds` that doesn't belong to this shop
-  // (spoofed or otherwise) simply isn't in the WHERE match — `count` only
-  // ever reflects real, owned rows, nothing leaks about ids that don't
+  // A single UPDATE scoped to shopId is inherently the tenant-safe shape
+  // for this: any id in `productIds` that doesn't belong to this shop
+  // (spoofed or otherwise) simply isn't in the WHERE match — `affectedRows`
+  // only ever reflects real, owned rows, nothing leaks about ids that don't
   // belong to the caller.
   async bulkUpdateStatus(ctx: TenantContext, dto: BulkUpdateProductStatusDto) {
-    const result = await this.prisma.product.updateMany({
-      where: { id: { in: dto.productIds }, shopId: ctx.shopId },
-      data: { status: dto.status },
-    });
+    const result = await this.db.execute(
+      `UPDATE product SET status = ? WHERE id IN (${dto.productIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [dto.status, ...dto.productIds, ctx.shopId],
+    );
     // One summary row for the whole batch, not one per product — the
     // individual product ids are already in `metadata` for anyone who needs
     // them; the log's job here is "what happened", not a per-row diff.
@@ -1886,14 +2147,14 @@ export class ProductsService {
       action: 'product.bulk_status_changed',
       entityType: 'product',
       after: { status: dto.status },
-      metadata: { productIds: dto.productIds, updated: result.count },
+      metadata: { productIds: dto.productIds, updated: result.affectedRows },
     });
-    return { updated: result.count, requested: dto.productIds.length };
+    return { updated: result.affectedRows, requested: dto.productIds.length };
   }
 
   // Deliberately a loop of the existing single remove() (tenant-scoped via
   // findOne, same friendly "has order history" message via
-  // handlePrismaError) rather than one deleteMany — a single multi-row
+  // handleDbError) rather than one multi-row DELETE — a single multi-row
   // DELETE would fail (and roll back) entirely if even one id hits the
   // order-history FK guard, when the correct behavior is "delete what can
   // be deleted, report what couldn't."
@@ -1923,10 +2184,11 @@ export class ProductsService {
   // percentage/fixed adjustment. Tenant-scoped the same way bulkUpdateStatus
   // is: productIds not owned by this shop just don't appear in `products`.
   async bulkUpdatePrice(ctx: TenantContext, dto: BulkPriceUpdateDto) {
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: dto.productIds }, shopId: ctx.shopId },
-      select: { id: true, name: true, price: true, compareAtPrice: true },
-    });
+    const products = await this.db.query<RowDataPacket[]>(
+      `SELECT id, name, price, compareAtPrice FROM product
+       WHERE id IN (${dto.productIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [...dto.productIds, ctx.shopId],
+    );
 
     const results: {
       id: number;
@@ -1942,8 +2204,8 @@ export class ProductsService {
       const current = dto.field === 'price' ? p.price : p.compareAtPrice;
       if (current === null) {
         results.push({
-          id: p.id,
-          name: p.name,
+          id: p.id as number,
+          name: p.name as string,
           oldPrice: null,
           success: false,
           error:
@@ -1961,36 +2223,33 @@ export class ProductsService {
       const rounded = Math.round(newPriceNum * 100) / 100;
       if (rounded < 0) {
         results.push({
-          id: p.id,
-          name: p.name,
-          oldPrice: current.toString(),
+          id: p.id as number,
+          name: p.name as string,
+          oldPrice: trimDecimal(String(current)),
           success: false,
           error: 'Would go below zero',
         });
         continue;
       }
-      updates.push({ id: p.id, newPrice: rounded });
+      updates.push({ id: p.id as number, newPrice: rounded });
       results.push({
-        id: p.id,
-        name: p.name,
-        oldPrice: current.toString(),
+        id: p.id as number,
+        name: p.name as string,
+        oldPrice: trimDecimal(String(current)),
         newPrice: String(rounded),
         success: true,
       });
     }
 
     if (updates.length > 0) {
-      await this.prisma.$transaction(
-        updates.map(({ id, newPrice }) =>
-          this.prisma.product.update({
-            where: { id },
-            data:
-              dto.field === 'price'
-                ? { price: newPrice }
-                : { compareAtPrice: newPrice },
-          }),
-        ),
-      );
+      await this.db.transaction(async (conn) => {
+        for (const { id, newPrice } of updates) {
+          await conn.query(
+            `UPDATE product SET ${dto.field === 'price' ? 'price' : 'compareAtPrice'} = ? WHERE id = ?`,
+            [newPrice, id],
+          );
+        }
+      });
       // One summary row for the batch (field/mode/value + which ids
       // succeeded) — same reasoning as bulkUpdateStatus above.
       await this.auditLogService.logCtx(ctx, {
@@ -2030,10 +2289,11 @@ export class ProductsService {
     outletId: number | undefined,
   ) {
     if (outletId !== undefined) {
-      const outlet = await this.prisma.outlet.findFirst({
-        where: { id: outletId, shopId: ctx.shopId },
-      });
-      if (!outlet) {
+      const outletRows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+        [outletId, ctx.shopId],
+      );
+      if (outletRows.length === 0) {
         throw new BadRequestException('outletId is invalid for this shop');
       }
     }
@@ -2045,7 +2305,7 @@ export class ProductsService {
     const usedSlugsThisBatch = new Set<string>();
     const restockNotifyTargets: { productId: number; variantId: number | null }[] = [];
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       for (const group of groups) {
         if (group.action === 'reject') continue;
 
@@ -2054,111 +2314,119 @@ export class ProductsService {
           const root = slugify(group.data.name);
           let slug = root;
           let suffix = 2;
-          while (
-            usedSlugsThisBatch.has(slug) ||
-            (await tx.product.findFirst({
-              where: { shopId: ctx.shopId, slug },
-              select: { id: true },
-            }))
-          ) {
+          for (;;) {
+            const [slugRows] = await conn.query<RowDataPacket[]>(
+              `SELECT id FROM product WHERE shopId = ? AND slug = ?`,
+              [ctx.shopId, slug],
+            );
+            if (!usedSlugsThisBatch.has(slug) && slugRows.length === 0) break;
             slug = `${root}-${suffix}`;
             suffix += 1;
           }
           usedSlugsThisBatch.add(slug);
 
           const tagIds = await this.resolveTagIdsTx(
-            tx,
+            conn,
             ctx,
             group.data.tagNames ?? [],
           );
-          const newProduct = await tx.product.create({
-            data: {
-              shopId: ctx.shopId,
-              name: group.data.name,
-              price: group.data.price!,
-              compareAtPrice: group.data.compareAtPrice,
-              costPrice: group.data.costPrice,
-              thumbnail: group.data.thumbnail!,
-              sku: group.data.sku!,
-              barcode: group.data.barcode,
-              description: group.data.description,
-              vendor: group.data.vendor,
-              productType: group.data.productType,
+          const [productResult] = await conn.query(
+            `INSERT INTO product (shopId, name, price, compareAtPrice, costPrice, thumbnail, sku, barcode, description, vendor, productType, slug, status, trackInventory, chargeTax)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              ctx.shopId,
+              group.data.name,
+              group.data.price!,
+              group.data.compareAtPrice ?? null,
+              group.data.costPrice ?? null,
+              group.data.thumbnail!,
+              group.data.sku!,
+              group.data.barcode ?? null,
+              group.data.description ?? null,
+              group.data.vendor ?? null,
+              group.data.productType ?? null,
               slug,
-              status: group.data.status ?? 'Available',
-              trackInventory: group.data.trackInventory ?? false,
-              chargeTax: group.data.chargeTax ?? true,
-              productcollection: {
-                create: (group.data.collectionIds ?? []).map((collectionId) => ({
-                  collectionId,
-                })),
-              },
-              producttag: { create: tagIds.map((tagId) => ({ tagId })) },
-            },
-            select: {
-              id: true,
-              name: true,
-              thumbnail: true,
-              trackInventory: true,
-              costPrice: true,
-            },
-          });
+              group.data.status ?? 'Available',
+              group.data.trackInventory ?? false,
+              group.data.chargeTax ?? true,
+            ],
+          );
+          const newProduct = {
+            id: (productResult as { insertId: number }).insertId,
+            name: group.data.name,
+            thumbnail: group.data.thumbnail!,
+            trackInventory: group.data.trackInventory ?? false,
+            costPrice: group.data.costPrice != null ? String(group.data.costPrice) : null,
+          };
+          if ((group.data.collectionIds ?? []).length > 0) {
+            const placeholders = group.data.collectionIds!.map(() => '(?, ?)').join(', ');
+            await conn.query(
+              `INSERT INTO productcollection (productId, collectionId) VALUES ${placeholders}`,
+              group.data.collectionIds!.flatMap((collectionId) => [newProduct.id, collectionId]),
+            );
+          }
+          if (tagIds.length > 0) {
+            const placeholders = tagIds.map(() => '(?, ?)').join(', ');
+            await conn.query(
+              `INSERT INTO producttag (productId, tagId) VALUES ${placeholders}`,
+              tagIds.flatMap((tagId) => [newProduct.id, tagId]),
+            );
+          }
           productId = newProduct.id;
           created += 1;
           // CSV import never creates a recipe (usesIngredients stays the
           // schema default, false) or variants for a new product — always
           // a product-level shadow.
-          await this.provisionShadowForProduct(tx, ctx, newProduct.id, {
-            name: newProduct.name,
-            thumbnail: newProduct.thumbnail,
-            trackInventory: newProduct.trackInventory,
-            costPrice: newProduct.costPrice,
-          });
+          await this.provisionShadowForProduct(conn, ctx, newProduct.id, newProduct);
         } else {
           productId = group.productId!;
           if (group.data.collectionIds) {
-            await tx.productcollection.deleteMany({ where: { productId } });
-            await tx.productcollection.createMany({
-              data: group.data.collectionIds.map((collectionId) => ({
-                productId,
-                collectionId,
-              })),
-            });
+            await conn.query(`DELETE FROM productcollection WHERE productId = ?`, [productId]);
+            if (group.data.collectionIds.length > 0) {
+              const placeholders = group.data.collectionIds.map(() => '(?, ?)').join(', ');
+              await conn.query(
+                `INSERT INTO productcollection (productId, collectionId) VALUES ${placeholders}`,
+                group.data.collectionIds.flatMap((collectionId) => [productId, collectionId]),
+              );
+            }
           }
           if (group.data.tagNames) {
-            const tagIds = await this.resolveTagIdsTx(
-              tx,
-              ctx,
-              group.data.tagNames,
-            );
-            await tx.producttag.deleteMany({ where: { productId } });
-            await tx.producttag.createMany({
-              data: tagIds.map((tagId) => ({ productId, tagId })),
-            });
+            const tagIds = await this.resolveTagIdsTx(conn, ctx, group.data.tagNames);
+            await conn.query(`DELETE FROM producttag WHERE productId = ?`, [productId]);
+            if (tagIds.length > 0) {
+              const placeholders = tagIds.map(() => '(?, ?)').join(', ');
+              await conn.query(
+                `INSERT INTO producttag (productId, tagId) VALUES ${placeholders}`,
+                tagIds.flatMap((tagId) => [productId, tagId]),
+              );
+            }
           }
-          await tx.product.update({
-            where: { id: productId },
-            data: {
-              name: group.data.name,
-              sku: group.data.sku,
-              price: group.data.price,
-              compareAtPrice: group.data.compareAtPrice,
-              costPrice: group.data.costPrice,
-              thumbnail: group.data.thumbnail,
-              barcode: group.data.barcode,
-              description: group.data.description,
-              vendor: group.data.vendor,
-              productType: group.data.productType,
-              status: group.data.status,
-              trackInventory: group.data.trackInventory,
-              chargeTax: group.data.chargeTax,
-            },
+          const set = buildSetClause({
+            name: group.data.name,
+            sku: group.data.sku,
+            price: group.data.price,
+            compareAtPrice: group.data.compareAtPrice,
+            costPrice: group.data.costPrice,
+            thumbnail: group.data.thumbnail,
+            barcode: group.data.barcode,
+            description: group.data.description,
+            vendor: group.data.vendor,
+            productType: group.data.productType,
+            status: group.data.status,
+            trackInventory: group.data.trackInventory,
+            chargeTax: group.data.chargeTax,
           });
+          if (set) {
+            await conn.query(`UPDATE product SET ${set.setClause} WHERE id = ?`, [
+              ...set.params,
+              productId,
+            ]);
+          }
           updated += 1;
           // No-op for a variant-carrying or recipe product (no matching
           // shadowProductId row) — see syncShadowMeta's own comment.
           await this.syncShadowMeta(
-            tx,
+            conn,
             { shadowProductId: productId },
             {
               name: group.data.name,
@@ -2169,7 +2437,7 @@ export class ProductsService {
         }
 
         if (group.stock !== undefined && outletId !== undefined) {
-          const { crossedToPositive } = await this.applyImportStock(tx, ctx, {
+          const { crossedToPositive } = await this.applyImportStock(conn, ctx, {
             outletId,
             productId,
             stock: group.stock,
@@ -2181,18 +2449,18 @@ export class ProductsService {
 
         for (const variant of group.variants) {
           if (variant.action === 'reject') continue;
-          const data: Prisma.productvariantUpdateInput = {};
-          if (variant.price !== undefined) data.price = variant.price;
-          if (variant.compareAtPrice !== undefined)
-            data.compareAtPrice = variant.compareAtPrice;
-          if (Object.keys(data).length > 0) {
-            await tx.productvariant.update({
-              where: { id: variant.variantId! },
-              data,
-            });
+          const set = buildSetClause({
+            price: variant.price,
+            compareAtPrice: variant.compareAtPrice,
+          });
+          if (set) {
+            await conn.query(`UPDATE productvariant SET ${set.setClause} WHERE id = ?`, [
+              ...set.params,
+              variant.variantId!,
+            ]);
           }
           if (variant.stock !== undefined && outletId !== undefined) {
-            const { crossedToPositive } = await this.applyImportStock(tx, ctx, {
+            const { crossedToPositive } = await this.applyImportStock(conn, ctx, {
               outletId,
               variantId: variant.variantId!,
               stock: variant.stock,
@@ -2238,7 +2506,7 @@ export class ProductsService {
   // once the transaction actually commits (same before/after-tx split as
   // adjustStock/transferStock use — never fired from inside the tx itself).
   private async applyImportStock(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     ctx: TenantContext,
     target: {
       outletId: number;
@@ -2247,7 +2515,7 @@ export class ProductsService {
       stock: number;
     },
   ): Promise<{ crossedToPositive: boolean }> {
-    // Passes `tx` explicitly — this runs mid-transaction inside
+    // Passes `conn` explicitly — this runs mid-transaction inside
     // confirmImportProducts, sometimes against a product created earlier in
     // this very transaction, so resolution must see uncommitted writes.
     // Rejecting a usesIngredients:true product's Stock column happens
@@ -2255,61 +2523,49 @@ export class ProductsService {
     const resolved = await this.resolveShadowStockTarget(
       ctx,
       { productId: target.productId, variantId: target.variantId },
-      tx,
+      conn,
     );
 
-    const before =
-      (
-        await tx.outletingredientstock.findUnique({
-          where: {
-            outletId_ingredientId: {
-              outletId: target.outletId,
-              ingredientId: resolved.ingredientId,
-            },
-          },
-        })
-      )?.stockQuantity ?? 0;
+    const [beforeRows] = await conn.query<RowDataPacket[]>(
+      `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+      [target.outletId, resolved.ingredientId],
+    );
+    const before = (beforeRows[0]?.stockQuantity as number | undefined) ?? 0;
 
-    await tx.outletingredientstock.upsert({
-      where: {
-        outletId_ingredientId: {
-          outletId: target.outletId,
-          ingredientId: resolved.ingredientId,
-        },
-      },
-      update: { stockQuantity: target.stock },
-      create: {
-        outletId: target.outletId,
-        ingredientId: resolved.ingredientId,
-        stockQuantity: target.stock,
-      },
-    });
+    await conn.query(
+      `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE stockQuantity = VALUES(stockQuantity)`,
+      [target.outletId, resolved.ingredientId, target.stock],
+    );
 
-    await tx.stockmovement.create({
-      data: {
-        shopId: ctx.shopId,
-        productId: resolved.productId,
-        variantId: resolved.variantId,
-        ingredientId: resolved.ingredientId,
-        type: 'IMPORT',
-        reason: null,
-        delta: target.stock - before,
-        outletId: target.outletId,
-        toOutletId: null,
-        note: 'CSV import',
-        actorUserId: ctx.userId,
-      },
-    });
+    await conn.query(
+      `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
+        resolved.productId,
+        resolved.variantId,
+        resolved.ingredientId,
+        'IMPORT',
+        null,
+        target.stock - before,
+        target.outletId,
+        null,
+        'CSV import',
+        ctx.userId,
+      ],
+    );
 
     return { crossedToPositive: before <= 0 && target.stock > 0 };
   }
 
-  // Same as resolveTagIds below but against a transaction client — kept
-  // separate rather than parameterizing resolveTagIds's `this.prisma` call,
+  // Same as resolveTagIds below but against a transaction connection — kept
+  // separate rather than parameterizing resolveTagIds's `this.db` call,
   // since every other write in the import commit path must go through the
-  // same tx for the batch to be one real transaction (see confirmImportProducts).
+  // same conn for the batch to be one real transaction (see confirmImportProducts).
   private async resolveTagIdsTx(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     ctx: TenantContext,
     names: string[],
   ): Promise<number[]> {
@@ -2318,12 +2574,16 @@ export class ProductsService {
     ];
     const tagIds: number[] = [];
     for (const name of uniqueNames) {
-      const tag = await tx.tag.upsert({
-        where: { shopId_name: { shopId: ctx.shopId, name } },
-        update: {},
-        create: { shopId: ctx.shopId, name },
-      });
-      tagIds.push(tag.id);
+      await conn.query(
+        `INSERT INTO tag (shopId, name) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+        [ctx.shopId, name],
+      );
+      const [rows] = await conn.query<RowDataPacket[]>(
+        `SELECT id FROM tag WHERE shopId = ? AND name = ?`,
+        [ctx.shopId, name],
+      );
+      tagIds.push(rows[0].id as number);
     }
     return tagIds;
   }
@@ -2354,13 +2614,13 @@ export class ProductsService {
       ),
     );
     const collectionRows = allCollectionNames.size
-      ? await this.prisma.collection.findMany({
-          where: { shopId: ctx.shopId, name: { in: [...allCollectionNames] } },
-          select: { id: true, name: true },
-        })
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT id, name FROM collection WHERE shopId = ? AND name IN (${[...allCollectionNames].map(() => '?').join(', ')})`,
+          [ctx.shopId, ...allCollectionNames],
+        )
       : [];
     const collectionIdByName = new Map(
-      collectionRows.map((c) => [c.name.toLowerCase(), c.id]),
+      collectionRows.map((c) => [(c.name as string).toLowerCase(), c.id as number]),
     );
 
     let autoHandle = 0;
@@ -2422,17 +2682,18 @@ export class ProductsService {
         }
       }
 
-      const existing = sku
-        ? await this.prisma.product.findFirst({
-            where: { shopId: ctx.shopId, sku },
-            select: { id: true, usesIngredients: true },
-          })
+      const existingRows = sku
+        ? await this.db.query<RowDataPacket[]>(
+            `SELECT id, usesIngredients FROM product WHERE shopId = ? AND sku = ?`,
+            [ctx.shopId, sku],
+          )
         : name
-          ? await this.prisma.product.findFirst({
-              where: { shopId: ctx.shopId, name },
-              select: { id: true, usesIngredients: true },
-            })
-          : null;
+          ? await this.db.query<RowDataPacket[]>(
+              `SELECT id, usesIngredients FROM product WHERE shopId = ? AND name = ?`,
+              [ctx.shopId, name],
+            )
+          : [];
+      const existing = existingRows[0];
       const action: ImportAction = existing ? 'update' : 'create';
 
       // A recipe product has no single stock number to absolute-set — see
@@ -2473,7 +2734,7 @@ export class ProductsService {
       const group: ResolvedProductGroup = {
         rowNumber: head.rowNumber,
         action: finalAction,
-        productId: existing?.id,
+        productId: existing?.id as number | undefined,
         data: {
           name: name ?? '',
           sku,
@@ -2509,10 +2770,13 @@ export class ProductsService {
         } else if (!variantSku) {
           vErrors.push('Variant SKU is required');
         } else {
-          const found = await this.prisma.productvariant.findFirst({
-            where: { sku: variantSku, product: { shopId: ctx.shopId } },
-            select: { id: true, productId: true },
-          });
+          const foundRows = await this.db.query<RowDataPacket[]>(
+            `SELECT pv.id, pv.productId FROM productvariant pv
+             JOIN product p ON p.id = pv.productId
+             WHERE pv.sku = ? AND p.shopId = ?`,
+            [variantSku, ctx.shopId],
+          );
+          const found = foundRows[0];
           if (!found) {
             vErrors.push(
               'No existing variant with this SKU — creating new variants via CSV import is not supported yet',
@@ -2525,7 +2789,7 @@ export class ProductsService {
             );
           } else {
             usedVariantSkus.add(variantSku);
-            variantId = found.id;
+            variantId = found.id as number;
           }
         }
 
@@ -2572,27 +2836,17 @@ export class ProductsService {
   }
 
   // Bare product row (no relations) for internal checks that don't need the
-  // full response shape — avoids re-running the heavier include just to read
-  // e.g. current.thumbnail/current.price.
+  // full response shape — avoids re-running the heavier loaders just to
+  // read e.g. current.thumbnail/current.price.
   private async findRaw(ctx: TenantContext, id: number) {
-    const product = await this.prisma.product.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!product) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM product WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (!rows[0]) {
       throw new NotFoundException(`Product ${id} not found`);
     }
-    return product;
-  }
-
-  private includeFor(outletId: number | undefined) {
-    return {
-      ...productInclude,
-      productvariant: {
-        orderBy: { order: 'asc' as const },
-        include: variantIncludeFor(outletId),
-      },
-      productingredient: productIngredientIncludeFor(outletId),
-    };
+    return rows[0];
   }
 
   private resolveFeaturedThumbnail(
@@ -2609,10 +2863,12 @@ export class ProductsService {
     collectionIds: number[],
   ) {
     const uniqueIds = [...new Set(collectionIds)];
-    const count = await this.prisma.collection.count({
-      where: { id: { in: uniqueIds }, shopId: ctx.shopId },
-    });
-    if (count !== uniqueIds.length) {
+    if (uniqueIds.length === 0) return;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM collection WHERE id IN (${uniqueIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [...uniqueIds, ctx.shopId],
+    );
+    if (Number(rows[0].c) !== uniqueIds.length) {
       throw new BadRequestException(
         'One or more collectionIds are invalid for this shop',
       );
@@ -2632,12 +2888,12 @@ export class ProductsService {
     const root = slugify(base);
     let candidate = root;
     let suffix = 2;
-    while (
-      await this.prisma.product.findFirst({
-        where: { shopId, slug: candidate },
-        select: { id: true },
-      })
-    ) {
+    for (;;) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM product WHERE shopId = ? AND slug = ?`,
+        [shopId, candidate],
+      );
+      if (rows.length === 0) break;
       candidate = `${root}-${suffix}`;
       suffix += 1;
     }
@@ -2653,30 +2909,337 @@ export class ProductsService {
     ];
     const tagIds: number[] = [];
     for (const name of uniqueNames) {
-      const tag = await this.prisma.tag.upsert({
-        where: { shopId_name: { shopId: ctx.shopId, name } },
-        update: {},
-        create: { shopId: ctx.shopId, name },
-      });
-      tagIds.push(tag.id);
+      await this.db.execute(
+        `INSERT INTO tag (shopId, name) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+        [ctx.shopId, name],
+      );
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM tag WHERE shopId = ? AND name = ?`,
+        [ctx.shopId, name],
+      );
+      tagIds.push(rows[0].id as number);
     }
     return tagIds;
   }
 
   private async getUnitsSoldByProduct(shopId: number, productIds: number[]) {
     if (productIds.length === 0) return new Map<number, number>();
-    const rows = await this.prisma.$queryRaw<UnitsSoldRow[]>`
-      SELECT oi.productId AS productId, SUM(oi.quantity) AS unitsSold
-      FROM orderitem oi
-      JOIN \`order\` o ON o.id = oi.orderId
-      WHERE o.shopId = ${shopId} AND o.status != 'cancelled'
-        AND oi.productId IN (${Prisma.join(productIds)})
-      GROUP BY oi.productId
-    `;
+    const rows = await this.db.query<UnitsSoldRow[]>(
+      `SELECT oi.productId AS productId, SUM(oi.quantity) AS unitsSold
+       FROM orderitem oi
+       JOIN \`order\` o ON o.id = oi.orderId
+       WHERE o.shopId = ? AND o.status != 'cancelled'
+         AND oi.productId IN (${productIds.map(() => '?').join(', ')})
+       GROUP BY oi.productId`,
+      [shopId, ...productIds],
+    );
     return new Map(rows.map((r) => [r.productId, Number(r.unitsSold ?? 0)]));
   }
 
-  private toResponse(product: ProductWithRelations, totalSold = 0) {
+  // Batch-loads every relation productInclude used to fetch in one Prisma
+  // nested include, as separate WHERE...IN queries grouped in JS — see
+  // loadVariantsWithRelations/loadIngredientLinks below for the two
+  // sub-loaders this composes. Returns a Map so callers (findAll/findOne/
+  // update/duplicate) can look up by id without re-querying.
+  private async loadProductsWithRelations(
+    productIds: number[],
+    outletId: number | undefined,
+  ): Promise<Map<number, AssembledProduct>> {
+    const result = new Map<number, AssembledProduct>();
+    if (productIds.length === 0) return result;
+    const idList = productIds.map(() => '?').join(', ');
+
+    const [
+      products,
+      collectionLinks,
+      tagLinks,
+      images,
+      attributes,
+      faqs,
+      options,
+      variants,
+      productIngredients,
+    ] = await Promise.all([
+      this.db.query<RowDataPacket[]>(`SELECT * FROM product WHERE id IN (${idList})`, productIds),
+      this.db.query<RowDataPacket[]>(
+        `SELECT pc.productId, c.* FROM productcollection pc JOIN collection c ON c.id = pc.collectionId WHERE pc.productId IN (${idList})`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT pt.productId, t.name AS tagName FROM producttag pt JOIN tag t ON t.id = pt.tagId WHERE pt.productId IN (${idList})`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM productimage WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM productattribute WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM productfaq WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT po.*, pov.id AS valueId, pov.value AS valueValue, pov.order AS valueOrder
+         FROM productoption po
+         LEFT JOIN productoptionvalue pov ON pov.optionId = po.id
+         WHERE po.productId IN (${idList})
+         ORDER BY po.\`order\` ASC, pov.\`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id, productId FROM productvariant WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.loadIngredientLinks(
+        `productId IN (${idList}) AND variantId IS NULL`,
+        productIds,
+        outletId,
+      ),
+    ]);
+
+    const collectionsByProduct = new Map<number, { collection: RowDataPacket }[]>();
+    for (const row of collectionLinks) {
+      const list = collectionsByProduct.get(row.productId as number) ?? [];
+      list.push({ collection: row });
+      collectionsByProduct.set(row.productId as number, list);
+    }
+    const tagsByProduct = new Map<number, { tag: { name: string } }[]>();
+    for (const row of tagLinks) {
+      const list = tagsByProduct.get(row.productId as number) ?? [];
+      list.push({ tag: { name: row.tagName as string } });
+      tagsByProduct.set(row.productId as number, list);
+    }
+    const imagesByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of images) {
+      const list = imagesByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      imagesByProduct.set(row.productId as number, list);
+    }
+    const attributesByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of attributes) {
+      const list = attributesByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      attributesByProduct.set(row.productId as number, list);
+    }
+    const faqsByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of faqs) {
+      const list = faqsByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      faqsByProduct.set(row.productId as number, list);
+    }
+    const optionsByProduct = new Map<
+      number,
+      Map<number, { id: number; name: string; order: number; productoptionvalue: { id: number; value: string; order: number }[] }>
+    >();
+    for (const row of options) {
+      const pid = row.productId as number;
+      const optMap = optionsByProduct.get(pid) ?? new Map();
+      const opt = optMap.get(row.id as number) ?? {
+        id: row.id as number,
+        name: row.name as string,
+        order: row.order as number,
+        productoptionvalue: [],
+      };
+      if (row.valueId != null) {
+        opt.productoptionvalue.push({
+          id: row.valueId as number,
+          value: row.valueValue as string,
+          order: row.valueOrder as number,
+        });
+      }
+      optMap.set(opt.id, opt);
+      optionsByProduct.set(pid, optMap);
+    }
+
+    const variantIds = variants.map((v) => v.id as number);
+    const [assembledVariants, variantIngredients] = await Promise.all([
+      this.loadVariantsWithRelations(variantIds, outletId),
+      this.loadIngredientLinks(
+        variantIds.length
+          ? `variantId IN (${variantIds.map(() => '?').join(', ')})`
+          : '1 = 0',
+        variantIds,
+        outletId,
+      ),
+    ]);
+    const variantsByProduct = new Map<number, AssembledVariant[]>();
+    for (const v of variants) {
+      const list = variantsByProduct.get(v.productId as number) ?? [];
+      list.push(assembledVariants.get(v.id as number)!);
+      variantsByProduct.set(v.productId as number, list);
+    }
+    void variantIngredients; // already folded into assembledVariants via loadVariantsWithRelations
+
+    const productIngredientsByProduct = new Map<number, AssembledIngredientLink[]>();
+    for (const row of productIngredients) {
+      const list = productIngredientsByProduct.get(row.productId) ?? [];
+      list.push(this.rowToIngredientLink(row));
+      productIngredientsByProduct.set(row.productId, list);
+    }
+
+    for (const p of products) {
+      const id = p.id as number;
+      result.set(id, {
+        ...(p as unknown as Record<string, unknown>),
+        id,
+        shopId: p.shopId as number,
+        name: p.name as string,
+        price: trimDecimal(p.price as string),
+        compareAtPrice: trimDecimal(p.compareAtPrice as string | null),
+        costPrice: trimDecimal(p.costPrice as string | null),
+        weight: trimDecimal(p.weight as string | null),
+        giftCardCustomAmountMin: trimDecimal(p.giftCardCustomAmountMin as string | null),
+        giftCardCustomAmountMax: trimDecimal(p.giftCardCustomAmountMax as string | null),
+        thumbnail: p.thumbnail as string,
+        sku: p.sku as string,
+        usesIngredients: Boolean(p.usesIngredients),
+        productcollection: collectionsByProduct.get(id) ?? [],
+        producttag: tagsByProduct.get(id) ?? [],
+        productimage: (imagesByProduct.get(id) ?? []).map((i) => ({
+          id: i.id as number,
+          url: i.url as string,
+          order: i.order as number,
+        })),
+        productattribute: (attributesByProduct.get(id) ?? []).map((a) => ({
+          id: a.id as number,
+          name: a.name as string,
+          value: a.value as string,
+          order: a.order as number,
+        })),
+        productfaq: (faqsByProduct.get(id) ?? []).map((f) => ({
+          id: f.id as number,
+          question: f.question as string,
+          answer: f.answer as string,
+          order: f.order as number,
+        })),
+        productoption: [...(optionsByProduct.get(id)?.values() ?? [])],
+        productvariant: variantsByProduct.get(id) ?? [],
+        productingredient: productIngredientsByProduct.get(id) ?? [],
+      } as unknown as AssembledProduct);
+    }
+    return result;
+  }
+
+  // Sub-loader for a set of variant ids — used both standalone
+  // (updateVariant's response) and as part of loadProductsWithRelations.
+  private async loadVariantsWithRelations(
+    variantIds: number[],
+    outletId: number | undefined,
+  ): Promise<Map<number, AssembledVariant>> {
+    const result = new Map<number, AssembledVariant>();
+    if (variantIds.length === 0) return result;
+    const idList = variantIds.map(() => '?').join(', ');
+
+    const [rows, ingredientLinks] = await Promise.all([
+      this.db.query<VariantRow[]>(
+        `SELECT v.*, img.url AS imageUrl,
+                ov1.value AS optionValue1Value, ov2.value AS optionValue2Value, ov3.value AS optionValue3Value
+         FROM productvariant v
+         LEFT JOIN productimage img ON img.id = v.imageId
+         LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
+         LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
+         LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
+         WHERE v.id IN (${idList})`,
+        variantIds,
+      ),
+      this.loadIngredientLinks(
+        `variantId IN (${idList})`,
+        variantIds,
+        outletId,
+      ),
+    ]);
+    const ingredientsByVariant = new Map<number, AssembledIngredientLink[]>();
+    for (const row of ingredientLinks) {
+      const vId = row.variantId as number;
+      const list = ingredientsByVariant.get(vId) ?? [];
+      list.push(this.rowToIngredientLink(row));
+      ingredientsByVariant.set(vId, list);
+    }
+
+    for (const v of rows) {
+      result.set(v.id, {
+        id: v.id,
+        sku: v.sku,
+        barcode: v.barcode,
+        price: trimDecimal(v.price),
+        compareAtPrice: trimDecimal(v.compareAtPrice),
+        weight: trimDecimal(v.weight),
+        imageId: v.imageId,
+        image: v.imageUrl !== null ? { url: v.imageUrl } : null,
+        order: v.order,
+        optionValue1Id: v.optionValue1Id,
+        optionValue1: v.optionValue1Value !== null ? { value: v.optionValue1Value } : null,
+        optionValue2Id: v.optionValue2Id,
+        optionValue2: v.optionValue2Value !== null ? { value: v.optionValue2Value } : null,
+        optionValue3Id: v.optionValue3Id,
+        optionValue3: v.optionValue3Value !== null ? { value: v.optionValue3Value } : null,
+        productingredient: ingredientsByVariant.get(v.id) ?? [],
+      });
+    }
+    return result;
+  }
+
+  // Shared by loadProductsWithRelations (product-level default rows,
+  // variantId IS NULL) and loadVariantsWithRelations (a variant's own
+  // override rows) — joins in the ingredient's own fields plus (only when
+  // outletId is resolved) its live stock at that outlet, needed for the
+  // effective-makeable-quantity display.
+  private async loadIngredientLinks(
+    whereSql: string,
+    whereParams: QueryParam[],
+    outletId: number | undefined,
+  ): Promise<IngredientLinkRow[]> {
+    if (whereParams.length === 0) return [];
+    const stockJoin =
+      outletId !== undefined
+        ? `LEFT JOIN outletingredientstock ois ON ois.ingredientId = ing.id AND ois.outletId = ?`
+        : '';
+    const stockColumns =
+      outletId !== undefined
+        ? `ois.stockQuantity AS stockQuantity, ois.lowStockThreshold AS lowStockThreshold`
+        : `NULL AS stockQuantity, NULL AS lowStockThreshold`;
+    // outletId's `?` (in the JOIN clause) appears before whereSql's `?`s (in
+    // the WHERE clause) in the SQL text below — params must be in that same
+    // order since .query() binds positionally, not by clause.
+    const params = outletId !== undefined ? [outletId, ...whereParams] : whereParams;
+    return this.db.query<IngredientLinkRow[]>(
+      `SELECT pi.id, pi.productId, pi.variantId, pi.ingredientId, pi.quantityPerUnit,
+              ing.name AS ingredientName, ing.unit AS ingredientUnit, ing.trackInventory AS ingredientTrackInventory,
+              ${stockColumns}
+       FROM productingredient pi
+       JOIN ingredient ing ON ing.id = pi.ingredientId
+       ${stockJoin}
+       WHERE pi.${whereSql}
+       ORDER BY pi.id ASC`,
+      params,
+    );
+  }
+
+  private rowToIngredientLink(row: IngredientLinkRow): AssembledIngredientLink {
+    return {
+      id: row.id,
+      productId: row.productId,
+      variantId: row.variantId,
+      ingredientId: row.ingredientId,
+      quantityPerUnit: row.quantityPerUnit,
+      ingredient: {
+        name: row.ingredientName,
+        unit: row.ingredientUnit,
+        trackInventory: Boolean(row.ingredientTrackInventory),
+        ...(row.stockQuantity !== null && {
+          outletingredientstock: [
+            { stockQuantity: row.stockQuantity, lowStockThreshold: row.lowStockThreshold },
+          ],
+        }),
+      },
+    };
+  }
+
+  private toResponse(product: AssembledProduct, totalSold = 0) {
     const {
       productcollection,
       producttag,
@@ -2735,7 +3298,7 @@ export class ProductsService {
       hasVariants: options.length > 0,
       options,
       variants: productvariant.map((v) =>
-        this.toVariantResponse(v, productingredient, rest.usesIngredients),
+        this.toVariantResponse(v, productingredient, rest.usesIngredients as boolean),
       ),
       // Ingredient-derived (Phase A) — makeableQuantity below is now the
       // SAME computation, since a shadow product's "recipe" is always
@@ -2767,8 +3330,8 @@ export class ProductsService {
   }
 
   private toVariantResponse(
-    v: VariantWithRelations,
-    productDefaultIngredients: ProductWithRelations['productingredient'],
+    v: AssembledVariant,
+    productDefaultIngredients: AssembledIngredientLink[],
     usesIngredients: boolean,
   ) {
     // A variant with its own override rows (its own shadow, when
@@ -2821,9 +3384,7 @@ export class ProductsService {
     };
   }
 
-  private toIngredientLinkResponse(
-    pi: ProductWithRelations['productingredient'][number],
-  ) {
+  private toIngredientLinkResponse(pi: AssembledIngredientLink) {
     return {
       id: pi.id,
       ingredientId: pi.ingredientId,
@@ -2840,16 +3401,9 @@ export class ProductsService {
   // variant's own stock number. null (not 0/Infinity) whenever the number
   // can't be computed: no recipe defined at all (unconstrained — today's
   // behavior), or no outlet was resolved for this request (ingredient stock
-  // wasn't fetched — see ingredientSelectFor).
+  // wasn't fetched — see loadIngredientLinks).
   private computeIngredientAvailability(
-    rows: {
-      quantityPerUnit: number;
-      ingredient: {
-        name: string;
-        trackInventory: boolean;
-        outletingredientstock?: { stockQuantity: number }[];
-      };
-    }[],
+    rows: AssembledIngredientLink[],
   ): { makeableQuantity: number | null; limitedByIngredient: string | null } {
     const trackedRows = rows.filter((r) => r.ingredient.trackInventory);
     if (trackedRows.length === 0)
@@ -2889,16 +3443,23 @@ export class ProductsService {
     }[],
   ) {
     const productIds = [...new Set(items.map((i) => i.productId))];
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, shopId },
-      include: { productoption: { select: { id: true } } },
-    });
+    const products = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM product WHERE id IN (${productIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [...productIds, shopId],
+    );
     if (products.length !== productIds.length) {
       throw new BadRequestException(
         'One or more items reference a product that does not belong to this shop',
       );
     }
-    const productsById = new Map(products.map((p) => [p.id, p]));
+    const optionCountRows = await this.db.query<RowDataPacket[]>(
+      `SELECT productId, COUNT(*) AS c FROM productoption WHERE productId IN (${productIds.map(() => '?').join(', ')}) GROUP BY productId`,
+      productIds,
+    );
+    const optionCountByProduct = new Map(
+      optionCountRows.map((r) => [r.productId as number, Number(r.c)]),
+    );
+    const productsById = new Map(products.map((p) => [p.id as number, p]));
 
     const variantIds = [
       ...new Set(
@@ -2906,37 +3467,38 @@ export class ProductsService {
       ),
     ];
     const variants = variantIds.length
-      ? await this.prisma.productvariant.findMany({
-          where: { id: { in: variantIds } },
-          include: {
-            optionValue1: true,
-            optionValue2: true,
-            optionValue3: true,
-          },
-        })
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT v.*, ov1.value AS optionValue1Value, ov2.value AS optionValue2Value, ov3.value AS optionValue3Value
+           FROM productvariant v
+           LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
+           LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
+           LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
+           WHERE v.id IN (${variantIds.map(() => '?').join(', ')})`,
+          variantIds,
+        )
       : [];
-    const variantsById = new Map(variants.map((v) => [v.id, v]));
+    const variantsById = new Map(variants.map((v) => [v.id as number, v]));
 
     return items.map((item) => {
       const product = productsById.get(item.productId)!;
-      const hasVariants = product.productoption.length > 0;
-      let variant: (typeof variants)[number] | null = null;
+      const hasVariants = (optionCountByProduct.get(item.productId) ?? 0) > 0;
+      let variant: RowDataPacket | null = null;
       if (hasVariants) {
         if (item.variantId === undefined) {
           throw new BadRequestException(
-            `${product.name} requires selecting an option before ordering`,
+            `${product.name as string} requires selecting an option before ordering`,
           );
         }
         const found = variantsById.get(item.variantId);
         if (!found || found.productId !== product.id) {
           throw new BadRequestException(
-            `Invalid variant selected for ${product.name}`,
+            `Invalid variant selected for ${product.name as string}`,
           );
         }
         variant = found;
       } else if (item.variantId !== undefined) {
         throw new BadRequestException(
-          `${product.name} does not have variant options`,
+          `${product.name as string} does not have variant options`,
         );
       }
 
@@ -2948,18 +3510,18 @@ export class ProductsService {
       // merchant actually configured (one of giftCardDenominations, or
       // within the custom-amount min/max) — never an arbitrary customer-
       // supplied price the way a bare priceOverride would be.
-      let price: Prisma.Decimal;
+      let price: string;
       if (product.isGiftCard) {
         if (item.giftCardAmount === undefined) {
           throw new BadRequestException(
-            `${product.name} requires choosing a gift card amount`,
+            `${product.name as string} requires choosing a gift card amount`,
           );
         }
         this.assertValidGiftCardAmount(product, item.giftCardAmount);
-        price = new Prisma.Decimal(item.giftCardAmount);
+        price = String(item.giftCardAmount);
       } else if (item.giftCardAmount !== undefined) {
         throw new BadRequestException(
-          `${product.name} is not a gift card product`,
+          `${product.name as string} is not a gift card product`,
         );
       } else {
         // Admin-only override (draft orders / manual phone-order price
@@ -2968,8 +3530,8 @@ export class ProductsService {
         // customer can never set their own price this way.
         price =
           item.priceOverride !== undefined
-            ? new Prisma.Decimal(item.priceOverride)
-            : (variant?.price ?? product.price);
+            ? String(item.priceOverride)
+            : ((variant?.price as string | undefined) ?? (product.price as string));
       }
 
       return {
@@ -2979,9 +3541,9 @@ export class ProductsService {
         price,
         variantLabel: variant
           ? buildVariantLabel([
-              variant.optionValue1?.value,
-              variant.optionValue2?.value,
-              variant.optionValue3?.value,
+              variant.optionValue1Value as string | undefined,
+              variant.optionValue2Value as string | undefined,
+              variant.optionValue3Value as string | undefined,
             ])
           : null,
         // Threaded into consumeForOrderItems so a product/variant that
@@ -3004,6 +3566,12 @@ export class ProductsService {
   // +1). Returns whether anything was actually consumed, so the caller can
   // set order.ingredientsConsumedAt — read back on restock instead of
   // re-deriving it from the toggle, see that column's own schema comment.
+  //
+  // STILL PRISMA — deliberately not converted in this phase. Every caller
+  // (OrdersService, PublicService, ReturnsService) is itself still Prisma
+  // and always passes its own transaction client here; converting this
+  // method alone would leave it unable to participate in those callers'
+  // transactions. Convert together with those three modules (Phase 5).
   //
   // Toggle gating is intentionally asymmetric by direction: direction -1 is
   // a fresh "should this fire at all" decision, so it re-checks
@@ -3190,12 +3758,7 @@ export class ProductsService {
   }
 
   private assertValidGiftCardAmount(
-    product: {
-      name: string;
-      giftCardDenominations: Prisma.JsonValue;
-      giftCardCustomAmountMin: Prisma.Decimal | null;
-      giftCardCustomAmountMax: Prisma.Decimal | null;
-    },
+    product: RowDataPacket,
     amount: number,
   ) {
     if (amount <= 0) {
@@ -3203,20 +3766,18 @@ export class ProductsService {
         'Gift card amount must be greater than zero',
       );
     }
-    const denominations = Array.isArray(product.giftCardDenominations)
-      ? (product.giftCardDenominations as number[])
+    const denominationsRaw = product.giftCardDenominations as unknown;
+    const denominations = Array.isArray(denominationsRaw)
+      ? (denominationsRaw as number[])
       : [];
     if (denominations.includes(amount)) return;
-    if (
-      product.giftCardCustomAmountMin !== null &&
-      product.giftCardCustomAmountMax !== null
-    ) {
-      const min = Number(product.giftCardCustomAmountMin);
-      const max = Number(product.giftCardCustomAmountMax);
-      if (amount >= min && amount <= max) return;
+    const min = product.giftCardCustomAmountMin as string | null;
+    const max = product.giftCardCustomAmountMax as string | null;
+    if (min !== null && max !== null) {
+      if (amount >= Number(min) && amount <= Number(max)) return;
     }
     throw new BadRequestException(
-      `${amount} is not a valid gift card amount for ${product.name}`,
+      `${amount} is not a valid gift card amount for ${product.name as string}`,
     );
   }
 
@@ -3224,11 +3785,10 @@ export class ProductsService {
     shopId: number,
     response: ReturnType<ProductsService['toResponse']>,
   ) {
-    const outlets = await this.prisma.outlet.findMany({
-      where: { shopId },
-      select: { id: true, name: true },
-      orderBy: { id: 'asc' },
-    });
+    const outlets = await this.db.query<RowDataPacket[]>(
+      `SELECT id, name FROM outlet WHERE shopId = ? ORDER BY id ASC`,
+      [shopId],
+    );
 
     // A usesIngredients:true product has no single stock number per outlet
     // across a multi-ingredient recipe — same "no per-product low-stock
@@ -3240,80 +3800,80 @@ export class ProductsService {
       return;
     }
 
-    const productShadow =
+    const productShadowRows =
       response.variants.length === 0
-        ? await this.prisma.ingredient.findFirst({
-            where: { shadowProductId: response.id },
-            select: { id: true },
-          })
-        : null;
+        ? await this.db.query<RowDataPacket[]>(
+            `SELECT id FROM ingredient WHERE shadowProductId = ?`,
+            [response.id],
+          )
+        : [];
+    const productShadow = productShadowRows[0];
     const productStockByOutlet = productShadow
       ? new Map(
           (
-            await this.prisma.outletingredientstock.findMany({
-              where: { ingredientId: productShadow.id },
-              select: { outletId: true, stockQuantity: true },
-            })
-          ).map((s) => [s.outletId, s.stockQuantity]),
+            await this.db.query<RowDataPacket[]>(
+              `SELECT outletId, stockQuantity FROM outletingredientstock WHERE ingredientId = ?`,
+              [productShadow.id],
+            )
+          ).map((s) => [s.outletId as number, s.stockQuantity as number]),
         )
       : new Map<number, number>();
     (response as any).stockByOutlet = outlets.map((o) => ({
       outletId: o.id,
       outletName: o.name,
-      stockQuantity: productStockByOutlet.get(o.id) ?? 0,
+      stockQuantity: productStockByOutlet.get(o.id as number) ?? 0,
     }));
 
     if (response.variants.length === 0) return;
     const variantIds = response.variants.map((v) => v.id);
-    const variantShadows = await this.prisma.ingredient.findMany({
-      where: { shadowVariantId: { in: variantIds } },
-      select: { id: true, shadowVariantId: true },
-    });
+    const variantShadows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, shadowVariantId FROM ingredient WHERE shadowVariantId IN (${variantIds.map(() => '?').join(', ')})`,
+      variantIds,
+    );
     const shadowIngredientIdByVariant = new Map(
-      variantShadows.map((s) => [s.shadowVariantId!, s.id]),
+      variantShadows.map((s) => [s.shadowVariantId as number, s.id as number]),
     );
     const variantStock = variantShadows.length
-      ? await this.prisma.outletingredientstock.findMany({
-          where: { ingredientId: { in: variantShadows.map((s) => s.id) } },
-          select: { outletId: true, ingredientId: true, stockQuantity: true },
-        })
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT outletId, ingredientId, stockQuantity FROM outletingredientstock WHERE ingredientId IN (${variantShadows.map(() => '?').join(', ')})`,
+          variantShadows.map((s) => s.id),
+        )
       : [];
     const byIngredient = new Map<number, Map<number, number>>();
     for (const row of variantStock) {
-      if (!byIngredient.has(row.ingredientId))
-        byIngredient.set(row.ingredientId, new Map());
-      byIngredient.get(row.ingredientId)!.set(row.outletId, row.stockQuantity);
+      const ingId = row.ingredientId as number;
+      if (!byIngredient.has(ingId)) byIngredient.set(ingId, new Map());
+      byIngredient.get(ingId)!.set(row.outletId as number, row.stockQuantity as number);
     }
     for (const v of response.variants as any[]) {
-      const shadowIngredientId = shadowIngredientIdByVariant.get(v.id);
+      const shadowIngredientId = shadowIngredientIdByVariant.get(v.id as number);
       const m =
-        (shadowIngredientId !== undefined &&
-          byIngredient.get(shadowIngredientId)) ||
+        (shadowIngredientId !== undefined && byIngredient.get(shadowIngredientId)) ||
         new Map<number, number>();
       v.stockByOutlet = outlets.map((o) => ({
         outletId: o.id,
         outletName: o.name,
-        stockQuantity: m.get(o.id) ?? 0,
+        stockQuantity: m.get(o.id as number) ?? 0,
       }));
     }
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        const target = String(error.meta?.target ?? '');
-        if (target.toLowerCase().includes('slug')) {
-          throw new ConflictException(
-            'A product with this slug already exists',
-          );
-        }
-        throw new ConflictException('A product with this SKU already exists');
+  private handleDbError(error: unknown): never {
+    if (isDuplicateKeyError(error)) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.toLowerCase().includes('slug')) {
+        throw new ConflictException('A product with this slug already exists');
       }
-      if (error.code === 'P2003') {
-        throw new ConflictException(
-          'This product has order history and cannot be deleted — mark it Unavailable instead',
-        );
-      }
+      throw new ConflictException('A product with this SKU already exists');
+    }
+    if (
+      error instanceof Error &&
+      'errno' in error &&
+      (error as { errno: number }).errno === 1451
+    ) {
+      throw new ConflictException(
+        'This product has order history and cannot be deleted — mark it Unavailable instead',
+      );
     }
     throw error;
   }

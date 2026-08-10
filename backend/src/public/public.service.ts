@@ -814,7 +814,7 @@ export class PublicService {
     let subtotal = new Prisma.Decimal(0);
     const itemsData = resolvedItems.map(
       ({ product, variant, quantity, price, variantLabel }, idx) => {
-        subtotal = subtotal.add(price.mul(quantity));
+        subtotal = subtotal.add(new Prisma.Decimal(price).mul(quantity));
         return {
           productId: product.id,
           productName: product.name,
