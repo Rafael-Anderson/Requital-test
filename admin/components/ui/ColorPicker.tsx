@@ -10,6 +10,7 @@
 // THEME_COLOR_FIELDS / getReadableTextColor in lib/types.ts and
 // lib/color-contrast.ts, both of which only ever accept "#rrggbb".
 import { useEffect, useId, useRef, useState } from "react";
+import Tooltip from "./Tooltip";
 
 interface ColorPickerProps {
   value: string;
@@ -153,16 +154,18 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
 
   return (
     <div className={`relative inline-block ${className}`} ref={rootRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={panelId}
-        aria-label={`Pick color, currently ${safeHex}`}
-        className={`${SWATCH_SIZE_CLASS[swatchSize]} shrink-0 rounded-md border border-black/15 dark:border-white/30 cursor-pointer transition-shadow outline-none focus-visible:ring-[3px] focus-visible:ring-accent/30`}
-        style={{ background: safeHex }}
-      />
+      <Tooltip label="Choose a color">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={panelId}
+          aria-label={`Pick color, currently ${safeHex}`}
+          className={`${SWATCH_SIZE_CLASS[swatchSize]} shrink-0 rounded-md border border-black/15 dark:border-white/30 cursor-pointer transition-shadow outline-none focus-visible:ring-[3px] focus-visible:ring-accent/30`}
+          style={{ background: safeHex }}
+        />
+      </Tooltip>
       {open && (
         <div
           id={panelId}

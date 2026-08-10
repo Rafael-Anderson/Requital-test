@@ -46,7 +46,11 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
               <span className="text-sm">Charge tax on this product</span>
             </div>
             <div className="flex items-center gap-2">
-              <Toggle checked={form.isCheckoutAddon} onChange={form.setIsCheckoutAddon} />
+              <Toggle
+                checked={form.isCheckoutAddon}
+                onChange={form.setIsCheckoutAddon}
+                tooltip="Offers this product in a popup when a customer checks out without it already in their cart."
+              />
               <span className="text-sm">Add-on at checkout</span>
             </div>
           </Card>
@@ -56,12 +60,20 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
               <h3 className="text-sm font-semibold">Inventory</h3>
               <div>
                 <div className="flex items-center gap-2">
-                  <Toggle checked={form.trackInventory} onChange={form.setTrackInventory} />
+                  <Toggle
+                    checked={form.trackInventory}
+                    onChange={form.setTrackInventory}
+                    tooltip="Deducts stock on every order and lets you set quantity per branch below. Leave off for made-to-order or unlimited items."
+                  />
                   <span className="text-sm">Track inventory</span>
                 </div>
                 {form.trackInventory && (
                   <label className="flex items-center gap-2 mt-2">
-                    <Toggle checked={form.continueSellingOutOfStock} onChange={form.setContinueSellingOutOfStock} />
+                    <Toggle
+                      checked={form.continueSellingOutOfStock}
+                      onChange={form.setContinueSellingOutOfStock}
+                      tooltip="Customers can still order this product even after its stock reaches zero."
+                    />
                     <span className="text-sm">Continue selling when out of stock</span>
                   </label>
                 )}
@@ -124,7 +136,11 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Shipping</h3>
           <label className="flex items-center gap-2">
-            <Toggle checked={form.physicalProduct} onChange={form.setPhysicalProduct} />
+            <Toggle
+              checked={form.physicalProduct}
+              onChange={form.setPhysicalProduct}
+              tooltip="Turn off for a digital or service item that has no weight or shipping needs."
+            />
             <span className="text-sm">Physical product</span>
           </label>
         </div>

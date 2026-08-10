@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/Toast";
 import Button from "@/components/ui/Button";
+import Tooltip from "@/components/ui/Tooltip";
 import * as api from "@/lib/api";
 
 // Per-session, not permanent: sessionStorage clears on tab close, so a
@@ -55,14 +56,16 @@ export default function EmailVerificationBanner() {
         <Button variant="secondary" size="sm" loading={sending} onClick={resend}>
           Resend email
         </Button>
-        <button
-          type="button"
-          aria-label="Dismiss"
-          onClick={dismiss}
-          className="text-amber-600 dark:text-amber-400 hover:opacity-70"
-        >
-          <X className="size-4" />
-        </button>
+        <Tooltip label="Hide this reminder for the rest of your session" align="end">
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={dismiss}
+            className="text-amber-600 dark:text-amber-400 hover:opacity-70"
+          >
+            <X className="size-4" />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

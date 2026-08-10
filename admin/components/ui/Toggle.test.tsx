@@ -48,4 +48,21 @@ describe("Toggle", () => {
     render(<Toggle checked={true} onChange={() => {}} />);
     expect(screen.getByRole("switch").className).toMatch(/bg-green/);
   });
+
+  it("renders no tooltip when the tooltip prop is omitted", () => {
+    render(<Toggle checked={false} onChange={() => {}} />);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("wraps the switch in a Tooltip with the given text when tooltip is set", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Toggle checked={false} onChange={onChange} tooltip="Deducts stock on every order." />,
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Deducts stock on every order.");
+    // Still fully functional as a switch, not just decorative.
+    await user.click(screen.getByRole("switch"));
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
 });

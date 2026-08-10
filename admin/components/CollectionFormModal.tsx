@@ -153,7 +153,11 @@ export default function CollectionFormModal({
           <ImageDropzone preview={imagePreview} onFileSelected={handleFileSelected} />
 
           <div className="flex items-center gap-2">
-            <Toggle checked={isFeatured} onChange={setIsFeatured} />
+            <Toggle
+              checked={isFeatured}
+              onChange={setIsFeatured}
+              tooltip="Gives this collection priority placement wherever the storefront homepage highlights collections."
+            />
             <span className="text-sm">Featured on homepage</span>
           </div>
         </div>

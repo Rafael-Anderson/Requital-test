@@ -20,6 +20,7 @@
 // (confirm dialogs) that don't need that.
 import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
+import Tooltip from "./Tooltip";
 
 export type ModalSize = "sm" | "md" | "lg";
 
@@ -89,14 +90,16 @@ export default function Modal({
         {title !== undefined && (
           <div className="flex items-center justify-between gap-4 p-6 pb-4 shrink-0">
             <h2 className="text-lg font-semibold">{title}</h2>
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label="Close"
-              className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-            >
-              <X className="size-5" />
-            </button>
+            <Tooltip label="Close" align="end">
+              <button
+                type="button"
+                onClick={requestClose}
+                aria-label="Close"
+                className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+              >
+                <X className="size-5" />
+              </button>
+            </Tooltip>
           </div>
         )}
         <div

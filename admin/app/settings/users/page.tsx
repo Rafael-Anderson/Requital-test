@@ -21,6 +21,7 @@ import EditStaffUserFormModal from "@/components/EditStaffUserFormModal";
 import BranchRoleFormModal from "@/components/BranchRoleFormModal";
 import AssignBranchRoleModal from "@/components/AssignBranchRoleModal";
 import PageShell from "@/components/ui/PageShell";
+import Tooltip from "@/components/ui/Tooltip";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 
 export default function SettingsUsersPage() {
@@ -138,20 +139,24 @@ export default function SettingsUsersPage() {
                     <TD className="text-zinc-500">{u.outlet?.name ?? "All branches"}</TD>
                     <TD>
                       <div className="flex gap-1 justify-end">
-                        <button
-                          onClick={() => setEditingUser(u)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                          aria-label={`Edit ${u.name}`}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(u)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                          aria-label={`Delete ${u.name}`}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
+                        <Tooltip label={`Edit ${u.name}`}>
+                          <button
+                            onClick={() => setEditingUser(u)}
+                            className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                            aria-label={`Edit ${u.name}`}
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip label={`Delete ${u.name}. This cannot be undone.`} align="end">
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                            aria-label={`Delete ${u.name}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </TD>
                   </TR>
@@ -198,20 +203,24 @@ export default function SettingsUsersPage() {
                       </span>
                     </div>
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => setEditingRole(r)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        aria-label={`Edit ${r.name}`}
-                      >
-                        <Pencil className="size-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteRole(r)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                        aria-label={`Delete ${r.name}`}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
+                      <Tooltip label={`Edit ${r.name}`}>
+                        <button
+                          onClick={() => setEditingRole(r)}
+                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          aria-label={`Edit ${r.name}`}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label={`Delete ${r.name}. This cannot be undone.`} align="end">
+                        <button
+                          onClick={() => handleDeleteRole(r)}
+                          className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                          aria-label={`Delete ${r.name}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
                 ))}
@@ -275,13 +284,18 @@ export default function SettingsUsersPage() {
                     <TD className="text-zinc-500">{a.branchrole.name}</TD>
                     <TD>
                       <div className="flex justify-end">
-                        <button
-                          onClick={() => handleUnassign(a)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                          aria-label={`Remove assignment for ${a.user.name} at ${a.outlet.name}`}
+                        <Tooltip
+                          label={`Remove ${a.branchrole.name} for ${a.user.name} at ${a.outlet.name}. Their shop-wide role stays unchanged.`}
+                          align="end"
                         >
-                          <Trash2 className="size-4" />
-                        </button>
+                          <button
+                            onClick={() => handleUnassign(a)}
+                            className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                            aria-label={`Remove assignment for ${a.user.name} at ${a.outlet.name}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </TD>
                   </TR>
