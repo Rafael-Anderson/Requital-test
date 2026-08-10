@@ -1,5 +1,3 @@
-import type { Prisma } from '@prisma/client';
-
 // Self-contained, printable HTML — no PDF library is installed in this repo
 // (checked package.json for puppeteer/@react-pdf/renderer before writing
 // this; see InvoicesController's own comment on the /pdf route). Serving
@@ -9,9 +7,9 @@ export interface InvoiceHtmlData {
   invoiceNumber: string;
   type: 'INVOICE' | 'PACKING_SLIP';
   issuedAt: Date;
-  subtotal: Prisma.Decimal;
-  taxAmount: Prisma.Decimal;
-  total: Prisma.Decimal;
+  subtotal: string | number;
+  taxAmount: string | number;
+  total: string | number;
   notes: string | null;
   shopName: string;
   shopAddress: string | null;
@@ -26,14 +24,14 @@ export interface InvoiceHtmlData {
     emirate: string;
     area: string | null;
     createdAt: Date;
-    deliveryFee: Prisma.Decimal | null;
-    discountAmount: Prisma.Decimal | null;
+    deliveryFee: string | number | null;
+    discountAmount: string | number | null;
     discountCode: string | null;
     orderitem: {
       productName: string;
       variantLabel: string | null;
       quantity: number;
-      priceAtPurchase: Prisma.Decimal;
+      priceAtPurchase: string | number;
     }[];
   };
 }
@@ -46,7 +44,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function money(amount: Prisma.Decimal | number, currency: string): string {
+function money(amount: string | number, currency: string): string {
   return `${currency} ${Number(amount).toFixed(2)}`;
 }
 
@@ -61,7 +59,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
           : item.productName,
       );
       const priceCell = showMoney
-        ? `<td class="num">${money(item.priceAtPurchase, data.currency)}</td><td class="num">${money(item.priceAtPurchase.mul(item.quantity), data.currency)}</td>`
+        ? `<td class="num">${money(item.priceAtPurchase, data.currency)}</td><td class="num">${money(Number(item.priceAtPurchase) * item.quantity, data.currency)}</td>`
         : '';
       return `<tr><td>${name}</td><td class="num">${item.quantity}</td>${priceCell}</tr>`;
     })
