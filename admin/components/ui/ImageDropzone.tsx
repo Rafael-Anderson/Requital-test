@@ -70,7 +70,7 @@ export default function ImageDropzone({
           <img
             src={preview}
             alt=""
-            className="size-16 rounded-md object-cover border dark:border-white/10 shrink-0"
+            className="size-16 rounded-md object-cover border border-black/10 dark:border-white/10 shrink-0"
           />
         ) : (
           <div className="size-16 rounded-md bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-400 shrink-0">

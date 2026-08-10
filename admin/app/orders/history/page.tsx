@@ -122,8 +122,7 @@ export default function OrderHistoryPage() {
 
   return (
     <PageShell>
-      <BackButton href="/orders" />
-      <BranchBar />
+      <BranchBar left={<BackButton href="/orders" />} />
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Orders</h1>
         <div className="relative w-full sm:w-72">
@@ -144,7 +143,7 @@ export default function OrderHistoryPage() {
         <select
           value={bulkStatus}
           onChange={(e) => setBulkStatus(e.target.value as OrderStatus | "")}
-          className="border rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
+          className="border border-black/15 dark:border-white/15 rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
         >
           <option value="">Move to…</option>
           {ORDER_STATUSES.map((s) => (
@@ -219,7 +218,7 @@ export default function OrderHistoryPage() {
                     <StatusBadge status={order.status} />
                   </TD>
                   <TD>{order.customerName}</TD>
-                  <TD className="capitalize text-zinc-500">{order.orderType ?? "—"}</TD>
+                  <TD className="capitalize text-zinc-500">{order.orderType ?? "-"}</TD>
                   <TD>
                     <StatusBadge status={order.paymentStatus} />
                     {latestTxn && (
@@ -229,7 +228,7 @@ export default function OrderHistoryPage() {
                     )}
                   </TD>
                   <TD>{order.total} AED</TD>
-                  <TD className="text-zinc-500">{order.channel ?? "—"}</TD>
+                  <TD className="text-zinc-500">{order.channel ?? "-"}</TD>
                   <TD className="text-xs text-zinc-500">
                     {new Date(order.createdAt).toLocaleString()}
                   </TD>

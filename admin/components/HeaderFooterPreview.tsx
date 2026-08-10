@@ -77,7 +77,7 @@ export default function HeaderFooterPreview({
           </div>
         </div>
         <div className="mt-3 pt-2 border-t border-white/10 text-[9px] opacity-60">
-          © {new Date().getFullYear()} {shopName || "Your Shop"} — All Rights Reserved
+          © {new Date().getFullYear()} {shopName || "Your Shop"}. All Rights Reserved
         </div>
       </div>
     </div>

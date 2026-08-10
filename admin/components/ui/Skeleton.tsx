@@ -61,7 +61,7 @@ export function ListPageSkeleton({
         </div>
       )}
       {showTabs && (
-        <div className="flex gap-1 border-b dark:border-white/10 mb-4">
+        <div className="flex gap-1 border-b border-gray-200 dark:border-white/10 mb-4">
           <Skeleton className="h-9 w-24 mb-0" />
           <Skeleton className="h-9 w-28 mb-0" />
         </div>

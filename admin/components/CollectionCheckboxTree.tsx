@@ -25,7 +25,7 @@ export default function CollectionCheckboxTree({
   if (rows.length === 0) {
     return (
       <p className="text-sm text-zinc-400 border rounded-lg border-black/15 dark:border-white/15 px-3 py-4 text-center">
-        No collections yet — create one on the Collections page first.
+        No collections yet. Create one on the Collections page first.
       </p>
     );
   }

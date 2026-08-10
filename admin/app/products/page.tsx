@@ -35,6 +35,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import Select from "@/components/ui/Select";
 import BulkActionBar from "@/components/ui/BulkActionBar";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
@@ -62,7 +63,6 @@ function InventoryPageContent() {
   // an already-filtered list; purely the initial value — changing the
   // dropdown afterward doesn't write back to the URL.
   const [collectionFilter, setCollectionFilter] = useState(searchParams.get("collection") ?? "");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [transferringProduct, setTransferringProduct] = useState<Product | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,17 +96,8 @@ function InventoryPageContent() {
       const id = Number(collectionFilter);
       result = result.filter((p) => p.collections.some((c) => c.id === id));
     }
-    if (lowStockOnly) {
-      result = result.filter(
-        (p) =>
-          p.trackInventory &&
-          p.stockQuantity !== null &&
-          p.lowStockThreshold !== null &&
-          p.stockQuantity <= p.lowStockThreshold,
-      );
-    }
     return result;
-  }, [products, collectionFilter, lowStockOnly]);
+  }, [products, collectionFilter]);
 
   const visibleIds = useMemo(() => (visibleProducts ?? []).map((p) => p.id), [visibleProducts]);
   const selection = useRowSelection(visibleIds);
@@ -261,32 +252,26 @@ function InventoryPageContent() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BranchBar left={<BackButton href="/" />} />
       <ProductsTabs />
-      <BranchBar />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Inventory</h1>
+        <h1 className="text-2xl font-semibold">Products</h1>
         <div className="flex items-center gap-2">
-          <select
-            value={collectionFilter}
-            onChange={(e) => setCollectionFilter(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
-          >
-            <option value="">All collections</option>
-            {collectionRows.map((c) => (
-              <option key={c.id} value={c.id}>
-                {"— ".repeat(c.depth)}
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
-            <Checkbox checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} aria-label="Low stock only" />
-            Low stock only
-          </label>
-          <Link href="/inventory/movements" title="Movement History (in Inventory)">
-            <Button variant="secondary">Movement history</Button>
-          </Link>
+          <div className="w-44">
+            <Select
+              value={collectionFilter}
+              onChange={(e) => setCollectionFilter(e.target.value)}
+              aria-label="Filter by collection"
+            >
+              <option value="">All collections</option>
+              {collectionRows.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {"- ".repeat(c.depth)}
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
           <DropdownMenu
             trigger={({ toggle, open }) => (
               <Button variant="primary" onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
@@ -325,17 +310,12 @@ function InventoryPageContent() {
         </div>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-      {!selectedOutletId && outlets.length > 0 && (
-        <p className="text-sm text-zinc-500 mb-3">
-          Stock is tracked per branch — pick one from the switcher above to see or adjust counts.
-        </p>
-      )}
 
       <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>
         <select
           value={bulkStatus}
           onChange={(e) => setBulkStatus(e.target.value)}
-          className="border rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
+          className="border border-black/15 dark:border-white/15 rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
         >
           <option value="">Set status…</option>
           {Object.keys(PRODUCT_STATUS_LABELS).map((s) => (
@@ -425,7 +405,7 @@ function InventoryPageContent() {
                   <TD className="text-zinc-500">{p.sku}</TD>
                   <TD className="text-zinc-500">{p.totalSold} sold</TD>
                   <TD className="text-xs text-zinc-500">
-                    {p.collections.length > 0 ? p.collections.map((c) => c.name).join(", ") : "—"}
+                    {p.collections.length > 0 ? p.collections.map((c) => c.name).join(", ") : "-"}
                   </TD>
                   <TD>
                     <button
@@ -449,10 +429,10 @@ function InventoryPageContent() {
                         }
                       >
                         {p.stockQuantity}
-                        {lowStock ? " — low stock" : ""}
+                        {lowStock ? " (low stock)" : ""}
                       </span>
                     ) : (
-                      <span className="text-zinc-400">—</span>
+                      <span className="text-zinc-400">-</span>
                     )}
                     {/* Bill of Materials — informational only, doesn't gate the
                         Active toggle or checkout (see backend
@@ -465,7 +445,7 @@ function InventoryPageContent() {
                       p.stockQuantity !== null &&
                       p.makeableQuantity < p.stockQuantity && (
                         <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
-                          only {p.makeableQuantity} can be made — limited by {p.limitedByIngredient}
+                          only {p.makeableQuantity} can be made (limited by {p.limitedByIngredient})
                         </div>
                       )}
                   </TD>

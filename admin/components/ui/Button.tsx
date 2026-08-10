@@ -35,7 +35,7 @@ export default function Button({
     <button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center gap-1.5 rounded font-medium transition-[background-color,border-color,color,transform] duration-100 ease-out cursor-pointer active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${sizeClass} ${VARIANT_STYLES[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-[background-color,border-color,color,transform] duration-100 ease-out cursor-pointer active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${sizeClass} ${VARIANT_STYLES[variant]} ${className}`}
       {...props}
     >
       {loading && <Spinner size="sm" />}

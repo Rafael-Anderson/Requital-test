@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/Toast";
 import {
-  stripPhoneFormatting,
+  normalizePhone,
+  normalizeTrn,
+  normalizeWebsiteUrl,
   validateEmail,
   validatePassword,
   validatePhone,
@@ -127,7 +129,7 @@ export function useAccountSetupForm() {
   const [websiteUrl, setWebsiteUrlRaw] = useState("");
 
   const [address, setAddressRaw] = useState("");
-  const [operatingModel, setOperatingModelRaw] = useState<Set<OperatingModelValue>>(new Set());
+  const [operatingModel, setOperatingModelRaw] = useState<OperatingModelValue | null>(null);
   const [branchCount, setBranchCountRaw] = useState("");
   // Default to the primary market this app already assumes elsewhere
   // (currency, timezone, phone normalization are all UAE-scoped today).
@@ -143,18 +145,19 @@ export function useAccountSetupForm() {
   // specifically on the invalid -> valid transition, not on every field that
   // simply validates fine the first time it's touched.
   function commitError(field: string, message: string | undefined) {
-    setFieldErrors((prev) => {
-      const hadError = !!prev[field];
-      if (!message) {
-        if (!hadError) return prev;
-        const next = { ...prev };
-        delete next[field];
+    const hadError = !!fieldErrors[field];
+    if (!message) {
+      if (hadError) {
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          delete next[field];
+          return next;
+        });
         toast(`✓ ${FIELD_LABELS[field]} looks good`);
-        return next;
       }
-      if (prev[field] === message) return prev;
-      return { ...prev, [field]: message };
-    });
+      return;
+    }
+    setFieldErrors((prev) => (prev[field] === message ? prev : { ...prev, [field]: message }));
   }
 
   function markTouched(field: string) {
@@ -177,28 +180,35 @@ export function useAccountSetupForm() {
     };
   }
 
+  // Same onChange as fieldHandlers(), but onBlur also normalizes the raw
+  // typed value to its canonical stored format (E.164 phone, https://-
+  // prefixed URL, digits-only TRN) before validating — so a forgiving format
+  // typed by the user (a local phone number, a bare domain, a dashed TRN)
+  // both validates and displays as the canonical form afterward.
+  function normalizingHandlers(field: string, setValue: (v: string) => void, normalize: (v: string) => string) {
+    return {
+      onChange: (value: string) => {
+        setValue(value);
+        if (touched[field]) commitError(field, validateField(field, value));
+      },
+      onBlur: (value: string) => {
+        const normalized = normalize(value);
+        setValue(normalized);
+        markTouched(field);
+        commitError(field, validateField(field, normalized));
+      },
+    };
+  }
+
   const firstNameHandlers = fieldHandlers("firstName", setFirstNameRaw);
   const emailHandlers = fieldHandlers("email", setEmailRaw);
   const passwordHandlers = fieldHandlers("password", setPasswordRaw);
   const businessNameHandlers = fieldHandlers("businessName", setBusinessNameRaw);
-  const trnHandlers = fieldHandlers("trn", setTrnRaw);
-  const websiteUrlHandlers = fieldHandlers("websiteUrl", setWebsiteUrlRaw);
+  const trnHandlers = normalizingHandlers("trn", setTrnRaw, normalizeTrn);
+  const websiteUrlHandlers = normalizingHandlers("websiteUrl", setWebsiteUrlRaw, normalizeWebsiteUrl);
   const addressHandlers = fieldHandlers("address", setAddressRaw);
 
-  // Phone gets its own pair: on blur it also strips spaces/dashes from the
-  // stored value before validating (spec: "keep data intact" otherwise).
-  const phoneHandlers = {
-    onChange: (value: string) => {
-      setPhoneRaw(value);
-      if (touched.phone) commitError("phone", validateField("phone", value));
-    },
-    onBlur: (value: string) => {
-      const stripped = stripPhoneFormatting(value);
-      setPhoneRaw(stripped);
-      markTouched("phone");
-      commitError("phone", validateField("phone", stripped));
-    },
-  };
+  const phoneHandlers = normalizingHandlers("phone", setPhoneRaw, normalizePhone);
 
   function setBusinessType(value: string) {
     setBusinessTypeRaw(value);
@@ -206,15 +216,10 @@ export function useAccountSetupForm() {
     commitError("businessType", validateField("businessType", value));
   }
 
-  function toggleOperatingModel(value: OperatingModelValue) {
-    setOperatingModelRaw((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      markTouched("operatingModel");
-      commitError("operatingModel", next.size === 0 ? "Select at least one option" : undefined);
-      return next;
-    });
+  function setOperatingModel(value: OperatingModelValue) {
+    setOperatingModelRaw(value);
+    markTouched("operatingModel");
+    commitError("operatingModel", undefined);
   }
 
   function setBranchCount(value: string) {
@@ -252,8 +257,8 @@ export function useAccountSetupForm() {
     for (const field of fields) {
       const message =
         field === "operatingModel"
-          ? operatingModel.size === 0
-            ? "Select at least one option"
+          ? operatingModel === null
+            ? "Select an option"
             : undefined
           : validateField(field, fieldValues[field]);
       if (message) errors[field] = message;
@@ -299,7 +304,7 @@ export function useAccountSetupForm() {
         trn: trn.trim() || undefined,
         websiteUrl: websiteUrl.trim() || undefined,
         address,
-        operatingModel: [...operatingModel],
+        operatingModel: operatingModel ? [operatingModel] : [],
         branchCount,
         productEditorMode,
         country,
@@ -334,7 +339,7 @@ export function useAccountSetupForm() {
     address,
     addressHandlers,
     operatingModel,
-    toggleOperatingModel,
+    setOperatingModel,
     branchCount,
     setBranchCount,
     country,

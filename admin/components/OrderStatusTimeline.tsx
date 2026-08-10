@@ -33,7 +33,7 @@ export default function OrderStatusTimeline({ orderId, refreshKey }: { orderId: 
   if (!history || history.length === 0) return null;
 
   return (
-    <section className="border rounded-lg p-4 dark:border-white/10 mb-4">
+    <section className="border border-black/10 rounded-lg p-4 dark:border-white/10 mb-4">
       <h3 className="font-medium mb-3">Status timeline</h3>
       <ol>
         {history.map((entry, i) => (

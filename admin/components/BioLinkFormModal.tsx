@@ -167,7 +167,7 @@ export default function BioLinkFormModal({
               </Select>
               <p className="text-xs text-zinc-400 mt-1.5">
                 Uses the URL already set for this platform on Online Presence (or your WhatsApp number for
-                WhatsApp) — nothing more to enter here. The icon won&apos;t appear on your bio page until that&apos;s
+                WhatsApp), nothing more to enter here. The icon won&apos;t appear on your bio page until that&apos;s
                 configured.
               </p>
             </div>

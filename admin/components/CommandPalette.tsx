@@ -29,7 +29,7 @@ function flatten(result: GlobalSearchResult | null): FlatResult[] {
     ...result.orders.map((o) => ({
       key: `order-${o.id}`,
       type: "order" as const,
-      label: `Order #${o.id} — ${o.customerName}`,
+      label: `Order #${o.id} · ${o.customerName}`,
       sublabel: `${o.status.replace(/_/g, " ")} · ${o.total} AED`,
       href: `/orders/${o.id}`,
     })),
@@ -134,9 +134,9 @@ export default function CommandPalette() {
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 pt-24 px-4" onClick={close}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 shadow-xl overflow-hidden"
+        className="w-full max-w-lg rounded-lg bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 shadow-xl overflow-hidden"
       >
-        <div className="flex items-center gap-2 border-b dark:border-white/10 px-4 py-3">
+        <div className="flex items-center gap-2 border-b border-gray-200 dark:border-white/10 px-4 py-3">
           <Search className="size-4 text-zinc-400 shrink-0" />
           <input
             autoFocus
@@ -146,7 +146,7 @@ export default function CommandPalette() {
             placeholder="Search products, orders, customers…"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
           />
-          <kbd className="text-xs text-zinc-400 border rounded px-1.5 py-0.5 dark:border-white/15 shrink-0">Esc</kbd>
+          <kbd className="text-xs text-zinc-400 border border-black/15 rounded px-1.5 py-0.5 dark:border-white/15 shrink-0">Esc</kbd>
         </div>
 
         <div className="max-h-96 overflow-y-auto">

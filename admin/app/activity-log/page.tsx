@@ -106,7 +106,7 @@ export default function ActivityLogPage() {
           <select
             value={entityType}
             onChange={(e) => setEntityType(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+            className="border border-black/15 dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
           >
             <option value="">All entities</option>
             {ENTITY_TYPES.map((t) => (
@@ -118,7 +118,7 @@ export default function ActivityLogPage() {
           <select
             value={actorUserId}
             onChange={(e) => setActorUserId(e.target.value)}
-            className="border rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+            className="border border-black/15 dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
           >
             <option value="">All staff</option>
             {actors.map((a) => (

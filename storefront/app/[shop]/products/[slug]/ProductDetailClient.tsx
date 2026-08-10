@@ -255,7 +255,7 @@ export default function ProductDetailClient() {
                     {option.name}
                     {selection[i] && (
                       <span className="text-zinc-500 font-normal">
-                        {" — "}
+                        {": "}
                         {option.values.find((v) => v.id === selection[i])?.value}
                       </span>
                     )}
@@ -417,7 +417,7 @@ export default function ProductDetailClient() {
             {product.isGiftCard ? (
               <div className="flex items-center gap-1.5">
                 <Truck className="size-3.5 shrink-0" {...iconStyleProps(shop?.iconStyle, 2)} />
-                <span>Delivered by email — no shipping required</span>
+                <span>Delivered by email, no shipping required</span>
               </div>
             ) : (
               <>

@@ -10,6 +10,12 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  normalizePhoneToE164,
+  normalizeTrn,
+  normalizeWebsiteUrl,
+} from '../../common/normalize';
 
 export const BUSINESS_TYPES = ['Retail', 'F&B', 'Services', 'Other'] as const;
 export const OPERATING_MODELS = [
@@ -40,10 +46,19 @@ export class SignupDto {
   // submitting: 40+ e2e specs call this endpoint directly with the pre-wizard
   // minimal payload, and this DTO has no way to tell "the wizard" apart from
   // any other caller.
+  // Forgiving on input (local "0501234567", bare country-code
+  // "971501234567", or full E.164 "+971501234567" are all accepted) —
+  // normalized to E.164 before validation runs, so the regex below only
+  // ever sees the canonical shape. Falls back to the raw value when it
+  // can't be parsed at all, so a genuinely invalid phone still produces a
+  // real validation error instead of silently passing/emptying.
   @IsOptional()
   @IsString()
-  @Matches(/^(\+)?[0-9]{7,15}$/, {
-    message: 'phone must be 7-15 digits, with an optional leading +',
+  @Transform(({ value }) =>
+    typeof value === 'string' ? (normalizePhoneToE164(value) ?? value) : value,
+  )
+  @Matches(/^\+[1-9]\d{6,14}$/, {
+    message: 'phone must be a valid phone number',
   })
   phone?: string;
 
@@ -66,14 +81,19 @@ export class SignupDto {
   businessType?: string;
 
   // Lenient by design (see admin/lib/validators.ts's TRN regex comment) —
-  // not re-validated by format here, just bounded.
+  // not re-validated by format here, just bounded. Normalized to
+  // digits-only storage regardless of what dashes/spacing was typed.
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeTrn(value) : value))
   @MaxLength(50)
   trn?: string;
 
+  // Accepts a bare domain ("example.com") as well as a fully-qualified URL —
+  // normalized to always carry a protocol before the regex below runs.
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? normalizeWebsiteUrl(value) : value))
   @MaxLength(255)
   @Matches(/^https?:\/\//i, {
     message: 'websiteUrl must start with http:// or https://',

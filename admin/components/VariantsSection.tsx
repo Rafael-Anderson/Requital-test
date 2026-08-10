@@ -150,12 +150,12 @@ export default function VariantsSection({
       <div>
         <h3 className="text-sm font-semibold mb-1">Options</h3>
         <p className="text-xs text-zinc-400 mb-3">
-          Up to {MAX_OPTIONS} options (e.g. Size, Color). Adding or editing values regenerates the variant list below —
+          Up to {MAX_OPTIONS} options (e.g. Size, Color). Adding or editing values regenerates the variant list below;
           variants that still match an existing combination keep their price/SKU/stock.
         </p>
         <div className="space-y-3">
           {options.map((option, index) => (
-            <div key={index} className="rounded-lg border dark:border-white/10 p-3">
+            <div key={index} className="rounded-lg border border-black/10 dark:border-white/10 p-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex-1">
                   <Input
@@ -210,7 +210,7 @@ export default function VariantsSection({
                   }
                 }}
                 placeholder="Add a value and press Enter"
-                className="w-full border rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                className="w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
               />
             </div>
           ))}
@@ -251,7 +251,7 @@ export default function VariantsSection({
                     </div>
                   </TD>
                   <TD>{v.price ?? product.price} AED</TD>
-                  <TD className="text-zinc-500">{v.stockQuantity ?? "—"}</TD>
+                  <TD className="text-zinc-500">{v.stockQuantity ?? "-"}</TD>
                   <TD>
                     <Tooltip label={`Edit ${v.label}`} align="end">
                       <button

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getShop } from "@/lib/api";
 import PageShell from "@/components/ui/PageShell";
@@ -34,7 +34,6 @@ const ADMIN_SECTIONS = [
   { href: "/affiliate", label: "Affiliate", icon: Share2 },
   { href: "/bio-links", label: "Bio Links", icon: Link2 },
   { href: "/activity-log", label: "Activity Log", icon: History },
-  { href: "/jobs", label: "Failed Jobs", icon: AlertTriangle },
 ];
 
 export default function HomePage() {
@@ -85,14 +84,15 @@ export default function HomePage() {
           role — 15 tiles for admin vs. 3 for branch — so the content being
           centered isn't a fixed height. */}
       <div className="flex min-h-[calc(100vh-154px)] items-center justify-center">
-        {/* Scales up to 5 columns on large screens instead of capping at 3
-            inside a max-w-md (448px) box regardless of viewport — with 15
-            tiles for an admin, that meant 5 rows of 3 no matter how wide the
-            screen was. Still responsive down to 2 columns on narrow/mobile
-            viewports, not hardcoded wide. gap-5 (was gap-3) — tiles read as
-            cramped/too close together at 12px, crowding out the breathing
-            room the rest of the page already has. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 max-w-4xl mx-auto">
+        {/* Scales up to 4 columns on large screens instead of capping at 3
+            inside a max-w-md (448px) box regardless of viewport. Capped at 4
+            (not 5) and given generous padding/gap/icon size so tiles stay
+            large and comfortable even with 11 tiles for an admin — an
+            earlier pass shrank per-tile padding (p-6 -> p-2.5) and scaled up
+            to 5 columns, which read as cramped rather than roomy; this
+            restores the larger tile/icon/gap sizing. Still responsive down
+            to 2 columns on narrow/mobile viewports, not hardcoded wide. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
           {sections.map(({ href, label, icon: Icon }) => {
             // Reports isn't disabled outright in simple mode — it's still a
             // real, working page — just greyed and unclickable here to keep
@@ -104,10 +104,10 @@ export default function HomePage() {
                   key={href}
                   aria-disabled="true"
                   title="Switch to Advanced in Business Information to use Reports"
-                  className="aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 opacity-40 cursor-not-allowed"
+                  className="aspect-square flex flex-col items-center justify-center gap-3 border border-black/10 rounded-xl p-5 dark:border-white/10 opacity-40 cursor-not-allowed"
                 >
-                  <span className="flex items-center justify-center size-14 rounded-2xl bg-accent/10">
-                    <Icon className="size-6 text-accent-text dark:text-accent" strokeWidth={1.75} />
+                  <span className="flex items-center justify-center size-16 rounded-2xl bg-accent/10">
+                    <Icon className="size-7 text-accent-text dark:text-accent" strokeWidth={1.75} />
                   </span>
                   <span className="text-sm font-medium">{label}</span>
                 </div>
@@ -118,7 +118,7 @@ export default function HomePage() {
               <Link
                 key={href}
                 href={href}
-                className="relative aspect-square flex flex-col items-center justify-center gap-3 border rounded-xl p-2.5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                className="relative aspect-square flex flex-col items-center justify-center gap-3 border border-black/10 rounded-xl p-5 dark:border-white/10 hover:border-black/30 dark:hover:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
                 {showDynamicThemeBadge && (
                   <span
@@ -128,8 +128,8 @@ export default function HomePage() {
                     Beta
                   </span>
                 )}
-                <span className="flex items-center justify-center size-14 rounded-2xl bg-accent/10">
-                  <Icon className="size-6 text-accent-text dark:text-accent" strokeWidth={1.75} />
+                <span className="flex items-center justify-center size-16 rounded-2xl bg-accent/10">
+                  <Icon className="size-7 text-accent-text dark:text-accent" strokeWidth={1.75} />
                 </span>
                 <span className="text-sm font-medium">{label}</span>
               </Link>

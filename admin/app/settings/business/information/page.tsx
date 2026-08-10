@@ -88,7 +88,7 @@ function WhatsAppCredentialsCard() {
         <p className="text-xs text-zinc-400 mt-1">
           Meta WhatsApp Cloud API credentials, used to send customer order notifications when
           &quot;Notify Customers via WhatsApp&quot; is on above. Business verification and number setup happen in
-          Meta&apos;s own Business Manager — paste the resulting values here.
+          Meta&apos;s own Business Manager, then paste the resulting values here.
           {!settings.hasCredentials && " Without these, notifications fall back to a console log only (dev/testing)."}
         </p>
       </div>
@@ -104,14 +104,14 @@ function WhatsAppCredentialsCard() {
             />
             {settings.maskedCredentials?.[field.key] && (
               <p className="mt-1 text-xs text-zinc-400">
-                Currently saved: {settings.maskedCredentials[field.key]} — re-enter both fields to change either one.
+                Currently saved: {settings.maskedCredentials[field.key]}. Re-enter both fields to change either one.
               </p>
             )}
           </div>
         ))}
       </div>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-400">Saves on its own — separate from the page's Save changes button below.</p>
+        <p className="text-xs text-zinc-400">Saves on its own, separate from the page's Save changes button below.</p>
         <div className="flex gap-2 shrink-0">
           {settings.hasCredentials && (
             <Button variant="secondary" onClick={handleClear} disabled={saving}>
@@ -172,7 +172,7 @@ function PublishCard({ shop, onChange }: { shop: Shop; onChange: (published: boo
   }
 
   const blocked = !shop.published && readiness !== null && !readiness.ready;
-  const tooltip = blocked ? readiness!.missing.join(' — ') : undefined;
+  const tooltip = blocked ? readiness!.missing.join(', ') : undefined;
 
   return (
     <Card className="flex items-center justify-between gap-4">
@@ -197,7 +197,7 @@ function PublishCard({ shop, onChange }: { shop: Shop; onChange: (published: boo
           </p>
         ) : (
           <p className="text-xs mt-1.5 text-zinc-400" title="Your store link will be live once published">
-            Store link — available once published
+            Store link (available once published)
           </p>
         )}
         {blocked && (
@@ -487,7 +487,7 @@ export default function BusinessInformationPage() {
         </p>
         <p className="text-xs text-zinc-400 mb-3">
           &quot;Notify Customers via WhatsApp&quot; and &quot;Allow Email Notifications&quot; send real order-confirmation
-          and delivery/pickup updates to customers. &quot;Allow WhatsApp Notifications&quot; only saves a preference —
+          and delivery/pickup updates to customers. &quot;Allow WhatsApp Notifications&quot; only saves a preference;
           it doesn&apos;t control customer messaging.
         </p>
         <div className="space-y-2">
@@ -512,7 +512,7 @@ export default function BusinessInformationPage() {
       <Card>
         <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Growth &amp; Alerts</p>
         <p className="text-xs text-zinc-400 mb-3">
-          Both off by default — these email potential/at-risk situations (an incomplete purchase, a running-low
+          Both off by default. These email potential/at-risk situations (an incomplete purchase, a running-low
           shelf), not existing-customer order updates, so they get their own deliberate opt-in.
         </p>
         <div className="space-y-3">
@@ -559,7 +559,7 @@ export default function BusinessInformationPage() {
       <Card>
         <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Product Editor</p>
         <p className="text-xs text-zinc-400 mb-3">
-          Simple starts with a focused form — variants and extras are off by default but available on any product.
+          Simple starts with a focused form. Variants and extras are off by default but available on any product.
           Advanced shows everything expanded from the start.
         </p>
         <SegmentedToggle

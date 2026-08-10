@@ -92,14 +92,14 @@ export default function ThemeAppearanceColorPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm">Primary color</p>
-                <p className="text-xs text-zinc-400">Any color — not a locked palette.</p>
+                <p className="text-xs text-zinc-400">Any color, not a locked palette.</p>
               </div>
               <ColorPicker value={brandColor} onChange={setBrandColor} />
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm">Secondary color</p>
-                <p className="text-xs text-zinc-400">Optional — derived from primary if unset.</p>
+                <p className="text-xs text-zinc-400">Optional. Derived from primary if unset.</p>
               </div>
               <ColorPicker value={secondaryColor || brandColor} onChange={setSecondaryColor} />
             </div>

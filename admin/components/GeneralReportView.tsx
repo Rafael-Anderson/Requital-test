@@ -11,7 +11,7 @@ import StatCard from "@/components/ui/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 
 function formatPaymentMode(method: string | null): string {
-  if (!method) return "—";
+  if (!method) return "-";
   return method
     .split("_")
     .map((w) => w[0].toUpperCase() + w.slice(1))
@@ -152,10 +152,10 @@ export default function GeneralReportView({
                   )}
                   <div className="text-xs text-zinc-500">{order.customerPhone}</div>
                 </TD>
-                <TD className="capitalize text-zinc-500">{order.orderType ?? "—"}</TD>
+                <TD className="capitalize text-zinc-500">{order.orderType ?? "-"}</TD>
                 <TD className="text-zinc-500">{formatPaymentMode(order.paymentMethod)}</TD>
                 <TD>{order.total} AED</TD>
-                <TD className="text-zinc-500">{order.channel ?? "—"}</TD>
+                <TD className="text-zinc-500">{order.channel ?? "-"}</TD>
                 <TD className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleString()}</TD>
               </TR>
             ))

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -11,6 +11,11 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { normalizePhoneToE164 } from '../../common/normalize';
+
+// See create-outlet.dto.ts's identical helper for the reasoning.
+const normalizePhoneField = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? (normalizePhoneToE164(value) ?? value) : value;
 
 export class UpdateOutletDto {
   @IsOptional()
@@ -30,6 +35,7 @@ export class UpdateOutletDto {
 
   @IsOptional()
   @IsString()
+  @Transform(normalizePhoneField)
   @MaxLength(30)
   whatsapp?: string;
 
@@ -49,6 +55,7 @@ export class UpdateOutletDto {
 
   @IsOptional()
   @IsString()
+  @Transform(normalizePhoneField)
   @MaxLength(30)
   phone?: string;
 

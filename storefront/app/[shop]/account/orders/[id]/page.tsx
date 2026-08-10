@@ -73,7 +73,7 @@ export default function OrderDetailPage() {
           <div className="text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-zinc-500">Fulfillment</span>
-              <span className="capitalize">{order.orderType ?? "—"}</span>
+              <span className="capitalize">{order.orderType ?? "-"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500">Location</span>
@@ -92,7 +92,7 @@ export default function OrderDetailPage() {
             <div className="flex justify-between">
               <span className="text-zinc-500">Payment</span>
               <span className="capitalize">
-                {order.paymentMethod?.replace(/_/g, " ") ?? "—"} · {order.paymentStatus}
+                {order.paymentMethod?.replace(/_/g, " ") ?? "-"} · {order.paymentStatus}
               </span>
             </div>
             <div className="flex justify-between">

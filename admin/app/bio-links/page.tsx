@@ -160,7 +160,7 @@ function BioPageConfigCard() {
             </button>
           )}
           <p className="mt-1.5 text-xs text-zinc-400">
-            Falls back to your Theme banner if left unset — your accent color shows through if neither is set.
+            Falls back to your Theme banner if left unset. Your accent color shows through if neither is set.
           </p>
         </div>
       </div>
@@ -177,7 +177,7 @@ function BioPageConfigCard() {
           label="Meta title"
           value={metaTitle}
           onChange={(e) => setMetaTitle(e.target.value)}
-          placeholder="Your Shop Name — Bio Links"
+          placeholder="Your Shop Name: Bio Links"
           maxLength={255}
         />
         <p className="mt-1.5 text-xs text-zinc-400">
@@ -285,7 +285,7 @@ export default function BioLinksPage() {
       <BackButton href="/" />
       <h1 className="text-2xl font-semibold mb-1">Bio Links</h1>
       <p className="text-sm text-zinc-500 mb-4">
-        A shareable link-in-bio page for your storefront — drag rows to reorder them.
+        A shareable link-in-bio page for your storefront. Drag rows to reorder them.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
@@ -302,7 +302,7 @@ export default function BioLinksPage() {
 
           {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-          <div className="rounded-lg border dark:border-white/10 overflow-hidden">
+          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
             {bioLinks === null ? (
               <TableSkeleton rows={4} cols={3} />
             ) : bioLinks.length === 0 ? (

@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
           </p>
           {devResetLink && (
             <p className="text-xs text-zinc-400 break-all">
-              Dev mode — reset link:{" "}
+              Dev mode, reset link:{" "}
               <Link href={devResetLink.replace(/^https?:\/\/[^/]+/, "")} className="text-accent hover:underline">
                 {devResetLink}
               </Link>
@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
       <form onSubmit={handleSubmit} className={AUTH_CARD_CLASS}>
         <h1 className={AUTH_HEADING_CLASS}>Reset your password</h1>
         <p className="text-sm text-zinc-500">
-          Enter the email you registered with — only accounts registered with an email can reset their password this
+          Enter the email you registered with. Only accounts registered with an email can reset their password this
           way.
         </p>
         <div>

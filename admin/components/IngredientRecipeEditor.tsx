@@ -60,7 +60,7 @@ export default function IngredientRecipeEditor({
   if (ingredients.length === 0) {
     return (
       <p className="text-xs text-zinc-400">
-        No ingredients yet — add some in Inventory &gt; Ingredients first.
+        No ingredients yet. Add some in Inventory &gt; Ingredients first.
       </p>
     );
   }

@@ -71,7 +71,7 @@ function SurveyContent() {
         {!loading && survey && (alreadyResponded || submitted) && (
           <div>
             <p className="text-sm text-zinc-500 mb-3">
-              Thanks for your feedback{shop?.name ? ` — ${shop.name} appreciates it!` : "!"}
+              Thanks for your feedback{shop?.name ? `. ${shop.name} appreciates it!` : "!"}
             </p>
             {displayRating > 0 && <p className="text-sm">Rating: {displayRating}/5</p>}
           </div>

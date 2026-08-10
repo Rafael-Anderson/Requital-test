@@ -267,7 +267,7 @@ export default function OrderDetailModal({
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">
                             {item.productName}
-                            {item.variantLabel ? ` — ${item.variantLabel}` : ""}
+                            {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                           </div>
                           <div className="text-xs text-zinc-500">
                             {item.quantity} × {item.priceAtPurchase} AED
@@ -349,7 +349,7 @@ export default function OrderDetailModal({
                             </span>
                           )}
                         </div>
-                        <div className="flex justify-between text-sm font-medium border-t dark:border-white/10 mt-2 pt-2">
+                        <div className="flex justify-between text-sm font-medium border-t border-gray-200 dark:border-white/10 mt-2 pt-2">
                           <span>Total</span>
                           <span>{order.total} AED</span>
                         </div>

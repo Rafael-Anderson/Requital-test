@@ -34,6 +34,14 @@ describe("HomePage — Phase B app restructure", () => {
     expect(screen.queryByText("Draft Orders")).not.toBeInTheDocument();
     expect(screen.queryByText("Abandoned Carts")).not.toBeInTheDocument();
   });
+
+  it("no longer shows a Failed Jobs tile (moved into Settings)", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Products")).toBeInTheDocument());
+    expect(screen.queryByText("Failed Jobs")).not.toBeInTheDocument();
+  });
 });
 
 describe("HomePage — Reports tile mode gating", () => {

@@ -24,7 +24,7 @@ function AcceptInviteForm() {
     e.preventDefault();
     setError(null);
     if (!token) {
-      setError("This invite link is missing its token — ask your admin to resend it");
+      setError("This invite link is missing its token. Ask your admin to resend it.");
       return;
     }
     if (password.length < 8) {
@@ -51,7 +51,7 @@ function AcceptInviteForm() {
       <div className="space-y-4">
         {!token ? (
           <p className="text-sm text-center text-red-600 dark:text-red-400">
-            This invite link is invalid — ask your admin to send you a new one.
+            This invite link is invalid. Ask your admin to send you a new one.
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

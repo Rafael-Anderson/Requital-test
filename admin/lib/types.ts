@@ -948,7 +948,7 @@ export interface ThemeSettings {
   // Record<ThemeColorKey, hex> — see THEME_COLOR_FIELDS below for the full
   // key list, grouping, and which ones the storefront actually applies.
   colors: Record<string, string> | null;
-  // Advanced tab — see HOMEPAGE_LAYOUTS below.
+  // Layout tab — see HOMEPAGE_LAYOUTS below.
   homepageLayout: HomepageLayout;
   // Phase C — what the storefront Home tab renders. Always a real value,
   // same rule as homepageLayout.
@@ -1017,7 +1017,7 @@ export const HOMEPAGE_LAYOUT_OPTIONS: HomepageLayoutOption[] = [
 
 // Theme Customizer v2 — mirrors backend/src/theme/constants.ts by hand (same
 // tradeoff as HOMEPAGE_LAYOUTS above). Each *_OPTIONS array feeds the preset
-// picker cards on the Advanced tab; see app/theme/edit/advanced/page.tsx.
+// picker cards on the Layout tab; see app/theme/edit/advanced/page.tsx.
 export const TOP_BAR_LAYOUTS = ["logo_left", "logo_center", "minimal"] as const;
 export type TopBarLayout = (typeof TOP_BAR_LAYOUTS)[number];
 export const TOP_BAR_LAYOUT_OPTIONS: { key: TopBarLayout; label: string; description: string }[] = [

@@ -118,13 +118,13 @@ export default function BulkPriceUpdateModal({
           onChange={(e) => setValue(e.target.value)}
         />
 
-        <div className="mt-4 border rounded-lg dark:border-white/10 overflow-hidden">
+        <div className="mt-4 border border-black/10 rounded-lg dark:border-white/10 overflow-hidden">
           <div className="max-h-64 overflow-y-auto divide-y divide-black/5 dark:divide-white/10">
             {preview.map(({ product, current, next }) => (
               <div key={product.id} className="flex items-center justify-between px-3 py-2 text-sm">
                 <span className="truncate">{product.name}</span>
                 <span className="shrink-0 text-zinc-500">
-                  {current === null ? "—" : current}
+                  {current === null ? "-" : current}
                   {" → "}
                   {next === null ? (
                     <span className="text-amber-600 dark:text-amber-400">skipped</span>

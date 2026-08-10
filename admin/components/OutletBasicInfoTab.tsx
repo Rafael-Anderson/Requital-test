@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { getShop, updateOutlet, updateShop } from "@/lib/api";
+import { normalizePhone } from "@/lib/validators";
 import type { Outlet, Shop } from "@/lib/types";
 import { mergeBusinessHours } from "@/lib/business-hours";
 import Button from "@/components/ui/Button";
@@ -122,9 +123,19 @@ export default function OutletBasicInfoTab({
         <h3 className="text-sm font-semibold mb-3">Contact Information</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input
+            label="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onBlur={(e) => setPhone(normalizePhone(e.target.value))}
+          />
 
-          <Input label="WhatsApp" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
+          <Input
+            label="WhatsApp"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            onBlur={(e) => setWhatsapp(normalizePhone(e.target.value))}
+          />
           {/* Tax Registration Number: no such field exists anywhere in the
               data model yet — not even at the shop level — so there's
               nothing to read-only-pull the way Country/Time Zone/Currency/
@@ -133,7 +144,7 @@ export default function OutletBasicInfoTab({
               cell keeps this row's shape matching the reference. */}
           <div aria-hidden="true" />
 
-          <Input label="Country" value={shop?.country ?? ""} disabled placeholder="—" />
+          <Input label="Country" value={shop?.country ?? ""} disabled placeholder="-" />
           <Input label="Time Zone" value={shop?.timezone ?? ""} disabled />
 
           <Input label="Currency" value={shop?.currency ?? ""} disabled />
@@ -144,7 +155,7 @@ export default function OutletBasicInfoTab({
           />
 
           <p className="sm:col-span-2 text-xs text-zinc-400 -mt-2">
-            Country, Time Zone, Currency, and Default Language are shop-wide — change them under
+            Country, Time Zone, Currency, and Default Language are shop-wide. Change them under
             Settings → Business Settings, not per outlet.
           </p>
         </div>
@@ -162,7 +173,7 @@ export default function OutletBasicInfoTab({
       <Card>
         <h3 className="text-sm font-semibold mb-1">Order Setting</h3>
         <p className="text-xs text-zinc-400 mb-4">
-          These apply shop-wide, across every outlet — not just this one.
+          These apply shop-wide, across every outlet, not just this one.
         </p>
 
         <div className="space-y-5">

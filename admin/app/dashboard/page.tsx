@@ -5,7 +5,6 @@ import { Wallet, Star, ClipboardList, Banknote, Users } from "lucide-react";
 import { getDashboardSummary, getDailyRevenue, getTopProducts } from "@/lib/api";
 import type { DashboardSummary, DailyRevenuePoint, TopProduct } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
-import { useShopMode } from "@/lib/useShopMode";
 import DateRangePicker, { defaultDateRange, type DateRange } from "@/components/ui/DateRangePicker";
 import StatCard from "@/components/ui/StatCard";
 import SalesOverviewChart from "@/components/SalesOverviewChart";
@@ -16,7 +15,6 @@ import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import Card from "@/components/ui/Card";
 import PageShell from "@/components/ui/PageShell";
-import SimpleDashboard from "@/components/SimpleDashboard";
 
 const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] = [
   { key: "placed", label: "Placed" },
@@ -33,14 +31,8 @@ export default function DashboardPage() {
   const [topProducts, setTopProducts] = useState<TopProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { selectedOutletId } = useOutletFilter();
-  const mode = useShopMode();
-  const isSimple = mode === "simple";
 
   useEffect(() => {
-    // Also skips while mode is still resolving (null) — avoids firing this
-    // heavier advanced fetch for the split second before a simple-mode shop's
-    // mode loads in, only to immediately discard it.
-    if (mode !== "advanced") return;
     setSummary(null);
     setDaily(null);
     setTopProducts(null);
@@ -56,7 +48,7 @@ export default function DashboardPage() {
         setTopProducts(p);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
-  }, [range, selectedOutletId, mode]);
+  }, [range, selectedOutletId]);
 
   const maxStage = useMemo(() => {
     if (!summary) return 1;
@@ -65,21 +57,9 @@ export default function DashboardPage() {
 
   if (error) return <p className="text-red-600">{error}</p>;
 
-  if (isSimple) {
-    return (
-      <PageShell>
-        <BackButton href="/" />
-        <BranchBar />
-        <h1 className="text-2xl font-semibold mb-6">Sales dashboard</h1>
-        <SimpleDashboard />
-      </PageShell>
-    );
-  }
-
   return (
     <PageShell>
-      <BackButton href="/" />
-      <BranchBar />
+      <BranchBar left={<BackButton href="/" />} />
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-2xl font-semibold">Sales dashboard</h1>
         <DateRangePicker value={range} onChange={setRange} />

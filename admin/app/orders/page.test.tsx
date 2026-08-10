@@ -66,13 +66,13 @@ function renderPage() {
 }
 
 describe("OrdersPage — simple/advanced mode", () => {
-  it("simple mode: hides the Order History tab", async () => {
+  it("simple mode: still shows the Order History tab (tabs are the same in both modes)", async () => {
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
     vi.mocked(listOrders).mockResolvedValue({ data: [order], total: 1 } as never);
     renderPage();
 
     await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
-    expect(screen.queryByText("Order History")).not.toBeInTheDocument();
+    expect(screen.getByText("Order History")).toBeInTheDocument();
   });
 
   it("simple mode: omits delivery date and 'Ordered ago' from the card", async () => {

@@ -109,7 +109,7 @@ export default function CsvImportModal({
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
         {preview && (
-          <div className="border rounded-lg dark:border-white/10 overflow-hidden mb-4">
+          <div className="border border-black/10 rounded-lg dark:border-white/10 overflow-hidden mb-4">
             <div className="max-h-72 overflow-y-auto divide-y divide-black/5 dark:divide-white/10">
               {preview.map((row, i) => (
                 <div key={i} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
@@ -131,7 +131,7 @@ export default function CsvImportModal({
                 </div>
               ))}
             </div>
-            <div className="px-3 py-2 text-xs text-zinc-500 border-t dark:border-white/10">
+            <div className="px-3 py-2 text-xs text-zinc-500 border-t border-gray-200 dark:border-white/10">
               {importable} row{importable === 1 ? "" : "s"} will be imported
               {rejected > 0 ? `, ${rejected} rejected (won't be written)` : ""}.
             </div>

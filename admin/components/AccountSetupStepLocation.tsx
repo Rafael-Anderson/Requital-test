@@ -2,7 +2,6 @@
 
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import Checkbox from "@/components/ui/Checkbox";
 import FieldErrorMessage from "@/components/ui/FieldErrorMessage";
 import { BRANCH_COUNTS, COUNTRIES, OPERATING_MODELS } from "@/lib/useAccountSetupForm";
 import type { AccountSetupFormState } from "@/lib/useAccountSetupForm";
@@ -49,12 +48,30 @@ export default function AccountSetupStepLocation({
         </span>
         <div className="space-y-2">
           {OPERATING_MODELS.map((option) => (
-            <Checkbox
+            <label
               key={option.value}
-              label={option.label}
-              checked={form.operatingModel.has(option.value)}
-              onChange={() => form.toggleOperatingModel(option.value)}
-            />
+              className="flex items-center gap-2 text-sm cursor-pointer select-none"
+            >
+              <span className="relative inline-flex size-4 shrink-0">
+                <input
+                  type="radio"
+                  name="operatingModel"
+                  value={option.value}
+                  checked={form.operatingModel === option.value}
+                  onChange={() => form.setOperatingModel(option.value)}
+                  className="peer absolute inset-0 size-4 cursor-pointer appearance-none"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 rounded-full border-[1.5px] border-black/25 dark:border-white/30 bg-white dark:bg-zinc-900 transition-colors duration-150 peer-hover:border-black/45 dark:peer-hover:border-white/45 peer-checked:border-black dark:peer-checked:border-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent/50 peer-focus-visible:ring-offset-1"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 m-auto size-2 rounded-full bg-black dark:bg-white scale-0 opacity-0 transition-all duration-150 peer-checked:scale-100 peer-checked:opacity-100"
+                />
+              </span>
+              {option.label}
+            </label>
           ))}
         </div>
         {operatingModelError && <FieldErrorMessage message={operatingModelError} />}

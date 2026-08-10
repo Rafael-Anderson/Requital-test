@@ -58,7 +58,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
     draft?.items.map((i) => ({
       productId: i.productId,
       variantId: i.variantId ?? undefined,
-      productName: i.variantLabel ? `${i.productName} — ${i.variantLabel}` : i.productName,
+      productName: i.variantLabel ? `${i.productName} · ${i.variantLabel}` : i.productName,
       quantity: i.quantity,
       price: i.price,
     })) ?? [],
@@ -123,7 +123,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
         {
           productId: product.id,
           variantId: variant.id,
-          productName: `${product.name} — ${variant.label}`,
+          productName: `${product.name} · ${variant.label}`,
           quantity,
           price: variant.price ?? product.price,
         },
@@ -349,7 +349,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                       min="1"
                       value={item.quantity}
                       onChange={(e) => updateItem(index, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                      className="w-16 border rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                      className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                     />
                   </TD>
                   <TD>
@@ -359,7 +359,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                       step="0.01"
                       value={item.price}
                       onChange={(e) => updateItem(index, { price: e.target.value })}
-                      className="w-20 border rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                      className="w-20 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                     />
                   </TD>
                   <TD>

@@ -110,7 +110,7 @@ export default function AffiliateOrdersPage() {
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-xs text-zinc-400">—</span>
+                    <span className="text-xs text-zinc-400">-</span>
                   )}
                 </TD>
               </TR>

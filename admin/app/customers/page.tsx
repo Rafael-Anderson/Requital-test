@@ -207,9 +207,9 @@ export default function CustomersPage() {
                 <TD>{c.orderCount}</TD>
                 <TD>{c.lifetimeValue.toFixed(2)} AED</TD>
                 <TD className="text-xs text-zinc-500">
-                  {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "—"}
+                  {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "-"}
                 </TD>
-                {isSimple && <TD className="text-zinc-500">{c.email ?? "—"}</TD>}
+                {isSimple && <TD className="text-zinc-500">{c.email ?? "-"}</TD>}
               </TR>
             ))
           )}

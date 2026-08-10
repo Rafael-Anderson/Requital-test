@@ -7,7 +7,7 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 py-2 text-sm border-b border-black/5 dark:border-white/10 last:border-0">
       <span className="text-zinc-500 dark:text-zinc-400">{label}</span>
-      <span className="font-medium text-zinc-900 dark:text-zinc-100 text-right">{value || "—"}</span>
+      <span className="font-medium text-zinc-900 dark:text-zinc-100 text-right">{value || "-"}</span>
     </div>
   );
 }
@@ -17,7 +17,7 @@ const PRODUCT_EDITOR_MODES = [
     value: "simple" as const,
     label: "Simple",
     tagline: "Multi-step form",
-    description: "Variants, attributes, and FAQ disabled by default — turn them on per product if needed",
+    description: "Variants, attributes, and FAQ disabled by default. Turn them on per product if needed",
   },
   {
     value: "advanced" as const,
@@ -29,10 +29,7 @@ const PRODUCT_EDITOR_MODES = [
 
 export default function AccountSetupStepReview({ form }: { form: AccountSetupFormState }) {
   const operatingModelLabel =
-    [...form.operatingModel]
-      .map((v) => OPERATING_MODELS.find((o) => o.value === v)?.label)
-      .filter(Boolean)
-      .join(", ") || "—";
+    OPERATING_MODELS.find((o) => o.value === form.operatingModel)?.label ?? "-";
 
   return (
     <div className="space-y-4">

@@ -58,7 +58,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
-export default function ThemeAdvancedPage() {
+export default function ThemeLayoutPage() {
   const toast = useToast();
   const [theme, setTheme] = useState<ThemeSettings | null>(null);
   const [homepageLayout, setHomepageLayout] = useState<HomepageLayout>("classic");
@@ -123,8 +123,33 @@ export default function ThemeAdvancedPage() {
   return (
     <PageShell variant="wide">
       <div className="space-y-4">
+        {/* Home tab and Menu are the two settings a merchant is most likely
+          to actually change here (the rest of this page is one-time brand
+          setup) — pulled out of the masonry flow below into their own fixed
+          side-by-side row at the top so they're never at the mercy of the
+          columns layout's height-balancing, unlike everything else here. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+          <Card>
+            <Section
+              title="Home tab"
+              hint="What the storefront's Home tab shows below the banner: grouped Template sections, or a flat grid of top-level Collections."
+            >
+              <SegmentedToggle value={homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={setHomeTabMode} />
+            </Section>
+          </Card>
+
+          <Card>
+            <Section
+              title="Menu"
+              hint="The storefront top bar's nav links. Add direct Collection buttons, or Dropdowns exposing several Collections on hover."
+            >
+              <MenuBuilder />
+            </Section>
+          </Card>
+        </div>
+
         {/* 2 columns at lg+, same "grid + items-start" pattern as Site
-          Settings' Logos & Icons split — these eight cards vary in height
+          Settings' Logos & Icons split — these cards vary in height
           (Homepage layout's 4 options wrap to two thumbnail rows, most
           others are one row), so items-start keeps each card at its own
           natural height instead of the grid stretching a shorter neighbor
@@ -136,7 +161,7 @@ export default function ThemeAdvancedPage() {
           <Card>
             <Section
               title="Homepage layout"
-              hint="A small set of layouts Requital builds and maintains — not a section-by-section builder. Pick the one closest to what you want."
+              hint="A small set of layouts Requital builds and maintains, not a section-by-section builder. Pick the one closest to what you want."
             >
               <PresetPicker
                 options={HOMEPAGE_LAYOUT_OPTIONS}
@@ -148,16 +173,7 @@ export default function ThemeAdvancedPage() {
           </Card>
 
           <Card>
-            <Section
-              title="Home tab"
-              hint="What the storefront's Home tab shows below the banner — grouped Template sections, or a flat grid of top-level Collections."
-            >
-              <SegmentedToggle value={homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={setHomeTabMode} />
-            </Section>
-          </Card>
-
-          <Card>
-            <Section title="Top bar layout" hint="How the header is arranged — logo, navigation icons, and cart.">
+            <Section title="Top bar layout" hint="How the header is arranged: logo, navigation icons, and cart.">
               <PresetPicker
                 options={TOP_BAR_LAYOUT_OPTIONS}
                 value={topBarLayout}
@@ -169,17 +185,8 @@ export default function ThemeAdvancedPage() {
 
           <Card>
             <Section
-              title="Menu"
-              hint="The storefront top bar's nav links — add direct Collection buttons, or Dropdowns exposing several Collections on hover."
-            >
-              <MenuBuilder />
-            </Section>
-          </Card>
-
-          <Card>
-            <Section
               title="Header size"
-              hint="Height/padding only — independent of the arrangement above, pairs with any of them."
+              hint="Height/padding only, independent of the arrangement above. Pairs with any of them."
             >
               <PresetPicker
                 options={HEADER_DENSITY_OPTIONS}
@@ -191,7 +198,7 @@ export default function ThemeAdvancedPage() {
           </Card>
 
           <Card>
-            <Section title="Footer layout" hint="How the footer is arranged — brand, links, and contact.">
+            <Section title="Footer layout" hint="How the footer is arranged: brand, links, and contact.">
               <PresetPicker
                 options={FOOTER_LAYOUT_OPTIONS}
                 value={footerLayout}
@@ -204,7 +211,7 @@ export default function ThemeAdvancedPage() {
           <Card>
             <Section
               title="Footer size"
-              hint="Height/padding only — independent of the arrangement above, pairs with any of them."
+              hint="Height/padding only, independent of the arrangement above. Pairs with any of them."
             >
               <PresetPicker
                 options={FOOTER_DENSITY_OPTIONS}
@@ -240,7 +247,7 @@ export default function ThemeAdvancedPage() {
           <Card>
             <Section
               title="Checkout layout"
-              hint="Every field is the same either way — this only changes how they're grouped."
+              hint="Every field is the same either way. This only changes how they're grouped."
             >
               <PresetPicker
                 options={CHECKOUT_LAYOUT_OPTIONS}
@@ -254,7 +261,7 @@ export default function ThemeAdvancedPage() {
           <Card>
             <Section
               title="Icon style"
-              hint="Applies everywhere icons appear on the storefront — cart, nav, and trust badges."
+              hint="Applies everywhere icons appear on the storefront: cart, nav, and trust badges."
             >
               <PresetPicker
                 options={ICON_STYLE_OPTIONS}
@@ -268,7 +275,7 @@ export default function ThemeAdvancedPage() {
           <Card>
             <Section
               title="Button shape"
-              hint="Applies to every primary button on the storefront — one choice, not per-button."
+              hint="Applies to every primary button on the storefront: one choice, not per-button."
             >
               <PresetPicker
                 options={BUTTON_RADIUS_OPTIONS}
@@ -280,7 +287,7 @@ export default function ThemeAdvancedPage() {
           </Card>
 
           <Card>
-            <Section title="Button fill" hint="Solid or outlined — applies everywhere the button shape above applies.">
+            <Section title="Button fill" hint="Solid or outlined. Applies everywhere the button shape above applies.">
               <PresetPicker
                 options={BUTTON_FILL_OPTIONS}
                 value={buttonFill}

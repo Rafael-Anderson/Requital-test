@@ -49,7 +49,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
         <div>
           <h3 className="text-sm font-semibold">Delivery Zones</h3>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Flat-fee named areas — additive to the radius set on the Delivery tab.
+            Flat-fee named areas, additive to the radius set on the Delivery tab.
           </p>
         </div>
         <Button variant="primary" onClick={() => setEditingZone("new")}>

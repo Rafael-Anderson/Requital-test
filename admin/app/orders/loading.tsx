@@ -9,7 +9,7 @@ export default function Loading() {
     <div>
       <Skeleton className="h-4 w-16 mb-4" />
       <Skeleton className="h-8 w-40 mb-1" />
-      <div className="flex gap-1 border-b dark:border-white/10 mb-4">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-white/10 mb-4">
         <Skeleton className="h-9 w-24 mb-0" />
         <Skeleton className="h-9 w-28 mb-0" />
       </div>

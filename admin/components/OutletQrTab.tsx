@@ -41,13 +41,13 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
       <div>
         <h3 className="text-sm font-semibold mb-1">Storefront QR Code</h3>
         <p className="text-xs text-zinc-400">
-          Scan to open your storefront — print this for signage at {outlet.name}.
+          Scan to open your storefront. Print this for signage at {outlet.name}.
         </p>
       </div>
 
       {!shop.published && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Your shop isn&apos;t published yet — this code won&apos;t resolve until you publish it.
+          Your shop isn&apos;t published yet. This code won&apos;t resolve until you publish it.
         </p>
       )}
 

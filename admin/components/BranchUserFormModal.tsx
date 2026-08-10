@@ -97,7 +97,7 @@ export default function BranchUserFormModal({
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <p className="text-sm text-zinc-500 -mt-2 mb-4">
-          A real, separate login for this staff member — the role picked below decides what they can
+          A real, separate login for this staff member. The role picked below decides what they can
           see and do.
         </p>
 
@@ -131,7 +131,7 @@ export default function BranchUserFormModal({
                 options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
               />
               <p className="mt-1.5 text-xs text-zinc-400">
-                Scoped to this outlet only — can&apos;t see or manage any other branch&apos;s orders or inventory.
+                Scoped to this outlet only. Can&apos;t see or manage any other branch&apos;s orders or inventory.
               </p>
             </div>
           )}

@@ -118,7 +118,7 @@ export default function DiscountsPage() {
                 <TD className="font-medium">{d.code}</TD>
                 <TD>{DISCOUNT_TYPE_LABELS[d.type]}</TD>
                 <TD className="text-zinc-500">
-                  {d.type === "FREE_SHIPPING" ? "—" : d.type === "PERCENTAGE" ? `${d.value}%` : d.value}
+                  {d.type === "FREE_SHIPPING" ? "-" : d.type === "PERCENTAGE" ? `${d.value}%` : d.value}
                 </TD>
                 <TD className="text-zinc-500">
                   {d.timesUsed}

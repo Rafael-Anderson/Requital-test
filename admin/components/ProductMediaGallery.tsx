@@ -69,7 +69,7 @@ export default function ProductMediaGallery({
               onDragStart={() => setDragIndex(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(i)}
-              className="relative group aspect-square rounded-lg border dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5 cursor-grab"
+              className="relative group aspect-square rounded-lg border border-black/10 dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5 cursor-grab"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={resolveImageUrl(img.url) ?? ""} alt="" className="w-full h-full object-cover" />
@@ -100,7 +100,7 @@ export default function ProductMediaGallery({
         preview={null}
         onFileSelected={handleAdd}
         label="Add image"
-        hint={uploading ? "Uploading…" : "Drag to reorder — the first image is used as the featured thumbnail."}
+        hint={uploading ? "Uploading…" : "Drag to reorder. The first image is used as the featured thumbnail."}
       />
     </div>
   );

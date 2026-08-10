@@ -119,7 +119,7 @@ export default function OutletPickupTab({
             <Card>
               <h3 className="text-sm font-semibold mb-1">Pickup Settings</h3>
               <p className="text-xs text-zinc-400 mb-4">
-                These apply shop-wide, across every outlet — not just this one.
+                These apply shop-wide, across every outlet, not just this one.
               </p>
 
               <div className="space-y-6">

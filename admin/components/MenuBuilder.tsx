@@ -165,9 +165,9 @@ export default function MenuBuilder() {
   return (
     <div className="space-y-3">
       {items.length === 0 && editingId === null ? (
-        <p className="text-sm text-zinc-400">No menu items yet — the storefront falls back to an automatic list of top-level collections.</p>
+        <p className="text-sm text-zinc-400">No menu items yet. The storefront falls back to an automatic list of top-level collections.</p>
       ) : (
-        <div className="rounded-lg border dark:border-white/10 divide-y divide-black/5 dark:divide-white/10 overflow-hidden">
+        <div className="rounded-lg border border-black/10 dark:border-white/10 divide-y divide-black/5 dark:divide-white/10 overflow-hidden">
           {items.map((item) => (
             <div
               key={item.id}
@@ -216,7 +216,7 @@ export default function MenuBuilder() {
       )}
 
       {editingId !== null ? (
-        <div className="rounded-lg border dark:border-white/10 p-3 space-y-3">
+        <div className="rounded-lg border border-black/10 dark:border-white/10 p-3 space-y-3">
           <Input label="Label" value={label} onChange={(e) => setLabel(e.target.value)} />
           <SegmentedToggle
             value={type}

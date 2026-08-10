@@ -46,7 +46,7 @@ function ResetPasswordContent() {
     return (
       <StorefrontPageShell variant="narrow">
         <div className={AUTH_CARD_CLASS}>
-          <p className="text-sm text-zinc-500">Password updated — redirecting you to sign in…</p>
+          <p className="text-sm text-zinc-500">Password updated. Redirecting you to sign in…</p>
         </div>
       </StorefrontPageShell>
     );

@@ -99,7 +99,7 @@ export default function DraftOrderDetailPage() {
       ) : draft.status === "OPEN" ? (
         <>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h1 className="text-2xl font-semibold">Draft order — {draft.customerName}</h1>
+            <h1 className="text-2xl font-semibold">Draft order for {draft.customerName}</h1>
             <div className="flex gap-2">
               <Button variant="danger" onClick={handleCancel} disabled={busy}>
                 Cancel order
@@ -118,7 +118,7 @@ export default function DraftOrderDetailPage() {
         <PageShell variant="form">
           <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <h1 className="text-2xl font-semibold">Draft order — {draft.customerName}</h1>
+              <h1 className="text-2xl font-semibold">Draft order for {draft.customerName}</h1>
               <span className="text-sm font-medium">{DRAFT_ORDER_STATUS_LABELS[draft.status]}</span>
             </div>
 
@@ -134,7 +134,7 @@ export default function DraftOrderDetailPage() {
                   <div key={item.id} className="flex items-center justify-between py-2 text-sm">
                     <span>
                       {item.productName}
-                      {item.variantLabel ? ` — ${item.variantLabel}` : ""} × {item.quantity}
+                      {item.variantLabel ? ` · ${item.variantLabel}` : ""} × {item.quantity}
                     </span>
                     <span>{(Number(item.price) * item.quantity).toFixed(2)} AED</span>
                   </div>
@@ -158,7 +158,7 @@ export default function DraftOrderDetailPage() {
                   <Link href={`/orders/${draft.convertedOrder.id}`} className="text-accent-text hover:underline">
                     Order #{draft.convertedOrder.id}
                   </Link>{" "}
-                  — {draft.convertedOrder.paymentStatus === "paid" ? "Paid" : "Unpaid"}
+                  ({draft.convertedOrder.paymentStatus === "paid" ? "Paid" : "Unpaid"})
                 </p>
                 {paymentLinkUrl && (
                   <div className="flex items-center gap-2 mt-2">

@@ -56,7 +56,7 @@ export default function AssignBranchRoleModal({
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <p className="text-sm text-zinc-500 -mt-2 mb-4">
-          Overrides this staff member&apos;s access at one specific outlet only — their access at every
+          Overrides this staff member&apos;s access at one specific outlet only. Their access at every
           other outlet is unaffected.
         </p>
 

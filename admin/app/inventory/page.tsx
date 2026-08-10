@@ -95,9 +95,8 @@ export default function IngredientsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
+      <BranchBar left={<BackButton href="/" />} />
       <InventoryTabs />
-      <BranchBar />
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Ingredients</h1>
         <div className="flex items-center gap-2">
@@ -214,7 +213,7 @@ export default function IngredientsPage() {
                       <span>{ingredient.name}</span>
                     </div>
                   </TD>
-                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "—"}</TD>
+                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "-"}</TD>
                   <TD className="text-zinc-500">{ingredient.unit}</TD>
                   <TD>
                     {ingredient.stockQuantity !== null ? (
@@ -226,7 +225,7 @@ export default function IngredientsPage() {
                         }
                       >
                         {ingredient.stockQuantity} {ingredient.unit}
-                        {lowStock ? " — low stock" : ""}
+                        {lowStock ? " (low stock)" : ""}
                       </span>
                     ) : (
                       <span className="text-zinc-400">Pick a branch to see stock</span>
