@@ -4,11 +4,11 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 
 describe('Health checks (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -23,11 +23,10 @@ describe('Health checks (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -48,7 +47,7 @@ describe('Health checks (e2e)', () => {
 
     it('returns 503 with a public-safe body (no stack, no error detail) when the database is unreachable', async () => {
       const spy = jest
-        .spyOn(prisma, '$queryRaw')
+        .spyOn(db, 'query')
         .mockRejectedValue(new Error('ECONNREFUSED — this must never reach the client'));
       try {
         const res = await request(app.getHttpServer())

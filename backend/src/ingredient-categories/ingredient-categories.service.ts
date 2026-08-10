@@ -3,7 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { IngredientcategoryRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateIngredientCategoryDto } from './dto/create-ingredient-category.dto';
 import { UpdateIngredientCategoryDto } from './dto/update-ingredient-category.dto';
@@ -16,21 +19,23 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 @Injectable()
 export class IngredientCategoriesService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
   findAll(ctx: TenantContext) {
-    return this.prisma.ingredientcategory.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: { name: 'asc' },
-    });
+    return this.db.query<(IngredientcategoryRow & RowDataPacket)[]>(
+      `SELECT * FROM ingredientcategory WHERE shopId = ? ORDER BY name ASC`,
+      [ctx.shopId],
+    );
   }
 
   async create(ctx: TenantContext, dto: CreateIngredientCategoryDto) {
-    return this.prisma.ingredientcategory.create({
-      data: { shopId: ctx.shopId, name: dto.name },
-    });
+    const result = await this.db.execute(
+      `INSERT INTO ingredientcategory (shopId, name) VALUES (?, ?)`,
+      [ctx.shopId, dto.name],
+    );
+    return this.findById(result.insertId);
   }
 
   async update(
@@ -39,25 +44,31 @@ export class IngredientCategoriesService {
     dto: UpdateIngredientCategoryDto,
   ) {
     await this.findOne(ctx, id);
-    return this.prisma.ingredientcategory.update({
-      where: { id },
-      data: { name: dto.name },
-    });
+    const set = buildSetClause({ name: dto.name });
+    if (set) {
+      await this.db.execute(
+        `UPDATE ingredientcategory SET ${set.setClause} WHERE id = ?`,
+        [...set.params, id],
+      );
+    }
+    return this.findById(id);
   }
 
   async remove(ctx: TenantContext, id: number) {
     const category = await this.findOne(ctx, id);
 
-    const ingredientCount = await this.prisma.ingredient.count({
-      where: { categoryId: id },
-    });
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM ingredient WHERE categoryId = ?`,
+      [id],
+    );
+    const ingredientCount = Number(countRows[0].c);
     if (ingredientCount > 0) {
       throw new ConflictException(
         `Cannot delete: this category has ${ingredientCount} ingredient${ingredientCount === 1 ? '' : 's'} assigned. Reassign or remove them first.`,
       );
     }
 
-    await this.prisma.ingredientcategory.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM ingredientcategory WHERE id = ?`, [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'ingredient_category.deleted',
       entityType: 'ingredientcategory',
@@ -67,13 +78,22 @@ export class IngredientCategoriesService {
     return { id, deleted: true };
   }
 
+  private async findById(id: number) {
+    const rows = await this.db.query<(IngredientcategoryRow & RowDataPacket)[]>(
+      `SELECT * FROM ingredientcategory WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
   private async findOne(ctx: TenantContext, id: number) {
-    const category = await this.prisma.ingredientcategory.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!category) {
+    const rows = await this.db.query<(IngredientcategoryRow & RowDataPacket)[]>(
+      `SELECT * FROM ingredientcategory WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Ingredient category ${id} not found`);
     }
-    return category;
+    return rows[0];
   }
 }

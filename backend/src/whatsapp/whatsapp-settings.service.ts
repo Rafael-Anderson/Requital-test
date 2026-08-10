@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { decrypt, encrypt } from '../common/crypto';
 import type { TenantContext } from '../common/tenant-context';
 import { WHATSAPP_CREDENTIAL_FIELDS } from './whatsapp-credential-fields';
@@ -22,14 +23,17 @@ function maskValue(value: string): string {
 // among several).
 @Injectable()
 export class WhatsAppSettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async find(ctx: TenantContext): Promise<WhatsAppSettingsResponse> {
-    const shop = await this.prisma.shop.findUniqueOrThrow({
-      where: { id: ctx.shopId },
-      select: { whatsappCredentials: true },
-    });
-    return this.toResponse(shop.whatsappCredentials);
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT whatsappCredentials FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    if (rows.length === 0) {
+      throw new NotFoundException(`Shop ${ctx.shopId} not found`);
+    }
+    return this.toResponse(rows[0].whatsappCredentials as string | null);
   }
 
   async setCredentials(
@@ -42,20 +46,19 @@ export class WhatsAppSettingsService {
         accessToken: dto.accessToken,
       }),
     );
-    await this.prisma.shop.update({
-      where: { id: ctx.shopId },
-      data: { whatsappCredentials: encrypted },
-    });
+    await this.db.execute(`UPDATE shop SET whatsappCredentials = ? WHERE id = ?`, [
+      encrypted,
+      ctx.shopId,
+    ]);
     return this.find(ctx);
   }
 
   async clearCredentials(
     ctx: TenantContext,
   ): Promise<WhatsAppSettingsResponse> {
-    await this.prisma.shop.update({
-      where: { id: ctx.shopId },
-      data: { whatsappCredentials: null },
-    });
+    await this.db.execute(`UPDATE shop SET whatsappCredentials = NULL WHERE id = ?`, [
+      ctx.shopId,
+    ]);
     return this.find(ctx);
   }
 
@@ -65,15 +68,16 @@ export class WhatsAppSettingsService {
   async resolveCredentials(
     shopId: number,
   ): Promise<Record<string, string> | null> {
-    const shop = await this.prisma.shop.findUnique({
-      where: { id: shopId },
-      select: { whatsappCredentials: true },
-    });
-    if (!shop?.whatsappCredentials) return null;
-    return JSON.parse(decrypt(shop.whatsappCredentials)) as Record<
-      string,
-      string
-    >;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT whatsappCredentials FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    const whatsappCredentials = rows[0]?.whatsappCredentials as
+      | string
+      | null
+      | undefined;
+    if (!whatsappCredentials) return null;
+    return JSON.parse(decrypt(whatsappCredentials)) as Record<string, string>;
   }
 
   private toResponse(encrypted: string | null): WhatsAppSettingsResponse {

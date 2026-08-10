@@ -3,15 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ExternaldeliveryRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateExternalDeliveryDto } from './dto/create-external-delivery.dto';
 import { UpdateExternalDeliveryDto } from './dto/update-external-delivery.dto';
 
 @Injectable()
 export class ExternalDeliveriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async create(
     ctx: TenantContext,
@@ -20,21 +23,21 @@ export class ExternalDeliveriesService {
   ) {
     await this.assertOrderBelongsToShop(ctx, orderId);
     try {
-      return await this.prisma.externaldelivery.create({
-        data: {
+      const result = await this.db.execute(
+        `INSERT INTO externaldelivery (orderId, carrier, vehicleType, price, destination, status)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
           orderId,
-          carrier: dto.carrier,
-          vehicleType: dto.vehicleType,
-          price: dto.price,
-          destination: dto.destination,
-          status: dto.status ?? 'pending',
-        },
-      });
+          dto.carrier,
+          dto.vehicleType ?? null,
+          dto.price,
+          dto.destination,
+          dto.status ?? 'pending',
+        ],
+      );
+      return this.findById(result.insertId);
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (isDuplicateKeyError(error)) {
         // One record per order, by design — see the schema comment.
         throw new ConflictException(
           'This order already has an external delivery logged',
@@ -50,25 +53,50 @@ export class ExternalDeliveriesService {
     dto: UpdateExternalDeliveryDto,
   ) {
     await this.assertOrderBelongsToShop(ctx, orderId);
-    const existing = await this.prisma.externaldelivery.findUnique({
-      where: { orderId },
-    });
+    const existing = await this.findByOrderId(orderId);
     if (!existing) {
       throw new NotFoundException(
         'No external delivery logged for this order yet',
       );
     }
-    return this.prisma.externaldelivery.update({
-      where: { orderId },
-      data: dto,
+    const set = buildSetClause({
+      status: dto.status,
+      carrier: dto.carrier,
+      vehicleType: dto.vehicleType,
+      price: dto.price,
+      destination: dto.destination,
     });
+    if (set) {
+      await this.db.execute(
+        `UPDATE externaldelivery SET ${set.setClause} WHERE orderId = ?`,
+        [...set.params, orderId],
+      );
+    }
+    return this.findByOrderId(orderId);
+  }
+
+  private async findById(id: number) {
+    const rows = await this.db.query<(ExternaldeliveryRow & RowDataPacket)[]>(
+      `SELECT * FROM externaldelivery WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
+  private async findByOrderId(orderId: number) {
+    const rows = await this.db.query<(ExternaldeliveryRow & RowDataPacket)[]>(
+      `SELECT * FROM externaldelivery WHERE orderId = ?`,
+      [orderId],
+    );
+    return rows[0];
   }
 
   private async assertOrderBelongsToShop(ctx: TenantContext, orderId: number) {
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, shopId: ctx.shopId },
-    });
-    if (!order) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Order ${orderId} not found`);
     }
   }

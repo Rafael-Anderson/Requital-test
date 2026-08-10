@@ -2,18 +2,24 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ShopRow } from '../db/types';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { SOCIAL_PLATFORM_DOMAINS, SOCIAL_PLATFORMS } from './constants';
 import type { TenantContext } from '../common/tenant-context';
 
 @Injectable()
 export class ShopService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
-  findOne(ctx: TenantContext) {
-    return this.prisma.shop.findUniqueOrThrow({ where: { id: ctx.shopId } });
+  async findOne(ctx: TenantContext) {
+    const shop = await this.findById(ctx.shopId);
+    if (!shop) throw new NotFoundException(`Shop ${ctx.shopId} not found`);
+    return shop;
   }
 
   // Same proxy the migration backfill used for existing shops (see
@@ -27,18 +33,15 @@ export class ShopService {
   async getPublishReadiness(
     ctx: TenantContext,
   ): Promise<{ ready: boolean; missing: string[] }> {
-    const [hasReadyOutlet, hasProduct, actingUser] = await Promise.all([
-      this.prisma.outlet.findFirst({
-        where: {
-          shopId: ctx.shopId,
-          OR: [{ deliveryEnabled: true }, { pickupEnabled: true }],
-        },
-        select: { id: true },
-      }),
-      this.prisma.product.findFirst({
-        where: { shopId: ctx.shopId },
-        select: { id: true },
-      }),
+    const [outletRows, productRows, userRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT id FROM outlet WHERE shopId = ? AND (deliveryEnabled = true OR pickupEnabled = true) LIMIT 1`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id FROM product WHERE shopId = ? LIMIT 1`,
+        [ctx.shopId],
+      ),
       // Conservative enforcement point for "email verification blocks
       // nothing" (docs/audit-2026-08.md §1.1): rather than blocking login
       // (which would lock a legitimate merchant out of their own account
@@ -47,16 +50,19 @@ export class ShopService {
       // acting user specifically, not "any admin on the shop" — the person
       // publishing is the one who needs to have proven control of their own
       // login email.
-      this.prisma.user.findUniqueOrThrow({
-        where: { id: ctx.userId },
-        select: { emailVerified: true },
-      }),
+      this.db.query<RowDataPacket[]>(
+        `SELECT emailVerified FROM user WHERE id = ?`,
+        [ctx.userId],
+      ),
     ]);
+    if (userRows.length === 0) {
+      throw new NotFoundException(`User ${ctx.userId} not found`);
+    }
     const missing: string[] = [];
-    if (!hasProduct) missing.push('Add at least one product');
-    if (!hasReadyOutlet)
+    if (productRows.length === 0) missing.push('Add at least one product');
+    if (outletRows.length === 0)
       missing.push('Enable delivery or pickup on at least one outlet');
-    if (!actingUser.emailVerified) missing.push('Verify your account email');
+    if (!userRows[0].emailVerified) missing.push('Verify your account email');
     return { ready: missing.length === 0, missing };
   }
 
@@ -72,9 +78,7 @@ export class ShopService {
     // which doesn't fit here since country must stay settable once). A
     // same-value re-save is a no-op, not a conflict.
     if (dto.country !== undefined) {
-      const current = await this.prisma.shop.findUniqueOrThrow({
-        where: { id: ctx.shopId },
-      });
+      const current = await this.findOne(ctx);
       if (current.country && current.country !== dto.country) {
         throw new ConflictException('Country cannot be changed once set.');
       }
@@ -86,9 +90,7 @@ export class ShopService {
       // whatever) must never get silently unpublished by an unrelated
       // update, and a merchant re-saving {published: true} on an
       // already-live shop shouldn't suddenly hit a readiness error either.
-      const current = await this.prisma.shop.findUniqueOrThrow({
-        where: { id: ctx.shopId },
-      });
+      const current = await this.findOne(ctx);
       if (!current.published) {
         const readiness = await this.getPublishReadiness(ctx);
         if (!readiness.ready) {
@@ -115,9 +117,7 @@ export class ShopService {
       // Checked against the merged (existing + incoming) state, not just
       // this request's fields — a partial update that only sends one method
       // must still know whether the other two are already on.
-      const current = await this.prisma.shop.findUniqueOrThrow({
-        where: { id: ctx.shopId },
-      });
+      const current = await this.findOne(ctx);
       if (touchesDeliveryPayment) {
         this.assertAtLeastOnePaymentMethod('delivery', [
           dto.deliveryPaymentCardOnline ?? current.deliveryPaymentCardOnline,
@@ -136,7 +136,87 @@ export class ShopService {
       }
     }
 
-    return this.prisma.shop.update({ where: { id: ctx.shopId }, data: dto });
+    const set = buildSetClause({
+      published: dto.published,
+      name: dto.name,
+      currency: dto.currency,
+      displayName: dto.displayName,
+      legalName: dto.legalName,
+      trademarkFormat: dto.trademarkFormat,
+      logoUrl: dto.logoUrl,
+      email: dto.email,
+      whatsappCountryCode: dto.whatsappCountryCode,
+      whatsappNumber: dto.whatsappNumber,
+      description: dto.description,
+      country: dto.country,
+      address: dto.address,
+      timezone: dto.timezone,
+      notifyWhatsapp: dto.notifyWhatsapp,
+      notifyCustomersWhatsapp: dto.notifyCustomersWhatsapp,
+      notifyEmail: dto.notifyEmail,
+      notifyAbandonedCart: dto.notifyAbandonedCart,
+      abandonedCartWindowMinutes: dto.abandonedCartWindowMinutes,
+      notifyLowStockDigest: dto.notifyLowStockDigest,
+      autoDeductIngredientStock: dto.autoDeductIngredientStock,
+      businessType: dto.businessType,
+      defaultLanguage: dto.defaultLanguage,
+      defaultDeliveryFee: dto.defaultDeliveryFee,
+      taxDisplayText: dto.taxDisplayText,
+      productDisplayOrientation: dto.productDisplayOrientation,
+      productImageZoomEnabled: dto.productImageZoomEnabled,
+      showCollectionMenu: dto.showCollectionMenu,
+      allowPreOrders: dto.allowPreOrders,
+      customerConfirmationRequired: dto.customerConfirmationRequired,
+      externalDeliveryEnabled: dto.externalDeliveryEnabled,
+      asapDeliveryEnabled: dto.asapDeliveryEnabled,
+      deliveryCalendarEnabled: dto.deliveryCalendarEnabled,
+      businessHours: dto.businessHours,
+      whatsappFloatingButtonEnabled: dto.whatsappFloatingButtonEnabled,
+      birthdayDiscountEnabled: dto.birthdayDiscountEnabled,
+      productEditorMode: dto.productEditorMode,
+      customerSurveyEnabled: dto.customerSurveyEnabled,
+      dynamicThemeBuilderEnabled: dto.dynamicThemeBuilderEnabled,
+      disableStoreCart: dto.disableStoreCart,
+      cartDisabledMode: dto.cartDisabledMode,
+      socialLinks: dto.socialLinks ? JSON.stringify(dto.socialLinks) : undefined,
+      deliveryPaymentCardOnline: dto.deliveryPaymentCardOnline,
+      deliveryPaymentCashOnDelivery: dto.deliveryPaymentCashOnDelivery,
+      deliveryPaymentCardOnDelivery: dto.deliveryPaymentCardOnDelivery,
+      pickupPaymentCardOnline: dto.pickupPaymentCardOnline,
+      pickupPaymentCashOnPickup: dto.pickupPaymentCashOnPickup,
+      pickupPaymentCardOnPickup: dto.pickupPaymentCardOnPickup,
+      deliveryHours: dto.deliveryHours ? JSON.stringify(dto.deliveryHours) : undefined,
+      pickupHours: dto.pickupHours ? JSON.stringify(dto.pickupHours) : undefined,
+      deliveryTimeSlotGapMinutes: dto.deliveryTimeSlotGapMinutes,
+      deliveryPreparationTimeMinutes: dto.deliveryPreparationTimeMinutes,
+      deliveryPreparationPlusDeliveryTimeMinutes:
+        dto.deliveryPreparationPlusDeliveryTimeMinutes,
+      estimatedDeliveryTimeFrom: dto.estimatedDeliveryTimeFrom,
+      estimatedDeliveryTimeTo: dto.estimatedDeliveryTimeTo,
+      estimatedDeliveryTimeUnit: dto.estimatedDeliveryTimeUnit,
+      pickupTimeSlotGapMinutes: dto.pickupTimeSlotGapMinutes,
+      pickupPreparationTimeMinutes: dto.pickupPreparationTimeMinutes,
+      pickupPreparationPlusTimeMinutes: dto.pickupPreparationPlusTimeMinutes,
+      allowSameDayOrders: dto.allowSameDayOrders,
+      allowNextDayOrders: dto.allowNextDayOrders,
+      taxRate: dto.taxRate,
+      taxInclusive: dto.taxInclusive,
+    });
+    if (set) {
+      await this.db.execute(`UPDATE shop SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        ctx.shopId,
+      ]);
+    }
+    return this.findOne(ctx);
+  }
+
+  private async findById(id: number): Promise<(ShopRow & RowDataPacket) | undefined> {
+    const rows = await this.db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 
   // Key must be a known platform; value must be a syntactically valid
