@@ -8,8 +8,9 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import { customer as CustomerModel } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { CustomerRow, ShopRow } from '../db/types';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 import { JobsService } from '../jobs/jobs.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
@@ -43,7 +44,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 @Injectable()
 export class CustomerAuthService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly jwtService: JwtService,
     private readonly jobsService: JobsService,
   ) {}
@@ -62,23 +63,22 @@ export class CustomerAuthService {
       // check, scoped to already-registered accounts only (two different
       // guest checkouts sharing an email is harmless and pre-existing;
       // login-by-email needs uniqueness only among *registered* rows).
-      const emailTaken = await this.prisma.customer.findFirst({
-        where: {
-          shopId: shop.id,
-          email: dto.email,
-          passwordHash: { not: null },
-        },
-      });
-      if (emailTaken) {
+      const emailTakenRows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM customer WHERE shopId = ? AND email = ? AND passwordHash IS NOT NULL`,
+        [shop.id, dto.email],
+      );
+      if (emailTakenRows.length > 0) {
         throw new ConflictException(
           'An account with this email already exists',
         );
       }
     }
 
-    const existing = await this.prisma.customer.findUnique({
-      where: { shopId_phone: { shopId: shop.id, phone: dto.phone } },
-    });
+    const existingRows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
+      [shop.id, dto.phone],
+    );
+    const existing = existingRows[0];
     if (existing?.passwordHash) {
       throw new ConflictException(
         'An account with this phone number already exists',
@@ -86,30 +86,32 @@ export class CustomerAuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
-    const customer = existing
-      ? await this.prisma.customer.update({
-          where: { id: existing.id },
-          data: {
-            passwordHash,
-            registeredAt: new Date(),
-            // A guest checkout's captured name/email might be stale or
-            // absent by the time they register — the name/email given at
-            // registration wins.
-            name: dto.name,
-            email: dto.email ?? existing.email,
-          },
-        })
-      : await this.prisma.customer.create({
-          data: {
-            shopId: shop.id,
-            name: dto.name,
-            phone: dto.phone,
-            email: dto.email,
-            passwordHash,
-            registeredAt: new Date(),
-          },
-        });
+    let customerId: number;
+    if (existing) {
+      await this.db.execute(
+        `UPDATE customer SET passwordHash = ?, registeredAt = ?, name = ?, email = ? WHERE id = ?`,
+        [
+          passwordHash,
+          new Date(),
+          // A guest checkout's captured name/email might be stale or
+          // absent by the time they register — the name/email given at
+          // registration wins.
+          dto.name,
+          dto.email ?? existing.email,
+          existing.id,
+        ],
+      );
+      customerId = existing.id;
+    } else {
+      const result = await this.db.execute(
+        `INSERT INTO customer (shopId, name, phone, email, passwordHash, registeredAt)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [shop.id, dto.name, dto.phone, dto.email ?? null, passwordHash, new Date()],
+      );
+      customerId = result.insertId;
+    }
 
+    const customer = await this.findCustomerByIdOrThrow(customerId);
     return this.issueTokenPair(customer);
   }
 
@@ -121,12 +123,11 @@ export class CustomerAuthService {
   // counter to maintain.
   async login(shopSlug: string, dto: LoginCustomerDto) {
     const shop = await this.resolveShop(shopSlug);
-    const customer = await this.prisma.customer.findFirst({
-      where: {
-        shopId: shop.id,
-        OR: [{ phone: dto.identifier }, { email: dto.identifier }],
-      },
-    });
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE shopId = ? AND (phone = ? OR email = ?)`,
+      [shop.id, dto.identifier, dto.identifier],
+    );
+    const customer = rows[0];
 
     if (customer?.passwordHash && this.isWithinLoginCooldown(customer)) {
       throw new UnauthorizedException('Invalid phone/email or password');
@@ -137,22 +138,19 @@ export class CustomerAuthService {
       !(await bcrypt.compare(dto.password, customer.passwordHash))
     ) {
       if (customer?.passwordHash) {
-        await this.prisma.customer.update({
-          where: { id: customer.id },
-          data: {
-            failedLoginAttempts: { increment: 1 },
-            lastFailedLoginAt: new Date(),
-          },
-        });
+        await this.db.execute(
+          `UPDATE customer SET failedLoginAttempts = failedLoginAttempts + 1, lastFailedLoginAt = ? WHERE id = ?`,
+          [new Date(), customer.id],
+        );
       }
       throw new UnauthorizedException('Invalid phone/email or password');
     }
 
     if (customer.failedLoginAttempts > 0) {
-      await this.prisma.customer.update({
-        where: { id: customer.id },
-        data: { failedLoginAttempts: 0, lastFailedLoginAt: null },
-      });
+      await this.db.execute(
+        `UPDATE customer SET failedLoginAttempts = 0, lastFailedLoginAt = NULL WHERE id = ?`,
+        [customer.id],
+      );
     }
     return this.issueTokenPair(customer);
   }
@@ -179,50 +177,52 @@ export class CustomerAuthService {
   async refresh(shopSlug: string, dto: RefreshCustomerTokenDto) {
     const shop = await this.resolveShop(shopSlug);
     const tokenHash = hashToken(dto.refreshToken);
-    const stored = await this.prisma.customerrefreshtoken.findUnique({
-      where: { tokenHash },
-    });
+    const storedRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM customerrefreshtoken WHERE tokenHash = ?`,
+      [tokenHash],
+    );
+    const stored = storedRows[0];
     if (!stored) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    if (stored.expiresAt < new Date()) {
+    if ((stored.expiresAt as Date) < new Date()) {
       throw new UnauthorizedException('Refresh token expired');
     }
 
     // Same rotate-via-CAS + kill-the-family-on-reuse pattern as
     // AuthService.refresh — see its comment for the full reasoning.
-    const claimed = await this.prisma.customerrefreshtoken.updateMany({
-      where: { id: stored.id, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    if (claimed.count === 0) {
-      await this.prisma.customerrefreshtoken.updateMany({
-        where: { familyId: stored.familyId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+    const claimed = await this.db.execute(
+      `UPDATE customerrefreshtoken SET revokedAt = ? WHERE id = ? AND revokedAt IS NULL`,
+      [new Date(), stored.id],
+    );
+    if (claimed.affectedRows === 0) {
+      await this.db.execute(
+        `UPDATE customerrefreshtoken SET revokedAt = ? WHERE familyId = ? AND revokedAt IS NULL`,
+        [new Date(), stored.familyId],
+      );
       throw new UnauthorizedException(
         'Refresh token reuse detected — all sessions revoked, please log in again',
       );
     }
 
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: stored.customerId },
-    });
+    const customer = await this.findCustomerById(stored.customerId as number);
     if (!customer?.passwordHash || customer.shopId !== shop.id) {
       throw new UnauthorizedException('Account no longer exists');
     }
-    return this.issueTokenPair(customer, stored.familyId);
+    return this.issueTokenPair(customer, stored.familyId as string);
   }
 
   async logout(dto: RefreshCustomerTokenDto) {
-    const stored = await this.prisma.customerrefreshtoken.findUnique({
-      where: { tokenHash: hashToken(dto.refreshToken) },
-    });
+    const storedRows = await this.db.query<RowDataPacket[]>(
+      `SELECT familyId FROM customerrefreshtoken WHERE tokenHash = ?`,
+      [hashToken(dto.refreshToken)],
+    );
+    const stored = storedRows[0];
     if (stored) {
-      await this.prisma.customerrefreshtoken.updateMany({
-        where: { familyId: stored.familyId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      await this.db.execute(
+        `UPDATE customerrefreshtoken SET revokedAt = ? WHERE familyId = ? AND revokedAt IS NULL`,
+        [new Date(), stored.familyId],
+      );
     }
     return { success: true };
   }
@@ -240,24 +240,25 @@ export class CustomerAuthService {
   // than building an SMS-OTP flow that wasn't asked for.
   async forgotPassword(shopSlug: string, dto: ForgotCustomerPasswordDto) {
     const shop = await this.resolveShop(shopSlug);
-    const customer = await this.prisma.customer.findFirst({
-      where: { shopId: shop.id, email: dto.email, passwordHash: { not: null } },
-    });
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE shopId = ? AND email = ? AND passwordHash IS NOT NULL`,
+      [shop.id, dto.email],
+    );
+    const customer = rows[0];
     if (!customer) {
       return { success: true };
     }
 
     const raw = generateOpaqueToken();
-    await this.prisma.customerauthtoken.create({
-      data: {
-        customerId: customer.id,
-        purpose: 'password_reset',
-        tokenHash: hashToken(raw),
-        expiresAt: new Date(
-          Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000,
-        ),
-      },
-    });
+    await this.db.execute(
+      `INSERT INTO customerauthtoken (customerId, purpose, tokenHash, expiresAt) VALUES (?, ?, ?, ?)`,
+      [
+        customer.id,
+        'password_reset',
+        hashToken(raw),
+        new Date(Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000),
+      ],
+    );
     const resetLink = `${STOREFRONT_URL}/${shopSlug}/account/reset-password?token=${raw}`;
     await this.jobsService.enqueue(
       shop.id,
@@ -274,66 +275,88 @@ export class CustomerAuthService {
   }
 
   async resetPassword(dto: ResetCustomerPasswordDto) {
-    const stored = await this.prisma.customerauthtoken.findUnique({
-      where: { tokenHash: hashToken(dto.token) },
-    });
+    const storedRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM customerauthtoken WHERE tokenHash = ?`,
+      [hashToken(dto.token)],
+    );
+    const stored = storedRows[0];
     if (
       !stored ||
       stored.purpose !== 'password_reset' ||
-      stored.expiresAt < new Date()
+      (stored.expiresAt as Date) < new Date()
     ) {
       throw new BadRequestException(
         'This reset link is invalid or has expired',
       );
     }
-    const claimed = await this.prisma.customerauthtoken.updateMany({
-      where: { id: stored.id, usedAt: null },
-      data: { usedAt: new Date() },
-    });
-    if (claimed.count === 0) {
+    const claimed = await this.db.execute(
+      `UPDATE customerauthtoken SET usedAt = ? WHERE id = ? AND usedAt IS NULL`,
+      [new Date(), stored.id],
+    );
+    if (claimed.affectedRows === 0) {
       throw new BadRequestException('This reset link has already been used');
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
-    await this.prisma.$transaction([
-      this.prisma.customer.update({
-        where: { id: stored.customerId },
-        data: { passwordHash },
-      }),
-      this.prisma.customerrefreshtoken.updateMany({
-        where: { customerId: stored.customerId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-    ]);
+    const customerId = stored.customerId as number;
+    await this.db.transaction(async (conn) => {
+      await conn.query(`UPDATE customer SET passwordHash = ? WHERE id = ?`, [
+        passwordHash,
+        customerId,
+      ]);
+      await conn.query(
+        `UPDATE customerrefreshtoken SET revokedAt = ? WHERE customerId = ? AND revokedAt IS NULL`,
+        [new Date(), customerId],
+      );
+    });
     return { success: true };
   }
 
-  private async resolveShop(shopSlug: string) {
-    const shop = await this.prisma.shop.findUnique({
-      where: { subdomain: shopSlug },
-    });
-    if (!shop) {
+  private async resolveShop(shopSlug: string): Promise<ShopRow & RowDataPacket> {
+    const rows = await this.db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ?`,
+      [shopSlug],
+    );
+    if (!rows[0]) {
       throw new NotFoundException(`Shop '${shopSlug}' not found`);
     }
-    return shop;
+    return rows[0];
   }
 
-  private async issueTokenPair(customer: CustomerModel, familyId?: string) {
+  private async findCustomerById(
+    id: number,
+  ): Promise<(CustomerRow & RowDataPacket) | undefined> {
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
+  private async findCustomerByIdOrThrow(id: number) {
+    const customer = await this.findCustomerById(id);
+    if (!customer) throw new NotFoundException(`Customer ${id} not found`);
+    return customer;
+  }
+
+  private async issueTokenPair(
+    customer: CustomerRow & { id: number },
+    familyId?: string,
+  ) {
     const accessToken = await this.jwtService.signAsync(
       { sub: customer.id, typ: 'customer' },
       { expiresIn: ACCESS_TOKEN_LIFETIME },
     );
     const rawRefreshToken = generateOpaqueToken();
-    await this.prisma.customerrefreshtoken.create({
-      data: {
-        customerId: customer.id,
-        familyId: familyId ?? randomUUID(),
-        tokenHash: hashToken(rawRefreshToken),
-        expiresAt: new Date(
-          Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
-        ),
-      },
-    });
+    await this.db.execute(
+      `INSERT INTO customerrefreshtoken (customerId, familyId, tokenHash, expiresAt) VALUES (?, ?, ?, ?)`,
+      [
+        customer.id,
+        familyId ?? randomUUID(),
+        hashToken(rawRefreshToken),
+        new Date(Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+      ],
+    );
     return {
       accessToken,
       accessTokenExpiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
@@ -342,7 +365,7 @@ export class CustomerAuthService {
     };
   }
 
-  private toCustomerResponse(customer: CustomerModel) {
+  private toCustomerResponse(customer: CustomerRow) {
     const {
       id,
       shopId,

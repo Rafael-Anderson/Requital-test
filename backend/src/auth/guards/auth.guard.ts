@@ -7,7 +7,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
-import { PrismaService } from '../../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../../database/database.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import type { TenantContext, UserRole } from '../../common/tenant-context';
 
@@ -20,7 +21,7 @@ interface JwtPayload {
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly reflector: Reflector,
   ) {}
 
@@ -60,9 +61,11 @@ export class AuthGuard implements CanActivate {
     // different outlet, or deleting the account, takes effect on the very
     // next request rather than lingering for the rest of the token's 7-day
     // lifetime.
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, shopId, role, outletId FROM user WHERE id = ?`,
+      [payload.sub],
+    );
+    const user = rows[0];
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }

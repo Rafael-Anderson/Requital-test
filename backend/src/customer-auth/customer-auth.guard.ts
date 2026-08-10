@@ -7,7 +7,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
 import type { CustomerContext } from './customer-context';
 
 interface CustomerJwtPayload {
@@ -34,7 +35,7 @@ interface CustomerJwtPayload {
 export class CustomerAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -55,9 +56,11 @@ export class CustomerAuthGuard implements CanActivate {
     }
 
     const shopSlug = request.params.shopSlug as string;
-    const shop = await this.prisma.shop.findUnique({
-      where: { subdomain: shopSlug },
-    });
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM shop WHERE subdomain = ?`,
+      [shopSlug],
+    );
+    const shop = shopRows[0];
     if (!shop) {
       throw new NotFoundException(`Shop '${shopSlug}' not found`);
     }
@@ -66,9 +69,11 @@ export class CustomerAuthGuard implements CanActivate {
     // AuthGuard — a password change (which revokes sessions) or the account
     // somehow losing its registration takes effect immediately, not at the
     // end of the access token's lifetime.
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: payload.sub },
-    });
+    const customerRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, shopId, passwordHash FROM customer WHERE id = ?`,
+      [payload.sub],
+    );
+    const customer = customerRows[0];
     if (!customer || !customer.passwordHash) {
       throw new UnauthorizedException('Account no longer exists');
     }

@@ -6,7 +6,7 @@
 import * as bcrypt from 'bcryptjs';
 import { UnauthorizedException } from '@nestjs/common';
 import { CustomerAuthService } from './customer-auth.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { DatabaseService } from '../database/database.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { JobsService } from '../jobs/jobs.service';
 
@@ -34,20 +34,12 @@ function fakeCustomer(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function createMockPrisma(overrides: Record<string, unknown> = {}) {
+function createMockDb() {
   return {
-    shop: {
-      findUnique: jest.fn().mockResolvedValue({ id: 1, subdomain: 'test-shop' }),
-    },
-    customer: {
-      findFirst: jest.fn(),
-      update: jest.fn().mockResolvedValue(fakeCustomer()),
-    },
-    customerrefreshtoken: {
-      create: jest.fn().mockResolvedValue({}),
-    },
-    ...overrides,
-  } as unknown as PrismaService;
+    query: jest.fn(),
+    execute: jest.fn().mockResolvedValue({ affectedRows: 1, insertId: 1 }),
+    transaction: jest.fn(),
+  } as unknown as DatabaseService & { query: jest.Mock; execute: jest.Mock };
 }
 
 function createMockJwt() {
@@ -68,12 +60,14 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       failedLoginAttempts: 2,
       lastFailedLoginAt: new Date(),
     });
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }]) // resolveShop
+      .mockResolvedValueOnce([customer]); // customer lookup
     mockCompare.mockResolvedValue(true);
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );
@@ -82,10 +76,10 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       password: 'correct',
     });
 
-    expect(prisma.customer.update).toHaveBeenCalledWith({
-      where: { id: customer.id },
-      data: { failedLoginAttempts: 0, lastFailedLoginAt: null },
-    });
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringContaining('failedLoginAttempts = 0'),
+      [customer.id],
+    );
   });
 
   it('a wrong password below the lockout threshold still runs bcrypt and records the failure', async () => {
@@ -93,12 +87,14 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       failedLoginAttempts: 1,
       lastFailedLoginAt: null,
     });
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }])
+      .mockResolvedValueOnce([customer]);
     mockCompare.mockResolvedValue(false);
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );
@@ -110,22 +106,21 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(bcrypt.compare).toHaveBeenCalled();
-    expect(prisma.customer.update).toHaveBeenCalledWith({
-      where: { id: customer.id },
-      data: {
-        failedLoginAttempts: { increment: 1 },
-        lastFailedLoginAt: expect.any(Date),
-      },
-    });
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringContaining('failedLoginAttempts = failedLoginAttempts + 1'),
+      [expect.any(Date), customer.id],
+    );
   });
 
   it('a nonexistent identifier is rejected without ever touching bcrypt or the customer table', async () => {
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(null);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }])
+      .mockResolvedValueOnce([]);
     mockCompare.mockClear();
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );
@@ -137,17 +132,19 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(mockCompare).not.toHaveBeenCalled();
-    expect(prisma.customer.update).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('a guest-only row (no passwordHash) is rejected without being tracked — nothing to brute-force', async () => {
     const guestRow = fakeCustomer({ passwordHash: null });
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(guestRow);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }])
+      .mockResolvedValueOnce([guestRow]);
     mockCompare.mockClear();
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );
@@ -159,7 +156,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(mockCompare).not.toHaveBeenCalled();
-    expect(prisma.customer.update).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('is rejected during the cooldown window WITHOUT running bcrypt, even with the correct password', async () => {
@@ -167,13 +164,15 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       failedLoginAttempts: 5,
       lastFailedLoginAt: new Date(Date.now() - 500), // 0.5s ago, inside the 2s window
     });
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }])
+      .mockResolvedValueOnce([customer]);
     mockCompare.mockClear();
     mockCompare.mockResolvedValue(true); // even the "right" password
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );
@@ -185,7 +184,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(mockCompare).not.toHaveBeenCalled();
-    expect(prisma.customer.update).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('succeeds once the cooldown window has actually elapsed', async () => {
@@ -193,12 +192,14 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       failedLoginAttempts: 5,
       lastFailedLoginAt: new Date(Date.now() - 3000), // past the 2s window
     });
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }])
+      .mockResolvedValueOnce([customer]);
     mockCompare.mockResolvedValue(true);
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );
@@ -215,12 +216,14 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       failedLoginAttempts: 50,
       lastFailedLoginAt: new Date(Date.now() - 61_000),
     });
-    const prisma = createMockPrisma();
-    (prisma.customer.findFirst as jest.Mock).mockResolvedValue(customer);
+    const db = createMockDb();
+    db.query
+      .mockResolvedValueOnce([{ id: 1, subdomain: 'test-shop' }])
+      .mockResolvedValueOnce([customer]);
     mockCompare.mockResolvedValue(true);
 
     const service = new CustomerAuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockJobsService(),
     );

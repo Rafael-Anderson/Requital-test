@@ -5,8 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { upsert } from '../database/upsert.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import { buildSetClause } from '../database/update.util';
+import type { RowDataPacket } from 'mysql2/promise';
 import type { TenantContext } from '../common/tenant-context';
 import {
   basePermissionsFor,
@@ -17,15 +20,9 @@ import { CreateBranchRoleDto } from './dto/create-branch-role.dto';
 import { UpdateBranchRoleDto } from './dto/update-branch-role.dto';
 import { AssignBranchRoleDto } from './dto/assign-branch-role.dto';
 
-const ASSIGNMENT_INCLUDE = {
-  user: { select: { id: true, name: true, email: true, role: true } },
-  outlet: { select: { id: true, name: true } },
-  branchrole: { select: { id: true, name: true, permissions: true } },
-} satisfies Prisma.useroutletroleInclude;
-
 @Injectable()
 export class BranchRolesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // The layer-on-top mechanism every outlet-scoped module calls before
   // falling back to its existing ctx.role logic. A null return means "no
@@ -44,14 +41,17 @@ export class BranchRolesService {
     ctx: TenantContext,
     outletId: number,
   ): Promise<Set<Permission> | null> {
-    const override = await this.prisma.useroutletrole.findUnique({
-      where: { userId_outletId: { userId: ctx.userId, outletId } },
-      include: { branchrole: { select: { permissions: true } } },
-    });
-    if (!override) return null;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT br.permissions
+       FROM useroutletrole uor
+       JOIN branchrole br ON br.id = uor.branchRoleId
+       WHERE uor.userId = ? AND uor.outletId = ?`,
+      [ctx.userId, outletId],
+    );
+    if (rows.length === 0) return null;
 
     const base = basePermissionsFor(ctx.role);
-    const granted = this.parsePermissions(override.branchrole.permissions);
+    const granted = this.parsePermissions(rows[0].permissions as unknown);
     const effective = new Set<Permission>();
     for (const permission of granted) {
       if (base.has(permission)) effective.add(permission);
@@ -75,7 +75,7 @@ export class BranchRolesService {
     }
   }
 
-  private parsePermissions(raw: Prisma.JsonValue): Permission[] {
+  private parsePermissions(raw: unknown): Permission[] {
     if (!Array.isArray(raw)) return [];
     return raw.filter(isPermission);
   }
@@ -83,21 +83,19 @@ export class BranchRolesService {
   // ---- branchrole bundle CRUD (admin-only, shop-scoped) ----
 
   async findAllRoles(ctx: TenantContext) {
-    return this.prisma.branchrole.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: { id: 'asc' },
-    });
+    return this.db.query<RowDataPacket[]>(
+      `SELECT * FROM branchrole WHERE shopId = ? ORDER BY id ASC`,
+      [ctx.shopId],
+    );
   }
 
   async createRole(ctx: TenantContext, dto: CreateBranchRoleDto) {
     try {
-      return await this.prisma.branchrole.create({
-        data: {
-          shopId: ctx.shopId,
-          name: dto.name,
-          permissions: dto.permissions,
-        },
-      });
+      const result = await this.db.execute(
+        `INSERT INTO branchrole (shopId, name, permissions) VALUES (?, ?, ?)`,
+        [ctx.shopId, dto.name, JSON.stringify(dto.permissions)],
+      );
+      return this.findRoleById(result.insertId);
     } catch (error) {
       this.handleRoleWriteError(error);
     }
@@ -106,15 +104,18 @@ export class BranchRolesService {
   async updateRole(ctx: TenantContext, id: number, dto: UpdateBranchRoleDto) {
     await this.assertRoleBelongsToShop(ctx, id);
     try {
-      return await this.prisma.branchrole.update({
-        where: { id },
-        data: {
-          ...(dto.name !== undefined && { name: dto.name }),
-          ...(dto.permissions !== undefined && {
-            permissions: dto.permissions,
-          }),
-        },
+      const set = buildSetClause({
+        name: dto.name,
+        permissions:
+          dto.permissions !== undefined ? JSON.stringify(dto.permissions) : undefined,
       });
+      if (set) {
+        await this.db.execute(`UPDATE branchrole SET ${set.setClause} WHERE id = ?`, [
+          ...set.params,
+          id,
+        ]);
+      }
+      return this.findRoleById(id);
     } catch (error) {
       this.handleRoleWriteError(error);
     }
@@ -127,25 +128,31 @@ export class BranchRolesService {
   // referenced pattern, there's nothing worth preserving here.
   async removeRole(ctx: TenantContext, id: number) {
     await this.assertRoleBelongsToShop(ctx, id);
-    await this.prisma.branchrole.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM branchrole WHERE id = ?`, [id]);
     return { id, deleted: true };
   }
 
+  private async findRoleById(id: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM branchrole WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
   private async assertRoleBelongsToShop(ctx: TenantContext, id: number) {
-    const role = await this.prisma.branchrole.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!role) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM branchrole WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (!rows[0]) {
       throw new NotFoundException(`Branch role ${id} not found`);
     }
-    return role;
+    return rows[0];
   }
 
   private handleRoleWriteError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+    if (isDuplicateKeyError(error)) {
       throw new ConflictException(
         'A branch role with this name already exists',
       );
@@ -156,11 +163,20 @@ export class BranchRolesService {
   // ---- assignment CRUD ----
 
   async listAssignments(ctx: TenantContext) {
-    return this.prisma.useroutletrole.findMany({
-      where: { user: { shopId: ctx.shopId } },
-      include: ASSIGNMENT_INCLUDE,
-      orderBy: { id: 'asc' },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT uor.id, uor.userId, uor.outletId, uor.branchRoleId, uor.createdAt,
+              u.id AS userJoinId, u.name AS userName, u.email AS userEmail, u.role AS userRole,
+              o.id AS outletJoinId, o.name AS outletName,
+              br.id AS branchRoleJoinId, br.name AS branchRoleName, br.permissions AS branchRolePermissions
+       FROM useroutletrole uor
+       JOIN user u ON u.id = uor.userId
+       JOIN outlet o ON o.id = uor.outletId
+       JOIN branchrole br ON br.id = uor.branchRoleId
+       WHERE u.shopId = ?
+       ORDER BY uor.id ASC`,
+      [ctx.shopId],
+    );
+    return rows.map((r) => this.rowToAssignment(r));
   }
 
   // Cross-tenant spoofing is exactly the class of bug this whole feature
@@ -168,46 +184,81 @@ export class BranchRolesService {
   // branchRoleId are each independently verified to belong to ctx.shopId
   // before the assignment is written, not just the outlet.
   async assign(ctx: TenantContext, dto: AssignBranchRoleDto) {
-    const [user, outlet, role] = await Promise.all([
-      this.prisma.user.findFirst({
-        where: { id: dto.userId, shopId: ctx.shopId },
-      }),
-      this.prisma.outlet.findFirst({
-        where: { id: dto.outletId, shopId: ctx.shopId },
-      }),
-      this.prisma.branchrole.findFirst({
-        where: { id: dto.branchRoleId, shopId: ctx.shopId },
-      }),
+    const [userRows, outletRows, roleRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT id FROM user WHERE id = ? AND shopId = ?`,
+        [dto.userId, ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+        [dto.outletId, ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id FROM branchrole WHERE id = ? AND shopId = ?`,
+        [dto.branchRoleId, ctx.shopId],
+      ),
     ]);
-    if (!user)
+    if (userRows.length === 0)
       throw new BadRequestException('User does not belong to this shop');
-    if (!outlet)
+    if (outletRows.length === 0)
       throw new BadRequestException('Outlet does not belong to this shop');
-    if (!role)
+    if (roleRows.length === 0)
       throw new BadRequestException('Branch role does not belong to this shop');
 
-    return this.prisma.useroutletrole.upsert({
-      where: {
-        userId_outletId: { userId: dto.userId, outletId: dto.outletId },
-      },
-      create: {
-        userId: dto.userId,
-        outletId: dto.outletId,
-        branchRoleId: dto.branchRoleId,
-      },
-      update: { branchRoleId: dto.branchRoleId },
-      include: ASSIGNMENT_INCLUDE,
-    });
+    await upsert(
+      this.db.pool,
+      'useroutletrole',
+      { userId: dto.userId, outletId: dto.outletId, branchRoleId: dto.branchRoleId },
+      ['branchRoleId'],
+    );
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT uor.id, uor.userId, uor.outletId, uor.branchRoleId, uor.createdAt,
+              u.id AS userJoinId, u.name AS userName, u.email AS userEmail, u.role AS userRole,
+              o.id AS outletJoinId, o.name AS outletName,
+              br.id AS branchRoleJoinId, br.name AS branchRoleName, br.permissions AS branchRolePermissions
+       FROM useroutletrole uor
+       JOIN user u ON u.id = uor.userId
+       JOIN outlet o ON o.id = uor.outletId
+       JOIN branchrole br ON br.id = uor.branchRoleId
+       WHERE uor.userId = ? AND uor.outletId = ?`,
+      [dto.userId, dto.outletId],
+    );
+    return this.rowToAssignment(rows[0]);
   }
 
   async unassign(ctx: TenantContext, userId: number, outletId: number) {
-    const existing = await this.prisma.useroutletrole.findFirst({
-      where: { userId, outletId, user: { shopId: ctx.shopId } },
-    });
-    if (!existing) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT uor.id FROM useroutletrole uor
+       JOIN user u ON u.id = uor.userId
+       WHERE uor.userId = ? AND uor.outletId = ? AND u.shopId = ?`,
+      [userId, outletId, ctx.shopId],
+    );
+    if (!rows[0]) {
       throw new NotFoundException('Assignment not found');
     }
-    await this.prisma.useroutletrole.delete({ where: { id: existing.id } });
+    await this.db.execute(`DELETE FROM useroutletrole WHERE id = ?`, [rows[0].id]);
     return { userId, outletId, deleted: true };
+  }
+
+  private rowToAssignment(r: RowDataPacket) {
+    return {
+      id: r.id as number,
+      userId: r.userId as number,
+      outletId: r.outletId as number,
+      branchRoleId: r.branchRoleId as number,
+      createdAt: r.createdAt as Date,
+      user: {
+        id: r.userJoinId as number,
+        name: r.userName as string,
+        email: r.userEmail as string,
+        role: r.userRole as string,
+      },
+      outlet: { id: r.outletJoinId as number, name: r.outletName as string },
+      branchrole: {
+        id: r.branchRoleJoinId as number,
+        name: r.branchRoleName as string,
+        permissions: r.branchRolePermissions,
+      },
+    };
   }
 }
