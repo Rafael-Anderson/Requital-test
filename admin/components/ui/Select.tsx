@@ -11,16 +11,20 @@
 // For a searchable picker (long product/collection/outlet lists), use
 // Combobox.tsx instead — <select> has no search.
 import { forwardRef, useId, type ReactNode, type SelectHTMLAttributes } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Info } from "lucide-react";
+import Tooltip from "./Tooltip";
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
+  // Only for fields where the label alone doesn't convey what the setting
+  // does — not every field needs one, see Tooltip.tsx's own call sites.
+  tooltip?: string;
   children: ReactNode;
 }
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, error, className = "", id, multiple, children, ...props },
+  { label, error, tooltip, className = "", id, multiple, children, ...props },
   ref,
 ) {
   const autoId = useId();
@@ -28,12 +32,16 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   return (
     <div>
       {label && (
-        <label
-          htmlFor={selectId}
-          className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5"
-        >
-          {label}
-        </label>
+        <div className="mb-1.5 flex items-center gap-1">
+          <label htmlFor={selectId} className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            {label}
+          </label>
+          {tooltip && (
+            <Tooltip label={tooltip}>
+              <Info className="size-3.5 text-zinc-400" />
+            </Tooltip>
+          )}
+        </div>
       )}
       <div className="relative">
         <select

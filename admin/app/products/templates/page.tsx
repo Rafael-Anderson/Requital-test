@@ -13,6 +13,7 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
+import Tooltip from "@/components/ui/Tooltip";
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[] | null>(null);
@@ -106,22 +107,26 @@ export default function TemplatesPage() {
                   </span>
                 </TD>
                 <TD>
-                  <Link
-                    href={`/products/templates/${c.id}/edit`}
-                    className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                    aria-label={`Edit ${c.title}`}
-                  >
-                    <Pencil className="size-4" />
-                  </Link>
+                  <Tooltip label={`Edit ${c.title}`}>
+                    <Link
+                      href={`/products/templates/${c.id}/edit`}
+                      className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                      aria-label={`Edit ${c.title}`}
+                    >
+                      <Pencil className="size-4" />
+                    </Link>
+                  </Tooltip>
                 </TD>
                 <TD>
-                  <button
-                    onClick={() => handleDelete(c)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                    aria-label={`Delete ${c.title}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <Tooltip label={`Delete ${c.title}. This cannot be undone.`} align="end">
+                    <button
+                      onClick={() => handleDelete(c)}
+                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      aria-label={`Delete ${c.title}`}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </Tooltip>
                 </TD>
               </TR>
             ))

@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
+import Tooltip from "@/components/ui/Tooltip";
 
 const FIELD_CLASS =
   "w-full border rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors";
@@ -83,14 +84,16 @@ export default function FaqsSection({
                   className={`${FIELD_CLASS} resize-y`}
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => removeRow(i)}
-                aria-label="Remove FAQ"
-                className="mt-1 flex items-center justify-center px-1 text-zinc-400 hover:text-red-600 cursor-pointer"
-              >
-                <X className="size-4" />
-              </button>
+              <Tooltip label="Remove this question">
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  aria-label="Remove FAQ"
+                  className="mt-1 flex items-center justify-center px-1 text-zinc-400 hover:text-red-600 cursor-pointer"
+                >
+                  <X className="size-4" />
+                </button>
+              </Tooltip>
             </div>
           ))}
         </div>

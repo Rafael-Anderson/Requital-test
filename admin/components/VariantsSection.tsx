@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import VariantEditModal from "@/components/VariantEditModal";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
 import type { GalleryImage } from "@/components/ProductMediaGallery";
+import Tooltip from "@/components/ui/Tooltip";
 
 interface OptionDraft {
   name: string;
@@ -164,14 +165,16 @@ export default function VariantsSection({
                     placeholder="e.g. Size"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeOption(index)}
-                  aria-label="Remove option"
-                  className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                >
-                  <X className="size-4" />
-                </button>
+                <Tooltip label="Remove this option and every variant it generates">
+                  <button
+                    type="button"
+                    onClick={() => removeOption(index)}
+                    aria-label="Remove option"
+                    className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </Tooltip>
               </div>
               <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
                 Option values
@@ -183,14 +186,16 @@ export default function VariantsSection({
                     className="inline-flex items-center gap-1 rounded-full bg-black/5 dark:bg-white/10 px-2.5 py-1 text-xs"
                   >
                     {value}
-                    <button
-                      type="button"
-                      onClick={() => removeValue(index, value)}
-                      aria-label={`Remove ${value}`}
-                      className="text-zinc-400 hover:text-red-600 cursor-pointer"
-                    >
-                      <X className="size-3" />
-                    </button>
+                    <Tooltip label={`Remove ${value}`}>
+                      <button
+                        type="button"
+                        onClick={() => removeValue(index, value)}
+                        aria-label={`Remove ${value}`}
+                        className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Tooltip>
                   </span>
                 ))}
               </div>
@@ -248,14 +253,16 @@ export default function VariantsSection({
                   <TD>{v.price ?? product.price} AED</TD>
                   <TD className="text-zinc-500">{v.stockQuantity ?? "—"}</TD>
                   <TD>
-                    <button
-                      type="button"
-                      onClick={() => setEditingVariant(v)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Edit ${v.label}`}
-                    >
-                      <Pencil className="size-4" />
-                    </button>
+                    <Tooltip label={`Edit ${v.label}`} align="end">
+                      <button
+                        type="button"
+                        onClick={() => setEditingVariant(v)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        aria-label={`Edit ${v.label}`}
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                 </TR>
               ))}

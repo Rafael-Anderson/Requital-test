@@ -6,6 +6,7 @@ import { resolveImageUrl, uploadThemeImage } from "@/lib/api";
 import type { BannerImage } from "@/lib/types";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 
 // Mirrors ProductMediaGallery's drag-to-reorder/add/remove shape (see that
 // component's own comment — no existing component supported more than one
@@ -83,14 +84,16 @@ export default function BannerImageGallery({
                 placeholder="Optional link (e.g. /templates/sale) — leave blank for no click-through"
                 className="flex-1 h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               />
-              <button
-                type="button"
-                onClick={() => handleRemove(i)}
-                aria-label="Remove banner"
-                className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer shrink-0"
-              >
-                <X className="size-4" />
-              </button>
+              <Tooltip label="Remove this banner">
+                <button
+                  type="button"
+                  onClick={() => handleRemove(i)}
+                  aria-label="Remove banner"
+                  className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer shrink-0"
+                >
+                  <X className="size-4" />
+                </button>
+              </Tooltip>
             </div>
           ))}
         </div>

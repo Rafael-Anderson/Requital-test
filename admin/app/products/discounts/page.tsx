@@ -14,6 +14,7 @@ import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import DiscountFormModal from "@/components/DiscountFormModal";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
+import Tooltip from "@/components/ui/Tooltip";
 
 function formatValidity(from: string | null, until: string | null): string {
   if (!from && !until) return "Always";
@@ -137,22 +138,26 @@ export default function DiscountsPage() {
                   </button>
                 </TD>
                 <TD>
-                  <button
-                    onClick={() => setEditing(d)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                    aria-label={`Edit ${d.code}`}
-                  >
-                    <Pencil className="size-4" />
-                  </button>
+                  <Tooltip label={`Edit ${d.code}`}>
+                    <button
+                      onClick={() => setEditing(d)}
+                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      aria-label={`Edit ${d.code}`}
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                  </Tooltip>
                 </TD>
                 <TD>
-                  <button
-                    onClick={() => handleDelete(d)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                    aria-label={`Delete ${d.code}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <Tooltip label={`Delete ${d.code}. This cannot be undone.`} align="end">
+                    <button
+                      onClick={() => handleDelete(d)}
+                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      aria-label={`Delete ${d.code}`}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </Tooltip>
                 </TD>
               </TR>
             ))
