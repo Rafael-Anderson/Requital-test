@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { ReportsFilterQueryDto } from './dto/reports-filter-query.dto';
 import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
@@ -37,19 +38,9 @@ const PRODUCT_SALES_SORT_COLUMN: Record<string, string> = {
   totalSalePrice: 'totalSalePrice',
 };
 
-interface ProductSalesRow {
-  productId: number;
-  name: string;
-  thumbnail: string;
-  currentPrice: string;
-  orderCount: bigint;
-  totalQuantity: bigint;
-  totalSalePrice: string | null;
-}
-
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // General Report only — no cancelled-exclusion baked in here. Unlike
   // Product Sale Report (which the task explicitly defines as excluding
@@ -62,34 +53,52 @@ export class ReportsService {
   private buildOrderWhere(
     ctx: TenantContext,
     filters: ReportsFilterQueryDto,
-  ): Prisma.orderWhereInput {
-    return {
-      shopId: ctx.shopId,
-      ...(filters.outletId !== undefined && { outletId: filters.outletId }),
-      ...(filters.orderType && { orderType: filters.orderType }),
-      ...(filters.status && { status: filters.status }),
-      ...(filters.paymentMode && { paymentMethod: filters.paymentMode }),
-      ...(filters.channel && { channel: filters.channel }),
-      ...((filters.dateFrom || filters.dateTo) && {
-        createdAt: {
-          ...(filters.dateFrom && { gte: new Date(filters.dateFrom) }),
-          ...(filters.dateTo && { lte: new Date(filters.dateTo) }),
-        },
-      }),
-    };
+    alias = 'o',
+  ): { sql: string; params: QueryParam[] } {
+    const conditions = [`${alias}.shopId = ?`];
+    const params: QueryParam[] = [ctx.shopId];
+    if (filters.outletId !== undefined) {
+      conditions.push(`${alias}.outletId = ?`);
+      params.push(filters.outletId);
+    }
+    if (filters.orderType) {
+      conditions.push(`${alias}.orderType = ?`);
+      params.push(filters.orderType);
+    }
+    if (filters.status) {
+      conditions.push(`${alias}.status = ?`);
+      params.push(filters.status);
+    }
+    if (filters.paymentMode) {
+      conditions.push(`${alias}.paymentMethod = ?`);
+      params.push(filters.paymentMode);
+    }
+    if (filters.channel) {
+      conditions.push(`${alias}.channel = ?`);
+      params.push(filters.channel);
+    }
+    if (filters.dateFrom) {
+      conditions.push(`${alias}.createdAt >= ?`);
+      params.push(new Date(filters.dateFrom));
+    }
+    if (filters.dateTo) {
+      conditions.push(`${alias}.createdAt <= ?`);
+      params.push(new Date(filters.dateTo));
+    }
+    return { sql: conditions.join(' AND '), params };
   }
 
   async getGeneralSummary(ctx: TenantContext, filters: ReportsFilterQueryDto) {
-    const where = this.buildOrderWhere(ctx, filters);
-    const result = await this.prisma.order.aggregate({
-      where,
-      _count: { _all: true },
-      _sum: { total: true, deliveryFee: true },
-    });
-    const grandTotal = Number(result._sum.total ?? 0);
-    const totalDeliveryFee = Number(result._sum.deliveryFee ?? 0);
+    const { sql, params } = this.buildOrderWhere(ctx, filters, 'o');
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c, COALESCE(SUM(total), 0) AS total, COALESCE(SUM(deliveryFee), 0) AS deliveryFee
+       FROM \`order\` o WHERE ${sql}`,
+      params,
+    );
+    const grandTotal = Number(rows[0].total);
+    const totalDeliveryFee = Number(rows[0].deliveryFee);
     return {
-      totalOrders: result._count._all,
+      totalOrders: Number(rows[0].c),
       grandTotal,
       totalPayments: grandTotal - totalDeliveryFee,
       totalDeliveryFee,
@@ -105,48 +114,59 @@ export class ReportsService {
     const search = query.search?.trim();
     const searchAsId =
       search && /^\d+$/.test(search) ? Number(search) : undefined;
-    const where: Prisma.orderWhereInput = {
-      ...this.buildOrderWhere(ctx, query),
-      ...(search && {
-        OR: [
-          { customerName: { contains: search } },
-          { customerPhone: { contains: search } },
-          ...(searchAsId !== undefined ? [{ id: searchAsId }] : []),
-        ],
-      }),
-    };
+    const { sql: whereSql, params: whereParams } = this.buildOrderWhere(
+      ctx,
+      query,
+      'o',
+    );
+    let sql = whereSql;
+    const params = [...whereParams];
+    if (search) {
+      const orParts = ['o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
+      const orParams: QueryParam[] = [`%${search}%`, `%${search}%`];
+      if (searchAsId !== undefined) {
+        orParts.push('o.id = ?');
+        orParams.push(searchAsId);
+      }
+      sql += ` AND (${orParts.join(' OR ')})`;
+      params.push(...orParams);
+    }
 
-    const [orders, total] = await this.prisma.$transaction([
-      this.prisma.order.findMany({
-        where,
-        include: {
-          outlet: { select: { name: true } },
-          customer: { select: { id: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.order.count({ where }),
+    const [orders, totalRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT o.id, o.status, o.customerName, o.customerPhone, o.orderType, o.paymentMethod,
+                o.total, o.channel, o.createdAt, ot.name AS outletName, c.id AS customerId
+         FROM \`order\` o
+         JOIN outlet ot ON ot.id = o.outletId
+         LEFT JOIN customer c ON c.id = o.customerId
+         WHERE ${sql}
+         ORDER BY o.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM \`order\` o WHERE ${sql}`,
+        params,
+      ),
     ]);
 
     return {
       data: orders.map((o) => ({
-        id: o.id,
-        outletName: o.outlet.name,
-        status: o.status,
-        customerId: o.customer?.id ?? null,
-        customerName: o.customerName,
-        customerPhone: o.customerPhone,
-        orderType: o.orderType,
-        paymentMethod: o.paymentMethod,
-        total: o.total,
-        channel: o.channel,
-        createdAt: o.createdAt,
+        id: o.id as number,
+        outletName: o.outletName as string,
+        status: o.status as string,
+        customerId: (o.customerId as number | null) ?? null,
+        customerName: o.customerName as string,
+        customerPhone: o.customerPhone as string,
+        orderType: o.orderType as string | null,
+        paymentMethod: o.paymentMethod as string | null,
+        total: o.total as string,
+        channel: o.channel as string | null,
+        createdAt: o.createdAt as Date,
       })),
       page,
       pageSize,
-      total,
+      total: Number(totalRows[0].c),
     };
   }
 
@@ -189,54 +209,61 @@ export class ReportsService {
     const searchAsId =
       search && /^\d+$/.test(search) ? Number(search) : undefined;
 
-    const where: Prisma.externaldeliveryWhereInput = {
-      order: this.buildOrderWhere(ctx, query),
-      ...(search && {
-        OR: [
-          { carrier: { contains: search } },
-          { order: { customerName: { contains: search } } },
-          { order: { customerPhone: { contains: search } } },
-          ...(searchAsId !== undefined ? [{ orderId: searchAsId }] : []),
-        ],
-      }),
-    };
+    const { sql: orderWhereSql, params: orderWhereParams } = this.buildOrderWhere(
+      ctx,
+      query,
+      'o',
+    );
+    let sql = orderWhereSql;
+    const params = [...orderWhereParams];
+    if (search) {
+      const orParts = ['ed.carrier LIKE ?', 'o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
+      const orParams: QueryParam[] = [`%${search}%`, `%${search}%`, `%${search}%`];
+      if (searchAsId !== undefined) {
+        orParts.push('ed.orderId = ?');
+        orParams.push(searchAsId);
+      }
+      sql += ` AND (${orParts.join(' OR ')})`;
+      params.push(...orParams);
+    }
 
-    const [rows, total] = await this.prisma.$transaction([
-      this.prisma.externaldelivery.findMany({
-        where,
-        include: {
-          order: {
-            select: {
-              customerName: true,
-              customerPhone: true,
-              outlet: { select: { name: true } },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.externaldelivery.count({ where }),
+    const [rows, totalRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT ed.*, o.customerName AS orderCustomerName, o.customerPhone AS orderCustomerPhone, ot.name AS outletName
+         FROM externaldelivery ed
+         JOIN \`order\` o ON o.id = ed.orderId
+         JOIN outlet ot ON ot.id = o.outletId
+         WHERE ${sql}
+         ORDER BY ed.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c
+         FROM externaldelivery ed
+         JOIN \`order\` o ON o.id = ed.orderId
+         WHERE ${sql}`,
+        params,
+      ),
     ]);
 
     return {
       data: rows.map((r) => ({
-        id: r.id,
-        orderId: r.orderId,
-        outletName: r.order.outlet.name,
-        customerName: r.order.customerName,
-        customerPhone: r.order.customerPhone,
-        carrier: r.carrier,
-        vehicleType: r.vehicleType,
-        price: r.price,
-        destination: r.destination,
-        status: r.status,
-        createdAt: r.createdAt,
+        id: r.id as number,
+        orderId: r.orderId as number,
+        outletName: r.outletName as string,
+        customerName: r.orderCustomerName as string,
+        customerPhone: r.orderCustomerPhone as string,
+        carrier: r.carrier as string,
+        vehicleType: r.vehicleType as string | null,
+        price: r.price as string,
+        destination: r.destination as string,
+        status: r.status as string,
+        createdAt: r.createdAt as Date,
       })),
       page,
       pageSize,
-      total,
+      total: Number(totalRows[0].c),
     };
   }
 
@@ -250,53 +277,74 @@ export class ReportsService {
     const search = query.search?.trim();
     const sortColumn =
       PRODUCT_SALES_SORT_COLUMN[query.sortBy ?? 'totalSalePrice'];
-    const sortDir =
-      query.sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const sortDir = query.sortDir === 'asc' ? 'ASC' : 'DESC';
 
-    const filterSql = Prisma.sql`
-      o.shopId = ${ctx.shopId} AND o.status != 'cancelled'
-      ${query.outletId !== undefined ? Prisma.sql`AND o.outletId = ${query.outletId}` : Prisma.empty}
-      ${query.orderType ? Prisma.sql`AND o.orderType = ${query.orderType}` : Prisma.empty}
-      ${query.status ? Prisma.sql`AND o.status = ${query.status}` : Prisma.empty}
-      ${query.paymentMode ? Prisma.sql`AND o.paymentMethod = ${query.paymentMode}` : Prisma.empty}
-      ${query.channel ? Prisma.sql`AND o.channel = ${query.channel}` : Prisma.empty}
-      ${query.dateFrom ? Prisma.sql`AND o.createdAt >= ${new Date(query.dateFrom)}` : Prisma.empty}
-      ${query.dateTo ? Prisma.sql`AND o.createdAt <= ${new Date(query.dateTo)}` : Prisma.empty}
-    `;
-    const searchSql = search
-      ? Prisma.sql`AND p.name LIKE ${`%${search}%`}`
-      : Prisma.empty;
+    const conditions = ["o.shopId = ?", "o.status != 'cancelled'"];
+    const params: QueryParam[] = [ctx.shopId];
+    if (query.outletId !== undefined) {
+      conditions.push('o.outletId = ?');
+      params.push(query.outletId);
+    }
+    if (query.orderType) {
+      conditions.push('o.orderType = ?');
+      params.push(query.orderType);
+    }
+    if (query.status) {
+      conditions.push('o.status = ?');
+      params.push(query.status);
+    }
+    if (query.paymentMode) {
+      conditions.push('o.paymentMethod = ?');
+      params.push(query.paymentMode);
+    }
+    if (query.channel) {
+      conditions.push('o.channel = ?');
+      params.push(query.channel);
+    }
+    if (query.dateFrom) {
+      conditions.push('o.createdAt >= ?');
+      params.push(new Date(query.dateFrom));
+    }
+    if (query.dateTo) {
+      conditions.push('o.createdAt <= ?');
+      params.push(new Date(query.dateTo));
+    }
+    if (search) {
+      conditions.push('p.name LIKE ?');
+      params.push(`%${search}%`);
+    }
+    const filterSql = conditions.join(' AND ');
 
-    const rows = await this.prisma.$queryRaw<ProductSalesRow[]>`
-      SELECT p.id AS productId, p.name AS name, p.thumbnail AS thumbnail, p.price AS currentPrice,
-        COUNT(DISTINCT oi.orderId) AS orderCount,
-        SUM(oi.quantity) AS totalQuantity,
-        SUM(oi.quantity * oi.priceAtPurchase) AS totalSalePrice
-      FROM orderitem oi
-      JOIN \`order\` o ON o.id = oi.orderId
-      JOIN product p ON p.id = oi.productId
-      WHERE ${filterSql}
-      ${searchSql}
-      GROUP BY p.id
-      ORDER BY ${Prisma.raw(sortColumn)} ${sortDir}
-      LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
-    `;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT p.id AS productId, p.name AS name, p.thumbnail AS thumbnail, p.price AS currentPrice,
+              COUNT(DISTINCT oi.orderId) AS orderCount,
+              SUM(oi.quantity) AS totalQuantity,
+              SUM(oi.quantity * oi.priceAtPurchase) AS totalSalePrice
+       FROM orderitem oi
+       JOIN \`order\` o ON o.id = oi.orderId
+       JOIN product p ON p.id = oi.productId
+       WHERE ${filterSql}
+       GROUP BY p.id
+       ORDER BY ${sortColumn} ${sortDir}
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
 
-    const [{ total }] = await this.prisma.$queryRaw<{ total: bigint }[]>`
-      SELECT COUNT(DISTINCT p.id) AS total
-      FROM orderitem oi
-      JOIN \`order\` o ON o.id = oi.orderId
-      JOIN product p ON p.id = oi.productId
-      WHERE ${filterSql}
-      ${searchSql}
-    `;
+    const totalRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(DISTINCT p.id) AS total
+       FROM orderitem oi
+       JOIN \`order\` o ON o.id = oi.orderId
+       JOIN product p ON p.id = oi.productId
+       WHERE ${filterSql}`,
+      params,
+    );
 
     return {
       data: rows.map((r) => ({
-        productId: r.productId,
-        name: r.name,
-        thumbnail: r.thumbnail,
-        currentPrice: r.currentPrice,
+        productId: r.productId as number,
+        name: r.name as string,
+        thumbnail: r.thumbnail as string,
+        currentPrice: r.currentPrice as string,
         orderCount: Number(r.orderCount),
         totalQuantity: Number(r.totalQuantity),
         totalSalePrice: Number(r.totalSalePrice ?? 0),
@@ -308,7 +356,7 @@ export class ReportsService {
       })),
       page,
       pageSize,
-      total: Number(total),
+      total: Number(totalRows[0].total),
     };
   }
 }

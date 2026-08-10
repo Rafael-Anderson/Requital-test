@@ -3,8 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type customer as Customer } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import type { CustomerRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -15,7 +18,7 @@ interface CustomerListRow {
   phone: string;
   email: string | null;
   createdAt: Date;
-  orderCount: bigint;
+  orderCount: number;
   lifetimeValue: string | null;
   lastOrderDate: Date | null;
 }
@@ -33,7 +36,7 @@ const SORT_COLUMN: Record<string, string> = {
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // Shared by both the storefront checkout flow (PublicService) and
   // admin-entered orders (OrdersService) — the one place phone-matching
@@ -45,44 +48,45 @@ export class CustomersService {
     shopId: number,
     data: { name: string; phone: string; email?: string | null },
   ) {
-    const existing = await this.prisma.customer.findUnique({
-      where: { shopId_phone: { shopId, phone: data.phone } },
-    });
+    const existingRows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
+      [shopId, data.phone],
+    );
+    const existing = existingRows[0];
     if (existing) {
       return this.applyUpdateIfChanged(existing, data);
     }
     try {
-      return await this.prisma.customer.create({
-        data: {
-          shopId,
-          name: data.name,
-          phone: data.phone,
-          email: data.email ?? undefined,
-        },
-      });
+      const result = await this.db.execute(
+        `INSERT INTO customer (shopId, name, phone, email) VALUES (?, ?, ?, ?)`,
+        [shopId, data.name, data.phone, data.email ?? null],
+      );
+      const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+        `SELECT * FROM customer WHERE id = ?`,
+        [result.insertId],
+      );
+      return rows[0];
     } catch (error) {
       // Two concurrent orders for the same brand-new phone number can both
-      // miss the findUnique above and both attempt to create — the loser
-      // hits Customer_shopId_phone_key (the only unique constraint on this
-      // table, see schema.prisma) instead of actually losing data. Re-fetch
-      // and resolve to the winner's row rather than letting a 500 surface,
-      // running it through the same name/email-diff path an ordinary
-      // (non-racing) repeat customer would take.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        const winner = await this.prisma.customer.findUniqueOrThrow({
-          where: { shopId_phone: { shopId, phone: data.phone } },
-        });
-        return this.applyUpdateIfChanged(winner, data);
+      // miss the SELECT above and both attempt to create — the loser hits
+      // the [shopId, phone] unique constraint (the only unique constraint on
+      // this table, see schema.prisma) instead of actually losing data.
+      // Re-fetch and resolve to the winner's row rather than letting a 500
+      // surface, running it through the same name/email-diff path an
+      // ordinary (non-racing) repeat customer would take.
+      if (isDuplicateKeyError(error)) {
+        const winnerRows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+          `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
+          [shopId, data.phone],
+        );
+        return this.applyUpdateIfChanged(winnerRows[0], data);
       }
       throw error;
     }
   }
 
   private async applyUpdateIfChanged(
-    existing: Customer,
+    existing: CustomerRow,
     data: { name: string; email?: string | null },
   ) {
     const nameChanged = data.name && data.name !== existing.name;
@@ -90,13 +94,21 @@ export class CustomersService {
     if (!nameChanged && !emailChanged) {
       return existing;
     }
-    return this.prisma.customer.update({
-      where: { id: existing.id },
-      data: {
-        ...(nameChanged && { name: data.name }),
-        ...(emailChanged && { email: data.email }),
-      },
+    const set = buildSetClause({
+      name: nameChanged ? data.name : undefined,
+      email: emailChanged ? data.email : undefined,
     });
+    if (set) {
+      await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        existing.id,
+      ]);
+    }
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ?`,
+      [existing.id],
+    );
+    return rows[0];
   }
 
   async findAll(ctx: TenantContext, query: ListCustomersQueryDto) {
@@ -104,32 +116,31 @@ export class CustomersService {
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
     const sortColumn = SORT_COLUMN[query.sortBy ?? 'lastOrderDate'];
-    const sortDir =
-      query.sortDir === 'asc' ? Prisma.sql`ASC` : Prisma.sql`DESC`;
-    const searchFilter = search
-      ? Prisma.sql`AND (c.name LIKE ${`%${search}%`} OR c.phone LIKE ${`%${search}%`})`
-      : Prisma.empty;
+    const sortDir = query.sortDir === 'asc' ? 'ASC' : 'DESC';
+    const searchCondition = search ? 'AND (c.name LIKE ? OR c.phone LIKE ?)' : '';
+    const searchParams = search ? [`%${search}%`, `%${search}%`] : [];
 
-    const rows = await this.prisma.$queryRaw<CustomerListRow[]>`
-      SELECT c.id, c.name, c.phone, c.email, c.createdAt,
-        COUNT(o.id) AS orderCount,
-        COALESCE(SUM(o.total), 0) AS lifetimeValue,
-        MAX(o.createdAt) AS lastOrderDate
-      FROM customer c
-      LEFT JOIN \`order\` o ON o.customerId = c.id AND o.status != 'cancelled'
-      WHERE c.shopId = ${ctx.shopId}
-      ${searchFilter}
-      GROUP BY c.id
-      ORDER BY ${Prisma.raw(sortColumn)} ${sortDir}
-      LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
-    `;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT c.id, c.name, c.phone, c.email, c.createdAt,
+              COUNT(o.id) AS orderCount,
+              COALESCE(SUM(o.total), 0) AS lifetimeValue,
+              MAX(o.createdAt) AS lastOrderDate
+       FROM customer c
+       LEFT JOIN \`order\` o ON o.customerId = c.id AND o.status != 'cancelled'
+       WHERE c.shopId = ? ${searchCondition}
+       GROUP BY c.id
+       ORDER BY ${sortColumn} ${sortDir}
+       LIMIT ? OFFSET ?`,
+      [ctx.shopId, ...searchParams, pageSize, (page - 1) * pageSize],
+    );
 
-    const [{ total }] = await this.prisma.$queryRaw<{ total: bigint }[]>`
-      SELECT COUNT(*) AS total FROM customer c WHERE c.shopId = ${ctx.shopId} ${searchFilter}
-    `;
+    const totalRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM customer c WHERE c.shopId = ? ${searchCondition}`,
+      [ctx.shopId, ...searchParams],
+    );
 
     return {
-      data: rows.map((r) => ({
+      data: (rows as unknown as CustomerListRow[]).map((r) => ({
         id: r.id,
         name: r.name,
         phone: r.phone,
@@ -141,7 +152,7 @@ export class CustomersService {
       })),
       page,
       pageSize,
-      total: Number(total),
+      total: Number(totalRows[0].total),
     };
   }
 
@@ -151,11 +162,31 @@ export class CustomersService {
     // Not outlet-scoped — customers are shop-wide (a customer isn't tied to
     // one branch), and this endpoint is admin-only anyway (see
     // customers.controller.ts), so there's no branch-outlet filter to apply.
-    const orders = await this.prisma.order.findMany({
-      where: { customerId: id, shopId: ctx.shopId },
-      include: { orderitem: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const orderRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM \`order\` WHERE customerId = ? AND shopId = ? ORDER BY createdAt DESC`,
+      [id, ctx.shopId],
+    );
+    const orderIds = orderRows.map((o) => o.id as number);
+    const items =
+      orderIds.length > 0
+        ? await this.db.query<RowDataPacket[]>(
+            `SELECT * FROM orderitem WHERE orderId IN (${orderIds.map(() => '?').join(', ')})`,
+            orderIds,
+          )
+        : [];
+    const itemsByOrder = new Map<number, RowDataPacket[]>();
+    for (const item of items) {
+      const list = itemsByOrder.get(item.orderId as number) ?? [];
+      list.push(item);
+      itemsByOrder.set(item.orderId as number, list);
+    }
+    const orders = orderRows.map((o) => ({
+      ...o,
+      orderitem: itemsByOrder.get(o.id as number) ?? [],
+    })) as ({ status: string; total: string; createdAt: Date } & RowDataPacket & {
+      orderitem: RowDataPacket[];
+    })[];
+
     const completedOrders = orders.filter((o) => o.status !== 'cancelled');
     const lifetimeValue = completedOrders.reduce(
       (sum, o) => sum + Number(o.total),
@@ -180,20 +211,25 @@ export class CustomersService {
   async update(ctx: TenantContext, id: number, dto: UpdateCustomerDto) {
     await this.assertBelongsToShop(ctx, id);
     try {
-      return await this.prisma.customer.update({
-        where: { id },
-        data: {
-          name: dto.name,
-          phone: dto.phone,
-          email: dto.email,
-          birthday: dto.birthday ? new Date(dto.birthday) : undefined,
-        },
+      const set = buildSetClause({
+        name: dto.name,
+        phone: dto.phone,
+        email: dto.email,
+        birthday: dto.birthday ? new Date(dto.birthday) : undefined,
       });
+      if (set) {
+        await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
+          ...set.params,
+          id,
+        ]);
+      }
+      const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+        `SELECT * FROM customer WHERE id = ?`,
+        [id],
+      );
+      return rows[0];
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (isDuplicateKeyError(error)) {
         throw new ConflictException(
           'Another customer with this phone number already exists',
         );
@@ -203,12 +239,13 @@ export class CustomersService {
   }
 
   private async assertBelongsToShop(ctx: TenantContext, id: number) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!customer) {
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Customer ${id} not found`);
     }
-    return customer;
+    return rows[0];
   }
 }

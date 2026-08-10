@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { slugify } from '../common/slugify';
 import { OcrService } from './ocr.service';
@@ -15,7 +16,7 @@ import { ProductsService } from '../products/products.service';
 @Injectable()
 export class ScanService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly ocrService: OcrService,
     private readonly scanSettingsService: ScanSettingsService,
     private readonly storageService: StorageService,
@@ -45,25 +46,25 @@ export class ScanService {
     );
 
     const [products, ingredients] = await Promise.all([
-      this.prisma.product.findMany({
-        where: { shopId: ctx.shopId },
-        select: { id: true, name: true },
-      }),
-      this.prisma.ingredient.findMany({
-        where: { shopId: ctx.shopId },
-        select: { id: true, name: true },
-      }),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id, name FROM product WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id, name FROM ingredient WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
     ]);
     const candidates: MatchCandidate[] = [
       ...products.map((p) => ({
-        id: p.id,
+        id: p.id as number,
         type: 'product' as const,
-        name: p.name,
+        name: p.name as string,
       })),
       ...ingredients.map((i) => ({
-        id: i.id,
+        id: i.id as number,
         type: 'ingredient' as const,
-        name: i.name,
+        name: i.name as string,
       })),
     ];
 
@@ -96,11 +97,11 @@ export class ScanService {
     }
 
     const outletIds = [...new Set(dto.items.map((i) => i.outletId))];
-    const outlets = await this.prisma.outlet.findMany({
-      where: { id: { in: outletIds }, shopId: ctx.shopId },
-      select: { id: true },
-    });
-    if (outlets.length !== outletIds.length) {
+    const outletRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id IN (${outletIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [...outletIds, ctx.shopId],
+    );
+    if (outletRows.length !== outletIds.length) {
       throw new BadRequestException(
         'One or more outletId values are invalid for this shop',
       );
@@ -112,37 +113,42 @@ export class ScanService {
     const matchedIngredientIds = dto.items
       .filter((i) => i.targetType === 'ingredient' && i.matchedId)
       .map((i) => i.matchedId!);
-    const [ownedProducts, ownedIngredients] = await Promise.all([
-      matchedProductIds.length
-        ? this.prisma.product.findMany({
-            where: { id: { in: matchedProductIds }, shopId: ctx.shopId },
-            select: {
-              id: true,
-              usesIngredients: true,
-              productoption: { select: { id: true } },
-            },
-          })
-        : [],
-      matchedIngredientIds.length
-        ? this.prisma.ingredient.findMany({
-            where: { id: { in: matchedIngredientIds }, shopId: ctx.shopId },
-            select: { id: true },
-          })
-        : [],
-    ]);
-    const ownedProductIds = new Set(ownedProducts.map((p) => p.id));
-    // `as const` on the tuple, not just relying on inference — this
-    // ternary+Promise.all pattern makes TS lose ownedProducts' element type
-    // (collapses to `any`, see CLAUDE.md's own note on this exact file),
-    // which otherwise breaks Map's constructor overload resolution
-    // entirely (a bare `.map((p) => [p.id, p])` infers `any[]`, not a
-    // 2-tuple). The `.usesIngredients`/`.productoption` reads below are
-    // still effectively unchecked by the type checker as a result — a
-    // pre-existing, documented gap, not introduced by this cast.
-    const ownedProductsById = new Map(
-      ownedProducts.map((p) => [p.id, p] as const),
+    const [ownedProductRows, ownedProductOptionRows, ownedIngredientRows] =
+      await Promise.all([
+        matchedProductIds.length
+          ? this.db.query<RowDataPacket[]>(
+              `SELECT id, usesIngredients, costPrice FROM product WHERE id IN (${matchedProductIds.map(() => '?').join(', ')}) AND shopId = ?`,
+              [...matchedProductIds, ctx.shopId],
+            )
+          : Promise.resolve([]),
+        matchedProductIds.length
+          ? this.db.query<RowDataPacket[]>(
+              `SELECT DISTINCT productId FROM productoption WHERE productId IN (${matchedProductIds.map(() => '?').join(', ')})`,
+              matchedProductIds,
+            )
+          : Promise.resolve([]),
+        matchedIngredientIds.length
+          ? this.db.query<RowDataPacket[]>(
+              `SELECT id FROM ingredient WHERE id IN (${matchedIngredientIds.map(() => '?').join(', ')}) AND shopId = ?`,
+              [...matchedIngredientIds, ctx.shopId],
+            )
+          : Promise.resolve([]),
+      ]);
+    const ownedProductIds = new Set(ownedProductRows.map((p) => p.id as number));
+    const productsWithOptions = new Set(
+      ownedProductOptionRows.map((r) => r.productId as number),
     );
-    const ownedIngredientIds = new Set(ownedIngredients.map((i) => i.id));
+    const ownedProductsById = new Map(
+      ownedProductRows.map((p) => [
+        p.id as number,
+        {
+          id: p.id as number,
+          usesIngredients: Boolean(p.usesIngredients),
+          hasOptions: productsWithOptions.has(p.id as number),
+        },
+      ]),
+    );
+    const ownedIngredientIds = new Set(ownedIngredientRows.map((i) => i.id as number));
 
     // Every variantId the client sent alongside a matched product — checked
     // in bulk (not per-item findFirst) that each actually belongs to the
@@ -151,13 +157,15 @@ export class ScanService {
       (i) => i.targetType === 'product' && i.matchedId && i.variantId,
     );
     const variantIdsToCheck = variantChecks.map((i) => i.variantId!);
-    const ownedVariants = variantIdsToCheck.length
-      ? await this.prisma.productvariant.findMany({
-          where: { id: { in: variantIdsToCheck } },
-          select: { id: true, productId: true },
-        })
+    const ownedVariantRows = variantIdsToCheck.length
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT id, productId FROM productvariant WHERE id IN (${variantIdsToCheck.map(() => '?').join(', ')})`,
+          variantIdsToCheck,
+        )
       : [];
-    const ownedVariantsById = new Map(ownedVariants.map((v) => [v.id, v]));
+    const ownedVariantsById = new Map(
+      ownedVariantRows.map((v) => [v.id as number, { id: v.id as number, productId: v.productId as number }]),
+    );
 
     const newCollectionIds = [
       ...new Set(
@@ -172,10 +180,11 @@ export class ScanService {
       ),
     ];
     if (newCollectionIds.length > 0) {
-      const owned = await this.prisma.collection.count({
-        where: { id: { in: newCollectionIds }, shopId: ctx.shopId },
-      });
-      if (owned !== newCollectionIds.length) {
+      const ownedRows = await this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM collection WHERE id IN (${newCollectionIds.map(() => '?').join(', ')}) AND shopId = ?`,
+        [...newCollectionIds, ctx.shopId],
+      );
+      if (Number(ownedRows[0].c) !== newCollectionIds.length) {
         throw new BadRequestException(
           'One or more collectionId values are invalid for this shop',
         );
@@ -198,12 +207,12 @@ export class ScanService {
               'This product uses a recipe — scan its ingredients individually instead',
             );
           }
-          if (product.productoption.length > 0 && !item.variantId) {
+          if (product.hasOptions && !item.variantId) {
             throw new BadRequestException(
               `Product ${item.matchedId} has variants — select which one this line is for`,
             );
           }
-          if (product.productoption.length === 0 && item.variantId) {
+          if (!product.hasOptions && item.variantId) {
             throw new BadRequestException(
               `Product ${item.matchedId} does not have variants`,
             );
@@ -245,14 +254,12 @@ export class ScanService {
     const usedSlugsThisBatch = new Set<string>();
     const restockNotifyTargets = new Set<string>();
 
-    const batch = await this.prisma.$transaction(async (tx) => {
-      const scanBatch = await tx.scanbatch.create({
-        data: {
-          shopId: ctx.shopId,
-          imageUrl: dto.imageUrl,
-          actorUserId: ctx.userId,
-        },
-      });
+    const batchId = await this.db.transaction(async (conn) => {
+      const [batchResult] = await conn.query(
+        `INSERT INTO scanbatch (shopId, imageUrl, actorUserId) VALUES (?, ?, ?)`,
+        [ctx.shopId, dto.imageUrl, ctx.userId],
+      );
+      const newBatchId = (batchResult as { insertId: number }).insertId;
 
       for (const item of dto.items) {
         let targetId: number;
@@ -264,74 +271,70 @@ export class ScanService {
           const root = slugify(item.createNew!.name);
           let slug = root;
           let suffix = 2;
-          while (
-            usedSlugsThisBatch.has(slug) ||
-            (await tx.product.findFirst({
-              where: { shopId: ctx.shopId, slug },
-              select: { id: true },
-            }))
-          ) {
+          for (;;) {
+            if (usedSlugsThisBatch.has(slug)) {
+              slug = `${root}-${suffix}`;
+              suffix += 1;
+              continue;
+            }
+            const [existingRows] = await conn.query<RowDataPacket[]>(
+              `SELECT id FROM product WHERE shopId = ? AND slug = ?`,
+              [ctx.shopId, slug],
+            );
+            if (existingRows.length === 0) break;
             slug = `${root}-${suffix}`;
             suffix += 1;
           }
           usedSlugsThisBatch.add(slug);
 
-          const newProduct = await tx.product.create({
-            data: {
-              shopId: ctx.shopId,
-              name: item.createNew!.name,
-              price: item.createNew!.price!,
+          const [productResult] = await conn.query(
+            `INSERT INTO product (shopId, name, price, thumbnail, sku, slug, status, trackInventory)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              ctx.shopId,
+              item.createNew!.name,
+              item.createNew!.price!,
               // No image comes from a scanned invoice — left blank rather
               // than a fake placeholder URL; the merchant adds a real photo
               // when they flesh out this quick-created draft (see
               // CommitScanNewItemDto's comment).
-              thumbnail: '',
-              sku: `SCAN-${randomUUID().slice(0, 8).toUpperCase()}`,
+              '',
+              `SCAN-${randomUUID().slice(0, 8).toUpperCase()}`,
               slug,
               // Draft, same as ProductsService.duplicate's quick-created
               // copies — a scan-created product shouldn't go live on the
               // storefront before the merchant has reviewed it.
-              status: 'Unavailable',
-              trackInventory: true,
-              productcollection: {
-                create: [{ collectionId: item.createNew!.collectionId! }],
-              },
-            },
-            select: {
-              id: true,
-              name: true,
-              thumbnail: true,
-              trackInventory: true,
-              costPrice: true,
-            },
-          });
+              'Unavailable',
+              true,
+            ],
+          );
+          const newProductId = (productResult as { insertId: number }).insertId;
+          await conn.query(
+            `INSERT INTO productcollection (productId, collectionId) VALUES (?, ?)`,
+            [newProductId, item.createNew!.collectionId!],
+          );
           // A scan-created product is always simple/usesIngredients:false
           // (no recipe UI exists on this flow) — needs its own shadow
           // ingredient just like one created via the product form.
           await this.productsService.provisionShadowForProduct(
-            tx,
+            conn,
             ctx,
-            newProduct.id,
+            newProductId,
             {
-              name: newProduct.name,
-              thumbnail: newProduct.thumbnail,
-              trackInventory: newProduct.trackInventory,
-              costPrice: newProduct.costPrice,
+              name: item.createNew!.name,
+              thumbnail: '',
+              trackInventory: true,
+              costPrice: null,
             },
           );
-          targetId = newProduct.id;
+          targetId = newProductId;
           created += 1;
         } else {
-          const newIngredient = await tx.ingredient.create({
-            data: {
-              shopId: ctx.shopId,
-              name: item.createNew!.name,
-              unit: item.createNew!.unit!,
-              trackInventory: true,
-            },
-            select: { id: true },
-          });
-          targetId = newIngredient.id;
+          const [ingredientResult] = await conn.query(
+            `INSERT INTO ingredient (shopId, name, unit, trackInventory) VALUES (?, ?, ?, ?)`,
+            [ctx.shopId, item.createNew!.name, item.createNew!.unit!, true],
+          );
+          targetId = (ingredientResult as { insertId: number }).insertId;
           created += 1;
         }
 
@@ -346,42 +349,28 @@ export class ScanService {
             ? await this.productsService.resolveShadowStockTarget(
                 ctx,
                 { productId: targetId, variantId: item.variantId },
-                tx,
+                conn,
               )
             : { ingredientId: targetId, productId: null, variantId: null };
 
-        const before = await tx.outletingredientstock.findUnique({
-          where: {
-            outletId_ingredientId: {
-              outletId: item.outletId,
-              ingredientId: resolved.ingredientId,
-            },
-          },
-        });
-        const beforeQty = before?.stockQuantity ?? 0;
+        const [beforeRows] = await conn.query<RowDataPacket[]>(
+          `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+          [item.outletId, resolved.ingredientId],
+        );
+        const beforeQty = (beforeRows[0]?.stockQuantity as number | undefined) ?? 0;
         if (
           item.targetType === 'product' &&
           beforeQty <= 0 &&
           beforeQty + item.quantity > 0
         ) {
-          restockNotifyTargets.add(
-            `${targetId}:${item.variantId ?? ''}`,
-          );
+          restockNotifyTargets.add(`${targetId}:${item.variantId ?? ''}`);
         }
-        await tx.outletingredientstock.upsert({
-          where: {
-            outletId_ingredientId: {
-              outletId: item.outletId,
-              ingredientId: resolved.ingredientId,
-            },
-          },
-          update: { stockQuantity: { increment: item.quantity } },
-          create: {
-            outletId: item.outletId,
-            ingredientId: resolved.ingredientId,
-            stockQuantity: item.quantity,
-          },
-        });
+        await conn.query(
+          `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+          [item.outletId, resolved.ingredientId, item.quantity],
+        );
 
         // Price capture — OCR-parsed and merchant-confirmed on the review
         // screen (see CommitScanItemDto.price's own comment). Written to
@@ -391,37 +380,39 @@ export class ScanService {
         // ingredient target.
         if (item.price !== undefined) {
           if (item.targetType === 'product') {
-            await tx.product.update({
-              where: { id: targetId },
-              data: { costPrice: item.price },
-            });
+            await conn.query(`UPDATE product SET costPrice = ? WHERE id = ?`, [
+              item.price,
+              targetId,
+            ]);
           } else {
-            await tx.ingredient.update({
-              where: { id: targetId },
-              data: { costPerUnit: item.price },
-            });
+            await conn.query(`UPDATE ingredient SET costPerUnit = ? WHERE id = ?`, [
+              item.price,
+              targetId,
+            ]);
           }
         }
 
-        await tx.stockmovement.create({
-          data: {
-            shopId: ctx.shopId,
-            productId: resolved.productId,
-            variantId: resolved.variantId,
-            ingredientId: resolved.ingredientId,
-            type: 'RECEIVED',
-            reason: null,
-            delta: item.quantity,
-            outletId: item.outletId,
-            toOutletId: null,
-            note: 'Scan to Stock',
-            actorUserId: ctx.userId,
-            scanBatchId: scanBatch.id,
-          },
-        });
+        await conn.query(
+          `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId, scanBatchId)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            resolved.productId,
+            resolved.variantId,
+            resolved.ingredientId,
+            'RECEIVED',
+            null,
+            item.quantity,
+            item.outletId,
+            null,
+            'Scan to Stock',
+            ctx.userId,
+            newBatchId,
+          ],
+        );
       }
 
-      return scanBatch;
+      return newBatchId;
     });
 
     for (const key of restockNotifyTargets) {
@@ -435,6 +426,6 @@ export class ScanService {
         .catch(() => {});
     }
 
-    return { batchId: batch.id, created, updated, total: dto.items.length };
+    return { batchId, created, updated, total: dto.items.length };
   }
 }

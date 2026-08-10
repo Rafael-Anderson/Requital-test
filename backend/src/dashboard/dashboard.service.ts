@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -21,21 +22,10 @@ function uaeDateKey(instant: Date): string {
   return new Date(instant.getTime() + UAE_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-interface DailyRevenueRow {
-  day: Date;
-  revenue: string | null;
-}
-
-interface TopProductRow {
-  productId: number;
-  revenue: string | null;
-  unitsSold: bigint | null;
-}
-
 @Injectable()
 export class DashboardService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly branchRolesService: BranchRolesService,
   ) {}
 
@@ -71,19 +61,20 @@ export class DashboardService {
     from: Date,
     toExclusive: Date,
   ) {
-    const result = await this.prisma.order.aggregate({
-      where: {
-        shopId,
-        ...(outletId !== undefined && { outletId }),
-        status: { not: 'cancelled' },
-        createdAt: { gte: from, lt: toExclusive },
-      },
-      _sum: { total: true },
-      _count: { _all: true },
-    });
+    const conditions = ["shopId = ?", "status != 'cancelled'", 'createdAt >= ?', 'createdAt < ?'];
+    const params: QueryParam[] = [shopId, from, toExclusive];
+    if (outletId !== undefined) {
+      conditions.push('outletId = ?');
+      params.push(outletId);
+    }
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS orderCount
+       FROM \`order\` WHERE ${conditions.join(' AND ')}`,
+      params,
+    );
     return {
-      revenue: Number(result._sum.total ?? 0),
-      orderCount: result._count._all,
+      revenue: Number(rows[0].revenue),
+      orderCount: Number(rows[0].orderCount),
     };
   }
 
@@ -109,12 +100,13 @@ export class DashboardService {
         'dashboard.view',
       );
     }
-    const outletWhere = outletId !== undefined ? { outletId } : {};
+    const outletConditionSql = outletId !== undefined ? 'AND outletId = ?' : '';
+    const outletParam = outletId !== undefined ? [outletId] : [];
 
     const [
       current,
       previous,
-      totalOrders,
+      totalOrdersRows,
       stageCounts,
       firstOrderByCustomer,
       channelGroups,
@@ -123,67 +115,54 @@ export class DashboardService {
     ] = await Promise.all([
       this.revenueAndCount(ctx.shopId, outletId, from, toExclusive),
       this.revenueAndCount(ctx.shopId, outletId, prevFrom, prevToExclusive),
-      this.prisma.order.count({
-        where: {
-          shopId: ctx.shopId,
-          ...outletWhere,
-          createdAt: { gte: from, lt: toExclusive },
-        },
-      }),
-      this.prisma.order.groupBy({
-        by: ['status'],
-        where: {
-          shopId: ctx.shopId,
-          ...outletWhere,
-          createdAt: { gte: from, lt: toExclusive },
-        },
-        _count: { _all: true },
-      }),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM \`order\`
+         WHERE shopId = ? ${outletConditionSql} AND createdAt >= ? AND createdAt < ?`,
+        [ctx.shopId, ...outletParam, from, toExclusive],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT status, COUNT(*) AS c FROM \`order\`
+         WHERE shopId = ? ${outletConditionSql} AND createdAt >= ? AND createdAt < ?
+         GROUP BY status`,
+        [ctx.shopId, ...outletParam, from, toExclusive],
+      ),
       // First order per customer (by phone) within the resolved scope, not
       // period-bounded — so "new this period" means their very first order
       // (at this outlet, if one is resolved; shop-wide otherwise) fell in
       // it, not just that they ordered again during it.
-      this.prisma.order.groupBy({
-        by: ['customerPhone'],
-        where: { shopId: ctx.shopId, ...outletWhere },
-        _min: { createdAt: true },
-      }),
-      this.prisma.order.groupBy({
-        by: ['channel'],
-        where: {
-          shopId: ctx.shopId,
-          ...outletWhere,
-          status: { not: 'cancelled' },
-          createdAt: { gte: from, lt: toExclusive },
-        },
-        _count: { _all: true },
-      }),
+      this.db.query<RowDataPacket[]>(
+        `SELECT customerPhone, MIN(createdAt) AS firstOrder FROM \`order\`
+         WHERE shopId = ? ${outletConditionSql}
+         GROUP BY customerPhone`,
+        [ctx.shopId, ...outletParam],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT channel, COUNT(*) AS c FROM \`order\`
+         WHERE shopId = ? ${outletConditionSql} AND status != 'cancelled' AND createdAt >= ? AND createdAt < ?
+         GROUP BY channel`,
+        [ctx.shopId, ...outletParam, from, toExclusive],
+      ),
       // Per-outlet order volume for the Outlet Distribution panel — real
       // now that multi-branch exists, not the single-outlet-100% placeholder
       // this endpoint used before outlets were built.
-      this.prisma.order.groupBy({
-        by: ['outletId'],
-        where: {
-          shopId: ctx.shopId,
-          ...outletWhere,
-          createdAt: { gte: from, lt: toExclusive },
-        },
-        _count: { _all: true },
-      }),
-      this.prisma.outlet.findMany({
-        where: {
-          shopId: ctx.shopId,
-          ...(outletId !== undefined && { id: outletId }),
-        },
-        select: { id: true, name: true },
-      }),
+      this.db.query<RowDataPacket[]>(
+        `SELECT outletId, COUNT(*) AS c FROM \`order\`
+         WHERE shopId = ? ${outletConditionSql} AND createdAt >= ? AND createdAt < ?
+         GROUP BY outletId`,
+        [ctx.shopId, ...outletParam, from, toExclusive],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT id, name FROM outlet WHERE shopId = ? ${outletId !== undefined ? 'AND id = ?' : ''}`,
+        outletId !== undefined ? [ctx.shopId, outletId] : [ctx.shopId],
+      ),
     ]);
+    const totalOrders = Number(totalOrdersRows[0].c);
 
     const aov = (r: { revenue: number; orderCount: number }) =>
       r.orderCount > 0 ? r.revenue / r.orderCount : 0;
 
     const stageCountByStatus = Object.fromEntries(
-      stageCounts.map((s) => [s.status, s._count._all]),
+      stageCounts.map((s) => [s.status as string, Number(s.c)]),
     );
     const ordersByStage = {
       placed: stageCountByStatus['pending'] ?? 0,
@@ -195,7 +174,7 @@ export class DashboardService {
 
     const newCustomersIn = (rangeFrom: Date, rangeToExclusive: Date) =>
       firstOrderByCustomer.filter((c) => {
-        const firstOrder = c._min.createdAt;
+        const firstOrder = c.firstOrder as Date | null;
         return (
           firstOrder && firstOrder >= rangeFrom && firstOrder < rangeToExclusive
         );
@@ -203,33 +182,27 @@ export class DashboardService {
     const currentNewCustomers = newCustomersIn(from, toExclusive);
     const previousNewCustomers = newCustomersIn(prevFrom, prevToExclusive);
 
-    const channelTotal = channelGroups.reduce(
-      (sum, g) => sum + g._count._all,
-      0,
-    );
+    const channelTotal = channelGroups.reduce((sum, g) => sum + Number(g.c), 0);
     const channels = channelGroups
       .map((g) => ({
-        channel: g.channel ?? 'Unspecified',
-        count: g._count._all,
-        percentage: channelTotal > 0 ? (g._count._all / channelTotal) * 100 : 0,
+        channel: (g.channel as string | null) ?? 'Unspecified',
+        count: Number(g.c),
+        percentage: channelTotal > 0 ? (Number(g.c) / channelTotal) * 100 : 0,
       }))
       .sort((a, b) => b.count - a.count);
 
     // Outlets with zero orders in the range still show up at 0% — a branch
     // that's been quiet is a real signal, not something to hide.
-    const outletOrderTotal = outletCounts.reduce(
-      (sum, g) => sum + g._count._all,
-      0,
-    );
+    const outletOrderTotal = outletCounts.reduce((sum, g) => sum + Number(g.c), 0);
     const countByOutlet = new Map(
-      outletCounts.map((g) => [g.outletId, g._count._all]),
+      outletCounts.map((g) => [g.outletId as number, Number(g.c)]),
     );
     const outletBreakdown = outlets
       .map((o) => {
-        const count = countByOutlet.get(o.id) ?? 0;
+        const count = countByOutlet.get(o.id as number) ?? 0;
         return {
-          outletId: o.id,
-          name: o.name,
+          outletId: o.id as number,
+          name: o.name as string,
           orderCount: count,
           percentage:
             outletOrderTotal > 0 ? (count / outletOrderTotal) * 100 : 0,
@@ -279,23 +252,23 @@ export class DashboardService {
         'dashboard.view',
       );
     }
-    const outletFilter =
-      outletId !== undefined
-        ? Prisma.sql`AND outletId = ${outletId}`
-        : Prisma.empty;
+    const outletFilter = outletId !== undefined ? 'AND outletId = ?' : '';
+    const params: QueryParam[] = [ctx.shopId, from, toExclusive];
+    if (outletId !== undefined) params.push(outletId);
 
-    const rows = await this.prisma.$queryRaw<DailyRevenueRow[]>`
-      SELECT DATE(DATE_ADD(createdAt, INTERVAL 4 HOUR)) AS day, SUM(total) AS revenue
-      FROM \`order\`
-      WHERE shopId = ${ctx.shopId} AND status != 'cancelled'
-        AND createdAt >= ${from} AND createdAt < ${toExclusive}
-        ${outletFilter}
-      GROUP BY day
-      ORDER BY day ASC
-    `;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT DATE(DATE_ADD(createdAt, INTERVAL 4 HOUR)) AS day, SUM(total) AS revenue
+       FROM \`order\`
+       WHERE shopId = ? AND status != 'cancelled'
+         AND createdAt >= ? AND createdAt < ?
+         ${outletFilter}
+       GROUP BY day
+       ORDER BY day ASC`,
+      params,
+    );
     const byDay = new Map(
       rows.map((r) => [
-        new Date(r.day).toISOString().slice(0, 10),
+        new Date(r.day as Date).toISOString().slice(0, 10),
         Number(r.revenue ?? 0),
       ]),
     );
@@ -325,40 +298,51 @@ export class DashboardService {
         'dashboard.view',
       );
     }
-    const outletFilter =
-      outletId !== undefined
-        ? Prisma.sql`AND o.outletId = ${outletId}`
-        : Prisma.empty;
+    const outletFilter = outletId !== undefined ? 'AND o.outletId = ?' : '';
+    const params: QueryParam[] = [ctx.shopId, from, toExclusive];
+    if (outletId !== undefined) params.push(outletId);
+    params.push(limit);
 
-    // Prisma's groupBy can't aggregate a derived expression (quantity *
-    // priceAtPurchase varies per line item, so it isn't a plain column sum)
-    // — raw SQL for this one, same as the daily-revenue DATE() grouping above.
-    const rows = await this.prisma.$queryRaw<TopProductRow[]>`
-      SELECT oi.productId AS productId,
-             SUM(oi.quantity * oi.priceAtPurchase) AS revenue,
-             SUM(oi.quantity) AS unitsSold
-      FROM orderitem oi
-      JOIN \`order\` o ON o.id = oi.orderId
-      WHERE o.shopId = ${ctx.shopId} AND o.status != 'cancelled'
-        AND o.createdAt >= ${from} AND o.createdAt < ${toExclusive}
-        ${outletFilter}
-      GROUP BY oi.productId
-      ORDER BY revenue DESC
-      LIMIT ${limit}
-    `;
+    // A derived-expression aggregate (quantity * priceAtPurchase varies per
+    // line item, so it isn't a plain column sum) — raw SQL, same as the
+    // daily-revenue DATE() grouping above.
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT oi.productId AS productId,
+              SUM(oi.quantity * oi.priceAtPurchase) AS revenue,
+              SUM(oi.quantity) AS unitsSold
+       FROM orderitem oi
+       JOIN \`order\` o ON o.id = oi.orderId
+       WHERE o.shopId = ? AND o.status != 'cancelled'
+         AND o.createdAt >= ? AND o.createdAt < ?
+         ${outletFilter}
+       GROUP BY oi.productId
+       ORDER BY revenue DESC
+       LIMIT ?`,
+      params,
+    );
 
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: rows.map((r) => r.productId) } },
-      select: { id: true, name: true, thumbnail: true },
+    const productIds = rows.map((r) => r.productId as number);
+    const products =
+      productIds.length > 0
+        ? await this.db.query<RowDataPacket[]>(
+            `SELECT id, name, thumbnail FROM product WHERE id IN (${productIds.map(() => '?').join(', ')})`,
+            productIds,
+          )
+        : [];
+    const productById = new Map(
+      products.map((p) => [p.id as number, p]),
+    );
+
+    return rows.map((r) => {
+      const productId = r.productId as number;
+      const product = productById.get(productId);
+      return {
+        productId,
+        name: (product?.name as string | undefined) ?? 'Unknown product',
+        thumbnail: (product?.thumbnail as string | undefined) ?? null,
+        revenue: Number(r.revenue ?? 0),
+        unitsSold: Number(r.unitsSold ?? 0),
+      };
     });
-    const productById = new Map(products.map((p) => [p.id, p]));
-
-    return rows.map((r) => ({
-      productId: r.productId,
-      name: productById.get(r.productId)?.name ?? 'Unknown product',
-      thumbnail: productById.get(r.productId)?.thumbnail ?? null,
-      revenue: Number(r.revenue ?? 0),
-      unitsSold: Number(r.unitsSold ?? 0),
-    }));
   }
 }
