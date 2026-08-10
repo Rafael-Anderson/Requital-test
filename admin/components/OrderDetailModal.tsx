@@ -28,6 +28,7 @@ import OrderInvoiceTab from "@/components/OrderInvoiceTab";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 import Modal from "@/components/ui/Modal";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Tooltip from "@/components/ui/Tooltip";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
 // Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
@@ -332,16 +333,18 @@ export default function OrderDetailModal({
                             <span className="flex items-center gap-1.5">
                               {deliveryFee.toFixed(2)} AED
                               {canEditFee && (
-                                <button
-                                  onClick={() => {
-                                    setFeeInput(deliveryFee.toFixed(2));
-                                    setEditingFee(true);
-                                  }}
-                                  className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                                  aria-label="Edit delivery fee"
-                                >
-                                  <Pencil className="size-3" />
-                                </button>
+                                <Tooltip label="Override the delivery fee for this order">
+                                  <button
+                                    onClick={() => {
+                                      setFeeInput(deliveryFee.toFixed(2));
+                                      setEditingFee(true);
+                                    }}
+                                    className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                    aria-label="Edit delivery fee"
+                                  >
+                                    <Pencil className="size-3" />
+                                  </button>
+                                </Tooltip>
                               )}
                             </span>
                           )}

@@ -16,6 +16,7 @@ import Input from "@/components/ui/Input";
 import Combobox from "@/components/ui/Combobox";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 
 interface DraftCollection {
   collectionId: number;
@@ -190,20 +191,24 @@ export default function MenuBuilder() {
                 </span>
               </div>
               <div className="flex gap-1 shrink-0">
-                <button
-                  onClick={() => startEdit(item)}
-                  className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                  aria-label={`Edit ${item.label}`}
-                >
-                  <Pencil className="size-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(item)}
-                  className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                  aria-label={`Remove ${item.label}`}
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                <Tooltip label={`Edit ${item.label}`}>
+                  <button
+                    onClick={() => startEdit(item)}
+                    className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    aria-label={`Edit ${item.label}`}
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                </Tooltip>
+                <Tooltip label={`Remove ${item.label} from the menu`} align="end">
+                  <button
+                    onClick={() => handleDelete(item)}
+                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                    aria-label={`Remove ${item.label}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </Tooltip>
               </div>
             </div>
           ))}
@@ -234,16 +239,18 @@ export default function MenuBuilder() {
                   {dropdownCollections.map((c) => (
                     <li key={c.collectionId} className="flex items-center justify-between text-sm bg-black/[0.03] dark:bg-white/[0.05] rounded px-2 py-1">
                       {c.name}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDropdownCollections((prev) => prev.filter((x) => x.collectionId !== c.collectionId))
-                        }
-                        aria-label={`Remove ${c.name}`}
-                        className="text-zinc-400 hover:text-red-600 cursor-pointer"
-                      >
-                        <X className="size-3.5" />
-                      </button>
+                      <Tooltip label={`Remove ${c.name} from this dropdown`}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDropdownCollections((prev) => prev.filter((x) => x.collectionId !== c.collectionId))
+                          }
+                          aria-label={`Remove ${c.name}`}
+                          className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </Tooltip>
                     </li>
                   ))}
                 </ul>

@@ -8,6 +8,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 import { RotateCcw, X } from "lucide-react";
 
 // Minimal ops visibility for the Phase 5 job queue — lists only dead-letter
@@ -104,24 +105,28 @@ export default function FailedJobsPage() {
                 </TD>
                 <TD className="text-xs text-zinc-500">{new Date(j.updatedAt).toLocaleString()}</TD>
                 <TD>
-                  <button
-                    onClick={() => handleRetry(j)}
-                    disabled={busyId === j.id}
-                    className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label={`Retry job ${j.id}`}
-                  >
-                    <RotateCcw className="size-4" />
-                  </button>
+                  <Tooltip label="Retry this job now">
+                    <button
+                      onClick={() => handleRetry(j)}
+                      disabled={busyId === j.id}
+                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={`Retry job ${j.id}`}
+                    >
+                      <RotateCcw className="size-4" />
+                    </button>
+                  </Tooltip>
                 </TD>
                 <TD>
-                  <button
-                    onClick={() => handleDismiss(j)}
-                    disabled={busyId === j.id}
-                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label={`Dismiss job ${j.id}`}
-                  >
-                    <X className="size-4" />
-                  </button>
+                  <Tooltip label="Dismiss without retrying. This cannot be undone." align="end">
+                    <button
+                      onClick={() => handleDismiss(j)}
+                      disabled={busyId === j.id}
+                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={`Dismiss job ${j.id}`}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </Tooltip>
                 </TD>
               </TR>
             ))

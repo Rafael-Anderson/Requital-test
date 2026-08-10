@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
+import Tooltip from "@/components/ui/Tooltip";
 
 // Raw input, not components/ui/Input — that component always renders a
 // visible label, which would repeat "Name"/"Value" on every row of a
@@ -95,14 +96,16 @@ export default function AttributesSection({
                 onChange={(e) => update(i, { value: e.target.value })}
                 className={`flex-1 ${FIELD_CLASS}`}
               />
-              <button
-                type="button"
-                onClick={() => removeRow(i)}
-                aria-label="Remove attribute"
-                className="h-9 flex items-center justify-center px-1 text-zinc-400 hover:text-red-600 cursor-pointer"
-              >
-                <X className="size-4" />
-              </button>
+              <Tooltip label="Remove this attribute">
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  aria-label="Remove attribute"
+                  className="h-9 flex items-center justify-center px-1 text-zinc-400 hover:text-red-600 cursor-pointer"
+                >
+                  <X className="size-4" />
+                </button>
+              </Tooltip>
             </div>
           ))}
         </div>

@@ -111,6 +111,15 @@ export class SignupDto {
   @IsIn(OPERATING_MODELS, { each: true })
   operatingModel?: string[];
 
+  // Wizard-only, same optional-for-e2e-compatibility reasoning as the other
+  // Location step fields above. Locked server-side once set — see
+  // ShopService.update's country check — but that lock only applies to
+  // later PATCH /shop calls; signup itself is always the first write.
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
   @IsOptional()
   @IsIn(BRANCH_COUNTS)
   branchCount?: string;

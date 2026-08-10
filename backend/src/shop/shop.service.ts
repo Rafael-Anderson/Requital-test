@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { SOCIAL_PLATFORM_DOMAINS, SOCIAL_PLATFORMS } from './constants';
@@ -59,6 +63,21 @@ export class ShopService {
   async update(ctx: TenantContext, dto: UpdateShopDto) {
     if (dto.socialLinks) {
       this.validateSocialLinks(dto.socialLinks);
+    }
+
+    // Country is settable once (at signup, or on first save here for a shop
+    // that predates this field / left it blank) and locked after — no
+    // "immutable once set" precedent existed elsewhere in this codebase to
+    // reuse (shop.subdomain is locked by omission from this DTO entirely,
+    // which doesn't fit here since country must stay settable once). A
+    // same-value re-save is a no-op, not a conflict.
+    if (dto.country !== undefined) {
+      const current = await this.prisma.shop.findUniqueOrThrow({
+        where: { id: ctx.shopId },
+      });
+      if (current.country && current.country !== dto.country) {
+        throw new ConflictException('Country cannot be changed once set.');
+      }
     }
 
     if (dto.published === true) {

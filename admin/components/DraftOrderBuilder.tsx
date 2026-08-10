@@ -19,6 +19,7 @@ import PageShell from "@/components/ui/PageShell";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import Combobox from "@/components/ui/Combobox";
+import Tooltip from "@/components/ui/Tooltip";
 
 // Mirrors backend/src/orders/constants.ts EMIRATES by hand — no shared
 // package between admin/backend, same tradeoff as every other mirrored
@@ -362,14 +363,16 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                     />
                   </TD>
                   <TD>
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      aria-label="Remove item"
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <Tooltip label="Remove this item from the draft order">
+                      <button
+                        type="button"
+                        onClick={() => removeItem(index)}
+                        aria-label="Remove item"
+                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                 </TR>
               ))}

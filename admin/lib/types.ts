@@ -1270,6 +1270,7 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, Credenti
   paypal: [
     { key: "clientId", label: "Client ID" },
     { key: "clientSecret", label: "Client Secret" },
+    { key: "webhookId", label: "Webhook ID" },
   ],
   tabby: [
     { key: "publicKey", label: "Public Key" },

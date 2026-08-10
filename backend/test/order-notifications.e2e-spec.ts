@@ -568,6 +568,191 @@ describe('Order status customer email notifications (e2e)', () => {
     });
   });
 
+  describe('Merchant WhatsApp order alert (platform-owned)', () => {
+    let fetchSpy: jest.SpyInstance;
+    const originalPhoneNumberId = process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
+    const originalAccessToken = process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN;
+
+    beforeEach(() => {
+      fetchSpy = jest.spyOn(global, 'fetch');
+    });
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+      if (originalPhoneNumberId === undefined) {
+        delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
+      } else {
+        process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = originalPhoneNumberId;
+      }
+      if (originalAccessToken === undefined) {
+        delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN;
+      } else {
+        process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = originalAccessToken;
+      }
+    });
+
+    function metaApiCalls() {
+      return fetchSpy.mock.calls.filter(([url]) =>
+        String(url).includes('/messages'),
+      );
+    }
+
+    interface WhatsAppAlertJobPayload {
+      to: string;
+      body: string;
+      orderId: number;
+    }
+
+    it('is always on: no per-shop toggle gates it, unlike the customer-facing WhatsApp channel', async () => {
+      // notifyCustomersWhatsapp/notifyEmail both off — the merchant alert
+      // must still fire since it has no per-shop enable/disable by design.
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-always-on',
+        false,
+        false,
+      );
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ phone: '0507654321' })
+        .expect(200);
+
+      const order = await createOrder(adminToken, outletId, productId, {});
+      const job = await processOwnEmailJob(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
+      expect(job).not.toBeNull();
+      expect(job!.status).toBe('completed');
+      const payload = job!.payload as unknown as WhatsAppAlertJobPayload;
+      expect(payload.to).toBe('+971507654321');
+      expect(payload.body).toContain(`New order #${order.id}`);
+      expect(payload.orderId).toBe(order.id);
+    });
+
+    it("prefers the outlet's whatsapp field over its phone field", async () => {
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-whatsapp-pref',
+        false,
+        false,
+      );
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ phone: '0507654322', whatsapp: '0507654399' })
+        .expect(200);
+
+      const order = await createOrder(adminToken, outletId, productId, {});
+      const job = await processOwnEmailJob(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
+      expect(job).not.toBeNull();
+      const payload = job!.payload as unknown as WhatsAppAlertJobPayload;
+      expect(payload.to).toBe('+971507654399');
+    });
+
+    it('does not enqueue anything when the outlet has no phone or whatsapp configured', async () => {
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-nophone',
+        false,
+        false,
+      );
+      const order = await createOrder(adminToken, outletId, productId, {});
+      const job = await prisma.job.findUnique({
+        where: {
+          idempotencyKey: `order:${order.id}:merchant-whatsapp-alert`,
+        },
+      });
+      expect(job).toBeNull();
+      // Order creation itself is unaffected.
+      expect(order.id).toBeTruthy();
+    });
+
+    it('does not enqueue anything when the outlet phone cannot be normalized to E.164', async () => {
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-badphone',
+        false,
+        false,
+      );
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ phone: 'not-a-real-number' })
+        .expect(200);
+
+      const order = await createOrder(adminToken, outletId, productId, {});
+      const job = await prisma.job.findUnique({
+        where: {
+          idempotencyKey: `order:${order.id}:merchant-whatsapp-alert`,
+        },
+      });
+      expect(job).toBeNull();
+    });
+
+    it('processes via the stub when the platform WhatsApp env vars are unset', async () => {
+      delete process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
+      delete process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN;
+
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-stub',
+        false,
+        false,
+      );
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ phone: '0507654323' })
+        .expect(200);
+
+      const order = await createOrder(adminToken, outletId, productId, {});
+      const job = await processOwnEmailJob(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
+      expect(job).not.toBeNull();
+      expect(job!.status).toBe('completed');
+      expect(metaApiCalls()).toHaveLength(0);
+      expect(
+        whatsAppStubCalls(logSpy, '+971507654323').some((line) =>
+          line.includes(`New order #${order.id}`),
+        ),
+      ).toBe(true);
+    });
+
+    it('calls the Meta Cloud API with platform env credentials (not per-shop ones) once configured', async () => {
+      process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID = 'platform-phone-id';
+      process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN = 'platform-access-token';
+      fetchSpy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ messages: [{ id: 'wamid.platform1' }] }),
+      });
+
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-real',
+        false,
+        false,
+      );
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ phone: '0507654324' })
+        .expect(200);
+
+      const order = await createOrder(adminToken, outletId, productId, {});
+      const job = await processOwnEmailJob(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
+      expect(job).not.toBeNull();
+      expect(job!.status).toBe('completed');
+
+      const calls = metaApiCalls();
+      expect(calls).toHaveLength(1);
+      const [url, init] = calls[0];
+      expect(String(url)).toContain('/platform-phone-id/messages');
+      expect(init.headers.Authorization).toBe('Bearer platform-access-token');
+      const sentBody = JSON.parse(init.body);
+      expect(sentBody.to).toBe('971507654324');
+    });
+  });
+
   describe('Real email provider (Resend)', () => {
     let fetchSpy: jest.SpyInstance;
     const originalKey = process.env.RESEND_API_KEY;

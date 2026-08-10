@@ -5,6 +5,7 @@ import { GripVertical, Star, X } from "lucide-react";
 import { resolveImageUrl, uploadProductImage } from "@/lib/api";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 
 export interface GalleryImage {
   url: string;
@@ -81,14 +82,16 @@ export default function ProductMediaGallery({
               <span className="absolute top-1 right-1 p-0.5 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity">
                 <GripVertical className="size-3.5" />
               </span>
-              <button
-                type="button"
-                onClick={() => handleRemove(i)}
-                aria-label="Remove image"
-                className="absolute bottom-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-colors cursor-pointer"
-              >
-                <X className="size-3" />
-              </button>
+              <Tooltip label="Remove this image">
+                <button
+                  type="button"
+                  onClick={() => handleRemove(i)}
+                  aria-label="Remove image"
+                  className="absolute bottom-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-colors cursor-pointer"
+                >
+                  <X className="size-3" />
+                </button>
+              </Tooltip>
             </div>
           ))}
         </div>

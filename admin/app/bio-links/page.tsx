@@ -36,6 +36,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import BioLinkFormModal from "@/components/BioLinkFormModal";
 import PageShell from "@/components/ui/PageShell";
+import Tooltip from "@/components/ui/Tooltip";
 
 const TYPE_BADGE_CLASS =
   "inline-flex items-center rounded-full border border-black/10 dark:border-white/10 px-2 py-0.5 text-xs text-zinc-500";
@@ -334,20 +335,24 @@ export default function BioLinksPage() {
                     </div>
                     <Toggle checked={link.active} onChange={(next) => handleToggleActive(link, next)} />
                     <div className="flex gap-1 shrink-0">
-                      <button
-                        onClick={() => setEditing(link)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        aria-label={`Edit ${link.label}`}
-                      >
-                        <Pencil className="size-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(link)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                        aria-label={`Delete ${link.label}`}
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
+                      <Tooltip label={`Edit ${link.label}`}>
+                        <button
+                          onClick={() => setEditing(link)}
+                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          aria-label={`Edit ${link.label}`}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label={`Delete ${link.label}. This cannot be undone.`} align="end">
+                        <button
+                          onClick={() => handleDelete(link)}
+                          className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                          aria-label={`Delete ${link.label}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
                 ))}

@@ -33,6 +33,7 @@ import ImageDropzone from "@/components/ui/ImageDropzone";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import Combobox from "@/components/ui/Combobox";
+import Tooltip from "@/components/ui/Tooltip";
 
 function slugify(input: string): string {
   return input
@@ -377,14 +378,16 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                             />
                           </TD>
                           <TD>
-                            <button
-                              type="button"
-                              onClick={() => removeCollectionMember(m.collectionId)}
-                              aria-label={`Remove ${m.collectionName}`}
-                              className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="size-4" />
-                            </button>
+                            <Tooltip label={`Remove ${m.collectionName} from this template`}>
+                              <button
+                                type="button"
+                                onClick={() => removeCollectionMember(m.collectionId)}
+                                aria-label={`Remove ${m.collectionName}`}
+                                className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="size-4" />
+                              </button>
+                            </Tooltip>
                           </TD>
                         </TR>
                       ))
@@ -439,14 +442,16 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                             />
                           </TD>
                           <TD>
-                            <button
-                              type="button"
-                              onClick={() => removeMember(m.productId)}
-                              aria-label={`Remove ${m.productName}`}
-                              className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="size-4" />
-                            </button>
+                            <Tooltip label={`Remove ${m.productName} from this template`}>
+                              <button
+                                type="button"
+                                onClick={() => removeMember(m.productId)}
+                                aria-label={`Remove ${m.productName}`}
+                                className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="size-4" />
+                              </button>
+                            </Tooltip>
                           </TD>
                         </TR>
                       ))

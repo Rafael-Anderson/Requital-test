@@ -266,6 +266,7 @@ export default function PaymentGatewaysPage() {
             <Toggle
               checked={independentEnabled[provider] ?? false}
               onChange={(checked) => setIndependentEnabled((prev) => ({ ...prev, [provider]: checked }))}
+              tooltip={`Makes ${PAYMENT_PROVIDER_LABELS[provider]} available as a payment option at checkout.`}
             />
           </div>
           <CredentialFields

@@ -44,6 +44,7 @@ import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
+import Tooltip from "@/components/ui/Tooltip";
 
 export default function InventoryPage() {
   return (
@@ -449,51 +450,61 @@ function InventoryPageContent() {
                       )}
                   </TD>
                   <TD>
-                    <Link
-                      href={`/products/${p.id}/edit`}
-                      className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                      aria-label={`Edit ${p.name}`}
-                    >
-                      <Pencil className="size-4" />
-                    </Link>
+                    <Tooltip label={`Edit ${p.name}`}>
+                      <Link
+                        href={`/products/${p.id}/edit`}
+                        className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                        aria-label={`Edit ${p.name}`}
+                      >
+                        <Pencil className="size-4" />
+                      </Link>
+                    </Tooltip>
                   </TD>
                   <TD>
                     {p.trackInventory && selectedOutletId && (
-                      <button
-                        onClick={() => setAdjustingProduct(p)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        aria-label={`Adjust stock for ${p.name}`}
-                      >
-                        <SlidersHorizontal className="size-4" />
-                      </button>
+                      <Tooltip label={`Adjust stock for ${p.name}`}>
+                        <button
+                          onClick={() => setAdjustingProduct(p)}
+                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          aria-label={`Adjust stock for ${p.name}`}
+                        >
+                          <SlidersHorizontal className="size-4" />
+                        </button>
+                      </Tooltip>
                     )}
                   </TD>
                   <TD>
-                    <button
-                      onClick={() => setTransferringProduct(p)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Transfer stock for ${p.name}`}
-                    >
-                      <ArrowLeftRight className="size-4" />
-                    </button>
+                    <Tooltip label={`Transfer stock for ${p.name} to another branch`}>
+                      <button
+                        onClick={() => setTransferringProduct(p)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        aria-label={`Transfer stock for ${p.name}`}
+                      >
+                        <ArrowLeftRight className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                   <TD>
-                    <button
-                      onClick={() => handleDuplicate(p)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Duplicate ${p.name}`}
-                    >
-                      <Copy className="size-4" />
-                    </button>
+                    <Tooltip label={`Create a copy of ${p.name}`}>
+                      <button
+                        onClick={() => handleDuplicate(p)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        aria-label={`Duplicate ${p.name}`}
+                      >
+                        <Copy className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                   <TD>
-                    <button
-                      onClick={() => handleDelete(p)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                      aria-label={`Delete ${p.name}`}
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <Tooltip label={`Delete ${p.name}. This cannot be undone.`} align="end">
+                      <button
+                        onClick={() => handleDelete(p)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                        aria-label={`Delete ${p.name}`}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                 </TR>
               );

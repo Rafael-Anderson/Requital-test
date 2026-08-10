@@ -12,6 +12,7 @@ import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import IngredientCategoryFormModal from "@/components/IngredientCategoryFormModal";
 import InventoryTabs from "@/components/InventoryTabs";
 import PageShell from "@/components/ui/PageShell";
+import Tooltip from "@/components/ui/Tooltip";
 
 export default function IngredientCategoriesPage() {
   const [ingredientCategories, setIngredientCategories] = useState<IngredientCategory[] | null>(null);
@@ -76,20 +77,24 @@ export default function IngredientCategoriesPage() {
               >
                 <span className="text-sm font-medium">{c.name}</span>
                 <div className="flex gap-1">
-                  <button
-                    onClick={() => setEditing(c)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                    aria-label={`Edit ${c.name}`}
-                  >
-                    <Pencil className="size-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(c)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                    aria-label={`Delete ${c.name}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <Tooltip label={`Edit ${c.name}`}>
+                    <button
+                      onClick={() => setEditing(c)}
+                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      aria-label={`Edit ${c.name}`}
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                  </Tooltip>
+                  <Tooltip label={`Delete ${c.name}. This cannot be undone.`} align="end">
+                    <button
+                      onClick={() => handleDelete(c)}
+                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      aria-label={`Delete ${c.name}`}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             ))}

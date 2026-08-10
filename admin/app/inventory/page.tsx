@@ -29,6 +29,7 @@ import TransferStockModal from "@/components/TransferStockModal";
 import AdjustStockModal from "@/components/AdjustStockModal";
 import CsvImportModal from "@/components/CsvImportModal";
 import DropdownMenu from "@/components/ui/DropdownMenu";
+import Tooltip from "@/components/ui/Tooltip";
 
 export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState<Ingredient[] | null>(null);
@@ -231,42 +232,50 @@ export default function IngredientsPage() {
                     )}
                   </TD>
                   <TD>
-                    <button
-                      onClick={() => setEditing(ingredient)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Edit ${ingredient.name}`}
-                    >
-                      <Pencil className="size-4" />
-                    </button>
+                    <Tooltip label={`Edit ${ingredient.name}`}>
+                      <button
+                        onClick={() => setEditing(ingredient)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        aria-label={`Edit ${ingredient.name}`}
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                   <TD>
                     {selectedOutletId && (
-                      <button
-                        onClick={() => setAdjusting(ingredient)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        aria-label={`Adjust stock for ${ingredient.name}`}
-                      >
-                        <SlidersHorizontal className="size-4" />
-                      </button>
+                      <Tooltip label={`Adjust stock for ${ingredient.name}`}>
+                        <button
+                          onClick={() => setAdjusting(ingredient)}
+                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          aria-label={`Adjust stock for ${ingredient.name}`}
+                        >
+                          <SlidersHorizontal className="size-4" />
+                        </button>
+                      </Tooltip>
                     )}
                   </TD>
                   <TD>
-                    <button
-                      onClick={() => setTransferring(ingredient)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Transfer stock for ${ingredient.name}`}
-                    >
-                      <ArrowLeftRight className="size-4" />
-                    </button>
+                    <Tooltip label={`Transfer stock for ${ingredient.name} to another branch`}>
+                      <button
+                        onClick={() => setTransferring(ingredient)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        aria-label={`Transfer stock for ${ingredient.name}`}
+                      >
+                        <ArrowLeftRight className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                   <TD>
-                    <button
-                      onClick={() => handleDelete(ingredient)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                      aria-label={`Delete ${ingredient.name}`}
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                    <Tooltip label={`Delete ${ingredient.name}. This cannot be undone.`} align="end">
+                      <button
+                        onClick={() => handleDelete(ingredient)}
+                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                        aria-label={`Delete ${ingredient.name}`}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </Tooltip>
                   </TD>
                 </TR>
               );

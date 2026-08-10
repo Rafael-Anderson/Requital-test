@@ -1,9 +1,27 @@
+import Tooltip from "./ui/Tooltip";
+
 // Pill shape adapted from "Status Badge" by Serafim on 21st.dev
 // (https://21st.dev/@serafimcloud/components/status-badge, itself credited
 // there as "inspired by Tremor") — rounded-full bordered pill with a leading
 // dot, swapped in place of the old solid-fill badge. Tremor-specific classes
 // (rounded-tremor-full, text-tremor-label) were translated to this project's
 // plain Tailwind palette rather than pulling in the Tremor preset.
+//
+// Tooltip copy is keyed by order-status values only (pending/confirmed/...)
+// — this component is also reused for paymentStatus/externaldelivery.status/
+// open-closed, whose values never collide with these keys, so a flat lookup
+// stays safe without a separate "kind" prop. Those other statuses are
+// already fully explained by their own visible label (paid/unpaid/open/
+// closed/etc.) and get no tooltip.
+const ORDER_STATUS_TOOLTIPS: Record<string, string> = {
+  pending: "Order placed. Stock has not been reserved yet.",
+  confirmed: "Stock has been deducted for this order.",
+  preparing: "The merchant is preparing this order.",
+  out_for_delivery: "The order is on its way, or ready for pickup.",
+  delivered: "The order was completed successfully.",
+  cancelled: "The order was cancelled and any deducted stock was restored.",
+};
+
 const DOT_STYLES: Record<string, string> = {
   pending: "bg-amber-500",
   confirmed: "bg-blue-500",
@@ -23,7 +41,7 @@ const DOT_STYLES: Record<string, string> = {
 };
 
 export default function StatusBadge({ status }: { status: string }) {
-  return (
+  const badge = (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs font-medium capitalize text-zinc-700 dark:text-zinc-200">
       <span
         className={`size-1.5 rounded-full ${DOT_STYLES[status] ?? "bg-zinc-400"}`}
@@ -32,4 +50,8 @@ export default function StatusBadge({ status }: { status: string }) {
       {status.replace(/_/g, " ")}
     </span>
   );
+
+  const tooltip = ORDER_STATUS_TOOLTIPS[status];
+  if (!tooltip) return badge;
+  return <Tooltip label={tooltip}>{badge}</Tooltip>;
 }

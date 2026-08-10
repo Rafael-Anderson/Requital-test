@@ -30,6 +30,7 @@ import Button from "@/components/ui/Button";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 
 // One per parsed OCR line — starts from the server's ScanPreviewItem but is
 // fully editable before commit, since Tesseract's accuracy is nowhere near
@@ -88,14 +89,16 @@ function KeywordChips({
             className="inline-flex items-center gap-1 rounded-full bg-black/5 dark:bg-white/10 px-2.5 py-1 text-xs"
           >
             {v}
-            <button
-              type="button"
-              onClick={() => onChange(values.filter((x) => x !== v))}
-              aria-label={`Remove ${v}`}
-              className="text-zinc-400 hover:text-red-600 cursor-pointer"
-            >
-              ×
-            </button>
+            <Tooltip label={`Remove ${v}`}>
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((x) => x !== v))}
+                aria-label={`Remove ${v}`}
+                className="text-zinc-400 hover:text-red-600 cursor-pointer"
+              >
+                ×
+              </button>
+            </Tooltip>
           </span>
         ))}
         {values.length === 0 && <span className="text-xs text-zinc-400">None</span>}

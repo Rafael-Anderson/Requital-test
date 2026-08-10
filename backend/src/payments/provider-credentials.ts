@@ -40,9 +40,10 @@ export interface CredentialFieldDef {
 //   providers' own env var fallbacks (TABBY_PUBLIC_KEY/TABBY_SECRET_KEY/
 //   TABBY_WEBHOOK_SECRET, TAMARA_API_URL/TAMARA_TOKEN/TAMARA_NOTIFICATION_TOKEN).
 //   Was a single-field placeholder from the earlier structural-stub task.
-// - paypal: standard PayPal REST API OAuth2 client-credentials shape — a
-//   reasonable, well-known field shape even though createCheckoutSession
-//   itself is a structural stub (see providers/paypal-payment.provider.ts).
+// - paypal: standard PayPal REST API OAuth2 client-credentials shape
+//   (clientId/clientSecret), plus webhookId — the Webhook ID PayPal issues
+//   per registered webhook, required by their remote
+//   verify-webhook-signature call (see providers/paypal-payment.provider.ts).
 // - nomod: no confirmed real API docs for this specific gateway were
 //   available to implement (or even confidently shape credentials) against
 //   — this is a placeholder 2-field shape (api key + secret), flagged the
@@ -62,6 +63,7 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<
   paypal: [
     { key: 'clientId', label: 'Client ID' },
     { key: 'clientSecret', label: 'Client Secret' },
+    { key: 'webhookId', label: 'Webhook ID' },
   ],
   tabby: [
     { key: 'publicKey', label: 'Public Key' },

@@ -1,5 +1,7 @@
 "use client";
 
+import Tooltip from "./Tooltip";
+
 // The app's switch control for binary status fields (active/inactive,
 // open/closed, enabled/disabled) — green when on, neutral grey when off.
 // Off used to be red, but red reads as "broken/error," not "not turned on
@@ -14,12 +16,17 @@ export default function Toggle({
   checked,
   onChange,
   disabled,
+  tooltip,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  // Only for toggles whose consequence isn't obvious from the surrounding
+  // label (e.g. switching off Recipe deletes the ingredient list) — a plain
+  // status toggle like "Active" needs none.
+  tooltip?: string;
 }) {
-  return (
+  const button = (
     <button
       type="button"
       role="switch"
@@ -39,4 +46,7 @@ export default function Toggle({
       />
     </button>
   );
+
+  if (!tooltip) return button;
+  return <Tooltip label={tooltip}>{button}</Tooltip>;
 }

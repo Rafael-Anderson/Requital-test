@@ -10,6 +10,7 @@ import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 
 interface WorkingItem {
   productId: number;
@@ -164,14 +165,16 @@ export default function EditOrderItemsModal({
                   />
                 </TD>
                 <TD>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(item.productId, item.variantId)}
-                    aria-label={`Remove ${item.productName}`}
-                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <Tooltip label={`Remove ${item.productName} from the order`}>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.productId, item.variantId)}
+                      aria-label={`Remove ${item.productName}`}
+                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </Tooltip>
                 </TD>
               </TR>
             ))}

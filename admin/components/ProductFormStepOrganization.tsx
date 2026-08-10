@@ -8,6 +8,7 @@ import CollectionCheckboxTree from "@/components/CollectionCheckboxTree";
 import VariantsSection from "@/components/VariantsSection";
 import AttributesSection from "@/components/AttributesSection";
 import FaqsSection from "@/components/FaqsSection";
+import Tooltip from "@/components/ui/Tooltip";
 import { PRODUCT_STATUS_LABELS } from "@/lib/types";
 import { PRODUCT_STATUSES, type ProductFormState } from "@/lib/useProductForm";
 
@@ -61,14 +62,16 @@ export default function ProductFormStepOrganization({
                 className="inline-flex items-center gap-1 rounded-full bg-black/5 dark:bg-white/10 px-2.5 py-1 text-xs"
               >
                 {tag}
-                <button
-                  type="button"
-                  onClick={() => form.removeTag(tag)}
-                  aria-label={`Remove ${tag}`}
-                  className="text-zinc-400 hover:text-red-600 cursor-pointer"
-                >
-                  ×
-                </button>
+                <Tooltip label={`Remove ${tag}`}>
+                  <button
+                    type="button"
+                    onClick={() => form.removeTag(tag)}
+                    aria-label={`Remove ${tag}`}
+                    className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </Tooltip>
               </span>
             ))}
           </div>

@@ -6,6 +6,7 @@ import { OutletFilterProvider } from "@/lib/outlet-context";
 import RequireAuth from "@/components/RequireAuth";
 import TopBar from "@/components/TopBar";
 import EmailVerificationBanner from "@/components/EmailVerificationBanner";
+import NewOrderBanner from "@/components/NewOrderBanner";
 import CommandPalette from "@/components/CommandPalette";
 import NavigationProgress from "@/components/ui/NavigationProgress";
 import "./globals.css";
@@ -65,6 +66,7 @@ export default function RootLayout({
               <RequireAuth>
                 <TopBar />
                 <EmailVerificationBanner />
+                <NewOrderBanner />
                 <CommandPalette />
                 <main className="p-6">{children}</main>
               </RequireAuth>

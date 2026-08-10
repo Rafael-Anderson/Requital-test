@@ -144,6 +144,36 @@ describe('Payment Settings (e2e)', () => {
       expect(JSON.stringify(res.body)).not.toContain('whsec_zzzz9999');
     });
 
+    it('saves and masks all 3 PayPal credential fields (clientId/clientSecret/webhookId)', async () => {
+      const shop = await setupShop('pay-paypal-creds');
+      await request(app.getHttpServer())
+        .patch('/payment-settings/paypal')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({
+          credentials: {
+            clientId: 'AeClientId1234',
+            clientSecret: 'EcSecret5678',
+            webhookId: 'WH-webhookid9012',
+          },
+        })
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get('/payment-settings')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      const paypal = findProvider(body<ProviderRow[]>(res), 'paypal');
+      expect(paypal.hasCredentials).toBe(true);
+      expect(paypal.maskedCredentials).toEqual({
+        clientId: '••••1234',
+        clientSecret: '••••5678',
+        webhookId: '••••9012',
+      });
+      expect(JSON.stringify(res.body)).not.toContain('AeClientId1234');
+      expect(JSON.stringify(res.body)).not.toContain('EcSecret5678');
+      expect(JSON.stringify(res.body)).not.toContain('WH-webhookid9012');
+    });
+
     it('is never stored in plaintext in the database either', async () => {
       const shop = await setupShop('pay-encrypted-at-rest');
       await request(app.getHttpServer())
@@ -336,7 +366,11 @@ describe('Payment Settings (e2e)', () => {
         .set('Authorization', `Bearer ${shopA.adminToken}`)
         .send({
           enabled: true,
-          credentials: { clientId: 'a', clientSecret: 'b' },
+          credentials: {
+            clientId: 'a',
+            clientSecret: 'b',
+            webhookId: 'shopA-webhook-id',
+          },
         })
         .expect(200);
 
@@ -347,7 +381,9 @@ describe('Payment Settings (e2e)', () => {
       const rowsB = body<ProviderRow[]>(settingsB);
       expect(findProvider(rowsB, 'stripe').hasCredentials).toBe(false);
       expect(findProvider(rowsB, 'paypal').enabled).toBe(false);
+      expect(findProvider(rowsB, 'paypal').hasCredentials).toBe(false);
       expect(JSON.stringify(settingsB.body)).not.toContain('shopA');
+      expect(JSON.stringify(settingsB.body)).not.toContain('shopA-webhook-id');
 
       const publicB = await request(app.getHttpServer())
         .get(`/public/${shopB.slug}`)

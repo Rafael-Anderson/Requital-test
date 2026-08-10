@@ -261,6 +261,7 @@ export function signup(data: {
   address?: string;
   operatingModel?: string[];
   branchCount?: string;
+  country?: string;
   productEditorMode?: "simple" | "advanced";
 }) {
   return apiFetch<TokenPair & { user: AuthUser; devVerificationLink?: string }>("/auth/signup", {

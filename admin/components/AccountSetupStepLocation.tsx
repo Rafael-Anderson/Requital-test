@@ -3,7 +3,7 @@
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import FieldErrorMessage from "@/components/ui/FieldErrorMessage";
-import { BRANCH_COUNTS, OPERATING_MODELS } from "@/lib/useAccountSetupForm";
+import { BRANCH_COUNTS, COUNTRIES, OPERATING_MODELS } from "@/lib/useAccountSetupForm";
 import type { AccountSetupFormState } from "@/lib/useAccountSetupForm";
 
 export default function AccountSetupStepLocation({
@@ -17,6 +17,21 @@ export default function AccountSetupStepLocation({
 
   return (
     <div className="space-y-4">
+      <Select
+        ref={registerFieldRef("country")}
+        label="Country"
+        required
+        value={form.country}
+        onChange={(e) => form.setCountry(e.target.value)}
+        error={form.touched.country ? form.fieldErrors.country : undefined}
+      >
+        {COUNTRIES.map((country) => (
+          <option key={country} value={country}>
+            {country}
+          </option>
+        ))}
+      </Select>
+
       <Input
         ref={registerFieldRef("address")}
         label="Primary Location / Address"
