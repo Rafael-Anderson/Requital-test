@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { OutletsModule } from './outlets/outlets.module';
 import { ProductsModule } from './products/products.module';
@@ -73,6 +74,10 @@ import { StorageModule } from './storage/storage.module';
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
     PrismaModule,
+    // Coexists with PrismaModule during the mysql2 migration (see
+    // migration/mysql2 branch) — remove PrismaModule once every service has
+    // been converted to DatabaseService.
+    DatabaseModule,
     AuthModule,
     OutletsModule,
     ProductsModule,
