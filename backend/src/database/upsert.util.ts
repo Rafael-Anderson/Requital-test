@@ -19,7 +19,9 @@ export async function upsert(
   const updateClause = updateColumns
     .map((c) => `\`${c}\` = VALUES(\`${c}\`)`)
     .join(', ');
-  const [result] = await runner.execute<ResultSetHeader>(
+  // .query(), not .execute() — see DatabaseService's own comment: mysql2's
+  // prepared-statement protocol has proven unreliable on this MySQL setup.
+  const [result] = await runner.query<ResultSetHeader>(
     `INSERT INTO \`${table}\` (${cols}) VALUES (${placeholders})
      ON DUPLICATE KEY UPDATE ${updateClause}`,
     columns.map((c) => values[c]),

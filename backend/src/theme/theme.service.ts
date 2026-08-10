@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService, type QueryParam } from '../database/database.service';
+import { upsert } from '../database/upsert.util';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ThemesettingsRow, BannerimageRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { UpdateThemeDto } from './dto/update-theme.dto';
 import { THEME_COLOR_KEYS } from './constants';
@@ -7,21 +10,55 @@ import { THEME_COLOR_KEYS } from './constants';
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 const VALID_COLOR_KEYS = new Set(THEME_COLOR_KEYS);
 
+// Every themesettings column that can be sent via UpdateThemeDto, and its
+// create-time default — mirrors findOne()'s own "no row yet" fallback shape.
+const THEME_FIELD_DEFAULTS: Record<string, QueryParam> = {
+  logoUrl: null,
+  bannerUrl: null,
+  brandColor: null,
+  secondaryColor: null,
+  heroText: null,
+  faviconUrl: null,
+  fontFamily: null,
+  footerLogoUrl: null,
+  footerDescription: null,
+  notificationText: null,
+  contactNumbers: null,
+  colors: null,
+  announcementBarEnabled: false,
+  announcementBarScrolling: false,
+  homepageLayout: 'classic',
+  homeTabMode: 'templates',
+  topBarLayout: 'logo_left',
+  iconStyle: 'outline',
+  buttonRadius: 'rounded',
+  buttonFill: 'solid',
+  pdpLayout: 'gallery_left',
+  cartLayout: 'full_page',
+  checkoutLayout: 'single_page',
+  footerLayout: 'columns',
+  headerDensity: 'regular',
+  footerDensity: 'regular',
+};
+const THEME_JSON_COLUMNS = new Set(['notificationText', 'contactNumbers', 'colors']);
+
 @Injectable()
 export class ThemeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async findOne(ctx: TenantContext) {
-    const [theme, images] = await Promise.all([
-      this.prisma.themesettings.findUnique({ where: { shopId: ctx.shopId } }),
+    const [themeRows, images] = await Promise.all([
+      this.db.query<(ThemesettingsRow & RowDataPacket)[]>(
+        `SELECT * FROM themesettings WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
       // bannerimage relates to shop directly, not themesettings (see the
       // model's own schema comment — banners shouldn't depend on a
-      // themesettings row existing yet), so this is always a second query,
-      // never a Prisma `include`.
-      this.prisma.bannerimage.findMany({
-        where: { shopId: ctx.shopId },
-        orderBy: { order: 'asc' },
-      }),
+      // themesettings row existing yet), so this is always a second query.
+      this.db.query<(BannerimageRow & RowDataPacket)[]>(
+        `SELECT * FROM bannerimage WHERE shopId = ? ORDER BY \`order\` ASC`,
+        [ctx.shopId],
+      ),
     ]);
     // No row yet (never saved) is a real, valid state — not an error. The
     // admin UI and storefront both already treat every field here as
@@ -31,34 +68,9 @@ export class ThemeService {
     // (possibly empty), never conditional on whether a themesettings row
     // exists yet.
     return {
-      ...(theme ?? {
+      ...(themeRows[0] ?? {
         shopId: ctx.shopId,
-        brandColor: null,
-        secondaryColor: null,
-        logoUrl: null,
-        bannerUrl: null,
-        faviconUrl: null,
-        footerLogoUrl: null,
-        footerDescription: null,
-        heroText: null,
-        fontFamily: null,
-        notificationText: null,
-        contactNumbers: null,
-        announcementBarEnabled: false,
-        announcementBarScrolling: false,
-        colors: null,
-        homepageLayout: 'classic',
-        homeTabMode: 'templates',
-        topBarLayout: 'logo_left',
-        iconStyle: 'outline',
-        buttonRadius: 'rounded',
-        buttonFill: 'solid',
-        pdpLayout: 'gallery_left',
-        cartLayout: 'full_page',
-        checkoutLayout: 'single_page',
-        footerLayout: 'columns',
-        headerDensity: 'regular',
-        footerDensity: 'regular',
+        ...THEME_FIELD_DEFAULTS,
         updatedAt: null,
       }),
       images,
@@ -82,36 +94,57 @@ export class ThemeService {
     // Only touched when images is actually part of this save (undefined
     // means "not being changed this call," same as every other optional
     // DTO field) — an explicit images:[] (all banners removed) clears it.
-    const bannerUrlSync =
+    const bannerUrlSync: { bannerUrl?: string | null } =
       images !== undefined ? { bannerUrl: images[0]?.url ?? null } : {};
+    const merged: Record<string, unknown> = { ...themeFields, ...bannerUrlSync };
 
-    const [theme] = await this.prisma.$transaction([
-      this.prisma.themesettings.upsert({
-        where: { shopId: ctx.shopId },
-        create: { shopId: ctx.shopId, ...themeFields, ...bannerUrlSync },
-        update: { ...themeFields, ...bannerUrlSync },
-      }),
-      ...(images !== undefined
-        ? [
-            this.prisma.bannerimage.deleteMany({
-              where: { shopId: ctx.shopId },
-            }),
-            this.prisma.bannerimage.createMany({
-              data: images.map((img, i) => ({
-                shopId: ctx.shopId,
-                url: img.url,
-                linkUrl: img.linkUrl ?? null,
-                order: img.order ?? i,
-              })),
-            }),
-          ]
-        : []),
-    ]);
-    const currentImages = await this.prisma.bannerimage.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: { order: 'asc' },
+    const values: Record<string, QueryParam> = {
+      shopId: ctx.shopId,
+      updatedAt: new Date(),
+    };
+    for (const [key, defaultValue] of Object.entries(THEME_FIELD_DEFAULTS)) {
+      const raw = merged[key];
+      if (raw === undefined) {
+        values[key] = defaultValue;
+      } else {
+        values[key] = THEME_JSON_COLUMNS.has(key)
+          ? JSON.stringify(raw)
+          : (raw as QueryParam);
+      }
+    }
+    // Filter to keys with a real value, not just Object.keys(merged) —
+    // class-transformer can pre-declare every DTO field as an own property
+    // set to `undefined` even when the request never sent it, so an
+    // unfiltered key list would tell the UPDATE branch to overwrite every
+    // untouched field back to its create-time default on every save. Found
+    // for real: a second PATCH sending only brandColor was wiping
+    // fontFamily/heroText/secondaryColor back to null.
+    const updateColumns = [
+      'updatedAt',
+      ...Object.keys(merged).filter((k) => merged[k] !== undefined),
+    ];
+
+    await this.db.transaction(async (conn) => {
+      await upsert(conn, 'themesettings', values, updateColumns);
+      if (images !== undefined) {
+        await conn.query(`DELETE FROM bannerimage WHERE shopId = ?`, [ctx.shopId]);
+        if (images.length > 0) {
+          const placeholders = images.map(() => '(?, ?, ?, ?)').join(', ');
+          const params = images.flatMap((img, i) => [
+            ctx.shopId,
+            img.url,
+            img.linkUrl ?? null,
+            img.order ?? i,
+          ]);
+          await conn.query(
+            `INSERT INTO bannerimage (shopId, url, linkUrl, \`order\`) VALUES ${placeholders}`,
+            params,
+          );
+        }
+      }
     });
-    return { ...theme, images: currentImages };
+
+    return this.findOne(ctx);
   }
 
   // Manual validation rather than a class-validator decorator, since

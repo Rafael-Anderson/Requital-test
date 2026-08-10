@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { upsert } from '../database/upsert.util';
+import type { RowDataPacket } from 'mysql2/promise';
 import type { TenantContext } from '../common/tenant-context';
 import { UpdateScanSettingsDto } from './dto/update-scan-settings.dto';
 import { DEFAULT_EXCLUDE_KEYWORDS } from './ocr-parser';
@@ -16,12 +18,14 @@ export interface ScanSettingsResponse {
 // SeoService/ThemeService — see seo.service.ts.
 @Injectable()
 export class ScanSettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async findOne(ctx: TenantContext): Promise<ScanSettingsResponse> {
-    const settings = await this.prisma.scansettings.findUnique({
-      where: { shopId: ctx.shopId },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM scansettings WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    const settings = rows[0];
     if (!settings) {
       return {
         shopId: ctx.shopId,
@@ -32,10 +36,10 @@ export class ScanSettingsService {
       };
     }
     return {
-      shopId: settings.shopId,
+      shopId: settings.shopId as number,
       excludeKeywords: settings.excludeKeywords as string[],
       includeKeywords: settings.includeKeywords as string[],
-      defaultOutletId: settings.defaultOutletId,
+      defaultOutletId: settings.defaultOutletId as number | null,
       unmatchedBehavior: settings.unmatchedBehavior as 'ask' | 'create',
     };
   }
@@ -45,47 +49,38 @@ export class ScanSettingsService {
     dto: UpdateScanSettingsDto,
   ): Promise<ScanSettingsResponse> {
     if (dto.defaultOutletId) {
-      const outlet = await this.prisma.outlet.findFirst({
-        where: { id: dto.defaultOutletId, shopId: ctx.shopId },
-      });
-      if (!outlet) {
+      const outletRows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+        [dto.defaultOutletId, ctx.shopId],
+      );
+      if (outletRows.length === 0) {
         throw new BadRequestException(
           'defaultOutletId is invalid for this shop',
         );
       }
     }
 
-    const settings = await this.prisma.scansettings.upsert({
-      where: { shopId: ctx.shopId },
-      create: {
+    const updateColumns: string[] = [];
+    if (dto.excludeKeywords !== undefined) updateColumns.push('excludeKeywords');
+    if (dto.includeKeywords !== undefined) updateColumns.push('includeKeywords');
+    if (dto.defaultOutletId !== undefined) updateColumns.push('defaultOutletId');
+    if (dto.unmatchedBehavior !== undefined) updateColumns.push('unmatchedBehavior');
+    updateColumns.push('updatedAt');
+
+    await upsert(
+      this.db.pool,
+      'scansettings',
+      {
         shopId: ctx.shopId,
-        excludeKeywords: dto.excludeKeywords ?? DEFAULT_EXCLUDE_KEYWORDS,
-        includeKeywords: dto.includeKeywords ?? [],
+        excludeKeywords: JSON.stringify(dto.excludeKeywords ?? DEFAULT_EXCLUDE_KEYWORDS),
+        includeKeywords: JSON.stringify(dto.includeKeywords ?? []),
         defaultOutletId: dto.defaultOutletId ?? null,
         unmatchedBehavior: dto.unmatchedBehavior ?? 'ask',
+        updatedAt: new Date(),
       },
-      update: {
-        ...(dto.excludeKeywords !== undefined && {
-          excludeKeywords: dto.excludeKeywords,
-        }),
-        ...(dto.includeKeywords !== undefined && {
-          includeKeywords: dto.includeKeywords,
-        }),
-        ...(dto.defaultOutletId !== undefined && {
-          defaultOutletId: dto.defaultOutletId,
-        }),
-        ...(dto.unmatchedBehavior !== undefined && {
-          unmatchedBehavior: dto.unmatchedBehavior,
-        }),
-      },
-    });
+      updateColumns,
+    );
 
-    return {
-      shopId: settings.shopId,
-      excludeKeywords: settings.excludeKeywords as string[],
-      includeKeywords: settings.includeKeywords as string[],
-      defaultOutletId: settings.defaultOutletId,
-      unmatchedBehavior: settings.unmatchedBehavior as 'ask' | 'create',
-    };
+    return this.findOne(ctx);
   }
 }

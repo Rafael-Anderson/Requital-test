@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import type { job as JobRecord } from '@prisma/client';
-import { JobsService } from './jobs.service';
+import { JobsService, type JobRecord } from './jobs.service';
 import { createLogger } from '../common/logging/logger';
 import { handleSendEmailJob } from './handlers/send-email.handler';
 import { handleSendMerchantWhatsAppAlertJob } from './handlers/send-merchant-whatsapp-alert.handler';
