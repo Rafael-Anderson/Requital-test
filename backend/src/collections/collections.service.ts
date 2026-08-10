@@ -4,8 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import type { CollectionRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { slugify } from '../common/slugify';
 import { CreateCollectionDto } from './dto/create-collection.dto';
@@ -16,25 +19,26 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 @Injectable()
 export class CollectionsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
   findAll(ctx: TenantContext) {
-    return this.prisma.collection.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-    });
+    return this.db.query<(CollectionRow & RowDataPacket)[]>(
+      `SELECT * FROM collection WHERE shopId = ? ORDER BY displayOrder ASC, name ASC`,
+      [ctx.shopId],
+    );
   }
 
   async findOne(ctx: TenantContext, id: number) {
-    const collection = await this.prisma.collection.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!collection) {
+    const rows = await this.db.query<(CollectionRow & RowDataPacket)[]>(
+      `SELECT * FROM collection WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Collection ${id} not found`);
     }
-    return collection;
+    return rows[0];
   }
 
   async create(ctx: TenantContext, dto: CreateCollectionDto) {
@@ -43,19 +47,22 @@ export class CollectionsService {
     }
 
     try {
-      return await this.prisma.collection.create({
-        data: {
-          shopId: ctx.shopId,
-          name: dto.name,
-          slug: dto.slug ?? slugify(dto.name),
-          parentCollectionId: dto.parentCollectionId,
-          displayOrder: dto.displayOrder ?? 0,
-          image: dto.image,
-          isFeatured: dto.isFeatured ?? false,
-        },
-      });
+      const result = await this.db.execute(
+        `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ctx.shopId,
+          dto.name,
+          dto.slug ?? slugify(dto.name),
+          dto.parentCollectionId ?? null,
+          dto.displayOrder ?? 0,
+          dto.image ?? null,
+          dto.isFeatured ?? false,
+        ],
+      );
+      return this.findById(result.insertId);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
   }
 
@@ -71,38 +78,48 @@ export class CollectionsService {
     }
 
     try {
-      return await this.prisma.collection.update({
-        where: { id },
-        data: {
-          name: dto.name,
-          slug: dto.slug,
-          displayOrder: dto.displayOrder,
-          isFeatured: dto.isFeatured,
-          ...(dto.parentCollectionId !== undefined && {
-            parentCollectionId: dto.parentCollectionId,
-          }),
-          ...(dto.image !== undefined && { image: dto.image }),
-        },
+      const set = buildSetClause({
+        name: dto.name,
+        slug: dto.slug,
+        displayOrder: dto.displayOrder,
+        isFeatured: dto.isFeatured,
+        parentCollectionId: dto.parentCollectionId,
+        image: dto.image,
       });
+      if (set) {
+        await this.db.execute(
+          `UPDATE collection SET ${set.setClause} WHERE id = ?`,
+          [...set.params, id],
+        );
+      }
+      return this.findById(id);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
   }
 
   async remove(ctx: TenantContext, id: number) {
     const collection = await this.findOne(ctx, id);
 
-    const [childCount, productCount] = await this.prisma.$transaction([
-      this.prisma.collection.count({ where: { parentCollectionId: id } }),
-      this.prisma.productcollection.count({ where: { collectionId: id } }),
+    const [childRows, productRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM collection WHERE parentCollectionId = ?`,
+        [id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM productcollection WHERE collectionId = ?`,
+        [id],
+      ),
     ]);
+    const childCount = Number(childRows[0].c);
+    const productCount = Number(productRows[0].c);
     if (childCount > 0 || productCount > 0) {
       throw new ConflictException(
         `Cannot delete: this collection has ${childCount} sub-collection${childCount === 1 ? '' : 's'} and ${productCount} product${productCount === 1 ? '' : 's'} assigned. Reassign or remove them first.`,
       );
     }
 
-    await this.prisma.collection.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM collection WHERE id = ?`, [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'collection.deleted',
       entityType: 'collection',
@@ -116,11 +133,11 @@ export class CollectionsService {
   // writes) — a stray/foreign id in the array rejects the whole request
   // rather than partially reordering. Same pattern as BioLinksService.reorder.
   async reorder(ctx: TenantContext, dto: ReorderCollectionsDto) {
-    const existing = await this.prisma.collection.findMany({
-      where: { shopId: ctx.shopId },
-      select: { id: true },
-    });
-    const existingIds = new Set(existing.map((c) => c.id));
+    const existing = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM collection WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    const existingIds = new Set(existing.map((c) => c.id as number));
     const requestedIds = new Set(dto.ids);
     if (
       dto.ids.length !== existingIds.size ||
@@ -131,25 +148,34 @@ export class CollectionsService {
       );
     }
 
-    await this.prisma.$transaction(
-      dto.ids.map((id, index) =>
-        this.prisma.collection.update({
-          where: { id },
-          data: { displayOrder: index },
-        }),
-      ),
-    );
+    await this.db.transaction(async (conn) => {
+      for (let index = 0; index < dto.ids.length; index++) {
+        await conn.query(`UPDATE collection SET displayOrder = ? WHERE id = ?`, [
+          index,
+          dto.ids[index],
+        ]);
+      }
+    });
     return this.findAll(ctx);
+  }
+
+  private async findById(id: number) {
+    const rows = await this.db.query<(CollectionRow & RowDataPacket)[]>(
+      `SELECT * FROM collection WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 
   private async assertParentBelongsToShop(
     ctx: TenantContext,
     parentCollectionId: number,
   ) {
-    const parent = await this.prisma.collection.findFirst({
-      where: { id: parentCollectionId, shopId: ctx.shopId },
-    });
-    if (!parent) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM collection WHERE id = ? AND shopId = ?`,
+      [parentCollectionId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new BadRequestException(
         'parentCollectionId is invalid for this shop',
       );
@@ -173,20 +199,16 @@ export class CollectionsService {
       }
       if (seen.has(cursor)) break; // defensive: pre-existing cycle, stop walking
       seen.add(cursor);
-      const node: { parentCollectionId: number | null } | null =
-        await this.prisma.collection.findFirst({
-          where: { id: cursor, shopId: ctx.shopId },
-          select: { parentCollectionId: true },
-        });
-      cursor = node?.parentCollectionId ?? null;
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT parentCollectionId FROM collection WHERE id = ? AND shopId = ?`,
+        [cursor, ctx.shopId],
+      );
+      cursor = (rows[0]?.parentCollectionId as number | null | undefined) ?? null;
     }
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+  private handleDbError(error: unknown): never {
+    if (isDuplicateKeyError(error)) {
       throw new ConflictException('A collection with this slug already exists');
     }
     throw error;

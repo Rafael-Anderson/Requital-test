@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { trimDecimal } from '../database/decimal.util';
+import type { IngredientRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -15,21 +19,11 @@ import {
   parseImportNumber,
 } from '../products/products-import';
 
-function includeFor(outletId: number | undefined) {
-  return {
-    category: { select: { id: true, name: true } },
-    ...(outletId !== undefined && {
-      outletingredientstock: {
-        where: { outletId },
-        select: { stockQuantity: true, lowStockThreshold: true },
-      },
-    }),
-  } satisfies Prisma.ingredientInclude;
+interface AssembledIngredient extends IngredientRow {
+  categoryName: string | null;
+  stockQuantity: number | null;
+  lowStockThreshold: number | null;
 }
-
-type IngredientWithStock = Prisma.ingredientGetPayload<{
-  include: ReturnType<typeof includeFor>;
-}>;
 
 // Deliberately a much lighter CRUD than ProductsService — no categories,
 // tags, images, options/variants, SEO, or publishing fields exist on this
@@ -42,7 +36,7 @@ type IngredientWithStock = Prisma.ingredientGetPayload<{
 @Injectable()
 export class IngredientsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
     private readonly branchRolesService: BranchRolesService,
   ) {}
@@ -65,22 +59,18 @@ export class IngredientsService {
         'ingredients.view',
       );
     }
-    const ingredients = await this.prisma.ingredient.findMany({
-      where: {
-        shopId: ctx.shopId,
-        // Phase A: a usesIngredients:false product/variant's auto-managed
-        // shadow ingredient is never a merchant-manageable ingredient —
-        // excluded here (the single query every other consumer of this
-        // list, incl. CSV export, goes through) rather than filtered by
-        // each caller. See ingredient.shadowProductId's schema comment.
-        shadowProductId: null,
-        shadowVariantId: null,
-        ...(categoryId !== undefined && { categoryId }),
-      },
-      include: includeFor(outletId),
-      orderBy: { id: 'asc' },
-    });
-    return ingredients.map((i) => this.toResponse(i, outletId));
+    const conditions = [
+      'i.shopId = ?',
+      'i.shadowProductId IS NULL',
+      'i.shadowVariantId IS NULL',
+    ];
+    const params: QueryParam[] = [ctx.shopId];
+    if (categoryId !== undefined) {
+      conditions.push('i.categoryId = ?');
+      params.push(categoryId);
+    }
+    const rows = await this.loadIngredientRows(conditions, params, outletId);
+    return rows.map((i) => this.toResponse(i));
   }
 
   async findOne(ctx: TenantContext, id: number, requestedOutletId?: number) {
@@ -92,38 +82,38 @@ export class IngredientsService {
         'ingredients.view',
       );
     }
-    const ingredient = await this.prisma.ingredient.findFirst({
-      where: { id, shopId: ctx.shopId, shadowProductId: null, shadowVariantId: null },
-      include: includeFor(outletId),
-    });
-    if (!ingredient) {
+    const rows = await this.loadIngredientRows(
+      ['i.id = ?', 'i.shopId = ?', 'i.shadowProductId IS NULL', 'i.shadowVariantId IS NULL'],
+      [id, ctx.shopId],
+      outletId,
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Ingredient ${id} not found`);
     }
-    return this.toResponse(ingredient, outletId);
+    return this.toResponse(rows[0]);
   }
 
   async create(ctx: TenantContext, dto: CreateIngredientDto) {
     if (dto.categoryId !== undefined) {
       await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
     }
-    const ingredient = await this.prisma.ingredient.create({
-      data: {
-        shopId: ctx.shopId,
-        name: dto.name,
-        unit: dto.unit,
-        trackInventory: dto.trackInventory ?? true,
-        image: dto.image,
-        description: dto.description,
-        costPerUnit: dto.costPerUnit,
-        supplier: dto.supplier,
-        categoryId: dto.categoryId,
-      },
-      include: { category: { select: { id: true, name: true } } },
-    });
-    return this.toResponse(
-      { ...ingredient, outletingredientstock: [] },
-      undefined,
+    const result = await this.db.execute(
+      `INSERT INTO ingredient (shopId, name, unit, trackInventory, image, description, costPerUnit, supplier, categoryId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
+        dto.name,
+        dto.unit,
+        dto.trackInventory ?? true,
+        dto.image ?? null,
+        dto.description ?? null,
+        dto.costPerUnit ?? null,
+        dto.supplier ?? null,
+        dto.categoryId ?? null,
+      ],
     );
+    const rows = await this.loadIngredientRows(['i.id = ?'], [result.insertId], undefined);
+    return this.toResponse(rows[0]);
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateIngredientDto) {
@@ -131,34 +121,35 @@ export class IngredientsService {
     if (dto.categoryId !== undefined && dto.categoryId !== null) {
       await this.assertCategoryBelongsToShop(ctx, dto.categoryId);
     }
-    const ingredient = await this.prisma.ingredient.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        unit: dto.unit,
-        trackInventory: dto.trackInventory,
-        image: dto.image,
-        description: dto.description,
-        costPerUnit: dto.costPerUnit,
-        supplier: dto.supplier,
-        categoryId: dto.categoryId,
-      },
-      include: { category: { select: { id: true, name: true } } },
+    const set = buildSetClause({
+      name: dto.name,
+      unit: dto.unit,
+      trackInventory: dto.trackInventory,
+      image: dto.image,
+      description: dto.description,
+      costPerUnit: dto.costPerUnit,
+      supplier: dto.supplier,
+      categoryId: dto.categoryId,
     });
-    return this.toResponse(
-      { ...ingredient, outletingredientstock: [] },
-      undefined,
-    );
+    if (set) {
+      await this.db.execute(`UPDATE ingredient SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        id,
+      ]);
+    }
+    const rows = await this.loadIngredientRows(['i.id = ?'], [id], undefined);
+    return this.toResponse(rows[0]);
   }
 
   private async assertCategoryBelongsToShop(
     ctx: TenantContext,
     categoryId: number,
   ) {
-    const category = await this.prisma.ingredientcategory.findFirst({
-      where: { id: categoryId, shopId: ctx.shopId },
-    });
-    if (!category) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM ingredientcategory WHERE id = ? AND shopId = ?`,
+      [categoryId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException('categoryId is invalid for this shop');
     }
   }
@@ -167,17 +158,18 @@ export class IngredientsService {
     ctx: TenantContext,
     outletId: number,
   ) {
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: outletId, shopId: ctx.shopId },
-    });
-    if (!outlet) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException('outletId is invalid for this shop');
     }
   }
 
   async remove(ctx: TenantContext, id: number) {
     const ingredient = await this.assertBelongsToShop(ctx, id);
-    await this.prisma.ingredient.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM ingredient WHERE id = ?`, [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'ingredient.deleted',
       entityType: 'ingredient',
@@ -213,62 +205,67 @@ export class IngredientsService {
     let created = 0;
     let updated = 0;
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       for (const group of groups) {
         if (group.action === 'reject') continue;
 
         let ingredientId: number;
         if (group.action === 'create') {
-          const newIngredient = await tx.ingredient.create({
-            data: {
-              shopId: ctx.shopId,
-              name: group.data.name,
-              unit: group.data.unit!,
-              trackInventory: group.data.trackInventory ?? true,
-            },
-            select: { id: true },
-          });
-          ingredientId = newIngredient.id;
+          const [result] = await conn.query(
+            `INSERT INTO ingredient (shopId, name, unit, trackInventory) VALUES (?, ?, ?, ?)`,
+            [
+              ctx.shopId,
+              group.data.name,
+              group.data.unit!,
+              group.data.trackInventory ?? true,
+            ],
+          );
+          ingredientId = (result as { insertId: number }).insertId;
           created += 1;
         } else {
           ingredientId = group.ingredientId!;
-          await tx.ingredient.update({
-            where: { id: ingredientId },
-            data: {
-              unit: group.data.unit,
-              trackInventory: group.data.trackInventory,
-            },
+          const set = buildSetClause({
+            unit: group.data.unit,
+            trackInventory: group.data.trackInventory,
           });
+          if (set) {
+            await conn.query(`UPDATE ingredient SET ${set.setClause} WHERE id = ?`, [
+              ...set.params,
+              ingredientId,
+            ]);
+          }
           updated += 1;
         }
 
         if (group.stock !== undefined && outletId !== undefined) {
-          const before =
-            (
-              await tx.outletingredientstock.findUnique({
-                where: { outletId_ingredientId: { outletId, ingredientId } },
-              })
-            )?.stockQuantity ?? 0;
-          await tx.outletingredientstock.upsert({
-            where: { outletId_ingredientId: { outletId, ingredientId } },
-            update: { stockQuantity: group.stock },
-            create: { outletId, ingredientId, stockQuantity: group.stock },
-          });
-          await tx.stockmovement.create({
-            data: {
-              shopId: ctx.shopId,
-              productId: null,
-              variantId: null,
+          const [beforeRows] = await conn.query<RowDataPacket[]>(
+            `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+            [outletId, ingredientId],
+          );
+          const before = (beforeRows[0]?.stockQuantity as number | undefined) ?? 0;
+          await conn.query(
+            `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE stockQuantity = VALUES(stockQuantity)`,
+            [outletId, ingredientId, group.stock],
+          );
+          await conn.query(
+            `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              ctx.shopId,
+              null,
+              null,
               ingredientId,
-              type: 'IMPORT',
-              reason: null,
-              delta: group.stock - before,
+              'IMPORT',
+              null,
+              group.stock - before,
               outletId,
-              toOutletId: null,
-              note: 'CSV import',
-              actorUserId: ctx.userId,
-            },
-          });
+              null,
+              'CSV import',
+              ctx.userId,
+            ],
+          );
         }
       }
     });
@@ -320,18 +317,16 @@ export class IngredientsService {
       if (raw['Stock'] && Number.isNaN(stock))
         errors.push('Stock is not a number');
 
-      const existing = name
-        ? await this.prisma.ingredient.findFirst({
-            where: {
-              shopId: ctx.shopId,
-              name,
-              shadowProductId: null,
-              shadowVariantId: null,
-            },
-            select: { id: true },
-          })
-        : null;
-      const action: ImportAction = existing ? 'update' : 'create';
+      let existingId: number | undefined;
+      if (name) {
+        const existingRows = await this.db.query<RowDataPacket[]>(
+          `SELECT id FROM ingredient
+           WHERE shopId = ? AND name = ? AND shadowProductId IS NULL AND shadowVariantId IS NULL`,
+          [ctx.shopId, name],
+        );
+        existingId = existingRows[0]?.id as number | undefined;
+      }
+      const action: ImportAction = existingId !== undefined ? 'update' : 'create';
 
       if (action === 'create') {
         if (!unit) errors.push('Unit is required to create a new ingredient');
@@ -353,7 +348,7 @@ export class IngredientsService {
       groups.push({
         rowNumber,
         action: finalAction,
-        ingredientId: existing?.id,
+        ingredientId: existingId,
         data: { name: name ?? '', unit, trackInventory },
         stock,
       });
@@ -366,23 +361,68 @@ export class IngredientsService {
     // Excludes a shadow ingredient too (see findAll's own comment) — it's
     // never merchant-editable/deletable through this API, only auto-managed
     // by ProductsService.
-    const ingredient = await this.prisma.ingredient.findFirst({
-      where: { id, shopId: ctx.shopId, shadowProductId: null, shadowVariantId: null },
-    });
-    if (!ingredient) {
+    const rows = await this.db.query<(IngredientRow & RowDataPacket)[]>(
+      `SELECT * FROM ingredient
+       WHERE id = ? AND shopId = ? AND shadowProductId IS NULL AND shadowVariantId IS NULL`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Ingredient ${id} not found`);
     }
-    return ingredient;
+    return rows[0];
   }
 
-  private toResponse(
-    ingredient: IngredientWithStock,
+  // Shared by findAll/findOne/create/update — joins in the category name
+  // and (only when outletId is resolved) this ingredient's live stock at
+  // that outlet, same shape as ProductsService.loadIngredientLinks.
+  private async loadIngredientRows(
+    conditions: string[],
+    conditionParams: QueryParam[],
     outletId: number | undefined,
-  ) {
-    const stockRow =
+  ): Promise<AssembledIngredient[]> {
+    const stockJoin =
       outletId !== undefined
-        ? ingredient.outletingredientstock?.[0]
-        : undefined;
+        ? `LEFT JOIN outletingredientstock ois ON ois.ingredientId = i.id AND ois.outletId = ?`
+        : '';
+    const stockColumns =
+      outletId !== undefined
+        ? `ois.stockQuantity AS stockQuantity, ois.lowStockThreshold AS lowStockThreshold`
+        : `NULL AS stockQuantity, NULL AS lowStockThreshold`;
+    // The join's `?` (if present) appears before the WHERE clause's `?`s in
+    // the SQL text below — params must be in that same order since .query()
+    // binds positionally, not by clause (see ProductsService.loadIngredientLinks
+    // for the bug this mirrors the fix of).
+    const params = outletId !== undefined ? [outletId, ...conditionParams] : conditionParams;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT i.*, c.name AS categoryName, ${stockColumns}
+       FROM ingredient i
+       LEFT JOIN ingredientcategory c ON c.id = i.categoryId
+       ${stockJoin}
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY i.id ASC`,
+      params,
+    );
+    return rows.map((r) => ({
+      id: r.id as number,
+      shopId: r.shopId as number,
+      name: r.name as string,
+      unit: r.unit as string,
+      trackInventory: Boolean(r.trackInventory),
+      image: r.image as string | null,
+      description: r.description as string | null,
+      costPerUnit: r.costPerUnit as string | null,
+      supplier: r.supplier as string | null,
+      categoryId: r.categoryId as number | null,
+      shadowProductId: r.shadowProductId as number | null,
+      shadowVariantId: r.shadowVariantId as number | null,
+      createdAt: r.createdAt as Date,
+      categoryName: r.categoryName as string | null,
+      stockQuantity: r.stockQuantity as number | null,
+      lowStockThreshold: r.lowStockThreshold as number | null,
+    }));
+  }
+
+  private toResponse(ingredient: AssembledIngredient) {
     return {
       id: ingredient.id,
       name: ingredient.name,
@@ -390,13 +430,13 @@ export class IngredientsService {
       trackInventory: ingredient.trackInventory,
       image: ingredient.image,
       description: ingredient.description,
-      costPerUnit: ingredient.costPerUnit,
+      costPerUnit: trimDecimal(ingredient.costPerUnit),
       supplier: ingredient.supplier,
       categoryId: ingredient.categoryId,
-      categoryName: ingredient.category?.name ?? null,
+      categoryName: ingredient.categoryName,
       createdAt: ingredient.createdAt,
-      stockQuantity: stockRow?.stockQuantity ?? null,
-      lowStockThreshold: stockRow?.lowStockThreshold ?? null,
+      stockQuantity: ingredient.stockQuantity,
+      lowStockThreshold: ingredient.lowStockThreshold,
     };
   }
 }
