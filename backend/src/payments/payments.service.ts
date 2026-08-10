@@ -138,7 +138,22 @@ export class PaymentsService {
         shopId,
         gateway,
       );
-      webhookSecret = credentials?.webhookSecret;
+      if (!credentials) {
+        throw new BadRequestException(
+          `Shop ${shopId} has no ${gateway} credentials configured`,
+        );
+      }
+      // PayPal's webhook verification needs 3 fields (clientId/clientSecret/
+      // webhookId), not the single shared secret every HMAC-based gateway
+      // here uses — bundle the whole resolved credentials object as JSON
+      // rather than widening this method's signature (and every other
+      // provider's parseWebhookEvent) for one gateway's different
+      // verification shape. See PayPalPaymentProvider.parseWebhookEvent for
+      // the corresponding decode.
+      webhookSecret =
+        gateway === 'paypal'
+          ? JSON.stringify(credentials)
+          : credentials.webhookSecret;
       if (!webhookSecret) {
         throw new BadRequestException(
           `Shop ${shopId} has no ${gateway} webhook secret configured`,
@@ -146,7 +161,7 @@ export class PaymentsService {
       }
     }
 
-    const result = provider.parseWebhookEvent(
+    const result = await provider.parseWebhookEvent(
       rawBody,
       signatureHeader,
       webhookSecret,

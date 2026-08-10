@@ -16,7 +16,9 @@ import {
 import { WHATSAPP_CREDENTIAL_FIELDS, type PublishReadiness, type Shop, type TrademarkFormat, type WhatsAppSettings } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
+import { COUNTRIES } from "@/lib/useAccountSetupForm";
 import Checkbox from "@/components/ui/Checkbox";
 import Card from "@/components/ui/Card";
 import ImageDropzone from "@/components/ui/ImageDropzone";
@@ -251,6 +253,10 @@ export default function BusinessInformationPage() {
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [description, setDescription] = useState("");
   const [country, setCountry] = useState("");
+  // Whether country was already set the moment this page loaded — the
+  // field locks server-side once set (ShopService.update), so this is a
+  // belt-and-suspenders UI disable, not the real enforcement.
+  const [countryLocked, setCountryLocked] = useState(false);
   const [address, setAddress] = useState("");
   const [timezone, setTimezone] = useState("Asia/Dubai");
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
@@ -278,6 +284,7 @@ export default function BusinessInformationPage() {
       setWhatsappNumber(s.whatsappNumber ?? "");
       setDescription(s.description ?? "");
       setCountry(s.country ?? "");
+      setCountryLocked(!!s.country);
       setAddress(s.address ?? "");
       setTimezone(s.timezone);
       setNotifyWhatsapp(s.notifyWhatsapp);
@@ -424,7 +431,32 @@ export default function BusinessInformationPage() {
             <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          <Input label="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
+          <div>
+            <Select
+              label="Country"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              disabled={countryLocked}
+            >
+              <option value="" disabled>
+                Select country
+              </option>
+              {/* A pre-existing shop's stored value might predate this fixed
+                  list (the field used to be free text) — surface it as-is
+                  rather than silently blanking the select. */}
+              {country && !(COUNTRIES as readonly string[]).includes(country) && (
+                <option value={country}>{country}</option>
+              )}
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+            {countryLocked && (
+              <p className="text-xs text-zinc-500 mt-1">Country is locked once set.</p>
+            )}
+          </div>
 
           <div className="sm:col-span-2 lg:col-span-3">
             <Textarea label="Address" value={address} onChange={(e) => setAddress(e.target.value)} rows={2} />

@@ -4,7 +4,13 @@ import type { job as JobRecord } from '@prisma/client';
 import { JobsService } from './jobs.service';
 import { createLogger } from '../common/logging/logger';
 import { handleSendEmailJob } from './handlers/send-email.handler';
-import type { JobPayload, JobType } from './jobs.types';
+import { handleSendMerchantWhatsAppAlertJob } from './handlers/send-merchant-whatsapp-alert.handler';
+import type {
+  JobPayload,
+  JobType,
+  SendEmailJobPayload,
+  SendMerchantWhatsAppAlertJobPayload,
+} from './jobs.types';
 
 const logger = createLogger('JobsWorker');
 const POLL_INTERVAL_MS = 5000;
@@ -13,8 +19,15 @@ const POLL_INTERVAL_MS = 5000;
 // switch to a real drain loop) if throughput ever measurably falls short.
 const MAX_JOBS_PER_TICK = 10;
 
+// Each handler is only ever invoked with the payload shape matching its own
+// job.type (processJob below looks the handler up by that same type), so
+// the per-branch cast here is safe despite JobPayload being a union.
 const HANDLERS: Record<JobType, (payload: JobPayload) => Promise<void>> = {
-  send_email: (payload) => handleSendEmailJob(payload),
+  send_email: (payload) => handleSendEmailJob(payload as SendEmailJobPayload),
+  send_merchant_whatsapp_alert: (payload) =>
+    handleSendMerchantWhatsAppAlertJob(
+      payload as SendMerchantWhatsAppAlertJobPayload,
+    ),
 };
 
 // Polls the `job` table on an interval and executes whatever's due — see

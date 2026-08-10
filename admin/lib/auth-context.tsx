@@ -24,6 +24,7 @@ interface AuthContextValue {
     address?: string;
     operatingModel?: string[];
     branchCount?: string;
+    country?: string;
     productEditorMode?: "simple" | "advanced";
   }) => Promise<{ devVerificationLink?: string }>;
   acceptInvite: (data: { token: string; password: string }) => Promise<void>;
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       address?: string;
       operatingModel?: string[];
       branchCount?: string;
+      country?: string;
     }) => {
       const result = await api.signup(data);
       api.setTokens(result);

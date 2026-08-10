@@ -45,13 +45,29 @@ export class PayController {
   }
 }
 
+// PayPal verifies its webhooks via a remote API call that needs 5 headers
+// together (transmission id/time/cert url/auth algo/signature), not the
+// single header value every other gateway here reads — bundled into one
+// JSON string so it still fits the shared handleWebhook(gateway, rawBody,
+// signatureHeader, shopId?) shape. Decoded on the other end by
+// PayPalPaymentProvider.parseWebhookEvent.
+function extractPayPalHeaders(request: Request): string {
+  return JSON.stringify({
+    transmissionId: request.headers['paypal-transmission-id'],
+    transmissionTime: request.headers['paypal-transmission-time'],
+    certUrl: request.headers['paypal-cert-url'],
+    authAlgo: request.headers['paypal-auth-algo'],
+    transmissionSig: request.headers['paypal-transmission-sig'],
+  });
+}
+
 // One route per registered gateway, all funneling into the same
 // PaymentsService.handleWebhook — :gateway in the path (not anything in the
 // payload) picks which provider's parseWebhookEvent verifies/parses this
-// delivery. The signature-header name genuinely differs per gateway (only
-// Stripe's is confirmed real: 'stripe-signature'); the others are read from
-// the header a real integration will actually use once one exists — TODO
-// when wiring up Telr/PayTabs/Tabby/Tamara for real.
+// delivery. The signature-header name genuinely differs per gateway (Stripe
+// and PayPal are confirmed real; the others are read from the header a real
+// integration will actually use once one exists — TODO when wiring up
+// Telr/PayTabs/Tabby/Tamara for real.
 @Controller('payments/webhook')
 export class PaymentsWebhookController {
   constructor(private readonly paymentsService: PaymentsService) {}
@@ -139,6 +155,33 @@ export class PaymentsWebhookController {
       'tamara',
       request.rawBody!,
       signature ?? '',
+    );
+  }
+
+  @Public()
+  @Post('paypal')
+  handlePayPalWebhook(@Req() request: RawBodyRequest<Request>) {
+    return this.paymentsService.handleWebhook(
+      'paypal',
+      request.rawBody!,
+      extractPayPalHeaders(request),
+    );
+  }
+
+  // Per-shop route, same purpose as Stripe's own — a merchant using their
+  // own PayPal app configures this URL (with their own shopId) as the
+  // webhook target in their PayPal Developer Dashboard.
+  @Public()
+  @Post('paypal/:shopId')
+  handlePayPalWebhookForShop(
+    @Req() request: RawBodyRequest<Request>,
+    @Param('shopId', ParseIntPipe) shopId: number,
+  ) {
+    return this.paymentsService.handleWebhook(
+      'paypal',
+      request.rawBody!,
+      extractPayPalHeaders(request),
+      shopId,
     );
   }
 }

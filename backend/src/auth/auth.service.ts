@@ -90,6 +90,7 @@ export class AuthService {
             operatingModel: dto.operatingModel?.join(','),
             branchCount: dto.branchCount,
             productEditorMode: dto.productEditorMode,
+            country: dto.country,
           },
         });
         // Every shop starts with one outlet so orders/inventory (both
