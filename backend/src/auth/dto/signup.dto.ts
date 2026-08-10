@@ -54,7 +54,7 @@ export class SignupDto {
   // real validation error instead of silently passing/emptying.
   @IsOptional()
   @IsString()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? (normalizePhoneToE164(value) ?? value) : value,
   )
   @Matches(/^\+[1-9]\d{6,14}$/, {
@@ -85,7 +85,7 @@ export class SignupDto {
   // digits-only storage regardless of what dashes/spacing was typed.
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? normalizeTrn(value) : value))
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? normalizeTrn(value) : value))
   @MaxLength(50)
   trn?: string;
 
@@ -93,7 +93,7 @@ export class SignupDto {
   // normalized to always carry a protocol before the regex below runs.
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? normalizeWebsiteUrl(value) : value))
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? normalizeWebsiteUrl(value) : value))
   @MaxLength(255)
   @Matches(/^https?:\/\//i, {
     message: 'websiteUrl must start with http:// or https://',

@@ -23,7 +23,7 @@ export class UpdateCustomerDto {
   // @@unique([shopId, phone]) as two separate records; the normalized
   // +971xxxxxxxxx shape still satisfies this regex unchanged.
   @IsOptional()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? (normalizePhoneToE164(value) ?? value) : value,
   )
   @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
