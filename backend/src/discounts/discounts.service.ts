@@ -4,8 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import { trimDecimal } from '../database/decimal.util';
+import type { DiscountRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateDiscountDto } from './dto/create-discount.dto';
 import { UpdateDiscountDto } from './dto/update-discount.dto';
@@ -17,18 +22,19 @@ import {
 } from './discount-constants';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
-const discountInclude = {
-  discountproduct: {
-    include: { product: { select: { id: true, name: true } } },
-  },
-  discountcollection: {
-    include: { collection: { select: { id: true, name: true } } },
-  },
-} satisfies Prisma.discountInclude;
+export interface ProductSummary {
+  id: number;
+  name: string;
+}
+export interface CollectionSummary {
+  id: number;
+  name: string;
+}
 
-type DiscountWithEligibility = Prisma.discountGetPayload<{
-  include: typeof discountInclude;
-}>;
+interface AssembledDiscount extends DiscountRow {
+  products: ProductSummary[];
+  collections: CollectionSummary[];
+}
 
 export interface EvaluateResult {
   valid: boolean;
@@ -44,65 +50,76 @@ export interface EvaluateResult {
 @Injectable()
 export class DiscountsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
   async findAll(ctx: TenantContext) {
-    const discounts = await this.prisma.discount.findMany({
-      where: { shopId: ctx.shopId },
-      include: discountInclude,
-      orderBy: { id: 'desc' },
-    });
-    return discounts.map((d) => this.toResponse(d));
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM discount WHERE shopId = ? ORDER BY id DESC`,
+      [ctx.shopId],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const discounts = await this.loadDiscountsWithRelations(ids);
+    return ids.map((id) => this.toResponse(discounts.get(id)!));
   }
 
   async findOne(ctx: TenantContext, id: number) {
-    const discount = await this.prisma.discount.findFirst({
-      where: { id, shopId: ctx.shopId },
-      include: discountInclude,
-    });
-    if (!discount) {
-      throw new NotFoundException(`Discount ${id} not found`);
-    }
-    return this.toResponse(discount);
+    await this.findRaw(ctx, id);
+    const discounts = await this.loadDiscountsWithRelations([id]);
+    return this.toResponse(discounts.get(id)!);
   }
 
   async create(ctx: TenantContext, dto: CreateDiscountDto) {
     this.assertFieldsMatchType(dto);
     await this.assertEligibilityTargetsBelongToShop(ctx, dto);
 
+    let insertId: number;
     try {
-      const discount = await this.prisma.discount.create({
-        data: {
-          shopId: ctx.shopId,
-          code: this.normalizeCode(dto.code),
-          type: dto.type,
-          value: dto.type === 'FREE_SHIPPING' ? undefined : dto.value,
-          minPurchaseAmount: dto.minPurchaseAmount,
-          appliesTo: dto.appliesTo ?? 'ALL_PRODUCTS',
-          usageLimit: dto.usageLimit,
-          usageLimitPerCustomer: dto.usageLimitPerCustomer,
-          startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
-          endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
-          active: dto.active ?? true,
-          discountproduct:
-            dto.appliesTo === 'SPECIFIC_PRODUCTS' && dto.productIds
-              ? { create: dto.productIds.map((productId) => ({ productId })) }
-              : undefined,
-          discountcollection:
-            dto.appliesTo === 'SPECIFIC_COLLECTIONS' && dto.collectionIds
-              ? {
-                  create: dto.collectionIds.map((collectionId) => ({ collectionId })),
-                }
-              : undefined,
-        },
-        include: discountInclude,
+      insertId = await this.db.transaction(async (conn) => {
+        const [result] = await conn.query(
+          `INSERT INTO discount (shopId, code, type, value, minPurchaseAmount, appliesTo, usageLimit, usageLimitPerCustomer, startsAt, endsAt, active, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            this.normalizeCode(dto.code),
+            dto.type,
+            dto.type === 'FREE_SHIPPING' ? null : (dto.value ?? null),
+            dto.minPurchaseAmount ?? null,
+            dto.appliesTo ?? 'ALL_PRODUCTS',
+            dto.usageLimit ?? null,
+            dto.usageLimitPerCustomer ?? null,
+            dto.startsAt ? new Date(dto.startsAt) : null,
+            dto.endsAt ? new Date(dto.endsAt) : null,
+            dto.active ?? true,
+            new Date(),
+          ],
+        );
+        const newId = (result as { insertId: number }).insertId;
+        if (dto.appliesTo === 'SPECIFIC_PRODUCTS' && dto.productIds?.length) {
+          const placeholders = dto.productIds.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO discountproduct (discountId, productId) VALUES ${placeholders}`,
+            dto.productIds.flatMap((productId) => [newId, productId]),
+          );
+        }
+        if (
+          dto.appliesTo === 'SPECIFIC_COLLECTIONS' &&
+          dto.collectionIds?.length
+        ) {
+          const placeholders = dto.collectionIds.map(() => '(?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO discountcollection (discountId, collectionId) VALUES ${placeholders}`,
+            dto.collectionIds.flatMap((collectionId) => [newId, collectionId]),
+          );
+        }
+        return newId;
       });
-      return this.toResponse(discount);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
+    const discounts = await this.loadDiscountsWithRelations([insertId]);
+    return this.toResponse(discounts.get(insertId)!);
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateDiscountDto) {
@@ -119,49 +136,57 @@ export class DiscountsService {
     }
 
     try {
-      const discount = await this.prisma.$transaction(async (tx) => {
+      await this.db.transaction(async (conn) => {
         if (dto.productIds) {
-          await tx.discountproduct.deleteMany({ where: { discountId: id } });
+          await conn.query(`DELETE FROM discountproduct WHERE discountId = ?`, [id]);
+          if (dto.productIds.length > 0) {
+            const placeholders = dto.productIds.map(() => '(?, ?)').join(', ');
+            await conn.query(
+              `INSERT INTO discountproduct (discountId, productId) VALUES ${placeholders}`,
+              dto.productIds.flatMap((productId) => [id, productId]),
+            );
+          }
         }
         if (dto.collectionIds) {
-          await tx.discountcollection.deleteMany({ where: { discountId: id } });
+          await conn.query(`DELETE FROM discountcollection WHERE discountId = ?`, [id]);
+          if (dto.collectionIds.length > 0) {
+            const placeholders = dto.collectionIds.map(() => '(?, ?)').join(', ');
+            await conn.query(
+              `INSERT INTO discountcollection (discountId, collectionId) VALUES ${placeholders}`,
+              dto.collectionIds.flatMap((collectionId) => [id, collectionId]),
+            );
+          }
         }
-        return tx.discount.update({
-          where: { id },
-          data: {
-            code: dto.code ? this.normalizeCode(dto.code) : undefined,
-            type: dto.type,
-            value: effectiveType === 'FREE_SHIPPING' ? null : dto.value,
-            minPurchaseAmount: dto.minPurchaseAmount,
-            appliesTo: dto.appliesTo,
-            usageLimit: dto.usageLimit,
-            usageLimitPerCustomer: dto.usageLimitPerCustomer,
-            startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
-            endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
-            active: dto.active,
-            ...(dto.productIds && {
-              discountproduct: {
-                create: dto.productIds.map((productId) => ({ productId })),
-              },
-            }),
-            ...(dto.collectionIds && {
-              discountcollection: {
-                create: dto.collectionIds.map((collectionId) => ({ collectionId })),
-              },
-            }),
-          },
-          include: discountInclude,
+        const set = buildSetClause({
+          code: dto.code ? this.normalizeCode(dto.code) : undefined,
+          type: dto.type,
+          value: effectiveType === 'FREE_SHIPPING' ? null : dto.value,
+          minPurchaseAmount: dto.minPurchaseAmount,
+          appliesTo: dto.appliesTo,
+          usageLimit: dto.usageLimit,
+          usageLimitPerCustomer: dto.usageLimitPerCustomer,
+          startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
+          endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+          active: dto.active,
+          updatedAt: new Date(),
         });
+        if (set) {
+          await conn.query(`UPDATE discount SET ${set.setClause} WHERE id = ?`, [
+            ...set.params,
+            id,
+          ]);
+        }
       });
-      return this.toResponse(discount);
     } catch (error) {
-      this.handlePrismaError(error);
+      this.handleDbError(error);
     }
+    const discounts = await this.loadDiscountsWithRelations([id]);
+    return this.toResponse(discounts.get(id)!);
   }
 
   async remove(ctx: TenantContext, id: number) {
     const discount = await this.findRaw(ctx, id);
-    await this.prisma.discount.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM discount WHERE id = ?`, [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'discount.deleted',
       entityType: 'discount',
@@ -186,21 +211,27 @@ export class DiscountsService {
   async resolveByCode(
     shopId: number,
     code: string,
-  ): Promise<DiscountWithEligibility | null> {
-    return this.prisma.discount.findUnique({
-      where: { shopId_code: { shopId, code: this.normalizeCode(code) } },
-      include: discountInclude,
-    });
+  ): Promise<AssembledDiscount | null> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM discount WHERE shopId = ? AND code = ?`,
+      [shopId, this.normalizeCode(code)],
+    );
+    if (rows.length === 0) return null;
+    const discounts = await this.loadDiscountsWithRelations([rows[0].id as number]);
+    return discounts.get(rows[0].id as number) ?? null;
   }
 
   async resolveById(
     shopId: number,
     id: number,
-  ): Promise<DiscountWithEligibility | null> {
-    return this.prisma.discount.findFirst({
-      where: { id, shopId },
-      include: discountInclude,
-    });
+  ): Promise<AssembledDiscount | null> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM discount WHERE id = ? AND shopId = ?`,
+      [id, shopId],
+    );
+    if (rows.length === 0) return null;
+    const discounts = await this.loadDiscountsWithRelations([id]);
+    return discounts.get(id) ?? null;
   }
 
   // Eligibility/amount computation given an already-resolved discount row
@@ -209,7 +240,7 @@ export class DiscountsService {
   // order creation. Doesn't touch usage counters — see redeem() for the
   // atomic claim, which happens separately, inside the order's transaction.
   async evaluate(
-    discount: DiscountWithEligibility | null,
+    discount: AssembledDiscount | null,
     input: {
       cartSubtotal: number;
       productIds?: number[];
@@ -243,25 +274,23 @@ export class DiscountsService {
       discount.usageLimitPerCustomer !== null &&
       input.customerId !== undefined
     ) {
-      const usedByCustomer = await this.prisma.discountredemption.count({
-        where: { discountId: discount.id, customerId: input.customerId },
-      });
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM discountredemption WHERE discountId = ? AND customerId = ?`,
+        [discount.id, input.customerId],
+      );
+      const usedByCustomer = Number(rows[0].c);
       if (usedByCustomer >= discount.usageLimitPerCustomer) {
         return this.reject('per_customer_limit_reached');
       }
     }
 
     if (discount.appliesTo === 'SPECIFIC_PRODUCTS') {
-      const eligibleIds = new Set(
-        discount.discountproduct.map((d) => d.productId),
-      );
+      const eligibleIds = new Set(discount.products.map((p) => p.id));
       if (!(input.productIds ?? []).some((id) => eligibleIds.has(id))) {
         return this.reject('not_eligible');
       }
     } else if (discount.appliesTo === 'SPECIFIC_COLLECTIONS') {
-      const eligibleIds = new Set(
-        discount.discountcollection.map((d) => d.collectionId),
-      );
+      const eligibleIds = new Set(discount.collections.map((c) => c.id));
       if (!(input.collectionIds ?? []).some((id) => eligibleIds.has(id))) {
         return this.reject('not_eligible');
       }
@@ -278,39 +307,37 @@ export class DiscountsService {
   }
 
   // Atomically claims one use — CAS on usageLimit, same WHERE-guarded
-  // updateMany idiom as outletstock's stock decrement — then records a
+  // UPDATE idiom as outletstock's stock decrement — then records a
   // redemption row. Must run INSIDE the same transaction that creates the
   // order (see OrdersService.create/PublicService.createOrder): if the CAS
   // fails (limit reached by a concurrent request since evaluate() ran), this
   // throws and the whole order attempt aborts — a discount is never silently
   // dropped from an order that already priced it in.
   async redeem(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     discount: { id: number; usageLimit: number | null },
     orderId: number,
     customerId: number | null,
   ) {
-    const result = await tx.discount.updateMany({
-      where: {
-        id: discount.id,
-        ...(discount.usageLimit !== null && {
-          timesUsed: { lt: discount.usageLimit },
-        }),
-      },
-      data: { timesUsed: { increment: 1 } },
-    });
-    if (result.count === 0) {
+    const conditions = ['id = ?'];
+    const params: QueryParam[] = [discount.id];
+    if (discount.usageLimit !== null) {
+      conditions.push('timesUsed < ?');
+      params.push(discount.usageLimit);
+    }
+    const [result] = await conn.query(
+      `UPDATE discount SET timesUsed = timesUsed + 1, updatedAt = ? WHERE ${conditions.join(' AND ')}`,
+      [new Date(), ...params],
+    );
+    if ((result as { affectedRows: number }).affectedRows === 0) {
       throw new ConflictException(
         'This promo code has just reached its usage limit',
       );
     }
-    await tx.discountredemption.create({
-      data: {
-        discountId: discount.id,
-        customerId: customerId ?? undefined,
-        orderId,
-      },
-    });
+    await conn.query(
+      `INSERT INTO discountredemption (discountId, customerId, orderId) VALUES (?, ?, ?)`,
+      [discount.id, customerId, orderId],
+    );
   }
 
   private reject(reason: DiscountRejectionReason): EvaluateResult {
@@ -324,7 +351,7 @@ export class DiscountsService {
   // Public — reused by DraftOrdersService to preview the discount amount on
   // an as-yet-unconverted draft order without duplicating the type/value math.
   computeAmount(
-    discount: { type: string; value: Prisma.Decimal | null },
+    discount: { type: string; value: string | number | null },
     cartSubtotal: number,
   ): number {
     if (discount.type === 'FREE_SHIPPING') return 0;
@@ -358,20 +385,24 @@ export class DiscountsService {
     dto: { appliesTo?: string; productIds?: number[]; collectionIds?: number[] },
   ) {
     if (dto.productIds?.length) {
-      const count = await this.prisma.product.count({
-        where: { id: { in: dto.productIds }, shopId: ctx.shopId },
-      });
-      if (count !== new Set(dto.productIds).size) {
+      const uniqueIds = [...new Set(dto.productIds)];
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM product WHERE id IN (${uniqueIds.map(() => '?').join(', ')}) AND shopId = ?`,
+        [...uniqueIds, ctx.shopId],
+      );
+      if (Number(rows[0].c) !== uniqueIds.length) {
         throw new BadRequestException(
           'One or more productIds are invalid for this shop',
         );
       }
     }
     if (dto.collectionIds?.length) {
-      const count = await this.prisma.collection.count({
-        where: { id: { in: dto.collectionIds }, shopId: ctx.shopId },
-      });
-      if (count !== new Set(dto.collectionIds).size) {
+      const uniqueIds = [...new Set(dto.collectionIds)];
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM collection WHERE id IN (${uniqueIds.map(() => '?').join(', ')}) AND shopId = ?`,
+        [...uniqueIds, ctx.shopId],
+      );
+      if (Number(rows[0].c) !== uniqueIds.length) {
         throw new BadRequestException(
           'One or more collectionIds are invalid for this shop',
         );
@@ -380,29 +411,77 @@ export class DiscountsService {
   }
 
   private async findRaw(ctx: TenantContext, id: number) {
-    const discount = await this.prisma.discount.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!discount) {
+    const rows = await this.db.query<(DiscountRow & RowDataPacket)[]>(
+      `SELECT * FROM discount WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Discount ${id} not found`);
     }
-    return discount;
+    return rows[0];
   }
 
-  private toResponse(discount: DiscountWithEligibility) {
-    const { discountproduct, discountcollection, ...rest } = discount;
+  // Batch-loads discountproduct/discountcollection (with their own product/
+  // collection name join) the way Prisma's nested include used to.
+  private async loadDiscountsWithRelations(
+    ids: number[],
+  ): Promise<Map<number, AssembledDiscount>> {
+    const result = new Map<number, AssembledDiscount>();
+    if (ids.length === 0) return result;
+    const idList = ids.map(() => '?').join(', ');
+    const [discounts, productLinks, collectionLinks] = await Promise.all([
+      this.db.query<(DiscountRow & RowDataPacket)[]>(
+        `SELECT * FROM discount WHERE id IN (${idList})`,
+        ids,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT dp.discountId, p.id AS productId, p.name AS productName
+         FROM discountproduct dp JOIN product p ON p.id = dp.productId
+         WHERE dp.discountId IN (${idList})`,
+        ids,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT dc.discountId, c.id AS collectionId, c.name AS collectionName
+         FROM discountcollection dc JOIN collection c ON c.id = dc.collectionId
+         WHERE dc.discountId IN (${idList})`,
+        ids,
+      ),
+    ]);
+    const productsByDiscount = new Map<number, ProductSummary[]>();
+    for (const row of productLinks) {
+      const list = productsByDiscount.get(row.discountId as number) ?? [];
+      list.push({ id: row.productId as number, name: row.productName as string });
+      productsByDiscount.set(row.discountId as number, list);
+    }
+    const collectionsByDiscount = new Map<number, CollectionSummary[]>();
+    for (const row of collectionLinks) {
+      const list = collectionsByDiscount.get(row.discountId as number) ?? [];
+      list.push({
+        id: row.collectionId as number,
+        name: row.collectionName as string,
+      });
+      collectionsByDiscount.set(row.discountId as number, list);
+    }
+    for (const d of discounts) {
+      result.set(d.id, {
+        ...d,
+        products: productsByDiscount.get(d.id) ?? [],
+        collections: collectionsByDiscount.get(d.id) ?? [],
+      });
+    }
+    return result;
+  }
+
+  private toResponse(discount: AssembledDiscount) {
     return {
-      ...rest,
-      products: discountproduct.map((dp) => dp.product),
-      collections: discountcollection.map((dc) => dc.collection),
+      ...discount,
+      value: trimDecimal(discount.value),
+      minPurchaseAmount: trimDecimal(discount.minPurchaseAmount),
     };
   }
 
-  private handlePrismaError(error: unknown): never {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
+  private handleDbError(error: unknown): never {
+    if (isDuplicateKeyError(error)) {
       throw new ConflictException('A discount with this code already exists');
     }
     throw error;

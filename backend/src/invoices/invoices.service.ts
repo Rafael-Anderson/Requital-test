@@ -43,7 +43,8 @@ export class InvoicesService {
     if (existing) return existing;
 
     const subtotal = order.orderitem.reduce(
-      (sum, item) => sum.add(item.priceAtPurchase.mul(item.quantity)),
+      (sum, item) =>
+        sum.add(new Prisma.Decimal(item.priceAtPurchase).mul(item.quantity)),
       new Prisma.Decimal(0),
     );
     const taxAmount = order.taxAmount ?? new Prisma.Decimal(0);

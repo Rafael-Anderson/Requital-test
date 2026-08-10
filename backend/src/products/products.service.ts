@@ -3588,7 +3588,7 @@ export class ProductsService {
   // under an since-disabled toggle, corrupting the count in the opposite
   // direction.
   async consumeForOrderItems(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     shopId: number,
     outletId: number,
     items: {
@@ -3627,35 +3627,31 @@ export class ProductsService {
     },
   ): Promise<boolean> {
     if (direction === -1) {
-      const shop = await tx.shop.findUniqueOrThrow({
-        where: { id: shopId },
-        select: { autoDeductIngredientStock: true },
-      });
-      if (!shop.autoDeductIngredientStock) return false;
+      const [shopRows] = await conn.query<RowDataPacket[]>(
+        `SELECT autoDeductIngredientStock FROM shop WHERE id = ?`,
+        [shopId],
+      );
+      if (!Boolean(shopRows[0]?.autoDeductIngredientStock)) return false;
     }
 
     const productIds = [...new Set(items.map((i) => i.productId))];
     if (productIds.length === 0) return false;
-    const recipeRows = await tx.productingredient.findMany({
-      where: { productId: { in: productIds } },
-      include: {
-        ingredient: {
-          select: {
-            name: true,
-            trackInventory: true,
-            shadowProductId: true,
-            shadowVariantId: true,
-          },
-        },
-      },
-    });
+    const [recipeRows] = await conn.query<RowDataPacket[]>(
+      `SELECT pi.id, pi.productId, pi.variantId, pi.ingredientId, pi.quantityPerUnit,
+              ing.name AS ingredientName, ing.trackInventory AS ingredientTrackInventory,
+              ing.shadowProductId AS ingredientShadowProductId, ing.shadowVariantId AS ingredientShadowVariantId
+       FROM productingredient pi
+       JOIN ingredient ing ON ing.id = pi.ingredientId
+       WHERE pi.productId IN (${productIds.map(() => '?').join(', ')})`,
+      productIds,
+    );
     if (recipeRows.length === 0) return false;
 
-    const rowsByProduct = new Map<number, typeof recipeRows>();
+    const rowsByProduct = new Map<number, RowDataPacket[]>();
     for (const row of recipeRows) {
-      if (!rowsByProduct.has(row.productId))
-        rowsByProduct.set(row.productId, []);
-      rowsByProduct.get(row.productId)!.push(row);
+      const pid = row.productId as number;
+      if (!rowsByProduct.has(pid)) rowsByProduct.set(pid, []);
+      rowsByProduct.get(pid)!.push(row);
     }
     const movementType = options.movementType ?? 'CONSUMED';
 
@@ -3663,13 +3659,20 @@ export class ProductsService {
     for (const item of items) {
       const rowsForProduct = rowsByProduct.get(item.productId);
       if (!rowsForProduct) continue;
-      const effectiveRows = this.resolveEffectiveRecipeRows(
-        rowsForProduct,
-        item.variantId,
-      );
+      // Same effective-recipe rule as resolveEffectiveRecipeRows below, just
+      // inlined — that generic doesn't structurally accept RowDataPacket's
+      // index-signature shape as satisfying its `{variantId}` constraint.
+      const variantOverrides =
+        item.variantId !== null
+          ? rowsForProduct.filter((r) => r.variantId === item.variantId)
+          : [];
+      const effectiveRows =
+        variantOverrides.length > 0
+          ? variantOverrides
+          : rowsForProduct.filter((r) => r.variantId === null);
       for (const row of effectiveRows) {
-        if (!row.ingredient.trackInventory) continue;
-        const totalQty = row.quantityPerUnit * item.quantity;
+        if (!Boolean(row.ingredientTrackInventory)) continue;
+        const totalQty = (row.quantityPerUnit as number) * item.quantity;
         const delta = direction * totalQty;
         consumedAnything = true;
 
@@ -3678,17 +3681,14 @@ export class ProductsService {
           options.throwOnInsufficientStock &&
           !item.allowNegative
         ) {
-          const result = await tx.outletingredientstock.updateMany({
-            where: {
-              outletId,
-              ingredientId: row.ingredientId,
-              stockQuantity: { gte: totalQty },
-            },
-            data: { stockQuantity: { decrement: totalQty } },
-          });
-          if (result.count === 0) {
+          const result = await conn.query(
+            `UPDATE outletingredientstock SET stockQuantity = stockQuantity - ?
+             WHERE outletId = ? AND ingredientId = ? AND stockQuantity >= ?`,
+            [totalQty, outletId, row.ingredientId, totalQty],
+          );
+          if ((result[0] as { affectedRows: number }).affectedRows === 0) {
             throw new ConflictException(
-              `Not enough ${row.ingredient.name} in stock to fulfill this order`,
+              `Not enough ${row.ingredientName as string} in stock to fulfill this order`,
             );
           }
         } else {
@@ -3697,20 +3697,12 @@ export class ProductsService {
           // restock): an atomic increment, no floor guard — deliberately
           // not stricter for ingredients than the codebase already is for
           // product stock at this same trigger point.
-          await tx.outletingredientstock.upsert({
-            where: {
-              outletId_ingredientId: {
-                outletId,
-                ingredientId: row.ingredientId,
-              },
-            },
-            update: { stockQuantity: { increment: delta } },
-            create: {
-              outletId,
-              ingredientId: row.ingredientId,
-              stockQuantity: delta,
-            },
-          });
+          await conn.query(
+            `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+            [outletId, row.ingredientId, delta],
+          );
         }
 
         // Shadow-resolved (Phase A): set productId/variantId alongside
@@ -3720,23 +3712,25 @@ export class ProductsService {
         // ingredient consumed by a multi-ingredient recipe keeps the
         // original ingredientId-only shape.
         const isShadow =
-          row.ingredient.shadowProductId !== null ||
-          row.ingredient.shadowVariantId !== null;
-        await tx.stockmovement.create({
-          data: {
+          row.ingredientShadowProductId !== null ||
+          row.ingredientShadowVariantId !== null;
+        await conn.query(
+          `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
             shopId,
-            productId: isShadow ? item.productId : null,
-            variantId: isShadow ? row.variantId : null,
-            ingredientId: row.ingredientId,
-            type: movementType,
-            reason: options.reason ?? null,
+            isShadow ? item.productId : null,
+            isShadow ? row.variantId : null,
+            row.ingredientId,
+            movementType,
+            options.reason ?? null,
             delta,
             outletId,
-            toOutletId: null,
-            note: options.note ?? null,
-            actorUserId: options.actorUserId,
-          },
-        });
+            null,
+            options.note ?? null,
+            options.actorUserId,
+          ],
+        );
       }
     }
     return consumedAnything;

@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { RowDataPacket } from 'mysql2/promise';
 import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { trimDecimal } from '../database/decimal.util';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import { createLogger } from '../common/logging/logger';
@@ -73,6 +76,7 @@ const INDEPENDENT_ONLINE_PROVIDERS = ['paypal', 'tabby', 'tamara'] as const;
 export class PublicService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly providerRegistry: PaymentProviderRegistry,
     private readonly paymentSettingsService: PaymentSettingsService,
     private readonly customersService: CustomersService,
@@ -811,26 +815,28 @@ export class PublicService {
       }
     }
 
-    let subtotal = new Prisma.Decimal(0);
+    let subtotal = 0;
     const itemsData = resolvedItems.map(
       ({ product, variant, quantity, price, variantLabel }, idx) => {
-        subtotal = subtotal.add(new Prisma.Decimal(price).mul(quantity));
+        subtotal += Number(price) * quantity;
         return {
-          productId: product.id,
-          productName: product.name,
-          variantId: variant?.id,
-          variantLabel: variantLabel ?? undefined,
+          productId: product.id as number,
+          productName: product.name as string,
+          variantId: variant?.id ?? null,
+          variantLabel: variantLabel ?? null,
           quantity,
           priceAtPurchase: price,
-          note: dto.items[idx].note || undefined,
+          note: dto.items[idx].note || null,
         };
       },
     );
 
     let deliveryFee =
       dto.orderType === 'pickup'
-        ? new Prisma.Decimal(0)
-        : await this.resolveDeliveryFee(shop, outlet, dto, Number(subtotal));
+        ? 0
+        : Number(
+            await this.resolveDeliveryFee(shop, outlet, dto, subtotal),
+          );
 
     // Resolved before the transaction (doesn't need order.id) — an
     // invalid/expired/exhausted code throws here rather than silently
@@ -839,7 +845,7 @@ export class PublicService {
     // and expects applied is a different UX contract than passive referral
     // tracking.
     let discount: { id: number; usageLimit: number | null } | null = null;
-    let discountAmount = new Prisma.Decimal(0);
+    let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
     if (dto.discountCode) {
       const resolved = await this.discountsService.resolveByCode(
@@ -847,7 +853,7 @@ export class PublicService {
         dto.discountCode,
       );
       const evaluated = await this.discountsService.evaluate(resolved, {
-        cartSubtotal: Number(subtotal),
+        cartSubtotal: subtotal,
       });
       if (!evaluated.valid) {
         throw new BadRequestException(
@@ -855,27 +861,24 @@ export class PublicService {
         );
       }
       discount = resolved!;
-      discountAmount = new Prisma.Decimal(evaluated.discountAmount ?? 0);
+      discountAmount = evaluated.discountAmount ?? 0;
       discountCodeSnapshot = evaluated.code;
       if (evaluated.freeShipping) {
-        deliveryFee = new Prisma.Decimal(0);
+        deliveryFee = 0;
       }
     }
     // Discount reduces the taxable base, same as a merchant discounting the
     // goods themselves — tax is computed on what the customer actually pays
     // for the products, not the pre-discount list price.
-    const discountedSubtotal = Prisma.Decimal.max(
-      0,
-      subtotal.sub(discountAmount),
-    );
+    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
 
     const { taxAmount, total } = computeOrderTotals({
-      subtotal: Number(discountedSubtotal),
-      deliveryFee: Number(deliveryFee),
+      subtotal: discountedSubtotal,
+      deliveryFee,
       taxRate: Number(shop.taxRate),
       taxInclusive: shop.taxInclusive,
     });
-    const orderTotal = new Prisma.Decimal(total.toFixed(2));
+    const orderTotal = Number(total.toFixed(2));
 
     // Gift card applies against the final total (after tax/delivery), not
     // the pre-tax subtotal a discount reduces — it's a payment credit, not
@@ -883,7 +886,7 @@ export class PublicService {
     // "bad code fails before any writes" discipline as discountCode above),
     // the atomic balance claim happens inside it via GiftCardsService.redeem.
     let giftCard: { id: number; code: string } | null = null;
-    let giftCardAmountApplied = new Prisma.Decimal(0);
+    let giftCardAmountApplied = 0;
     if (dto.giftCardCode) {
       const evaluated = await this.giftCardsService.validateCode(
         shop.id,
@@ -895,16 +898,13 @@ export class PublicService {
         );
       }
       giftCard = { id: evaluated.giftCardId!, code: evaluated.code! };
-      giftCardAmountApplied = Prisma.Decimal.min(
-        new Prisma.Decimal(evaluated.remainingBalance!),
-        orderTotal,
-      );
+      giftCardAmountApplied = Math.min(evaluated.remainingBalance!, orderTotal);
     }
     // What's actually owed through the selected paymentMethod after the
     // gift card credit — 0 when the card fully covers the order, in which
     // case no online-payment session is created at all (see below) and the
     // order is marked paid immediately, since nothing further is owed.
-    const remainderTotal = orderTotal.sub(giftCardAmountApplied);
+    const remainderTotal = orderTotal - giftCardAmountApplied;
 
     const customer = await this.customersService.findOrCreateForOrder(shop.id, {
       name: dto.customerName,
@@ -919,10 +919,10 @@ export class PublicService {
     const attribution = await this.affiliateService.resolveAttribution(
       shop.id,
       dto.referralCode,
-      Number(total),
+      total,
     );
 
-    const order = await this.prisma.$transaction(async (tx) => {
+    const orderId = await this.db.transaction(async (conn) => {
       // Reserved at the moment the storefront customer checks out, not
       // deferred to merchant confirmation like the admin-entered order flow
       // — a real customer transaction needs the stock guarantee
@@ -944,13 +944,13 @@ export class PublicService {
       // path (see stockmovement.actorUserId's schema comment).
       const ingredientsConsumed =
         await this.productsService.consumeForOrderItems(
-          tx,
+          conn,
           shop.id,
           outlet.id,
           resolvedItems
             .filter(({ product }) => !product.isGiftCard)
             .map(({ product, variant, quantity, allowNegative }) => ({
-              productId: product.id,
+              productId: product.id as number,
               variantId: variant?.id ?? null,
               quantity,
               allowNegative,
@@ -959,73 +959,88 @@ export class PublicService {
           { throwOnInsufficientStock: true, actorUserId: null },
         );
 
-      const created = await tx.order.create({
-        data: {
-          shopId: shop.id,
-          ingredientsConsumedAt: ingredientsConsumed ? new Date() : undefined,
-          outletId: outlet.id,
-          customerId: customer.id,
-          customerName: dto.customerName,
-          customerPhone: dto.customerPhone,
-          customerEmail: dto.customerEmail,
-          customerAddress: dto.customerAddress,
-          emirate: dto.emirate,
-          area: dto.area,
-          deliveryDate: dto.deliveryDate
-            ? new Date(dto.deliveryDate)
-            : undefined,
-          deliveryTimeSlot: dto.deliveryTimeSlot,
-          deliveryNotes: dto.deliveryNotes,
-          receiverMessage: dto.receiverMessage,
-          channel: 'storefront',
-          orderType: dto.orderType,
-          paymentMethod: dto.paymentMethod,
+      const trackingToken = generateTrackingCode();
+      const [result] = await conn.query(
+        `INSERT INTO \`order\` (
+          shopId, ingredientsConsumedAt, outletId, customerId, customerName, customerPhone, customerEmail,
+          customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
+          giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          shop.id,
+          ingredientsConsumed ? new Date() : null,
+          outlet.id,
+          customer.id,
+          dto.customerName,
+          dto.customerPhone,
+          dto.customerEmail ?? null,
+          dto.customerAddress,
+          dto.emirate,
+          dto.area ?? null,
+          dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+          dto.deliveryTimeSlot ?? null,
+          dto.deliveryNotes ?? null,
+          dto.receiverMessage ?? null,
+          'storefront',
+          dto.orderType,
+          dto.paymentMethod,
           deliveryFee,
-          taxAmount: new Prisma.Decimal(taxAmount.toFixed(2)),
-          discountId: discount?.id,
-          discountCode: discountCodeSnapshot,
-          discountAmount: discount ? discountAmount : undefined,
-          giftCardId: giftCard?.id,
-          giftCardCode: giftCard?.code,
-          giftCardAmount: giftCard ? giftCardAmountApplied : undefined,
-          total: orderTotal,
+          Number(taxAmount.toFixed(2)),
+          discount?.id ?? null,
+          discountCodeSnapshot ?? null,
+          discount ? discountAmount : null,
+          giftCard?.id ?? null,
+          giftCard?.code ?? null,
+          giftCard ? giftCardAmountApplied : null,
+          orderTotal,
           // Nothing left to collect through the selected paymentMethod when
           // the gift card covers the order in full — marked paid at
           // creation rather than left 'unpaid' waiting for a payment event
           // that was never going to happen (no online-payment session is
           // created for a zero remainder either, see below).
-          paymentStatus: remainderTotal.lessThanOrEqualTo(0)
-            ? 'paid'
-            : undefined,
-          trackingToken: generateTrackingCode(),
-          orderitem: { create: itemsData },
-        },
-        include: { orderitem: true },
-      });
+          remainderTotal <= 0 ? 'paid' : 'unpaid',
+          trackingToken,
+        ],
+      );
+      const newOrderId = (result as { insertId: number }).insertId;
 
-      if (discount) {
-        await this.discountsService.redeem(
-          tx,
-          discount,
-          created.id,
-          customer.id,
+      if (itemsData.length > 0) {
+        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        await conn.query(
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, note)
+           VALUES ${placeholders}`,
+          itemsData.flatMap((d) => [
+            newOrderId,
+            d.productId,
+            d.productName,
+            d.variantId,
+            d.variantLabel,
+            d.quantity,
+            d.priceAtPurchase,
+            d.note,
+          ]),
         );
       }
 
-      if (giftCard && giftCardAmountApplied.greaterThan(0)) {
+      if (discount) {
+        await this.discountsService.redeem(conn, discount, newOrderId, customer.id);
+      }
+
+      if (giftCard && giftCardAmountApplied > 0) {
         await this.giftCardsService.redeem(
-          tx,
+          conn,
           giftCard.id,
-          Number(giftCardAmountApplied),
-          created.id,
+          giftCardAmountApplied,
+          newOrderId,
         );
       }
 
       if (attribution) {
         await this.affiliateService.recordAttribution(
-          tx,
+          conn,
           shop.id,
-          created.id,
+          newOrderId,
           attribution,
         );
       }
@@ -1043,9 +1058,9 @@ export class PublicService {
         .map(({ price, quantity }) => ({ amount: Number(price), quantity }));
       if (giftCardLines.length > 0) {
         await this.giftCardsService.issueForOrder(
-          tx,
+          conn,
           shop.id,
-          created.id,
+          newOrderId,
           customer.id,
           giftCardLines,
           dto.customerEmail ?? null,
@@ -1058,14 +1073,41 @@ export class PublicService {
       // scenario safe — see AbandonedCartsService.markRecovered's own
       // comment on the CAS claim this performs.
       await this.abandonedCartsService.markRecovered(
-        tx,
+        conn,
         shop.id,
         dto.customerPhone,
-        created.id,
+        newOrderId,
       );
 
-      return created;
+      return newOrderId;
     });
+
+    const orderRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM \`order\` WHERE id = ?`,
+      [orderId],
+    );
+    const itemRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM orderitem WHERE orderId = ?`,
+      [orderId],
+    );
+    const order = {
+      ...orderRows[0],
+      id: orderRows[0].id as number,
+      outletId: orderRows[0].outletId as number,
+      customerName: orderRows[0].customerName as string,
+      customerEmail: orderRows[0].customerEmail as string | null,
+      customerPhone: orderRows[0].customerPhone as string,
+      orderType: orderRows[0].orderType as string | null,
+      deliveryFee: trimDecimal(orderRows[0].deliveryFee as string),
+      taxAmount: trimDecimal(orderRows[0].taxAmount as string),
+      discountAmount: trimDecimal(orderRows[0].discountAmount as string),
+      giftCardAmount: trimDecimal(orderRows[0].giftCardAmount as string),
+      total: trimDecimal(orderRows[0].total as string) as string,
+      orderitem: itemRows.map((i) => ({
+        ...i,
+        priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
+      })),
+    };
 
     // Fires on order placement itself, not on payment completion — "we
     // received your order" rather than a payment receipt. Consistent for
@@ -1105,15 +1147,15 @@ export class PublicService {
     // A gift card covering the order in full leaves nothing to charge — no
     // checkout session is created regardless of which online paymentMethod
     // was selected (order was already marked 'paid' at creation above).
-    if (gatewayName && remainderTotal.greaterThan(0)) {
+    if (gatewayName && remainderTotal > 0) {
       const provider = this.providerRegistry.get(gatewayName);
       const credentials = await this.paymentSettingsService.resolveCredentials(
         shop.id,
         gatewayName,
       );
       const session = await provider.createCheckoutSession({
-        orderId: order.id,
-        amount: Number(remainderTotal),
+        orderId: order.id as number,
+        amount: remainderTotal,
         currency: shop.currency,
         successUrl: `${STOREFRONT_URL}/${shopSlug}/orders/${order.id}?paid=1`,
         cancelUrl: `${STOREFRONT_URL}/${shopSlug}/checkout?orderId=${order.id}`,
