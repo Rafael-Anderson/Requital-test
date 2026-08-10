@@ -73,11 +73,22 @@ export interface PaymentProvider {
   // /payments/webhook/stripe/:shopId). Undefined on the legacy platform-wide
   // route — providers that support only a single platform-level secret
   // (Stripe today) fall back to that env var for backward compatibility.
+  // For most gateways this is a single HMAC secret. PayPal's verification
+  // needs multiple credential fields (clientId/clientSecret/webhookId) and
+  // is itself a remote API call, not a local computation — PaymentsService
+  // JSON-encodes the full resolved credentials object into this same string
+  // for that one gateway (see handleWebhook's `gateway === 'paypal'`
+  // branch) rather than widening this parameter for every provider.
+  //
+  // Return type allows a Promise so a provider whose verification requires
+  // a network call (PayPal) can be async — handleWebhook awaits the result,
+  // and every synchronous provider here still satisfies this type
+  // unchanged (a function returning T already satisfies T | Promise<T>).
   parseWebhookEvent(
     payload: Buffer,
     signatureHeader: string,
     webhookSecret?: string,
-  ): WebhookResult | null;
+  ): WebhookResult | null | Promise<WebhookResult | null>;
   // Optional — not every provider supports API-issued refunds (or is even a
   // real integration yet, see Tabby/Tamara/Nomod's structural-stub
   // comments). ReturnsService checks for this method's presence and falls

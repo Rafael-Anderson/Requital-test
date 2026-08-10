@@ -25,6 +25,19 @@ export type OperatingModelValue = (typeof OPERATING_MODELS)[number]["value"];
 
 export const BRANCH_COUNTS = ["1", "2-5", "6-10", "10+"] as const;
 
+// Purely informational for now (see CLAUDE.md's country-selector note) — not
+// a general ISO-3166 list, just the Gulf markets this app already targets
+// plus an escape hatch.
+export const COUNTRIES = [
+  "United Arab Emirates",
+  "Saudi Arabia",
+  "Qatar",
+  "Kuwait",
+  "Bahrain",
+  "Oman",
+  "Other",
+] as const;
+
 export const STEP_LABELS = ["Personal Info", "Business Info", "Location & Setup", "Review & Confirm"];
 
 // Which wizard step a validated field lives on — same jump-to-earliest-error
@@ -41,6 +54,7 @@ export const FIELD_STEP: Record<string, number> = {
   address: 2,
   operatingModel: 2,
   branchCount: 2,
+  country: 2,
 };
 
 export const FIELD_LABELS: Record<string, string> = {
@@ -55,6 +69,7 @@ export const FIELD_LABELS: Record<string, string> = {
   address: "Primary Location / Address",
   operatingModel: "Operating Model",
   branchCount: "Number of Branches",
+  country: "Country",
 };
 
 function slugifySubdomain(value: string): string {
@@ -86,6 +101,8 @@ function validateField(field: string, value: string): string | undefined {
       return validateRequired(value, "Address").message;
     case "branchCount":
       return validateRequired(value, "Number of branches").message;
+    case "country":
+      return validateRequired(value, "Country").message;
     default:
       return undefined;
   }
@@ -112,6 +129,9 @@ export function useAccountSetupForm() {
   const [address, setAddressRaw] = useState("");
   const [operatingModel, setOperatingModelRaw] = useState<Set<OperatingModelValue>>(new Set());
   const [branchCount, setBranchCountRaw] = useState("");
+  // Default to the primary market this app already assumes elsewhere
+  // (currency, timezone, phone normalization are all UAE-scoped today).
+  const [country, setCountryRaw] = useState<string>("United Arab Emirates");
   const [productEditorMode, setProductEditorMode] = useState<"simple" | "advanced">("simple");
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -203,6 +223,12 @@ export function useAccountSetupForm() {
     commitError("branchCount", validateField("branchCount", value));
   }
 
+  function setCountry(value: string) {
+    setCountryRaw(value);
+    markTouched("country");
+    commitError("country", validateField("country", value));
+  }
+
   const fieldValues: Record<string, string> = {
     firstName,
     email,
@@ -214,6 +240,7 @@ export function useAccountSetupForm() {
     websiteUrl,
     address,
     branchCount,
+    country,
   };
 
   // Validates every field on one wizard step, marking them all touched (so
@@ -275,6 +302,7 @@ export function useAccountSetupForm() {
         operatingModel: [...operatingModel],
         branchCount,
         productEditorMode,
+        country,
       });
       return { ok: true, errors: {} };
     } catch (err) {
@@ -309,6 +337,8 @@ export function useAccountSetupForm() {
     toggleOperatingModel,
     branchCount,
     setBranchCount,
+    country,
+    setCountry,
     productEditorMode,
     setProductEditorMode,
     touched,

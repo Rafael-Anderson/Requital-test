@@ -22,6 +22,7 @@ interface NotifiableOrder {
   customerPhone: string;
   orderType: string | null;
   total: Prisma.Decimal | string;
+  outletId: number;
 }
 
 // Customer-facing order notifications, email and WhatsApp — independent
@@ -71,6 +72,7 @@ export class OrderNotificationsService {
         `order:${order.id}:confirmed-email`,
       ),
       this.sendWhatsApp(shopId, order, bodyText),
+      this.sendMerchantAlert(shopId, order),
     ]);
   }
 
@@ -207,6 +209,51 @@ export class OrderNotificationsService {
         shopId,
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  // Platform-owned WhatsApp new-order alert to the merchant's own outlet —
+  // Requital's own WhatsApp Business account, not merchant-configured (see
+  // common/whatsapp.ts's sendPlatformWhatsAppAlertOrThrow and CLAUDE.md's
+  // "WhatsApp order alerts (platform-owned)" note). Always on, no per-shop
+  // toggle (the feature is "zero setup, it's just on") — never throws, same
+  // discipline as sendWhatsApp above, so a bad outlet phone or a down
+  // platform WhatsApp account can never block order creation or the other
+  // two notification channels.
+  private async sendMerchantAlert(shopId: number, order: NotifiableOrder) {
+    try {
+      const outlet = await this.prisma.outlet.findUnique({
+        where: { id: order.outletId },
+        select: { phone: true, whatsapp: true },
+      });
+      const rawPhone = outlet?.whatsapp || outlet?.phone;
+      if (!rawPhone) return;
+
+      const to = normalizePhoneToE164(rawPhone);
+      if (!to) {
+        logger.warn(
+          `order #${order.id}: outlet phone could not be normalized to E.164 — skipping merchant alert`,
+          { orderId: order.id, shopId },
+        );
+        return;
+      }
+
+      const body = `New order #${order.id} from ${order.customerName}. Total: ${order.total} AED.`;
+      await this.jobsService.enqueue(
+        shopId,
+        'send_merchant_whatsapp_alert',
+        { to, body, orderId: order.id },
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
+    } catch (err) {
+      logger.error(
+        `order #${order.id}: merchant WhatsApp alert enqueue failed`,
+        {
+          orderId: order.id,
+          shopId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
     }
   }
 }
