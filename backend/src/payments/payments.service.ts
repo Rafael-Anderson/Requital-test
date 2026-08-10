@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { PaymentProviderRegistry } from './payment-provider.registry';
@@ -24,7 +25,7 @@ const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 @Injectable()
 export class PaymentsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly providerRegistry: PaymentProviderRegistry,
     private readonly paymentSettingsService: PaymentSettingsService,
     private readonly affiliateService: AffiliateService,
@@ -34,13 +35,17 @@ export class PaymentsService {
 
   async generateLink(ctx: TenantContext, orderId: number) {
     const outletId = resolveOutletFilter(ctx);
-    const order = await this.prisma.order.findFirst({
-      where: {
-        id: orderId,
-        shopId: ctx.shopId,
-        ...(outletId !== undefined && { outletId }),
-      },
-    });
+    const conditions = ['id = ?', 'shopId = ?'];
+    const params: (string | number)[] = [orderId, ctx.shopId];
+    if (outletId !== undefined) {
+      conditions.push('outletId = ?');
+      params.push(outletId);
+    }
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM \`order\` WHERE ${conditions.join(' AND ')}`,
+      params,
+    );
+    const order = rows[0];
     if (!order) {
       throw new NotFoundException(`Order ${orderId} not found`);
     }
@@ -51,7 +56,7 @@ export class PaymentsService {
     // apply to an admin generating a payment link for one of its orders.
     await this.branchRolesService.assertPermission(
       ctx,
-      order.outletId,
+      order.outletId as number,
       'payments.generate_link',
     );
     if (order.paymentStatus === 'paid') {
@@ -67,10 +72,10 @@ export class PaymentsService {
     const expiresAt = new Date(
       Date.now() + LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     );
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { paymentLinkToken: token, paymentLinkExpiresAt: expiresAt },
-    });
+    await this.db.execute(
+      `UPDATE \`order\` SET paymentLinkToken = ?, paymentLinkExpiresAt = ? WHERE id = ?`,
+      [token, expiresAt, orderId],
+    );
 
     return { url: `${STOREFRONT_URL}/pay/${token}`, token, expiresAt };
   }
@@ -78,10 +83,13 @@ export class PaymentsService {
   // Public (token-authenticated, not shop-scoped) — the token is the
   // credential a customer holds, standing in for a merchant session.
   async getCheckoutSession(token: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { paymentLinkToken: token },
-      include: { shop: true },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT o.*, s.id AS shopRowId, s.paymentGateway AS shopPaymentGateway, s.currency AS shopCurrency
+       FROM \`order\` o JOIN shop s ON s.id = o.shopId
+       WHERE o.paymentLinkToken = ?`,
+      [token],
+    );
+    const order = rows[0];
     if (!order) {
       throw new NotFoundException('Payment link not found');
     }
@@ -90,20 +98,20 @@ export class PaymentsService {
     }
     if (
       !order.paymentLinkExpiresAt ||
-      order.paymentLinkExpiresAt < new Date()
+      (order.paymentLinkExpiresAt as Date) < new Date()
     ) {
       throw new GoneException('Payment link has expired');
     }
 
-    const provider = this.providerRegistry.get(order.shop.paymentGateway);
+    const provider = this.providerRegistry.get(order.shopPaymentGateway as string);
     const credentials = await this.paymentSettingsService.resolveCredentials(
-      order.shop.id,
-      order.shop.paymentGateway,
+      order.shopRowId as number,
+      order.shopPaymentGateway as string,
     );
     const session = await provider.createCheckoutSession({
-      orderId: order.id,
+      orderId: order.id as number,
       amount: Number(order.total),
-      currency: order.shop.currency,
+      currency: order.shopCurrency as string,
       successUrl: `${STOREFRONT_URL}/pay/${token}/success`,
       cancelUrl: `${STOREFRONT_URL}/pay/${token}`,
       credentials,
@@ -170,9 +178,11 @@ export class PaymentsService {
       return { received: true };
     }
 
-    const order = await this.prisma.order.findUnique({
-      where: { id: result.orderId },
-    });
+    const orderRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM \`order\` WHERE id = ?`,
+      [result.orderId],
+    );
+    const order = orderRows[0];
     if (!order) {
       return { received: true };
     }
@@ -182,7 +192,7 @@ export class PaymentsService {
     // arrived on, never silently applied to a different shop's order.
     if (shopId !== undefined && order.shopId !== shopId) {
       logger.warn(
-        `webhook for order ${order.id} received on the wrong shop's webhook URL — ignoring`,
+        `webhook for order ${order.id as number} received on the wrong shop's webhook URL — ignoring`,
         { orderId: order.id, orderShopId: order.shopId, webhookShopId: shopId },
       );
       return { received: true };
@@ -196,53 +206,51 @@ export class PaymentsService {
       // If the insert violates the unique constraint, the whole transaction
       // (including the order update) rolls back, so a duplicate delivery
       // can't re-apply the paymentStatus change or insert a second row.
-      await this.prisma.$transaction([
-        this.prisma.paymenttransaction.create({
-          data: {
-            orderId: order.id,
-            gateway: provider.name,
-            gatewayReference: result.providerReference,
-            providerChargeReference: result.chargeReference,
-            amount: order.total,
-            status: result.status,
-          },
-        }),
-        ...(result.status === 'paid'
-          ? [
-              this.prisma.order.update({
-                where: { id: order.id },
-                data: { paymentStatus: 'paid' },
-              }),
-            ]
-          : []),
-      ]);
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        // P2002: the unique (gateway, gatewayReference) index rejected a
-        // duplicate insert — the earlier delivery already fully committed.
-        // P2034: MySQL reported a write conflict — observed in practice when
-        // two deliveries of the same event land truly concurrently, before
-        // either has committed, so neither has hit P2002 yet. Both outcomes
-        // mean "a concurrent/prior delivery of this exact event owns this
-        // write," so both no-op the same way instead of surfacing a 500 that
-        // would make the gateway retry a delivery that already succeeded elsewhere.
-        if (error.code === 'P2002' || error.code === 'P2034') {
-          return { received: true };
+      await this.db.transaction(async (conn) => {
+        await conn.query(
+          `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            order.id,
+            provider.name,
+            result.providerReference,
+            result.chargeReference ?? null,
+            order.total,
+            result.status,
+          ],
+        );
+        if (result.status === 'paid') {
+          await conn.query(`UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`, [
+            order.id,
+          ]);
         }
+      });
+    } catch (error) {
+      // Duplicate key (errno 1062): the unique (gateway, gatewayReference)
+      // index rejected a duplicate insert — the earlier delivery already
+      // fully committed. Lock conflict (errno 1213/1205): observed in
+      // practice when two deliveries of the same event land truly
+      // concurrently, before either has committed, so neither has hit 1062
+      // yet. Both outcomes mean "a concurrent/prior delivery of this exact
+      // event owns this write," so both no-op the same way instead of
+      // surfacing a 500 that would make the gateway retry a delivery that
+      // already succeeded elsewhere.
+      if (isDuplicateKeyError(error) || isLockConflict(error)) {
+        return { received: true };
       }
       throw error;
     }
 
     if (result.status === 'paid') {
-      await this.affiliateService.syncOrderStatus(order.id, {
+      await this.affiliateService.syncOrderStatus(order.id as number, {
         paymentPaid: true,
       });
     }
 
     if (result.advanceOrderStatus) {
       await this.applyAdvanceOrderStatus(
-        order.id,
-        order.shopId,
+        order.id as number,
+        order.shopId as number,
         result.advanceOrderStatus,
       );
     }
@@ -268,16 +276,19 @@ export class PaymentsService {
     shopId: number,
     action: 'confirmed' | 'cancelled',
   ) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-    });
+    const orderRows = await this.db.query<RowDataPacket[]>(
+      `SELECT status FROM \`order\` WHERE id = ?`,
+      [orderId],
+    );
+    const order = orderRows[0];
     if (!order || order.status !== 'pending') {
       return;
     }
-    const admin = await this.prisma.user.findFirst({
-      where: { shopId, role: 'admin' },
-      orderBy: { id: 'asc' },
-    });
+    const adminRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM user WHERE shopId = ? AND role = 'admin' ORDER BY id ASC LIMIT 1`,
+      [shopId],
+    );
+    const admin = adminRows[0];
     if (!admin) {
       logger.warn(
         `webhook-driven order ${action} skipped — shop has no admin user to attribute it to`,
@@ -286,7 +297,7 @@ export class PaymentsService {
       return;
     }
     const ctx: TenantContext = {
-      userId: admin.id,
+      userId: admin.id as number,
       shopId,
       role: 'admin',
       outletId: null,
