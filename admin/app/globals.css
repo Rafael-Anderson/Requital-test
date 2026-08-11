@@ -131,6 +131,25 @@ body {
   }
 }
 
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
 /* Product wizard step transitions (ProductForm.tsx): the entering step
    slides in from the direction navigation is heading — forward from the
    right (Next), backward from the left (Back/stepper click) — mirroring
@@ -182,6 +201,9 @@ body {
   }
   .backdrop-in {
     animation: backdrop-in 0.2s ease-out;
+  }
+  .shake {
+    animation: shake 0.4s ease-in-out;
   }
   .step-enter-forward {
     animation: step-enter-forward 0.2s ease-out;
