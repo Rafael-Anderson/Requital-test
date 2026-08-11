@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { StockmovementRow } from '../src/db/types';
 
 interface AuthResponse {
   accessToken: string;
@@ -56,7 +58,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Order Returns/Refunds (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -72,11 +74,10 @@ describe('Order Returns/Refunds (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -383,10 +384,12 @@ describe('Order Returns/Refunds (e2e)', () => {
         .expect(201);
 
       expect(await stockAt(adminToken, outletId, product.id)).toBe(9);
-      const movement = await prisma.stockmovement.findFirst({
-        where: { productId: product.id, type: 'RETURN' },
-      });
-      expect(movement).not.toBeNull();
+      const movementRows = await db.query<(StockmovementRow & RowDataPacket)[]>(
+        `SELECT * FROM stockmovement WHERE productId = ? AND type = ?`,
+        [product.id, 'RETURN'],
+      );
+      const movement = movementRows[0];
+      expect(movement).not.toBeUndefined();
       expect(movement?.delta).toBe(2);
       expect(movement?.outletId).toBe(outletId);
     });
@@ -438,16 +441,17 @@ describe('Order Returns/Refunds (e2e)', () => {
       // configured in this test environment, so ReturnsService's attempt to
       // call stripe.refunds.create() is guaranteed to throw — this is
       // exactly the "provider call fails" path, not a mock standing in for it.
-      await prisma.paymenttransaction.create({
-        data: {
-          orderId: order.id,
-          gateway: 'stripe',
-          gatewayReference: `evt_test_${runId}`,
-          providerChargeReference: `pi_test_${runId}`,
-          amount: order.total,
-          status: 'paid',
-        },
-      });
+      await db.execute(
+        `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          order.id,
+          'stripe',
+          `evt_test_${runId}`,
+          `pi_test_${runId}`,
+          order.total,
+          'paid',
+        ],
+      );
 
       const res = await request(app.getHttpServer())
         .post(`/orders/${order.id}/returns`)

@@ -5,7 +5,8 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 
 interface AuthResponse {
   accessToken: string;
@@ -39,7 +40,7 @@ function body<T>(res: Response): T {
 // item edits, and order-items-edit.e2e-spec.ts never touches ingredients.
 describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -55,11 +56,10 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -138,10 +138,11 @@ describe('Order item edits: BOM ingredient stock deduction (e2e)', () => {
   }
 
   async function roseStockOf(outletId: number, ingredientId: number) {
-    const row = await prisma.outletingredientstock.findUnique({
-      where: { outletId_ingredientId: { outletId, ingredientId } },
-    });
-    return row?.stockQuantity ?? 0;
+    const rows = await db.query<RowDataPacket[]>(
+      `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+      [outletId, ingredientId],
+    );
+    return (rows[0]?.stockQuantity as number | undefined) ?? 0;
   }
 
   async function createAndConfirmOrder(

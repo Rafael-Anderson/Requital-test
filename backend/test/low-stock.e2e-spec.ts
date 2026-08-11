@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ShopRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 import { LowStockDigestService } from '../src/products/low-stock-digest.service';
 
@@ -35,7 +37,7 @@ function body<T>(res: Response): T {
 
 describe('Low Stock Alerts (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   let lowStockDigestService: LowStockDigestService;
   const runId = Date.now();
 
@@ -52,14 +54,22 @@ describe('Low Stock Alerts (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
     lowStockDigestService = app.get(LowStockDigestService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getShopBySubdomain(subdomain: string): Promise<ShopRow> {
+    const rows = await db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ?`,
+      [subdomain],
+    );
+    if (!rows[0]) throw new Error('shop not found');
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string, outletCount = 1) {
     const shopSlug = `${slugPrefix}-${runId}`;
@@ -330,9 +340,7 @@ describe('Low Stock Alerts (e2e)', () => {
 
     it('respects the opt-in toggle (off by default)', async () => {
       const { shopSlug } = await makeLowStockShop('ls-digest-toggle');
-      const shop = await prisma.shop.findUniqueOrThrow({
-        where: { subdomain: shopSlug },
-      });
+      const shop = await getShopBySubdomain(shopSlug);
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const sent = await lowStockDigestService.sendForShop(
@@ -352,9 +360,7 @@ describe('Low Stock Alerts (e2e)', () => {
         .send({ notifyLowStockDigest: true })
         .expect(200);
 
-      const shop = await prisma.shop.findUniqueOrThrow({
-        where: { subdomain: shopSlug },
-      });
+      const shop = await getShopBySubdomain(shopSlug);
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
 
@@ -374,10 +380,11 @@ describe('Low Stock Alerts (e2e)', () => {
       );
       expect(second).toBe(false);
 
-      const updated = await prisma.shop.findUniqueOrThrow({
-        where: { id: shop.id },
-      });
-      expect(updated.lowStockDigestLastSentAt).not.toBeNull();
+      const updatedRows = await db.query<(ShopRow & RowDataPacket)[]>(
+        `SELECT * FROM shop WHERE id = ?`,
+        [shop.id],
+      );
+      expect(updatedRows[0].lowStockDigestLastSentAt).not.toBeNull();
     });
   });
 });

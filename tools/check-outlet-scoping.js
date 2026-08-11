@@ -30,6 +30,12 @@ const ROOT = path.join(__dirname, "..", "backend", "src");
 
 const OWNERSHIP_MARKERS = [
   "outlet.findFirst",
+  // Post-mysql2-migration equivalent of the Prisma `outlet.findFirst({ id,
+  // shopId })` check above — every converted call site uses this same raw
+  // SQL shape (see products/ingredients/scan/auth/draft-orders services),
+  // so one substring covers all of them, including scan.service.ts's
+  // `id IN (...)` batch variant.
+  "FROM outlet WHERE",
   "assertOutletBelongsToShop",
   "assertOutletAccessible",
   "assertZoneBelongsToOutlet",
@@ -48,17 +54,18 @@ const ALLOWLIST = [
   "products/products.service.ts:consumeForOrderItems",
   "products/products.service.ts:applyImportStock",
   "dashboard/dashboard.service.ts:revenueAndCount",
-  // Read-only Prisma include/select builders — outletId only narrows a
-  // nested relation's own `where`, scoped underneath a product/ingredient
-  // already fetched with its own shopId check. A foreign outletId here can
-  // only ever match zero rows (the composite key also requires this exact
-  // product/variant id), never leak another shop's data.
-  "ingredients/ingredients.service.ts:includeFor",
-  "ingredients/ingredients.service.ts:toResponse",
-  "products/products.service.ts:ingredientSelectFor",
-  "products/products.service.ts:variantIncludeFor",
-  "products/products.service.ts:productIngredientIncludeFor",
-  "products/products.service.ts:includeFor",
+  // Read-only batch-loader queries (post-mysql2-migration replacement for
+  // the Prisma include/select builders these entries used to name) —
+  // outletId only narrows a LEFT JOIN's own ON/WHERE clause for a stock
+  // lookup, scoped underneath a product/ingredient id set already resolved
+  // via its own shopId check. A foreign outletId here can only ever match
+  // zero rows in that join (the id list also requires the exact
+  // product/variant ids already fetched), never leak another shop's data.
+  "ingredients/ingredients.service.ts:loadIngredientRows",
+  "products/products.service.ts:loadProductsWithRelations",
+  "products/products.service.ts:loadVariantsWithRelations",
+  "products/products.service.ts:loadIngredientLinks",
+  "public/public.service.ts:loadPublicProductsWithRelations",
   // Read-only report/dashboard aggregates — outletId is always AND-ed
   // alongside shopId in the same where clause, so a foreign outletId
   // narrows to zero rows rather than leaking a different shop's rows.
@@ -87,7 +94,6 @@ const ALLOWLIST = [
   "public/public.service.ts:getProduct",
   "public/public.service.ts:getProductBySlug",
   "public/public.service.ts:getRelatedProducts",
-  "public/public.service.ts:publicProductInclude",
 ];
 
 function walk(dir, out = []) {
@@ -125,13 +131,36 @@ function findMatchingBraceEnd(lines, startLine) {
   return lines.length - 1;
 }
 
+// A call-statement/array-element sitting alone on its own line (very common
+// now that raw SQL params are one-per-line, e.g. `generateOpaqueToken(),`)
+// closes its own parens and is immediately followed by `,`/`;` and nothing
+// else — a real method declaration never does that (it either continues
+// the signature onto more lines, or closes with `{` right there).
+const CALL_STATEMENT_END = /\)\s*[,;]?\s*$/;
+
 const flagged = [];
 for (const file of files) {
   const rel = path.relative(ROOT, file).replace(/\\/g, "/");
   const src = fs.readFileSync(file, "utf8");
   const lines = src.split("\n");
 
+  // Tracks whether line i *starts* inside a multi-line template literal
+  // (backtick string) — SQL text spanning several lines (e.g. `VALUES (?,
+  // ?, ?)` on its own continuation line) reads as plain text, not JS, and
+  // must never be scanned for a method declaration. Approximate on purpose
+  // (naive backtick parity, no ${...} awareness) — good enough given this
+  // file's own "heuristic, not a real parser" philosophy.
+  const startsInTemplate = new Array(lines.length).fill(false);
+  let inTemplate = false;
   for (let i = 0; i < lines.length; i++) {
+    startsInTemplate[i] = inTemplate;
+    const backticks = (lines[i].match(/`/g) || []).length;
+    if (backticks % 2 === 1) inTemplate = !inTemplate;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    if (startsInTemplate[i]) continue;
+    if (CALL_STATEMENT_END.test(lines[i].trim()) && !lines[i].includes("{")) continue;
     const m = lines[i].match(METHOD_START);
     if (!m) continue;
     const methodName = m[4];

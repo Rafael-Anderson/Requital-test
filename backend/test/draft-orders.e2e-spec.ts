@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { OrderRow, DiscountRow } from '../src/db/types';
 import { getShadowStockQuantity } from './helpers/stock';
 
 interface AuthResponse {
@@ -45,7 +47,7 @@ const OUTLET_LON = 55.2708;
 
 describe('Draft Orders (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -61,13 +63,28 @@ describe('Draft Orders (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getOrderById(id: number): Promise<OrderRow | undefined> {
+    const rows = await db.query<(OrderRow & RowDataPacket)[]>(
+      `SELECT * FROM \`order\` WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
+  async function getDiscountById(id: number): Promise<DiscountRow | undefined> {
+    const rows = await db.query<(DiscountRow & RowDataPacket)[]>(
+      `SELECT * FROM discount WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string) {
     const slug = `${slugPrefix}-${runId}`;
@@ -244,13 +261,11 @@ describe('Draft Orders (e2e)', () => {
       expect(result.status).toBe('COMPLETED');
       expect(result.convertedOrderId).toBeTruthy();
 
-      const order = await prisma.order.findUnique({
-        where: { id: result.convertedOrderId },
-      });
+      const order = await getOrderById(result.convertedOrderId);
       expect(order?.paymentStatus).toBe('paid');
       expect(order?.channel).toBe('draft_order');
 
-      const stock = await getShadowStockQuantity(prisma, outletId, {
+      const stock = await getShadowStockQuantity(db, outletId, {
         productId,
       });
       expect(stock).toBe(2); // 5 - 3, reserved immediately, same as storefront checkout
@@ -311,7 +326,7 @@ describe('Draft Orders (e2e)', () => {
       const statuses = [resA.status, resB.status].sort();
       expect(statuses).toEqual([201, 409]);
 
-      const finalStock = await getShadowStockQuantity(prisma, outletId, {
+      const finalStock = await getShadowStockQuantity(db, outletId, {
         productId,
       });
       expect(finalStock).toBe(0);
@@ -342,9 +357,7 @@ describe('Draft Orders (e2e)', () => {
       expect(draftOrder.convertedOrderId).toBeTruthy();
       expect(paymentLink.url).toContain(paymentLink.token);
 
-      const orderAfterInvoice = await prisma.order.findUnique({
-        where: { id: draftOrder.convertedOrderId! },
-      });
+      const orderAfterInvoice = await getOrderById(draftOrder.convertedOrderId!);
       expect(orderAfterInvoice?.paymentStatus).toBe('unpaid');
       expect(orderAfterInvoice?.paymentLinkToken).toBe(paymentLink.token);
 
@@ -358,14 +371,19 @@ describe('Draft Orders (e2e)', () => {
       expect(result.status).toBe('COMPLETED');
       expect(result.convertedOrderId).toBe(draftOrder.convertedOrderId);
 
-      const finalOrder = await prisma.order.findUnique({
-        where: { id: draftOrder.convertedOrderId! },
-      });
+      const finalOrder = await getOrderById(draftOrder.convertedOrderId!);
       expect(finalOrder?.paymentStatus).toBe('paid');
 
-      const allOrdersForDraft = await prisma.order.count({
-        where: { draftorder: { id: draft.id } },
-      });
+      // draftorder.convertedOrderId is a unique FK into `order` — count via
+      // that join to prove exactly one order exists for this draft (not
+      // duplicated by the earlier send-invoice conversion).
+      const allOrdersForDraftRows = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM \`order\` o
+         INNER JOIN draftorder do ON do.convertedOrderId = o.id
+         WHERE do.id = ?`,
+        [draft.id],
+      );
+      const allOrdersForDraft = Number(allOrdersForDraftRows[0].c);
       expect(allOrdersForDraft).toBe(1);
     });
   });
@@ -411,7 +429,7 @@ describe('Draft Orders (e2e)', () => {
       );
       const orderId = sent.draftOrder.convertedOrderId!;
 
-      const stockAfterReserve = await getShadowStockQuantity(prisma, outletId, {
+      const stockAfterReserve = await getShadowStockQuantity(db, outletId, {
         productId,
       });
       expect(stockAfterReserve).toBe(3); // 5 - 2
@@ -421,10 +439,10 @@ describe('Draft Orders (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      const order = await getOrderById(orderId);
       expect(order?.status).toBe('cancelled');
 
-      const stockAfterCancel = await getShadowStockQuantity(prisma, outletId, {
+      const stockAfterCancel = await getShadowStockQuantity(db, outletId, {
         productId,
       });
       expect(stockAfterCancel).toBe(5); // restocked
@@ -470,15 +488,11 @@ describe('Draft Orders (e2e)', () => {
         completed,
       );
 
-      const order = await prisma.order.findUnique({
-        where: { id: result.convertedOrderId },
-      });
+      const order = await getOrderById(result.convertedOrderId);
       expect(order?.discountCode).toBe(discount.code);
       expect(Number(order?.discountAmount)).toBe(20);
 
-      const updatedDiscount = await prisma.discount.findUnique({
-        where: { id: discount.id },
-      });
+      const updatedDiscount = await getDiscountById(discount.id);
       expect(updatedDiscount?.timesUsed).toBe(1);
 
       // A second draft against the same (now-exhausted) code is rejected at

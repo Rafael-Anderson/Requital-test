@@ -5,7 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -55,7 +55,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -71,11 +71,10 @@ describe('Ingredients: CRUD, stock movements, tenant isolation (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 

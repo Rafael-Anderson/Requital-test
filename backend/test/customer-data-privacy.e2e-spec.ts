@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { CustomerRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AdminAuthResponse {
@@ -47,7 +49,7 @@ jest.setTimeout(30000);
 
 describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -63,13 +65,21 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getCustomerById(id: number): Promise<CustomerRow> {
+    const rows = await db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ?`,
+      [id],
+    );
+    if (!rows[0]) throw new Error('customer not found');
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string) {
     const shopSlug = `${slugPrefix}-${runId}`;
@@ -261,9 +271,7 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         .set('Authorization', `Bearer ${registered.accessToken}`)
         .expect(200);
 
-      const customer = await prisma.customer.findUniqueOrThrow({
-        where: { id: registered.customer.id },
-      });
+      const customer = await getCustomerById(registered.customer.id);
       expect(customer.name).toBe('Deleted User');
       // Deterministic, id-derived values (not a fresh random value per
       // call) — see CustomerAccountService.anonymiseCustomer's own comment
@@ -277,11 +285,13 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
 
       // The order itself still exists, still pointing at the (now
       // anonymised) customer — merchant records are preserved.
-      const stillExists = await prisma.order.findUnique({
-        where: { id: order.id },
-      });
-      expect(stillExists).not.toBeNull();
-      expect(stillExists!.customerId).toBe(registered.customer.id);
+      const stillExistsRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM \`order\` WHERE id = ?`,
+        [order.id],
+      );
+      const stillExists = stillExistsRows[0];
+      expect(stillExists).not.toBeUndefined();
+      expect(stillExists.customerId).toBe(registered.customer.id);
 
       // The old access token is dead immediately — CustomerAuthGuard
       // rejects it now that passwordHash is null.
@@ -343,13 +353,10 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       // Force the token's expiresAt into the past directly in the DB —
       // simulates waiting out the real 10-minute TTL without the test
       // actually sleeping that long.
-      await prisma.customerauthtoken.updateMany({
-        where: {
-          customerId: registered.customer.id,
-          purpose: 'account_deletion',
-        },
-        data: { expiresAt: new Date(Date.now() - 60 * 1000) },
-      });
+      await db.execute(
+        `UPDATE customerauthtoken SET expiresAt = ? WHERE customerId = ? AND purpose = ?`,
+        [new Date(Date.now() - 60 * 1000), registered.customer.id, 'account_deletion'],
+      );
 
       await request(app.getHttpServer())
         .delete(
@@ -394,9 +401,7 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         .expect(401);
 
       // Shop A's own account is untouched.
-      const customerA = await prisma.customer.findUniqueOrThrow({
-        where: { id: registeredA.customer.id },
-      });
+      const customerA = await getCustomerById(registeredA.customer.id);
       expect(customerA.name).not.toBe('Deleted User');
     });
   });

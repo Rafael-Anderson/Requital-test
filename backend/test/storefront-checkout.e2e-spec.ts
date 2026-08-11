@@ -4,11 +4,17 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
+import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 import { StructuredLoggerService } from '../src/common/logging/structured-logger.service';
 import { getShadowStockQuantity } from './helpers/stock';
+import type {
+  OrderRow as DbOrderRow,
+  OrderitemRow,
+  ShopRow,
+} from '../src/db/types';
 
 interface AuthResponse {
   accessToken: string;
@@ -72,7 +78,7 @@ const FAR_LON = 54.3773;
 
 describe('Storefront public checkout (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
   const shopSlug = `storefront-test-${runId}`;
 
@@ -104,7 +110,7 @@ describe('Storefront public checkout (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
 
     const signup = await request(app.getHttpServer())
       .post('/auth/signup')
@@ -187,7 +193,6 @@ describe('Storefront public checkout (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -332,9 +337,11 @@ describe('Storefront public checkout (e2e)', () => {
     });
 
     it('cash_on_delivery never touches Stripe — no checkoutUrl', async () => {
-      const order = await prisma.order.findUniqueOrThrow({
-        where: { id: createdOrderId },
-      });
+      const [order] = await db.query<(DbOrderRow & RowDataPacket)[]>(
+        'SELECT * FROM `order` WHERE id = ?',
+        [createdOrderId],
+      );
+      if (!order) throw new Error('order not found');
       expect(order.paymentMethod).toBe('cash_on_delivery');
     });
 
@@ -345,9 +352,11 @@ describe('Storefront public checkout (e2e)', () => {
         .send({ defaultDeliveryFee: 999, taxRate: 50 })
         .expect(200);
 
-      const order = await prisma.order.findUniqueOrThrow({
-        where: { id: createdOrderId },
-      });
+      const [order] = await db.query<(DbOrderRow & RowDataPacket)[]>(
+        'SELECT * FROM `order` WHERE id = ?',
+        [createdOrderId],
+      );
+      if (!order) throw new Error('order not found');
       expect(Number(order.deliveryFee)).toBe(15);
       expect(Number(order.taxAmount)).toBeCloseTo(5, 2);
       expect(Number(order.total)).toBeCloseTo(120, 2);
@@ -411,9 +420,11 @@ describe('Storefront public checkout (e2e)', () => {
         .expect(201);
       const { order } = body<CreateOrderResponseBody>(res);
 
-      const item = await prisma.orderitem.findFirstOrThrow({
-        where: { orderId: order.id },
-      });
+      const [item] = await db.query<(OrderitemRow & RowDataPacket)[]>(
+        'SELECT * FROM orderitem WHERE orderId = ? LIMIT 1',
+        [order.id],
+      );
+      if (!item) throw new Error('orderitem not found');
       expect(item.note).toBe('No card, please');
     });
 
@@ -430,9 +441,11 @@ describe('Storefront public checkout (e2e)', () => {
         .expect(201);
       const { order } = body<CreateOrderResponseBody>(res);
 
-      const item = await prisma.orderitem.findFirstOrThrow({
-        where: { orderId: order.id },
-      });
+      const [item] = await db.query<(OrderitemRow & RowDataPacket)[]>(
+        'SELECT * FROM orderitem WHERE orderId = ? LIMIT 1',
+        [order.id],
+      );
+      if (!item) throw new Error('orderitem not found');
       expect(item.note).toBeNull();
     });
   });
@@ -591,10 +604,9 @@ describe('Storefront public checkout (e2e)', () => {
         })
         .expect(200);
       // Force the otherwise-unreachable "no radius" state directly.
-      await prisma.outlet.update({
-        where: { id: noRadiusOutletId },
-        data: { deliveryRadiusKm: null },
-      });
+      await db.execute('UPDATE outlet SET deliveryRadiusKm = NULL WHERE id = ?', [
+        noRadiusOutletId,
+      ]);
 
       const zone = await request(app.getHttpServer())
         .post(`/outlets/${noRadiusOutletId}/delivery-zones`)
@@ -788,7 +800,7 @@ describe('Storefront public checkout (e2e)', () => {
         expect.stringContaining('Not enough'),
       );
 
-      const stock = await getShadowStockQuantity(prisma, outletId, {
+      const stock = await getShadowStockQuantity(db, outletId, {
         productId: raceProductId,
       });
       expect(stock).toBe(1); // untouched — the whole transaction rolled back
@@ -810,21 +822,23 @@ describe('Storefront public checkout (e2e)', () => {
       const statuses = [a.status, b.status].sort();
       expect(statuses).toEqual([201, 409]);
 
-      const stock = await getShadowStockQuantity(prisma, outletId, {
+      const stock = await getShadowStockQuantity(db, outletId, {
         productId: raceProductId,
       });
       expect(stock).toBe(0);
 
-      const orderCount = await prisma.order.count({
-        where: {
-          shopId: (
-            await prisma.shop.findUniqueOrThrow({
-              where: { subdomain: shopSlug },
-            })
-          ).id,
-          orderitem: { some: { productId: raceProductId } },
-        },
-      });
+      const [shopRow] = await db.query<(ShopRow & RowDataPacket)[]>(
+        'SELECT * FROM shop WHERE subdomain = ?',
+        [shopSlug],
+      );
+      if (!shopRow) throw new Error('shop not found');
+      const [orderCountRow] = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(DISTINCT o.id) AS c FROM \`order\` o
+         JOIN orderitem oi ON oi.orderId = o.id
+         WHERE o.shopId = ? AND oi.productId = ?`,
+        [shopRow.id, raceProductId],
+      );
+      const orderCount = Number(orderCountRow.c);
       expect(orderCount).toBe(1); // the losing request's order was never created (rolled back)
     });
   });

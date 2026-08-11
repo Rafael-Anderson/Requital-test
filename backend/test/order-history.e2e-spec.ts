@@ -5,7 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -37,7 +37,7 @@ function body<T>(res: Response): T {
 // fixed: cancel() previously wrote no audit-log entry at all.
 describe('Order status history/timeline (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -53,11 +53,10 @@ describe('Order status history/timeline (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 

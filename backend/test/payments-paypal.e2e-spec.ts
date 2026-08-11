@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { PaymenttransactionRow, OrderRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AdminAuthResponse {
@@ -45,7 +47,7 @@ jest.setTimeout(30000);
 
 describe('PayPal payment webhook (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   let fetchSpy: jest.SpyInstance;
   const runId = Date.now();
 
@@ -70,14 +72,13 @@ describe('PayPal payment webhook (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
     delete process.env.PAYPAL_CLIENT_ID;
     delete process.env.PAYPAL_CLIENT_SECRET;
     delete process.env.PAYPAL_WEBHOOK_ID;
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -294,9 +295,10 @@ describe('PayPal payment webhook (e2e)', () => {
       .send(payload)
       .expect(201);
 
-    const rows = await prisma.paymenttransaction.findMany({
-      where: { orderId: order.id, gateway: 'paypal' },
-    });
+    const rows = await db.query<(PaymenttransactionRow & RowDataPacket)[]>(
+      'SELECT * FROM paymenttransaction WHERE orderId = ? AND gateway = ?',
+      [order.id, 'paypal'],
+    );
     expect(rows).toHaveLength(1);
   });
 
@@ -373,9 +375,12 @@ describe('PayPal payment webhook (e2e)', () => {
     const order = body<OrderCreateResponse>(
       await createPendingOrder(shopSlug, outletId, productId),
     ).order;
-    const shopId = (
-      await prisma.order.findUniqueOrThrow({ where: { id: order.id } })
-    ).shopId;
+    const orderRows = await db.query<(OrderRow & RowDataPacket)[]>(
+      'SELECT * FROM `order` WHERE id = ?',
+      [order.id],
+    );
+    if (!orderRows[0]) throw new Error('order not found');
+    const shopId = orderRows[0].shopId;
     void adminToken;
 
     const payload = paypalEvent(

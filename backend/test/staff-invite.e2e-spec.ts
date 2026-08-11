@@ -5,7 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 import { hashToken } from '../src/common/token-hash';
 
 interface TokenPair {
@@ -44,7 +44,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Staff invite flow (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -60,11 +60,10 @@ describe('Staff invite flow (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -203,10 +202,10 @@ describe('Staff invite flow (e2e)', () => {
       body<BranchUserResponse>(created).devInviteLink!,
     );
 
-    await prisma.authtoken.updateMany({
-      where: { tokenHash: hashToken(token) },
-      data: { expiresAt: new Date(Date.now() - 1000) },
-    });
+    await db.execute(`UPDATE authtoken SET expiresAt = ? WHERE tokenHash = ?`, [
+      new Date(Date.now() - 1000),
+      hashToken(token),
+    ]);
 
     const res = await request(app.getHttpServer())
       .post('/auth/accept-invite')

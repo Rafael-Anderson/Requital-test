@@ -8,7 +8,6 @@ import { resolveErrorTrackingProvider } from './common/error-tracking/error-trac
 import { HealthModule } from './health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PrismaModule } from './prisma/prisma.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { OutletsModule } from './outlets/outlets.module';
@@ -54,7 +53,7 @@ import { StorageModule } from './storage/storage.module';
   imports: [
     // Powers @Cron() in LowStockDigestService and AbandonedCartsService —
     // one registration for the whole app, same as every other *Module.forRoot()
-    // singleton (PrismaModule, etc.).
+    // singleton (DatabaseModule, etc.).
     ScheduleModule.forRoot(),
     // Global per-IP default — generous enough not to affect normal admin/
     // storefront polling (orders list polls every 20s, per admin/AGENTS.md).
@@ -73,10 +72,6 @@ import { StorageModule } from './storage/storage.module';
       throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
-    PrismaModule,
-    // Coexists with PrismaModule during the mysql2 migration (see
-    // migration/mysql2 branch) — remove PrismaModule once every service has
-    // been converted to DatabaseService.
     DatabaseModule,
     AuthModule,
     OutletsModule,

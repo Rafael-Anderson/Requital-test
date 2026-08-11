@@ -4,8 +4,9 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
+import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -62,7 +63,7 @@ function body<T>(res: Response): T {
 
 describe('Theme (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -78,11 +79,10 @@ describe('Theme (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -186,10 +186,13 @@ describe('Theme (e2e)', () => {
         fontFamily: 'poppins',
       });
 
-      const rowCount = await prisma.themesettings.count({
-        where: { shop: { subdomain: shop.slug } },
-      });
-      expect(rowCount).toBe(1);
+      const countRows = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM themesettings
+         JOIN shop ON shop.id = themesettings.shopId
+         WHERE shop.subdomain = ?`,
+        [shop.slug],
+      );
+      expect(Number(countRows[0].c)).toBe(1);
     });
 
     it('a saved theme is reflected on the public storefront payload', async () => {

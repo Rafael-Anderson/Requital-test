@@ -5,7 +5,14 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type {
+  ShopRow,
+  CustomerRow,
+  OrderRow,
+  DiscountRow as DiscountDbRow,
+} from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -55,7 +62,7 @@ const OUTLET_LON = 55.2708;
 
 describe('Discounts (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -71,13 +78,37 @@ describe('Discounts (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getDiscountById(id: number): Promise<DiscountDbRow> {
+    const rows = await db.query<(DiscountDbRow & RowDataPacket)[]>(
+      `SELECT * FROM discount WHERE id = ?`,
+      [id],
+    );
+    if (!rows[0]) throw new Error('discount not found');
+    return rows[0];
+  }
+
+  async function getShopBySubdomain(subdomain: string): Promise<ShopRow | undefined> {
+    const rows = await db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ?`,
+      [subdomain],
+    );
+    return rows[0];
+  }
+
+  async function getOrderById(id: number): Promise<OrderRow | undefined> {
+    const rows = await db.query<(OrderRow & RowDataPacket)[]>(
+      `SELECT * FROM \`order\` WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string) {
     const slug = `${slugPrefix}-${runId}`;
@@ -327,10 +358,10 @@ describe('Discounts (e2e)', () => {
     it('usage_limit_reached once timesUsed hits the cap', async () => {
       const { adminToken } = await setupShop('reason-usagelimit');
       const d = await createDiscount(adminToken, { usageLimit: 1 });
-      await prisma.discount.update({
-        where: { id: d.id },
-        data: { timesUsed: 1 },
-      });
+      await db.execute(`UPDATE discount SET timesUsed = ? WHERE id = ?`, [
+        1,
+        d.id,
+      ]);
       const res = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -371,10 +402,12 @@ describe('Discounts (e2e)', () => {
         )
         .expect(201);
 
-      const shop = await prisma.shop.findUnique({ where: { subdomain: slug } });
-      const customer = await prisma.customer.findFirst({
-        where: { shopId: shop!.id, phone },
-      });
+      const shop = await getShopBySubdomain(slug);
+      const customerRows = await db.query<(CustomerRow & RowDataPacket)[]>(
+        `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
+        [shop!.id, phone],
+      );
+      const customer = customerRows[0];
       const res = await request(app.getHttpServer())
         .post('/shop/discounts/validate')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -459,18 +492,14 @@ describe('Discounts (e2e)', () => {
         )
         .expect(201);
       const order = body<{ order: { id: number; total: string } }>(res).order;
-      const dbOrder = await prisma.order.findUnique({
-        where: { id: order.id },
-      });
+      const dbOrder = await getOrderById(order.id);
       expect(dbOrder?.discountId).toBe(d.id);
       expect(dbOrder?.discountCode).toBe(d.code);
       expect(Number(dbOrder?.discountAmount)).toBe(10);
       // subtotal 100 - discount 10 = 90, plus whatever delivery fee applies (no tax configured).
       expect(Number(dbOrder?.total)).toBeLessThan(100);
 
-      const updatedDiscount = await prisma.discount.findUnique({
-        where: { id: d.id },
-      });
+      const updatedDiscount = await getDiscountById(d.id);
       expect(updatedDiscount?.timesUsed).toBe(1);
     });
 
@@ -506,9 +535,7 @@ describe('Discounts (e2e)', () => {
       const order = body<{
         order: { id: number; total: string; deliveryFee: string | null };
       }>(orderRes).order;
-      const dbOrder = await prisma.order.findUnique({
-        where: { id: order.id },
-      });
+      const dbOrder = await getOrderById(order.id);
       expect(Number(dbOrder?.discountAmount)).toBe(30);
       expect(dbOrder?.discountCode).toBe(fixed.code);
 
@@ -531,9 +558,7 @@ describe('Discounts (e2e)', () => {
         )
         .expect(201);
       const freeShipOrder = body<{ order: { id: number } }>(freeShipRes).order;
-      const dbFreeShip = await prisma.order.findUnique({
-        where: { id: freeShipOrder.id },
-      });
+      const dbFreeShip = await getOrderById(freeShipOrder.id);
       expect(Number(dbFreeShip?.deliveryFee)).toBe(0);
 
       const badRes = await request(app.getHttpServer())
@@ -586,13 +611,13 @@ describe('Discounts (e2e)', () => {
       expect(succeeded).toHaveLength(1);
       expect(failed).toHaveLength(CONCURRENCY - 1);
 
-      const finalDiscount = await prisma.discount.findUnique({
-        where: { id: d.id },
-      });
+      const finalDiscount = await getDiscountById(d.id);
       expect(finalDiscount?.timesUsed).toBe(1);
-      const redemptions = await prisma.discountredemption.count({
-        where: { discountId: d.id },
-      });
+      const redemptionRows = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM discountredemption WHERE discountId = ?`,
+        [d.id],
+      );
+      const redemptions = Number(redemptionRows[0].c);
       expect(redemptions).toBe(1);
     });
   });

@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { OrderitemRow, IngredientRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 import { getShadowStockQuantity } from './helpers/stock';
 
@@ -63,7 +65,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Products / variants (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -79,11 +81,10 @@ describe('Products / variants (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -730,9 +731,11 @@ describe('Products / variants (e2e)', () => {
         orderRes,
       ).order;
 
-      const detail = await prisma.orderitem.findFirst({
-        where: { orderId: order.id },
-      });
+      const detailRows = await db.query<(OrderitemRow & RowDataPacket)[]>(
+        'SELECT * FROM orderitem WHERE orderId = ?',
+        [order.id],
+      );
+      const detail = detailRows[0];
       expect(detail?.variantId).toBe(small.id);
       expect(detail?.variantLabel).toBe('Small');
       expect(Number(detail?.priceAtPurchase)).toBe(40);
@@ -790,7 +793,7 @@ describe('Products / variants (e2e)', () => {
         })
         .expect(201);
 
-      const variantStock = await getShadowStockQuantity(prisma, outletId, {
+      const variantStock = await getShadowStockQuantity(db, outletId, {
         productId: product.id,
         variantId: small.id,
       });
@@ -800,10 +803,10 @@ describe('Products / variants (e2e)', () => {
       // ingredient.shadowProductId's schema comment — so there's no
       // product-level stock row to find at all, same "stays untouched"
       // assertion as the pre-Phase-A direct outletstock check.
-      const productShadow = await prisma.ingredient.findFirst({
-        where: { shadowProductId: product.id },
-      });
-      expect(productShadow).toBeNull();
+      const productShadowRows = await db.query<
+        (IngredientRow & RowDataPacket)[]
+      >('SELECT * FROM ingredient WHERE shadowProductId = ?', [product.id]);
+      expect(productShadowRows[0] ?? null).toBeNull();
 
       // Out of stock — only 2 left, ordering 5 must be rejected, not
       // silently oversell.
