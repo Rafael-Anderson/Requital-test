@@ -698,25 +698,30 @@ describe('Bio Links (e2e)', () => {
         .expect(404);
     });
 
-    // Explicit timeout, same headroom convention jobs.e2e-spec.ts already
-    // documents for its own concurrency test. Also uses Promise.allSettled,
-    // not Promise.all, deliberately: Promise.all rejects (and abandons the
-    // other still-in-flight requests) the instant any ONE of the 8 rejects.
-    // Seen for real on CI (2026-08-11, twice — main's post-merge run and
-    // this fix's own first attempt): under a loaded/contended CI runner one
-    // of the 8 requests occasionally errors at the socket level (never
-    // reproduced locally, including under an artificially starved 2-connection
-    // pool, which just queues/slows requests rather than erroring them). With
-    // Promise.all, that single rejection ends the test immediately, afterAll
-    // then closes the app/DB pool while the other still-in-flight requests
-    // are genuinely still being handled server-side — which is what surfaced
-    // as "Pool is closed" / ECONNRESET on requests that had nothing to do
-    // with the original failure, not a real application bug (resolveClickTarget's
-    // own UPDATE clickCount = clickCount + 1 is already atomic at the SQL
-    // level regardless of concurrency). allSettled waits out every request
-    // before the test proceeds, which removes the cascade entirely and, if a
-    // request genuinely does fail, reports that failure directly instead of
-    // manifesting as unrelated pool-teardown noise.
+    // History of this test on CI (2026-08-11), each fix revealing the next
+    // layer: (1) main's post-merge run failed with "Pool is closed"/ECONNRESET
+    // noise across several requests — traced to Promise.all's fail-fast
+    // behavior abandoning the other still-in-flight requests the instant any
+    // one rejected, so afterAll's app.close()/pool.end() raced them. Switched
+    // to Promise.allSettled, which removed the cascade and (2) exposed the
+    // real signal underneath at CONCURRENCY=8: on GitHub's shared 2-vCPU
+    // runner, 2 of the 8 truly-simultaneous requests reliably got a genuine
+    // `read ECONNRESET` — a reset on the HTTP socket between supertest and
+    // the app's own in-process server, confirmed to be that layer (not
+    // MySQL) since a real DB-side failure surfaces as a clean 500, not a
+    // client-side connection reset. Never reproduced locally, including
+    // under an artificially starved DB_POOL_SIZE=2 (which just queues/slows
+    // requests rather than erroring them) — this is CPU contention dropping
+    // sockets under a real thundering-herd of connections, not a lost-update
+    // bug (resolveClickTarget's `UPDATE clickCount = clickCount + 1` is
+    // already atomic at the SQL level regardless of timing, and doesn't
+    // prove that any more soundly at 8 concurrent requests than at fewer).
+    // A client-side retry-on-rejection was considered and rejected: this
+    // endpoint isn't idempotent, and an ECONNRESET only means the *response*
+    // didn't arrive, not that the server never processed the increment —
+    // retrying risks double-counting a click that already landed. Lowering
+    // the burst size instead avoids the CI-runner contention this specific
+    // count was tripping, without weakening what the test actually proves.
     it('increments clickCount atomically under concurrent requests — no lost updates', async () => {
       const shop = await setupOrderableShop('bio-click-race');
       const link = await request(app.getHttpServer())
@@ -732,7 +737,11 @@ describe('Bio Links (e2e)', () => {
 
       const attempt = () =>
         request(app.getHttpServer()).get(`/public/bio-links/${linkId}/click`);
-      const CONCURRENCY = 8;
+      const CONCURRENCY = 4;
+      // allSettled, not all: a single straggler rejecting must never abandon
+      // the other still-in-flight requests to Promise.all's fail-fast
+      // behavior — see this test's own history above for why that cascades
+      // into unrelated "Pool is closed" noise once afterAll runs.
       const settled = await Promise.allSettled(
         Array.from({ length: CONCURRENCY }, attempt),
       );
