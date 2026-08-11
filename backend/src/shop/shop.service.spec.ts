@@ -117,6 +117,113 @@ describe('ShopService — payment methods require at least one enabled', () => {
   });
 });
 
+describe('ShopService — domain configuration', () => {
+  it('rejects a malformed custom domain without touching the database', async () => {
+    const db = createMockDb(
+      baseShop({
+        subdomain: 'acme',
+        domainType: 'subdomain',
+        customDomain: null,
+      }),
+    );
+    const service = new ShopService(db);
+
+    await expect(
+      service.updateDomain(adminCtx, {
+        type: 'custom',
+        customDomain: 'not a domain',
+      }),
+    ).rejects.toThrow('Enter a valid domain');
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a pasted URL before validating/storing it', async () => {
+    const db = createMockDb(
+      baseShop({
+        subdomain: 'acme',
+        domainType: 'custom',
+        customDomain: 'shop.acme.com',
+      }),
+    );
+    const service = new ShopService(db);
+
+    await service.updateDomain(adminCtx, {
+      type: 'custom',
+      customDomain: 'HTTPS://Shop.Acme.com/',
+    });
+
+    const [, params] = db.execute.mock.calls[0];
+    expect(params).toContain('shop.acme.com');
+  });
+
+  it('maps a duplicate-key error on customDomain to a 409 with a field-specific message', async () => {
+    const db = createMockDb(
+      baseShop({
+        subdomain: 'acme',
+        domainType: 'subdomain',
+        customDomain: null,
+      }),
+    );
+    const dupeError = Object.assign(new Error('Duplicate entry'), {
+      errno: 1062,
+    });
+    db.execute.mockRejectedValueOnce(dupeError);
+    const service = new ShopService(db);
+
+    await expect(
+      service.updateDomain(adminCtx, {
+        type: 'custom',
+        customDomain: 'taken.example.com',
+      }),
+    ).rejects.toThrow('already connected to another shop');
+  });
+
+  it('switching to type=subdomain clears customDomain in the same write', async () => {
+    const db = createMockDb(
+      baseShop({
+        subdomain: 'acme',
+        domainType: 'custom',
+        customDomain: 'shop.acme.com',
+      }),
+    );
+    const service = new ShopService(db);
+
+    await service.updateDomain(adminCtx, { type: 'subdomain' });
+
+    const [sql] = db.execute.mock.calls[0];
+    expect(sql).toContain("domainType = 'subdomain'");
+    expect(sql).toContain('customDomain = NULL');
+  });
+
+  it('computes storefrontUrl from the shop subdomain when type=subdomain', async () => {
+    const db = createMockDb(
+      baseShop({
+        subdomain: 'acme',
+        domainType: 'subdomain',
+        customDomain: null,
+      }),
+    );
+    const service = new ShopService(db);
+
+    const result = await service.getDomainConfig(adminCtx);
+    expect(result.storefrontUrl).toBe('https://acme.requital.io');
+  });
+
+  it('computes storefrontUrl from customDomain when type=custom', async () => {
+    const db = createMockDb(
+      baseShop({
+        subdomain: 'acme',
+        domainType: 'custom',
+        customDomain: 'shop.acme.com',
+      }),
+    );
+    const service = new ShopService(db);
+
+    const result = await service.getDomainConfig(adminCtx);
+    expect(result.storefrontUrl).toBe('https://shop.acme.com');
+  });
+});
+
 describe('ShopService — store/delivery/pickup hours are independent records', () => {
   it('updating deliveryHours does not touch businessHours or pickupHours in the write', async () => {
     const db = createMockDb(baseShop());

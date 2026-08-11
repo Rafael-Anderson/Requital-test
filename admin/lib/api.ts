@@ -73,6 +73,7 @@ import type {
   PaginatedStockMovements,
   FailedJob,
   Shop,
+  ShopDomainConfig,
   StockMovementType,
   ThemeSettings,
   TopProduct,
@@ -512,6 +513,19 @@ export function updateShop(
   },
 ) {
   return apiFetch<Shop>("/shop", { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function getShopDomain() {
+  return apiFetch<ShopDomainConfig>("/shop/domain");
+}
+
+export function updateShopDomain(
+  data: { type: "subdomain" } | { type: "custom"; customDomain: string },
+) {
+  return apiFetch<ShopDomainConfig>("/shop/domain", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 export function uploadShopLogo(file: File) {

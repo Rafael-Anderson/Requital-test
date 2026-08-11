@@ -303,6 +303,8 @@ export interface ShopRow {
   whatsappCredentials: string | null;
   trn: string | null;
   websiteUrl: string | null;
+  customDomain: string | null;
+  domainType: string;
   operatingModel: string | null;
   branchCount: string | null;
   businessType: string | null;

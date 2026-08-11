@@ -48,6 +48,7 @@ import { NotifySubscriptionsModule } from './notify-subscriptions/notify-subscri
 import { StorefrontSearchModule } from './storefront-search/storefront-search.module';
 import { JobsModule } from './jobs/jobs.module';
 import { StorageModule } from './storage/storage.module';
+import { DomainsModule } from './domains/domains.module';
 
 @Module({
   imports: [
@@ -113,6 +114,7 @@ import { StorageModule } from './storage/storage.module';
     HealthModule,
     JobsModule,
     StorageModule,
+    DomainsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -30,6 +30,8 @@ const PRODUCT_EDITOR_MODES = [
 export default function AccountSetupStepReview({ form }: { form: AccountSetupFormState }) {
   const operatingModelLabel =
     OPERATING_MODELS.find((o) => o.value === form.operatingModel)?.label ?? "-";
+  const domainValue =
+    form.domainType === "custom" ? form.customDomain : `${form.subdomain}.requital.io`;
 
   return (
     <div className="space-y-4">
@@ -75,6 +77,7 @@ export default function AccountSetupStepReview({ form }: { form: AccountSetupFor
         <ReviewRow label="Email" value={form.email} />
         <ReviewRow label="Phone Number" value={form.phone} />
         <ReviewRow label="Business Name" value={form.businessName} />
+        <ReviewRow label="Storefront Domain" value={domainValue} />
         <ReviewRow label="Location" value={form.address} />
         <ReviewRow label="Operating Model" value={operatingModelLabel} />
         <ReviewRow label="Number of Branches" value={form.branchCount} />

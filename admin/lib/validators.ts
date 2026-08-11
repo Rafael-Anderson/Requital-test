@@ -26,6 +26,24 @@ const URL_REGEX = /^https?:\/\//i;
 
 const UAE_COUNTRY_CODE = "971";
 
+// Mirrors backend/src/shop/constants.ts's RESERVED_SUBDOMAINS by hand (no
+// shared package between the two apps — see this file's header comment).
+export const RESERVED_SUBDOMAINS = [
+  "www",
+  "api",
+  "admin",
+  "mail",
+  "requital",
+  "app",
+  "dashboard",
+  "static",
+  "cdn",
+];
+const SUBDOMAIN_REGEX = /^[a-z0-9-]+$/;
+// Mirrors backend/src/shop/domain-validation.ts's HOSTNAME_REGEX by hand.
+const CUSTOM_DOMAIN_REGEX =
+  /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*\.[a-z]{2,63}$/;
+
 export function validateEmail(value: string): ValidationResult {
   if (!value.trim()) return { valid: false, message: "Email is required" };
   if (!EMAIL_REGEX.test(value.trim())) {
@@ -135,4 +153,61 @@ export function validateUrl(value: string): ValidationResult {
 export function validateRequired(value: string, fieldLabel: string): ValidationResult {
   if (!value.trim()) return { valid: false, message: `${fieldLabel} is required` };
   return { valid: true };
+}
+
+// The editable part of the Account Setup wizard's subdomain picker
+// (AccountSetupStepBusiness.tsx) — pre-filled from the business name via
+// slugifySubdomain() below, but freely editable, so it needs its own
+// validation independent of the business name field.
+export function validateSubdomain(value: string): ValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) return { valid: false, message: "Subdomain is required" };
+  if (trimmed.length < 3 || trimmed.length > 63) {
+    return { valid: false, message: "Subdomain must be 3-63 characters" };
+  }
+  if (!SUBDOMAIN_REGEX.test(trimmed)) {
+    return { valid: false, message: "Only lowercase letters, numbers, and hyphens" };
+  }
+  if (trimmed.startsWith("-") || trimmed.endsWith("-")) {
+    return { valid: false, message: "Can't start or end with a hyphen" };
+  }
+  if (RESERVED_SUBDOMAINS.includes(trimmed)) {
+    return { valid: false, message: "This subdomain is reserved" };
+  }
+  return { valid: true };
+}
+
+// Custom storefront domain — required (unlike validateUrl above, this field
+// is only ever validated while the "Custom domain" tab is selected, so an
+// empty value is always a real error, never "optional and blank").
+export function validateCustomDomain(value: string): ValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) return { valid: false, message: "Domain is required" };
+  if (!CUSTOM_DOMAIN_REGEX.test(trimmed) || trimmed.length > 253) {
+    return { valid: false, message: "Enter a valid domain (e.g. shop.example.com)" };
+  }
+  return { valid: true };
+}
+
+// Mirrors backend/src/common/normalize.ts's normalizeCustomDomain by hand —
+// strips a pasted protocol/trailing path so what's stored/validated is
+// always a bare hostname.
+export function normalizeCustomDomain(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
+}
+
+// Auto-fills the subdomain picker from the business name (still freely
+// editable afterward) — lowercase, non-alphanumerics collapsed to a single
+// hyphen, leading/trailing hyphens trimmed, capped at 40 chars so it stays
+// comfortably under the 63-char backend limit even after a user edits it.
+export function slugifySubdomain(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
 }
