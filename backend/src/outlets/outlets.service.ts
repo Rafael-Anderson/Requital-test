@@ -4,19 +4,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import type { OutletRow } from '../db/types';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
 import { computeIsOpen } from './outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import type { TenantContext } from '../common/tenant-context';
-import type { outlet as OutletModel } from '@prisma/client';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 
 @Injectable()
 export class OutletsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly branchRolesService: BranchRolesService,
   ) {}
 
@@ -35,20 +37,23 @@ export class OutletsService {
         'outlets.view_own',
       );
     }
-    const [outlets, shop] = await Promise.all([
-      this.prisma.outlet.findMany({
-        where: {
-          shopId: ctx.shopId,
-          ...(ctx.role === 'branch' && { id: ctx.outletId! }),
-        },
-        orderBy: { id: 'asc' },
-      }),
-      this.prisma.shop.findUniqueOrThrow({
-        where: { id: ctx.shopId },
-        select: { timezone: true },
-      }),
+    const conditions = ['shopId = ?'];
+    const params: (string | number)[] = [ctx.shopId];
+    if (ctx.role === 'branch') {
+      conditions.push('id = ?');
+      params.push(ctx.outletId!);
+    }
+    const [outlets, shopRows] = await Promise.all([
+      this.db.query<(OutletRow & RowDataPacket)[]>(
+        `SELECT * FROM outlet WHERE ${conditions.join(' AND ')} ORDER BY id ASC`,
+        params,
+      ),
+      this.db.query<RowDataPacket[]>(`SELECT timezone FROM shop WHERE id = ?`, [
+        ctx.shopId,
+      ]),
     ]);
-    return outlets.map((o) => this.withComputedStatus(o, shop.timezone));
+    const timezone = shopRows[0].timezone as string;
+    return outlets.map((o) => this.withComputedStatus(o, timezone));
   }
 
   async findOne(ctx: TenantContext, id: number) {
@@ -64,20 +69,23 @@ export class OutletsService {
     // Always checked (never skipped) — unlike findAll, this is always a
     // single concrete outlet, whether the caller is admin or branch.
     await this.branchRolesService.assertPermission(ctx, id, 'outlets.view_own');
-    const [outlet, shop] = await Promise.all([
-      this.prisma.outlet.findFirst({ where: { id, shopId: ctx.shopId } }),
-      this.prisma.shop.findUniqueOrThrow({
-        where: { id: ctx.shopId },
-        select: { timezone: true },
-      }),
+    const [outletRows, shopRows] = await Promise.all([
+      this.db.query<(OutletRow & RowDataPacket)[]>(
+        `SELECT * FROM outlet WHERE id = ? AND shopId = ?`,
+        [id, ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(`SELECT timezone FROM shop WHERE id = ?`, [
+        ctx.shopId,
+      ]),
     ]);
+    const outlet = outletRows[0];
     if (!outlet) {
       throw new NotFoundException(`Outlet ${id} not found`);
     }
-    return this.withComputedStatus(outlet, shop.timezone);
+    return this.withComputedStatus(outlet, shopRows[0].timezone as string);
   }
 
-  create(ctx: TenantContext, dto: CreateOutletDto) {
+  async create(ctx: TenantContext, dto: CreateOutletDto) {
     this.validateDelivery(
       dto.deliveryEnabled ?? false,
       dto.deliveryRadiusKm,
@@ -85,29 +93,39 @@ export class OutletsService {
       dto.longitude,
     );
     const closedOverride = dto.closedOverride ?? false;
-    return this.prisma.outlet.create({
-      data: {
-        shopId: ctx.shopId,
-        name: dto.name,
-        nameAr: dto.nameAr,
-        email: dto.email,
-        whatsapp: dto.whatsapp,
-        active: dto.active ?? true,
-        emirate: dto.emirate,
-        area: dto.area,
-        phone: dto.phone,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        businessHours: dto.businessHours,
+    const result = await this.db.execute(
+      `INSERT INTO outlet (
+        shopId, name, nameAr, email, whatsapp, active, emirate, area, phone,
+        latitude, longitude, businessHours, closedOverride, closedOverrideSetAt,
+        pickupEnabled, deliveryEnabled, deliveryRadiusKm
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
+        dto.name,
+        dto.nameAr ?? null,
+        dto.email ?? null,
+        dto.whatsapp ?? null,
+        dto.active ?? true,
+        dto.emirate ?? null,
+        dto.area ?? null,
+        dto.phone ?? null,
+        dto.latitude ?? null,
+        dto.longitude ?? null,
+        dto.businessHours ? JSON.stringify(dto.businessHours) : null,
         closedOverride,
         // Stamped here, not accepted from the client — see outlet-status.ts
         // for how this drives the next-day auto-expiry.
-        closedOverrideSetAt: closedOverride ? new Date() : null,
-        pickupEnabled: dto.pickupEnabled ?? false,
-        deliveryEnabled: dto.deliveryEnabled ?? false,
-        deliveryRadiusKm: dto.deliveryRadiusKm,
-      },
-    });
+        closedOverride ? new Date() : null,
+        dto.pickupEnabled ?? false,
+        dto.deliveryEnabled ?? false,
+        dto.deliveryRadiusKm ?? null,
+      ],
+    );
+    const rows = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ?`,
+      [result.insertId],
+    );
+    return rows[0];
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateOutletDto) {
@@ -122,42 +140,61 @@ export class OutletsService {
       dto.longitude !== undefined ? dto.longitude : current.longitude,
     );
 
-    return this.prisma.outlet.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        nameAr: dto.nameAr,
-        email: dto.email,
-        whatsapp: dto.whatsapp,
-        active: dto.active,
-        emirate: dto.emirate,
-        area: dto.area,
-        phone: dto.phone,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        businessHours: dto.businessHours,
-        closedOverride: dto.closedOverride,
-        // Re-stamped every time this request turns the override on (even if
-        // it was already on) — flipping it is "today" by definition of the
-        // action. Cleared when explicitly turned off. Left untouched (Prisma
-        // skips `undefined` fields) when this update doesn't mention it.
-        ...(dto.closedOverride !== undefined && {
-          closedOverrideSetAt: dto.closedOverride ? new Date() : null,
-        }),
-        pickupEnabled: dto.pickupEnabled,
-        deliveryEnabled: dto.deliveryEnabled,
-        deliveryRadiusKm: dto.deliveryRadiusKm,
-      },
+    const set = buildSetClause({
+      name: dto.name,
+      nameAr: dto.nameAr,
+      email: dto.email,
+      whatsapp: dto.whatsapp,
+      active: dto.active,
+      emirate: dto.emirate,
+      area: dto.area,
+      phone: dto.phone,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      businessHours:
+        dto.businessHours !== undefined
+          ? JSON.stringify(dto.businessHours)
+          : undefined,
+      closedOverride: dto.closedOverride,
+      // Re-stamped every time this request turns the override on (even if
+      // it was already on) — flipping it is "today" by definition of the
+      // action. Cleared when explicitly turned off. Left untouched (omitted
+      // from the SET clause) when this update doesn't mention it.
+      ...(dto.closedOverride !== undefined && {
+        closedOverrideSetAt: dto.closedOverride ? new Date() : null,
+      }),
+      pickupEnabled: dto.pickupEnabled,
+      deliveryEnabled: dto.deliveryEnabled,
+      deliveryRadiusKm: dto.deliveryRadiusKm,
     });
+    if (set) {
+      await this.db.execute(`UPDATE outlet SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        id,
+      ]);
+    }
+    const rows = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 
   async remove(ctx: TenantContext, id: number) {
     await this.assertBelongsToShop(ctx, id);
 
-    const [orderCount, userCount] = await this.prisma.$transaction([
-      this.prisma.order.count({ where: { outletId: id } }),
-      this.prisma.user.count({ where: { outletId: id } }),
+    const [orderRows, userRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM \`order\` WHERE outletId = ?`,
+        [id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM user WHERE outletId = ?`,
+        [id],
+      ),
     ]);
+    const orderCount = Number(orderRows[0].c);
+    const userCount = Number(userRows[0].c);
     if (orderCount > 0 || userCount > 0) {
       throw new ConflictException(
         `Cannot delete: this outlet has ${orderCount} order${orderCount === 1 ? '' : 's'} and ${userCount} assigned user${userCount === 1 ? '' : 's'}. Reassign or remove them first.`,
@@ -166,7 +203,7 @@ export class OutletsService {
 
     // outletstock rows cascade on delete — an outlet with no orders/users
     // but existing stock rows is safe to remove outright.
-    await this.prisma.outlet.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM outlet WHERE id = ?`, [id]);
     return { id, deleted: true };
   }
 
@@ -187,13 +224,14 @@ export class OutletsService {
   // at the controller) still only need the shop boundary, never the branch
   // one — an admin manages every outlet in their own shop.
   private async assertBelongsToShop(ctx: TenantContext, id: number) {
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!outlet) {
+    const rows = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Outlet ${id} not found`);
     }
-    return outlet;
+    return rows[0];
   }
 
   // A radius is meaningless without a center point, so both are required
@@ -228,7 +266,7 @@ export class OutletsService {
     }
   }
 
-  private withComputedStatus(outlet: OutletModel, timezone: string) {
+  private withComputedStatus(outlet: OutletRow, timezone: string) {
     return {
       ...outlet,
       isOpen: computeIsOpen(

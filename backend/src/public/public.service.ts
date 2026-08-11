@@ -3,10 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import type { RowDataPacket } from 'mysql2/promise';
-import { PrismaService } from '../prisma/prisma.service';
-import { DatabaseService } from '../database/database.service';
+import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
@@ -39,6 +37,17 @@ import {
   POLICY_PAGE_TYPES,
   type PolicyPageType,
 } from '../policy-pages/policy-page-constants';
+import type {
+  ShopRow,
+  OutletRow,
+  DeliveryzoneRow,
+  ThemesettingsRow,
+  ShopseosettingsRow,
+  BannerimageRow,
+  CollectionRow,
+  ProductRow,
+  SurveyresponseRow,
+} from '../db/types';
 
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
@@ -72,10 +81,14 @@ const PICKUP_PAYMENT_FLAGS = {
 // visibility toggle" framing the settings page uses for all of these.
 const INDEPENDENT_ONLINE_PROVIDERS = ['paypal', 'tabby', 'tamara'] as const;
 
+// Shape returned per product by loadPublicProductsWithRelations — replaces
+// the old Prisma-payload-derived PublicProductRow/toProductResponse split
+// now that assembly happens in one pass at query time (see that method).
+type PublicProductResponse = Record<string, unknown>;
+
 @Injectable()
 export class PublicService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly db: DatabaseService,
     private readonly providerRegistry: PaymentProviderRegistry,
     private readonly paymentSettingsService: PaymentSettingsService,
@@ -116,12 +129,16 @@ export class PublicService {
 
   async getShop(shopSlug: string) {
     const shop = await this.resolveShop(shopSlug);
-    const theme = await this.prisma.themesettings.findUnique({
-      where: { shopId: shop.id },
-    });
-    const seo = await this.prisma.shopseosettings.findUnique({
-      where: { shopId: shop.id },
-    });
+    const themeRows = await this.db.query<(ThemesettingsRow & RowDataPacket)[]>(
+      `SELECT * FROM themesettings WHERE shopId = ?`,
+      [shop.id],
+    );
+    const theme = themeRows[0] ?? null;
+    const seoRows = await this.db.query<(ShopseosettingsRow & RowDataPacket)[]>(
+      `SELECT * FROM shopseosettings WHERE shopId = ?`,
+      [shop.id],
+    );
+    const seo = seoRows[0] ?? null;
     // Which of the independent online providers (PayPal/Tabby/Tamara) the
     // storefront should offer as their own selectable payment methods —
     // reuses PaymentSettingsService.isEnabled, the exact same enabled/
@@ -147,20 +164,20 @@ export class PublicService {
         results.filter((r) => r.enabled).map((r) => r.provider),
       ),
       this.paymentSettingsService.isEnabled(shop.id, shop.paymentGateway),
-      this.prisma.bannerimage.findMany({
-        where: { shopId: shop.id },
-        orderBy: { order: 'asc' },
-      }),
-      this.prisma.policypage.findMany({
-        where: { shopId: shop.id },
-        select: { type: true },
-      }),
+      this.db.query<(BannerimageRow & RowDataPacket)[]>(
+        `SELECT * FROM bannerimage WHERE shopId = ? ORDER BY \`order\` ASC`,
+        [shop.id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT type FROM policypage WHERE shopId = ?`,
+        [shop.id],
+      ),
     ]);
     // Only the types a merchant has actually written content for — the
     // footer never links to a policy type with no content (see
     // components/Footer.tsx), so it needs to know which ones are real
     // without a second round-trip per type.
-    const policyPageTypes = publishedPolicyPages.map((p) => p.type);
+    const policyPageTypes = publishedPolicyPages.map((p) => p.type as string);
     // Deliberately not a full `...shop` spread — this is public, unauthenticated
     // data, so only the fields the storefront actually needs are exposed
     // (nothing that reads as internal/back-office, even though nothing on
@@ -200,12 +217,12 @@ export class PublicService {
       productDisplayOrientation: shop.productDisplayOrientation,
       productImageZoomEnabled: shop.productImageZoomEnabled,
       showCollectionMenu: shop.showCollectionMenu,
-      taxRate: shop.taxRate,
+      taxRate: trimDecimal(shop.taxRate),
       taxInclusive: shop.taxInclusive,
       taxDisplayText: shop.taxDisplayText,
       allowSameDayOrders: shop.allowSameDayOrders,
       allowNextDayOrders: shop.allowNextDayOrders,
-      defaultDeliveryFee: shop.defaultDeliveryFee,
+      defaultDeliveryFee: trimDecimal(shop.defaultDeliveryFee),
       deliveryTimeSlotGapMinutes: shop.deliveryTimeSlotGapMinutes,
       pickupTimeSlotGapMinutes: shop.pickupTimeSlotGapMinutes,
       estimatedDeliveryTimeFrom: shop.estimatedDeliveryTimeFrom,
@@ -291,27 +308,28 @@ export class PublicService {
   // nothing beyond what the shop's own public storefront URL already
   // reveals to anyone who visits it.
   async listShopsForSitemap() {
-    const shops = await this.prisma.shop.findMany({
-      where: { published: true },
-      select: { subdomain: true, updatedAt: true },
-      orderBy: { id: 'asc' },
-    });
-    return shops.map((s) => ({ slug: s.subdomain, updatedAt: s.updatedAt }));
+    const shops = await this.db.query<RowDataPacket[]>(
+      `SELECT subdomain, updatedAt FROM shop WHERE published = 1 ORDER BY id ASC`,
+    );
+    return shops.map((s) => ({
+      slug: s.subdomain as string,
+      updatedAt: s.updatedAt as Date,
+    }));
   }
 
   async listCollections(shopSlug: string) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    return this.prisma.collection.findMany({
-      where: { shopId: shop.id },
-      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-    });
+    return this.db.query<(CollectionRow & RowDataPacket)[]>(
+      `SELECT * FROM collection WHERE shopId = ? ORDER BY displayOrder ASC, name ASC`,
+      [shop.id],
+    );
   }
 
   // Collection (taxonomy node) detail page — /[shop]/collections/[slug].
-  // Reuses the same publicProductInclude/toProductResponse shape
-  // listProducts already returns, filtered the same way listProducts'
-  // collectionId param already is.
+  // Reuses the same loadPublicProductsWithRelations shape listProducts
+  // already returns, filtered the same way listProducts' collectionId
+  // param already is.
   async getCollectionBySlug(
     shopSlug: string,
     slug: string,
@@ -319,27 +337,35 @@ export class PublicService {
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const collection = await this.prisma.collection.findFirst({
-      where: { shopId: shop.id, slug },
-    });
+    const collections = await this.db.query<(CollectionRow & RowDataPacket)[]>(
+      `SELECT * FROM collection WHERE shopId = ? AND slug = ? LIMIT 1`,
+      [shop.id, slug],
+    );
+    const collection = collections[0];
     if (!collection) {
       throw new NotFoundException(`Collection '${slug}' not found`);
     }
-    const products = await this.prisma.product.findMany({
-      where: {
-        shopId: shop.id,
-        status: 'Available',
-        productcollection: { some: { collectionId: collection.id } },
-      },
-      include: this.publicProductInclude(outletId),
-      orderBy: { id: 'asc' },
-    });
+    const productRows = await this.db.query<RowDataPacket[]>(
+      `SELECT p.id FROM product p
+       JOIN productcollection pc ON pc.productId = p.id
+       WHERE p.shopId = ? AND p.status = 'Available' AND pc.collectionId = ?
+       ORDER BY p.id ASC`,
+      [shop.id, collection.id],
+    );
+    const productIds = productRows.map((r) => r.id as number);
+    const products = await this.loadPublicProductsWithRelations(
+      productIds,
+      shop.id,
+      outletId,
+    );
     return {
       id: collection.id,
       name: collection.name,
       slug: collection.slug,
       image: collection.image,
-      products: products.map((p) => this.toProductResponse(p)),
+      products: productIds
+        .map((id) => products.get(id))
+        .filter((p): p is NonNullable<typeof p> => !!p),
     };
   }
 
@@ -350,30 +376,34 @@ export class PublicService {
   async getHomepageTemplates(shopSlug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const templates = await this.prisma.template.findMany({
-      where: { shopId: shop.id, isActive: true },
-      orderBy: [{ displayOrder: 'asc' }, { title: 'asc' }],
-    });
+    const templates = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM template WHERE shopId = ? AND isActive = 1 ORDER BY displayOrder ASC, title ASC`,
+      [shop.id],
+    );
     const HOMEPAGE_SECTION_PRODUCT_CAP = 12;
     return Promise.all(
       templates.map(async (template) => {
         const productIds = (
-          await this.templatesService.resolveProductIds(shop.id, template)
+          await this.templatesService.resolveProductIds(shop.id, {
+            id: template.id as number,
+            type: template.type as string,
+            rules: template.rules,
+          })
         ).slice(0, HOMEPAGE_SECTION_PRODUCT_CAP);
-        const products = await this.prisma.product.findMany({
-          where: { id: { in: productIds }, shopId: shop.id, status: 'Available' },
-          include: this.publicProductInclude(outletId),
-        });
-        const byId = new Map(products.map((p) => [p.id, p]));
+        const products = await this.loadPublicProductsWithRelations(
+          productIds,
+          shop.id,
+          outletId,
+        );
         const ordered = productIds
-          .map((id) => byId.get(id))
+          .map((id) => products.get(id))
           .filter((p): p is NonNullable<typeof p> => !!p);
         return {
           id: template.id,
           title: template.title,
           slug: template.slug,
           description: template.description,
-          products: ordered.map((p) => this.toProductResponse(p)),
+          products: ordered,
         };
       }),
     );
@@ -406,12 +436,12 @@ export class PublicService {
     return this.templatesService.listPublic(shop.id);
   }
 
-  // Product formatting reuses toProductResponse/publicProductInclude
-  // (the exact same shape listProducts/getProduct return) rather than
-  // TemplatesService duplicating that — it only ever resolves an ordered
-  // productId list (MANUAL's own order, or RULE_BASED's newest-first), see
-  // its own resolveProductIds. findMany doesn't preserve `id IN (...)`
-  // order, so results are re-sorted here to match.
+  // Product formatting reuses loadPublicProductsWithRelations (the exact
+  // same shape listProducts/getProduct return) rather than TemplatesService
+  // duplicating that — it only ever resolves an ordered productId list
+  // (MANUAL's own order, or RULE_BASED's newest-first), see its own
+  // resolveProductIds. WHERE id IN (...) doesn't preserve order, so results
+  // are re-sorted here to match.
   async getTemplate(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
@@ -424,13 +454,13 @@ export class PublicService {
     }
     const { summary, productIds } = resolved;
 
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, shopId: shop.id, status: 'Available' },
-      include: this.publicProductInclude(outletId),
-    });
-    const byId = new Map(products.map((p) => [p.id, p]));
+    const products = await this.loadPublicProductsWithRelations(
+      productIds,
+      shop.id,
+      outletId,
+    );
     const ordered = productIds
-      .map((id) => byId.get(id))
+      .map((id) => products.get(id))
       .filter((p): p is NonNullable<typeof p> => !!p);
 
     return {
@@ -439,7 +469,7 @@ export class PublicService {
       slug: summary.slug,
       description: summary.description,
       image: summary.image,
-      products: ordered.map((p) => this.toProductResponse(p)),
+      products: ordered,
     };
   }
 
@@ -451,32 +481,46 @@ export class PublicService {
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const products = await this.prisma.product.findMany({
-      where: {
-        shopId: shop.id,
-        status: 'Available',
-        ...(collectionId !== undefined && {
-          productcollection: { some: { collectionId } },
-        }),
-        ...(isCheckoutAddon !== undefined && { isCheckoutAddon }),
-      },
-      include: this.publicProductInclude(outletId),
-      orderBy: { id: 'asc' },
-    });
-    return products.map((p) => this.toProductResponse(p));
+    const conditions = ['shopId = ?', "status = 'Available'"];
+    const params: QueryParam[] = [shop.id];
+    if (collectionId !== undefined) {
+      conditions.push(
+        'EXISTS (SELECT 1 FROM productcollection pc WHERE pc.productId = product.id AND pc.collectionId = ?)',
+      );
+      params.push(collectionId);
+    }
+    if (isCheckoutAddon !== undefined) {
+      conditions.push('isCheckoutAddon = ?');
+      params.push(isCheckoutAddon);
+    }
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE ${conditions.join(' AND ')} ORDER BY id ASC`,
+      params,
+    );
+    const productIds = rows.map((r) => r.id as number);
+    const products = await this.loadPublicProductsWithRelations(
+      productIds,
+      shop.id,
+      outletId,
+    );
+    return productIds
+      .map((id) => products.get(id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
   }
 
   async getProduct(shopSlug: string, id: number, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const product = await this.prisma.product.findFirst({
-      where: { id, shopId: shop.id, status: 'Available' },
-      include: this.publicProductInclude(outletId),
-    });
+    const products = await this.loadPublicProductsWithRelations(
+      [id],
+      shop.id,
+      outletId,
+    );
+    const product = products.get(id);
     if (!product) {
       throw new NotFoundException(`Product ${id} not found`);
     }
-    return this.toProductResponse(product);
+    return product;
   }
 
   // Slug-based lookup for the storefront's canonical product URL — kept as
@@ -486,14 +530,21 @@ export class PublicService {
   async getProductBySlug(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const product = await this.prisma.product.findFirst({
-      where: { slug, shopId: shop.id, status: 'Available' },
-      include: this.publicProductInclude(outletId),
-    });
-    if (!product) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE slug = ? AND shopId = ? AND status = 'Available' LIMIT 1`,
+      [slug, shop.id],
+    );
+    const row = rows[0];
+    if (!row) {
       throw new NotFoundException(`Product '${slug}' not found`);
     }
-    return this.toProductResponse(product);
+    const id = row.id as number;
+    const products = await this.loadPublicProductsWithRelations(
+      [id],
+      shop.id,
+      outletId,
+    );
+    return products.get(id)!;
   }
 
   // Template-first, same-collection fallback — see RelatedProducts.tsx on
@@ -503,105 +554,314 @@ export class PublicService {
   async getRelatedProducts(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const product = await this.prisma.product.findFirst({
-      where: { slug, shopId: shop.id, status: 'Available' },
-      include: { productcollection: true },
-    });
-    if (!product) {
+    const productRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE slug = ? AND shopId = ? AND status = 'Available' LIMIT 1`,
+      [slug, shop.id],
+    );
+    const productRow = productRows[0];
+    if (!productRow) {
       throw new NotFoundException(`Product '${slug}' not found`);
     }
+    const productId = productRow.id as number;
 
     let relatedIds = await this.templatesService.findRelatedProductIds(
       shop.id,
-      product.id,
+      productId,
     );
 
     if (relatedIds.length === 0) {
-      const collectionId = product.productcollection[0]?.collectionId;
+      const collectionRows = await this.db.query<RowDataPacket[]>(
+        `SELECT collectionId FROM productcollection WHERE productId = ? LIMIT 1`,
+        [productId],
+      );
+      const collectionId = collectionRows[0]?.collectionId as
+        | number
+        | undefined;
       if (collectionId !== undefined) {
-        const rows = await this.prisma.product.findMany({
-          where: {
-            shopId: shop.id,
-            status: 'Available',
-            id: { not: product.id },
-            productcollection: { some: { collectionId } },
-          },
-          select: { id: true },
-          take: 4,
-        });
-        relatedIds = rows.map((r) => r.id);
+        const rows = await this.db.query<RowDataPacket[]>(
+          `SELECT p.id FROM product p
+           JOIN productcollection pc ON pc.productId = p.id
+           WHERE p.shopId = ? AND p.status = 'Available' AND p.id != ? AND pc.collectionId = ?
+           LIMIT 4`,
+          [shop.id, productId, collectionId],
+        );
+        relatedIds = rows.map((r) => r.id as number);
       }
     }
 
     if (relatedIds.length === 0) return [];
 
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: relatedIds }, shopId: shop.id },
-      include: this.publicProductInclude(outletId),
-    });
-    const byId = new Map(products.map((p) => [p.id, p]));
+    const products = await this.loadPublicProductsWithRelations(
+      relatedIds,
+      shop.id,
+      outletId,
+    );
     return relatedIds
-      .map((id) => byId.get(id))
-      .filter((p): p is NonNullable<typeof p> => !!p)
-      .map((p) => this.toProductResponse(p));
+      .map((id) => products.get(id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
   }
 
-  private publicProductInclude(outletId: number | undefined) {
-    return {
-      productcollection: { include: { collection: true } },
-      productimage: { orderBy: { order: 'asc' as const } },
-      productattribute: { orderBy: { order: 'asc' as const } },
-      productfaq: { orderBy: { order: 'asc' as const } },
-      productoption: {
-        orderBy: { order: 'asc' as const },
-        include: { productoptionvalue: { orderBy: { order: 'asc' as const } } },
-      },
-      productvariant: {
-        orderBy: { order: 'asc' as const },
-        include: {
-          image: true,
-          optionValue1: true,
-          optionValue2: true,
-          optionValue3: true,
-          // Only ever a shadow ingredient's stock (see
-          // ingredient.shadowVariantId's schema comment) — null for a
-          // usesIngredients:true variant, which never surfaces its real
-          // recipe/ingredient stock to a shopper. Selecting only
-          // stockQuantity keeps the ingredient's own id/name out of this
-          // response entirely, preserving the "no ingredient identity ever
-          // leaks to /public" invariant.
-          ...(outletId !== undefined && {
-            shadowIngredient: {
-              select: {
-                outletingredientstock: {
-                  where: { outletId },
-                  select: { stockQuantity: true },
-                },
-              },
-            },
-          }),
-        },
-      },
-      ...(outletId !== undefined && {
-        shadowIngredient: {
-          select: {
-            outletingredientstock: {
-              where: { outletId },
-              select: { stockQuantity: true },
-            },
-          },
-        },
-      }),
-    } satisfies Prisma.productInclude;
+  // Batch-loads every relation the old publicProductInclude used to fetch
+  // in one Prisma nested include, as separate WHERE...IN queries grouped in
+  // JS (same technique as ProductsService.loadProductsWithRelations), and
+  // assembles the final public response shape directly — there's no
+  // separate toProductResponse step since nothing else consumes the
+  // intermediate shape. Always re-filters by shopId + status: 'Available'
+  // even though every caller already resolved its own id list that way, as
+  // defense in depth against a stale/cross-shop id slipping through.
+  private async loadPublicProductsWithRelations(
+    productIds: number[],
+    shopId: number,
+    outletId: number | undefined,
+  ): Promise<Map<number, PublicProductResponse>> {
+    const result = new Map<number, PublicProductResponse>();
+    if (productIds.length === 0) return result;
+    const idList = productIds.map(() => '?').join(', ');
+
+    // outletId's `?` (in a JOIN clause) appears before the WHERE clause's
+    // `?`s in the SQL text below — params must be in that same order since
+    // .query() binds positionally, not by clause (see
+    // ProductsService.loadIngredientLinks's own comment on this).
+    const variantStockJoin =
+      outletId !== undefined
+        ? 'LEFT JOIN outletingredientstock vois ON vois.ingredientId = vshadow.id AND vois.outletId = ?'
+        : '';
+    const variantStockColumn =
+      outletId !== undefined
+        ? 'vois.stockQuantity AS variantStockQuantity'
+        : 'NULL AS variantStockQuantity';
+    const variantParams: QueryParam[] =
+      outletId !== undefined ? [outletId, ...productIds] : productIds;
+
+    const productStockJoin =
+      outletId !== undefined
+        ? 'LEFT JOIN outletingredientstock ois ON ois.ingredientId = ing.id AND ois.outletId = ?'
+        : '';
+    const productStockColumn =
+      outletId !== undefined
+        ? 'ois.stockQuantity AS stockQuantity'
+        : 'NULL AS stockQuantity';
+    const productStockParams: QueryParam[] =
+      outletId !== undefined ? [outletId, ...productIds] : productIds;
+
+    const [
+      products,
+      collectionLinks,
+      images,
+      attributes,
+      faqs,
+      options,
+      variants,
+      shadowStock,
+    ] = await Promise.all([
+      this.db.query<(ProductRow & RowDataPacket)[]>(
+        `SELECT * FROM product WHERE id IN (${idList}) AND shopId = ? AND status = 'Available'`,
+        [...productIds, shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT pc.productId, c.* FROM productcollection pc JOIN collection c ON c.id = pc.collectionId WHERE pc.productId IN (${idList})`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM productimage WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM productattribute WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM productfaq WHERE productId IN (${idList}) ORDER BY \`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT po.*, pov.id AS valueId, pov.value AS valueValue, pov.order AS valueOrder
+         FROM productoption po
+         LEFT JOIN productoptionvalue pov ON pov.optionId = po.id
+         WHERE po.productId IN (${idList})
+         ORDER BY po.\`order\` ASC, pov.\`order\` ASC`,
+        productIds,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT v.*, img.url AS imageUrl,
+                ov1.value AS optionValue1Value, ov2.value AS optionValue2Value, ov3.value AS optionValue3Value,
+                ${variantStockColumn}
+         FROM productvariant v
+         LEFT JOIN productimage img ON img.id = v.imageId
+         LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
+         LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
+         LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
+         LEFT JOIN ingredient vshadow ON vshadow.shadowVariantId = v.id
+         ${variantStockJoin}
+         WHERE v.productId IN (${idList})
+         ORDER BY v.\`order\` ASC`,
+        variantParams,
+      ),
+      // Only ever a shadow ingredient's stock (see
+      // ingredient.shadowProductId's schema comment) — null for a
+      // usesIngredients:true product, which never surfaces its real
+      // recipe/ingredient stock to a shopper.
+      this.db.query<RowDataPacket[]>(
+        `SELECT ing.shadowProductId AS productId, ${productStockColumn}
+         FROM ingredient ing
+         ${productStockJoin}
+         WHERE ing.shadowProductId IN (${idList})`,
+        productStockParams,
+      ),
+    ]);
+
+    const collectionsByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of collectionLinks) {
+      const list = collectionsByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      collectionsByProduct.set(row.productId as number, list);
+    }
+    const imagesByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of images) {
+      const list = imagesByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      imagesByProduct.set(row.productId as number, list);
+    }
+    const attributesByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of attributes) {
+      const list = attributesByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      attributesByProduct.set(row.productId as number, list);
+    }
+    const faqsByProduct = new Map<number, RowDataPacket[]>();
+    for (const row of faqs) {
+      const list = faqsByProduct.get(row.productId as number) ?? [];
+      list.push(row);
+      faqsByProduct.set(row.productId as number, list);
+    }
+    const optionsByProduct = new Map<
+      number,
+      Map<
+        number,
+        {
+          id: number;
+          name: string;
+          order: number;
+          values: { id: number; value: string; order: number }[];
+        }
+      >
+    >();
+    for (const row of options) {
+      const pid = row.productId as number;
+      const optMap = optionsByProduct.get(pid) ?? new Map();
+      const opt = optMap.get(row.id as number) ?? {
+        id: row.id as number,
+        name: row.name as string,
+        order: row.order as number,
+        values: [],
+      };
+      if (row.valueId != null) {
+        opt.values.push({
+          id: row.valueId as number,
+          value: row.valueValue as string,
+          order: row.valueOrder as number,
+        });
+      }
+      optMap.set(opt.id, opt);
+      optionsByProduct.set(pid, optMap);
+    }
+    const variantsByProduct = new Map<number, Record<string, unknown>[]>();
+    for (const v of variants) {
+      const list = variantsByProduct.get(v.productId as number) ?? [];
+      list.push({
+        id: v.id as number,
+        sku: v.sku as string | null,
+        barcode: v.barcode as string | null,
+        price: trimDecimal(v.price as string | null),
+        compareAtPrice: trimDecimal(v.compareAtPrice as string | null),
+        imageUrl: (v.imageUrl as string | null) ?? null,
+        optionValue1Id: v.optionValue1Id as number | null,
+        optionValue2Id: v.optionValue2Id as number | null,
+        optionValue3Id: v.optionValue3Id as number | null,
+        label: buildVariantLabel([
+          v.optionValue1Value as string | undefined,
+          v.optionValue2Value as string | undefined,
+          v.optionValue3Value as string | undefined,
+        ]),
+        stockQuantity:
+          v.variantStockQuantity !== null
+            ? Number(v.variantStockQuantity)
+            : null,
+      });
+      variantsByProduct.set(v.productId as number, list);
+    }
+    const shadowStockByProduct = new Map<number, number | null>();
+    for (const row of shadowStock) {
+      shadowStockByProduct.set(
+        row.productId as number,
+        row.stockQuantity !== null ? Number(row.stockQuantity) : null,
+      );
+    }
+
+    for (const p of products) {
+      const id = p.id;
+      const options_ = [...(optionsByProduct.get(id)?.values() ?? [])];
+      result.set(id, {
+        ...p,
+        price: trimDecimal(p.price),
+        compareAtPrice: trimDecimal(p.compareAtPrice),
+        costPrice: trimDecimal(p.costPrice),
+        weight: trimDecimal(p.weight),
+        giftCardCustomAmountMin: trimDecimal(p.giftCardCustomAmountMin),
+        giftCardCustomAmountMax: trimDecimal(p.giftCardCustomAmountMax),
+        collections: (collectionsByProduct.get(id) ?? []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          image: c.image,
+          displayOrder: c.displayOrder,
+          isFeatured: c.isFeatured,
+          parentCollectionId: c.parentCollectionId,
+        })),
+        images: (imagesByProduct.get(id) ?? []).map((i) => ({
+          id: i.id,
+          url: i.url,
+          order: i.order,
+        })),
+        attributes: (attributesByProduct.get(id) ?? []).map((a) => ({
+          id: a.id,
+          name: a.name,
+          value: a.value,
+          order: a.order,
+        })),
+        faqs: (faqsByProduct.get(id) ?? []).map((f) => ({
+          id: f.id,
+          question: f.question,
+          answer: f.answer,
+          order: f.order,
+        })),
+        hasVariants: options_.length > 0,
+        options: options_,
+        variants: variantsByProduct.get(id) ?? [],
+        // Same convention as the admin ProductsService: null when no outlet
+        // was resolved for this request, when trackInventory is off and no
+        // stock row was ever created, or when this product uses a recipe
+        // (no shadow ingredient — a recipe's real availability never
+        // surfaces to the storefront) — distinct from 0, which means the
+        // outlet genuinely has none in stock right now.
+        stockQuantity: shadowStockByProduct.get(id) ?? null,
+        // Fallback chain lives here (not client-side) so every consumer of
+        // this API — the storefront's generateMetadata included — gets an
+        // already-sensible title/description without duplicating the logic.
+        metaTitle: p.metaTitle ?? p.name,
+        metaDescription: p.metaDescription ?? truncateDescription(p.description),
+      });
+    }
+    return result;
   }
 
   async listOutlets(shopSlug: string) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const outlets = await this.prisma.outlet.findMany({
-      where: { shopId: shop.id, active: true },
-      orderBy: { id: 'asc' },
-    });
+    const outlets = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE shopId = ? AND active = 1 ORDER BY id ASC`,
+      [shop.id],
+    );
     return outlets.map((o) => ({
       id: o.id,
       name: o.name,
@@ -628,11 +888,16 @@ export class PublicService {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     await this.assertOutletBelongsToShop(shop.id, outletId);
-    return this.prisma.deliveryzone.findMany({
-      where: { outletId, isActive: true },
-      orderBy: { id: 'asc' },
-      select: { id: true, name: true, fee: true, minOrderAmount: true },
-    });
+    const zones = await this.db.query<(DeliveryzoneRow & RowDataPacket)[]>(
+      `SELECT id, name, fee, minOrderAmount FROM deliveryzone WHERE outletId = ? AND isActive = 1 ORDER BY id ASC`,
+      [outletId],
+    );
+    return zones.map((z) => ({
+      id: z.id,
+      name: z.name,
+      fee: trimDecimal(z.fee),
+      minOrderAmount: trimDecimal(z.minOrderAmount),
+    }));
   }
 
   geocode(query?: string) {
@@ -653,60 +918,69 @@ export class PublicService {
     if (!token?.trim()) {
       throw new BadRequestException('A tracking code is required');
     }
-    const order = await this.prisma.order.findUnique({
-      where: { trackingToken: token },
-      include: {
-        orderitem: {
-          select: {
-            productName: true,
-            variantLabel: true,
-            quantity: true,
-            priceAtPurchase: true,
-          },
-        },
-        shop: {
-          select: {
-            name: true,
-            currency: true,
-            estimatedDeliveryTimeFrom: true,
-            estimatedDeliveryTimeTo: true,
-            estimatedDeliveryTimeUnit: true,
-            pickupPreparationTimeMinutes: true,
-          },
-        },
-        outlet: { select: { name: true } },
-        // Only for `hasAccount` below — never returning the hash itself,
-        // just whether one is set. See customer.passwordHash's own comment:
-        // null = guest, never registered.
-        customer: { select: { passwordHash: true } },
-      },
-    });
+    const orders = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM \`order\` WHERE trackingToken = ? LIMIT 1`,
+      [token],
+    );
+    const order = orders[0];
     if (!order) {
       throw new NotFoundException('No order found for that tracking code');
     }
 
+    const [items, shopRows, outletRows, customerRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT productName, variantLabel, quantity, priceAtPurchase FROM orderitem WHERE orderId = ?`,
+        [order.id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT name, currency, estimatedDeliveryTimeFrom, estimatedDeliveryTimeTo, estimatedDeliveryTimeUnit, pickupPreparationTimeMinutes
+         FROM shop WHERE id = ?`,
+        [order.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(`SELECT name FROM outlet WHERE id = ?`, [
+        order.outletId,
+      ]),
+      // Only for `hasAccount` below — never returning the hash itself, just
+      // whether one is set. See customer.passwordHash's own comment: null =
+      // guest, never registered.
+      order.customerId !== null
+        ? this.db.query<RowDataPacket[]>(
+            `SELECT passwordHash FROM customer WHERE id = ?`,
+            [order.customerId],
+          )
+        : Promise.resolve([] as RowDataPacket[]),
+    ]);
+    const shop = shopRows[0];
+    const outlet = outletRows[0];
+    const customer = customerRows[0];
+
     const estimatedTime =
       order.orderType === 'delivery'
-        ? `${order.shop.estimatedDeliveryTimeFrom}-${order.shop.estimatedDeliveryTimeTo} ${order.shop.estimatedDeliveryTimeUnit}`
+        ? `${shop.estimatedDeliveryTimeFrom}-${shop.estimatedDeliveryTimeTo} ${shop.estimatedDeliveryTimeUnit}`
         : order.orderType === 'pickup'
-          ? `${order.shop.pickupPreparationTimeMinutes} minutes`
+          ? `${shop.pickupPreparationTimeMinutes} minutes`
           : null;
 
     return {
       id: order.id,
-      shopName: order.shop.name,
-      outletName: order.outlet.name,
+      shopName: shop.name as string,
+      outletName: outlet.name as string,
       customerName: order.customerName,
       status: order.status,
       orderType: order.orderType,
       paymentStatus: order.paymentStatus,
       deliveryDate: order.deliveryDate,
       deliveryTimeSlot: order.deliveryTimeSlot,
-      items: order.orderitem,
-      deliveryFee: order.deliveryFee,
-      taxAmount: order.taxAmount,
-      total: order.total,
-      currency: order.shop.currency,
+      items: items.map((i) => ({
+        productName: i.productName as string,
+        variantLabel: i.variantLabel as string | null,
+        quantity: i.quantity as number,
+        priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
+      })),
+      deliveryFee: trimDecimal(order.deliveryFee as string | null),
+      taxAmount: trimDecimal(order.taxAmount as string | null),
+      total: trimDecimal(order.total as string) as string,
+      currency: shop.currency as string,
       createdAt: order.createdAt,
       estimatedTime,
       // Lets the storefront offer a light "sign in to see all your orders"
@@ -716,7 +990,7 @@ export class PublicService {
       // Not a new privacy exposure: the tracking token itself already grants
       // full read access to this order and its (guest-creatable) customer
       // row, same trust boundary as everything else this endpoint returns.
-      hasAccount: order.customer?.passwordHash != null,
+      hasAccount: (customer?.passwordHash ?? null) != null,
     };
   }
 
@@ -727,15 +1001,21 @@ export class PublicService {
     if (!token?.trim()) {
       throw new BadRequestException('A survey token is required');
     }
-    const survey = await this.prisma.surveyresponse.findUnique({
-      where: { token },
-      include: { shop: { select: { name: true, displayName: true } } },
-    });
+    const surveys = await this.db.query<(SurveyresponseRow & RowDataPacket)[]>(
+      `SELECT * FROM surveyresponse WHERE token = ? LIMIT 1`,
+      [token],
+    );
+    const survey = surveys[0];
     if (!survey) {
       throw new NotFoundException('No survey found for that token');
     }
+    const shops = await this.db.query<RowDataPacket[]>(
+      `SELECT name, displayName FROM shop WHERE id = ?`,
+      [survey.shopId],
+    );
+    const shop = shops[0];
     return {
-      shopName: survey.shop.displayName ?? survey.shop.name,
+      shopName: (shop.displayName as string | null) ?? (shop.name as string),
       rating: survey.rating,
       comment: survey.comment,
       respondedAt: survey.respondedAt,
@@ -746,23 +1026,21 @@ export class PublicService {
     if (!token?.trim()) {
       throw new BadRequestException('A survey token is required');
     }
-    const survey = await this.prisma.surveyresponse.findUnique({
-      where: { token },
-    });
+    const surveys = await this.db.query<(SurveyresponseRow & RowDataPacket)[]>(
+      `SELECT * FROM surveyresponse WHERE token = ? LIMIT 1`,
+      [token],
+    );
+    const survey = surveys[0];
     if (!survey) {
       throw new NotFoundException('No survey found for that token');
     }
     if (survey.respondedAt) {
       throw new BadRequestException('This survey has already been submitted');
     }
-    await this.prisma.surveyresponse.update({
-      where: { token },
-      data: {
-        rating: dto.rating,
-        comment: dto.comment ?? null,
-        respondedAt: new Date(),
-      },
-    });
+    await this.db.execute(
+      `UPDATE surveyresponse SET rating = ?, comment = ?, respondedAt = ? WHERE token = ?`,
+      [dto.rating, dto.comment ?? null, new Date(), token],
+    );
     return { success: true };
   }
 
@@ -775,9 +1053,11 @@ export class PublicService {
   async createOrder(shopSlug: string, dto: CreatePublicOrderDto) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: dto.outletId, shopId: shop.id, active: true },
-    });
+    const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
+      [dto.outletId, shop.id],
+    );
+    const outlet = outletRows[0];
     if (!outlet) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
@@ -789,7 +1069,10 @@ export class PublicService {
       throw new BadRequestException('This outlet does not offer pickup');
     }
     await this.assertPaymentMethodAvailable(
-      shop,
+      shop as unknown as Record<string, unknown> & {
+        id: number;
+        paymentGateway: string;
+      },
       dto.orderType,
       dto.paymentMethod,
     );
@@ -1167,7 +1450,7 @@ export class PublicService {
   }
 
   private async resolveDeliveryFee(
-    shop: { id: number; defaultDeliveryFee: Prisma.Decimal },
+    shop: { id: number; defaultDeliveryFee: string },
     outlet: {
       id: number;
       latitude: number | null;
@@ -1176,7 +1459,7 @@ export class PublicService {
     },
     dto: CreatePublicOrderDto,
     subtotal: number,
-  ): Promise<Prisma.Decimal> {
+  ): Promise<string> {
     // Radius is the eligibility boundary — if configured, coordinates are
     // required to prove the customer is inside it. Zones (below) then
     // decide the actual fee; radius never itself sets a fee.
@@ -1199,9 +1482,10 @@ export class PublicService {
       }
     }
 
-    const zones = await this.prisma.deliveryzone.findMany({
-      where: { outletId: outlet.id, isActive: true },
-    });
+    const zones = await this.db.query<(DeliveryzoneRow & RowDataPacket)[]>(
+      `SELECT * FROM deliveryzone WHERE outletId = ? AND isActive = 1`,
+      [outlet.id],
+    );
     const zone = matchDeliveryZone(zones, dto.area, dto.emirate);
     if (zone) {
       if (subtotal < Number(zone.minOrderAmount)) {
@@ -1358,10 +1642,12 @@ export class PublicService {
     }
   }
 
-  private async resolveShop(shopSlug: string) {
-    const shop = await this.prisma.shop.findUnique({
-      where: { subdomain: shopSlug },
-    });
+  private async resolveShop(shopSlug: string): Promise<ShopRow> {
+    const rows = await this.db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ? LIMIT 1`,
+      [shopSlug],
+    );
+    const shop = rows[0];
     if (!shop) {
       throw new NotFoundException(`Shop '${shopSlug}' not found`);
     }
@@ -1384,136 +1670,12 @@ export class PublicService {
   }
 
   private async assertOutletBelongsToShop(shopId: number, outletId: number) {
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: outletId, shopId },
-    });
-    if (!outlet) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ? LIMIT 1`,
+      [outletId, shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Outlet ${outletId} not found`);
     }
   }
-
-  private toProductResponse(product: PublicProductRow) {
-    const {
-      productcollection,
-      productimage,
-      productattribute,
-      productfaq,
-      productoption,
-      productvariant,
-      shadowIngredient,
-      metaTitle,
-      metaDescription,
-      description,
-      ...rest
-    } = product;
-    return {
-      ...rest,
-      description,
-      collections: productcollection.map((pc) => pc.collection),
-      images: productimage.map((i) => ({
-        id: i.id,
-        url: i.url,
-        order: i.order,
-      })),
-      attributes: productattribute.map((a) => ({
-        id: a.id,
-        name: a.name,
-        value: a.value,
-        order: a.order,
-      })),
-      faqs: productfaq.map((f) => ({
-        id: f.id,
-        question: f.question,
-        answer: f.answer,
-        order: f.order,
-      })),
-      hasVariants: productoption.length > 0,
-      options: productoption.map((o) => ({
-        id: o.id,
-        name: o.name,
-        order: o.order,
-        values: o.productoptionvalue.map((v) => ({
-          id: v.id,
-          value: v.value,
-          order: v.order,
-        })),
-      })),
-      // Sku/barcode included for parity with the admin shape even though
-      // the storefront UI itself never displays them to shoppers.
-      variants: productvariant.map((v) => ({
-        id: v.id,
-        sku: v.sku,
-        barcode: v.barcode,
-        price: v.price,
-        compareAtPrice: v.compareAtPrice,
-        imageUrl: v.image?.url ?? null,
-        optionValue1Id: v.optionValue1Id,
-        optionValue2Id: v.optionValue2Id,
-        optionValue3Id: v.optionValue3Id,
-        label: buildVariantLabel([
-          v.optionValue1?.value,
-          v.optionValue2?.value,
-          v.optionValue3?.value,
-        ]),
-        stockQuantity:
-          v.shadowIngredient?.outletingredientstock?.[0]?.stockQuantity ?? null,
-      })),
-      // Same convention as the admin ProductsService: null when no outlet
-      // was resolved for this request, when trackInventory is off and no
-      // stock row was ever created, or when this product uses a recipe
-      // (shadowIngredient is null — a recipe's real availability never
-      // surfaces to the storefront, same as before Phase A) — distinct from
-      // 0, which means the outlet genuinely has none in stock right now.
-      stockQuantity:
-        shadowIngredient?.outletingredientstock?.[0]?.stockQuantity ?? null,
-      // Fallback chain lives here (not client-side) so every consumer of
-      // this API — the storefront's generateMetadata included — gets an
-      // already-sensible title/description without duplicating the logic.
-      metaTitle: metaTitle ?? product.name,
-      metaDescription: metaDescription ?? truncateDescription(description),
-    };
-  }
 }
-
-type PublicProductRow = Omit<
-  Prisma.productGetPayload<{
-    include: {
-      productcollection: { include: { collection: true } };
-      productimage: true;
-      productattribute: true;
-      productfaq: true;
-      productoption: { include: { productoptionvalue: true } };
-      productvariant: {
-        include: {
-          image: true;
-          optionValue1: true;
-          optionValue2: true;
-          optionValue3: true;
-        };
-      };
-    };
-  }>,
-  'productvariant'
-> & {
-  // Prisma's payload-inference generics can't narrow a relation whose
-  // include shape is computed dynamically (publicProductInclude branches on
-  // outletId) rather than passed as an inline literal — same known
-  // limitation this codebase's own `(response as any).stockByOutlet` cast
-  // in products.service.ts already works around. Loosely typed here (only
-  // ever actually shaped `{ outletingredientstock: {...}[] } | null` at
-  // runtime, per publicProductInclude's own `select`) rather than fighting
-  // Prisma's generics for a field this method reads exactly once.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  shadowIngredient?: any;
-  productvariant: (Prisma.productvariantGetPayload<{
-    include: {
-      image: true;
-      optionValue1: true;
-      optionValue2: true;
-      optionValue3: true;
-    };
-  }> & {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    shadowIngredient?: any;
-  })[];
-};

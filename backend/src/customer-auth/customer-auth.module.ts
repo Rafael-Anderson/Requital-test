@@ -21,7 +21,7 @@ import { JobsModule } from '../jobs/jobs.module';
   providers: [CustomerAuthService, CustomerAuthGuard],
   // JwtModule itself must be exported too, not just CustomerAuthGuard —
   // @UseGuards(CustomerAuthGuard) in a *different* module (CustomerAccountModule)
-  // re-resolves the guard's own constructor deps (JwtService, PrismaService)
+  // re-resolves the guard's own constructor deps (JwtService, DatabaseService)
   // in that module's scope, so JwtService has to be visible there too.
   exports: [JwtModule, CustomerAuthGuard],
 })

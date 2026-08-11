@@ -5,8 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { buildSetClause } from '../database/update.util';
@@ -49,19 +47,6 @@ import {
   parseImportNumber,
   splitList,
 } from './products-import';
-
-// mysql2 Pool/PoolConnection both expose .query() at the top level; a
-// Prisma TransactionClient never does (its surface is namespaced per
-// model, e.g. `.product.findFirst`) — same detection idiom as
-// JobsService.enqueue's isPoolConnection, used here for the same reason:
-// resolveShadowStockTarget is called both internally (already-converted
-// Phase 4 methods, mysql2) and externally by ScanService (Phase 7, still
-// Prisma) with its own tx.
-function isMysqlRunner(
-  client: Prisma.TransactionClient | PoolConnection | Pool,
-): client is PoolConnection | Pool {
-  return typeof (client as PoolConnection).query === 'function';
-}
 
 interface IngredientLinkRow extends RowDataPacket {
   id: number;
@@ -200,11 +185,6 @@ interface ResolvedProductGroup {
 export class ProductsService {
   constructor(
     private readonly db: DatabaseService,
-    // Kept only for consumeForOrderItems (called exclusively by
-    // not-yet-converted Phase 5 modules — orders/public/returns — with
-    // their own Prisma tx) and resolveShadowStockTarget's legacy branch
-    // (ScanService, Phase 7). Remove once both phases convert.
-    private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
     private readonly branchRolesService: BranchRolesService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
@@ -1569,52 +1549,17 @@ export class ProductsService {
   // whether one was already provisioned. Not private — ScanService's
   // scan-to-stock flow (its own product-creation path) reuses this exact
   // provisioning logic rather than duplicating it.
-  //
-  // Accepts either a mysql2 runner (every caller inside this file) or a
-  // still-Prisma Prisma.TransactionClient (only ScanService, Phase 7,
-  // passes its own tx here) — see isMysqlRunner at the top of this file.
-  // Delete the Prisma branch once Phase 7 converts.
   async provisionShadowForProduct(
-    conn: PoolConnection | Prisma.TransactionClient,
+    conn: PoolConnection,
     ctx: TenantContext,
     productId: number,
     meta: {
       name: string;
       thumbnail: string;
       trackInventory: boolean;
-      costPrice: string | number | Prisma.Decimal | null;
+      costPrice: string | number | null;
     },
   ): Promise<void> {
-    if (!isMysqlRunner(conn)) {
-      // Legacy Prisma path — see the method's own doc comment.
-      const existing = await conn.ingredient.findFirst({
-        where: { shadowProductId: productId },
-        select: { id: true },
-      });
-      if (existing) return;
-      const shadow = await conn.ingredient.create({
-        data: {
-          shopId: ctx.shopId,
-          name: meta.name,
-          unit: 'unit',
-          trackInventory: meta.trackInventory,
-          image: meta.thumbnail,
-          costPerUnit: meta.costPrice,
-          shadowProductId: productId,
-        },
-      });
-      await conn.productingredient.create({
-        data: {
-          shopId: ctx.shopId,
-          productId,
-          variantId: null,
-          ingredientId: shadow.id,
-          quantityPerUnit: 1,
-        },
-      });
-      return;
-    }
-
     const [existingRows] = await conn.query<RowDataPacket[]>(
       `SELECT id FROM ingredient WHERE shadowProductId = ?`,
       [productId],
@@ -1655,7 +1600,7 @@ export class ProductsService {
       name: string;
       thumbnail: string;
       trackInventory: boolean;
-      costPrice: string | number | Prisma.Decimal | null;
+      costPrice: string | number | null;
     },
   ): Promise<void> {
     const [existingRows] = await conn.query<RowDataPacket[]>(
@@ -1756,14 +1701,10 @@ export class ProductsService {
   // callers no longer need to call that separately. Not private — reused
   // by ScanService for the same reason.
   //
-  // Accepts either a mysql2 runner (Pool/PoolConnection — every caller
-  // inside this file) or a still-Prisma Prisma.TransactionClient (only
-  // ScanService, Phase 7, passes its own tx here) — see isMysqlRunner at
-  // the top of this file. Delete the Prisma branch once Phase 7 converts.
   async resolveShadowStockTarget(
     ctx: TenantContext,
     target: { productId?: number; variantId?: number; ingredientId?: number },
-    client: Prisma.TransactionClient | PoolConnection | Pool = this.db.pool,
+    client: PoolConnection | Pool = this.db.pool,
   ): Promise<{
     ingredientId: number;
     productId: number | null;
@@ -1771,58 +1712,6 @@ export class ProductsService {
   }> {
     this.assertStockTarget(target);
 
-    if (!isMysqlRunner(client)) {
-      // Legacy Prisma path — see the method's own doc comment.
-      if (target.ingredientId) {
-        const ingredient = await client.ingredient.findFirst({
-          where: { id: target.ingredientId, shopId: ctx.shopId },
-          select: { id: true },
-        });
-        if (!ingredient) {
-          throw new NotFoundException(`Ingredient ${target.ingredientId} not found`);
-        }
-        return { ingredientId: target.ingredientId, productId: null, variantId: null };
-      }
-      const product = await client.product.findFirst({
-        where: { id: target.productId, shopId: ctx.shopId },
-        select: { id: true, usesIngredients: true },
-      });
-      if (!product) {
-        throw new NotFoundException(`Product ${target.productId} not found`);
-      }
-      if (product.usesIngredients) {
-        throw new BadRequestException(
-          'This product uses a recipe — adjust the individual ingredient stock instead',
-        );
-      }
-      if (target.variantId) {
-        const variant = await client.productvariant.findFirst({
-          where: { id: target.variantId, productId: product.id },
-          select: { id: true },
-        });
-        if (!variant) {
-          throw new BadRequestException('variantId is invalid for this product');
-        }
-        const shadow = await client.ingredient.findFirst({
-          where: { shadowVariantId: variant.id },
-          select: { id: true },
-        });
-        if (!shadow) {
-          throw new BadRequestException(`Variant ${variant.id} has no stock record`);
-        }
-        return { ingredientId: shadow.id, productId: product.id, variantId: variant.id };
-      }
-      const shadow = await client.ingredient.findFirst({
-        where: { shadowProductId: product.id },
-        select: { id: true },
-      });
-      if (!shadow) {
-        throw new BadRequestException(`Product ${product.id} has no stock record`);
-      }
-      return { ingredientId: shadow.id, productId: product.id, variantId: null };
-    }
-
-    // mysql2 path
     if (target.ingredientId) {
       const [rows] = await client.query<RowDataPacket[]>(
         `SELECT id FROM ingredient WHERE id = ? AND shopId = ?`,
@@ -3566,12 +3455,6 @@ export class ProductsService {
   // +1). Returns whether anything was actually consumed, so the caller can
   // set order.ingredientsConsumedAt — read back on restock instead of
   // re-deriving it from the toggle, see that column's own schema comment.
-  //
-  // STILL PRISMA — deliberately not converted in this phase. Every caller
-  // (OrdersService, PublicService, ReturnsService) is itself still Prisma
-  // and always passes its own transaction client here; converting this
-  // method alone would leave it unable to participate in those callers'
-  // transactions. Convert together with those three modules (Phase 5).
   //
   // Toggle gating is intentionally asymmetric by direction: direction -1 is
   // a fresh "should this fire at all" decision, so it re-checks

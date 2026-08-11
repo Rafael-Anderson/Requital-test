@@ -1,6 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
 import { DatabaseService } from '../database/database.service';
 import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
 import type {
@@ -16,12 +14,6 @@ const MAX_BACKOFF_SECONDS = 3600;
 
 export type JobRecord = JobRow;
 
-function isPoolConnection(
-  tx: Prisma.TransactionClient | PoolConnection,
-): tx is PoolConnection {
-  return typeof (tx as PoolConnection).query === 'function';
-}
-
 // DB-backed job queue — see the Phase 5 report for why this was chosen over
 // BullMQ+Redis. Claiming (claimNextJob) uses `FOR UPDATE SKIP LOCKED` so
 // multiple worker processes/instances can poll the same table without ever
@@ -30,15 +22,7 @@ function isPoolConnection(
 // PaymentsService.handleWebhook / InvoicesService.generateForOrder.
 @Injectable()
 export class JobsService {
-  constructor(
-    private readonly db: DatabaseService,
-    // Still needed only for enqueue()'s Prisma-transaction-client shim
-    // below, kept until every caller that enqueues mid-transaction
-    // (currently GiftCardsService, via orders.service.ts's own
-    // transaction) has itself converted off Prisma — see that branch's own
-    // comment. Delete this injection in the same pass that removes it.
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // shopId is validated here, not left to the caller or the DB's FK
   // constraint — a missing/invalid shopId is rejected before a row is ever
@@ -53,10 +37,7 @@ export class JobsService {
   // called mid order-creation transaction) — this is what makes the job row
   // commit-or-rollback atomically with the work it describes, rather than
   // being written on a separate connection outside that transaction and
-  // potentially outliving a later rollback. Accepts either a mysql2
-  // PoolConnection (converted callers) or a still-Prisma
-  // Prisma.TransactionClient (not-yet-converted callers) during the
-  // migration — see isPoolConnection above.
+  // potentially outliving a later rollback.
   async enqueue(
     shopId: number,
     type: JobType,
@@ -64,7 +45,7 @@ export class JobsService {
     idempotencyKey: string,
     options: {
       maxAttempts?: number;
-      tx?: Prisma.TransactionClient | PoolConnection;
+      tx?: PoolConnection;
     } = {},
   ): Promise<JobRecord> {
     const { maxAttempts = 5, tx } = options;
@@ -74,35 +55,8 @@ export class JobsService {
       );
     }
 
-    if (tx && !isPoolConnection(tx)) {
-      // Legacy path — delete once every mid-transaction enqueue() caller is
-      // off Prisma (see constructor comment).
-      try {
-        return (await tx.job.create({
-          data: {
-            shopId,
-            type,
-            payload: payload as unknown as Prisma.InputJsonValue,
-            idempotencyKey,
-            maxAttempts,
-          },
-        })) as unknown as JobRecord;
-      } catch (error) {
-        if (
-          error instanceof Object &&
-          'code' in error &&
-          (error.code === 'P2002' || error.code === 'P2034')
-        ) {
-          const existing = await tx.job.findUnique({ where: { idempotencyKey } });
-          if (existing) return existing as unknown as JobRecord;
-        }
-        throw error;
-      }
-    }
-
     try {
       if (tx) {
-        // tx is a PoolConnection here (isPoolConnection check above).
         // updatedAt has no DB-level default (an @updatedAt field, same as
         // every other one in this schema — see CLAUDE.md's invoicecounter
         // note) so it's always set explicitly, on every insert.

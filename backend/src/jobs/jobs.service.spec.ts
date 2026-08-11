@@ -2,10 +2,9 @@
  * Standard jest-mock-typing false positive (see CLAUDE.md's backend lint-gap
  * note and auth.service.spec.ts's identical disable). */
 import { NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
 import { JobsService } from './jobs.service';
 import type { DatabaseService } from '../database/database.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { PoolConnection } from 'mysql2/promise';
 
 function fakeJob(overrides: Record<string, unknown> = {}) {
   return {
@@ -42,16 +41,10 @@ function createMockDb() {
   };
 }
 
-// Only exercised by the "still-Prisma tx" legacy-shim test below — every
-// other test goes through the DatabaseService mock.
-function createMockPrisma() {
-  return {} as unknown as PrismaService;
-}
-
 describe('JobsService.enqueue', () => {
   it('rejects a missing/invalid shopId before writing anything', async () => {
     const db = createMockDb();
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await expect(
       service.enqueue(
@@ -77,7 +70,7 @@ describe('JobsService.enqueue', () => {
     const existing = fakeJob({ id: 5 });
     db.execute.mockRejectedValue(duplicateKeyError());
     db.query.mockResolvedValue([existing]);
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     const result = await service.enqueue(
       10,
@@ -92,7 +85,7 @@ describe('JobsService.enqueue', () => {
   it('re-throws a non-duplicate-key error', async () => {
     const db = createMockDb();
     db.execute.mockRejectedValue(new Error('connection lost'));
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await expect(
       service.enqueue(
@@ -104,14 +97,18 @@ describe('JobsService.enqueue', () => {
     ).rejects.toThrow('connection lost');
   });
 
-  it('writes through the given transaction client, not the injected db pool, when a still-Prisma tx is passed', async () => {
+  it('writes through the given transaction connection, not the injected db pool, when tx is passed', async () => {
     const db = createMockDb();
+    const insertedJob = fakeJob();
     const tx = {
-      job: { create: jest.fn().mockResolvedValue(fakeJob()) },
-    } as unknown as Prisma.TransactionClient;
-    const service = new JobsService(db, createMockPrisma());
+      query: jest
+        .fn()
+        .mockResolvedValueOnce([{ insertId: insertedJob.id }])
+        .mockResolvedValueOnce([[insertedJob]]),
+    } as unknown as PoolConnection;
+    const service = new JobsService(db);
 
-    await service.enqueue(
+    const result = await service.enqueue(
       10,
       'send_email',
       { to: 'a', subject: 's', bodyText: 'b' },
@@ -120,9 +117,8 @@ describe('JobsService.enqueue', () => {
     );
 
     expect(db.execute).not.toHaveBeenCalled();
-    expect(
-      (tx as unknown as { job: { create: jest.Mock } }).job.create,
-    ).toHaveBeenCalled();
+    expect((tx as unknown as { query: jest.Mock }).query).toHaveBeenCalled();
+    expect(result).toEqual(insertedJob);
   });
 });
 
@@ -130,7 +126,7 @@ describe('JobsService.failJob — retry-with-backoff / dead-letter transition', 
   it('re-schedules with a later nextAttemptAt while attempts remain', async () => {
     const db = createMockDb();
     db.query.mockResolvedValue([fakeJob({ attempts: 2, maxAttempts: 5 })]);
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await service.failJob(1, 'boom');
 
@@ -143,7 +139,7 @@ describe('JobsService.failJob — retry-with-backoff / dead-letter transition', 
   it('dead-letters once attempts reaches maxAttempts, never scheduling another retry', async () => {
     const db = createMockDb();
     db.query.mockResolvedValue([fakeJob({ attempts: 5, maxAttempts: 5 })]);
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await service.failJob(1, 'final failure');
 
@@ -157,7 +153,7 @@ describe('JobsService.failJob — retry-with-backoff / dead-letter transition', 
     const db = createMockDb();
     // attempts=10 would be 30*2^9 ≈ 4.3h uncapped — must clamp to 1h.
     db.query.mockResolvedValue([fakeJob({ attempts: 10, maxAttempts: 20 })]);
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
     const before = Date.now();
 
     await service.failJob(1, 'still failing');
@@ -174,7 +170,7 @@ describe('JobsService.retry / dismiss — tenant scoping', () => {
   it('retry only succeeds when the job belongs to the given shopId', async () => {
     const db = createMockDb();
     db.execute.mockResolvedValue({ affectedRows: 0 });
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await expect(service.retry(999, 1)).rejects.toThrow(NotFoundException);
     expect(db.execute).toHaveBeenCalledWith(
@@ -186,7 +182,7 @@ describe('JobsService.retry / dismiss — tenant scoping', () => {
   it('dismiss only succeeds when the job belongs to the given shopId', async () => {
     const db = createMockDb();
     db.execute.mockResolvedValue({ affectedRows: 0 });
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await expect(service.dismiss(999, 1)).rejects.toThrow(NotFoundException);
   });
@@ -194,7 +190,7 @@ describe('JobsService.retry / dismiss — tenant scoping', () => {
   it('retry succeeds and resets attempts when scoped correctly', async () => {
     const db = createMockDb();
     db.execute.mockResolvedValue({ affectedRows: 1 });
-    const service = new JobsService(db, createMockPrisma());
+    const service = new JobsService(db);
 
     await expect(service.retry(10, 1)).resolves.toBeUndefined();
   });
