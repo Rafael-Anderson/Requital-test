@@ -698,6 +698,17 @@ describe('Bio Links (e2e)', () => {
         .expect(404);
     });
 
+    // Explicit timeout (same fix jobs.e2e-spec.ts already documents for its
+    // own concurrency test): setupOrderableShop's own sequential HTTP calls
+    // plus 8 real concurrent requests against the shared CI MySQL container
+    // can exceed Jest's 5s default under a loaded/shared runner — seen for
+    // real (2026-08-11, first post-merge run on main): Jest's timeout fired
+    // mid-test, afterAll then closed the app/DB pool while requests were
+    // still in flight, surfacing as "Pool is closed" / ECONNRESET rather
+    // than a clean timeout message. Not an application bug — resolveClickTarget's
+    // own UPDATE clickCount = clickCount + 1 is already atomic at the SQL
+    // level regardless of concurrency; this only gives the test itself more
+    // real-world headroom.
     it('increments clickCount atomically under concurrent requests — no lost updates', async () => {
       const shop = await setupOrderableShop('bio-click-race');
       const link = await request(app.getHttpServer())
@@ -721,6 +732,6 @@ describe('Bio Links (e2e)', () => {
 
       const row = await getBiolink(linkId);
       expect(row.clickCount).toBe(CONCURRENCY);
-    });
+    }, 20000);
   });
 });
