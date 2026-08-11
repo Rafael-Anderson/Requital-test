@@ -1,6 +1,6 @@
 import { BranchRolesService } from './branch-roles.service';
 import { basePermissionsFor } from '../common/permissions';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 
 // This is the actual security guarantee behind the whole branch-roles
@@ -11,10 +11,13 @@ import type { TenantContext } from '../common/tenant-context';
 // that could pass for the wrong reason (e.g. a role that happens to be
 // admin-only reachable everywhere it's tested).
 
-function createMockPrisma() {
-  return {
-    useroutletrole: { findUnique: jest.fn() },
-  } as unknown as PrismaService;
+// resolveEffectivePermissions joins useroutletrole -> branchrole and
+// selects just br.permissions — mockResolvedValue([{ permissions }]) for
+// an override, or ([]) for "no override row".
+function createMockDb() {
+  return { query: jest.fn() } as unknown as DatabaseService & {
+    query: jest.Mock;
+  };
 }
 
 function ctxFor(
@@ -58,9 +61,9 @@ describe('basePermissionsFor', () => {
 
 describe('BranchRolesService.resolveEffectivePermissions', () => {
   it("returns null (no override) when no useroutletrole row exists — callers must fall through to today's logic unchanged", async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue(null);
-    const service = new BranchRolesService(prisma);
+    const db = createMockDb();
+    db.query.mockResolvedValue([]);
+    const service = new BranchRolesService(db);
 
     const result = await service.resolveEffectivePermissions(
       ctxFor('admin'),
@@ -68,18 +71,15 @@ describe('BranchRolesService.resolveEffectivePermissions', () => {
     );
 
     expect(result).toBeNull();
-    expect(prisma.useroutletrole.findUnique).toHaveBeenCalledWith({
-      where: { userId_outletId: { userId: 1, outletId: 5 } },
-      include: { branchrole: { select: { permissions: true } } },
-    });
+    expect(db.query).toHaveBeenCalledWith(expect.any(String), [1, 5]);
   });
 
   it('a strict-subset override on an admin correctly restricts them to exactly that subset', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: { permissions: ['orders.view', 'dashboard.view'] },
-    });
-    const service = new BranchRolesService(prisma);
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      { permissions: ['orders.view', 'dashboard.view'] },
+    ]);
+    const service = new BranchRolesService(db);
 
     const result = await service.resolveEffectivePermissions(
       ctxFor('admin'),
@@ -97,13 +97,13 @@ describe('BranchRolesService.resolveEffectivePermissions', () => {
   // never exceed the user's shop-wide ceiling, no matter what the
   // assignment itself says.
   it('an attempted upgrade beyond the base role is silently stripped by the intersection, never granted', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: {
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      {
         permissions: ['orders.view', 'orders.manage', 'payments.generate_link'],
       },
-    });
-    const service = new BranchRolesService(prisma);
+    ]);
+    const service = new BranchRolesService(db);
 
     const result = await service.resolveEffectivePermissions(
       ctxFor('viewer'),
@@ -119,17 +119,17 @@ describe('BranchRolesService.resolveEffectivePermissions', () => {
   });
 
   it('an order_manager base role strips products/ingredients permissions from an over-generous branchrole', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: {
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      {
         permissions: [
           'products.view',
           'products.manage_stock',
           'orders.manage',
         ],
       },
-    });
-    const service = new BranchRolesService(prisma);
+    ]);
+    const service = new BranchRolesService(db);
 
     const result = await service.resolveEffectivePermissions(
       ctxFor('order_manager'),
@@ -140,13 +140,13 @@ describe('BranchRolesService.resolveEffectivePermissions', () => {
   });
 
   it('gracefully ignores garbage/unknown values in a corrupted permissions JSON column', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: {
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      {
         permissions: ['orders.view', 'not.a.real.permission', 123, null],
       },
-    });
-    const service = new BranchRolesService(prisma);
+    ]);
+    const service = new BranchRolesService(db);
 
     const result = await service.resolveEffectivePermissions(
       ctxFor('admin'),
@@ -159,9 +159,9 @@ describe('BranchRolesService.resolveEffectivePermissions', () => {
 
 describe('BranchRolesService.assertPermission', () => {
   it('passes silently when there is no override at all', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue(null);
-    const service = new BranchRolesService(prisma);
+    const db = createMockDb();
+    db.query.mockResolvedValue([]);
+    const service = new BranchRolesService(db);
 
     await expect(
       service.assertPermission(ctxFor('viewer'), 5, 'orders.manage'),
@@ -169,11 +169,9 @@ describe('BranchRolesService.assertPermission', () => {
   });
 
   it('passes silently when the effective (post-intersection) set includes the required permission', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: { permissions: ['orders.view'] },
-    });
-    const service = new BranchRolesService(prisma);
+    const db = createMockDb();
+    db.query.mockResolvedValue([{ permissions: ['orders.view'] }]);
+    const service = new BranchRolesService(db);
 
     await expect(
       service.assertPermission(ctxFor('admin'), 5, 'orders.view'),
@@ -181,11 +179,9 @@ describe('BranchRolesService.assertPermission', () => {
   });
 
   it('throws ForbiddenException when the effective set exists but lacks the required permission', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: { permissions: ['orders.view'] },
-    });
-    const service = new BranchRolesService(prisma);
+    const db = createMockDb();
+    db.query.mockResolvedValue([{ permissions: ['orders.view'] }]);
+    const service = new BranchRolesService(db);
 
     await expect(
       service.assertPermission(ctxFor('admin'), 5, 'orders.manage'),
@@ -193,11 +189,9 @@ describe('BranchRolesService.assertPermission', () => {
   });
 
   it('throws even when the branchrole nominally grants the permission but the base role does not (upgrade attempt)', async () => {
-    const prisma = createMockPrisma();
-    (prisma.useroutletrole.findUnique as jest.Mock).mockResolvedValue({
-      branchrole: { permissions: ['orders.manage'] },
-    });
-    const service = new BranchRolesService(prisma);
+    const db = createMockDb();
+    db.query.mockResolvedValue([{ permissions: ['orders.manage'] }]);
+    const service = new BranchRolesService(db);
 
     await expect(
       service.assertPermission(ctxFor('viewer'), 5, 'orders.manage'),

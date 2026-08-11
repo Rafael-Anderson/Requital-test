@@ -5,8 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import { buildSetClause } from '../database/update.util';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { CustomerRow } from '../db/types';
 import type { CustomerContext } from '../customer-auth/customer-context';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
@@ -34,22 +37,34 @@ export interface CustomerAddress {
   longitude?: number;
 }
 
-const orderInclude = {
+interface OrderWithItems extends RowDataPacket {
+  id: number;
+  status: string;
+  orderType: string | null;
+  paymentStatus: string;
+  paymentMethod: string | null;
+  outletName: string;
+  deliveryDate: Date | null;
+  deliveryTimeSlot: string | null;
+  customerAddress: string;
+  deliveryFee: string | null;
+  taxAmount: string | null;
+  discountAmount: string | null;
+  total: string;
+  trackingToken: string | null;
+  createdAt: Date;
   orderitem: {
-    select: {
-      productName: true,
-      variantLabel: true,
-      quantity: true,
-      priceAtPurchase: true,
-    },
-  },
-  outlet: { select: { name: true } },
-} satisfies Prisma.orderInclude;
+    productName: string;
+    variantLabel: string | null;
+    quantity: number;
+    priceAtPurchase: string;
+  }[];
+}
 
 @Injectable()
 export class CustomerAccountService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly invoicesService: InvoicesService,
     private readonly auditLogService: AuditLogService,
   ) {}
@@ -63,24 +78,27 @@ export class CustomerAccountService {
   }
 
   async getProfile(ctx: CustomerContext) {
-    const customer = await this.prisma.customer.findUniqueOrThrow({
-      where: { id: ctx.customerId },
-    });
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
     return this.toProfileResponse(customer);
   }
 
   async updateProfile(ctx: CustomerContext, dto: UpdateProfileDto) {
     try {
-      const customer = await this.prisma.customer.update({
-        where: { id: ctx.customerId },
-        data: { name: dto.name, email: dto.email, phone: dto.phone },
+      const set = buildSetClause({
+        name: dto.name,
+        email: dto.email,
+        phone: dto.phone,
       });
+      if (set) {
+        await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
+          ...set.params,
+          ctx.customerId,
+        ]);
+      }
+      const customer = await this.findCustomerOrThrow(ctx.customerId);
       return this.toProfileResponse(customer);
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (isDuplicateKeyError(error)) {
         throw new ConflictException(
           'Another account with this phone number already exists',
         );
@@ -97,31 +115,25 @@ export class CustomerAccountService {
   // couldn't already see via the other account endpoints, just bundles it
   // into one downloadable file.
   async exportData(ctx: CustomerContext) {
-    const customer = await this.prisma.customer.findUniqueOrThrow({
-      where: { id: ctx.customerId },
-    });
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
     if (
       customer.lastDataExportAt &&
-      Date.now() - customer.lastDataExportAt.getTime() < EXPORT_RATE_LIMIT_MS
+      Date.now() - (customer.lastDataExportAt as Date).getTime() < EXPORT_RATE_LIMIT_MS
     ) {
       const retryAt = new Date(
-        customer.lastDataExportAt.getTime() + EXPORT_RATE_LIMIT_MS,
+        (customer.lastDataExportAt as Date).getTime() + EXPORT_RATE_LIMIT_MS,
       );
       throw new BadRequestException(
         `You can request your data once every 24 hours — try again after ${retryAt.toISOString()}`,
       );
     }
 
-    const orders = await this.prisma.order.findMany({
-      where: { customerId: ctx.customerId, shopId: ctx.shopId },
-      include: orderInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    const orders = await this.fetchOrdersWithItems(ctx.customerId, ctx.shopId);
 
-    await this.prisma.customer.update({
-      where: { id: ctx.customerId },
-      data: { lastDataExportAt: new Date() },
-    });
+    await this.db.execute(`UPDATE customer SET lastDataExportAt = ? WHERE id = ?`, [
+      new Date(),
+      ctx.customerId,
+    ]);
     await this.logCustomerAction(
       ctx.shopId,
       ctx.customerId,
@@ -144,24 +156,21 @@ export class CustomerAccountService {
   // shape as password-reset) with its own 'account_deletion' purpose,
   // rather than a new table.
   async requestDeletion(ctx: CustomerContext) {
-    const customer = await this.prisma.customer.findUniqueOrThrow({
-      where: { id: ctx.customerId },
-    });
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
     if (this.isAnonymised(customer)) {
       return { alreadyDeleted: true as const };
     }
 
     const raw = generateOpaqueToken();
-    await this.prisma.customerauthtoken.create({
-      data: {
-        customerId: ctx.customerId,
-        purpose: 'account_deletion',
-        tokenHash: hashToken(raw),
-        expiresAt: new Date(
-          Date.now() + DELETION_TOKEN_LIFETIME_MINUTES * 60 * 1000,
-        ),
-      },
-    });
+    await this.db.execute(
+      `INSERT INTO customerauthtoken (customerId, purpose, tokenHash, expiresAt) VALUES (?, ?, ?, ?)`,
+      [
+        ctx.customerId,
+        'account_deletion',
+        hashToken(raw),
+        new Date(Date.now() + DELETION_TOKEN_LIFETIME_MINUTES * 60 * 1000),
+      ],
+    );
     return {
       alreadyDeleted: false as const,
       confirmationToken: raw,
@@ -177,21 +186,21 @@ export class CustomerAccountService {
   // customer stops authenticating immediately (see anonymiseCustomer's own
   // comment), but this check keeps the service safe to call directly too.
   async confirmDeletion(ctx: CustomerContext, token: string) {
-    const customer = await this.prisma.customer.findUniqueOrThrow({
-      where: { id: ctx.customerId },
-    });
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
     if (this.isAnonymised(customer)) {
       return { success: true as const };
     }
 
-    const stored = await this.prisma.customerauthtoken.findUnique({
-      where: { tokenHash: hashToken(token) },
-    });
+    const storedRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM customerauthtoken WHERE tokenHash = ?`,
+      [hashToken(token)],
+    );
+    const stored = storedRows[0];
     if (
       !stored ||
       stored.purpose !== 'account_deletion' ||
       stored.customerId !== ctx.customerId ||
-      stored.expiresAt < new Date()
+      (stored.expiresAt as Date) < new Date()
     ) {
       throw new BadRequestException(
         'This confirmation link is invalid or has expired',
@@ -200,11 +209,11 @@ export class CustomerAccountService {
     // Single-use CAS, same pattern as CustomerAuthService.resetPassword —
     // a second delivery of the same token (double-click, retry) can't
     // re-run the anonymisation twice.
-    const claimed = await this.prisma.customerauthtoken.updateMany({
-      where: { id: stored.id, usedAt: null },
-      data: { usedAt: new Date() },
-    });
-    if (claimed.count === 0) {
+    const claimed = await this.db.execute(
+      `UPDATE customerauthtoken SET usedAt = ? WHERE id = ? AND usedAt IS NULL`,
+      [new Date(), stored.id],
+    );
+    if (claimed.affectedRows === 0) {
       throw new BadRequestException(
         'This confirmation link has already been used',
       );
@@ -224,10 +233,10 @@ export class CustomerAccountService {
   // scope for this deletion, per the task), only the customer's own PII is
   // scrubbed.
   private async anonymiseCustomer(shopId: number, customerId: number) {
-    await this.prisma.customer.update({
-      where: { id: customerId },
-      data: {
-        name: 'Deleted User',
+    await this.db.execute(
+      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, passwordHash = NULL WHERE id = ?`,
+      [
+        'Deleted User',
         // Derived from the customer's own (globally unique) id, not a
         // fresh randomUUID() per call — this is what makes anonymisation
         // itself idempotent. confirmDeletion already guards against a
@@ -240,36 +249,27 @@ export class CustomerAccountService {
         // double the audit-log entries. A stable, id-derived value means
         // every call — racing or retried — converges on the exact same
         // result.
-        email: `deleted-${customerId}@deleted.requital`,
+        `deleted-${customerId}@deleted.requital`,
         // `phone` is NOT NULL and part of the @@unique([shopId, phone])
         // index — a literal null isn't possible without widening the
         // column (a real schema change, out of proportion for this task).
         // customerId is a global autoincrement id (not scoped per shop),
         // so this is guaranteed unique across every shop's [shopId, phone]
         // rows too, same reasoning as the email above.
-        phone: `DELETED-${customerId}`,
-        birthday: null,
-        addresses: Prisma.JsonNull,
-        // Clearing this is what actually revokes every outstanding access
-        // token immediately, not just future logins — CustomerAuthGuard
-        // re-reads the customer row on every request and already rejects
-        // any bearer token when passwordHash is null ("Account no longer
-        // exists"), so this alone covers "invalidate all active JWT
-        // sessions" for access tokens; the refresh-token revocation below
-        // covers the other half (silent background refresh).
-        passwordHash: null,
-      },
-    });
-    await this.prisma.customerrefreshtoken.updateMany({
-      where: { customerId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+        `DELETED-${customerId}`,
+        customerId,
+      ],
+    );
+    await this.db.execute(
+      `UPDATE customerrefreshtoken SET revokedAt = ? WHERE customerId = ? AND revokedAt IS NULL`,
+      [new Date(), customerId],
+    );
     // Any outstanding password-reset/deletion-confirmation tokens for this
     // customer are dead the moment the account is gone.
-    await this.prisma.customerauthtoken.updateMany({
-      where: { customerId, usedAt: null },
-      data: { usedAt: new Date() },
-    });
+    await this.db.execute(
+      `UPDATE customerauthtoken SET usedAt = ? WHERE customerId = ? AND usedAt IS NULL`,
+      [new Date(), customerId],
+    );
     await this.logCustomerAction(shopId, customerId, 'CUSTOMER_DATA_DELETION');
   }
 
@@ -285,13 +285,14 @@ export class CustomerAccountService {
     customerId: number,
     action: 'CUSTOMER_DATA_EXPORT' | 'CUSTOMER_DATA_DELETION',
   ) {
-    const admin = await this.prisma.user.findFirst({
-      where: { shopId, role: 'admin' },
-      orderBy: { id: 'asc' },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM user WHERE shopId = ? AND role = 'admin' ORDER BY id ASC LIMIT 1`,
+      [shopId],
+    );
+    const admin = rows[0];
     if (!admin) return;
     await this.auditLogService.log(
-      { shopId, actorUserId: admin.id },
+      { shopId, actorUserId: admin.id as number },
       {
         action,
         entityType: 'customer',
@@ -305,11 +306,7 @@ export class CustomerAccountService {
   // this shop they've ordered from, same as the admin CRM's per-customer
   // order list (CustomersService.findOne).
   async listOrders(ctx: CustomerContext) {
-    const orders = await this.prisma.order.findMany({
-      where: { customerId: ctx.customerId, shopId: ctx.shopId },
-      include: orderInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+    const orders = await this.fetchOrdersWithItems(ctx.customerId, ctx.shopId);
     // One query for every order's invoice existence rather than N+1 —
     // "Download Invoice" only ever renders for the storefront-facing
     // INVOICE type, never PACKING_SLIP (that stays admin/courier-only).
@@ -326,10 +323,8 @@ export class CustomerAccountService {
   // doesn't match, and returns the same 404 either way, never leaking which
   // case it was.
   async getOrder(ctx: CustomerContext, id: number) {
-    const order = await this.prisma.order.findFirst({
-      where: { id, customerId: ctx.customerId, shopId: ctx.shopId },
-      include: orderInclude,
-    });
+    const orders = await this.fetchOrdersWithItems(ctx.customerId, ctx.shopId, id);
+    const order = orders[0];
     if (!order) {
       throw new NotFoundException(`Order ${id} not found`);
     }
@@ -337,19 +332,70 @@ export class CustomerAccountService {
     return this.toOrderSummary(order, invoicedOrderIds.has(order.id));
   }
 
+  // Two queries (orders+outlet, then their items keyed by orderId) rather
+  // than one multi-JOIN — orderitem is a one-to-many relation per order, so
+  // joining it directly would fan out the order/outlet columns across
+  // however many line items each order has.
+  private async fetchOrdersWithItems(
+    customerId: number,
+    shopId: number,
+    onlyOrderId?: number,
+  ): Promise<OrderWithItems[]> {
+    const conditions = ['o.customerId = ?', 'o.shopId = ?'];
+    const params: number[] = [customerId, shopId];
+    if (onlyOrderId !== undefined) {
+      conditions.push('o.id = ?');
+      params.push(onlyOrderId);
+    }
+    const orders = await this.db.query<RowDataPacket[]>(
+      `SELECT o.*, otl.name AS outletName
+       FROM \`order\` o
+       JOIN outlet otl ON otl.id = o.outletId
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY o.createdAt DESC`,
+      params,
+    );
+    if (orders.length === 0) return [];
+
+    const orderIds = orders.map((o) => o.id as number);
+    const items = await this.db.query<RowDataPacket[]>(
+      `SELECT orderId, productName, variantLabel, quantity, priceAtPurchase
+       FROM orderitem WHERE orderId IN (${orderIds.map(() => '?').join(', ')})`,
+      orderIds,
+    );
+    const itemsByOrder = new Map<number, OrderWithItems['orderitem']>();
+    for (const item of items) {
+      const list = itemsByOrder.get(item.orderId as number) ?? [];
+      list.push({
+        productName: item.productName as string,
+        variantLabel: item.variantLabel as string | null,
+        quantity: item.quantity as number,
+        priceAtPurchase: item.priceAtPurchase as string,
+      });
+      itemsByOrder.set(item.orderId as number, list);
+    }
+
+    return orders.map(
+      (o) =>
+        ({
+          ...o,
+          outletName: o.outletName as string,
+          orderitem: itemsByOrder.get(o.id as number) ?? [],
+        }) as OrderWithItems,
+    );
+  }
+
   private async invoicedOrderIds(orderIds: number[]): Promise<Set<number>> {
     if (orderIds.length === 0) return new Set();
-    const rows = await this.prisma.invoice.findMany({
-      where: { orderId: { in: orderIds }, type: 'INVOICE' },
-      select: { orderId: true },
-    });
-    return new Set(rows.map((r) => r.orderId));
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT orderId FROM invoice WHERE orderId IN (${orderIds.map(() => '?').join(', ')}) AND type = 'INVOICE'`,
+      orderIds,
+    );
+    return new Set(rows.map((r) => r.orderId as number));
   }
 
   async listAddresses(ctx: CustomerContext): Promise<CustomerAddress[]> {
-    const customer = await this.prisma.customer.findUniqueOrThrow({
-      where: { id: ctx.customerId },
-    });
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
     return (customer.addresses as CustomerAddress[] | null) ?? [];
   }
 
@@ -359,12 +405,10 @@ export class CustomerAccountService {
   ): Promise<CustomerAddress> {
     const addresses = await this.listAddresses(ctx);
     const address: CustomerAddress = { id: randomUUID().slice(0, 8), ...dto };
-    await this.prisma.customer.update({
-      where: { id: ctx.customerId },
-      data: {
-        addresses: [...addresses, address] as unknown as Prisma.InputJsonValue,
-      },
-    });
+    await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [
+      JSON.stringify([...addresses, address]),
+      ctx.customerId,
+    ]);
     return address;
   }
 
@@ -380,10 +424,10 @@ export class CustomerAccountService {
     }
     const updated: CustomerAddress = { ...addresses[index], ...dto };
     addresses[index] = updated;
-    await this.prisma.customer.update({
-      where: { id: ctx.customerId },
-      data: { addresses: addresses as unknown as Prisma.InputJsonValue },
-    });
+    await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [
+      JSON.stringify(addresses),
+      ctx.customerId,
+    ]);
     return updated;
   }
 
@@ -393,11 +437,24 @@ export class CustomerAccountService {
       throw new NotFoundException(`Address ${addressId} not found`);
     }
     const next = addresses.filter((a) => a.id !== addressId);
-    await this.prisma.customer.update({
-      where: { id: ctx.customerId },
-      data: { addresses: next as unknown as Prisma.InputJsonValue },
-    });
+    await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [
+      JSON.stringify(next),
+      ctx.customerId,
+    ]);
     return { id: addressId, deleted: true };
+  }
+
+  private async findCustomerOrThrow(
+    customerId: number,
+  ): Promise<CustomerRow & RowDataPacket> {
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ?`,
+      [customerId],
+    );
+    if (!rows[0]) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+    return rows[0];
   }
 
   private toProfileResponse(customer: {
@@ -432,17 +489,14 @@ export class CustomerAccountService {
     };
   }
 
-  private toOrderSummary(
-    order: Prisma.orderGetPayload<{ include: typeof orderInclude }>,
-    hasInvoice: boolean,
-  ) {
+  private toOrderSummary(order: OrderWithItems, hasInvoice: boolean) {
     return {
       id: order.id,
       status: order.status,
       orderType: order.orderType,
       paymentStatus: order.paymentStatus,
       paymentMethod: order.paymentMethod,
-      outletName: order.outlet.name,
+      outletName: order.outletName,
       deliveryDate: order.deliveryDate,
       deliveryTimeSlot: order.deliveryTimeSlot,
       customerAddress: order.customerAddress,

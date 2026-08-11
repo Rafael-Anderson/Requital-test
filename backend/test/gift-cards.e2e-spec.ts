@@ -5,7 +5,10 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ShopRow, GiftcardRow } from '../src/db/types';
+import { trimDecimal } from '../src/database/decimal.util';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -56,7 +59,7 @@ function body<T>(res: Response): T {
 
 describe('Gift Cards (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -72,13 +75,40 @@ describe('Gift Cards (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getShopBySubdomain(subdomain: string): Promise<ShopRow> {
+    const rows = await db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ?`,
+      [subdomain],
+    );
+    if (!rows[0]) throw new Error('shop not found');
+    return rows[0];
+  }
+
+  async function getGiftCardsByShopAndOrder(
+    shopId: number,
+    purchaseOrderId: number,
+  ): Promise<GiftcardRow[]> {
+    return db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT * FROM giftcard WHERE shopId = ? AND purchaseOrderId = ?`,
+      [shopId, purchaseOrderId],
+    );
+  }
+
+  async function getGiftCardById(id: number): Promise<GiftcardRow> {
+    const rows = await db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT * FROM giftcard WHERE id = ?`,
+      [id],
+    );
+    if (!rows[0]) throw new Error('giftcard not found');
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string) {
     const shopSlug = `${slugPrefix}-${runId}`;
@@ -191,15 +221,11 @@ describe('Gift Cards (e2e)', () => {
         .expect(201);
       const orderId = body<OrderCreateResponse>(res).order.id;
 
-      const shop = await prisma.shop.findUniqueOrThrow({
-        where: { subdomain: shopSlug },
-      });
-      const cards = await prisma.giftcard.findMany({
-        where: { shopId: shop.id, purchaseOrderId: orderId },
-      });
+      const shop = await getShopBySubdomain(shopSlug);
+      const cards = await getGiftCardsByShopAndOrder(shop.id, orderId);
       expect(cards).toHaveLength(1);
-      expect(cards[0].initialValue.toString()).toBe('200');
-      expect(cards[0].remainingBalance.toString()).toBe('200');
+      expect(trimDecimal(cards[0].initialValue)).toBe('200');
+      expect(trimDecimal(cards[0].remainingBalance)).toBe('200');
       expect(cards[0].status).toBe('active');
       expect(cards[0].purchasedByCustomerId).not.toBeNull();
     });
@@ -223,17 +249,13 @@ describe('Gift Cards (e2e)', () => {
         .expect(201);
       const orderId = body<OrderCreateResponse>(res).order.id;
 
-      const shop = await prisma.shop.findUniqueOrThrow({
-        where: { subdomain: shopSlug },
-      });
-      const cards = await prisma.giftcard.findMany({
-        where: { shopId: shop.id, purchaseOrderId: orderId },
-      });
+      const shop = await getShopBySubdomain(shopSlug);
+      const cards = await getGiftCardsByShopAndOrder(shop.id, orderId);
       expect(cards).toHaveLength(3);
       expect(new Set(cards.map((c) => c.code)).size).toBe(3); // all distinct
-      expect(cards.every((c) => c.remainingBalance.toString() === '100')).toBe(
-        true,
-      );
+      expect(
+        cards.every((c) => trimDecimal(c.remainingBalance) === '100'),
+      ).toBe(true);
     });
 
     it('rejects an amount that is neither a configured denomination nor within a custom range', async () => {
@@ -280,17 +302,17 @@ describe('Gift Cards (e2e)', () => {
       // touching outletingredientstock — so the shadow's stock row itself
       // should never have been created, same "no row at all" assertion as
       // the pre-Phase-A direct outletstock check.
-      const shadow = await prisma.ingredient.findFirst({
-        where: { shadowProductId: giftCardProductId },
-        select: { id: true },
-      });
-      expect(shadow).not.toBeNull();
-      const stockRow = await prisma.outletingredientstock.findUnique({
-        where: {
-          outletId_ingredientId: { outletId, ingredientId: shadow!.id },
-        },
-      });
-      expect(stockRow).toBeNull();
+      const shadowRows = await db.query<RowDataPacket[]>(
+        `SELECT id FROM ingredient WHERE shadowProductId = ?`,
+        [giftCardProductId],
+      );
+      const shadow = shadowRows[0];
+      expect(shadow).not.toBeUndefined();
+      const stockRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+        [outletId, shadow.id],
+      );
+      expect(stockRows[0]).toBeUndefined();
     });
   });
 
@@ -351,9 +373,7 @@ describe('Gift Cards (e2e)', () => {
       expect(Number(order.giftCardAmount)).toBe(Number(order.total));
       expect(order.paymentStatus).toBe('paid');
 
-      const updatedCard = await prisma.giftcard.findUniqueOrThrow({
-        where: { id: card.id },
-      });
+      const updatedCard = await getGiftCardById(card.id);
       expect(Number(updatedCard.remainingBalance)).toBe(
         500 - Number(order.total),
       );
@@ -379,9 +399,7 @@ describe('Gift Cards (e2e)', () => {
       // Not fully covered — still needs the selected payment method for the rest.
       expect(order.paymentStatus).not.toBe('paid');
 
-      const updatedCard = await prisma.giftcard.findUniqueOrThrow({
-        where: { id: card.id },
-      });
+      const updatedCard = await getGiftCardById(card.id);
       expect(Number(updatedCard.remainingBalance)).toBe(0);
       expect(updatedCard.status).toBe('redeemed');
     });
@@ -434,9 +452,7 @@ describe('Gift Cards (e2e)', () => {
       // balance must never go negative.
       expect(statuses[0]).toBe(201);
 
-      const updatedCard = await prisma.giftcard.findUniqueOrThrow({
-        where: { id: card.id },
-      });
+      const updatedCard = await getGiftCardById(card.id);
       expect(Number(updatedCard.remainingBalance)).toBeGreaterThanOrEqual(0);
       expect(Number(updatedCard.remainingBalance)).toBeLessThanOrEqual(80);
     });
@@ -464,14 +480,13 @@ describe('Gift Cards (e2e)', () => {
         .expect(201);
       const order = body<OrderCreateResponse>(orderRes).order;
 
-      const balanceAfterPurchaseRedemption =
-        await prisma.giftcard.findUniqueOrThrow({ where: { id: card.id } });
+      const balanceAfterPurchaseRedemption = await getGiftCardById(card.id);
 
       // Deliver then return it in full.
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'delivered' },
-      });
+      await db.execute(`UPDATE \`order\` SET status = ? WHERE id = ?`, [
+        'delivered',
+        order.id,
+      ]);
       const orderDetail = await request(app.getHttpServer())
         .get(`/orders/${order.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -494,9 +509,7 @@ describe('Gift Cards (e2e)', () => {
         Number(orderReturn.refundAmount),
       );
 
-      const finalCard = await prisma.giftcard.findUniqueOrThrow({
-        where: { id: card.id },
-      });
+      const finalCard = await getGiftCardById(card.id);
       expect(Number(finalCard.remainingBalance)).toBe(
         Number(balanceAfterPurchaseRedemption.remainingBalance) +
           Number(orderReturn.giftCardRefundAmount),
@@ -527,10 +540,10 @@ describe('Gift Cards (e2e)', () => {
         .expect(201);
       const order = body<OrderCreateResponse>(orderRes).order;
 
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: 'delivered' },
-      });
+      await db.execute(`UPDATE \`order\` SET status = ? WHERE id = ?`, [
+        'delivered',
+        order.id,
+      ]);
       const orderDetail = await request(app.getHttpServer())
         .get(`/orders/${order.id}`)
         .set('Authorization', `Bearer ${adminToken}`)

@@ -5,7 +5,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -44,7 +43,6 @@ function body<T>(res: Response): T {
 
 describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -60,11 +58,9 @@ describe('Inventory movements: transfer + reason-coded adjustment (e2e)', () => 
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 

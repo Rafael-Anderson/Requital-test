@@ -5,7 +5,8 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -56,7 +57,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('SEO (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -72,11 +73,10 @@ describe('SEO (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -224,10 +224,11 @@ describe('SEO (e2e)', () => {
         metaDescription: 'Same-day flower delivery.',
       });
 
-      const rowCount = await prisma.shopseosettings.count({
-        where: { shop: { subdomain: shop.slug } },
-      });
-      expect(rowCount).toBe(1);
+      const rowCountRows = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM shopseosettings s JOIN shop ON shop.id = s.shopId WHERE shop.subdomain = ?`,
+        [shop.slug],
+      );
+      expect(Number(rowCountRows[0].c)).toBe(1);
     });
 
     it('ogImage falls back to Theme banner, then Theme logo, when unset', async () => {

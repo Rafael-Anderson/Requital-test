@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { OutletingredientstockRow, OrderRow as OrderDbRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -78,7 +80,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -94,13 +96,33 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getIngredientStock(
+    outletId: number,
+    ingredientId: number,
+  ): Promise<OutletingredientstockRow> {
+    const rows = await db.query<(OutletingredientstockRow & RowDataPacket)[]>(
+      `SELECT * FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+      [outletId, ingredientId],
+    );
+    if (!rows[0]) throw new Error('outletingredientstock not found');
+    return rows[0];
+  }
+
+  async function getOrder(orderId: number): Promise<OrderDbRow> {
+    const rows = await db.query<(OrderDbRow & RowDataPacket)[]>(
+      `SELECT * FROM \`order\` WHERE id = ?`,
+      [orderId],
+    );
+    if (!rows[0]) throw new Error('order not found');
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string) {
     const slug = `${slugPrefix}-${runId}`;
@@ -375,9 +397,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .expect(201);
       expect(body<OrderCreateResponse>(created).order.status).toBe('pending');
 
-      const roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      const roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(1000 - 16);
     });
   });
@@ -403,14 +423,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .expect(201);
       const orderId = body<OrderCreateResponse>(created).order.id;
 
-      const roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      const roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100 - 12); // 6 * 2
 
-      const order = await prisma.order.findUniqueOrThrow({
-        where: { id: orderId },
-      });
+      const order = await getOrder(orderId);
       expect(order.ingredientsConsumedAt).not.toBeNull();
 
       const movements = await request(app.getHttpServer())
@@ -481,14 +497,10 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .expect(201);
       const orderId = body<OrderCreateResponse>(created).order.id;
 
-      const roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      const roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100); // untouched
 
-      const order = await prisma.order.findUniqueOrThrow({
-        where: { id: orderId },
-      });
+      const order = await getOrder(orderId);
       expect(order.ingredientsConsumedAt).toBeNull();
     });
 
@@ -508,9 +520,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .expect(201);
       const orderId = body<OrderRow>(created).id;
 
-      let roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      let roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100); // not yet consumed while pending
 
       await request(app.getHttpServer())
@@ -519,9 +529,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .send({ status: 'confirmed' })
         .expect(200);
 
-      roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100 - 6);
 
       // Cancelling a confirmed (ingredients-consumed) order restocks them.
@@ -530,9 +538,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
 
-      roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100);
     });
 
@@ -552,9 +558,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .expect(201);
       const orderId = body<OrderCreateResponse>(created).order.id;
 
-      let roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      let roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100 - 6);
 
       await request(app.getHttpServer())
@@ -562,9 +566,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
 
-      roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(100);
     });
   });
@@ -634,9 +636,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       const successCount = [a.status, b.status].filter((s) => s === 201).length;
       expect(successCount).toBe(1);
 
-      const roseStock = await prisma.outletingredientstock.findUniqueOrThrow({
-        where: { outletId_ingredientId: { outletId, ingredientId: rose } },
-      });
+      const roseStock = await getIngredientStock(outletId, rose);
       expect(roseStock.stockQuantity).toBe(0);
     });
   });

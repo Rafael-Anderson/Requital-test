@@ -1,5 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { createLogger } from '../common/logging/logger';
 
@@ -12,7 +12,7 @@ const logger = createLogger('HealthController');
 // signal and nothing about the deployment itself.
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // Liveness: zero dependencies (no DB, no external call) — answers only
   // "is the process up and able to handle a request at all," which is what
@@ -32,7 +32,7 @@ export class HealthController {
   @Get('ready')
   async readiness() {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.db.query('SELECT 1');
       return { status: 'ok' };
     } catch (err) {
       logger.error('readiness check failed — database unreachable', {

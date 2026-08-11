@@ -6,7 +6,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { PaymenttransactionRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AdminAuthResponse {
@@ -39,7 +41,7 @@ jest.setTimeout(30000);
 
 describe('Tabby & Tamara payment webhooks (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   const TABBY_SECRET = 'tabby-webhook-secret-for-tests';
@@ -61,13 +63,12 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
     delete process.env.TABBY_WEBHOOK_SECRET;
     delete process.env.TAMARA_NOTIFICATION_TOKEN;
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -275,9 +276,10 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
         .send(payload)
         .expect(201);
 
-      const rows = await prisma.paymenttransaction.findMany({
-        where: { orderId: order.id, gateway: 'tabby' },
-      });
+      const rows = await db.query<(PaymenttransactionRow & RowDataPacket)[]>(
+        'SELECT * FROM paymenttransaction WHERE orderId = ? AND gateway = ?',
+        [order.id, 'tabby'],
+      );
       expect(rows).toHaveLength(1);
 
       const detail = await request(app.getHttpServer())

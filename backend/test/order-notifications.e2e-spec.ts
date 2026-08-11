@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { JobRow } from '../src/db/types';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
 import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
@@ -87,16 +89,23 @@ function settle() {
 // claim+process it here. Returns the final row, or null if nothing was
 // ever enqueued for this key within the deadline.
 let jobsWorker: JobsWorkerService;
-let prisma: PrismaService;
+let db: DatabaseService;
+async function findJobByKey(idempotencyKey: string): Promise<JobRow | null> {
+  const rows = await db.query<(JobRow & RowDataPacket)[]>(
+    'SELECT * FROM job WHERE idempotencyKey = ?',
+    [idempotencyKey],
+  );
+  return rows[0] ?? null;
+}
 async function processOwnEmailJob(idempotencyKey: string) {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
-    const job = await prisma.job.findUnique({ where: { idempotencyKey } });
+    const job = await findJobByKey(idempotencyKey);
     if (job) {
       if (job.status === 'pending') {
         await jobsWorker.processJobById(job.id);
       }
-      return prisma.job.findUnique({ where: { idempotencyKey } });
+      return findJobByKey(idempotencyKey);
     }
     await new Promise((resolve) => setTimeout(resolve, 30));
   }
@@ -125,7 +134,7 @@ describe('Order status customer email notifications (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
     jobsWorker = app.get(JobsWorkerService);
   });
 
@@ -138,7 +147,6 @@ describe('Order status customer email notifications (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -229,7 +237,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.to).toBe(email);
     expect(payload.subject).toContain(`Order confirmation — #${order.id}`);
   });
@@ -244,9 +252,7 @@ describe('Order status customer email notifications (e2e)', () => {
       customerEmail: email,
     });
 
-    const job = await prisma.job.findUnique({
-      where: { idempotencyKey: `order:${order.id}:confirmed-email` },
-    });
+    const job = await findJobByKey(`order:${order.id}:confirmed-email`);
     expect(job).toBeNull();
   });
 
@@ -262,9 +268,7 @@ describe('Order status customer email notifications (e2e)', () => {
     // would also catch unrelated jobs (this shop's own verification email,
     // anything still draining from an earlier test) that have nothing to
     // do with this order.
-    const job = await prisma.job.findUnique({
-      where: { idempotencyKey: `order:${order.id}:confirmed-email` },
-    });
+    const job = await findJobByKey(`order:${order.id}:confirmed-email`);
     expect(job).toBeNull();
   });
 
@@ -288,9 +292,7 @@ describe('Order status customer email notifications (e2e)', () => {
         .expect(200);
       await settle();
       // No email at any of these intermediate transitions.
-      const midJob = await prisma.job.findUnique({
-        where: { idempotencyKey: jobKey },
-      });
+      const midJob = await findJobByKey(jobKey);
       expect(midJob).toBeNull();
     }
 
@@ -303,7 +305,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const job = await processOwnEmailJob(jobKey);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('out for delivery');
     expect(payload.subject).not.toContain('ready for pickup');
   });
@@ -340,7 +342,7 @@ describe('Order status customer email notifications (e2e)', () => {
     );
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('ready for pickup');
   });
 
@@ -424,7 +426,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const job = await processOwnEmailJob(`order:${orderId}:confirmed-email`);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('Order confirmation');
   });
 
@@ -623,7 +625,7 @@ describe('Order status customer email notifications (e2e)', () => {
       );
       expect(job).not.toBeNull();
       expect(job!.status).toBe('completed');
-      const payload = job!.payload as unknown as WhatsAppAlertJobPayload;
+      const payload = job!.payload as WhatsAppAlertJobPayload;
       expect(payload.to).toBe('+971507654321');
       expect(payload.body).toContain(`New order #${order.id}`);
       expect(payload.orderId).toBe(order.id);
@@ -646,7 +648,7 @@ describe('Order status customer email notifications (e2e)', () => {
         `order:${order.id}:merchant-whatsapp-alert`,
       );
       expect(job).not.toBeNull();
-      const payload = job!.payload as unknown as WhatsAppAlertJobPayload;
+      const payload = job!.payload as WhatsAppAlertJobPayload;
       expect(payload.to).toBe('+971507654399');
     });
 
@@ -657,11 +659,9 @@ describe('Order status customer email notifications (e2e)', () => {
         false,
       );
       const order = await createOrder(adminToken, outletId, productId, {});
-      const job = await prisma.job.findUnique({
-        where: {
-          idempotencyKey: `order:${order.id}:merchant-whatsapp-alert`,
-        },
-      });
+      const job = await findJobByKey(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
       expect(job).toBeNull();
       // Order creation itself is unaffected.
       expect(order.id).toBeTruthy();
@@ -680,11 +680,9 @@ describe('Order status customer email notifications (e2e)', () => {
         .expect(200);
 
       const order = await createOrder(adminToken, outletId, productId, {});
-      const job = await prisma.job.findUnique({
-        where: {
-          idempotencyKey: `order:${order.id}:merchant-whatsapp-alert`,
-        },
-      });
+      const job = await findJobByKey(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
       expect(job).toBeNull();
     });
 
@@ -872,7 +870,6 @@ describe('Order status customer email notifications (e2e)', () => {
 // behavior the describe blocks above already cover one layer down.
 describe('Order creation is non-blocking against a hanging or throwing notification provider (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   const runId = Date.now();
 
   async function buildApp(
@@ -902,7 +899,6 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
   }
 
   afterEach(async () => {
-    await prisma?.$disconnect();
     await app?.close();
   });
 
@@ -966,7 +962,6 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
     // Never resolves — if the call site still awaited this, the request
     // itself would time out; asserting a fast response is the whole point.
     app = await buildApp(() => new Promise<void>(() => {}));
-    prisma = app.get(PrismaService);
     const { slug, outletId, productId } =
       await setupPublishedShop('notify-hang');
 
@@ -992,7 +987,6 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
 
   it('a notification provider that throws does not fail order creation', async () => {
     app = await buildApp(() => Promise.reject(new Error('provider down')));
-    prisma = app.get(PrismaService);
     const { slug, outletId, productId } =
       await setupPublishedShop('notify-throw');
 

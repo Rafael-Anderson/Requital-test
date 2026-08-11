@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { OrderRow as DbOrderRow } from '../src/db/types';
 
 interface AuthResponse {
   accessToken: string;
@@ -37,7 +39,7 @@ function body<T>(res: Response): T {
 
 describe('Order internal notes (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -53,11 +55,10 @@ describe('Order internal notes (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -198,10 +199,11 @@ describe('Order internal notes (e2e)', () => {
       .get(`/orders/${order.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    const raw = await prisma.order.findUnique({
-      where: { id: order.id },
-      select: { trackingToken: true },
-    });
+    const rawRows = await db.query<(DbOrderRow & RowDataPacket)[]>(
+      'SELECT trackingToken FROM `order` WHERE id = ?',
+      [order.id],
+    );
+    const raw = rawRows[0];
 
     const publicRes = await request(app.getHttpServer())
       .get(`/public/orders/lookup?token=${raw!.trackingToken}`)

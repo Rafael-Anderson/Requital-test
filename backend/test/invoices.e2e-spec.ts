@@ -5,7 +5,8 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AdminAuthResponse {
@@ -46,7 +47,7 @@ jest.setTimeout(30000);
 
 describe('Invoices & packing slips (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -62,11 +63,10 @@ describe('Invoices & packing slips (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -176,9 +176,10 @@ describe('Invoices & packing slips (e2e)', () => {
         .expect(201);
       expect(body<InvoiceRow>(second).id).toBe(invoice.id); // same row, not a duplicate
 
-      const rows = await prisma.invoice.findMany({
-        where: { orderId: order.id, type: 'INVOICE' },
-      });
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM invoice WHERE orderId = ? AND type = ?`,
+        [order.id, 'INVOICE'],
+      );
       expect(rows).toHaveLength(1);
     });
 
@@ -230,9 +231,10 @@ describe('Invoices & packing slips (e2e)', () => {
       expect(b.status).toBe(201);
       expect(body<InvoiceRow>(a).id).toBe(body<InvoiceRow>(b).id);
 
-      const rows = await prisma.invoice.findMany({
-        where: { orderId: order.id, type: 'INVOICE' },
-      });
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM invoice WHERE orderId = ? AND type = ?`,
+        [order.id, 'INVOICE'],
+      );
       expect(rows).toHaveLength(1);
     });
   });
@@ -331,10 +333,11 @@ describe('Invoices & packing slips (e2e)', () => {
         .send({ orderId: orderB.id, type: 'INVOICE' })
         .expect(404);
 
-      const leaked = await prisma.invoice.findFirst({
-        where: { orderId: orderB.id },
-      });
-      expect(leaked).toBeNull();
+      const leaked = await db.query<RowDataPacket[]>(
+        `SELECT * FROM invoice WHERE orderId = ?`,
+        [orderB.id],
+      );
+      expect(leaked[0]).toBeUndefined();
     });
 
     it('an unauthenticated request is rejected', async () => {

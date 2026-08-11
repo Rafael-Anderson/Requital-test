@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment --
  * Standard jest-mock-typing false positive (see CLAUDE.md's backend lint-gap
  * note): `expect(mockedService.method).toHaveBeenCalledWith(...)` trips
- * unbound-method, and reading fields off a loosely-typed mocked Prisma
+ * unbound-method, and reading fields off a loosely-typed mocked DB row
  * result trips no-unsafe-assignment. Already the majority of this repo's
  * pre-existing lint debt across every other *.spec.ts file; disabled here
  * rather than adding more instances of the same accepted, documented
@@ -9,7 +9,7 @@
 import * as bcrypt from 'bcryptjs';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { DatabaseService } from '../database/database.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { AuditLogService } from '../audit-log/audit-log.service';
 import type { JobsService } from '../jobs/jobs.service';
@@ -25,7 +25,9 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-function fakeUser(overrides: Record<string, unknown> = {}) {
+// Flat row shape as it comes back from the user JOIN query (shopName/
+// outletJoinId/outletName merged in) — see AuthService.rowToUser.
+function fakeUserRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
     shopId: 1,
@@ -39,30 +41,27 @@ function fakeUser(overrides: Record<string, unknown> = {}) {
     failedLoginAttempts: 0,
     lastFailedLoginAt: null,
     createdAt: new Date(),
-    shop: { name: 'Test Shop' },
+    shopName: 'Test Shop',
+    outletJoinId: null,
+    outletName: null,
     ...overrides,
   };
 }
 
-function createMockPrisma(overrides: Record<string, unknown> = {}) {
+function createMockDb() {
+  const conn = { query: jest.fn().mockResolvedValue([{}]) };
   return {
-    user: {
-      findUnique: jest.fn(),
-      findUniqueOrThrow: jest.fn(),
-      update: jest.fn().mockResolvedValue(fakeUser()),
-    },
-    authtoken: {
-      create: jest.fn().mockResolvedValue({}),
-      findUnique: jest.fn(),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-    },
-    refreshtoken: {
-      create: jest.fn().mockResolvedValue({}),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-    },
-    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
-    ...overrides,
-  } as unknown as PrismaService;
+    query: jest.fn().mockResolvedValue([]),
+    execute: jest.fn().mockResolvedValue({ affectedRows: 1, insertId: 1 }),
+    transaction: jest.fn((fn: (c: typeof conn) => Promise<unknown>) => fn(conn)),
+    pool: {},
+    _conn: conn,
+  } as unknown as DatabaseService & {
+    query: jest.Mock;
+    execute: jest.Mock;
+    transaction: jest.Mock;
+    _conn: { query: jest.Mock };
+  };
 }
 
 function createMockJwt() {
@@ -85,36 +84,36 @@ function createMockJobsService() {
 
 describe('AuthService.login — progressive lockout', () => {
   it('a correct password succeeds and resets the failed-attempt counter', async () => {
-    const user = fakeUser({
+    const user = fakeUserRow({
       failedLoginAttempts: 2,
       lastFailedLoginAt: new Date(),
     });
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
     mockCompare.mockResolvedValue(true);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: user.id },
-      data: { failedLoginAttempts: 0, lastFailedLoginAt: null },
-    });
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringContaining('failedLoginAttempts = 0'),
+      [user.id],
+    );
   });
 
   it('a wrong password below the lockout threshold still runs bcrypt and records the failure', async () => {
-    const user = fakeUser({ failedLoginAttempts: 1, lastFailedLoginAt: null });
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    const user = fakeUserRow({ failedLoginAttempts: 1, lastFailedLoginAt: null });
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
     mockCompare.mockResolvedValue(false);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -124,23 +123,20 @@ describe('AuthService.login — progressive lockout', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(bcrypt.compare).toHaveBeenCalled();
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: { increment: 1 },
-        lastFailedLoginAt: expect.any(Date),
-      },
-    });
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringContaining('failedLoginAttempts = failedLoginAttempts + 1'),
+      [expect.any(Date), user.id],
+    );
   });
 
   it('a nonexistent email is rejected without ever touching bcrypt or the user table', async () => {
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+    const db = createMockDb();
+    db.query.mockResolvedValue([]);
     const compareSpy = mockCompare;
     compareSpy.mockClear();
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -150,23 +146,23 @@ describe('AuthService.login — progressive lockout', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(compareSpy).not.toHaveBeenCalled();
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('is rejected during the cooldown window WITHOUT running bcrypt, even with the correct password', async () => {
     // At the lockout threshold (5), the first cooldown window is 2s.
-    const user = fakeUser({
+    const user = fakeUserRow({
       failedLoginAttempts: 5,
       lastFailedLoginAt: new Date(Date.now() - 500), // 0.5s ago, well inside the 2s window
     });
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
     const compareSpy = mockCompare;
     compareSpy.mockClear();
     compareSpy.mockResolvedValue(true); // even the "right" password
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -180,20 +176,20 @@ describe('AuthService.login — progressive lockout', () => {
     // that depends on secret material — and it must not ratchet the
     // cooldown further, since the caller never actually got a real attempt.
     expect(compareSpy).not.toHaveBeenCalled();
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('succeeds once the cooldown window has actually elapsed', async () => {
-    const user = fakeUser({
+    const user = fakeUserRow({
       failedLoginAttempts: 5,
       lastFailedLoginAt: new Date(Date.now() - 3000), // 3s ago, past the 2s window
     });
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
     mockCompare.mockResolvedValue(true);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -207,16 +203,16 @@ describe('AuthService.login — progressive lockout', () => {
     // A huge attempt count would compute an astronomically large delay
     // without a cap; confirm it's clamped to the documented 60s ceiling by
     // checking a wait of 61s (safely past any capped window) is enough.
-    const user = fakeUser({
+    const user = fakeUserRow({
       failedLoginAttempts: 50,
       lastFailedLoginAt: new Date(Date.now() - 61_000),
     });
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
     mockCompare.mockResolvedValue(true);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -229,37 +225,39 @@ describe('AuthService.login — progressive lockout', () => {
 
 describe('AuthService — token supersession and invalidation', () => {
   it('forgotPassword invalidates any still-outstanding reset token before issuing a new one', async () => {
-    const user = fakeUser();
-    const prisma = createMockPrisma();
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(user);
+    const user = fakeUserRow();
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
     );
     await service.forgotPassword({ email: user.email });
 
-    expect(prisma.authtoken.updateMany).toHaveBeenCalledWith({
-      where: { userId: user.id, purpose: 'password_reset', usedAt: null },
-      data: { usedAt: expect.any(Date) },
-    });
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringContaining("purpose = ? AND usedAt IS NULL"),
+      [expect.any(Date), user.id, 'password_reset'],
+    );
     // The invalidation must happen before the new token is created, not after.
-    const invalidateOrder = (prisma.authtoken.updateMany as jest.Mock).mock
-      .invocationCallOrder[0];
-    const createOrder = (prisma.authtoken.create as jest.Mock).mock
-      .invocationCallOrder[0];
-    expect(invalidateOrder).toBeLessThan(createOrder);
+    const invalidateIndex = db.execute.mock.calls.findIndex(([sql]: [string]) =>
+      sql.includes('UPDATE authtoken SET usedAt'),
+    );
+    const createIndex = db.execute.mock.calls.findIndex(([sql]: [string]) =>
+      sql.includes('INSERT INTO authtoken'),
+    );
+    expect(invalidateIndex).toBeLessThan(createIndex);
   });
 
   it('resendVerification invalidates any still-outstanding verification token before issuing a new one', async () => {
-    const user = fakeUser({ emailVerified: false });
-    const prisma = createMockPrisma();
-    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(user);
+    const user = fakeUserRow({ emailVerified: false });
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -271,21 +269,21 @@ describe('AuthService — token supersession and invalidation', () => {
       outletId: null,
     });
 
-    expect(prisma.authtoken.updateMany).toHaveBeenCalledWith({
-      where: { userId: user.id, purpose: 'email_verification', usedAt: null },
-      data: { usedAt: expect.any(Date) },
-    });
+    expect(db.execute).toHaveBeenCalledWith(
+      expect.stringContaining("purpose = ? AND usedAt IS NULL"),
+      [expect.any(Date), user.id, 'email_verification'],
+    );
   });
 
   it('changePassword invalidates any outstanding password-reset token as part of the same transaction', async () => {
-    const user = fakeUser();
-    const prisma = createMockPrisma();
-    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue(user);
+    const user = fakeUserRow();
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
     mockCompare.mockResolvedValue(true);
     mockHash.mockResolvedValue('new-hash');
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -295,25 +293,28 @@ describe('AuthService — token supersession and invalidation', () => {
       { currentPassword: 'old', newPassword: 'newpassword123' },
     );
 
-    expect(prisma.authtoken.updateMany).toHaveBeenCalledWith({
-      where: { userId: user.id, purpose: 'password_reset', usedAt: null },
-      data: { usedAt: expect.any(Date) },
-    });
+    expect(db.transaction).toHaveBeenCalled();
+    expect(db._conn.query).toHaveBeenCalledWith(
+      expect.stringContaining("purpose = 'password_reset'"),
+      [expect.any(Date), user.id],
+    );
   });
 
   it('resetPassword rejects a token that has already been used', async () => {
-    const prisma = createMockPrisma();
-    (prisma.authtoken.findUnique as jest.Mock).mockResolvedValue({
-      id: 1,
-      userId: 1,
-      purpose: 'password_reset',
-      expiresAt: new Date(Date.now() + 60_000),
-      usedAt: null,
-    });
-    (prisma.authtoken.updateMany as jest.Mock).mockResolvedValue({ count: 0 }); // CAS lost — already used
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      {
+        id: 1,
+        userId: 1,
+        purpose: 'password_reset',
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+      },
+    ]);
+    db.execute.mockResolvedValue({ affectedRows: 0 }); // CAS lost — already used
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -327,17 +328,19 @@ describe('AuthService — token supersession and invalidation', () => {
   });
 
   it('resetPassword rejects an expired token', async () => {
-    const prisma = createMockPrisma();
-    (prisma.authtoken.findUnique as jest.Mock).mockResolvedValue({
-      id: 1,
-      userId: 1,
-      purpose: 'password_reset',
-      expiresAt: new Date(Date.now() - 1000),
-      usedAt: null,
-    });
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      {
+        id: 1,
+        userId: 1,
+        purpose: 'password_reset',
+        expiresAt: new Date(Date.now() - 1000),
+        usedAt: null,
+      },
+    ]);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -351,17 +354,19 @@ describe('AuthService — token supersession and invalidation', () => {
   });
 
   it('resetPassword rejects a token of the wrong purpose (e.g. an email-verification token)', async () => {
-    const prisma = createMockPrisma();
-    (prisma.authtoken.findUnique as jest.Mock).mockResolvedValue({
-      id: 1,
-      userId: 1,
-      purpose: 'email_verification',
-      expiresAt: new Date(Date.now() + 60_000),
-      usedAt: null,
-    });
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      {
+        id: 1,
+        userId: 1,
+        purpose: 'email_verification',
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+      },
+    ]);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
@@ -375,11 +380,11 @@ describe('AuthService — token supersession and invalidation', () => {
   });
 
   it('verifyEmail rejects a garbage/unknown token', async () => {
-    const prisma = createMockPrisma();
-    (prisma.authtoken.findUnique as jest.Mock).mockResolvedValue(null);
+    const db = createMockDb();
+    db.query.mockResolvedValue([]);
 
     const service = new AuthService(
-      prisma,
+      db,
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),

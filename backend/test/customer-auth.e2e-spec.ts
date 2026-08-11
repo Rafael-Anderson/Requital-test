@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ShopRow, CustomerRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AdminAuthResponse {
@@ -54,7 +56,7 @@ function body<T>(res: Response): T {
 
 describe('Customer storefront accounts (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -70,13 +72,42 @@ describe('Customer storefront accounts (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getShopBySubdomain(subdomain: string): Promise<ShopRow> {
+    const rows = await db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ?`,
+      [subdomain],
+    );
+    if (!rows[0]) throw new Error('shop not found');
+    return rows[0];
+  }
+
+  async function getCustomerByShopAndPhone(
+    shopId: number,
+    phone: string,
+  ): Promise<CustomerRow> {
+    const rows = await db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
+      [shopId, phone],
+    );
+    if (!rows[0]) throw new Error('customer not found');
+    return rows[0];
+  }
+
+  async function getCustomerById(id: number): Promise<CustomerRow> {
+    const rows = await db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ?`,
+      [id],
+    );
+    if (!rows[0]) throw new Error('customer not found');
+    return rows[0];
+  }
 
   // Publishes the shop, enables pickup, and seeds one purchasable product —
   // the minimum a guest checkout (and therefore a findOrCreateForOrder
@@ -188,16 +219,12 @@ describe('Customer storefront accounts (e2e)', () => {
     await guestCheckout(shopSlug, outletId, productId, {
       customerPhone: phone,
     });
-    const guestCountBefore = await prisma.customer.count({
-      where: {
-        shopId: (
-          await prisma.shop.findUniqueOrThrow({
-            where: { subdomain: shopSlug },
-          })
-        ).id,
-      },
-    });
-    expect(guestCountBefore).toBe(1);
+    const shopBefore = await getShopBySubdomain(shopSlug);
+    const countBeforeRows = await db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM customer WHERE shopId = ?`,
+      [shopBefore.id],
+    );
+    expect(Number(countBeforeRows[0].c)).toBe(1);
 
     const res = await register(shopSlug, {
       phone,
@@ -205,16 +232,13 @@ describe('Customer storefront accounts (e2e)', () => {
     }).expect(201);
     const registered = body<CustomerAuthResponse>(res);
 
-    const shop = await prisma.shop.findUniqueOrThrow({
-      where: { subdomain: shopSlug },
-    });
-    const countAfter = await prisma.customer.count({
-      where: { shopId: shop.id },
-    });
-    expect(countAfter).toBe(1); // still one row — claimed, not duplicated
-    const dbCustomer = await prisma.customer.findUniqueOrThrow({
-      where: { shopId_phone: { shopId: shop.id, phone } },
-    });
+    const shop = await getShopBySubdomain(shopSlug);
+    const countAfterRows = await db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM customer WHERE shopId = ?`,
+      [shop.id],
+    );
+    expect(Number(countAfterRows[0].c)).toBe(1); // still one row — claimed, not duplicated
+    const dbCustomer = await getCustomerByShopAndPhone(shop.id, phone);
     expect(dbCustomer.id).toBe(registered.customer.id);
     expect(dbCustomer.passwordHash).not.toBeNull();
 
@@ -544,16 +568,14 @@ describe('Customer storefront accounts (e2e)', () => {
 
       // Simulate the cooldown having elapsed — same backdating technique
       // auth-lifecycle.e2e-spec.ts uses for the merchant-lockout equivalent.
-      await prisma.customer.updateMany({
-        where: { id: customerId },
-        data: { lastFailedLoginAt: new Date(Date.now() - 3000) },
-      });
+      await db.execute(
+        `UPDATE customer SET lastFailedLoginAt = ? WHERE id = ?`,
+        [new Date(Date.now() - 3000), customerId],
+      );
 
       await customerLogin(shopSlug, phone, 'password123').expect(201);
 
-      const customer = await prisma.customer.findUniqueOrThrow({
-        where: { id: customerId },
-      });
+      const customer = await getCustomerById(customerId);
       expect(customer.failedLoginAttempts).toBe(0);
     });
 
@@ -583,10 +605,10 @@ describe('Customer storefront accounts (e2e)', () => {
       // Even after 8 straight failures, the account is not permanently
       // locked — backdating past the capped 60s ceiling always lets the
       // correct password back in.
-      await prisma.customer.updateMany({
-        where: { email },
-        data: { lastFailedLoginAt: new Date(Date.now() - 61_000) },
-      });
+      await db.execute(
+        `UPDATE customer SET lastFailedLoginAt = ? WHERE email = ?`,
+        [new Date(Date.now() - 61_000), email],
+      );
       await customerLogin(shopSlug, email, 'password123').expect(201);
     });
 

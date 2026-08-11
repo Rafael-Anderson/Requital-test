@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import Fuse from 'fuse.js';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 
 const PAGE_SIZE = 20;
 const CACHE_TTL_MS = 60_000;
@@ -61,7 +62,7 @@ export class StorefrontSearchService {
   // runs under real multi-instance load.
   private cache = new Map<string, CacheEntry>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   async search(
     shopSlug: string,
@@ -78,20 +79,22 @@ export class StorefrontSearchService {
       };
     }
 
-    const shop = await this.prisma.shop.findUnique({
-      where: { subdomain: shopSlug },
-      select: { id: true, published: true },
-    });
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, published FROM shop WHERE subdomain = ?`,
+      [shopSlug],
+    );
+    const shop = shopRows[0];
     if (!shop || !shop.published) {
       throw new NotFoundException('Shop not found');
     }
+    const shopId = shop.id as number;
 
-    const cacheKey = `${shop.id}:${trimmed.toLowerCase()}`;
+    const cacheKey = `${shopId}:${trimmed.toLowerCase()}`;
     let entry = this.cache.get(cacheKey);
     if (!entry || entry.expiresAt < Date.now()) {
       entry = {
         expiresAt: Date.now() + CACHE_TTL_MS,
-        response: await this.computeResults(shop.id, trimmed),
+        response: await this.computeResults(shopId, trimmed),
       };
       this.cache.set(cacheKey, entry);
     }
@@ -123,38 +126,37 @@ export class StorefrontSearchService {
   }
 
   private async loadDocs(shopId: number): Promise<SearchDoc[]> {
-    const products = await this.prisma.product.findMany({
-      where: { shopId, status: 'Available' },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        thumbnail: true,
-        price: true,
-        sku: true,
-        description: true,
-        shortSummary: true,
-        producttag: { select: { tag: { select: { name: true } } } },
-        // Only MANUAL-template membership is indexed here — a
-        // RULE_BASED template's membership is computed live (see
-        // template's own schema comment) and isn't worth re-evaluating
-        // per product on every search; a shop's manually curated
-        // templates (the common case) are still fully searchable.
-        templateproduct: {
-          select: { template: { select: { title: true } } },
-        },
-      },
-    });
-    return products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      thumbnail: p.thumbnail,
-      price: p.price.toString(),
-      sku: p.sku,
-      description: [p.shortSummary, p.description].filter(Boolean).join(' '),
-      tags: p.producttag.map((t) => t.tag.name).join(' '),
-      templates: p.templateproduct.map((c) => c.template.title).join(' '),
+    // Only MANUAL-template membership is indexed here (templates joined via
+    // templateproduct) — a RULE_BASED template's membership is computed
+    // live (see template's own schema comment) and isn't worth
+    // re-evaluating per product on every search; a shop's manually curated
+    // templates (the common case) are still fully searchable. Correlated
+    // subqueries (rather than a single multi-JOIN) avoid the row fan-out
+    // that joining two separate one-to-many relations at once would cause.
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT p.id, p.name, p.slug, p.thumbnail, p.price, p.sku, p.description, p.shortSummary,
+              (SELECT GROUP_CONCAT(t.name SEPARATOR ' ')
+                 FROM producttag pt JOIN tag t ON t.id = pt.tagId
+                WHERE pt.productId = p.id) AS tags,
+              (SELECT GROUP_CONCAT(tpl.title SEPARATOR ' ')
+                 FROM templateproduct tp JOIN template tpl ON tpl.id = tp.templateId
+                WHERE tp.productId = p.id) AS templates
+       FROM product p
+       WHERE p.shopId = ? AND p.status = ?`,
+      [shopId, 'Available'],
+    );
+    return rows.map((p) => ({
+      id: p.id as number,
+      name: p.name as string,
+      slug: p.slug as string,
+      thumbnail: p.thumbnail as string,
+      price: p.price as string,
+      sku: p.sku as string,
+      description: [p.shortSummary as string | null, p.description as string | null]
+        .filter(Boolean)
+        .join(' '),
+      tags: (p.tags as string | null) ?? '',
+      templates: (p.templates as string | null) ?? '',
     }));
   }
 

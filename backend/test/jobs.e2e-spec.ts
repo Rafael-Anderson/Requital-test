@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { JobRow, ShopRow } from '../src/db/types';
 import { JobsService } from '../src/jobs/jobs.service';
 import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 import { SchedulerService } from '../src/jobs/scheduler.service';
@@ -38,7 +40,7 @@ jest.setTimeout(20000);
 
 describe('Job queue (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   let jobsService: JobsService;
   let jobsWorker: JobsWorkerService;
   let schedulerService: SchedulerService;
@@ -61,7 +63,7 @@ describe('Job queue (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
     jobsService = app.get(JobsService);
     jobsWorker = app.get(JobsWorkerService);
     schedulerService = app.get(SchedulerService);
@@ -78,9 +80,12 @@ describe('Job queue (e2e)', () => {
           subdomain: shopSlug,
         })
         .expect(201);
-      const shop = await prisma.shop.findUniqueOrThrow({
-        where: { subdomain: shopSlug },
-      });
+      const shopRows = await db.query<(ShopRow & RowDataPacket)[]>(
+        `SELECT * FROM shop WHERE subdomain = ?`,
+        [shopSlug],
+      );
+      const shop = shopRows[0];
+      if (!shop) throw new Error('shop not found');
       return {
         shopId: shop.id,
         token: body<AuthResponse>(signup).accessToken,
@@ -95,9 +100,17 @@ describe('Job queue (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getJob(id: number): Promise<JobRow> {
+    const rows = await db.query<(JobRow & RowDataPacket)[]>(
+      `SELECT * FROM job WHERE id = ?`,
+      [id],
+    );
+    if (!rows[0]) throw new Error('job not found');
+    return rows[0];
+  }
 
   describe('enqueue — idempotency and shopId validation', () => {
     it('rejects a job with no/invalid shopId at enqueue time, before any row is written', async () => {
@@ -110,10 +123,11 @@ describe('Job queue (e2e)', () => {
         ),
       ).rejects.toThrow();
 
-      const count = await prisma.job.count({
-        where: { idempotencyKey: `adversarial-no-shop-${runId}` },
-      });
-      expect(count).toBe(0);
+      const countRows = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM job WHERE idempotencyKey = ?`,
+        [`adversarial-no-shop-${runId}`],
+      );
+      expect(Number(countRows[0].c)).toBe(0);
     });
 
     it('enqueuing the same idempotencyKey twice runs the underlying job exactly once', async () => {
@@ -134,9 +148,10 @@ describe('Job queue (e2e)', () => {
       );
 
       expect(second.id).toBe(first.id);
-      const rows = await prisma.job.findMany({
-        where: { idempotencyKey: key },
-      });
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM job WHERE idempotencyKey = ?`,
+        [key],
+      );
       expect(rows).toHaveLength(1);
     });
   });
@@ -156,35 +171,33 @@ describe('Job queue (e2e)', () => {
       let claimed = await jobsService.claimJobById(enqueued.id);
       expect(claimed?.attempts).toBe(1);
       await jobsService.failJob(enqueued.id, 'transient failure 1');
-      let row = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      let row = await getJob(enqueued.id);
       expect(row.status).toBe('pending');
       expect(row.attempts).toBe(1);
 
       // Attempt 2: claim (forcing nextAttemptAt so the backoff delay doesn't
       // block the claim in this test), fail again.
-      await prisma.job.update({
-        where: { id: enqueued.id },
-        data: { nextAttemptAt: new Date() },
-      });
+      await db.execute(`UPDATE job SET nextAttemptAt = ? WHERE id = ?`, [
+        new Date(),
+        enqueued.id,
+      ]);
       claimed = await jobsService.claimJobById(enqueued.id);
       expect(claimed?.attempts).toBe(2);
       await jobsService.failJob(enqueued.id, 'transient failure 2');
-      row = await prisma.job.findUniqueOrThrow({ where: { id: enqueued.id } });
+      row = await getJob(enqueued.id);
       expect(row.status).toBe('pending');
       expect(row.attempts).toBe(2);
 
       // Attempt 3: succeeds.
-      await prisma.job.update({
-        where: { id: enqueued.id },
-        data: { nextAttemptAt: new Date() },
-      });
+      await db.execute(`UPDATE job SET nextAttemptAt = ? WHERE id = ?`, [
+        new Date(),
+        enqueued.id,
+      ]);
       claimed = await jobsService.claimJobById(enqueued.id);
       expect(claimed?.attempts).toBe(3);
       await jobsService.completeJob(enqueued.id);
 
-      row = await prisma.job.findUniqueOrThrow({ where: { id: enqueued.id } });
+      row = await getJob(enqueued.id);
       expect(row.status).toBe('completed');
       expect(row.attempts).toBe(3);
       expect(row.completedAt).not.toBeNull();
@@ -202,9 +215,7 @@ describe('Job queue (e2e)', () => {
       const before = Date.now();
       await jobsService.failJob(enqueued.id, 'boom');
 
-      const row = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      const row = await getJob(enqueued.id);
       expect(row.nextAttemptAt.getTime()).toBeGreaterThan(before);
     });
   });
@@ -222,29 +233,28 @@ describe('Job queue (e2e)', () => {
 
       await jobsService.claimJobById(enqueued.id);
       await jobsService.failJob(enqueued.id, 'failure 1');
-      await prisma.job.update({
-        where: { id: enqueued.id },
-        data: { nextAttemptAt: new Date() },
-      });
+      await db.execute(`UPDATE job SET nextAttemptAt = ? WHERE id = ?`, [
+        new Date(),
+        enqueued.id,
+      ]);
       await jobsService.claimJobById(enqueued.id);
       await jobsService.failJob(enqueued.id, 'failure 2 — final');
 
-      const row = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      const row = await getJob(enqueued.id);
       expect(row.status).toBe('dead_letter');
       expect(row.lastError).toBe('failure 2 — final');
 
       // Never retried further: it no longer matches the pending-jobs claim
       // query at all, regardless of nextAttemptAt.
-      await prisma.job.update({
-        where: { id: enqueued.id },
-        data: { nextAttemptAt: new Date(0) },
-      });
-      const stillPending = await prisma.job.findFirst({
-        where: { id: enqueued.id, status: 'pending' },
-      });
-      expect(stillPending).toBeNull();
+      await db.execute(`UPDATE job SET nextAttemptAt = ? WHERE id = ?`, [
+        new Date(0),
+        enqueued.id,
+      ]);
+      const stillPendingRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM job WHERE id = ? AND status = ?`,
+        [enqueued.id, 'pending'],
+      );
+      expect(stillPendingRows[0]).toBeUndefined();
     });
   });
 
@@ -272,9 +282,7 @@ describe('Job queue (e2e)', () => {
       const processed = await jobsWorker.processJobById(enqueued.id);
       expect(processed).toBe(true);
 
-      const row = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      const row = await getJob(enqueued.id);
       expect(row.status).toBe('completed');
     });
   });
@@ -292,9 +300,7 @@ describe('Job queue (e2e)', () => {
       await jobsService.claimJobById(enqueued.id);
       await jobsService.failJob(enqueued.id, 'dead on first failure');
 
-      const dlqRow = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      const dlqRow = await getJob(enqueued.id);
       expect(dlqRow.status).toBe('dead_letter');
 
       // Shop A sees it.
@@ -328,9 +334,7 @@ describe('Job queue (e2e)', () => {
         .expect(404);
 
       // The row is untouched by shop B's rejected attempts.
-      const stillDlq = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      const stillDlq = await getJob(enqueued.id);
       expect(stillDlq.status).toBe('dead_letter');
 
       // Shop A can retry its own job.
@@ -338,9 +342,7 @@ describe('Job queue (e2e)', () => {
         .post(`/jobs/${enqueued.id}/retry`)
         .set('Authorization', `Bearer ${shopAAdminToken}`)
         .expect(201);
-      const retried = await prisma.job.findUniqueOrThrow({
-        where: { id: enqueued.id },
-      });
+      const retried = await getJob(enqueued.id);
       expect(retried.status).toBe('pending');
       expect(retried.attempts).toBe(0);
     });

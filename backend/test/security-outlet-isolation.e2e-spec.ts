@@ -5,7 +5,8 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { getShadowStockQuantity } from './helpers/stock';
 
 // supertest types response bodies as `any` — these describe just enough of
@@ -70,7 +71,7 @@ function body<T>(res: Response): T {
 // the request to the caller's own outlet, or rejects it outright.
 describe('Outlet & shop isolation (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
 
   // Unique per run so repeated executions don't collide on shop.subdomain's
   // unique constraint.
@@ -108,7 +109,7 @@ describe('Outlet & shop isolation (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
 
     // --- Shop A: two outlets, an admin, and a branch user pinned to outletA1 ---
     const signupA = await request(app.getHttpServer())
@@ -288,7 +289,6 @@ describe('Outlet & shop isolation (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -318,9 +318,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .expect(404);
 
       // Confirm directly against the DB that A2's order was left untouched.
-      const untouched = await prisma.order.findUniqueOrThrow({
-        where: { id: orderA2Id },
-      });
+      const untouchedRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM \`order\` WHERE id = ?`,
+        [orderA2Id],
+      );
+      const untouched = untouchedRows[0];
       expect(untouched.status).toBe('pending');
     });
 
@@ -349,7 +351,7 @@ describe('Outlet & shop isolation (e2e)', () => {
     });
 
     it('PATCH /products/stock/bulk-adjust with outletId=A2 never touches A2 stock', async () => {
-      const before = await getShadowStockQuantity(prisma, outletA2Id, {
+      const before = await getShadowStockQuantity(db, outletA2Id, {
         productId: productAId,
       });
 
@@ -362,7 +364,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         })
         .expect(200);
 
-      const after = await getShadowStockQuantity(prisma, outletA2Id, {
+      const after = await getShadowStockQuantity(db, outletA2Id, {
         productId: productAId,
       });
       // A2's stock must be exactly what it was before this request — the
@@ -487,10 +489,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .send({ name: 'Renamed by branch user' })
         .expect(403);
 
-      const untouched = await prisma.deliveryzone.findUniqueOrThrow({
-        where: { id: outletA2ZoneId },
-      });
-      expect(untouched.name).toBe('Sharjah');
+      const untouchedRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM deliveryzone WHERE id = ?`,
+        [outletA2ZoneId],
+      );
+      expect(untouchedRows[0].name).toBe('Sharjah');
     });
 
     it('DELETE /outlets/:A1/delivery-zones/:zoneA1 is rejected for a branch user, zone still exists', async () => {
@@ -499,11 +502,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .set('Authorization', `Bearer ${shopABranchToken}`)
         .expect(403);
 
-      await expect(
-        prisma.deliveryzone.findUniqueOrThrow({
-          where: { id: outletA1ZoneId },
-        }),
-      ).resolves.toBeTruthy();
+      const stillExistsRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM deliveryzone WHERE id = ?`,
+        [outletA1ZoneId],
+      );
+      expect(stillExistsRows[0]).toBeTruthy();
     });
   });
 
@@ -537,7 +540,7 @@ describe('Outlet & shop isolation (e2e)', () => {
     });
 
     it("PATCH /products/stock/bulk-adjust with no outletId adjusts A1's stock", async () => {
-      const beforeQty = await getShadowStockQuantity(prisma, outletA1Id, {
+      const beforeQty = await getShadowStockQuantity(db, outletA1Id, {
         productId: productAId,
       });
 
@@ -547,7 +550,7 @@ describe('Outlet & shop isolation (e2e)', () => {
         .send({ adjustments: [{ productId: productAId, delta: 7 }] })
         .expect(200);
 
-      const after = await getShadowStockQuantity(prisma, outletA1Id, {
+      const after = await getShadowStockQuantity(db, outletA1Id, {
         productId: productAId,
       });
       expect(after).toBe(beforeQty + 7);
@@ -612,9 +615,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .set('Authorization', `Bearer ${shopAAdminToken}`)
         .expect(200);
 
-      await expect(
-        prisma.deliveryzone.findUnique({ where: { id: zoneId } }),
-      ).resolves.toBeNull();
+      const deletedRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM deliveryzone WHERE id = ?`,
+        [zoneId],
+      );
+      expect(deletedRows[0]).toBeUndefined();
     });
   });
 
@@ -698,10 +703,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .send({ name: 'Hijacked' })
         .expect(404);
 
-      const untouched = await prisma.deliveryzone.findUniqueOrThrow({
-        where: { id: outletB1ZoneId },
-      });
-      expect(untouched.name).toBe('Abu Dhabi');
+      const untouchedRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM deliveryzone WHERE id = ?`,
+        [outletB1ZoneId],
+      );
+      expect(untouchedRows[0].name).toBe('Abu Dhabi');
     });
 
     it("Shop A admin cannot delete Shop B's zone via the same id-guessing path", async () => {
@@ -710,11 +716,11 @@ describe('Outlet & shop isolation (e2e)', () => {
         .set('Authorization', `Bearer ${shopAAdminToken}`)
         .expect(404);
 
-      await expect(
-        prisma.deliveryzone.findUniqueOrThrow({
-          where: { id: outletB1ZoneId },
-        }),
-      ).resolves.toBeTruthy();
+      const stillExistsRows = await db.query<RowDataPacket[]>(
+        `SELECT * FROM deliveryzone WHERE id = ?`,
+        [outletB1ZoneId],
+      );
+      expect(stillExistsRows[0]).toBeTruthy();
     });
   });
 

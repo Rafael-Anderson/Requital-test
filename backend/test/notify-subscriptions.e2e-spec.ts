@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { NotifysubscriptionRow } from '../src/db/types';
 
 interface AuthResponse {
   accessToken: string;
@@ -29,7 +31,7 @@ function body<T>(res: Response): T {
 
 describe('Notify subscriptions (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -45,11 +47,10 @@ describe('Notify subscriptions (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -124,10 +125,11 @@ describe('Notify subscriptions (e2e)', () => {
       .query({ email, productId })
       .expect(200);
 
-    const row = await prisma.notifysubscription.findFirst({
-      where: { productId, email },
-    });
-    expect(row).toBeNull();
+    const rows = await db.query<RowDataPacket[]>(
+      `SELECT * FROM notifysubscription WHERE productId = ? AND email = ?`,
+      [productId, email],
+    );
+    expect(rows[0]).toBeUndefined();
   });
 
   it('rejects a subscribe for a productId that does not exist', async () => {
@@ -160,10 +162,11 @@ describe('Notify subscriptions (e2e)', () => {
       .query({ email, productId: shopB.productId })
       .expect(200);
 
-    const stillThere = await prisma.notifysubscription.findFirst({
-      where: { productId: shopA.productId, email },
-    });
-    expect(stillThere).not.toBeNull();
+    const stillThereRows = await db.query<RowDataPacket[]>(
+      `SELECT * FROM notifysubscription WHERE productId = ? AND email = ?`,
+      [shopA.productId, email],
+    );
+    expect(stillThereRows[0]).not.toBeUndefined();
   });
 
   // Phase 8.3 — NotifySubscriptionsService.triggerForProduct fires (not
@@ -187,9 +190,11 @@ describe('Notify subscriptions (e2e)', () => {
     async function waitForNotified(productId: number, email: string) {
       const deadline = Date.now() + 5000;
       while (Date.now() < deadline) {
-        const row = await prisma.notifysubscription.findFirst({
-          where: { productId, email },
-        });
+        const rows = await db.query<(NotifysubscriptionRow & RowDataPacket)[]>(
+          `SELECT * FROM notifysubscription WHERE productId = ? AND email = ?`,
+          [productId, email],
+        );
+        const row = rows[0];
         if (row?.notifiedAt) return row;
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
@@ -295,10 +300,11 @@ describe('Notify subscriptions (e2e)', () => {
     it('4. CSV import (POST /products/import/confirm)', async () => {
       const { adminToken, productId, outletId } =
         await setupShopWithProduct('restock-csv');
-      const product = await prisma.product.findUniqueOrThrow({
-        where: { id: productId },
-        select: { sku: true, name: true },
-      });
+      const productRows = await db.query<RowDataPacket[]>(
+        `SELECT sku, name FROM product WHERE id = ?`,
+        [productId],
+      );
+      const product = productRows[0] as { sku: string; name: string };
 
       const email = `csv-${runId}@example.com`;
       await subscribeTo(productId, email);

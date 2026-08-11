@@ -1,5 +1,5 @@
 import { OutletsService } from './outlets.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
 
@@ -17,14 +17,34 @@ const mockBranchRolesService = {
 // and persistence — still works correctly after adding the deliveryZones
 // reservation column, not a distance formula that doesn't exist.
 
-function createMockPrisma() {
+function createMockDb() {
   return {
-    outlet: {
-      create: jest.fn(),
-      update: jest.fn(),
-      findFirst: jest.fn(),
-    },
-  } as unknown as PrismaService;
+    query: jest.fn().mockResolvedValue([]),
+    execute: jest.fn().mockResolvedValue({ insertId: 1 }),
+    transaction: jest.fn(),
+  } as unknown as DatabaseService & { query: jest.Mock; execute: jest.Mock };
+}
+
+// Parses the column list out of `INSERT INTO outlet (a, b, c) VALUES (...)`
+// and zips it against the bound params, so assertions can read fields by
+// name (e.g. `insertFields(...).deliveryRadiusKm`) instead of a brittle
+// positional index — mirrors what the old `data: expect.objectContaining`
+// Prisma assertions checked, without needing an ORM-shaped mock.
+function insertFields(sql: string, params: unknown[]): Record<string, unknown> {
+  const match = sql.match(/INSERT INTO outlet \(([\s\S]*?)\)/)!;
+  const columns = match[1].split(',').map((c) => c.trim());
+  return Object.fromEntries(columns.map((c, i) => [c, params[i]]));
+}
+
+// Same idea for `UPDATE outlet SET a = ?, b = ? WHERE id = ?` — only the
+// columns actually present in the SET clause are returned, so "was this
+// field left untouched" is just "is the key absent."
+function updateFields(sql: string, params: unknown[]): Record<string, unknown> {
+  const match = sql.match(/SET ([\s\S]*?) WHERE/)!;
+  const columns = match[1]
+    .split(',')
+    .map((c) => c.trim().replace(/`/g, '').replace(/\s*=\s*\?$/, ''));
+  return Object.fromEntries(columns.map((c, i) => [c, params[i]]));
 }
 
 const adminCtx: TenantContext = {
@@ -36,9 +56,9 @@ const adminCtx: TenantContext = {
 
 describe('OutletsService — delivery radius/coordinates wiring', () => {
   it('create() persists deliveryRadiusKm with latitude/longitude together', async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.create as jest.Mock).mockResolvedValue({ id: 1 });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValue([{ id: 1 }]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await service.create(adminCtx, {
       name: 'Test Outlet',
@@ -48,91 +68,86 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
       longitude: 55.3,
     });
 
-    expect(prisma.outlet.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          deliveryEnabled: true,
-          deliveryRadiusKm: 7.5,
-          latitude: 25.2,
-          longitude: 55.3,
-        }),
-      }),
-    );
+    const [sql, params] = db.execute.mock.calls[0];
+    expect(insertFields(sql, params)).toMatchObject({
+      deliveryEnabled: true,
+      deliveryRadiusKm: 7.5,
+      latitude: 25.2,
+      longitude: 55.3,
+    });
   });
 
-  it('create() rejects delivery enabled without coordinates', () => {
-    const prisma = createMockPrisma();
-    const service = new OutletsService(prisma, mockBranchRolesService);
+  it('create() rejects delivery enabled without coordinates', async () => {
+    const db = createMockDb();
+    const service = new OutletsService(db, mockBranchRolesService);
 
-    // validateDelivery throws synchronously inside the (non-async) create()
-    // method, so this is a plain throw, not a rejected promise.
-    expect(() =>
+    await expect(
       service.create(adminCtx, {
         name: 'Test Outlet',
         deliveryEnabled: true,
         deliveryRadiusKm: 5,
       } as any),
-    ).toThrow('Outlet coordinates are required when delivery is enabled');
-    expect(prisma.outlet.create).not.toHaveBeenCalled();
+    ).rejects.toThrow('Outlet coordinates are required when delivery is enabled');
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
-  it('create() rejects delivery enabled without a radius', () => {
-    const prisma = createMockPrisma();
-    const service = new OutletsService(prisma, mockBranchRolesService);
+  it('create() rejects delivery enabled without a radius', async () => {
+    const db = createMockDb();
+    const service = new OutletsService(db, mockBranchRolesService);
 
-    expect(() =>
+    await expect(
       service.create(adminCtx, {
         name: 'Test Outlet',
         deliveryEnabled: true,
         latitude: 25.2,
         longitude: 55.3,
       } as any),
-    ).toThrow('Delivery radius (km) is required when delivery is enabled');
-    expect(prisma.outlet.create).not.toHaveBeenCalled();
+    ).rejects.toThrow('Delivery radius (km) is required when delivery is enabled');
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it("update() validates against the stored outlet's existing coordinates when the request omits them", async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.findFirst as jest.Mock).mockResolvedValue({
-      id: 5,
-      shopId: 1,
-      latitude: 25.1,
-      longitude: 55.2,
-      deliveryEnabled: false,
-      deliveryRadiusKm: null,
-      closedOverride: false,
-    });
-    (prisma.outlet.update as jest.Mock).mockResolvedValue({ id: 5 });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValueOnce([
+      {
+        id: 5,
+        shopId: 1,
+        latitude: 25.1,
+        longitude: 55.2,
+        deliveryEnabled: false,
+        deliveryRadiusKm: null,
+        closedOverride: false,
+      },
+    ]);
+    db.query.mockResolvedValueOnce([{ id: 5 }]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await service.update(adminCtx, 5, {
       deliveryEnabled: true,
       deliveryRadiusKm: 3,
     });
 
-    expect(prisma.outlet.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 5 },
-        data: expect.objectContaining({
-          deliveryEnabled: true,
-          deliveryRadiusKm: 3,
-        }),
-      }),
-    );
+    const [sql, params] = db.execute.mock.calls[0];
+    expect(updateFields(sql, params)).toMatchObject({
+      deliveryEnabled: true,
+      deliveryRadiusKm: 3,
+    });
   });
 
   it('update() rejects enabling delivery when neither the request nor the stored outlet has coordinates', async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.findFirst as jest.Mock).mockResolvedValue({
-      id: 5,
-      shopId: 1,
-      latitude: null,
-      longitude: null,
-      deliveryEnabled: false,
-      deliveryRadiusKm: null,
-      closedOverride: false,
-    });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValueOnce([
+      {
+        id: 5,
+        shopId: 1,
+        latitude: null,
+        longitude: null,
+        deliveryEnabled: false,
+        deliveryRadiusKm: null,
+        closedOverride: false,
+      },
+    ]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await expect(
       service.update(adminCtx, 5, {
@@ -142,84 +157,93 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
     ).rejects.toThrow(
       'Outlet coordinates are required when delivery is enabled',
     );
-    expect(prisma.outlet.update).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it("update() leaves an already-delivery-enabled outlet's radius/coordinates alone when this request does not touch delivery", async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.findFirst as jest.Mock).mockResolvedValue({
-      id: 5,
-      shopId: 1,
-      latitude: 25.1,
-      longitude: 55.2,
-      deliveryEnabled: true,
-      deliveryRadiusKm: 10,
-      closedOverride: false,
-    });
-    (prisma.outlet.update as jest.Mock).mockResolvedValue({ id: 5 });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValueOnce([
+      {
+        id: 5,
+        shopId: 1,
+        latitude: 25.1,
+        longitude: 55.2,
+        deliveryEnabled: true,
+        deliveryRadiusKm: 10,
+        closedOverride: false,
+      },
+    ]);
+    db.query.mockResolvedValueOnce([{ id: 5 }]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await service.update(adminCtx, 5, { name: 'Renamed' });
 
-    expect(prisma.outlet.update).toHaveBeenCalled();
+    expect(db.execute).toHaveBeenCalled();
   });
 });
 
 describe('OutletsService — closedOverride timestamp stamping', () => {
   it('create() stamps closedOverrideSetAt when created with the override already on', async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.create as jest.Mock).mockResolvedValue({ id: 1 });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValue([{ id: 1 }]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await service.create(adminCtx, {
       name: 'Test Outlet',
       closedOverride: true,
     });
 
-    const { data } = (prisma.outlet.create as jest.Mock).mock.calls[0][0];
-    expect(data.closedOverride).toBe(true);
-    expect(data.closedOverrideSetAt).toBeInstanceOf(Date);
+    const [sql, params] = db.execute.mock.calls[0];
+    const fields = insertFields(sql, params);
+    expect(fields.closedOverride).toBe(true);
+    expect(fields.closedOverrideSetAt).toBeInstanceOf(Date);
   });
 
   it('update() clears closedOverrideSetAt when the override is explicitly turned off', async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.findFirst as jest.Mock).mockResolvedValue({
-      id: 5,
-      shopId: 1,
-      latitude: null,
-      longitude: null,
-      deliveryEnabled: false,
-      deliveryRadiusKm: null,
-      closedOverride: true,
-    });
-    (prisma.outlet.update as jest.Mock).mockResolvedValue({ id: 5 });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValueOnce([
+      {
+        id: 5,
+        shopId: 1,
+        latitude: null,
+        longitude: null,
+        deliveryEnabled: false,
+        deliveryRadiusKm: null,
+        closedOverride: true,
+      },
+    ]);
+    db.query.mockResolvedValueOnce([{ id: 5 }]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await service.update(adminCtx, 5, { closedOverride: false });
 
-    const { data } = (prisma.outlet.update as jest.Mock).mock.calls[0][0];
-    expect(data.closedOverride).toBe(false);
-    expect(data.closedOverrideSetAt).toBeNull();
+    const [sql, params] = db.execute.mock.calls[0];
+    const fields = updateFields(sql, params);
+    expect(fields.closedOverride).toBe(false);
+    expect(fields.closedOverrideSetAt).toBeNull();
   });
 
   it('update() leaves closedOverrideSetAt untouched when this request does not mention closedOverride', async () => {
-    const prisma = createMockPrisma();
-    (prisma.outlet.findFirst as jest.Mock).mockResolvedValue({
-      id: 5,
-      shopId: 1,
-      latitude: null,
-      longitude: null,
-      deliveryEnabled: false,
-      deliveryRadiusKm: null,
-      closedOverride: true,
-    });
-    (prisma.outlet.update as jest.Mock).mockResolvedValue({ id: 5 });
-    const service = new OutletsService(prisma, mockBranchRolesService);
+    const db = createMockDb();
+    db.query.mockResolvedValueOnce([
+      {
+        id: 5,
+        shopId: 1,
+        latitude: null,
+        longitude: null,
+        deliveryEnabled: false,
+        deliveryRadiusKm: null,
+        closedOverride: true,
+      },
+    ]);
+    db.query.mockResolvedValueOnce([{ id: 5 }]);
+    const service = new OutletsService(db, mockBranchRolesService);
 
     await service.update(adminCtx, 5, { name: 'Renamed' });
 
-    const { data } = (prisma.outlet.update as jest.Mock).mock.calls[0][0];
-    expect(data).not.toHaveProperty('closedOverrideSetAt');
+    const [sql, params] = db.execute.mock.calls[0];
+    const fields = updateFields(sql, params);
+    expect(fields).not.toHaveProperty('closedOverrideSetAt');
   });
 });
 
@@ -241,10 +265,7 @@ describe('OutletsService.geocode', () => {
         },
       ],
     } as any);
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     const result = await service.geocode('Dubai Mall');
 
@@ -266,10 +287,7 @@ describe('OutletsService.geocode', () => {
       ok: true,
       json: async () => [],
     } as any);
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await expect(service.geocode('zzznonexistentplace')).rejects.toThrow(
       'No location found for that search',
@@ -278,10 +296,7 @@ describe('OutletsService.geocode', () => {
 
   it('rejects an empty query without calling fetch', async () => {
     global.fetch = jest.fn();
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await expect(service.geocode('')).rejects.toThrow(
       'A search query is required',
@@ -291,10 +306,7 @@ describe('OutletsService.geocode', () => {
 
   it('throws a friendly error when the upstream request itself fails (network/non-200)', async () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false });
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await expect(service.geocode('Dubai Mall')).rejects.toThrow(
       'Geocoding lookup failed',
@@ -306,10 +318,7 @@ describe('OutletsService.geocode', () => {
       ok: true,
       json: async () => [{ lat: '1', lon: '2', display_name: 'x' }],
     } as any);
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await service.geocode('Dubai Mall');
 
@@ -335,10 +344,7 @@ describe('OutletsService.reverseGeocode', () => {
       ok: true,
       json: async () => ({ display_name: 'Dubai Mall, Dubai, UAE' }),
     } as any);
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     const result = await service.reverseGeocode(25.197044, 55.2789516);
 
@@ -353,10 +359,7 @@ describe('OutletsService.reverseGeocode', () => {
       ok: true,
       json: async () => ({ error: 'Unable to geocode' }),
     } as any);
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await expect(service.reverseGeocode(0, 0)).rejects.toThrow(
       'No address found for that location',
@@ -365,10 +368,7 @@ describe('OutletsService.reverseGeocode', () => {
 
   it('rejects missing/non-numeric coordinates without calling fetch', async () => {
     global.fetch = jest.fn();
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await expect(service.reverseGeocode(undefined, undefined)).rejects.toThrow(
       'lat and lon are required',
@@ -381,10 +381,7 @@ describe('OutletsService.reverseGeocode', () => {
 
   it('throws a friendly error when the upstream request itself fails', async () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false });
-    const service = new OutletsService(
-      createMockPrisma(),
-      mockBranchRolesService,
-    );
+    const service = new OutletsService(createMockDb(), mockBranchRolesService);
 
     await expect(service.reverseGeocode(25.2, 55.3)).rejects.toThrow(
       'Reverse geocoding lookup failed',

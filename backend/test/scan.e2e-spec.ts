@@ -7,7 +7,6 @@ import { App } from 'supertest/types';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -76,7 +75,6 @@ const RECEIPT_FIXTURE = readFileSync(
 
 describe('Scan to Stock (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   const runId = Date.now();
 
   // Real tesseract.js OCR calls (not mocked) take a few seconds each — well
@@ -98,11 +96,9 @@ describe('Scan to Stock (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 

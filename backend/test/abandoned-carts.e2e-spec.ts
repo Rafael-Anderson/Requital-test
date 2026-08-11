@@ -5,7 +5,10 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import { trimDecimal } from '../src/database/decimal.util';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ShopRow, AbandonedcartRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 import { AbandonedCartsService } from '../src/abandoned-carts/abandoned-carts.service';
 
@@ -37,7 +40,7 @@ function body<T>(res: Response): T {
 
 describe('Abandoned Cart Recovery (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   let abandonedCartsService: AbandonedCartsService;
   const runId = Date.now();
 
@@ -54,14 +57,34 @@ describe('Abandoned Cart Recovery (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
     abandonedCartsService = app.get(AbandonedCartsService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getShopBySubdomain(subdomain: string): Promise<ShopRow> {
+    const rows = await db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE subdomain = ?`,
+      [subdomain],
+    );
+    if (!rows[0]) throw new Error('shop not found');
+    return rows[0];
+  }
+
+  async function getCartByShopAndPhone(
+    shopId: number,
+    customerPhone: string,
+  ): Promise<AbandonedcartRow> {
+    const rows = await db.query<(AbandonedcartRow & RowDataPacket)[]>(
+      `SELECT * FROM abandonedcart WHERE shopId = ? AND customerPhone = ?`,
+      [shopId, customerPhone],
+    );
+    if (!rows[0]) throw new Error('abandonedcart not found');
+    return rows[0];
+  }
 
   async function setupShop(slugPrefix: string) {
     const shopSlug = `${slugPrefix}-${runId}`;
@@ -198,14 +221,13 @@ describe('Abandoned Cart Recovery (e2e)', () => {
       ],
     }).expect(201);
 
-    const shop = await prisma.shop.findUniqueOrThrow({
-      where: { subdomain: shopSlug },
-    });
-    const rows = await prisma.abandonedcart.findMany({
-      where: { shopId: shop.id, customerPhone: phone },
-    });
+    const shop = await getShopBySubdomain(shopSlug);
+    const rows = await db.query<(AbandonedcartRow & RowDataPacket)[]>(
+      `SELECT * FROM abandonedcart WHERE shopId = ? AND customerPhone = ?`,
+      [shop.id, phone],
+    );
     expect(rows).toHaveLength(1);
-    expect(rows[0].cartValue.toString()).toBe('100'); // 50 * 2, refreshed
+    expect(trimDecimal(rows[0].cartValue)).toBe('100'); // 50 * 2, refreshed
 
     const list = await request(app.getHttpServer())
       .get('/abandoned-carts')
@@ -229,14 +251,8 @@ describe('Abandoned Cart Recovery (e2e)', () => {
     ).expect(201);
     const orderId = body<OrderCreateResponse>(order).order.id;
 
-    const shop = await prisma.shop.findUniqueOrThrow({
-      where: { subdomain: shopSlug },
-    });
-    const cart = await prisma.abandonedcart.findUniqueOrThrow({
-      where: {
-        shopId_customerPhone: { shopId: shop.id, customerPhone: phone },
-      },
-    });
+    const shop = await getShopBySubdomain(shopSlug);
+    const cart = await getCartByShopAndPhone(shop.id, phone);
     expect(cart.recoveredOrderId).toBe(orderId);
   });
 
@@ -245,9 +261,7 @@ describe('Abandoned Cart Recovery (e2e)', () => {
     const phone = '0514444444';
     await captureCart(shopSlug, phone, productId).expect(201);
 
-    const shop = await prisma.shop.findUniqueOrThrow({
-      where: { subdomain: shopSlug },
-    });
+    const shop = await getShopBySubdomain(shopSlug);
 
     // Toggle off (default) — no send even though the "window" already elapsed.
     let sent = await abandonedCartsService.sendDueForShop(
@@ -257,11 +271,7 @@ describe('Abandoned Cart Recovery (e2e)', () => {
       0,
     );
     expect(sent).toBe(0);
-    let cart = await prisma.abandonedcart.findUniqueOrThrow({
-      where: {
-        shopId_customerPhone: { shopId: shop.id, customerPhone: phone },
-      },
-    });
+    let cart = await getCartByShopAndPhone(shop.id, phone);
     expect(cart.recoveryEmailSentAt).toBeNull();
 
     // Opt in, then it sends.
@@ -277,11 +287,7 @@ describe('Abandoned Cart Recovery (e2e)', () => {
       0,
     );
     expect(sent).toBe(1);
-    cart = await prisma.abandonedcart.findUniqueOrThrow({
-      where: {
-        shopId_customerPhone: { shopId: shop.id, customerPhone: phone },
-      },
-    });
+    cart = await getCartByShopAndPhone(shop.id, phone);
     expect(cart.recoveryEmailSentAt).not.toBeNull();
 
     // Calling it again must not send a second time for the same episode.
@@ -309,9 +315,7 @@ describe('Abandoned Cart Recovery (e2e)', () => {
     // result in a recovery email for a since-completed cart.
     await guestCheckout(shopSlug, outletId, productId, phone).expect(201);
 
-    const shop = await prisma.shop.findUniqueOrThrow({
-      where: { subdomain: shopSlug },
-    });
+    const shop = await getShopBySubdomain(shopSlug);
     const sent = await abandonedCartsService.sendDueForShop(
       shop.id,
       shop.name,
@@ -319,11 +323,7 @@ describe('Abandoned Cart Recovery (e2e)', () => {
       0,
     );
     expect(sent).toBe(0);
-    const cart = await prisma.abandonedcart.findUniqueOrThrow({
-      where: {
-        shopId_customerPhone: { shopId: shop.id, customerPhone: phone },
-      },
-    });
+    const cart = await getCartByShopAndPhone(shop.id, phone);
     expect(cart.recoveryEmailSentAt).toBeNull();
     expect(cart.recoveredOrderId).not.toBeNull();
   });
@@ -351,14 +351,8 @@ describe('Abandoned Cart Recovery (e2e)', () => {
     const phone = '0517777777';
     await captureCart(shopSlug, phone, productId).expect(201);
 
-    const shop = await prisma.shop.findUniqueOrThrow({
-      where: { subdomain: shopSlug },
-    });
-    const cart = await prisma.abandonedcart.findUniqueOrThrow({
-      where: {
-        shopId_customerPhone: { shopId: shop.id, customerPhone: phone },
-      },
-    });
+    const shop = await getShopBySubdomain(shopSlug);
+    const cart = await getCartByShopAndPhone(shop.id, phone);
 
     const recovered = await request(app.getHttpServer())
       .get(`/public/abandoned-carts/recover?token=${cart.recoverToken}`)

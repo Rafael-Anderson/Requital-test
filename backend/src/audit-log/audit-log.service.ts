@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import type { TenantContext } from '../common/tenant-context';
 import { ListAuditLogQueryDto } from './dto/list-audit-log-query.dto';
 
@@ -15,7 +15,7 @@ interface LogEntry {
 
 @Injectable()
 export class AuditLogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // Takes shopId/actorUserId directly rather than TenantContext — login
   // (the one caller with no ctx yet, since it's what produces one) needs
@@ -29,18 +29,20 @@ export class AuditLogService {
   // lie).
   async log(actor: { shopId: number; actorUserId: number }, entry: LogEntry) {
     try {
-      await this.prisma.auditlog.create({
-        data: {
-          shopId: actor.shopId,
-          actorUserId: actor.actorUserId,
-          action: entry.action,
-          entityType: entry.entityType,
-          entityId: entry.entityId,
-          before: toJson(entry.before),
-          after: toJson(entry.after),
-          metadata: toJson(entry.metadata),
-        },
-      });
+      await this.db.execute(
+        `INSERT INTO auditlog (shopId, actorUserId, action, entityType, entityId, \`before\`, \`after\`, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          actor.shopId,
+          actor.actorUserId,
+          entry.action,
+          entry.entityType,
+          entry.entityId ?? null,
+          toJson(entry.before),
+          toJson(entry.after),
+          toJson(entry.metadata),
+        ],
+      );
     } catch {
       // See comment above — never propagate.
     }
@@ -53,35 +55,48 @@ export class AuditLogService {
   async list(ctx: TenantContext, query: ListAuditLogQueryDto) {
     const page = query.page ?? 1;
     const pageSize = Math.min(query.pageSize ?? 20, 100);
-    const where: Prisma.auditlogWhereInput = {
-      shopId: ctx.shopId,
-      ...(query.entityType && { entityType: query.entityType }),
-      ...(query.actorUserId && { actorUserId: query.actorUserId }),
-    };
 
-    const [total, rows] = await Promise.all([
-      this.prisma.auditlog.count({ where }),
-      this.prisma.auditlog.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: { actor: { select: { id: true, name: true } } },
-      }),
-    ]);
+    const conditions = ['al.shopId = ?'];
+    const params: (string | number)[] = [ctx.shopId];
+    if (query.entityType) {
+      conditions.push('al.entityType = ?');
+      params.push(query.entityType);
+    }
+    if (query.actorUserId) {
+      conditions.push('al.actorUserId = ?');
+      params.push(query.actorUserId);
+    }
+    const whereClause = conditions.join(' AND ');
+
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM auditlog al WHERE ${whereClause}`,
+      params,
+    );
+    const total = Number(countRows[0].c);
+
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT al.id, al.action, al.entityType, al.entityId, al.\`before\`, al.\`after\`,
+              al.metadata, al.createdAt, u.id AS actorId, u.name AS actorName
+       FROM auditlog al
+       JOIN user u ON u.id = al.actorUserId
+       WHERE ${whereClause}
+       ORDER BY al.createdAt DESC
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
 
     return {
       data: rows.map((r) => ({
-        id: r.id,
-        action: r.action,
-        entityType: r.entityType,
-        entityId: r.entityId,
+        id: r.id as number,
+        action: r.action as string,
+        entityType: r.entityType as string,
+        entityId: r.entityId as number | null,
         before: r.before,
         after: r.after,
         metadata: r.metadata,
-        actorId: r.actor.id,
-        actorName: r.actor.name,
-        createdAt: r.createdAt,
+        actorId: r.actorId as number,
+        actorName: r.actorName as string,
+        createdAt: r.createdAt as Date,
       })),
       total,
       page,
@@ -97,41 +112,46 @@ export class AuditLogService {
     entityId: number,
     action?: string,
   ) {
-    const rows = await this.prisma.auditlog.findMany({
-      where: {
-        shopId: ctx.shopId,
-        entityType,
-        entityId,
-        ...(action && { action }),
-      },
-      orderBy: { createdAt: 'asc' },
-      include: { actor: { select: { id: true, name: true } } },
-    });
+    const conditions = ['al.shopId = ?', 'al.entityType = ?', 'al.entityId = ?'];
+    const params: (string | number)[] = [ctx.shopId, entityType, entityId];
+    if (action) {
+      conditions.push('al.action = ?');
+      params.push(action);
+    }
+
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT al.id, al.action, al.\`before\`, al.\`after\`, al.createdAt, u.name AS actorName
+       FROM auditlog al
+       JOIN user u ON u.id = al.actorUserId
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY al.createdAt ASC`,
+      params,
+    );
     return rows.map((r) => ({
-      id: r.id,
-      action: r.action,
+      id: r.id as number,
+      action: r.action as string,
       before: r.before,
       after: r.after,
-      actorName: r.actor.name,
-      createdAt: r.createdAt,
+      actorName: r.actorName as string,
+      createdAt: r.createdAt as Date,
     }));
   }
 
   // For filter dropdowns — every distinct staff member who has at least one
   // logged action in this shop.
   async listActors(ctx: TenantContext) {
-    const rows = await this.prisma.auditlog.findMany({
-      where: { shopId: ctx.shopId },
-      distinct: ['actorUserId'],
-      select: { actor: { select: { id: true, name: true } } },
-      orderBy: { actorUserId: 'asc' },
-    });
-    return rows.map((r) => r.actor);
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT DISTINCT al.actorUserId AS id, u.name AS name
+       FROM auditlog al
+       JOIN user u ON u.id = al.actorUserId
+       WHERE al.shopId = ?
+       ORDER BY al.actorUserId ASC`,
+      [ctx.shopId],
+    );
+    return rows.map((r) => ({ id: r.id as number, name: r.name as string }));
   }
 }
 
-function toJson(value: unknown): Prisma.InputJsonValue | undefined {
-  return value === undefined
-    ? undefined
-    : (JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue);
+function toJson(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { JobsService } from '../jobs/jobs.service';
 import { SchedulerService } from '../jobs/scheduler.service';
 import { buildVariantLabel } from './variant-generator';
@@ -15,13 +16,14 @@ interface LowStockLine {
 // Scheduled daily summary — explicitly NOT real-time per-item email (see
 // the Low Stock Alerts task's own scope note). Runs once a day for every
 // shop that has opted in; lastSentAt is a per-shop CAS guard (claimed via
-// updateMany, same discipline as AbandonedCartsService) so an overlapping
-// or re-triggered run can never double-send for the same shop on the same
-// day, and a shop that hasn't opted in never gets queried at all.
+// an UPDATE ... WHERE checking affectedRows, same discipline as
+// AbandonedCartsService) so an overlapping or re-triggered run can never
+// double-send for the same shop on the same day, and a shop that hasn't
+// opted in never gets queried at all.
 @Injectable()
 export class LowStockDigestService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly jobsService: JobsService,
     private readonly schedulerService: SchedulerService,
   ) {}
@@ -41,27 +43,24 @@ export class LowStockDigestService {
   }
 
   private async runSweep() {
-    const candidates = await this.prisma.shop.findMany({
-      where: { notifyLowStockDigest: true },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        lowStockDigestLastSentAt: true,
-      },
-    });
+    const candidates = await this.db.query<RowDataPacket[]>(
+      `SELECT id, name, email, lowStockDigestLastSentAt FROM shop WHERE notifyLowStockDigest = true`,
+    );
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
     for (const shop of candidates) {
-      if (
-        shop.lowStockDigestLastSentAt &&
-        shop.lowStockDigestLastSentAt >= startOfToday
-      ) {
+      const lastSentAt = shop.lowStockDigestLastSentAt as Date | null;
+      if (lastSentAt && lastSentAt >= startOfToday) {
         continue; // already sent today
       }
-      await this.sendForShop(shop.id, shop.name, shop.email, startOfToday);
+      await this.sendForShop(
+        shop.id as number,
+        shop.name as string,
+        shop.email as string | null,
+        startOfToday,
+      );
     }
   }
 
@@ -75,28 +74,24 @@ export class LowStockDigestService {
     shopEmail: string | null,
     startOfToday: Date,
   ) {
-    const shop = await this.prisma.shop.findUnique({
-      where: { id: shopId },
-      select: { notifyLowStockDigest: true },
-    });
-    if (!shop?.notifyLowStockDigest) return false;
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT notifyLowStockDigest FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    if (!shopRows[0]?.notifyLowStockDigest) return false;
 
     // CAS claim FIRST, before doing any query work — mirrors
     // AbandonedCartsService's claim-before-send discipline: if two
-    // triggers for the same shop race, only one updateMany can match
-    // (lastSentAt is still before today), the other gets count 0 and skips.
-    const claimed = await this.prisma.shop.updateMany({
-      where: {
-        id: shopId,
-        notifyLowStockDigest: true,
-        OR: [
-          { lowStockDigestLastSentAt: null },
-          { lowStockDigestLastSentAt: { lt: startOfToday } },
-        ],
-      },
-      data: { lowStockDigestLastSentAt: new Date() },
-    });
-    if (claimed.count === 0) return false;
+    // triggers for the same shop race, only one UPDATE can match
+    // (lastSentAt is still before today), the other gets affectedRows 0
+    // and skips.
+    const claimed = await this.db.execute(
+      `UPDATE shop SET lowStockDigestLastSentAt = ?
+       WHERE id = ? AND notifyLowStockDigest = true
+         AND (lowStockDigestLastSentAt IS NULL OR lowStockDigestLastSentAt < ?)`,
+      [new Date(), shopId, startOfToday],
+    );
+    if (claimed.affectedRows === 0) return false;
 
     const lines = await this.collectLowStockLines(shopId);
     if (lines.length === 0) return false; // claimed the send-slot, but nothing to report — no empty email
@@ -133,74 +128,66 @@ export class LowStockDigestService {
   // already updates this same column, so there's nothing separate to hook
   // — a background poll re-deriving the same comparison on a schedule
   // (this digest) is correct without also needing a write-time side effect.
-  // Phase A: a single query against outletingredientstock — the only stock
-  // table now — replaces the three parallel product/variant/ingredient
-  // queries this used before. A shadow-backed product/variant's row
-  // resolves its label through ingredient.shadowProduct/shadowVariant; a
-  // real merchant-created ingredient (both null) uses its own name.
+  // A shadow-backed product/variant's row resolves its label through
+  // ingredient.shadowProduct/shadowVariant; a real merchant-created
+  // ingredient (both null) uses its own name.
   private async collectLowStockLines(shopId: number): Promise<LowStockLine[]> {
-    const rows = await this.prisma.outletingredientstock.findMany({
-      where: { lowStockThreshold: { not: null }, ingredient: { shopId } },
-      select: {
-        stockQuantity: true,
-        lowStockThreshold: true,
-        outlet: { select: { name: true } },
-        ingredient: {
-          select: {
-            name: true,
-            shadowProduct: { select: { name: true } },
-            shadowVariant: {
-              select: {
-                product: { select: { name: true } },
-                optionValue1: { select: { value: true } },
-                optionValue2: { select: { value: true } },
-                optionValue3: { select: { value: true } },
-              },
-            },
-          },
-        },
-      },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT ois.stockQuantity, ois.lowStockThreshold, o.name AS outletName,
+              ing.name AS ingredientName,
+              sp.name AS shadowProductName,
+              svp.name AS shadowVariantProductName,
+              ov1.value AS optionValue1, ov2.value AS optionValue2, ov3.value AS optionValue3
+       FROM outletingredientstock ois
+       JOIN outlet o ON o.id = ois.outletId
+       JOIN ingredient ing ON ing.id = ois.ingredientId
+       LEFT JOIN product sp ON sp.id = ing.shadowProductId
+       LEFT JOIN productvariant sv ON sv.id = ing.shadowVariantId
+       LEFT JOIN product svp ON svp.id = sv.productId
+       LEFT JOIN productoptionvalue ov1 ON ov1.id = sv.optionValue1Id
+       LEFT JOIN productoptionvalue ov2 ON ov2.id = sv.optionValue2Id
+       LEFT JOIN productoptionvalue ov3 ON ov3.id = sv.optionValue3Id
+       WHERE ois.lowStockThreshold IS NOT NULL AND ing.shopId = ?`,
+      [shopId],
+    );
 
     const lines: LowStockLine[] = [];
     for (const row of rows) {
-      if (
-        row.lowStockThreshold === null ||
-        row.stockQuantity > row.lowStockThreshold
-      ) {
+      const lowStockThreshold = row.lowStockThreshold as number | null;
+      const stockQuantity = row.stockQuantity as number;
+      if (lowStockThreshold === null || stockQuantity > lowStockThreshold) {
         continue;
       }
       let label: string;
-      if (row.ingredient.shadowVariant) {
+      if (row.shadowVariantProductName) {
         const variantLabel = buildVariantLabel([
-          row.ingredient.shadowVariant.optionValue1?.value,
-          row.ingredient.shadowVariant.optionValue2?.value,
-          row.ingredient.shadowVariant.optionValue3?.value,
+          row.optionValue1 as string | undefined,
+          row.optionValue2 as string | undefined,
+          row.optionValue3 as string | undefined,
         ]);
         label = variantLabel
-          ? `${row.ingredient.shadowVariant.product.name} (${variantLabel})`
-          : row.ingredient.shadowVariant.product.name;
-      } else if (row.ingredient.shadowProduct) {
-        label = row.ingredient.shadowProduct.name;
+          ? `${row.shadowVariantProductName as string} (${variantLabel})`
+          : (row.shadowVariantProductName as string);
+      } else if (row.shadowProductName) {
+        label = row.shadowProductName as string;
       } else {
-        label = row.ingredient.name;
+        label = row.ingredientName as string;
       }
       lines.push({
         label,
-        outletName: row.outlet.name,
-        stockQuantity: row.stockQuantity,
-        lowStockThreshold: row.lowStockThreshold,
+        outletName: row.outletName as string,
+        stockQuantity,
+        lowStockThreshold,
       });
     }
     return lines;
   }
 
   private async resolveAdminEmail(shopId: number): Promise<string | null> {
-    const admin = await this.prisma.user.findFirst({
-      where: { shopId, role: 'admin' },
-      orderBy: { id: 'asc' },
-      select: { email: true },
-    });
-    return admin?.email ?? null;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT email FROM user WHERE shopId = ? AND role = ? ORDER BY id ASC LIMIT 1`,
+      [shopId, 'admin'],
+    );
+    return (rows[0]?.email as string | undefined) ?? null;
   }
 }

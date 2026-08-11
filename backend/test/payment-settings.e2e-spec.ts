@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { ShoppaymentproviderRow, OrderRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -45,7 +47,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Payment Settings (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -61,11 +63,10 @@ describe('Payment Settings (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -187,9 +188,13 @@ describe('Payment Settings (e2e)', () => {
         })
         .expect(200);
 
-      const row = await prisma.shoppaymentprovider.findFirst({
-        where: { provider: 'stripe', shop: { subdomain: shop.slug } },
-      });
+      const rows = await db.query<(ShoppaymentproviderRow & RowDataPacket)[]>(
+        `SELECT spp.* FROM shoppaymentprovider spp
+         JOIN shop s ON s.id = spp.shopId
+         WHERE spp.provider = ? AND s.subdomain = ?`,
+        ['stripe', shop.slug],
+      );
+      const row = rows[0];
       expect(row?.credentials).toBeTruthy();
       expect(row!.credentials).not.toContain('sk_live_super_secret_value_999');
       expect(row!.credentials).not.toContain('whsec_abc');
@@ -572,10 +577,13 @@ describe('Payment Settings (e2e)', () => {
         })
         .expect(500);
 
-      const order = await prisma.order.findFirst({
-        where: { shop: { subdomain: shop.slug }, paymentMethod: 'tabby' },
-      });
-      expect(order).toBeTruthy();
+      const orderRows = await db.query<(OrderRow & RowDataPacket)[]>(
+        `SELECT o.* FROM \`order\` o
+         JOIN shop s ON s.id = o.shopId
+         WHERE s.subdomain = ? AND o.paymentMethod = ?`,
+        [shop.slug, 'tabby'],
+      );
+      expect(orderRows[0]).toBeTruthy();
     });
 
     it('card_online is rejected once the shop explicitly disables its only card processor', async () => {

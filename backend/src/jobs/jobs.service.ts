@@ -1,21 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import type { job as JobRecord } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
+import type {
+  PoolConnection,
+  ResultSetHeader,
+  RowDataPacket,
+} from 'mysql2/promise';
+import type { JobRow } from '../db/types';
 import type { JobPayload, JobType } from './jobs.types';
 
 const BASE_BACKOFF_SECONDS = 30;
 const MAX_BACKOFF_SECONDS = 3600;
 
+export type JobRecord = JobRow;
+
 // DB-backed job queue — see the Phase 5 report for why this was chosen over
 // BullMQ+Redis. Claiming (claimNextJob) uses `FOR UPDATE SKIP LOCKED` so
 // multiple worker processes/instances can poll the same table without ever
 // claiming the same row twice; enqueue() is idempotent on `idempotencyKey`
-// via the same catch-P2002-and-return-the-winner idiom as
+// via the same catch-duplicate-key-and-return-the-winner idiom as
 // PaymentsService.handleWebhook / InvoicesService.generateForOrder.
 @Injectable()
 export class JobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // shopId is validated here, not left to the caller or the DB's FK
   // constraint — a missing/invalid shopId is rejected before a row is ever
@@ -25,7 +32,7 @@ export class JobsService {
   // request, a duplicate webhook, ...) still runs the underlying work
   // exactly once.
   //
-  // `tx`: pass the surrounding Prisma.TransactionClient when enqueuing from
+  // `tx`: pass the surrounding transaction connection when enqueuing from
   // inside an existing transaction (e.g. GiftCardsService.issueForOrder,
   // called mid order-creation transaction) — this is what makes the job row
   // commit-or-rollback atomically with the work it describes, rather than
@@ -36,33 +43,44 @@ export class JobsService {
     type: JobType,
     payload: JobPayload,
     idempotencyKey: string,
-    options: { maxAttempts?: number; tx?: Prisma.TransactionClient } = {},
+    options: {
+      maxAttempts?: number;
+      tx?: PoolConnection;
+    } = {},
   ): Promise<JobRecord> {
     const { maxAttempts = 5, tx } = options;
-    const client = tx ?? this.prisma;
     if (!Number.isInteger(shopId) || shopId <= 0) {
       throw new Error(
         `job enqueue rejected: invalid shopId (${JSON.stringify(shopId)})`,
       );
     }
+
     try {
-      return await client.job.create({
-        data: {
-          shopId,
-          type,
-          payload: payload as unknown as Prisma.InputJsonValue,
-          idempotencyKey,
-          maxAttempts,
-        },
-      });
+      if (tx) {
+        // updatedAt has no DB-level default (an @updatedAt field, same as
+        // every other one in this schema — see CLAUDE.md's invoicecounter
+        // note) so it's always set explicitly, on every insert.
+        const [result] = await tx.query<ResultSetHeader>(
+          `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [shopId, type, JSON.stringify(payload), idempotencyKey, maxAttempts, new Date()],
+        );
+        const [rows] = await tx.query<RowDataPacket[]>(
+          `SELECT * FROM job WHERE id = ?`,
+          [result.insertId],
+        );
+        return rows[0] as unknown as JobRecord;
+      }
+      const result = await this.db.execute(
+        `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [shopId, type, JSON.stringify(payload), idempotencyKey, maxAttempts, new Date()],
+      );
+      const created = await this.findById(result.insertId);
+      return created as JobRecord;
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        (error.code === 'P2002' || error.code === 'P2034')
-      ) {
-        const existing = await client.job.findUnique({
-          where: { idempotencyKey },
-        });
+      if (isDuplicateKeyError(error) || isLockConflict(error)) {
+        const existing = await this.findByIdempotencyKey(idempotencyKey);
         if (existing) return existing;
       }
       throw error;
@@ -74,10 +92,7 @@ export class JobsService {
   // never both pick up the same row. `FOR UPDATE SKIP LOCKED` (MySQL 8+) is
   // what makes this safe: a row already locked by another claimer is simply
   // skipped rather than blocked on, so pollers never queue up behind each
-  // other. Prisma has no query-builder API for SKIP LOCKED, hence the raw
-  // SQL — same "raw SQL where Prisma can't express it" precedent as
-  // InvoicesService.nextInvoiceNumber and the dashboard's grouped-by-derived-
-  // expression queries.
+  // other.
   //
   // Binds a JS `Date` rather than using SQL `NOW()` — found for real, not by
   // inspection: this session's local dev MySQL server's own clock runs ~4h
@@ -92,19 +107,26 @@ export class JobsService {
   // internally consistent regardless of the DB server's own clock/timezone.
   async claimNextJob(): Promise<JobRecord | null> {
     const now = new Date();
-    return this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<{ id: number }[]>`
-        SELECT id FROM job
-        WHERE status = 'pending' AND nextAttemptAt <= ${now}
-        ORDER BY nextAttemptAt ASC
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-      `;
+    return this.db.transaction(async (conn) => {
+      const [rows] = await conn.query<RowDataPacket[]>(
+        `SELECT id FROM job
+         WHERE status = 'pending' AND nextAttemptAt <= ?
+         ORDER BY nextAttemptAt ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED`,
+        [now],
+      );
       if (rows.length === 0) return null;
-      return tx.job.update({
-        where: { id: rows[0].id },
-        data: { status: 'processing', attempts: { increment: 1 } },
-      });
+      const id = rows[0].id as number;
+      await conn.query(
+        `UPDATE job SET status = 'processing', attempts = attempts + 1, updatedAt = ? WHERE id = ?`,
+        [new Date(), id],
+      );
+      const [jobRows] = await conn.query<RowDataPacket[]>(
+        `SELECT * FROM job WHERE id = ?`,
+        [id],
+      );
+      return jobRows[0] as unknown as JobRecord;
     });
   }
 
@@ -117,19 +139,20 @@ export class JobsService {
   // enqueued in the shared test database at the same time; a future
   // "process this job now" admin action would reuse it too.
   async claimJobById(id: number): Promise<JobRecord | null> {
-    const result = await this.prisma.job.updateMany({
-      where: { id, status: 'pending', nextAttemptAt: { lte: new Date() } },
-      data: { status: 'processing', attempts: { increment: 1 } },
-    });
-    if (result.count === 0) return null;
-    return this.prisma.job.findUnique({ where: { id } });
+    const result = await this.db.execute(
+      `UPDATE job SET status = 'processing', attempts = attempts + 1, updatedAt = ?
+       WHERE id = ? AND status = 'pending' AND nextAttemptAt <= ?`,
+      [new Date(), id, new Date()],
+    );
+    if (result.affectedRows === 0) return null;
+    return this.findById(id);
   }
 
   async completeJob(id: number): Promise<void> {
-    await this.prisma.job.update({
-      where: { id },
-      data: { status: 'completed', completedAt: new Date() },
-    });
+    await this.db.execute(
+      `UPDATE job SET status = 'completed', completedAt = ?, updatedAt = ? WHERE id = ?`,
+      [new Date(), new Date(), id],
+    );
   }
 
   // Retries with exponential backoff (30s, 60s, 120s, ... capped at 1h)
@@ -137,61 +160,75 @@ export class JobsService {
   // 'dead_letter' — terminal, never auto-retried again, visible in the
   // admin failed-jobs view (see listDeadLetter/retry/dismiss below).
   async failJob(id: number, errorMessage: string): Promise<void> {
-    const job = await this.prisma.job.findUniqueOrThrow({ where: { id } });
+    const job = await this.findById(id);
+    if (!job) {
+      throw new NotFoundException(`Job ${id} not found`);
+    }
     if (job.attempts >= job.maxAttempts) {
-      await this.prisma.job.update({
-        where: { id },
-        data: { status: 'dead_letter', lastError: errorMessage },
-      });
+      await this.db.execute(
+        `UPDATE job SET status = 'dead_letter', lastError = ?, updatedAt = ? WHERE id = ?`,
+        [errorMessage, new Date(), id],
+      );
       return;
     }
-    await this.prisma.job.update({
-      where: { id },
-      data: {
-        status: 'pending',
-        lastError: errorMessage,
-        nextAttemptAt: new Date(
-          Date.now() + backoffSeconds(job.attempts) * 1000,
-        ),
-      },
-    });
+    await this.db.execute(
+      `UPDATE job SET status = 'pending', lastError = ?, nextAttemptAt = ?, updatedAt = ? WHERE id = ?`,
+      [
+        errorMessage,
+        new Date(Date.now() + backoffSeconds(job.attempts) * 1000),
+        new Date(),
+        id,
+      ],
+    );
   }
 
   async listDeadLetter(shopId: number): Promise<JobRecord[]> {
-    return this.prisma.job.findMany({
-      where: { shopId, status: 'dead_letter' },
-      orderBy: { updatedAt: 'desc' },
-    });
+    return this.db.query<(JobRow & RowDataPacket)[]>(
+      `SELECT * FROM job WHERE shopId = ? AND status = 'dead_letter' ORDER BY updatedAt DESC`,
+      [shopId],
+    );
   }
 
-  // Both scoped by (id, shopId) via updateMany rather than a plain
-  // findUnique-then-update — a shop admin can only ever retry/dismiss their
-  // own shop's failed jobs; a mismatched id/shopId pair (or an id belonging
-  // to another shop) matches zero rows and 404s, never leaks or mutates
-  // another tenant's job.
+  // Both scoped by (id, shopId) via an UPDATE checking affectedRows rather
+  // than a plain find-then-update — a shop admin can only ever retry/dismiss
+  // their own shop's failed jobs; a mismatched id/shopId pair (or an id
+  // belonging to another shop) matches zero rows and 404s, never leaks or
+  // mutates another tenant's job.
   async retry(shopId: number, id: number): Promise<void> {
-    const result = await this.prisma.job.updateMany({
-      where: { id, shopId, status: 'dead_letter' },
-      data: {
-        status: 'pending',
-        attempts: 0,
-        nextAttemptAt: new Date(),
-        lastError: null,
-      },
-    });
-    if (result.count === 0) {
+    const result = await this.db.execute(
+      `UPDATE job SET status = 'pending', attempts = 0, nextAttemptAt = ?, lastError = NULL, updatedAt = ?
+       WHERE id = ? AND shopId = ? AND status = 'dead_letter'`,
+      [new Date(), new Date(), id, shopId],
+    );
+    if (result.affectedRows === 0) {
       throw new NotFoundException(`Failed job ${id} not found`);
     }
   }
 
   async dismiss(shopId: number, id: number): Promise<void> {
-    const result = await this.prisma.job.updateMany({
-      where: { id, shopId, status: 'dead_letter' },
-      data: { status: 'dismissed' },
-    });
-    if (result.count === 0) {
+    const result = await this.db.execute(
+      `UPDATE job SET status = 'dismissed', updatedAt = ? WHERE id = ? AND shopId = ? AND status = 'dead_letter'`,
+      [new Date(), id, shopId],
+    );
+    if (result.affectedRows === 0) {
       throw new NotFoundException(`Failed job ${id} not found`);
     }
+  }
+
+  private async findById(id: number): Promise<JobRecord | null> {
+    const rows = await this.db.query<(JobRow & RowDataPacket)[]>(
+      `SELECT * FROM job WHERE id = ?`,
+      [id],
+    );
+    return rows[0] ?? null;
+  }
+
+  private async findByIdempotencyKey(key: string): Promise<JobRecord | null> {
+    const rows = await this.db.query<(JobRow & RowDataPacket)[]>(
+      `SELECT * FROM job WHERE idempotencyKey = ?`,
+      [key],
+    );
+    return rows[0] ?? null;
   }
 }
 

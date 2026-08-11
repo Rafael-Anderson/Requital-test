@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -9,7 +10,7 @@ const RESULTS_PER_COLLECTION = 5;
 @Injectable()
 export class SearchService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly branchRolesService: BranchRolesService,
   ) {}
 
@@ -38,16 +39,21 @@ export class SearchService {
   }
 
   private async searchProducts(ctx: TenantContext, query: string) {
-    const rows = await this.prisma.product.findMany({
-      where: {
-        shopId: ctx.shopId,
-        OR: [{ name: { contains: query } }, { sku: { contains: query } }],
-      },
-      select: { id: true, name: true, sku: true, price: true, thumbnail: true },
-      take: RESULTS_PER_COLLECTION,
-      orderBy: { name: 'asc' },
-    });
-    return rows.map((p) => ({ ...p, price: p.price.toString() }));
+    const like = `%${query}%`;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, name, sku, price, thumbnail FROM product
+       WHERE shopId = ? AND (name LIKE ? OR sku LIKE ?)
+       ORDER BY name ASC
+       LIMIT ?`,
+      [ctx.shopId, like, like, RESULTS_PER_COLLECTION],
+    );
+    return rows.map((p) => ({
+      id: p.id as number,
+      name: p.name as string,
+      sku: p.sku as string,
+      price: p.price as string,
+      thumbnail: p.thumbnail as string,
+    }));
   }
 
   private async searchOrders(
@@ -66,21 +72,35 @@ export class SearchService {
         'search.use',
       );
     }
-    const rows = await this.prisma.order.findMany({
-      where: {
-        shopId: ctx.shopId,
-        ...(outletId !== undefined && { outletId }),
-        OR: [
-          { customerName: { contains: query } },
-          { customerPhone: { contains: query } },
-          ...(searchAsId !== undefined ? [{ id: searchAsId }] : []),
-        ],
-      },
-      select: { id: true, customerName: true, status: true, total: true },
-      take: RESULTS_PER_COLLECTION,
-      orderBy: { createdAt: 'desc' },
-    });
-    return rows.map((o) => ({ ...o, total: o.total.toString() }));
+
+    const like = `%${query}%`;
+    const conditions = ['shopId = ?'];
+    const params: (string | number)[] = [ctx.shopId];
+    if (outletId !== undefined) {
+      conditions.push('outletId = ?');
+      params.push(outletId);
+    }
+    const orClauses = ['customerName LIKE ?', 'customerPhone LIKE ?'];
+    params.push(like, like);
+    if (searchAsId !== undefined) {
+      orClauses.push('id = ?');
+      params.push(searchAsId);
+    }
+    conditions.push(`(${orClauses.join(' OR ')})`);
+
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, customerName, status, total FROM \`order\`
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY createdAt DESC
+       LIMIT ?`,
+      [...params, RESULTS_PER_COLLECTION],
+    );
+    return rows.map((o) => ({
+      id: o.id as number,
+      customerName: o.customerName as string,
+      status: o.status as string,
+      total: o.total as string,
+    }));
   }
 
   private async searchCustomers(ctx: TenantContext, query: string) {
@@ -90,19 +110,19 @@ export class SearchService {
     // throwing, so one blocked collection doesn't fail the whole search.
     if (ctx.role !== 'admin' && ctx.role !== 'viewer') return [];
 
-    const rows = await this.prisma.customer.findMany({
-      where: {
-        shopId: ctx.shopId,
-        OR: [
-          { name: { contains: query } },
-          { phone: { contains: query } },
-          { email: { contains: query } },
-        ],
-      },
-      select: { id: true, name: true, phone: true, email: true },
-      take: RESULTS_PER_COLLECTION,
-      orderBy: { name: 'asc' },
-    });
-    return rows;
+    const like = `%${query}%`;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, name, phone, email FROM customer
+       WHERE shopId = ? AND (name LIKE ? OR phone LIKE ? OR email LIKE ?)
+       ORDER BY name ASC
+       LIMIT ?`,
+      [ctx.shopId, like, like, like, RESULTS_PER_COLLECTION],
+    );
+    return rows.map((c) => ({
+      id: c.id as number,
+      name: c.name as string,
+      phone: c.phone as string,
+      email: c.email as string | null,
+    }));
   }
 }

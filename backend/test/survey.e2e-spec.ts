@@ -4,10 +4,12 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
+import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
 import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
+import type { JobRow, ShopRow, SurveyresponseRow } from '../src/db/types';
 
 interface AuthResponse {
   accessToken: string;
@@ -49,16 +51,25 @@ function settle() {
 // console.log) this process's spy could then never observe. Processes this
 // specific job, by its own idempotency key, in this process instead.
 let jobsWorker: JobsWorkerService;
-let prisma: PrismaService;
+let db: DatabaseService;
+async function findJobByIdempotencyKey(
+  idempotencyKey: string,
+): Promise<JobRow | null> {
+  const rows = await db.query<(JobRow & RowDataPacket)[]>(
+    `SELECT * FROM job WHERE idempotencyKey = ?`,
+    [idempotencyKey],
+  );
+  return rows[0] ?? null;
+}
 async function processOwnEmailJob(idempotencyKey: string) {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
-    const job = await prisma.job.findUnique({ where: { idempotencyKey } });
+    const job = await findJobByIdempotencyKey(idempotencyKey);
     if (job) {
       if (job.status === 'pending') {
         await jobsWorker.processJobById(job.id);
       }
-      return prisma.job.findUnique({ where: { idempotencyKey } });
+      return findJobByIdempotencyKey(idempotencyKey);
     }
     await new Promise((resolve) => setTimeout(resolve, 30));
   }
@@ -89,7 +100,7 @@ describe('Post-purchase survey (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
     jobsWorker = app.get(JobsWorkerService);
   });
 
@@ -102,7 +113,6 @@ describe('Post-purchase survey (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -213,9 +223,11 @@ describe('Post-purchase survey (e2e)', () => {
 
     await driveToDelivered(adminToken, order.id);
 
-    const survey = await prisma.surveyresponse.findUnique({
-      where: { orderId: order.id },
-    });
+    const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
+      `SELECT * FROM surveyresponse WHERE orderId = ?`,
+      [order.id],
+    );
+    const survey = surveyRows[0] ?? null;
     expect(survey).not.toBeNull();
     expect(survey?.respondedAt).toBeNull();
 
@@ -236,10 +248,11 @@ describe('Post-purchase survey (e2e)', () => {
     const order = await createOrder(adminToken, outletId, productId, {});
     await driveToDelivered(adminToken, order.id);
 
-    const survey = await prisma.surveyresponse.findUnique({
-      where: { orderId: order.id },
-    });
-    expect(survey).toBeNull();
+    const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
+      `SELECT * FROM surveyresponse WHERE orderId = ?`,
+      [order.id],
+    );
+    expect(surveyRows[0] ?? null).toBeNull();
   });
 
   it('creates the survey row but sends no email when notifyEmail is off at the moment of delivery', async () => {
@@ -255,13 +268,14 @@ describe('Post-purchase survey (e2e)', () => {
 
     await driveToDelivered(adminToken, order.id);
 
-    const survey = await prisma.surveyresponse.findUnique({
-      where: { orderId: order.id },
-    });
-    expect(survey).not.toBeNull();
-    const job = await prisma.job.findUnique({
-      where: { idempotencyKey: `order:${order.id}:survey-email` },
-    });
+    const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
+      `SELECT * FROM surveyresponse WHERE orderId = ?`,
+      [order.id],
+    );
+    expect(surveyRows[0] ?? null).not.toBeNull();
+    const job = await findJobByIdempotencyKey(
+      `order:${order.id}:survey-email`,
+    );
     expect(job).toBeNull();
   });
 
@@ -276,9 +290,12 @@ describe('Post-purchase survey (e2e)', () => {
     });
 
     const orderNotificationsService = app.get(OrderNotificationsService);
-    const shop = await prisma.shop.findFirstOrThrow({
-      where: { name: { contains: 'survey-idempotent' } },
-    });
+    const shopRows = await db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE name LIKE ? LIMIT 1`,
+      [`%survey-idempotent%`],
+    );
+    const shop = shopRows[0];
+    if (!shop) throw new Error('shop not found');
     const notifiableOrder = {
       id: order.id,
       customerName: 'Survey Customer',
@@ -297,18 +314,20 @@ describe('Post-purchase survey (e2e)', () => {
       notifiableOrder,
     );
 
-    const count = await prisma.surveyresponse.count({
-      where: { orderId: order.id },
-    });
-    expect(count).toBe(1);
+    const countRows = await db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM surveyresponse WHERE orderId = ?`,
+      [order.id],
+    );
+    expect(Number(countRows[0].c)).toBe(1);
     // Idempotent at the job layer too: the second notifySurveyRequest call
     // enqueues under the same idempotencyKey, so exactly one row exists —
     // checked directly (job count), not by counting stub log lines, which
     // can't distinguish "one job, sent once" from "one job, retried twice".
-    const jobCount = await prisma.job.count({
-      where: { idempotencyKey: `order:${order.id}:survey-email` },
-    });
-    expect(jobCount).toBe(1);
+    const jobCountRows = await db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM job WHERE idempotencyKey = ?`,
+      [`order:${order.id}:survey-email`],
+    );
+    expect(Number(jobCountRows[0].c)).toBe(1);
     const job = await processOwnEmailJob(`order:${order.id}:survey-email`);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
@@ -322,9 +341,12 @@ describe('Post-purchase survey (e2e)', () => {
       );
       const order = await createOrder(adminToken, outletId, productId, {});
       await driveToDelivered(adminToken, order.id);
-      const survey = await prisma.surveyresponse.findUniqueOrThrow({
-        where: { orderId: order.id },
-      });
+      const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
+        `SELECT * FROM surveyresponse WHERE orderId = ?`,
+        [order.id],
+      );
+      const survey = surveyRows[0];
+      if (!survey) throw new Error('surveyresponse not found');
       return { adminToken, order, token: survey.token };
     }
 
@@ -355,9 +377,12 @@ describe('Post-purchase survey (e2e)', () => {
         .send({ rating: 5, comment: 'Great service!' })
         .expect(201);
 
-      const survey = await prisma.surveyresponse.findUniqueOrThrow({
-        where: { orderId: order.id },
-      });
+      const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
+        `SELECT * FROM surveyresponse WHERE orderId = ?`,
+        [order.id],
+      );
+      const survey = surveyRows[0];
+      if (!survey) throw new Error('surveyresponse not found');
       expect(survey.rating).toBe(5);
       expect(survey.comment).toBe('Great service!');
       expect(survey.respondedAt).not.toBeNull();

@@ -4,8 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
+import { isDuplicateKeyError } from '../database/mysql-errors';
+import type { AffiliateRow, AffiliatecodeRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateAffiliateDto } from './dto/create-affiliate.dto';
 import { UpdateAffiliateDto } from './dto/update-affiliate.dto';
@@ -18,54 +21,64 @@ const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 @Injectable()
 export class AffiliateService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // ---------- Affiliate tab ----------
 
   async getSummary(ctx: TenantContext) {
     const [
-      totalCode,
-      totalAffiliate,
-      activeAffiliate,
-      codesByStatus,
-      pendingOrders,
-      approvedOrders,
+      totalCodeRows,
+      totalAffiliateRows,
+      activeAffiliateRows,
+      codesByStatusRows,
+      pendingOrdersRows,
+      approvedOrdersRows,
     ] = await Promise.all([
-      this.prisma.affiliatecode.count({ where: { shopId: ctx.shopId } }),
-      this.prisma.affiliate.count({ where: { shopId: ctx.shopId } }),
-      this.prisma.affiliate.count({
-        where: { shopId: ctx.shopId, status: 'active' },
-      }),
-      this.prisma.affiliatecode.groupBy({
-        by: ['status'],
-        where: { shopId: ctx.shopId },
-        _count: true,
-      }),
-      this.prisma.affiliateorder.count({
-        where: { shopId: ctx.shopId, status: 'pending' },
-      }),
-      this.prisma.affiliateorder.findMany({
-        where: { shopId: ctx.shopId, status: 'approved' },
-        select: { order: { select: { total: true } } },
-      }),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliatecode WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliate WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliate WHERE shopId = ? AND status = 'active'`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT status, COUNT(*) AS c FROM affiliatecode WHERE shopId = ? GROUP BY status`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliateorder WHERE shopId = ? AND status = 'pending'`,
+        [ctx.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT o.total AS orderTotal FROM affiliateorder ao
+         JOIN \`order\` o ON o.id = ao.orderId
+         WHERE ao.shopId = ? AND ao.status = 'approved'`,
+        [ctx.shopId],
+      ),
     ]);
 
     const codeStatus = { approved: 0, pending: 0, blocked: 0 };
-    for (const row of codesByStatus) {
-      if (row.status in codeStatus)
-        codeStatus[row.status as keyof typeof codeStatus] = row._count;
+    for (const row of codesByStatusRows) {
+      const status = row.status as string;
+      if (status in codeStatus)
+        codeStatus[status as keyof typeof codeStatus] = Number(row.c);
     }
 
     return {
-      totalCode,
-      totalAffiliate,
-      activeAffiliate,
-      pendingOrders,
+      totalCode: Number(totalCodeRows[0].c),
+      totalAffiliate: Number(totalAffiliateRows[0].c),
+      activeAffiliate: Number(activeAffiliateRows[0].c),
+      pendingOrders: Number(pendingOrdersRows[0].c),
       // Revenue driven through approved affiliate orders (order totals, not
       // commission payable — the per-order commission owed is shown on the
       // Affiliate Orders tab instead).
-      approvedOrderRevenue: approvedOrders.reduce(
-        (sum, r) => sum + Number(r.order.total),
+      approvedOrderRevenue: approvedOrdersRows.reduce(
+        (sum, r) => sum + Number(r.orderTotal),
         0,
       ),
       codeStatus,
@@ -76,51 +89,59 @@ export class AffiliateService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
-    const where: Prisma.affiliateWhereInput = {
-      shopId: ctx.shopId,
-      ...(search && {
-        OR: [{ name: { contains: search } }, { mobile: { contains: search } }],
-      }),
-    };
+    const conditions = ['a.shopId = ?'];
+    const params: QueryParam[] = [ctx.shopId];
+    if (search) {
+      conditions.push('(a.name LIKE ? OR a.mobile LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    const where = conditions.join(' AND ');
 
-    const [rows, total] = await this.prisma.$transaction([
-      this.prisma.affiliate.findMany({
-        where,
-        include: {
-          affiliatecode: {
-            include: { _count: { select: { affiliateorder: true } } },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.affiliate.count({ where }),
+    const [rows, totalRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT a.*,
+                (SELECT COUNT(*) FROM affiliatecode ac WHERE ac.affiliateId = a.id) AS codesCount,
+                (SELECT COUNT(*) FROM affiliateorder ao
+                 JOIN affiliatecode ac ON ac.id = ao.affiliateCodeId
+                 WHERE ac.affiliateId = a.id) AS ordersCount
+         FROM affiliate a
+         WHERE ${where}
+         ORDER BY a.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliate a WHERE ${where}`,
+        params,
+      ),
     ]);
 
     return {
       data: rows.map((a) => ({
-        id: a.id,
-        name: a.name,
-        mobile: a.mobile,
-        status: a.status,
-        createdAt: a.createdAt,
-        codesCount: a.affiliatecode.length,
-        ordersCount: a.affiliatecode.reduce(
-          (sum, c) => sum + c._count.affiliateorder,
-          0,
-        ),
+        id: a.id as number,
+        name: a.name as string,
+        mobile: a.mobile as string,
+        status: a.status as string,
+        createdAt: a.createdAt as Date,
+        codesCount: Number(a.codesCount),
+        ordersCount: Number(a.ordersCount),
       })),
       page,
       pageSize,
-      total,
+      total: Number(totalRows[0].c),
     };
   }
 
   async createAffiliate(ctx: TenantContext, dto: CreateAffiliateDto) {
-    return this.prisma.affiliate.create({
-      data: { shopId: ctx.shopId, name: dto.name, mobile: dto.mobile },
-    });
+    const result = await this.db.execute(
+      `INSERT INTO affiliate (shopId, name, mobile) VALUES (?, ?, ?)`,
+      [ctx.shopId, dto.name, dto.mobile],
+    );
+    const rows = await this.db.query<(AffiliateRow & RowDataPacket)[]>(
+      `SELECT * FROM affiliate WHERE id = ?`,
+      [result.insertId],
+    );
+    return rows[0];
   }
 
   async updateAffiliate(
@@ -129,10 +150,31 @@ export class AffiliateService {
     dto: UpdateAffiliateDto,
   ) {
     await this.assertAffiliateBelongsToShop(ctx, id);
-    return this.prisma.affiliate.update({
-      where: { id },
-      data: { name: dto.name, mobile: dto.mobile, status: dto.status },
-    });
+    const setParts: string[] = [];
+    const params: QueryParam[] = [];
+    if (dto.name !== undefined) {
+      setParts.push('name = ?');
+      params.push(dto.name);
+    }
+    if (dto.mobile !== undefined) {
+      setParts.push('mobile = ?');
+      params.push(dto.mobile);
+    }
+    if (dto.status !== undefined) {
+      setParts.push('status = ?');
+      params.push(dto.status);
+    }
+    if (setParts.length > 0) {
+      await this.db.execute(`UPDATE affiliate SET ${setParts.join(', ')} WHERE id = ?`, [
+        ...params,
+        id,
+      ]);
+    }
+    const rows = await this.db.query<(AffiliateRow & RowDataPacket)[]>(
+      `SELECT * FROM affiliate WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 
   // ---------- Affiliate Codes tab ----------
@@ -141,61 +183,63 @@ export class AffiliateService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
     const search = query.search?.trim();
-    const where: Prisma.affiliatecodeWhereInput = {
-      shopId: ctx.shopId,
-      ...(search && {
-        OR: [
-          { code: { contains: search } },
-          { promotionFor: { contains: search } },
-        ],
-      }),
-    };
+    const conditions = ['ac.shopId = ?'];
+    const params: QueryParam[] = [ctx.shopId];
+    if (search) {
+      conditions.push('(ac.code LIKE ? OR ac.promotionFor LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    const where = conditions.join(' AND ');
 
-    const shop = await this.prisma.shop.findUniqueOrThrow({
-      where: { id: ctx.shopId },
-      select: { subdomain: true },
-    });
-    const [rows, total] = await this.prisma.$transaction([
-      this.prisma.affiliatecode.findMany({
-        where,
-        include: {
-          affiliate: { select: { name: true } },
-          _count: { select: { affiliateorder: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.affiliatecode.count({ where }),
+    const [shopRows, rows, totalRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(`SELECT subdomain FROM shop WHERE id = ?`, [
+        ctx.shopId,
+      ]),
+      this.db.query<RowDataPacket[]>(
+        `SELECT ac.*, af.name AS affiliateName,
+                (SELECT COUNT(*) FROM affiliateorder ao WHERE ao.affiliateCodeId = ac.id) AS ordersCount
+         FROM affiliatecode ac
+         JOIN affiliate af ON af.id = ac.affiliateId
+         WHERE ${where}
+         ORDER BY ac.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliatecode ac WHERE ${where}`,
+        params,
+      ),
     ]);
+    const subdomain = shopRows[0].subdomain as string;
 
     return {
       data: rows.map((c) => ({
-        id: c.id,
-        code: c.code,
-        affiliateId: c.affiliateId,
-        affiliateName: c.affiliate.name,
-        promotionFor: c.promotionFor,
-        url: `${STOREFRONT_URL}/${shop.subdomain}?ref=${c.code}`,
-        status: c.status,
-        commissionType: c.commissionType,
+        id: c.id as number,
+        code: c.code as string,
+        affiliateId: c.affiliateId as number,
+        affiliateName: c.affiliateName as string,
+        promotionFor: c.promotionFor as string,
+        url: `${STOREFRONT_URL}/${subdomain}?ref=${c.code as string}`,
+        status: c.status as string,
+        commissionType: c.commissionType as string,
         commissionValue: Number(c.commissionValue),
-        validFrom: c.validFrom,
-        validUntil: c.validUntil,
-        ordersCount: c._count.affiliateorder,
-        createdAt: c.createdAt,
+        validFrom: c.validFrom as Date | null,
+        validUntil: c.validUntil as Date | null,
+        ordersCount: Number(c.ordersCount),
+        createdAt: c.createdAt as Date,
       })),
       page,
       pageSize,
-      total,
+      total: Number(totalRows[0].c),
     };
   }
 
   async createCode(ctx: TenantContext, dto: CreateAffiliateCodeDto) {
-    const affiliate = await this.prisma.affiliate.findFirst({
-      where: { id: dto.affiliateId, shopId: ctx.shopId },
-    });
-    if (!affiliate) {
+    const affiliateRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM affiliate WHERE id = ? AND shopId = ?`,
+      [dto.affiliateId, ctx.shopId],
+    );
+    if (affiliateRows.length === 0) {
       throw new NotFoundException(`Affiliate ${dto.affiliateId} not found`);
     }
     if (
@@ -207,23 +251,27 @@ export class AffiliateService {
     }
 
     try {
-      return await this.prisma.affiliatecode.create({
-        data: {
-          shopId: ctx.shopId,
-          affiliateId: dto.affiliateId,
-          code: dto.code,
-          promotionFor: dto.promotionFor ?? 'All Products',
-          commissionType: dto.commissionType,
-          commissionValue: dto.commissionValue,
-          validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
-          validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
-        },
-      });
+      const result = await this.db.execute(
+        `INSERT INTO affiliatecode (shopId, affiliateId, code, promotionFor, commissionType, commissionValue, validFrom, validUntil)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ctx.shopId,
+          dto.affiliateId,
+          dto.code,
+          dto.promotionFor ?? 'All Products',
+          dto.commissionType,
+          dto.commissionValue,
+          dto.validFrom ? new Date(dto.validFrom) : null,
+          dto.validUntil ? new Date(dto.validUntil) : null,
+        ],
+      );
+      const rows = await this.db.query<(AffiliatecodeRow & RowDataPacket)[]>(
+        `SELECT * FROM affiliatecode WHERE id = ?`,
+        [result.insertId],
+      );
+      return rows[0];
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (isDuplicateKeyError(error)) {
         throw new ConflictException(
           `Code '${dto.code}' already exists for this shop`,
         );
@@ -238,17 +286,43 @@ export class AffiliateService {
     dto: UpdateAffiliateCodeDto,
   ) {
     await this.assertCodeBelongsToShop(ctx, id);
-    return this.prisma.affiliatecode.update({
-      where: { id },
-      data: {
-        promotionFor: dto.promotionFor,
-        status: dto.status,
-        commissionType: dto.commissionType,
-        commissionValue: dto.commissionValue,
-        validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
-        validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
-      },
-    });
+    const setParts: string[] = [];
+    const params: QueryParam[] = [];
+    if (dto.promotionFor !== undefined) {
+      setParts.push('promotionFor = ?');
+      params.push(dto.promotionFor);
+    }
+    if (dto.status !== undefined) {
+      setParts.push('status = ?');
+      params.push(dto.status);
+    }
+    if (dto.commissionType !== undefined) {
+      setParts.push('commissionType = ?');
+      params.push(dto.commissionType);
+    }
+    if (dto.commissionValue !== undefined) {
+      setParts.push('commissionValue = ?');
+      params.push(dto.commissionValue);
+    }
+    if (dto.validFrom !== undefined) {
+      setParts.push('validFrom = ?');
+      params.push(dto.validFrom ? new Date(dto.validFrom) : null);
+    }
+    if (dto.validUntil !== undefined) {
+      setParts.push('validUntil = ?');
+      params.push(dto.validUntil ? new Date(dto.validUntil) : null);
+    }
+    if (setParts.length > 0) {
+      await this.db.execute(`UPDATE affiliatecode SET ${setParts.join(', ')} WHERE id = ?`, [
+        ...params,
+        id,
+      ]);
+    }
+    const rows = await this.db.query<(AffiliatecodeRow & RowDataPacket)[]>(
+      `SELECT * FROM affiliatecode WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 
   // ---------- Affiliate Orders tab ----------
@@ -257,37 +331,40 @@ export class AffiliateService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    const [rows, total] = await this.prisma.$transaction([
-      this.prisma.affiliateorder.findMany({
-        where: { shopId: ctx.shopId },
-        include: {
-          order: { select: { id: true, customerName: true, total: true } },
-          affiliatecode: {
-            select: { code: true, affiliate: { select: { name: true } } },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.affiliateorder.count({ where: { shopId: ctx.shopId } }),
+    const [rows, totalRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT ao.*, o.id AS orderPk, o.customerName AS orderCustomerName, o.total AS orderTotal,
+                ac.code AS codeValue, af.name AS affiliateName
+         FROM affiliateorder ao
+         JOIN \`order\` o ON o.id = ao.orderId
+         JOIN affiliatecode ac ON ac.id = ao.affiliateCodeId
+         JOIN affiliate af ON af.id = ac.affiliateId
+         WHERE ao.shopId = ?
+         ORDER BY ao.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [ctx.shopId, pageSize, (page - 1) * pageSize],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM affiliateorder WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
     ]);
 
     return {
       data: rows.map((r) => ({
-        id: r.id,
-        orderId: r.order.id,
-        customerName: r.order.customerName,
-        orderTotal: Number(r.order.total),
-        code: r.affiliatecode.code,
-        affiliateName: r.affiliatecode.affiliate.name,
+        id: r.id as number,
+        orderId: r.orderPk as number,
+        customerName: r.orderCustomerName as string,
+        orderTotal: Number(r.orderTotal),
+        code: r.codeValue as string,
+        affiliateName: r.affiliateName as string,
         commissionAmount: Number(r.commissionAmount),
-        status: r.status,
-        createdAt: r.createdAt,
+        status: r.status as string,
+        createdAt: r.createdAt as Date,
       })),
       page,
       pageSize,
-      total,
+      total: Number(totalRows[0].c),
     };
   }
 
@@ -300,21 +377,28 @@ export class AffiliateService {
     id: number,
     dto: UpdateAffiliateOrderStatusDto,
   ) {
-    const row = await this.prisma.affiliateorder.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM affiliateorder WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    const row = rows[0];
     if (!row) {
       throw new NotFoundException(`Affiliate order ${id} not found`);
     }
     if (row.status !== 'pending') {
       throw new BadRequestException(
-        `Cannot change status — commission is already '${row.status}'`,
+        `Cannot change status — commission is already '${row.status as string}'`,
       );
     }
-    return this.prisma.affiliateorder.update({
-      where: { id },
-      data: { status: dto.status },
-    });
+    await this.db.execute(`UPDATE affiliateorder SET status = ? WHERE id = ?`, [
+      dto.status,
+      id,
+    ]);
+    const updated = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM affiliateorder WHERE id = ?`,
+      [id],
+    );
+    return updated[0];
   }
 
   // ---------- Referral attribution (called from order-creation flows) ----------
@@ -331,9 +415,11 @@ export class AffiliateService {
     const trimmed = code?.trim();
     if (!trimmed) return null;
 
-    const row = await this.prisma.affiliatecode.findUnique({
-      where: { shopId_code: { shopId, code: trimmed } },
-    });
+    const rows = await this.db.query<(AffiliatecodeRow & RowDataPacket)[]>(
+      `SELECT * FROM affiliatecode WHERE shopId = ? AND code = ?`,
+      [shopId, trimmed],
+    );
+    const row = rows[0];
     if (!row || row.status !== 'approved') return null;
 
     const now = new Date();
@@ -348,27 +434,25 @@ export class AffiliateService {
     return { affiliateCodeId: row.id, commissionAmount };
   }
 
-  // Called inside the same transaction that creates the order, so attribution
-  // can never exist without the order it's attributed to (or vice versa).
+  // Called right after the transaction that creates the order (not
+  // atomically inside it — OrdersService/PublicService both call this with
+  // the plain pool once the order id is known) — accepts either so a
+  // caller that DOES have an open connection can still pass it through.
   async recordAttribution(
-    tx: Prisma.TransactionClient,
+    runner: PoolConnection | Pool,
     shopId: number,
     orderId: number,
     attribution: { affiliateCodeId: number; commissionAmount: number },
   ) {
-    await tx.affiliateorder.create({
-      data: {
-        shopId,
-        orderId,
-        affiliateCodeId: attribution.affiliateCodeId,
-        commissionAmount: attribution.commissionAmount,
-      },
-    });
+    await runner.query(
+      `INSERT INTO affiliateorder (shopId, orderId, affiliateCodeId, commissionAmount) VALUES (?, ?, ?, ?)`,
+      [shopId, orderId, attribution.affiliateCodeId, attribution.commissionAmount],
+    );
   }
 
   // Auto-sync from the order's own lifecycle — called from
   // OrdersService.updateStatus/cancel and PaymentsService.handleWebhook.
-  // Safe no-op if the order has no affiliate attribution at all (updateMany
+  // Safe no-op if the order has no affiliate attribution at all (the UPDATE
   // just matches zero rows). Only ever moves a commission OUT of 'pending' —
   // never re-derives or reverses a status once set, so a merchant's own
   // manual approve/block (or an earlier auto-sync) is never clobbered by a
@@ -384,29 +468,29 @@ export class AffiliateService {
           ? 'approved'
           : null;
     if (!nextStatus) return;
-    await this.prisma.affiliateorder.updateMany({
-      where: { orderId, status: 'pending' },
-      data: { status: nextStatus },
-    });
+    await this.db.execute(
+      `UPDATE affiliateorder SET status = ? WHERE orderId = ? AND status = 'pending'`,
+      [nextStatus, orderId],
+    );
   }
 
   private async assertAffiliateBelongsToShop(ctx: TenantContext, id: number) {
-    const affiliate = await this.prisma.affiliate.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!affiliate) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM affiliate WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Affiliate ${id} not found`);
     }
-    return affiliate;
   }
 
   private async assertCodeBelongsToShop(ctx: TenantContext, id: number) {
-    const code = await this.prisma.affiliatecode.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!code) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM affiliatecode WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Affiliate code ${id} not found`);
     }
-    return code;
   }
 }

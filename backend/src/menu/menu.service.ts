@@ -3,8 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
@@ -12,17 +12,26 @@ import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { ReorderMenuItemsDto } from './dto/reorder-menu-items.dto';
 import type { MenuItemType } from './menu-constants';
 
-const menuItemInclude = {
-  collection: { select: { id: true, name: true, slug: true } },
-  menuitemcollection: {
-    orderBy: { sortOrder: 'asc' as const },
-    include: { collection: { select: { id: true, name: true, slug: true } } },
-  },
-} satisfies Prisma.menuitemInclude;
+export interface CollectionSummary {
+  id: number;
+  name: string;
+  slug: string;
+}
 
-type MenuItemWithRelations = Prisma.menuitemGetPayload<{
-  include: typeof menuItemInclude;
-}>;
+interface AssembledMenuItem {
+  id: number;
+  shopId: number;
+  label: string;
+  type: string;
+  displayOrder: number;
+  collectionId: number | null;
+  collection: CollectionSummary | null;
+  menuitemcollection: {
+    collectionId: number;
+    sortOrder: number;
+    collection: CollectionSummary;
+  }[];
+}
 
 // The storefront's merchant-configurable top-bar "Menu" (Phase C) — a
 // merchant-ordered list of LINK (one Collection) / DROPDOWN (several
@@ -30,17 +39,18 @@ type MenuItemWithRelations = Prisma.menuitemGetPayload<{
 @Injectable()
 export class MenuService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
   async findAll(ctx: TenantContext) {
-    const items = await this.prisma.menuitem.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: { displayOrder: 'asc' },
-      include: menuItemInclude,
-    });
-    return items.map((i) => this.toAdminResponse(i));
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM menuitem WHERE shopId = ? ORDER BY displayOrder ASC`,
+      [ctx.shopId],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const items = await this.loadMenuItemsWithRelations(ids);
+    return ids.map((id) => this.toAdminResponse(items.get(id)!));
   }
 
   async findOne(ctx: TenantContext, id: number) {
@@ -60,28 +70,28 @@ export class MenuService {
       );
     }
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const item = await tx.menuitem.create({
-        data: {
-          shopId: ctx.shopId,
-          label: dto.label,
-          type: dto.type,
-          collectionId: dto.type === 'LINK' ? dto.collectionId : null,
-          displayOrder: dto.displayOrder ?? 0,
-        },
-      });
+    const newId = await this.db.transaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO menuitem (shopId, label, type, collectionId, displayOrder) VALUES (?, ?, ?, ?, ?)`,
+        [
+          ctx.shopId,
+          dto.label,
+          dto.type,
+          dto.type === 'LINK' ? dto.collectionId : null,
+          dto.displayOrder ?? 0,
+        ],
+      );
+      const itemId = (result as { insertId: number }).insertId;
       if (dto.type === 'DROPDOWN' && dto.collections?.length) {
-        await tx.menuitemcollection.createMany({
-          data: dto.collections.map((c) => ({
-            menuItemId: item.id,
-            collectionId: c.collectionId,
-            sortOrder: c.sortOrder,
-          })),
-        });
+        const placeholders = dto.collections.map(() => '(?, ?, ?)').join(', ');
+        await conn.query(
+          `INSERT INTO menuitemcollection (menuItemId, collectionId, sortOrder) VALUES ${placeholders}`,
+          dto.collections.flatMap((c) => [itemId, c.collectionId, c.sortOrder]),
+        );
       }
-      return item;
+      return itemId;
     });
-    return this.findOne(ctx, created.id);
+    return this.findOne(ctx, newId);
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateMenuItemDto) {
@@ -115,26 +125,39 @@ export class MenuService {
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.menuitem.update({
-        where: { id },
-        data: {
-          label: dto.label,
-          type: dto.type,
-          displayOrder: dto.displayOrder,
-          ...(touchesTarget && { collectionId }),
-        },
-      });
+    await this.db.transaction(async (conn) => {
+      const setParts: string[] = [];
+      const setParams: (string | number | null)[] = [];
+      if (dto.label !== undefined) {
+        setParts.push('label = ?');
+        setParams.push(dto.label);
+      }
+      if (dto.type !== undefined) {
+        setParts.push('type = ?');
+        setParams.push(dto.type);
+      }
+      if (dto.displayOrder !== undefined) {
+        setParts.push('displayOrder = ?');
+        setParams.push(dto.displayOrder);
+      }
       if (touchesTarget) {
-        await tx.menuitemcollection.deleteMany({ where: { menuItemId: id } });
+        setParts.push('collectionId = ?');
+        setParams.push(collectionId ?? null);
+      }
+      if (setParts.length > 0) {
+        await conn.query(`UPDATE menuitem SET ${setParts.join(', ')} WHERE id = ?`, [
+          ...setParams,
+          id,
+        ]);
+      }
+      if (touchesTarget) {
+        await conn.query(`DELETE FROM menuitemcollection WHERE menuItemId = ?`, [id]);
         if (collections?.length) {
-          await tx.menuitemcollection.createMany({
-            data: collections.map((c) => ({
-              menuItemId: id,
-              collectionId: c.collectionId,
-              sortOrder: c.sortOrder,
-            })),
-          });
+          const placeholders = collections.map(() => '(?, ?, ?)').join(', ');
+          await conn.query(
+            `INSERT INTO menuitemcollection (menuItemId, collectionId, sortOrder) VALUES ${placeholders}`,
+            collections.flatMap((c) => [id, c.collectionId, c.sortOrder]),
+          );
         }
       }
     });
@@ -143,7 +166,7 @@ export class MenuService {
 
   async remove(ctx: TenantContext, id: number) {
     const item = await this.assertBelongsToShop(ctx, id);
-    await this.prisma.menuitem.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM menuitem WHERE id = ?`, [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'menuitem.deleted',
       entityType: 'menuitem',
@@ -156,12 +179,13 @@ export class MenuService {
   // ---------- Public (storefront) ----------
 
   async listPublic(shopId: number) {
-    const items = await this.prisma.menuitem.findMany({
-      where: { shopId },
-      orderBy: { displayOrder: 'asc' },
-      include: menuItemInclude,
-    });
-    return items.map((i) => this.toAdminResponse(i));
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM menuitem WHERE shopId = ? ORDER BY displayOrder ASC`,
+      [shopId],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const items = await this.loadMenuItemsWithRelations(ids);
+    return ids.map((id) => this.toAdminResponse(items.get(id)!));
   }
 
   // ---------- Admin CRUD (cont'd) ----------
@@ -169,11 +193,11 @@ export class MenuService {
   // Every id must belong to this shop, same pattern as
   // BioLinksService.reorder / CollectionsService.reorder.
   async reorder(ctx: TenantContext, dto: ReorderMenuItemsDto) {
-    const existing = await this.prisma.menuitem.findMany({
-      where: { shopId: ctx.shopId },
-      select: { id: true },
-    });
-    const existingIds = new Set(existing.map((i) => i.id));
+    const existing = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM menuitem WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    const existingIds = new Set(existing.map((i) => i.id as number));
     const requestedIds = new Set(dto.ids);
     if (
       dto.ids.length !== existingIds.size ||
@@ -184,15 +208,83 @@ export class MenuService {
       );
     }
 
-    await this.prisma.$transaction(
-      dto.ids.map((id, index) =>
-        this.prisma.menuitem.update({
-          where: { id },
-          data: { displayOrder: index },
-        }),
-      ),
-    );
+    await this.db.transaction(async (conn) => {
+      for (let index = 0; index < dto.ids.length; index++) {
+        await conn.query(`UPDATE menuitem SET displayOrder = ? WHERE id = ?`, [
+          index,
+          dto.ids[index],
+        ]);
+      }
+    });
     return this.findAll(ctx);
+  }
+
+  // Batch-loads every relation menuItemInclude used to fetch in one Prisma
+  // nested include, as separate WHERE...IN queries grouped in JS.
+  private async loadMenuItemsWithRelations(
+    ids: number[],
+  ): Promise<Map<number, AssembledMenuItem>> {
+    const result = new Map<number, AssembledMenuItem>();
+    if (ids.length === 0) return result;
+    const idList = ids.map(() => '?').join(', ');
+    const [items, memberships] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT mi.id, mi.shopId, mi.label, mi.type, mi.displayOrder, mi.collectionId,
+                c.id AS colId, c.name AS colName, c.slug AS colSlug
+         FROM menuitem mi
+         LEFT JOIN collection c ON c.id = mi.collectionId
+         WHERE mi.id IN (${idList})`,
+        ids,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT mic.menuItemId, mic.collectionId, mic.sortOrder,
+                c.id AS colId, c.name AS colName, c.slug AS colSlug
+         FROM menuitemcollection mic
+         JOIN collection c ON c.id = mic.collectionId
+         WHERE mic.menuItemId IN (${idList})
+         ORDER BY mic.sortOrder ASC`,
+        ids,
+      ),
+    ]);
+    const membershipsByItem = new Map<
+      number,
+      { collectionId: number; sortOrder: number; collection: CollectionSummary }[]
+    >();
+    for (const row of memberships) {
+      const menuItemId = row.menuItemId as number;
+      const list = membershipsByItem.get(menuItemId) ?? [];
+      list.push({
+        collectionId: row.collectionId as number,
+        sortOrder: row.sortOrder as number,
+        collection: {
+          id: row.colId as number,
+          name: row.colName as string,
+          slug: row.colSlug as string,
+        },
+      });
+      membershipsByItem.set(menuItemId, list);
+    }
+    for (const item of items) {
+      const id = item.id as number;
+      result.set(id, {
+        id,
+        shopId: item.shopId as number,
+        label: item.label as string,
+        type: item.type as string,
+        displayOrder: item.displayOrder as number,
+        collectionId: item.collectionId as number | null,
+        collection:
+          item.colId !== null
+            ? {
+                id: item.colId as number,
+                name: item.colName as string,
+                slug: item.colSlug as string,
+              }
+            : null,
+        menuitemcollection: membershipsByItem.get(id) ?? [],
+      });
+    }
+    return result;
   }
 
   private assertFieldsMatchType(
@@ -230,25 +322,27 @@ export class MenuService {
   private async assertBelongsToShop(
     ctx: TenantContext,
     id: number,
-  ): Promise<MenuItemWithRelations> {
-    const item = await this.prisma.menuitem.findFirst({
-      where: { id, shopId: ctx.shopId },
-      include: menuItemInclude,
-    });
-    if (!item) {
+  ): Promise<AssembledMenuItem> {
+    const ownRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM menuitem WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (ownRows.length === 0) {
       throw new NotFoundException(`Menu item ${id} not found`);
     }
-    return item;
+    const items = await this.loadMenuItemsWithRelations([id]);
+    return items.get(id)!;
   }
 
   private async assertCollectionBelongsToShop(
     ctx: TenantContext,
     collectionId: number,
   ) {
-    const collection = await this.prisma.collection.findFirst({
-      where: { id: collectionId, shopId: ctx.shopId },
-    });
-    if (!collection) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM collection WHERE id = ? AND shopId = ?`,
+      [collectionId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Collection ${collectionId} not found`);
     }
   }
@@ -258,17 +352,19 @@ export class MenuService {
     collectionIds: number[],
   ) {
     const uniqueIds = [...new Set(collectionIds)];
-    const count = await this.prisma.collection.count({
-      where: { id: { in: uniqueIds }, shopId: ctx.shopId },
-    });
-    if (count !== uniqueIds.length) {
+    if (uniqueIds.length === 0) return;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM collection WHERE id IN (${uniqueIds.map(() => '?').join(', ')}) AND shopId = ?`,
+      [...uniqueIds, ctx.shopId],
+    );
+    if (Number(rows[0].c) !== uniqueIds.length) {
       throw new BadRequestException(
         'One or more collectionIds are invalid for this shop',
       );
     }
   }
 
-  private toAdminResponse(item: MenuItemWithRelations) {
+  private toAdminResponse(item: AssembledMenuItem) {
     return {
       id: item.id,
       label: item.label,

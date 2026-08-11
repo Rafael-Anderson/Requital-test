@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { UserRow } from '../src/db/types';
 
 interface TokenPair {
   accessToken: string;
@@ -39,7 +41,7 @@ function messageOf(res: Response): string {
 // it; this file is intentionally not that.
 describe('Auth lifecycle: progressive lockout, token supersession, adversarial cases (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -55,11 +57,10 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -120,10 +121,10 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
       // auth-security.e2e-spec.ts uses for the expired-reset-token test) —
       // waiting out a real 2-second window in every CI run would be slow
       // and the elapsed-time logic itself isn't what's under test here.
-      await prisma.user.updateMany({
-        where: { email: signup.email },
-        data: { lastFailedLoginAt: new Date(Date.now() - 3000) },
-      });
+      await db.execute(
+        `UPDATE user SET lastFailedLoginAt = ? WHERE email = ?`,
+        [new Date(Date.now() - 3000), signup.email],
+      );
 
       const res = await request(app.getHttpServer())
         .post('/auth/login')
@@ -134,9 +135,12 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
       // A real login must fully clear the counter, not just let this one
       // attempt through — the very next login (even after another instant
       // failed guess) should not still be under the old, larger cooldown.
-      const user = await prisma.user.findUniqueOrThrow({
-        where: { email: signup.email },
-      });
+      const userRows = await db.query<(UserRow & RowDataPacket)[]>(
+        `SELECT * FROM user WHERE email = ?`,
+        [signup.email],
+      );
+      const user = userRows[0];
+      if (!user) throw new Error('user not found');
       expect(user.failedLoginAttempts).toBe(0);
     });
 
@@ -162,10 +166,10 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
       // Even after 8 straight failures, the account is not permanently
       // locked: backdating lastFailedLoginAt to "long enough ago" (past the
       // capped 60s ceiling) always lets the correct password back in.
-      await prisma.user.updateMany({
-        where: { email: signup.email },
-        data: { lastFailedLoginAt: new Date(Date.now() - 61_000) },
-      });
+      await db.execute(
+        `UPDATE user SET lastFailedLoginAt = ? WHERE email = ?`,
+        [new Date(Date.now() - 61_000), signup.email],
+      );
       await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: signup.email, password: 'password123' })
@@ -356,10 +360,10 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
         .send({ token: 'complete-nonsense', newPassword: 'whatever12345' })
         .expect(400);
 
-      await prisma.authtoken.updateMany({
-        where: { userId: signup.user.id, purpose: 'password_reset' },
-        data: { expiresAt: new Date(Date.now() - 1000) },
-      });
+      await db.execute(
+        `UPDATE authtoken SET expiresAt = ? WHERE userId = ? AND purpose = ?`,
+        [new Date(Date.now() - 1000), signup.user.id, 'password_reset'],
+      );
       const expired = await request(app.getHttpServer())
         .post('/auth/reset-password')
         .send({ token, newPassword: 'whatever12345' })

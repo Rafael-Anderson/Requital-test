@@ -1,10 +1,9 @@
-import { Prisma } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PaymentProviderRegistry } from './payment-provider.registry';
 import type { PaymentSettingsService } from './payment-settings.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import { TelrPaymentProvider } from './providers/telr-payment.provider';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { DatabaseService } from '../database/database.service';
 import type {
   PaymentProvider,
   WebhookResult,
@@ -29,10 +28,14 @@ const mockAffiliateServicePaid = {
   syncOrderStatus: jest.fn().mockResolvedValue(undefined),
 } as unknown as AffiliateService;
 
-function createMockPrisma(opts: {
+function duplicateKeyError() {
+  return Object.assign(new Error('Duplicate entry'), { errno: 1062 });
+}
+
+function createMockDb(opts: {
   order?: {
     id: number;
-    total: Prisma.Decimal | number;
+    total: number;
     shopId?: number;
     status?: string;
   } | null;
@@ -40,25 +43,48 @@ function createMockPrisma(opts: {
   adminUser?: { id: number } | null;
 }) {
   const order = opts.order ?? null;
-  return {
-    order: {
-      findUnique: jest.fn().mockResolvedValue(order),
-      update: jest.fn().mockResolvedValue({}),
-    },
-    user: {
-      findFirst: jest.fn().mockResolvedValue(opts.adminUser ?? { id: 1 }),
-    },
-    paymenttransaction: {
-      create: jest.fn(() =>
-        opts.createRejectsWith
-          ? Promise.reject(opts.createRejectsWith)
-          : Promise.resolve({}),
-      ),
-    },
-    // Array-form $transaction: reject like the real thing if any operation
-    // in the array is itself a rejected promise by the time this runs.
-    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
-  } as unknown as PrismaService;
+  const insertCalls: unknown[][] = [];
+  const orderUpdateCalls: unknown[][] = [];
+
+  interface MockConn {
+    query: jest.Mock;
+  }
+  const conn: MockConn = {
+    query: jest.fn((sql: string, params?: unknown[]) => {
+      if (sql.includes('INSERT INTO paymenttransaction')) {
+        insertCalls.push(params ?? []);
+        if (opts.createRejectsWith) {
+          return Promise.reject(opts.createRejectsWith);
+        }
+        return Promise.resolve([{ insertId: 1 }, []]);
+      }
+      if (sql.includes("UPDATE `order` SET paymentStatus")) {
+        orderUpdateCalls.push(params ?? []);
+        return Promise.resolve([{ affectedRows: 1 }, []]);
+      }
+      return Promise.resolve([[], []]);
+    }),
+  };
+
+  const db = {
+    query: jest.fn((sql: string) => {
+      if (sql.includes('FROM `order`')) {
+        return Promise.resolve(order ? [order] : []);
+      }
+      if (sql.includes('FROM user')) {
+        const adminUser =
+          opts.adminUser !== undefined ? opts.adminUser : { id: 1 };
+        return Promise.resolve(adminUser ? [adminUser] : []);
+      }
+      return Promise.resolve([]);
+    }),
+    execute: jest.fn().mockResolvedValue({ affectedRows: 1 }),
+    transaction: jest.fn((cb: (conn: MockConn) => Promise<unknown>) =>
+      cb(conn),
+    ),
+  } as unknown as DatabaseService;
+
+  return { db, insertCalls, orderUpdateCalls };
 }
 
 class FakeProvider implements PaymentProvider {
@@ -70,22 +96,13 @@ class FakeProvider implements PaymentProvider {
   }
 }
 
-// A P2002 (unique constraint violation) as thrown by the real Prisma client
-// on a duplicate (gateway, gatewayReference) insert.
-function p2002(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-    code: 'P2002',
-    clientVersion: 'test',
-  });
-}
-
 describe('PaymentsService.handleWebhook — idempotency (shared across every gateway)', () => {
   it('a stub provider (e.g. Telr) that has no real parseWebhookEvent implementation safely no-ops', async () => {
     const registry = new PaymentProviderRegistry();
     registry.register(new TelrPaymentProvider());
-    const prisma = createMockPrisma({});
+    const { db } = createMockDb({});
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       {} as AffiliateService,
@@ -100,7 +117,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
     );
 
     expect(result).toEqual({ received: true });
-    expect(prisma.paymenttransaction.create).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it('records the transaction and marks the order paid on a recognized "paid" event', async () => {
@@ -112,14 +129,14 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
         status: 'paid',
       }),
     );
-    const prisma = createMockPrisma({
-      order: { id: 42, total: new Prisma.Decimal(100) },
+    const { db, insertCalls, orderUpdateCalls } = createMockDb({
+      order: { id: 42, total: 100 },
     });
     const affiliateService = {
       syncOrderStatus: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       affiliateService,
@@ -134,22 +151,15 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
     );
 
     expect(result).toEqual({ received: true });
-    expect(prisma.paymenttransaction.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          orderId: 42,
-          gateway: 'fake',
-          gatewayReference: 'evt_1',
-        }),
-      }),
+    expect(insertCalls).toHaveLength(1);
+    expect(insertCalls[0]).toEqual(
+      expect.arrayContaining([42, 'fake', 'evt_1']),
     );
-    expect(prisma.order.update).toHaveBeenCalledWith({
-      where: { id: 42 },
-      data: { paymentStatus: 'paid' },
-    });
+    expect(orderUpdateCalls).toHaveLength(1);
+    expect(orderUpdateCalls[0]).toEqual([42]);
   });
 
-  it('a duplicate delivery of the same event (P2002 on gateway+gatewayReference) is swallowed, not re-applied or thrown', async () => {
+  it('a duplicate delivery of the same event (errno 1062 on gateway+gatewayReference) is swallowed, not re-applied or thrown', async () => {
     const registry = new PaymentProviderRegistry();
     registry.register(
       new FakeProvider({
@@ -158,12 +168,12 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
         status: 'paid',
       }),
     );
-    const prisma = createMockPrisma({
-      order: { id: 7, total: new Prisma.Decimal(50) },
-      createRejectsWith: p2002(),
+    const { db } = createMockDb({
+      order: { id: 7, total: 50 },
+      createRejectsWith: duplicateKeyError(),
     });
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       {} as AffiliateService,
@@ -187,9 +197,9 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
         status: 'paid',
       }),
     );
-    const prisma = createMockPrisma({ order: null });
+    const { db } = createMockDb({ order: null });
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       {} as AffiliateService,
@@ -203,14 +213,14 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       'sig',
     );
     expect(result).toEqual({ received: true });
-    expect(prisma.paymenttransaction.create).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it('an unregistered gateway name throws rather than silently doing nothing', async () => {
     const registry = new PaymentProviderRegistry();
-    const prisma = createMockPrisma({});
+    const { db } = createMockDb({});
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       {} as AffiliateService,
@@ -237,12 +247,12 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
         advanceOrderStatus: 'confirmed',
       }),
     );
-    const prisma = createMockPrisma({
+    const { db } = createMockDb({
       order: {
         id: 10,
         shopId: 5,
         status: 'pending',
-        total: new Prisma.Decimal(100),
+        total: 100,
       },
       adminUser: { id: 77 },
     });
@@ -251,7 +261,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       cancel: jest.fn(),
     } as unknown as OrdersService;
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       mockAffiliateServicePaid,
@@ -279,12 +289,12 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
         advanceOrderStatus: 'cancelled',
       }),
     );
-    const prisma = createMockPrisma({
+    const { db } = createMockDb({
       order: {
         id: 11,
         shopId: 5,
         status: 'pending',
-        total: new Prisma.Decimal(100),
+        total: 100,
       },
     });
     const ordersService = {
@@ -292,7 +302,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       cancel: jest.fn().mockResolvedValue({}),
     } as unknown as OrdersService;
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       {} as AffiliateService,
@@ -319,12 +329,12 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
         advanceOrderStatus: 'confirmed',
       }),
     );
-    const prisma = createMockPrisma({
+    const { db } = createMockDb({
       order: {
         id: 12,
         shopId: 5,
         status: 'preparing', // already moved on by staff
-        total: new Prisma.Decimal(100),
+        total: 100,
       },
     });
     const ordersService = {
@@ -332,7 +342,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       cancel: jest.fn(),
     } as unknown as OrdersService;
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       mockAffiliateServicePaid,
@@ -361,12 +371,12 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
         advanceOrderStatus: 'confirmed',
       }),
     );
-    const prisma = createMockPrisma({
+    const { db } = createMockDb({
       order: {
         id: 13,
         shopId: 5,
         status: 'pending',
-        total: new Prisma.Decimal(100),
+        total: 100,
       },
     });
     const ordersService = {
@@ -374,7 +384,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       cancel: jest.fn(),
     } as unknown as OrdersService;
     const service = new PaymentsService(
-      prisma,
+      db,
       registry,
       {} as PaymentSettingsService,
       mockAffiliateServicePaid,

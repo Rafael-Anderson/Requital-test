@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { sendWhatsAppStub } from '../common/whatsapp';
 import { normalizePhoneToE164 } from '../common/phone';
 import { generateSurveyToken } from '../common/token-hash';
@@ -21,7 +21,7 @@ interface NotifiableOrder {
   customerEmail: string | null;
   customerPhone: string;
   orderType: string | null;
-  total: Prisma.Decimal | string;
+  total: string;
   outletId: number;
 }
 
@@ -55,7 +55,7 @@ interface NotifiableOrder {
 @Injectable()
 export class OrderNotificationsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly whatsAppSettingsService: WhatsAppSettingsService,
     private readonly metaWhatsAppProvider: MetaWhatsAppProvider,
     private readonly jobsService: JobsService,
@@ -105,30 +105,27 @@ export class OrderNotificationsService {
   // moment — same "gated at the moment it happened, never retroactively
   // re-evaluated" discipline as ingredientsConsumedAt (see schema.prisma).
   async notifySurveyRequest(shopId: number, order: NotifiableOrder) {
-    const shop = await this.prisma.shop.findUnique({
-      where: { id: shopId },
-      select: {
-        customerSurveyEnabled: true,
-        notifyEmail: true,
-        subdomain: true,
-        name: true,
-        displayName: true,
-      },
-    });
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT customerSurveyEnabled, notifyEmail, subdomain, name, displayName FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    const shop = shopRows[0];
     if (!shop?.customerSurveyEnabled) return;
 
-    const existing = await this.prisma.surveyresponse.findUnique({
-      where: { orderId: order.id },
-    });
-    if (existing) return;
+    const existingRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM surveyresponse WHERE orderId = ?`,
+      [order.id],
+    );
+    if (existingRows.length > 0) return;
 
     const token = generateSurveyToken();
-    await this.prisma.surveyresponse.create({
-      data: { shopId, orderId: order.id, token },
-    });
+    await this.db.execute(
+      `INSERT INTO surveyresponse (shopId, orderId, token) VALUES (?, ?, ?)`,
+      [shopId, order.id, token],
+    );
 
     if (!shop.notifyEmail || !order.customerEmail) return;
-    const link = `${STOREFRONT_URL}/${shop.subdomain}/survey?token=${token}`;
+    const link = `${STOREFRONT_URL}/${shop.subdomain as string}/survey?token=${token}`;
     await this.jobsService.enqueue(
       shopId,
       'send_email',
@@ -136,7 +133,7 @@ export class OrderNotificationsService {
         to: order.customerEmail,
         subject: `How was your order? — #${order.id}`,
         bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.id}: ${link}`,
-        fromName: shop.displayName ?? shop.name,
+        fromName: (shop.displayName as string | null) ?? (shop.name as string),
       },
       `order:${order.id}:survey-email`,
     );
@@ -150,10 +147,11 @@ export class OrderNotificationsService {
     idempotencyKey: string,
   ) {
     if (!order.customerEmail) return;
-    const shop = await this.prisma.shop.findUnique({
-      where: { id: shopId },
-      select: { notifyEmail: true, name: true, displayName: true },
-    });
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT notifyEmail, name, displayName FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    const shop = shopRows[0];
     if (!shop?.notifyEmail) return;
     await this.jobsService.enqueue(
       shopId,
@@ -162,7 +160,7 @@ export class OrderNotificationsService {
         to: order.customerEmail,
         subject,
         bodyText,
-        fromName: shop.displayName ?? shop.name,
+        fromName: (shop.displayName as string | null) ?? (shop.name as string),
       },
       idempotencyKey,
     );
@@ -177,11 +175,11 @@ export class OrderNotificationsService {
     bodyText: string,
   ) {
     try {
-      const shop = await this.prisma.shop.findUnique({
-        where: { id: shopId },
-        select: { notifyCustomersWhatsapp: true },
-      });
-      if (!shop?.notifyCustomersWhatsapp) return;
+      const shopRows = await this.db.query<RowDataPacket[]>(
+        `SELECT notifyCustomersWhatsapp FROM shop WHERE id = ?`,
+        [shopId],
+      );
+      if (!shopRows[0]?.notifyCustomersWhatsapp) return;
 
       const to = normalizePhoneToE164(order.customerPhone);
       if (!to) {
@@ -222,14 +220,15 @@ export class OrderNotificationsService {
   // two notification channels.
   private async sendMerchantAlert(shopId: number, order: NotifiableOrder) {
     try {
-      const outlet = await this.prisma.outlet.findUnique({
-        where: { id: order.outletId },
-        select: { phone: true, whatsapp: true },
-      });
+      const outletRows = await this.db.query<RowDataPacket[]>(
+        `SELECT phone, whatsapp FROM outlet WHERE id = ?`,
+        [order.outletId],
+      );
+      const outlet = outletRows[0];
       const rawPhone = outlet?.whatsapp || outlet?.phone;
       if (!rawPhone) return;
 
-      const to = normalizePhoneToE164(rawPhone);
+      const to = normalizePhoneToE164(rawPhone as string);
       if (!to) {
         logger.warn(
           `order #${order.id}: outlet phone could not be normalized to E.164 — skipping merchant alert`,

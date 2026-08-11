@@ -5,7 +5,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { BiolinkRow as BiolinkDbRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -51,7 +53,7 @@ function body<T>(res: Response): T {
 
 describe('Bio Links (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -67,13 +69,21 @@ describe('Bio Links (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
+
+  async function getBiolink(id: number): Promise<BiolinkDbRow> {
+    const rows = await db.query<(BiolinkDbRow & RowDataPacket)[]>(
+      `SELECT * FROM biolink WHERE id = ?`,
+      [id],
+    );
+    if (!rows[0]) throw new Error('biolink not found');
+    return rows[0];
+  }
 
   async function setupOrderableShop(slugPrefix: string) {
     const signup = await request(app.getHttpServer())
@@ -601,9 +611,7 @@ describe('Bio Links (e2e)', () => {
         .expect(302);
       expect(res.headers.location).toBe('https://example.com/landing');
 
-      const row = await prisma.biolink.findUniqueOrThrow({
-        where: { id: linkId },
-      });
+      const row = await getBiolink(linkId);
       expect(row.clickCount).toBe(1);
     });
 
@@ -711,9 +719,7 @@ describe('Bio Links (e2e)', () => {
       );
       expect(results.every((r) => r.status === 302)).toBe(true);
 
-      const row = await prisma.biolink.findUniqueOrThrow({
-        where: { id: linkId },
-      });
+      const row = await getBiolink(linkId);
       expect(row.clickCount).toBe(CONCURRENCY);
     });
   });

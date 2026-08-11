@@ -4,8 +4,9 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
+import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -31,7 +32,7 @@ function body<T>(res: Response): T {
 
 describe('Shop publish state (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -47,11 +48,10 @@ describe('Shop publish state (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -151,24 +151,23 @@ describe('Shop publish state (e2e)', () => {
       // Re-runs the exact predicate migration 20260726100000_shop_published
       // used to backfill existing rows — a permanent regression check on the
       // rule itself, not just a one-time migration run.
-      const [readyRow] = await prisma.$queryRaw<{ wouldPublish: number }[]>`
+      const wouldPublishSql = `
         SELECT
           (EXISTS (
-            SELECT 1 FROM outlet WHERE outlet.shopId = ${readyShop.shopId}
+            SELECT 1 FROM outlet WHERE outlet.shopId = ?
               AND (outlet.deliveryEnabled = true OR outlet.pickupEnabled = true)
           ) AND EXISTS (
-            SELECT 1 FROM product WHERE product.shopId = ${readyShop.shopId}
+            SELECT 1 FROM product WHERE product.shopId = ?
           )) AS wouldPublish
       `;
-      const [emptyRow] = await prisma.$queryRaw<{ wouldPublish: number }[]>`
-        SELECT
-          (EXISTS (
-            SELECT 1 FROM outlet WHERE outlet.shopId = ${emptyShop.shopId}
-              AND (outlet.deliveryEnabled = true OR outlet.pickupEnabled = true)
-          ) AND EXISTS (
-            SELECT 1 FROM product WHERE product.shopId = ${emptyShop.shopId}
-          )) AS wouldPublish
-      `;
+      const [readyRow] = await db.query<RowDataPacket[]>(wouldPublishSql, [
+        readyShop.shopId,
+        readyShop.shopId,
+      ]);
+      const [emptyRow] = await db.query<RowDataPacket[]>(wouldPublishSql, [
+        emptyShop.shopId,
+        emptyShop.shopId,
+      ]);
       expect(Number(readyRow.wouldPublish)).toBe(1);
       expect(Number(emptyRow.wouldPublish)).toBe(0);
     });

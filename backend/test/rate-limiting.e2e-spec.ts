@@ -4,7 +4,6 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 
 // Regression coverage for a real finding: prior to this fix, nothing in the
 // app rate-limited /auth/login, /auth/signup, password reset, or any public
@@ -20,7 +19,6 @@ import { PrismaService } from '../src/prisma/prisma.service';
 // @nestjs/throttler source before writing this test).
 describe('Rate limiting (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   const originalNodeEnv = process.env.NODE_ENV;
 
   beforeAll(async () => {
@@ -36,11 +34,9 @@ describe('Rate limiting (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 

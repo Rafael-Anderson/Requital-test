@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { trimDecimal } from '../database/decimal.util';
+import type { AbandonedcartRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
 import { SchedulerService } from '../jobs/scheduler.service';
 import { generateOpaqueToken } from '../common/token-hash';
@@ -23,7 +25,7 @@ export interface CartItemSnapshot {
 @Injectable()
 export class AbandonedCartsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly jobsService: JobsService,
     private readonly schedulerService: SchedulerService,
   ) {}
@@ -42,52 +44,67 @@ export class AbandonedCartsService {
       0,
     );
     const cartItems: CartItemSnapshot[] = dto.cartItems;
+    const cartItemsJson = JSON.stringify(cartItems);
 
-    const existing = await this.prisma.abandonedcart.findUnique({
-      where: {
-        shopId_customerPhone: { shopId, customerPhone: dto.customerPhone },
-      },
-    });
+    const existingRows = await this.db.query<(AbandonedcartRow & RowDataPacket)[]>(
+      `SELECT * FROM abandonedcart WHERE shopId = ? AND customerPhone = ?`,
+      [shopId, dto.customerPhone],
+    );
+    const existing = existingRows[0];
 
     if (existing && existing.recoveredOrderId === null) {
-      return this.prisma.abandonedcart.update({
-        where: { id: existing.id },
-        data: {
-          customerName: dto.customerName,
-          customerEmail: dto.customerEmail ?? null,
-          outletId: dto.outletId ?? existing.outletId,
-          cartItems: cartItems as unknown as Prisma.InputJsonValue,
+      await this.db.execute(
+        `UPDATE abandonedcart SET customerName = ?, customerEmail = ?, outletId = ?, cartItems = ?, cartValue = ?, updatedAt = ?
+         WHERE id = ?`,
+        [
+          dto.customerName,
+          dto.customerEmail ?? null,
+          dto.outletId ?? existing.outletId,
+          cartItemsJson,
           cartValue,
-        },
-      });
+          new Date(),
+          existing.id,
+        ],
+      );
+      return this.findByIdRaw(existing.id);
     }
 
-    return this.prisma.abandonedcart.upsert({
-      where: {
-        shopId_customerPhone: { shopId, customerPhone: dto.customerPhone },
-      },
-      create: {
+    if (existing) {
+      await this.db.execute(
+        `UPDATE abandonedcart SET customerName = ?, customerEmail = ?, outletId = ?, cartItems = ?, cartValue = ?,
+                capturedAt = ?, updatedAt = ?, recoveryEmailSentAt = NULL, recoveredOrderId = NULL, recoverToken = ?
+         WHERE id = ?`,
+        [
+          dto.customerName,
+          dto.customerEmail ?? null,
+          dto.outletId ?? null,
+          cartItemsJson,
+          cartValue,
+          new Date(),
+          new Date(),
+          generateOpaqueToken(),
+          existing.id,
+        ],
+      );
+      return this.findByIdRaw(existing.id);
+    }
+
+    const result = await this.db.execute(
+      `INSERT INTO abandonedcart (shopId, outletId, customerName, customerPhone, customerEmail, cartItems, cartValue, recoverToken, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         shopId,
-        outletId: dto.outletId,
-        customerName: dto.customerName,
-        customerPhone: dto.customerPhone,
-        customerEmail: dto.customerEmail,
-        cartItems: cartItems as unknown as Prisma.InputJsonValue,
+        dto.outletId ?? null,
+        dto.customerName,
+        dto.customerPhone,
+        dto.customerEmail ?? null,
+        cartItemsJson,
         cartValue,
-        recoverToken: generateOpaqueToken(),
-      },
-      update: {
-        customerName: dto.customerName,
-        customerEmail: dto.customerEmail ?? null,
-        outletId: dto.outletId,
-        cartItems: cartItems as unknown as Prisma.InputJsonValue,
-        cartValue,
-        capturedAt: new Date(),
-        recoveryEmailSentAt: null,
-        recoveredOrderId: null,
-        recoverToken: generateOpaqueToken(),
-      },
-    });
+        generateOpaqueToken(),
+        new Date(),
+      ],
+    );
+    return this.findByIdRaw(result.insertId);
   }
 
   // Public, token-authenticated (not the row's numeric id) — the
@@ -98,9 +115,11 @@ export class AbandonedCartsService {
   // recovery link re-adding items after they already checked out via it or
   // another device.
   async resolveByToken(token: string) {
-    const cart = await this.prisma.abandonedcart.findUnique({
-      where: { recoverToken: token },
-    });
+    const rows = await this.db.query<(AbandonedcartRow & RowDataPacket)[]>(
+      `SELECT * FROM abandonedcart WHERE recoverToken = ?`,
+      [token],
+    );
+    const cart = rows[0];
     if (!cart || cart.recoveredOrderId !== null) {
       throw new NotFoundException('This recovery link is no longer valid');
     }
@@ -111,39 +130,40 @@ export class AbandonedCartsService {
   }
 
   // Called from inside PublicService.createOrder's transaction, right
-  // after the order is created — a CAS updateMany (WHERE recoveredOrderId
+  // after the order is created — a CAS UPDATE (WHERE recoveredOrderId
   // IS NULL), same idiom as stock/discount. This is the write that makes
   // the "completion racing the recovery job" scenario safe: whichever of
-  // this call and the recovery job's own claim (see claimDueForShop below)
+  // this call and the recovery job's own claim (see sendDueForShop below)
   // lands first in the DB wins the row, and the loser's own WHERE clause
   // simply matches zero rows.
   async markRecovered(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     shopId: number,
     customerPhone: string,
     orderId: number,
   ) {
-    await tx.abandonedcart.updateMany({
-      where: { shopId, customerPhone, recoveredOrderId: null },
-      data: { recoveredOrderId: orderId },
-    });
+    await conn.query(
+      `UPDATE abandonedcart SET recoveredOrderId = ?, updatedAt = ? WHERE shopId = ? AND customerPhone = ? AND recoveredOrderId IS NULL`,
+      [orderId, new Date(), shopId, customerPhone],
+    );
   }
 
   async findAllForShop(ctx: TenantContext) {
-    return this.prisma.abandonedcart.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: { capturedAt: 'desc' },
-      select: {
-        id: true,
-        customerName: true,
-        customerPhone: true,
-        customerEmail: true,
-        cartValue: true,
-        capturedAt: true,
-        recoveryEmailSentAt: true,
-        recoveredOrderId: true,
-      },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, customerName, customerPhone, customerEmail, cartValue, capturedAt, recoveryEmailSentAt, recoveredOrderId
+       FROM abandonedcart WHERE shopId = ? ORDER BY capturedAt DESC`,
+      [ctx.shopId],
+    );
+    return rows.map((r) => ({
+      id: r.id as number,
+      customerName: r.customerName as string,
+      customerPhone: r.customerPhone as string,
+      customerEmail: r.customerEmail as string | null,
+      cartValue: trimDecimal(r.cartValue as string),
+      capturedAt: r.capturedAt as Date,
+      recoveryEmailSentAt: r.recoveryEmailSentAt as Date | null,
+      recoveredOrderId: r.recoveredOrderId as number | null,
+    }));
   }
 
   // Wrapped in the cross-instance advisory lock (see SchedulerService) so
@@ -161,21 +181,15 @@ export class AbandonedCartsService {
   }
 
   private async runSweep() {
-    const shops = await this.prisma.shop.findMany({
-      where: { notifyAbandonedCart: true },
-      select: {
-        id: true,
-        name: true,
-        subdomain: true,
-        abandonedCartWindowMinutes: true,
-      },
-    });
+    const shops = await this.db.query<RowDataPacket[]>(
+      `SELECT id, name, subdomain, abandonedCartWindowMinutes FROM shop WHERE notifyAbandonedCart = TRUE`,
+    );
     for (const shop of shops) {
       await this.sendDueForShop(
-        shop.id,
-        shop.name,
-        shop.subdomain,
-        shop.abandonedCartWindowMinutes,
+        shop.id as number,
+        shop.name as string,
+        shop.subdomain as string,
+        shop.abandonedCartWindowMinutes as number,
       );
     }
   }
@@ -190,21 +204,17 @@ export class AbandonedCartsService {
     shopSlug: string,
     windowMinutes: number,
   ) {
-    const shop = await this.prisma.shop.findUnique({
-      where: { id: shopId },
-      select: { notifyAbandonedCart: true },
-    });
-    if (!shop?.notifyAbandonedCart) return 0;
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT notifyAbandonedCart FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    if (!shopRows[0]?.notifyAbandonedCart) return 0;
 
     const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000);
-    const candidates = await this.prisma.abandonedcart.findMany({
-      where: {
-        shopId,
-        capturedAt: { lte: cutoff },
-        recoveryEmailSentAt: null,
-        recoveredOrderId: null,
-      },
-    });
+    const candidates = await this.db.query<(AbandonedcartRow & RowDataPacket)[]>(
+      `SELECT * FROM abandonedcart WHERE shopId = ? AND capturedAt <= ? AND recoveryEmailSentAt IS NULL AND recoveredOrderId IS NULL`,
+      [shopId, cutoff],
+    );
 
     let sent = 0;
     for (const cart of candidates) {
@@ -213,16 +223,13 @@ export class AbandonedCartsService {
       // Claim THIS row right before sending — the candidates list above was
       // read a moment ago and could already be stale (an order may have
       // completed, or another overlapping run may have claimed it, in the
-      // interim). Only a successful claim (count 1) is allowed to send.
-      const claimed = await this.prisma.abandonedcart.updateMany({
-        where: {
-          id: cart.id,
-          recoveryEmailSentAt: null,
-          recoveredOrderId: null,
-        },
-        data: { recoveryEmailSentAt: new Date() },
-      });
-      if (claimed.count === 0) continue;
+      // interim). Only a successful claim (affectedRows 1) is allowed to send.
+      const claimed = await this.db.execute(
+        `UPDATE abandonedcart SET recoveryEmailSentAt = ?, updatedAt = ?
+         WHERE id = ? AND recoveryEmailSentAt IS NULL AND recoveredOrderId IS NULL`,
+        [new Date(), new Date(), cart.id],
+      );
+      if (claimed.affectedRows === 0) continue;
 
       const items = cart.cartItems as unknown as CartItemSnapshot[];
       const bodyLines = [
@@ -249,5 +256,13 @@ export class AbandonedCartsService {
       sent += 1;
     }
     return sent;
+  }
+
+  private async findByIdRaw(id: number) {
+    const rows = await this.db.query<(AbandonedcartRow & RowDataPacket)[]>(
+      `SELECT * FROM abandonedcart WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 }

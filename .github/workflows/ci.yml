@@ -45,14 +45,13 @@ jobs:
       - name: Set up CI env
         run: cp .env.ci .env
 
-      - run: npx prisma generate
-
-      # migrate deploy (not migrate dev) applies the hand-authored migrations
-      # in prisma/migrations/ as-is against a clean database — no shadow DB
-      # involved, matching CLAUDE.md's "never pass DATABASE_URL as
-      # --shadow-database-url" rule (that flag isn't used here at all).
+      # Applies the hand-authored migrations in prisma/migrations/ as-is
+      # against a clean database, in timestamp order, via scripts/migrate.ts
+      # (see that script's own header) — no shadow DB involved, matching
+      # CLAUDE.md's "never pass DATABASE_URL as --shadow-database-url" rule
+      # (that flag isn't used here at all).
       - name: Apply migrations to a clean database
-        run: npx prisma migrate deploy
+        run: npm run db:migrate
 
       - run: npx tsc --noEmit
 
@@ -235,9 +234,7 @@ jobs:
       - working-directory: backend
         run: cp .env.ci .env
       - working-directory: backend
-        run: npx prisma generate
-      - working-directory: backend
-        run: npx prisma migrate deploy
+        run: npm run db:migrate
       - working-directory: backend
         run: npm run build
       - name: Start backend (background)

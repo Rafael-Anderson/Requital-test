@@ -4,8 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { PoolConnection, Pool, RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { trimDecimal } from '../database/decimal.util';
+import type { GiftcardRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateGiftCardDto } from './dto/create-gift-card.dto';
@@ -38,21 +41,25 @@ function generateGiftCardCode(): string {
 @Injectable()
 export class GiftCardsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly jobsService: JobsService,
   ) {}
 
   async findAll(ctx: TenantContext) {
-    return this.prisma.giftcard.findMany({
-      where: { shopId: ctx.shopId },
-      orderBy: { id: 'desc' },
-      include: { purchasedByCustomer: { select: { id: true, name: true } } },
-    });
+    const rows = await this.db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT g.*, c.id AS purchaserId, c.name AS purchaserName
+       FROM giftcard g
+       LEFT JOIN customer c ON c.id = g.purchasedByCustomerId
+       WHERE g.shopId = ?
+       ORDER BY g.id DESC`,
+      [ctx.shopId],
+    );
+    return rows.map((r) => this.toResponse(r));
   }
 
   async findOne(ctx: TenantContext, id: number) {
     const card = await this.findRaw(ctx, id);
-    return card;
+    return this.toResponse(card);
   }
 
   // Admin-issued only — a storefront purchase goes through issueForOrder
@@ -64,26 +71,36 @@ export class GiftCardsService {
   // where nobody's looking at an admin screen to relay it).
   async create(ctx: TenantContext, dto: CreateGiftCardDto) {
     const code = await this.generateUniqueCode();
-    return this.prisma.giftcard.create({
-      data: {
-        shopId: ctx.shopId,
+    const result = await this.db.execute(
+      `INSERT INTO giftcard (shopId, code, initialValue, remainingBalance, expiresAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
         code,
-        initialValue: dto.initialValue,
-        remainingBalance: dto.initialValue,
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      },
-    });
+        dto.initialValue,
+        dto.initialValue,
+        dto.expiresAt ? new Date(dto.expiresAt) : null,
+        new Date(),
+      ],
+    );
+    const card = await this.findByIdRaw(result.insertId);
+    return this.toResponse(card);
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateGiftCardDto) {
     await this.findRaw(ctx, id);
-    return this.prisma.giftcard.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      },
+    const set = buildSetClause({
+      status: dto.status,
+      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+      updatedAt: new Date(),
     });
+    if (set) {
+      await this.db.execute(`UPDATE giftcard SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        id,
+      ]);
+    }
+    const card = await this.findByIdRaw(id);
+    return this.toResponse(card);
   }
 
   // Full endpoint logic for the storefront's checkout gift-card-code field
@@ -95,7 +112,11 @@ export class GiftCardsService {
     rawCode: string,
   ): Promise<EvaluateGiftCardResult> {
     const code = this.normalizeCode(rawCode);
-    const card = await this.prisma.giftcard.findUnique({ where: { code } });
+    const rows = await this.db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT * FROM giftcard WHERE code = ?`,
+      [code],
+    );
+    const card = rows[0];
     if (!card || card.shopId !== shopId) return this.reject('not_found');
     if (card.status === 'disabled') return this.reject('disabled');
     if (
@@ -114,34 +135,40 @@ export class GiftCardsService {
   }
 
   async resolveById(shopId: number, id: number) {
-    return this.prisma.giftcard.findFirst({ where: { id, shopId } });
+    const rows = await this.db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT * FROM giftcard WHERE id = ? AND shopId = ?`,
+      [id, shopId],
+    );
+    return rows[0] ?? null;
   }
 
   // Atomically draws down `amount` — CAS on remainingBalance, same
-  // WHERE-guarded updateMany idiom as stock/discount. Must run inside the
+  // WHERE-guarded UPDATE idiom as stock/discount. Must run inside the
   // same transaction that creates the order: if two concurrent checkouts
   // both validated the same card's balance a moment ago and only one can
   // actually be covered, the loser's CAS fails here and the whole order
   // attempt aborts, exactly like a discount's usage-limit race.
   async redeem(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     giftCardId: number,
     amount: number,
     orderId: number,
   ) {
-    const result = await tx.giftcard.updateMany({
-      where: { id: giftCardId, remainingBalance: { gte: amount } },
-      data: { remainingBalance: { decrement: amount } },
-    });
-    if (result.count === 0) {
+    const [result] = await conn.query(
+      `UPDATE giftcard SET remainingBalance = remainingBalance - ?, updatedAt = ?
+       WHERE id = ? AND remainingBalance >= ?`,
+      [amount, new Date(), giftCardId, amount],
+    );
+    if ((result as { affectedRows: number }).affectedRows === 0) {
       throw new ConflictException(
         "This gift card's balance just changed — please try again",
       );
     }
-    await tx.giftcardredemption.create({
-      data: { giftCardId, orderId, amountUsed: amount },
-    });
-    await this.syncStatus(tx, giftCardId);
+    await conn.query(
+      `INSERT INTO giftcardredemption (giftCardId, orderId, amountUsed) VALUES (?, ?, ?)`,
+      [giftCardId, orderId, amount],
+    );
+    await this.syncStatus(conn, giftCardId);
   }
 
   // Credits a refund back onto the card's balance instead of a provider
@@ -150,16 +177,12 @@ export class GiftCardsService {
   // but a merchant-revoked or expired card doesn't get silently
   // reactivated by an unrelated refund) — only the automatic active<->
   // redeemed transition (syncStatus) applies here.
-  async creditRefund(
-    tx: Prisma.TransactionClient,
-    giftCardId: number,
-    amount: number,
-  ) {
-    await tx.giftcard.update({
-      where: { id: giftCardId },
-      data: { remainingBalance: { increment: amount } },
-    });
-    await this.syncStatus(tx, giftCardId);
+  async creditRefund(conn: PoolConnection, giftCardId: number, amount: number) {
+    await conn.query(
+      `UPDATE giftcard SET remainingBalance = remainingBalance + ?, updatedAt = ? WHERE id = ?`,
+      [amount, new Date(), giftCardId],
+    );
+    await this.syncStatus(conn, giftCardId);
   }
 
   // One unit issued per quantity — e.g. quantity 3 of a 200 AED gift card
@@ -170,7 +193,7 @@ export class GiftCardsService {
   // note) — emails the code(s) to the purchaser's own order email, not a
   // separate recipient field.
   async issueForOrder(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     shopId: number,
     orderId: number,
     customerId: number | null,
@@ -181,17 +204,12 @@ export class GiftCardsService {
     const issued: { code: string; initialValue: number }[] = [];
     for (const line of lines) {
       for (let i = 0; i < line.quantity; i += 1) {
-        const code = await this.generateUniqueCode(tx);
-        await tx.giftcard.create({
-          data: {
-            shopId,
-            code,
-            initialValue: line.amount,
-            remainingBalance: line.amount,
-            purchasedByCustomerId: customerId ?? undefined,
-            purchaseOrderId: orderId,
-          },
-        });
+        const code = await this.generateUniqueCode(conn);
+        await conn.query(
+          `INSERT INTO giftcard (shopId, code, initialValue, remainingBalance, purchasedByCustomerId, purchaseOrderId, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [shopId, code, line.amount, line.amount, customerId, orderId, new Date()],
+        );
         issued.push({ code, initialValue: line.amount });
       }
     }
@@ -201,7 +219,7 @@ export class GiftCardsService {
         '',
         ...issued.map((g) => `${g.code} — ${g.initialValue}`),
       ];
-      // Enqueued via `tx` (not the plain injected prisma client) so the job
+      // Enqueued via `conn` (not the plain injected db pool) so the job
       // row commits atomically with the gift cards it describes — if the
       // surrounding order-creation transaction rolls back, this job row
       // never exists to be sent either. Also moves what used to be a
@@ -217,17 +235,18 @@ export class GiftCardsService {
           fromName: shopName,
         },
         `gift-card-issued-email:${orderId}`,
-        { tx },
+        { tx: conn },
       );
     }
     return issued;
   }
 
-  private async syncStatus(tx: Prisma.TransactionClient, giftCardId: number) {
-    const card = await tx.giftcard.findUnique({
-      where: { id: giftCardId },
-      select: { status: true, remainingBalance: true },
-    });
+  private async syncStatus(conn: PoolConnection, giftCardId: number) {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT status, remainingBalance FROM giftcard WHERE id = ?`,
+      [giftCardId],
+    );
+    const card = rows[0];
     if (!card) return;
     // Only ever flips between the two auto-managed states — a disabled or
     // expired card stays exactly as an admin/the expiry check left it.
@@ -235,20 +254,24 @@ export class GiftCardsService {
     const nextStatus =
       Number(card.remainingBalance) <= 0 ? 'redeemed' : 'active';
     if (nextStatus !== card.status) {
-      await tx.giftcard.update({
-        where: { id: giftCardId },
-        data: { status: nextStatus },
-      });
+      await conn.query(`UPDATE giftcard SET status = ?, updatedAt = ? WHERE id = ?`, [
+        nextStatus,
+        new Date(),
+        giftCardId,
+      ]);
     }
   }
 
   private async generateUniqueCode(
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
+    runner: PoolConnection | Pool = this.db.pool,
   ): Promise<string> {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const code = generateGiftCardCode();
-      const existing = await client.giftcard.findUnique({ where: { code } });
-      if (!existing) return code;
+      const [rows] = await runner.query<RowDataPacket[]>(
+        `SELECT id FROM giftcard WHERE code = ?`,
+        [code],
+      );
+      if (rows.length === 0) return code;
     }
     throw new ConflictException(
       'Could not generate a unique gift card code — please try again',
@@ -268,12 +291,32 @@ export class GiftCardsService {
   }
 
   private async findRaw(ctx: TenantContext, id: number) {
-    const card = await this.prisma.giftcard.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!card) {
+    const rows = await this.db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT * FROM giftcard WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Gift card ${id} not found`);
     }
-    return card;
+    return rows[0];
+  }
+
+  private async findByIdRaw(id: number) {
+    const rows = await this.db.query<(GiftcardRow & RowDataPacket)[]>(
+      `SELECT * FROM giftcard WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
+  private toResponse(card: GiftcardRow & { purchaserId?: number; purchaserName?: string }) {
+    const { purchaserId, purchaserName, ...rest } = card;
+    return {
+      ...rest,
+      initialValue: trimDecimal(card.initialValue),
+      remainingBalance: trimDecimal(card.remainingBalance),
+      purchasedByCustomer:
+        purchaserId != null ? { id: purchaserId, name: purchaserName } : null,
+    };
   }
 }

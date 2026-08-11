@@ -3,7 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { DatabaseService } from '../database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import type { NotifysubscriptionRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
 import { SubscribeDto } from './dto/subscribe.dto';
 
@@ -14,47 +16,38 @@ const NOTIFY_CHUNK_SIZE = 50;
 @Injectable()
 export class NotifySubscriptionsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly jobsService: JobsService,
   ) {}
 
   async subscribe(dto: SubscribeDto) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
-      select: { id: true, shopId: true },
-    });
+    const productRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, shopId FROM product WHERE id = ?`,
+      [dto.productId],
+    );
+    const product = productRows[0];
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
     if (dto.variantId) {
-      const variant = await this.prisma.productvariant.findFirst({
-        where: { id: dto.variantId, productId: dto.productId },
-      });
-      if (!variant) {
+      const variantRows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM productvariant WHERE id = ? AND productId = ?`,
+        [dto.variantId, dto.productId],
+      );
+      if (variantRows.length === 0) {
         throw new BadRequestException('variantId is invalid for this product');
       }
     }
 
     const email = dto.email.toLowerCase().trim();
-    const shopId = product.shopId;
+    const shopId = product.shopId as number;
+    const variantId = dto.variantId ?? null;
 
     // Idempotent: a repeat subscribe for the same (shop, product, variant,
     // email) just returns the existing row — no error, no duplicate row,
-    // and doesn't count against the rate limit below. findFirst rather than
-    // findUnique on the compound key: Prisma's generated compound-unique
-    // input type requires variantId to be a plain number (MySQL's
-    // NULL-is-distinct unique-index semantics mean the compound key can't
-    // be looked up with an explicit null), so a product-level (variantId
-    // null) subscription has to be matched via a regular filtered query.
-    const existing = await this.prisma.notifysubscription.findFirst({
-      where: {
-        shopId,
-        productId: dto.productId,
-        variantId: dto.variantId ?? null,
-        email,
-      },
-    });
+    // and doesn't count against the rate limit below.
+    const existing = await this.findExisting(shopId, dto.productId, variantId, email);
     if (existing) {
       return { subscription: existing, alreadySubscribed: true };
     }
@@ -64,23 +57,22 @@ export class NotifySubscriptionsService {
     // a small race window under true concurrency isn't worth a DB-level
     // counter. Tighten only if this endpoint is ever abused for real.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentCount = await this.prisma.notifysubscription.count({
-      where: { shopId, email, createdAt: { gte: oneHourAgo } },
-    });
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM notifysubscription WHERE shopId = ? AND email = ? AND createdAt >= ?`,
+      [shopId, email, oneHourAgo],
+    );
+    const recentCount = Number(countRows[0].c);
     if (recentCount >= RATE_LIMIT_PER_HOUR) {
       throw new BadRequestException(
         'Too many notify-me subscriptions from this email — try again later',
       );
     }
 
-    const subscription = await this.prisma.notifysubscription.create({
-      data: {
-        shopId,
-        productId: dto.productId,
-        variantId: dto.variantId ?? null,
-        email,
-      },
-    });
+    const result = await this.db.execute(
+      `INSERT INTO notifysubscription (shopId, productId, variantId, email) VALUES (?, ?, ?, ?)`,
+      [shopId, dto.productId, variantId, email],
+    );
+    const subscription = await this.findById(result.insertId);
     return { subscription, alreadySubscribed: false };
   }
 
@@ -88,19 +80,17 @@ export class NotifySubscriptionsService {
   // denies whether a *specific* email/product pair was actually subscribed,
   // so this can't be used to probe another shopper's subscriptions.
   async unsubscribe(email: string, productId: number) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
-      select: { shopId: true },
-    });
+    const productRows = await this.db.query<RowDataPacket[]>(
+      `SELECT shopId FROM product WHERE id = ?`,
+      [productId],
+    );
+    const product = productRows[0];
     if (!product) return { success: true };
 
-    await this.prisma.notifysubscription.deleteMany({
-      where: {
-        shopId: product.shopId,
-        productId,
-        email: email.toLowerCase().trim(),
-      },
-    });
+    await this.db.execute(
+      `DELETE FROM notifysubscription WHERE shopId = ? AND productId = ? AND email = ?`,
+      [product.shopId, productId, email.toLowerCase().trim()],
+    );
     return { success: true };
   }
 
@@ -112,49 +102,43 @@ export class NotifySubscriptionsService {
     productId: number,
     variantId?: number | null,
   ) {
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
-      select: {
-        id: true,
-        name: true,
-        thumbnail: true,
-        slug: true,
-        shop: { select: { subdomain: true, name: true } },
-      },
-    });
+    const productRows = await this.db.query<RowDataPacket[]>(
+      `SELECT p.id, p.name, p.thumbnail, p.slug, s.subdomain AS shopSubdomain, s.name AS shopName
+       FROM product p JOIN shop s ON s.id = p.shopId
+       WHERE p.id = ?`,
+      [productId],
+    );
+    const product = productRows[0];
     if (!product) return;
 
-    const subscriptions = await this.prisma.notifysubscription.findMany({
-      where: {
-        shopId,
-        productId,
-        variantId: variantId ?? null,
-        notifiedAt: null,
-      },
-    });
+    const subscriptions = await this.db.query<(NotifysubscriptionRow & RowDataPacket)[]>(
+      `SELECT * FROM notifysubscription
+       WHERE shopId = ? AND productId = ? AND variantId ${variantId == null ? 'IS NULL' : '= ?'} AND notifiedAt IS NULL`,
+      variantId == null ? [shopId, productId] : [shopId, productId, variantId],
+    );
     if (subscriptions.length === 0) return;
 
-    const productUrl = `${STOREFRONT_URL}/${product.shop.subdomain}/products/${product.slug}`;
+    const productUrl = `${STOREFRONT_URL}/${product.shopSubdomain as string}/products/${product.slug as string}`;
 
     for (let i = 0; i < subscriptions.length; i += NOTIFY_CHUNK_SIZE) {
       const chunk = subscriptions.slice(i, i + NOTIFY_CHUNK_SIZE);
       await Promise.allSettled(
         chunk.map(async (sub) => {
-          const unsubscribeUrl = `${STOREFRONT_URL}/${product.shop.subdomain}/unsubscribe-notify?email=${encodeURIComponent(sub.email)}&productId=${productId}`;
+          const unsubscribeUrl = `${STOREFRONT_URL}/${product.shopSubdomain as string}/unsubscribe-notify?email=${encodeURIComponent(sub.email)}&productId=${productId}`;
           await this.jobsService.enqueue(
             shopId,
             'send_email',
             {
               to: sub.email,
-              subject: `${product.name} is back in stock!`,
+              subject: `${product.name as string} is back in stock!`,
               bodyText: [
-                `Good news — ${product.name} is back in stock at ${product.shop.name}.`,
+                `Good news — ${product.name as string} is back in stock at ${product.shopName as string}.`,
                 '',
                 `View it here: ${productUrl}`,
                 '',
                 `Don't want these emails? Unsubscribe: ${unsubscribeUrl}`,
               ].join('\n'),
-              fromName: product.shop.name,
+              fromName: product.shopName as string,
             },
             `back-in-stock-email:${sub.id}`,
           );
@@ -165,12 +149,34 @@ export class NotifySubscriptionsService {
           // row can't abort the rest of the chunk. Real delivery failures
           // are now the queue's problem (retry/backoff/DLQ), not this
           // method's.
-          await this.prisma.notifysubscription.update({
-            where: { id: sub.id },
-            data: { notifiedAt: new Date() },
-          });
+          await this.db.execute(
+            `UPDATE notifysubscription SET notifiedAt = ? WHERE id = ?`,
+            [new Date(), sub.id],
+          );
         }),
       );
     }
+  }
+
+  private async findExisting(
+    shopId: number,
+    productId: number,
+    variantId: number | null,
+    email: string,
+  ) {
+    const rows = await this.db.query<(NotifysubscriptionRow & RowDataPacket)[]>(
+      `SELECT * FROM notifysubscription
+       WHERE shopId = ? AND productId = ? AND variantId ${variantId == null ? 'IS NULL' : '= ?'} AND email = ?`,
+      variantId == null ? [shopId, productId, email] : [shopId, productId, variantId, email],
+    );
+    return rows[0];
+  }
+
+  private async findById(id: number) {
+    const rows = await this.db.query<(NotifysubscriptionRow & RowDataPacket)[]>(
+      `SELECT * FROM notifysubscription WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
   }
 }

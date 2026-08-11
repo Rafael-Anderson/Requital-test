@@ -7,7 +7,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 import { UPLOAD_ROOT } from '../src/storage/providers/local-storage.provider';
 
 interface AuthResponse {
@@ -39,7 +38,6 @@ function fsPathForUploadUrl(url: string): string {
 
 describe('Storage / uploads (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -55,11 +53,9 @@ describe('Storage / uploads (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 

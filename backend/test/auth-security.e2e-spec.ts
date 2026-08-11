@@ -5,7 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { DatabaseService } from '../src/database/database.service';
 import { hashToken } from '../src/common/token-hash';
 
 interface TokenPair {
@@ -42,7 +42,7 @@ function messageContains(res: Response, substring: string): boolean {
 
 describe('Auth security: refresh rotation, password reset, email verification, permissions (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
+  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -58,11 +58,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
+    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
     await app.close();
   });
 
@@ -324,10 +323,10 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       // deterministic than actually waiting out the real 30-minute window.
       // Scoped by tokenHash (not just purpose) so this can never backdate a
       // different test's still-live token if e2e files ever run concurrently.
-      await prisma.authtoken.updateMany({
-        where: { tokenHash: hashToken(token) },
-        data: { expiresAt: new Date(Date.now() - 1000) },
-      });
+      await db.execute(
+        `UPDATE authtoken SET expiresAt = ? WHERE tokenHash = ?`,
+        [new Date(Date.now() - 1000), hashToken(token)],
+      );
 
       const res = await request(app.getHttpServer())
         .post('/auth/reset-password')

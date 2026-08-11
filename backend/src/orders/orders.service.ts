@@ -4,8 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import { trimDecimal } from '../database/decimal.util';
+import type { OrderRow, OrderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { generateTrackingCode } from '../common/token-hash';
@@ -35,38 +39,34 @@ import { computeOrderTotals } from '../public/order-pricing';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 
-const orderInclude = {
-  orderitem: true,
-  // Latest payment transaction, for the Order History table's Payment Mode
-  // column — same shape orderDetailInclude already fetches for the modal,
-  // just also needed at list level now that History shows it per row.
-  paymenttransaction: { orderBy: { createdAt: 'desc' as const }, take: 1 },
-} satisfies Prisma.orderInclude;
+interface AssembledOrderItem extends OrderitemRow {
+  product?: { thumbnail: string };
+}
 
-// Richer include used only by the single-order detail endpoint (the order
-// detail modal) — product thumbnails for item images and the latest payment
-// transaction for payment-mode display. Kept separate from `orderInclude` so
-// list/status-transition responses don't carry the extra joins.
-const orderDetailInclude = {
-  orderitem: { include: { product: { select: { thumbnail: true } } } },
-  paymenttransaction: { orderBy: { createdAt: 'desc' as const }, take: 1 },
-  externaldelivery: true,
-  // Staff-only note thread — included here (single-order detail) but never
-  // in `orderInclude` above (list views) or anywhere in src/public. Newest
-  // first, matching a typical activity-feed reading order.
-  ordernote: {
-    include: { author: { select: { id: true, name: true } } },
-    orderBy: { createdAt: 'desc' as const },
-  },
-  // Read-only in the admin UI — responses are customer-submitted only via
-  // the public survey endpoints, see PublicSurveyController.
-  surveyresponse: true,
-} satisfies Prisma.orderInclude;
+interface AssembledOrder extends OrderRow {
+  orderitem: AssembledOrderItem[];
+  paymenttransaction: RowDataPacket[];
+}
+
+export interface AssembledOrderNote {
+  id: number;
+  orderId: number;
+  authorUserId: number;
+  note: string;
+  createdAt: Date;
+  author: { id: number; name: string };
+}
+
+interface AssembledOrderDetail extends AssembledOrder {
+  externaldelivery: RowDataPacket | null;
+  ordernote: AssembledOrderNote[];
+  surveyresponse: RowDataPacket | null;
+}
 
 @Injectable()
 export class OrdersService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly customersService: CustomersService,
     private readonly affiliateService: AffiliateService,
     private readonly productsService: ProductsService,
@@ -91,39 +91,61 @@ export class OrdersService {
         'orders.view',
       );
     }
-    const where: Prisma.orderWhereInput = {
-      shopId: ctx.shopId,
-      ...(outletId !== undefined && { outletId }),
-      ...(query.statuses?.length
-        ? { status: { in: query.statuses } }
-        : query.status && { status: query.status }),
-      ...((query.dateFrom || query.dateTo) && {
-        createdAt: {
-          ...(query.dateFrom && { gte: new Date(query.dateFrom) }),
-          ...(query.dateTo && { lte: new Date(query.dateTo) }),
-        },
-      }),
-      ...(searchTerm && {
-        OR: [
-          { customerName: { contains: searchTerm } },
-          { customerPhone: { contains: searchTerm } },
-          ...(searchAsId !== undefined ? [{ id: searchAsId }] : []),
-        ],
-      }),
-    };
 
-    const [orders, total] = await this.prisma.$transaction([
-      this.prisma.order.findMany({
-        where,
-        include: orderInclude,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.order.count({ where }),
+    const conditions = ['o.shopId = ?'];
+    const params: QueryParam[] = [ctx.shopId];
+    if (outletId !== undefined) {
+      conditions.push('o.outletId = ?');
+      params.push(outletId);
+    }
+    if (query.statuses?.length) {
+      conditions.push(`o.status IN (${query.statuses.map(() => '?').join(', ')})`);
+      params.push(...query.statuses);
+    } else if (query.status) {
+      conditions.push('o.status = ?');
+      params.push(query.status);
+    }
+    if (query.dateFrom) {
+      conditions.push('o.createdAt >= ?');
+      params.push(new Date(query.dateFrom));
+    }
+    if (query.dateTo) {
+      conditions.push('o.createdAt <= ?');
+      params.push(new Date(query.dateTo));
+    }
+    if (searchTerm) {
+      const orParts = ['o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
+      const orParams: QueryParam[] = [`%${searchTerm}%`, `%${searchTerm}%`];
+      if (searchAsId !== undefined) {
+        orParts.push('o.id = ?');
+        orParams.push(searchAsId);
+      }
+      conditions.push(`(${orParts.join(' OR ')})`);
+      params.push(...orParams);
+    }
+    const where = conditions.join(' AND ');
+
+    const [idRows, totalRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT o.id FROM \`order\` o WHERE ${where}
+         ORDER BY o.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [...params, pageSize, (page - 1) * pageSize],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM \`order\` o WHERE ${where}`,
+        params,
+      ),
     ]);
+    const ids = idRows.map((r) => r.id as number);
+    const orders = await this.loadOrdersWithRelations(ids);
 
-    return { data: orders, page, pageSize, total };
+    return {
+      data: ids.map((id) => this.toResponse(orders.get(id)!)),
+      page,
+      pageSize,
+      total: Number(totalRows[0].c),
+    };
   }
 
   // The single shared "load + tenant/outlet scope check" every read and
@@ -138,23 +160,27 @@ export class OrdersService {
   // is intentional: you can't manage what you can't view.
   async findOne(ctx: TenantContext, id: number) {
     const outletId = resolveOutletFilter(ctx);
-    const order = await this.prisma.order.findFirst({
-      where: {
-        id,
-        shopId: ctx.shopId,
-        ...(outletId !== undefined && { outletId }),
-      },
-      include: orderInclude,
-    });
-    if (!order) {
+    const conditions = ['id = ?', 'shopId = ?'];
+    const params: QueryParam[] = [id, ctx.shopId];
+    if (outletId !== undefined) {
+      conditions.push('outletId = ?');
+      params.push(outletId);
+    }
+    const ownRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM \`order\` WHERE ${conditions.join(' AND ')}`,
+      params,
+    );
+    if (ownRows.length === 0) {
       throw new NotFoundException(`Order ${id} not found`);
     }
+    const orders = await this.loadOrdersWithRelations([id]);
+    const order = orders.get(id)!;
     await this.branchRolesService.assertPermission(
       ctx,
       order.outletId,
       'orders.view',
     );
-    return order;
+    return this.toResponse(order);
   }
 
   // Used by the GET /orders/:id endpoint (order detail modal) — same lookup
@@ -162,16 +188,17 @@ export class OrdersService {
   // count, neither of which the internal status/cancel checks need.
   async findOneDetail(ctx: TenantContext, id: number) {
     const order = await this.findOne(ctx, id);
-    const detail = await this.prisma.order.findFirst({
-      where: { id: order.id },
-      include: orderDetailInclude,
-    });
+    const details = await this.loadOrderDetailWithRelations(order.id);
     // Repeat-customer count is shop-wide by design — a customer who has
     // ordered from a different branch is still a repeat customer.
-    const customerOrderCount = await this.prisma.order.count({
-      where: { shopId: ctx.shopId, customerPhone: order.customerPhone },
-    });
-    return { ...detail, customerOrderCount };
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM \`order\` WHERE shopId = ? AND customerPhone = ?`,
+      [ctx.shopId, order.customerPhone],
+    );
+    return {
+      ...this.toDetailResponse(details),
+      customerOrderCount: Number(countRows[0].c),
+    };
   }
 
   // findOne() below is the same tenant/outlet-scoped existence check every
@@ -184,10 +211,25 @@ export class OrdersService {
       order.outletId,
       'orders.manage',
     );
-    return this.prisma.ordernote.create({
-      data: { orderId, authorUserId: ctx.userId, note: dto.note },
-      include: { author: { select: { id: true, name: true } } },
-    });
+    const result = await this.db.execute(
+      `INSERT INTO ordernote (orderId, authorUserId, note) VALUES (?, ?, ?)`,
+      [orderId, ctx.userId, dto.note],
+    );
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT on1.*, u.id AS authorId, u.name AS authorName
+       FROM ordernote on1 JOIN user u ON u.id = on1.authorUserId
+       WHERE on1.id = ?`,
+      [result.insertId],
+    );
+    const row = rows[0];
+    return {
+      id: row.id as number,
+      orderId: row.orderId as number,
+      authorUserId: row.authorUserId as number,
+      note: row.note as string,
+      createdAt: row.createdAt as Date,
+      author: { id: row.authorId as number, name: row.authorName as string },
+    };
   }
 
   // reserveStock: off by default (admin-entered orders defer stock
@@ -209,10 +251,11 @@ export class OrdersService {
     if (outletId === undefined) {
       throw new BadRequestException('outletId is required');
     }
-    const outlet = await this.prisma.outlet.findFirst({
-      where: { id: outletId, shopId: ctx.shopId },
-    });
-    if (!outlet) {
+    const outletRows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, ctx.shopId],
+    );
+    if (outletRows.length === 0) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
     await this.branchRolesService.assertPermission(
@@ -231,15 +274,15 @@ export class OrdersService {
       })),
     );
 
-    let subtotal = new Prisma.Decimal(0);
+    let subtotal = 0;
     const itemsData = resolvedItems.map(
       ({ product, variant, quantity, price, variantLabel }) => {
-        subtotal = subtotal.add(price.mul(quantity));
+        subtotal += Number(price) * quantity;
         return {
-          productId: product.id,
-          productName: product.name,
-          variantId: variant?.id,
-          variantLabel: variantLabel ?? undefined,
+          productId: product.id as number,
+          productName: product.name as string,
+          variantId: variant?.id ?? null,
+          variantLabel: variantLabel ?? null,
           quantity,
           priceAtPurchase: price,
         };
@@ -250,22 +293,22 @@ export class OrdersService {
     // resolve and snapshot the shop's current default at creation time, same
     // principle as priceAtPurchase on order items — a later change to the
     // shop default must never retroactively change this order's total.
-    let deliveryFee: Prisma.Decimal;
+    let deliveryFee: number;
     if (dto.deliveryFee !== undefined) {
-      deliveryFee = new Prisma.Decimal(dto.deliveryFee);
+      deliveryFee = dto.deliveryFee;
     } else {
-      const shop = await this.prisma.shop.findUniqueOrThrow({
-        where: { id: ctx.shopId },
-        select: { defaultDeliveryFee: true },
-      });
-      deliveryFee = shop.defaultDeliveryFee;
+      const shopRows = await this.db.query<RowDataPacket[]>(
+        `SELECT defaultDeliveryFee FROM shop WHERE id = ?`,
+        [ctx.shopId],
+      );
+      deliveryFee = Number(shopRows[0]?.defaultDeliveryFee ?? 0);
     }
 
     // Resolved (not yet claimed — see redeem() inside the transaction below)
     // before the customer lookup, same "cheap read before the expensive/
     // stateful part" ordering as affiliate attribution.
     let discount: { id: number; usageLimit: number | null } | null = null;
-    let discountAmount = new Prisma.Decimal(0);
+    let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
     if (dto.discountCode) {
       const resolved = await this.discountsService.resolveByCode(
@@ -273,7 +316,7 @@ export class OrdersService {
         dto.discountCode,
       );
       const evaluated = await this.discountsService.evaluate(resolved, {
-        cartSubtotal: Number(subtotal),
+        cartSubtotal: subtotal,
       });
       if (!evaluated.valid) {
         throw new BadRequestException(
@@ -281,15 +324,15 @@ export class OrdersService {
         );
       }
       discount = resolved!;
-      discountAmount = new Prisma.Decimal(evaluated.discountAmount ?? 0);
+      discountAmount = evaluated.discountAmount ?? 0;
       discountCodeSnapshot = evaluated.code;
       if (evaluated.freeShipping) {
-        deliveryFee = new Prisma.Decimal(0);
+        deliveryFee = 0;
       }
     }
 
-    let total = subtotal.add(deliveryFee).sub(discountAmount);
-    if (total.isNegative()) total = new Prisma.Decimal(0);
+    let total = subtotal + deliveryFee - discountAmount;
+    if (total < 0) total = 0;
 
     const customer = await this.customersService.findOrCreateForOrder(
       ctx.shopId,
@@ -303,10 +346,10 @@ export class OrdersService {
     const attribution = await this.affiliateService.resolveAttribution(
       ctx.shopId,
       dto.referralCode,
-      Number(total),
+      total,
     );
 
-    const order = await this.prisma.$transaction(async (tx) => {
+    const orderId = await this.db.transaction(async (conn) => {
       // Stock reservation only fires alongside an immediate reservation
       // (reserveStock) — a deferred (non-reserveStock) admin order hasn't
       // committed stock yet either; that case is instead covered at the
@@ -320,13 +363,13 @@ export class OrdersService {
       let ingredientsConsumed = false;
       if (options.reserveStock) {
         ingredientsConsumed = await this.productsService.consumeForOrderItems(
-          tx,
+          conn,
           ctx.shopId,
           outletId,
           resolvedItems
             .filter(({ product }) => !product.isGiftCard)
             .map(({ product, variant, quantity, allowNegative }) => ({
-              productId: product.id,
+              productId: product.id as number,
               variantId: variant?.id ?? null,
               quantity,
               allowNegative,
@@ -336,57 +379,75 @@ export class OrdersService {
         );
       }
 
-      const created = await tx.order.create({
-        data: {
-          shopId: ctx.shopId,
+      const trackingToken = generateTrackingCode();
+      const [result] = await conn.query(
+        `INSERT INTO \`order\` (
+          shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
+          customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          channel, orderType, deliveryFee, discountId, discountCode, discountAmount, total, trackingToken
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ctx.shopId,
           outletId,
-          ingredientsConsumedAt: ingredientsConsumed ? new Date() : undefined,
-          customerId: customer.id,
-          customerName: dto.customerName,
-          customerPhone: dto.customerPhone,
-          customerEmail: dto.customerEmail,
-          customerAddress: dto.customerAddress,
-          emirate: dto.emirate,
-          area: dto.area,
-          deliveryDate: dto.deliveryDate
-            ? new Date(dto.deliveryDate)
-            : undefined,
-          deliveryTimeSlot: dto.deliveryTimeSlot,
-          deliveryNotes: dto.deliveryNotes,
-          receiverMessage: dto.receiverMessage,
-          channel: dto.channel,
-          orderType: dto.orderType,
-          deliveryFee,
-          discountId: discount?.id,
-          discountCode: discountCodeSnapshot,
-          discountAmount: discount ? discountAmount : undefined,
-          total,
-          trackingToken: generateTrackingCode(),
-          orderitem: { create: itemsData },
-        },
-        include: orderInclude,
-      });
-
-      if (discount) {
-        await this.discountsService.redeem(
-          tx,
-          discount,
-          created.id,
+          ingredientsConsumed ? new Date() : null,
           customer.id,
+          dto.customerName,
+          dto.customerPhone,
+          dto.customerEmail ?? null,
+          dto.customerAddress,
+          dto.emirate,
+          dto.area ?? null,
+          dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+          dto.deliveryTimeSlot ?? null,
+          dto.deliveryNotes ?? null,
+          dto.receiverMessage ?? null,
+          dto.channel ?? null,
+          dto.orderType ?? null,
+          deliveryFee,
+          discount?.id ?? null,
+          discountCodeSnapshot ?? null,
+          discount ? discountAmount : null,
+          total,
+          trackingToken,
+        ],
+      );
+      const newOrderId = (result as { insertId: number }).insertId;
+
+      if (itemsData.length > 0) {
+        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+        await conn.query(
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase)
+           VALUES ${placeholders}`,
+          itemsData.flatMap((d) => [
+            newOrderId,
+            d.productId,
+            d.productName,
+            d.variantId,
+            d.variantLabel,
+            d.quantity,
+            d.priceAtPurchase,
+          ]),
         );
       }
 
-      return created;
+      if (discount) {
+        await this.discountsService.redeem(conn, discount, newOrderId, customer.id);
+      }
+
+      return newOrderId;
     });
 
     if (attribution) {
       await this.affiliateService.recordAttribution(
-        this.prisma,
+        this.db.pool,
         ctx.shopId,
-        order.id,
+        orderId,
         attribution,
       );
     }
+
+    const orders = await this.loadOrdersWithRelations([orderId]);
+    const order = this.toResponse(orders.get(orderId)!);
 
     // Not awaited, deliberately — see the matching comment on the storefront
     // checkout path (PublicService.createOrder) for why: a slow or down
@@ -425,16 +486,19 @@ export class OrdersService {
     }
 
     const subtotal = order.orderitem.reduce(
-      (sum, item) => sum.add(item.priceAtPurchase.mul(item.quantity)),
-      new Prisma.Decimal(0),
+      (sum: number, item: AssembledOrderItem) =>
+        sum + Number(item.priceAtPurchase) * item.quantity,
+      0,
     );
-    const deliveryFee = new Prisma.Decimal(dto.deliveryFee);
+    const total = subtotal + dto.deliveryFee;
 
-    return this.prisma.order.update({
-      where: { id },
-      data: { deliveryFee, total: subtotal.add(deliveryFee) },
-      include: orderInclude,
-    });
+    await this.db.execute(`UPDATE \`order\` SET deliveryFee = ?, total = ? WHERE id = ?`, [
+      dto.deliveryFee,
+      total,
+      id,
+    ]);
+    const orders = await this.loadOrdersWithRelations([id]);
+    return this.toResponse(orders.get(id)!);
   }
 
   async updateStatus(
@@ -457,25 +521,20 @@ export class OrdersService {
       );
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       // Compare-and-swap on the status column, not a plain update: the
       // WHERE clause re-checks `order.status` at the moment MySQL takes the
       // row lock, so if two requests race to confirm the same order, only
-      // one UPDATE can match — the loser gets count 0 instead of both
-      // decrementing stock. Without this, the `order.status` read above is
-      // stale by the time the write happens and the guard below is a no-op
-      // under concurrency. The outletId re-check is defense in depth on top
-      // of the findOne check above, not load-bearing on its own.
-      const result = await tx.order.updateMany({
-        where: {
-          id,
-          shopId: ctx.shopId,
-          outletId: order.outletId,
-          status: order.status,
-        },
-        data: { status: dto.status },
-      });
-      if (result.count === 0) {
+      // one UPDATE can match — the loser gets affectedRows 0 instead of
+      // both decrementing stock. Without this, the `order.status` read
+      // above is stale by the time the write happens and the guard below is
+      // a no-op under concurrency. The outletId re-check is defense in
+      // depth on top of the findOne check above, not load-bearing on its own.
+      const [result] = await conn.query(
+        `UPDATE \`order\` SET status = ? WHERE id = ? AND shopId = ? AND outletId = ? AND status = ?`,
+        [dto.status, id, ctx.shopId, order.outletId, order.status],
+      );
+      if ((result as { affectedRows: number }).affectedRows === 0) {
         throw new ConflictException(
           'Order status changed before this update could be applied — refresh and retry',
         );
@@ -495,7 +554,7 @@ export class OrdersService {
         !IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')
       ) {
         await this.adjustStockForOrder(
-          tx,
+          conn,
           ctx,
           order.id,
           order.outletId,
@@ -503,11 +562,9 @@ export class OrdersService {
           false,
         );
       }
-      return tx.order.findUniqueOrThrow({
-        where: { id },
-        include: orderInclude,
-      });
     });
+    const orders = await this.loadOrdersWithRelations([id]);
+    const updated = this.toResponse(orders.get(id)!);
 
     await this.affiliateService.syncOrderStatus(id, {
       orderStatus: dto.status,
@@ -579,7 +636,7 @@ export class OrdersService {
   // 'pending' or 'confirmed' (EDITABLE_ORDER_STATUSES — see constants.ts for
   // why 'preparing' and beyond are excluded). Reuses
   // ProductsService.resolveOrderItems for validation/pricing (same as
-  // create()) and the exact CAS-guarded updateMany discipline checkout's
+  // create()) and the exact CAS-guarded UPDATE discipline checkout's
   // reserveStock uses for the "need more stock" direction — not a parallel
   // implementation.
   async updateItems(
@@ -609,15 +666,15 @@ export class OrdersService {
       })),
     );
 
-    let newSubtotal = new Prisma.Decimal(0);
+    let newSubtotal = 0;
     const newItemsData = resolvedItems.map(
       ({ product, variant, quantity, price, variantLabel }) => {
-        newSubtotal = newSubtotal.add(price.mul(quantity));
+        newSubtotal += Number(price) * quantity;
         return {
-          productId: product.id,
-          productName: product.name,
-          variantId: variant?.id,
-          variantLabel: variantLabel ?? undefined,
+          productId: product.id as number,
+          productName: product.name as string,
+          variantId: variant?.id ?? null,
+          variantLabel: variantLabel ?? null,
           quantity,
           priceAtPurchase: price,
         };
@@ -643,7 +700,7 @@ export class OrdersService {
     // clears. Dropped (not re-claimed a second time either way — usage was
     // already recorded at original order creation) rather than blocking the
     // edit outright; the caller is told via `discountDropped`.
-    let discountAmount = order.discountAmount ?? new Prisma.Decimal(0);
+    let discountAmount = Number(order.discountAmount ?? 0);
     let discountDropped = false;
     if (order.discountId) {
       const discount = await this.discountsService.resolveById(
@@ -651,14 +708,14 @@ export class OrdersService {
         order.discountId,
       );
       const evaluated = await this.discountsService.evaluate(discount, {
-        cartSubtotal: Number(newSubtotal),
-        productIds: resolvedItems.map((i) => i.product.id),
+        cartSubtotal: newSubtotal,
+        productIds: resolvedItems.map((i) => i.product.id as number),
         customerId: order.customerId ?? undefined,
       });
       if (evaluated.valid) {
-        discountAmount = new Prisma.Decimal(evaluated.discountAmount ?? 0);
+        discountAmount = evaluated.discountAmount ?? 0;
       } else {
-        discountAmount = new Prisma.Decimal(0);
+        discountAmount = 0;
         discountDropped = true;
       }
     }
@@ -669,32 +726,39 @@ export class OrdersService {
     // materially changed because of this edit, so the tax on it must track
     // that, or the order's numbers stop adding up. deliveryFee is left
     // exactly as it was (it doesn't depend on items in this app's model).
-    const shop = await this.prisma.shop.findUniqueOrThrow({
-      where: { id: ctx.shopId },
-      select: { taxRate: true, taxInclusive: true },
-    });
-    const deliveryFee = order.deliveryFee ?? new Prisma.Decimal(0);
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT taxRate, taxInclusive FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const shop = shopRows[0];
+    const deliveryFee = Number(order.deliveryFee ?? 0);
     const { taxAmount, total: totalBeforeDiscount } = computeOrderTotals({
-      subtotal: Number(newSubtotal),
-      deliveryFee: Number(deliveryFee),
+      subtotal: newSubtotal,
+      deliveryFee,
       taxRate: Number(shop.taxRate),
-      taxInclusive: shop.taxInclusive,
+      taxInclusive: Boolean(shop.taxInclusive),
     });
-    let total = new Prisma.Decimal(totalBeforeDiscount).sub(discountAmount);
-    if (total.isNegative()) total = new Prisma.Decimal(0);
+    let total = totalBeforeDiscount - discountAmount;
+    if (total < 0) total = 0;
 
     let ingredientStockWarnings: string[] = [];
-    const updated = await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       if (stockReserved) {
-        const oldItems = await tx.orderitem.findMany({ where: { orderId } });
+        const [oldItems] = await conn.query<RowDataPacket[]>(
+          `SELECT productId, variantId, quantity FROM orderitem WHERE orderId = ?`,
+          [orderId],
+        );
         const key = (productId: number, variantId: number | null) =>
           `${productId}:${variantId ?? ''}`;
         const oldQtyByKey = new Map(
-          oldItems.map((i) => [key(i.productId, i.variantId), i.quantity]),
+          oldItems.map((i) => [
+            key(i.productId as number, i.variantId as number | null),
+            i.quantity as number,
+          ]),
         );
         const newQtyByKey = new Map(
           resolvedItems.map((i) => [
-            key(i.product.id, i.variant?.id ?? null),
+            key(i.product.id as number, i.variant?.id ?? null),
             i.quantity,
           ]),
         );
@@ -731,7 +795,10 @@ export class OrdersService {
           // continueSellingOutOfStock-based rule resolveOrderItems uses for
           // order creation (order-item-edit never had that escape valve).
           const usesIngredientsByProduct = new Map(
-            resolvedItems.map((i) => [i.product.id, i.product.usesIngredients]),
+            resolvedItems.map((i) => [
+              i.product.id as number,
+              i.product.usesIngredients as boolean,
+            ]),
           );
           const increasedItems: {
             productId: number;
@@ -762,7 +829,7 @@ export class OrdersService {
 
           if (increasedItems.length > 0) {
             await this.productsService.consumeForOrderItems(
-              tx,
+              conn,
               ctx.shopId,
               order.outletId,
               increasedItems,
@@ -770,14 +837,14 @@ export class OrdersService {
               { throwOnInsufficientStock: true, actorUserId: ctx.userId },
             );
             ingredientStockWarnings = await this.findNegativeIngredientStock(
-              tx,
+              conn,
               order.outletId,
               increasedItems.map((i) => i.productId),
             );
           }
           if (decreasedItems.length > 0) {
             await this.productsService.consumeForOrderItems(
-              tx,
+              conn,
               ctx.shopId,
               order.outletId,
               decreasedItems,
@@ -788,32 +855,48 @@ export class OrdersService {
         }
       }
 
-      await tx.orderitem.deleteMany({ where: { orderId } });
-      await tx.orderitem.createMany({
-        data: newItemsData.map((d) => ({ ...d, orderId })),
-      });
+      await conn.query(`DELETE FROM orderitem WHERE orderId = ?`, [orderId]);
+      if (newItemsData.length > 0) {
+        const placeholders = newItemsData.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+        await conn.query(
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase)
+           VALUES ${placeholders}`,
+          newItemsData.flatMap((d) => [
+            orderId,
+            d.productId,
+            d.productName,
+            d.variantId,
+            d.variantLabel,
+            d.quantity,
+            d.priceAtPurchase,
+          ]),
+        );
+      }
 
-      return tx.order.update({
-        where: { id: orderId },
-        data: {
-          total,
-          taxAmount: new Prisma.Decimal(taxAmount),
-          discountAmount,
-          ...(discountDropped && { discountId: null, discountCode: null }),
-        },
-        include: orderInclude,
+      const set = buildSetClause({
+        total,
+        taxAmount,
+        discountAmount,
+        ...(discountDropped && { discountId: null, discountCode: null }),
       });
+      await conn.query(`UPDATE \`order\` SET ${set!.setClause} WHERE id = ?`, [
+        ...set!.params,
+        orderId,
+      ]);
     });
+
+    const orders = await this.loadOrdersWithRelations([orderId]);
+    const updated = this.toResponse(orders.get(orderId)!);
 
     await this.auditLogService.logCtx(ctx, {
       action: 'order.items_edited',
       entityType: 'order',
       entityId: orderId,
       before: {
-        total: order.total.toString(),
+        total: order.total,
         itemCount: order.orderitem.length,
       },
-      after: { total: total.toString(), itemCount: newItemsData.length },
+      after: { total: String(total), itemCount: newItemsData.length },
       metadata: discountDropped ? { discountDropped: true } : undefined,
     });
 
@@ -825,25 +908,23 @@ export class OrdersService {
   // increase-direction consumeForOrderItems (throwOnInsufficientStock:
   // false, so it never blocks) to build the merchant-facing warning list.
   private async findNegativeIngredientStock(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     outletId: number,
     productIds: number[],
   ): Promise<string[]> {
-    const recipeRows = await tx.productingredient.findMany({
-      where: { productId: { in: productIds } },
-      select: { ingredientId: true },
-    });
-    const ingredientIds = [...new Set(recipeRows.map((r) => r.ingredientId))];
+    const [recipeRows] = await conn.query<RowDataPacket[]>(
+      `SELECT DISTINCT ingredientId FROM productingredient WHERE productId IN (${productIds.map(() => '?').join(', ')})`,
+      productIds,
+    );
+    const ingredientIds = recipeRows.map((r) => r.ingredientId as number);
     if (ingredientIds.length === 0) return [];
-    const negative = await tx.outletingredientstock.findMany({
-      where: {
-        outletId,
-        ingredientId: { in: ingredientIds },
-        stockQuantity: { lt: 0 },
-      },
-      include: { ingredient: { select: { name: true } } },
-    });
-    return negative.map((r) => r.ingredient.name);
+    const [negative] = await conn.query<RowDataPacket[]>(
+      `SELECT ing.name AS name FROM outletingredientstock ois
+       JOIN ingredient ing ON ing.id = ois.ingredientId
+       WHERE ois.outletId = ? AND ois.ingredientId IN (${ingredientIds.map(() => '?').join(', ')}) AND ois.stockQuantity < 0`,
+      [outletId, ...ingredientIds],
+    );
+    return negative.map((r) => r.name as string);
   }
 
   async cancel(ctx: TenantContext, id: number) {
@@ -859,22 +940,17 @@ export class OrdersService {
       );
     }
 
-    const cancelled = await this.prisma.$transaction(async (tx) => {
+    await this.db.transaction(async (conn) => {
       // Two CAS attempts instead of "read status, then decide" — that read
       // is stale by the time we write under concurrency (e.g. a confirm and
       // a cancel racing the same order), and the wrong branch would either
       // skip a needed restock or double-restock. Whichever CAS actually
       // matches the row's current status at lock time is authoritative.
-      const fromPending = await tx.order.updateMany({
-        where: {
-          id,
-          shopId: ctx.shopId,
-          outletId: order.outletId,
-          status: 'pending',
-        },
-        data: { status: 'cancelled' },
-      });
-      if (fromPending.count === 1) {
+      const [fromPending] = await conn.query(
+        `UPDATE \`order\` SET status = 'cancelled' WHERE id = ? AND shopId = ? AND outletId = ? AND status = 'pending'`,
+        [id, ctx.shopId, order.outletId],
+      );
+      if ((fromPending as { affectedRows: number }).affectedRows === 1) {
         // An order from an immediate-reservation channel already reserved
         // stock at creation (decremented while still 'pending', not at
         // confirm — see updateStatus above) — cancelling from 'pending' must
@@ -884,7 +960,7 @@ export class OrdersService {
           IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')
         ) {
           await this.adjustStockForOrder(
-            tx,
+            conn,
             ctx,
             id,
             order.outletId,
@@ -892,40 +968,33 @@ export class OrdersService {
             order.ingredientsConsumedAt !== null,
           );
         }
-        return tx.order.findUniqueOrThrow({
-          where: { id },
-          include: orderInclude,
-        });
+        return;
       }
 
-      const fromStockDecremented = await tx.order.updateMany({
-        where: {
-          id,
-          shopId: ctx.shopId,
-          outletId: order.outletId,
-          status: { in: ['confirmed', 'preparing', 'out_for_delivery'] },
-        },
-        data: { status: 'cancelled' },
-      });
-      if (fromStockDecremented.count === 1) {
+      const [fromStockDecremented] = await conn.query(
+        `UPDATE \`order\` SET status = 'cancelled'
+         WHERE id = ? AND shopId = ? AND outletId = ? AND status IN ('confirmed', 'preparing', 'out_for_delivery')`,
+        [id, ctx.shopId, order.outletId],
+      );
+      if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
         await this.adjustStockForOrder(
-          tx,
+          conn,
           ctx,
           id,
           order.outletId,
           1,
           order.ingredientsConsumedAt !== null,
         );
-        return tx.order.findUniqueOrThrow({
-          where: { id },
-          include: orderInclude,
-        });
+        return;
       }
 
       throw new ConflictException(
         'Order status changed before this cancellation could be applied — refresh and retry',
       );
     });
+
+    const orders = await this.loadOrdersWithRelations([id]);
+    const cancelled = this.toResponse(orders.get(id)!);
 
     await this.affiliateService.syncOrderStatus(id, {
       orderStatus: 'cancelled',
@@ -964,7 +1033,7 @@ export class OrdersService {
       ...entries.map((e) => ({
         status: (e.after as { status?: string } | null)?.status ?? null,
         timestamp: e.createdAt,
-        actorName: e.actorName,
+        actorName: e.actorName as string,
       })),
     ];
   }
@@ -981,19 +1050,19 @@ export class OrdersService {
   // have gone stale under the concurrent case that would matter here, same
   // trust already placed in order.channel/order.outletId throughout this file.
   private async adjustStockForOrder(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     ctx: TenantContext,
     orderId: number,
     outletId: number,
     direction: 1 | -1,
     ingredientsAlreadyConsumed: boolean,
   ) {
-    const items = await tx.orderitem.findMany({
-      where: { orderId },
-      include: {
-        product: { select: { trackInventory: true, usesIngredients: true } },
-      },
-    });
+    const [items] = await conn.query<RowDataPacket[]>(
+      `SELECT oi.productId, oi.variantId, oi.quantity, p.trackInventory, p.usesIngredients
+       FROM orderitem oi JOIN product p ON p.id = oi.productId
+       WHERE oi.orderId = ?`,
+      [orderId],
+    );
     // Only a restock (direction 1, i.e. cancellation) can ever cross stock
     // from 0 up to positive — collected here and fired (not awaited, see
     // below) after the loop so a slow email batch never delays the
@@ -1008,32 +1077,34 @@ export class OrdersService {
     }[] = [];
     if (direction === 1) {
       for (const item of items) {
-        if (!item.product.trackInventory || item.product.usesIngredients)
+        if (!Boolean(item.trackInventory) || Boolean(item.usesIngredients))
           continue;
-        const shadow = await tx.ingredient.findFirst({
-          where: item.variantId
-            ? { shadowVariantId: item.variantId }
-            : { shadowProductId: item.productId },
-          select: { id: true },
-        });
-        const before = shadow
-          ? await tx.outletingredientstock.findUnique({
-              where: {
-                outletId_ingredientId: { outletId, ingredientId: shadow.id },
-              },
-            })
-          : null;
-        if ((before?.stockQuantity ?? 0) <= 0) {
+        const [shadowRows] = await conn.query<RowDataPacket[]>(
+          item.variantId
+            ? `SELECT id FROM ingredient WHERE shadowVariantId = ?`
+            : `SELECT id FROM ingredient WHERE shadowProductId = ?`,
+          [item.variantId ? item.variantId : item.productId],
+        );
+        const shadow = shadowRows[0];
+        let before = 0;
+        if (shadow) {
+          const [beforeRows] = await conn.query<RowDataPacket[]>(
+            `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+            [outletId, shadow.id],
+          );
+          before = (beforeRows[0]?.stockQuantity as number | undefined) ?? 0;
+        }
+        if (before <= 0) {
           restockNotifyTargets.push({
-            productId: item.productId,
-            variantId: item.variantId,
+            productId: item.productId as number,
+            variantId: item.variantId as number | null,
           });
         }
       }
     }
     for (const target of restockNotifyTargets) {
       this.notifySubscriptionsService
-        .triggerForProduct(ctx.shopId, target.productId, target.variantId)
+        .triggerForProduct(ctx.shopId, target.productId, target.variantId ?? undefined)
         .catch(() => {});
     }
 
@@ -1044,36 +1115,188 @@ export class OrdersService {
     // this specific order actually consumed stock in the first place).
     if (direction === -1) {
       const consumed = await this.productsService.consumeForOrderItems(
-        tx,
+        conn,
         ctx.shopId,
         outletId,
         items.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
+          productId: item.productId as number,
+          variantId: item.variantId as number | null,
+          quantity: item.quantity as number,
         })),
         -1,
         { throwOnInsufficientStock: false, actorUserId: ctx.userId },
       );
       if (consumed) {
-        await tx.order.update({
-          where: { id: orderId },
-          data: { ingredientsConsumedAt: new Date() },
-        });
+        await conn.query(`UPDATE \`order\` SET ingredientsConsumedAt = ? WHERE id = ?`, [
+          new Date(),
+          orderId,
+        ]);
       }
     } else if (ingredientsAlreadyConsumed) {
       await this.productsService.consumeForOrderItems(
-        tx,
+        conn,
         ctx.shopId,
         outletId,
         items.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId,
-          quantity: item.quantity,
+          productId: item.productId as number,
+          variantId: item.variantId as number | null,
+          quantity: item.quantity as number,
         })),
         1,
         { throwOnInsufficientStock: false, actorUserId: ctx.userId },
       );
     }
+  }
+
+  // Batch-loads orderitem + the latest paymenttransaction per order — same
+  // shape orderInclude used to fetch in one Prisma nested include (list/
+  // status-transition responses; see loadOrderDetailWithRelations for the
+  // richer single-order variant).
+  private async loadOrdersWithRelations(
+    ids: number[],
+  ): Promise<Map<number, AssembledOrder>> {
+    const result = new Map<number, AssembledOrder>();
+    if (ids.length === 0) return result;
+    const idList = ids.map(() => '?').join(', ');
+    const [orders, items, payments] = await Promise.all([
+      this.db.query<(OrderRow & RowDataPacket)[]>(
+        `SELECT * FROM \`order\` WHERE id IN (${idList})`,
+        ids,
+      ),
+      this.db.query<(OrderitemRow & RowDataPacket)[]>(
+        `SELECT * FROM orderitem WHERE orderId IN (${idList})`,
+        ids,
+      ),
+      this.loadLatestPaymentTransactions(ids),
+    ]);
+    const itemsByOrder = new Map<number, AssembledOrderItem[]>();
+    for (const item of items) {
+      const list = itemsByOrder.get(item.orderId) ?? [];
+      list.push(item);
+      itemsByOrder.set(item.orderId, list);
+    }
+    for (const o of orders) {
+      result.set(o.id, {
+        ...o,
+        orderitem: itemsByOrder.get(o.id) ?? [],
+        paymenttransaction: payments.get(o.id) ?? [],
+      });
+    }
+    return result;
+  }
+
+  // Richer variant used only by the single-order detail endpoint (the order
+  // detail modal) — product thumbnails for item images and the latest
+  // payment transaction for payment-mode display, plus externaldelivery/
+  // ordernote/surveyresponse. Kept separate from loadOrdersWithRelations so
+  // list/status-transition responses don't carry the extra joins.
+  private async loadOrderDetailWithRelations(
+    id: number,
+  ): Promise<AssembledOrderDetail> {
+    const [orderRows, items, payments, externalDeliveryRows, noteRows, surveyRows] =
+      await Promise.all([
+        this.db.query<(OrderRow & RowDataPacket)[]>(
+          `SELECT * FROM \`order\` WHERE id = ?`,
+          [id],
+        ),
+        this.db.query<RowDataPacket[]>(
+          `SELECT oi.*, p.thumbnail AS productThumbnail
+           FROM orderitem oi JOIN product p ON p.id = oi.productId
+           WHERE oi.orderId = ?`,
+          [id],
+        ),
+        this.loadLatestPaymentTransactions([id]),
+        this.db.query<RowDataPacket[]>(
+          `SELECT * FROM externaldelivery WHERE orderId = ?`,
+          [id],
+        ),
+        this.db.query<RowDataPacket[]>(
+          `SELECT on1.*, u.id AS authorId, u.name AS authorName
+           FROM ordernote on1 JOIN user u ON u.id = on1.authorUserId
+           WHERE on1.orderId = ?
+           ORDER BY on1.createdAt DESC`,
+          [id],
+        ),
+        this.db.query<RowDataPacket[]>(
+          `SELECT * FROM surveyresponse WHERE orderId = ?`,
+          [id],
+        ),
+      ]);
+    const order = orderRows[0];
+    return {
+      ...order,
+      orderitem: items.map((i) => ({
+        ...(i as unknown as OrderitemRow),
+        product: { thumbnail: i.productThumbnail as string },
+      })),
+      paymenttransaction: payments.get(id) ?? [],
+      externaldelivery: externalDeliveryRows[0] ?? null,
+      ordernote: noteRows.map((n) => ({
+        id: n.id,
+        orderId: n.orderId,
+        authorUserId: n.authorUserId,
+        note: n.note,
+        createdAt: n.createdAt,
+        author: { id: n.authorId, name: n.authorName },
+      })),
+      surveyresponse: surveyRows[0] ?? null,
+    };
+  }
+
+  // Deterministic "one row per order" resolution of the most recent
+  // paymenttransaction — a plain MAX(createdAt) GROUP BY can return more
+  // than one row per order on a createdAt tie, so this ties-breaks on id
+  // too via a correlated subquery, matching Prisma's own take:1 exactness.
+  private async loadLatestPaymentTransactions(
+    orderIds: number[],
+  ): Promise<Map<number, RowDataPacket[]>> {
+    const result = new Map<number, RowDataPacket[]>();
+    if (orderIds.length === 0) return result;
+    const idList = orderIds.map(() => '?').join(', ');
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT pt.* FROM paymenttransaction pt
+       WHERE pt.orderId IN (${idList})
+         AND pt.id = (
+           SELECT pt2.id FROM paymenttransaction pt2
+           WHERE pt2.orderId = pt.orderId
+           ORDER BY pt2.createdAt DESC, pt2.id DESC
+           LIMIT 1
+         )`,
+      orderIds,
+    );
+    for (const row of rows) {
+      result.set(row.orderId as number, [row]);
+    }
+    return result;
+  }
+
+  private toResponse(order: AssembledOrder) {
+    return {
+      ...order,
+      deliveryFee: trimDecimal(order.deliveryFee),
+      taxAmount: trimDecimal(order.taxAmount),
+      discountAmount: trimDecimal(order.discountAmount),
+      giftCardAmount: trimDecimal(order.giftCardAmount),
+      total: trimDecimal(order.total),
+      orderitem: order.orderitem.map((i) => ({
+        ...i,
+        priceAtPurchase: trimDecimal(i.priceAtPurchase),
+      })),
+      paymenttransaction: order.paymenttransaction.map((p) => ({
+        ...p,
+        amount: trimDecimal(p.amount as string),
+      })),
+    };
+  }
+
+  private toDetailResponse(order: AssembledOrderDetail) {
+    return {
+      ...this.toResponse(order),
+      externaldelivery: order.externaldelivery
+        ? { ...order.externaldelivery, price: trimDecimal(order.externaldelivery.price as string) }
+        : null,
+      ordernote: order.ordernote,
+      surveyresponse: order.surveyresponse,
+    };
   }
 }

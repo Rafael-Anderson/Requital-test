@@ -3,8 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { buildSetClause } from '../database/update.util';
+import type { BiolinkRow, BiolinkpageconfigRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { BIO_LINK_TARGET_FIELD, type BioLinkType } from './bio-link-constants';
 import { CreateBioLinkDto } from './dto/create-bio-link.dto';
@@ -34,32 +36,29 @@ interface TargetFields {
   socialPlatform?: string | null;
 }
 
-const bioLinkInclude = {
-  product: {
-    select: { id: true, name: true, slug: true, thumbnail: true, status: true },
-  },
-  collection: { select: { id: true, name: true, slug: true, image: true } },
-  template: {
-    select: { id: true, title: true, slug: true, image: true, isActive: true },
-  },
-} satisfies Prisma.biolinkInclude;
+interface AssembledBioLink extends BiolinkRow {
+  product: { id: number; name: string; slug: string; thumbnail: string; status: string } | null;
+  collection: { id: number; name: string; slug: string; image: string | null } | null;
+  template: { id: number; title: string; slug: string; image: string | null; isActive: boolean } | null;
+}
 
 @Injectable()
 export class BioLinksService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
   // ---------- Admin CRUD ----------
 
   async findAll(ctx: TenantContext) {
-    const links = await this.prisma.biolink.findMany({
-      where: { shopId: ctx.shopId },
-      include: bioLinkInclude,
-      orderBy: { order: 'asc' },
-    });
-    return links.map((l) => this.toAdminResponse(l));
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM biolink WHERE shopId = ? ORDER BY \`order\` ASC`,
+      [ctx.shopId],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const links = await this.loadBioLinksWithRelations(ids);
+    return ids.map((id) => this.toAdminResponse(links.get(id)!));
   }
 
   async create(ctx: TenantContext, dto: CreateBioLinkDto) {
@@ -72,24 +71,32 @@ export class BioLinksService {
     if (dto.templateId)
       await this.assertTemplateBelongsToShop(ctx, dto.templateId);
 
-    const { _max } = await this.prisma.biolink.aggregate({
-      where: { shopId: ctx.shopId },
-      _max: { order: true },
-    });
-    const nextOrder = (_max.order ?? -1) + 1;
+    const maxRows = await this.db.query<RowDataPacket[]>(
+      `SELECT MAX(\`order\`) AS maxOrder FROM biolink WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    const nextOrder =
+      maxRows[0].maxOrder === null ? 0 : Number(maxRows[0].maxOrder) + 1;
 
-    const created = await this.prisma.biolink.create({
-      data: {
-        shopId: ctx.shopId,
-        type: dto.type,
-        label: dto.label ?? null,
-        ...this.clearedTargetFields(dto.type, dto),
-        order: nextOrder,
-        active: dto.active ?? true,
-      },
-      include: bioLinkInclude,
-    });
-    return this.toAdminResponse(created);
+    const targetFields = this.clearedTargetFields(dto.type, dto);
+    const result = await this.db.execute(
+      `INSERT INTO biolink (shopId, type, label, url, productId, collectionId, templateId, socialPlatform, \`order\`, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ctx.shopId,
+        dto.type,
+        dto.label ?? null,
+        targetFields.url,
+        targetFields.productId,
+        targetFields.collectionId,
+        targetFields.templateId,
+        targetFields.socialPlatform,
+        nextOrder,
+        dto.active ?? true,
+      ],
+    );
+    const links = await this.loadBioLinksWithRelations([result.insertId]);
+    return this.toAdminResponse(links.get(result.insertId)!);
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateBioLinkDto) {
@@ -158,22 +165,26 @@ export class BioLinksService {
     if (targetData.templateId)
       await this.assertTemplateBelongsToShop(ctx, targetData.templateId);
 
-    const updated = await this.prisma.biolink.update({
-      where: { id },
-      data: {
-        type: effectiveType,
-        label: dto.label !== undefined ? dto.label : undefined,
-        active: dto.active,
-        ...targetData,
-      },
-      include: bioLinkInclude,
+    const set = buildSetClause({
+      type: effectiveType,
+      label: dto.label !== undefined ? dto.label : undefined,
+      active: dto.active,
+      ...targetData,
+      updatedAt: new Date(),
     });
-    return this.toAdminResponse(updated);
+    if (set) {
+      await this.db.execute(`UPDATE biolink SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        id,
+      ]);
+    }
+    const links = await this.loadBioLinksWithRelations([id]);
+    return this.toAdminResponse(links.get(id)!);
   }
 
   async remove(ctx: TenantContext, id: number) {
     const link = await this.assertBelongsToShop(ctx, id);
-    await this.prisma.biolink.delete({ where: { id } });
+    await this.db.execute(`DELETE FROM biolink WHERE id = ?`, [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'biolink.deleted',
       entityType: 'biolink',
@@ -188,11 +199,11 @@ export class BioLinksService {
   // rather than partially reordering. All rows written in one transaction
   // so the list is never observably half-reordered.
   async reorder(ctx: TenantContext, dto: ReorderBioLinksDto) {
-    const existing = await this.prisma.biolink.findMany({
-      where: { shopId: ctx.shopId },
-      select: { id: true },
-    });
-    const existingIds = new Set(existing.map((l) => l.id));
+    const existing = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM biolink WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    const existingIds = new Set(existing.map((l) => l.id as number));
     const requestedIds = new Set(dto.ids);
     if (
       dto.ids.length !== existingIds.size ||
@@ -203,25 +214,30 @@ export class BioLinksService {
       );
     }
 
-    await this.prisma.$transaction(
-      dto.ids.map((id, index) =>
-        this.prisma.biolink.update({ where: { id }, data: { order: index } }),
-      ),
-    );
+    await this.db.transaction(async (conn) => {
+      for (let index = 0; index < dto.ids.length; index++) {
+        await conn.query(`UPDATE biolink SET \`order\` = ?, updatedAt = ? WHERE id = ?`, [
+          index,
+          new Date(),
+          dto.ids[index],
+        ]);
+      }
+    });
     return this.findAll(ctx);
   }
 
   // ---------- Admin: page-level config (logo/background/description/meta) ----------
 
   async getPageConfig(ctx: TenantContext) {
-    const config = await this.prisma.biolinkpageconfig.findUnique({
-      where: { shopId: ctx.shopId },
-    });
+    const rows = await this.db.query<(BiolinkpageconfigRow & RowDataPacket)[]>(
+      `SELECT * FROM biolinkpageconfig WHERE shopId = ?`,
+      [ctx.shopId],
+    );
     // No row yet (never customized) is a valid, common state — same
     // "null-shape fallback" convention as ThemeService.findOne/SeoService.findOne,
     // not an error.
     return (
-      config ?? {
+      rows[0] ?? {
         shopId: ctx.shopId,
         logoUrl: null,
         backgroundUrl: null,
@@ -232,12 +248,30 @@ export class BioLinksService {
     );
   }
 
-  updatePageConfig(ctx: TenantContext, dto: UpdateBioPageConfigDto) {
-    return this.prisma.biolinkpageconfig.upsert({
-      where: { shopId: ctx.shopId },
-      create: { shopId: ctx.shopId, ...dto },
-      update: dto,
-    });
+  async updatePageConfig(ctx: TenantContext, dto: UpdateBioPageConfigDto) {
+    const set = buildSetClause({ ...dto });
+    const updateClause = set
+      ? set.setClause
+      : 'shopId = shopId'; // no-op update when dto is empty, matches Prisma's upsert(update: {}) behavior
+    await this.db.execute(
+      `INSERT INTO biolinkpageconfig (shopId, logoUrl, backgroundUrl, description, metaTitle, metaDescription)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE ${updateClause}`,
+      [
+        ctx.shopId,
+        dto.logoUrl ?? null,
+        dto.backgroundUrl ?? null,
+        dto.description ?? null,
+        dto.metaTitle ?? null,
+        dto.metaDescription ?? null,
+        ...(set ? set.params : []),
+      ],
+    );
+    const rows = await this.db.query<(BiolinkpageconfigRow & RowDataPacket)[]>(
+      `SELECT * FROM biolinkpageconfig WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    return rows[0];
   }
 
   // ---------- Public (storefront) ----------
@@ -248,15 +282,17 @@ export class BioLinksService {
   // (shop.logoUrl, shop.bannerUrl, shop.metaTitle, ...) rather than
   // duplicating that resolution in a second place.
   async getPublicPageConfig(shopId: number) {
-    const config = await this.prisma.biolinkpageconfig.findUnique({
-      where: { shopId },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM biolinkpageconfig WHERE shopId = ?`,
+      [shopId],
+    );
+    const config = rows[0];
     return {
-      logoUrl: config?.logoUrl ?? null,
-      backgroundUrl: config?.backgroundUrl ?? null,
-      description: config?.description ?? null,
-      metaTitle: config?.metaTitle ?? null,
-      metaDescription: config?.metaDescription ?? null,
+      logoUrl: (config?.logoUrl as string | null) ?? null,
+      backgroundUrl: (config?.backgroundUrl as string | null) ?? null,
+      description: (config?.description as string | null) ?? null,
+      metaTitle: (config?.metaTitle as string | null) ?? null,
+      metaDescription: (config?.metaDescription as string | null) ?? null,
     };
   }
 
@@ -270,11 +306,13 @@ export class BioLinksService {
     whatsappCountryCode: string | null;
     whatsappNumber: string | null;
   }) {
-    const links = await this.prisma.biolink.findMany({
-      where: { shopId: shop.id, active: true },
-      include: bioLinkInclude,
-      orderBy: { order: 'asc' },
-    });
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM biolink WHERE shopId = ? AND active = TRUE ORDER BY \`order\` ASC`,
+      [shop.id],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const linksMap = await this.loadBioLinksWithRelations(ids);
+    const links = ids.map((id) => linksMap.get(id)!);
 
     const result: Array<{
       id: number;
@@ -354,35 +392,55 @@ export class BioLinksService {
   // specify this edge case for the click endpoint specifically (only for the
   // list endpoint), so this is an interpretation, not a guess at a stated rule.
   async resolveClickTarget(id: number): Promise<string> {
-    const link = await this.prisma.biolink.findUnique({
-      where: { id },
-      include: { shop: true, product: true, collection: true, template: true },
-    });
-    if (!link || !link.active || !link.shop.published) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT bl.*, s.published AS shopPublished, s.subdomain AS shopSubdomain,
+              s.socialLinks AS shopSocialLinks, s.whatsappCountryCode AS shopWhatsappCountryCode,
+              s.whatsappNumber AS shopWhatsappNumber,
+              p.slug AS productSlug, p.status AS productStatus,
+              c.id AS collectionRowId,
+              t.slug AS templateSlug, t.isActive AS templateIsActive
+       FROM biolink bl
+       JOIN shop s ON s.id = bl.shopId
+       LEFT JOIN product p ON p.id = bl.productId
+       LEFT JOIN collection c ON c.id = bl.collectionId
+       LEFT JOIN template t ON t.id = bl.templateId
+       WHERE bl.id = ?`,
+      [id],
+    );
+    const link = rows[0];
+    if (!link || !link.active || !link.shopPublished) {
       throw new NotFoundException('Bio link not found');
     }
 
-    await this.prisma.biolink.update({
-      where: { id },
-      data: { clickCount: { increment: 1 } },
-    });
+    await this.db.execute(`UPDATE biolink SET clickCount = clickCount + 1 WHERE id = ?`, [
+      id,
+    ]);
 
-    const base = `${STOREFRONT_URL}/${link.shop.subdomain}`;
-    switch (link.type) {
+    const base = `${STOREFRONT_URL}/${link.shopSubdomain as string}`;
+    switch (link.type as string) {
       case 'EXTERNAL_URL':
-        return link.url ?? base;
+        return (link.url as string | null) ?? base;
       case 'PRODUCT':
-        return link.product && link.product.status === 'Available'
-          ? `${base}/products/${link.product.slug}`
+        return link.productSlug && link.productStatus === 'Available'
+          ? `${base}/products/${link.productSlug as string}`
           : base;
       case 'COLLECTION':
-        return link.collection ? `${base}?collection=${link.collection.id}` : base;
+        return link.collectionRowId ? `${base}?collection=${link.collectionRowId as number}` : base;
       case 'TEMPLATE':
-        return link.template && link.template.isActive
-          ? `${base}/templates/${link.template.slug}`
+        return link.templateSlug && link.templateIsActive
+          ? `${base}/templates/${link.templateSlug as string}`
           : base;
       case 'SOCIAL_ICON':
-        return this.resolveSocialUrl(link.shop, link.socialPlatform) ?? base;
+        return (
+          this.resolveSocialUrl(
+            {
+              socialLinks: link.shopSocialLinks,
+              whatsappCountryCode: link.shopWhatsappCountryCode as string | null,
+              whatsappNumber: link.shopWhatsappNumber as string | null,
+            },
+            link.socialPlatform as string | null,
+          ) ?? base
+        );
       default:
         return base;
     }
@@ -428,9 +486,7 @@ export class BioLinksService {
     return '';
   }
 
-  private toAdminResponse(
-    link: Prisma.biolinkGetPayload<{ include: typeof bioLinkInclude }>,
-  ) {
+  private toAdminResponse(link: AssembledBioLink) {
     return {
       id: link.id,
       type: link.type,
@@ -502,23 +558,25 @@ export class BioLinksService {
   }
 
   private async assertBelongsToShop(ctx: TenantContext, id: number) {
-    const link = await this.prisma.biolink.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
-    if (!link) {
+    const rows = await this.db.query<(BiolinkRow & RowDataPacket)[]>(
+      `SELECT * FROM biolink WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Bio link ${id} not found`);
     }
-    return link;
+    return rows[0];
   }
 
   private async assertProductBelongsToShop(
     ctx: TenantContext,
     productId: number,
   ) {
-    const product = await this.prisma.product.findFirst({
-      where: { id: productId, shopId: ctx.shopId },
-    });
-    if (!product) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE id = ? AND shopId = ?`,
+      [productId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Product ${productId} not found`);
     }
   }
@@ -527,10 +585,11 @@ export class BioLinksService {
     ctx: TenantContext,
     collectionId: number,
   ) {
-    const collection = await this.prisma.collection.findFirst({
-      where: { id: collectionId, shopId: ctx.shopId },
-    });
-    if (!collection) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM collection WHERE id = ? AND shopId = ?`,
+      [collectionId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Collection ${collectionId} not found`);
     }
   }
@@ -539,11 +598,82 @@ export class BioLinksService {
     ctx: TenantContext,
     templateId: number,
   ) {
-    const template = await this.prisma.template.findFirst({
-      where: { id: templateId, shopId: ctx.shopId },
-    });
-    if (!template) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM template WHERE id = ? AND shopId = ?`,
+      [templateId, ctx.shopId],
+    );
+    if (rows.length === 0) {
       throw new NotFoundException(`Template ${templateId} not found`);
     }
+  }
+
+  // Batch-loads product/collection/template the way bioLinkInclude used to
+  // fetch in one Prisma nested include.
+  private async loadBioLinksWithRelations(
+    ids: number[],
+  ): Promise<Map<number, AssembledBioLink>> {
+    const result = new Map<number, AssembledBioLink>();
+    if (ids.length === 0) return result;
+    const idList = ids.map(() => '?').join(', ');
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT bl.*,
+              p.id AS pId, p.name AS pName, p.slug AS pSlug, p.thumbnail AS pThumbnail, p.status AS pStatus,
+              c.id AS cId, c.name AS cName, c.slug AS cSlug, c.image AS cImage,
+              t.id AS tId, t.title AS tTitle, t.slug AS tSlug, t.image AS tImage, t.isActive AS tIsActive
+       FROM biolink bl
+       LEFT JOIN product p ON p.id = bl.productId
+       LEFT JOIN collection c ON c.id = bl.collectionId
+       LEFT JOIN template t ON t.id = bl.templateId
+       WHERE bl.id IN (${idList})`,
+      ids,
+    );
+    for (const r of rows) {
+      result.set(r.id as number, {
+        id: r.id as number,
+        shopId: r.shopId as number,
+        type: r.type as string,
+        label: r.label as string | null,
+        url: r.url as string | null,
+        productId: r.productId as number | null,
+        collectionId: r.collectionId as number | null,
+        templateId: r.templateId as number | null,
+        socialPlatform: r.socialPlatform as string | null,
+        order: r.order as number,
+        active: Boolean(r.active),
+        clickCount: r.clickCount as number,
+        createdAt: r.createdAt as Date,
+        updatedAt: r.updatedAt as Date,
+        product:
+          r.pId !== null
+            ? {
+                id: r.pId as number,
+                name: r.pName as string,
+                slug: r.pSlug as string,
+                thumbnail: r.pThumbnail as string,
+                status: r.pStatus as string,
+              }
+            : null,
+        collection:
+          r.cId !== null
+            ? {
+                id: r.cId as number,
+                name: r.cName as string,
+                slug: r.cSlug as string,
+                image: r.cImage as string | null,
+              }
+            : null,
+        template:
+          r.tId !== null
+            ? {
+                id: r.tId as number,
+                title: r.tTitle as string,
+                slug: r.tSlug as string,
+                image: r.tImage as string | null,
+                isActive: Boolean(r.tIsActive),
+              }
+            : null,
+      });
+    }
+    return result;
   }
 }

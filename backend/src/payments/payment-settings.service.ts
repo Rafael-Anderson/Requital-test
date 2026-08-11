@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import type { QueryParam } from '../database/database.service';
 import { ShopService } from '../shop/shop.service';
 import type { TenantContext } from '../common/tenant-context';
 import { decrypt, encrypt } from '../common/crypto';
@@ -31,18 +33,22 @@ function isCardProcessor(provider: string): provider is PaymentGatewayProvider {
 @Injectable()
 export class PaymentSettingsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly shopService: ShopService,
   ) {}
 
   async findAll(ctx: TenantContext): Promise<ProviderSettingsResponse[]> {
-    const [shop, rows] = await Promise.all([
-      this.prisma.shop.findUniqueOrThrow({ where: { id: ctx.shopId } }),
-      this.prisma.shoppaymentprovider.findMany({
-        where: { shopId: ctx.shopId },
-      }),
+    const [shopRows, rows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(`SELECT * FROM shop WHERE id = ?`, [ctx.shopId]),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM shoppaymentprovider WHERE shopId = ?`,
+        [ctx.shopId],
+      ),
     ]);
-    const byProvider = new Map(rows.map((r) => [r.provider, r]));
+    const shop = shopRows[0];
+    const byProvider = new Map(
+      rows.map((r) => [r.provider as string, r as { enabled: boolean; credentials: string | null }]),
+    );
 
     const gatewayRows = PAYMENT_GATEWAY_PROVIDERS.map((provider) => {
       const row = byProvider.get(provider);
@@ -67,8 +73,9 @@ export class PaymentSettingsService {
     // toggling COD *from this page* sets both together.
     const codRow: ProviderSettingsResponse = {
       provider: 'cod',
-      enabled:
+      enabled: Boolean(
         shop.deliveryPaymentCashOnDelivery || shop.pickupPaymentCashOnPickup,
+      ),
       isCardProcessor: false,
       hasCredentials: false,
       maskedCredentials: null,
@@ -107,10 +114,13 @@ export class PaymentSettingsService {
       this.assertValidCredentials(typedProvider, dto.credentials);
     }
 
-    const existingRows = await this.prisma.shoppaymentprovider.findMany({
-      where: { shopId: ctx.shopId },
-    });
-    const byProvider = new Map(existingRows.map((r) => [r.provider, r]));
+    const existingRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM shoppaymentprovider WHERE shopId = ?`,
+      [ctx.shopId],
+    );
+    const byProvider = new Map(
+      existingRows.map((r) => [r.provider as string, r as { enabled: boolean; credentials: string | null }]),
+    );
 
     if (dto.enabled === true && isCardProcessor(typedProvider)) {
       const other = typedProvider === 'stripe' ? 'nomod' : 'stripe';
@@ -134,33 +144,43 @@ export class PaymentSettingsService {
       ? encrypt(JSON.stringify(dto.credentials))
       : undefined;
 
-    await this.prisma.shoppaymentprovider.upsert({
-      where: {
-        shopId_provider: { shopId: ctx.shopId, provider: typedProvider },
-      },
-      create: {
-        shopId: ctx.shopId,
-        provider: typedProvider,
-        enabled: nextEnabled,
-        credentials: encryptedCredentials ?? null,
-      },
-      update: {
-        ...(dto.enabled !== undefined && { enabled: dto.enabled }),
-        ...(encryptedCredentials !== undefined && {
-          credentials: encryptedCredentials,
-        }),
-      },
-    });
+    // Conditional ON DUPLICATE KEY UPDATE clause: only overwrite `enabled`/
+    // `credentials` on an existing row when this call actually touched
+    // them — a plain upsert()-style "always overwrite with the create
+    // value" would wipe a saved credential every time the toggle alone is
+    // flipped, or vice versa.
+    const updateParts: string[] = ['updatedAt = ?'];
+    const updateParams: QueryParam[] = [new Date()];
+    if (dto.enabled !== undefined) {
+      updateParts.push('enabled = ?');
+      updateParams.push(dto.enabled);
+    }
+    if (encryptedCredentials !== undefined) {
+      updateParts.push('credentials = ?');
+      updateParams.push(encryptedCredentials);
+    }
+    await this.db.execute(
+      `INSERT INTO shoppaymentprovider (shopId, provider, enabled, credentials)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE ${updateParts.join(', ')}`,
+      [
+        ctx.shopId,
+        typedProvider,
+        nextEnabled,
+        encryptedCredentials ?? null,
+        ...updateParams,
+      ],
+    );
 
     // Keeps shop.paymentGateway (still what card_online checkout resolution
     // reads — see PublicService.createOrder) in sync with whichever card
     // processor is now active, so the rest of the existing checkout flow
     // needs no further changes.
     if (dto.enabled === true && isCardProcessor(typedProvider)) {
-      await this.prisma.shop.update({
-        where: { id: ctx.shopId },
-        data: { paymentGateway: typedProvider },
-      });
+      await this.db.execute(`UPDATE shop SET paymentGateway = ? WHERE id = ?`, [
+        typedProvider,
+        ctx.shopId,
+      ]);
     }
 
     return this.findAll(ctx);
@@ -175,11 +195,13 @@ export class PaymentSettingsService {
     shopId: number,
     provider: string,
   ): Promise<Record<string, string> | null> {
-    const row = await this.prisma.shoppaymentprovider.findUnique({
-      where: { shopId_provider: { shopId, provider } },
-    });
-    if (!row?.credentials) return null;
-    return JSON.parse(decrypt(row.credentials)) as Record<string, string>;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT credentials FROM shoppaymentprovider WHERE shopId = ? AND provider = ?`,
+      [shopId, provider],
+    );
+    const credentials = rows[0]?.credentials as string | null | undefined;
+    if (!credentials) return null;
+    return JSON.parse(decrypt(credentials)) as Record<string, string>;
   }
 
   // Whether `provider` (an online-payment provider, not cod) should be
@@ -191,12 +213,15 @@ export class PaymentSettingsService {
   async isEnabled(shopId: number, provider: string): Promise<boolean> {
     if (!(PAYMENT_GATEWAY_PROVIDERS as readonly string[]).includes(provider))
       return false;
-    const allRows = await this.prisma.shoppaymentprovider.findMany({
-      where: { shopId },
-    });
+    const allRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM shoppaymentprovider WHERE shopId = ?`,
+      [shopId],
+    );
     return this.resolveEnabled(
       provider as PaymentGatewayProvider,
-      new Map(allRows.map((r) => [r.provider, r])),
+      new Map(
+        allRows.map((r) => [r.provider as string, r as { enabled: boolean; credentials: string | null }]),
+      ),
     );
   }
 

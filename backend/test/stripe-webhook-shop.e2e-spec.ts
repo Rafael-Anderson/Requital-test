@@ -16,7 +16,6 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import Stripe from 'stripe';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from '../src/prisma/prisma.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -63,7 +62,6 @@ function stripeEventPayload(eventId: string, orderId: number): string {
 
 describe('Per-shop Stripe webhook routing (e2e)', () => {
   let app: INestApplication<App>;
-  let prisma: PrismaService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -83,12 +81,10 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
       }),
     );
     await app.init();
-    prisma = app.get(PrismaService);
   });
 
   afterAll(async () => {
     process.env.STRIPE_WEBHOOK_SECRET = ORIGINAL_STRIPE_WEBHOOK_SECRET;
-    await prisma.$disconnect();
     await app.close();
   });
 

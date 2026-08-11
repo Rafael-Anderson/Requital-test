@@ -1,29 +1,43 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
+import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
+import type { InvoiceRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { OrdersService } from '../orders/orders.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import type { InvoiceType } from './invoices.constants';
 import { renderInvoiceHtml } from './invoice-html';
 
-const orderForInvoiceInclude = {
-  orderitem: true,
-  shop: {
-    select: {
-      name: true,
-      displayName: true,
-      address: true,
-      email: true,
-      currency: true,
-    },
-  },
-} satisfies Prisma.orderInclude;
+interface OrderForInvoice {
+  id: number;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string | null;
+  customerAddress: string;
+  emirate: string;
+  area: string | null;
+  createdAt: Date;
+  deliveryFee: string | null;
+  discountAmount: string | null;
+  discountCode: string | null;
+  shopName: string;
+  shopDisplayName: string | null;
+  shopAddress: string | null;
+  shopEmail: string | null;
+  shopCurrency: string;
+  orderitem: {
+    productName: string;
+    variantLabel: string | null;
+    quantity: number;
+    priceAtPurchase: string;
+  }[];
+}
 
 @Injectable()
 export class InvoicesService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly db: DatabaseService,
     private readonly ordersService: OrdersService,
   ) {}
 
@@ -37,60 +51,70 @@ export class InvoicesService {
     // etc.) rather than a ForbiddenException that would leak existence.
     const order = await this.ordersService.findOne(ctx, dto.orderId);
 
-    const existing = await this.prisma.invoice.findUnique({
-      where: { orderId_type: { orderId: order.id, type: dto.type } },
-    });
-    if (existing) return existing;
+    const existingRows = await this.db.query<(InvoiceRow & RowDataPacket)[]>(
+      `SELECT * FROM invoice WHERE orderId = ? AND type = ?`,
+      [order.id, dto.type],
+    );
+    if (existingRows[0]) return existingRows[0];
 
     const subtotal = order.orderitem.reduce(
-      (sum, item) => sum.add(item.priceAtPurchase.mul(item.quantity)),
-      new Prisma.Decimal(0),
+      (sum: number, item: { priceAtPurchase: string; quantity: number }) =>
+        sum + Number(item.priceAtPurchase) * item.quantity,
+      0,
     );
-    const taxAmount = order.taxAmount ?? new Prisma.Decimal(0);
+    const taxAmount = Number(order.taxAmount ?? 0);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const invoiceId = await this.db.transaction(async (conn) => {
         const invoiceNumber = await this.nextInvoiceNumber(
-          tx,
+          conn,
           ctx.shopId,
           dto.type,
         );
-        return tx.invoice.create({
-          data: {
-            orderId: order.id,
-            shopId: ctx.shopId,
-            type: dto.type,
+        const [result] = await conn.query(
+          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            order.id,
+            ctx.shopId,
+            dto.type,
             invoiceNumber,
             subtotal,
             taxAmount,
-            total: order.total,
-          },
-        });
+            order.total,
+          ],
+        );
+        return (result as { insertId: number }).insertId;
       });
+      const rows = await this.db.query<(InvoiceRow & RowDataPacket)[]>(
+        `SELECT * FROM invoice WHERE id = ?`,
+        [invoiceId],
+      );
+      return rows[0];
     } catch (error) {
       // Lost the race to a concurrent generate for the same order+type —
       // the unique constraint on (orderId, type) is what actually enforces
       // idempotency under concurrency; this just lets the loser read back
       // what the winner created instead of erroring. Same
-      // catch-P2002-and-no-op-idempotency pattern as
+      // catch-duplicate-key-and-no-op-idempotency pattern as
       // PaymentsService.handleWebhook (see that method's own comment).
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        (error.code === 'P2002' || error.code === 'P2034')
-      ) {
-        const winner = await this.prisma.invoice.findUnique({
-          where: { orderId_type: { orderId: order.id, type: dto.type } },
-        });
-        if (winner) return winner;
+      if (isDuplicateKeyError(error) || isLockConflict(error)) {
+        const winnerRows = await this.db.query<(InvoiceRow & RowDataPacket)[]>(
+          `SELECT * FROM invoice WHERE orderId = ? AND type = ?`,
+          [order.id, dto.type],
+        );
+        if (winnerRows[0]) return winnerRows[0];
       }
       throw error;
     }
   }
 
   async findOne(ctx: TenantContext, id: number) {
-    const invoice = await this.prisma.invoice.findFirst({
-      where: { id, shopId: ctx.shopId },
-    });
+    const rows = await this.db.query<(InvoiceRow & RowDataPacket)[]>(
+      `SELECT * FROM invoice WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    const invoice = rows[0];
     if (!invoice) {
       throw new NotFoundException(`Invoice ${id} not found`);
     }
@@ -104,10 +128,10 @@ export class InvoicesService {
 
   async findAllForOrder(ctx: TenantContext, orderId: number) {
     await this.ordersService.findOne(ctx, orderId); // tenant/outlet scope check
-    return this.prisma.invoice.findMany({
-      where: { orderId, shopId: ctx.shopId },
-      orderBy: { issuedAt: 'asc' },
-    });
+    return this.db.query<(InvoiceRow & RowDataPacket)[]>(
+      `SELECT * FROM invoice WHERE orderId = ? AND shopId = ? ORDER BY issuedAt ASC`,
+      [orderId, ctx.shopId],
+    );
   }
 
   async renderHtml(ctx: TenantContext, id: number): Promise<string> {
@@ -116,10 +140,10 @@ export class InvoicesService {
     // result, since this is the one call site that reaches back into
     // `order` directly rather than staying inside the already-scoped
     // invoice row.
-    const order = await this.prisma.order.findFirstOrThrow({
-      where: { id: invoice.orderId, shopId: ctx.shopId },
-      include: orderForInvoiceInclude,
-    });
+    const order = await this.loadOrderForInvoice(invoice.orderId, ctx.shopId);
+    if (!order) {
+      throw new NotFoundException(`Order ${invoice.orderId} not found`);
+    }
     return this.buildHtml(invoice, order);
   }
 
@@ -135,34 +159,72 @@ export class InvoicesService {
     customerId: number,
     orderId: number,
   ): Promise<string> {
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, shopId, customerId },
-      include: orderForInvoiceInclude,
-    });
+    const order = await this.loadOrderForInvoice(orderId, shopId, customerId);
     if (!order) {
       throw new NotFoundException(`Order ${orderId} not found`);
     }
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { orderId_type: { orderId, type: 'INVOICE' } },
-    });
+    const rows = await this.db.query<(InvoiceRow & RowDataPacket)[]>(
+      `SELECT * FROM invoice WHERE orderId = ? AND type = 'INVOICE'`,
+      [orderId],
+    );
+    const invoice = rows[0];
     if (!invoice) {
       throw new NotFoundException(`No invoice generated for order ${orderId}`);
     }
     return this.buildHtml(invoice, order);
   }
 
-  private buildHtml(
-    invoice: {
-      invoiceNumber: string;
-      type: string;
-      issuedAt: Date;
-      subtotal: Prisma.Decimal;
-      taxAmount: Prisma.Decimal;
-      total: Prisma.Decimal;
-      notes: string | null;
-    },
-    order: Prisma.orderGetPayload<{ include: typeof orderForInvoiceInclude }>,
-  ): string {
+  private async loadOrderForInvoice(
+    orderId: number,
+    shopId: number,
+    customerId?: number,
+  ): Promise<OrderForInvoice | null> {
+    const conditions = ['o.id = ?', 'o.shopId = ?'];
+    const params: (number | string)[] = [orderId, shopId];
+    if (customerId !== undefined) {
+      conditions.push('o.customerId = ?');
+      params.push(customerId);
+    }
+    const orderRows = await this.db.query<RowDataPacket[]>(
+      `SELECT o.*, s.name AS shopName, s.displayName AS shopDisplayName,
+              s.address AS shopAddress, s.email AS shopEmail, s.currency AS shopCurrency
+       FROM \`order\` o JOIN shop s ON s.id = o.shopId
+       WHERE ${conditions.join(' AND ')}`,
+      params,
+    );
+    const order = orderRows[0];
+    if (!order) return null;
+    const items = await this.db.query<RowDataPacket[]>(
+      `SELECT productName, variantLabel, quantity, priceAtPurchase FROM orderitem WHERE orderId = ?`,
+      [orderId],
+    );
+    return {
+      id: order.id as number,
+      customerName: order.customerName as string,
+      customerPhone: order.customerPhone as string,
+      customerEmail: order.customerEmail as string | null,
+      customerAddress: order.customerAddress as string,
+      emirate: order.emirate as string,
+      area: order.area as string | null,
+      createdAt: order.createdAt as Date,
+      deliveryFee: order.deliveryFee as string | null,
+      discountAmount: order.discountAmount as string | null,
+      discountCode: order.discountCode as string | null,
+      shopName: order.shopName as string,
+      shopDisplayName: order.shopDisplayName as string | null,
+      shopAddress: order.shopAddress as string | null,
+      shopEmail: order.shopEmail as string | null,
+      shopCurrency: order.shopCurrency as string,
+      orderitem: items.map((i) => ({
+        productName: i.productName as string,
+        variantLabel: i.variantLabel as string | null,
+        quantity: i.quantity as number,
+        priceAtPurchase: i.priceAtPurchase as string,
+      })),
+    };
+  }
+
+  private buildHtml(invoice: InvoiceRow, order: OrderForInvoice): string {
     return renderInvoiceHtml({
       invoiceNumber: invoice.invoiceNumber,
       type: invoice.type as 'INVOICE' | 'PACKING_SLIP',
@@ -171,21 +233,20 @@ export class InvoicesService {
       taxAmount: invoice.taxAmount,
       total: invoice.total,
       notes: invoice.notes,
-      shopName: order.shop.displayName ?? order.shop.name,
-      shopAddress: order.shop.address,
-      shopEmail: order.shop.email,
-      currency: order.shop.currency,
+      shopName: order.shopDisplayName ?? order.shopName,
+      shopAddress: order.shopAddress,
+      shopEmail: order.shopEmail,
+      currency: order.shopCurrency,
       order,
     });
   }
 
   // Atomic per-(shop,type) sequence via MySQL's `INSERT ... ON DUPLICATE KEY
   // UPDATE ... LAST_INSERT_ID(...)` idiom — the row lock this statement
-  // takes serializes concurrent callers, which a Prisma-level
-  // upsert-then-read is not guaranteed to do. See invoicecounter's schema
-  // comment.
+  // takes serializes concurrent callers, which a read-then-write upsert is
+  // not guaranteed to do. See invoicecounter's schema comment.
   private async nextInvoiceNumber(
-    tx: Prisma.TransactionClient,
+    conn: PoolConnection,
     shopId: number,
     type: InvoiceType,
   ): Promise<string> {
@@ -196,14 +257,13 @@ export class InvoicesService {
     // increment) is what makes SELECT LAST_INSERT_ID() below correct on
     // both the create and increment paths, not just whichever one happened
     // to run last on this pooled connection.
-    await tx.$executeRaw`
-      INSERT INTO invoicecounter (shopId, type, lastNumber)
-      VALUES (${shopId}, ${type}, LAST_INSERT_ID(1))
-      ON DUPLICATE KEY UPDATE lastNumber = LAST_INSERT_ID(lastNumber + 1)
-    `;
-    const rows = await tx.$queryRaw<
-      { seq: bigint }[]
-    >`SELECT LAST_INSERT_ID() AS seq`;
+    await conn.query(
+      `INSERT INTO invoicecounter (shopId, type, lastNumber)
+       VALUES (?, ?, LAST_INSERT_ID(1))
+       ON DUPLICATE KEY UPDATE lastNumber = LAST_INSERT_ID(lastNumber + 1)`,
+      [shopId, type],
+    );
+    const [rows] = await conn.query<RowDataPacket[]>(`SELECT LAST_INSERT_ID() AS seq`);
     const n = Number(rows[0].seq);
     const prefix = type === 'PACKING_SLIP' ? 'PS' : 'INV';
     return `${prefix}-${String(n).padStart(4, '0')}`;
