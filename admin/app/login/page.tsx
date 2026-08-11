@@ -94,9 +94,12 @@ export default function LoginPage() {
             className={`${AUTH_INPUT_CLASS} ${error ? ERROR_INPUT_CLASS : ""}`}
           />
           {error && (
-            <p className="mt-1.5 text-[13px] text-red-600 dark:text-red-400" role="alert" aria-live="polite">
+            <div
+              role="alert"
+              className="mt-2 rounded-md border border-red-400 bg-red-100 px-3 py-2 text-[13px] text-red-700 dark:border-red-500 dark:bg-red-950 dark:text-red-400"
+            >
               {error}
-            </p>
+            </div>
           )}
         </div>
         <p className="text-right -mt-2">
