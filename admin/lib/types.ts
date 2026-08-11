@@ -814,6 +814,10 @@ export interface Shop {
   id: number;
   name: string;
   subdomain: string;
+  // See ShopDomainConfig below for the full picture — this is just the
+  // stored raw column, kept here since GET /shop returns the whole row.
+  domainType: "subdomain" | "custom";
+  customDomain: string | null;
   // Gates storefront visibility + the platform sitemap — see the "Publish
   // your store" action on this page (Settings > Business Information) and
   // backend PublicService.assertPublished.
@@ -908,6 +912,14 @@ export interface Shop {
 export interface PublishReadiness {
   ready: boolean;
   missing: string[];
+}
+
+// GET/PATCH /shop/domain's response shape — see backend ShopService.getDomainConfig.
+export interface ShopDomainConfig {
+  type: "subdomain" | "custom";
+  subdomain: string;
+  customDomain: string | null;
+  storefrontUrl: string;
 }
 
 export const FONT_CHOICES = ["inter", "poppins", "playfair-display", "roboto"] as const;

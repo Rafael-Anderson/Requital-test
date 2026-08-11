@@ -6,11 +6,24 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { ShopRow } from '../db/types';
 import { UpdateShopDto } from './dto/update-shop.dto';
+import { UpdateShopDomainDto } from './dto/update-shop-domain.dto';
 import { SOCIAL_PLATFORM_DOMAINS, SOCIAL_PLATFORMS } from './constants';
+import { isValidCustomDomain } from './domain-validation';
+import { normalizeCustomDomain } from '../common/normalize';
 import type { TenantContext } from '../common/tenant-context';
+
+// Same env-driven storefront base URL every other customer-facing link in
+// this codebase resolves from (see e.g. payments.service.ts's own
+// STOREFRONT_URL) — the root domain a shop's own subdomain hangs off of,
+// not the full base URL, since a subdomain-type shop's storefrontUrl is
+// {subdomain}.{root}, not {STOREFRONT_URL}/{subdomain} like the existing
+// path-based storefront links.
+const STOREFRONT_ROOT_DOMAIN =
+  process.env.STOREFRONT_ROOT_DOMAIN ?? 'requital.io';
 
 @Injectable()
 export class ShopService {
@@ -209,6 +222,58 @@ export class ShopService {
       ]);
     }
     return this.findOne(ctx);
+  }
+
+  // shop.subdomain itself is immutable after signup (see update()'s country
+  // check above for the established precedent on locked fields) — this
+  // endpoint only toggles which one actually drives the storefront's public
+  // URL, and sets/clears the custom hostname. Caddy's on-demand-TLS `ask`
+  // endpoint (DomainsService.verify) is what actually makes a saved
+  // customDomain reachable — this method just persists the merchant's choice.
+  async getDomainConfig(ctx: TenantContext) {
+    const shop = await this.findOne(ctx);
+    return {
+      type: shop.domainType,
+      subdomain: shop.subdomain,
+      customDomain: shop.customDomain,
+      storefrontUrl:
+        shop.domainType === 'custom' && shop.customDomain
+          ? `https://${shop.customDomain}`
+          : `https://${shop.subdomain}.${STOREFRONT_ROOT_DOMAIN}`,
+    };
+  }
+
+  async updateDomain(ctx: TenantContext, dto: UpdateShopDomainDto) {
+    if (dto.type === 'custom') {
+      const domain = normalizeCustomDomain(dto.customDomain ?? '');
+      if (!isValidCustomDomain(domain)) {
+        throw new BadRequestException(
+          'Enter a valid domain (e.g. shop.example.com), with no protocol or path.',
+        );
+      }
+      try {
+        await this.db.execute(
+          `UPDATE shop SET domainType = 'custom', customDomain = ? WHERE id = ?`,
+          [domain, ctx.shopId],
+        );
+      } catch (error) {
+        if (isDuplicateKeyError(error)) {
+          throw new ConflictException(
+            'This domain is already connected to another shop.',
+          );
+        }
+        throw error;
+      }
+    } else {
+      // Switching back to the default {subdomain}.requital.io — clears
+      // whatever custom hostname was set so it doesn't linger unused (and
+      // frees it up for another shop to claim).
+      await this.db.execute(
+        `UPDATE shop SET domainType = 'subdomain', customDomain = NULL WHERE id = ?`,
+        [ctx.shopId],
+      );
+    }
+    return this.getDomainConfig(ctx);
   }
 
   private async findById(id: number): Promise<(ShopRow & RowDataPacket) | undefined> {

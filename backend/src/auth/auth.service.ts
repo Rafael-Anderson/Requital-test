@@ -17,6 +17,7 @@ import type { UserRow } from '../db/types';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 import { JobsService } from '../jobs/jobs.service';
 import { SignupDto } from './dto/signup.dto';
+import { RESERVED_SUBDOMAINS } from '../shop/constants';
 import { LoginDto } from './dto/login.dto';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -69,6 +70,9 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto) {
+    if (RESERVED_SUBDOMAINS.includes(dto.subdomain)) {
+      throw new BadRequestException('This subdomain is reserved');
+    }
     const existingRows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM shop WHERE subdomain = ?`,
       [dto.subdomain],

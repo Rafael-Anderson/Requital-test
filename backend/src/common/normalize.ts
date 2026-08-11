@@ -19,3 +19,16 @@ export function normalizeWebsiteUrl(raw: string): string {
 export function normalizeTrn(raw: string): string {
   return raw.replace(/[^0-9]/g, '');
 }
+
+// Custom storefront domain: opposite direction from normalizeWebsiteUrl
+// above — a domain column must never carry a protocol/path (Caddy's
+// on-demand-TLS ask endpoint and reverse-proxy Host matching both key off
+// the bare hostname), so this strips one off if a merchant pastes a full
+// URL instead of typing "shop.example.com" directly.
+export function normalizeCustomDomain(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '');
+}

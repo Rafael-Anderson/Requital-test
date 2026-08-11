@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeCustomDomain,
   normalizePhone,
   normalizeTrn,
   normalizeWebsiteUrl,
   passwordRequirements,
+  slugifySubdomain,
   stripPhoneFormatting,
+  validateCustomDomain,
   validateEmail,
   validatePassword,
   validatePhone,
   validateRequired,
+  validateSubdomain,
   validateTrn,
   validateUrl,
 } from "./validators";
@@ -210,6 +214,83 @@ describe("normalizeWebsiteUrl", () => {
 
   it("trims surrounding whitespace", () => {
     expect(normalizeWebsiteUrl("  example.com  ")).toBe("https://example.com");
+  });
+});
+
+describe("validateSubdomain", () => {
+  const valid = ["acme", "acme-shop", "shop123", "abc"];
+  const invalid = [
+    "",
+    "  ",
+    "ab", // too short
+    "a".repeat(64), // too long
+    "Acme", // uppercase
+    "acme shop", // space
+    "acme.shop", // dot
+    "-acme", // leading hyphen
+    "acme-", // trailing hyphen
+    "api", // reserved
+    "admin", // reserved
+    "www", // reserved
+  ];
+
+  it.each(valid)("accepts %s", (subdomain) => {
+    expect(validateSubdomain(subdomain)).toEqual({ valid: true });
+  });
+
+  it.each(invalid)("rejects %s", (subdomain) => {
+    const result = validateSubdomain(subdomain);
+    expect(result.valid).toBe(false);
+    expect(result.message).toBeTruthy();
+  });
+});
+
+describe("validateCustomDomain", () => {
+  it("is invalid when blank (required, unlike validateUrl)", () => {
+    expect(validateCustomDomain("").valid).toBe(false);
+  });
+
+  const valid = ["example.com", "shop.example.com", "my-shop.example.co.uk"];
+  const invalid = ["example", "http://example.com", "example.com/path", "not a domain", "-example.com"];
+
+  it.each(valid)("accepts %s", (domain) => {
+    expect(validateCustomDomain(domain)).toEqual({ valid: true });
+  });
+
+  it.each(invalid)("rejects %s", (domain) => {
+    const result = validateCustomDomain(domain);
+    expect(result.valid).toBe(false);
+    expect(result.message).toBeTruthy();
+  });
+});
+
+describe("normalizeCustomDomain", () => {
+  it("strips a protocol and trailing path/slash, and lowercases", () => {
+    expect(normalizeCustomDomain("HTTPS://Shop.Example.com/")).toBe("shop.example.com");
+    expect(normalizeCustomDomain("http://example.com/some/path")).toBe("example.com");
+  });
+
+  it("leaves an already-bare lowercase hostname unchanged", () => {
+    expect(normalizeCustomDomain("example.com")).toBe("example.com");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(normalizeCustomDomain("  example.com  ")).toBe("example.com");
+  });
+});
+
+describe("slugifySubdomain", () => {
+  it("lowercases and collapses non-alphanumerics into single hyphens", () => {
+    expect(slugifySubdomain("Acme Flowers & Gifts!")).toBe("acme-flowers-gifts");
+  });
+
+  it("trims leading/trailing hyphens produced by leading/trailing punctuation", () => {
+    expect(slugifySubdomain("  Acme  ")).toBe("acme");
+  });
+
+  it("caps the result at 40 characters", () => {
+    const long = "a".repeat(60);
+    expect(slugifySubdomain(long)).toHaveLength(40);
   });
 });
 

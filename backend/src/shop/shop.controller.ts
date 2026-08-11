@@ -11,6 +11,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ShopService } from './shop.service';
 import { UpdateShopDto } from './dto/update-shop.dto';
+import { UpdateShopDomainDto } from './dto/update-shop-domain.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
 import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -44,6 +45,19 @@ export class ShopController {
   @Patch()
   update(@CurrentUser() ctx: TenantContext, @Body() dto: UpdateShopDto) {
     return this.shopService.update(ctx, dto);
+  }
+
+  @Get('domain')
+  getDomain(@CurrentUser() ctx: TenantContext) {
+    return this.shopService.getDomainConfig(ctx);
+  }
+
+  @Patch('domain')
+  updateDomain(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: UpdateShopDomainDto,
+  ) {
+    return this.shopService.updateDomain(ctx, dto);
   }
 
   @Post('upload')

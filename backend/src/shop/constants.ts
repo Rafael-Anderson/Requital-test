@@ -21,3 +21,23 @@ export const SOCIAL_PLATFORM_DOMAINS: Record<string, string[]> = {
 };
 
 export const SOCIAL_PLATFORMS = Object.keys(SOCIAL_PLATFORM_DOMAINS);
+
+// Subdomains a shop must never claim — collides with a real platform
+// hostname (admin.requital.io, api.requital.io, ...) or a reserved word a
+// future platform page might need. Checked once, at signup (shop.subdomain
+// is immutable after that — see ShopService.update's country-lock comment
+// for the established "no mutation path for this field" precedent). Mirrored
+// by hand in admin/lib/validators.ts (RESERVED_SUBDOMAINS) — no shared
+// package between the two apps, same as every other cross-app-duplicated
+// regex/list in this codebase.
+export const RESERVED_SUBDOMAINS = [
+  'www',
+  'api',
+  'admin',
+  'mail',
+  'requital',
+  'app',
+  'dashboard',
+  'static',
+  'cdn',
+];

@@ -3,18 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { updateShopDomain } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import {
+  normalizeCustomDomain,
   normalizePhone,
   normalizeTrn,
-  normalizeWebsiteUrl,
+  slugifySubdomain,
+  validateCustomDomain,
   validateEmail,
   validatePassword,
   validatePhone,
   validateRequired,
+  validateSubdomain,
   validateTrn,
-  validateUrl,
 } from "@/lib/validators";
+
+export type DomainType = "subdomain" | "custom";
 
 export const BUSINESS_TYPES = ["Retail", "F&B", "Services", "Other"] as const;
 
@@ -52,7 +57,8 @@ export const FIELD_STEP: Record<string, number> = {
   businessName: 1,
   businessType: 1,
   trn: 1,
-  websiteUrl: 1,
+  subdomain: 1,
+  customDomain: 1,
   address: 2,
   operatingModel: 2,
   branchCount: 2,
@@ -67,19 +73,13 @@ export const FIELD_LABELS: Record<string, string> = {
   businessName: "Business Name",
   businessType: "Business Type",
   trn: "TRN",
-  websiteUrl: "Website URL",
+  subdomain: "Subdomain",
+  customDomain: "Custom Domain",
   address: "Primary Location / Address",
   operatingModel: "Operating Model",
   branchCount: "Number of Branches",
   country: "Country",
 };
-
-function slugifySubdomain(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 function validateField(field: string, value: string): string | undefined {
   switch (field) {
@@ -97,8 +97,10 @@ function validateField(field: string, value: string): string | undefined {
       return validateRequired(value, "Business type").message;
     case "trn":
       return validateTrn(value).message;
-    case "websiteUrl":
-      return validateUrl(value).message;
+    case "subdomain":
+      return validateSubdomain(value).message;
+    case "customDomain":
+      return validateCustomDomain(value).message;
     case "address":
       return validateRequired(value, "Address").message;
     case "branchCount":
@@ -126,7 +128,14 @@ export function useAccountSetupForm() {
   const [businessName, setBusinessNameRaw] = useState("");
   const [businessType, setBusinessTypeRaw] = useState("");
   const [trn, setTrnRaw] = useState("");
-  const [websiteUrl, setWebsiteUrlRaw] = useState("");
+
+  const [domainType, setDomainTypeRaw] = useState<DomainType>("subdomain");
+  const [subdomain, setSubdomainRaw] = useState("");
+  const [customDomain, setCustomDomainRaw] = useState("");
+  // Once the user edits the subdomain field directly, stop overwriting it
+  // from businessName — same "auto-fill until touched" convention as any
+  // slug picker (e.g. a CMS post-URL field keyed off its title).
+  const [subdomainManuallyEdited, setSubdomainManuallyEdited] = useState(false);
 
   const [address, setAddressRaw] = useState("");
   const [operatingModel, setOperatingModelRaw] = useState<OperatingModelValue | null>(null);
@@ -203,12 +212,49 @@ export function useAccountSetupForm() {
   const firstNameHandlers = fieldHandlers("firstName", setFirstNameRaw);
   const emailHandlers = fieldHandlers("email", setEmailRaw);
   const passwordHandlers = fieldHandlers("password", setPasswordRaw);
-  const businessNameHandlers = fieldHandlers("businessName", setBusinessNameRaw);
   const trnHandlers = normalizingHandlers("trn", setTrnRaw, normalizeTrn);
-  const websiteUrlHandlers = normalizingHandlers("websiteUrl", setWebsiteUrlRaw, normalizeWebsiteUrl);
   const addressHandlers = fieldHandlers("address", setAddressRaw);
 
   const phoneHandlers = normalizingHandlers("phone", setPhoneRaw, normalizePhone);
+
+  // businessName's own onChange/onBlur, plus (unless the user has directly
+  // edited the subdomain field) keeping the subdomain picker's auto-filled
+  // value in sync — same handler shape as fieldHandlers() above, just with
+  // this one extra side effect.
+  const businessNameHandlers = {
+    onChange: (value: string) => {
+      setBusinessNameRaw(value);
+      if (touched.businessName) commitError("businessName", validateField("businessName", value));
+      if (!subdomainManuallyEdited) setSubdomainRaw(slugifySubdomain(value));
+    },
+    onBlur: (value: string) => {
+      markTouched("businessName");
+      commitError("businessName", validateField("businessName", value));
+    },
+  };
+
+  const subdomainHandlers = {
+    onChange: (value: string) => {
+      setSubdomainManuallyEdited(true);
+      setSubdomainRaw(value);
+      if (touched.subdomain) commitError("subdomain", validateField("subdomain", value));
+    },
+    onBlur: (value: string) => {
+      const normalized = value.trim().toLowerCase();
+      setSubdomainRaw(normalized);
+      markTouched("subdomain");
+      commitError("subdomain", validateField("subdomain", normalized));
+    },
+  };
+
+  const customDomainHandlers = normalizingHandlers("customDomain", setCustomDomainRaw, normalizeCustomDomain);
+
+  function setDomainType(value: DomainType) {
+    setDomainTypeRaw(value);
+    // Switching tabs shouldn't leave a validation error showing for the
+    // field that's no longer even rendered.
+    commitError(value === "subdomain" ? "customDomain" : "subdomain", undefined);
+  }
 
   function setBusinessType(value: string) {
     setBusinessTypeRaw(value);
@@ -242,7 +288,8 @@ export function useAccountSetupForm() {
     businessName,
     businessType,
     trn,
-    websiteUrl,
+    subdomain,
+    customDomain,
     address,
     branchCount,
     country,
@@ -252,7 +299,13 @@ export function useAccountSetupForm() {
   // inline errors render) and returning just that step's error map — used
   // both to gate "Next" and to build the cross-field error modal.
   function validateStep(step: number): Record<string, string> {
-    const fields = Object.keys(FIELD_STEP).filter((f) => FIELD_STEP[f] === step);
+    let fields = Object.keys(FIELD_STEP).filter((f) => FIELD_STEP[f] === step);
+    if (step === 1) {
+      // Only the domain-picker field matching the currently-selected tab is
+      // actually rendered — validating the hidden one would block "Next" on
+      // an error the user can't even see.
+      fields = fields.filter((f) => f !== (domainType === "subdomain" ? "customDomain" : "subdomain"));
+    }
     const errors: Record<string, string> = {};
     for (const field of fields) {
       const message =
@@ -293,22 +346,40 @@ export function useAccountSetupForm() {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      // shop.subdomain is required regardless of which domain tab is
+      // selected (it's still the internal /public/:shopSlug/... routing
+      // slug) — subdomain itself already tracks businessName by default, so
+      // this is only ever empty if the user cleared it by hand while on the
+      // Custom domain tab, in which case falling back to a fresh slug is
+      // better than sending an empty string.
       await signup({
         name: firstName,
         email,
         password,
         shopName: businessName,
-        subdomain: slugifySubdomain(businessName),
+        subdomain: subdomain || slugifySubdomain(businessName),
         phone,
         businessType,
         trn: trn.trim() || undefined,
-        websiteUrl: websiteUrl.trim() || undefined,
         address,
         operatingModel: operatingModel ? [operatingModel] : [],
         branchCount,
         productEditorMode,
         country,
       });
+
+      // A custom domain is a separate, optional connect step on top of the
+      // account that was just created successfully — a failure here (a
+      // race on the uniqueness check, a network blip) shouldn't surface as
+      // "account creation failed" when it didn't. The merchant can always
+      // set it (or retry) later from Settings > Business Information.
+      if (domainType === "custom" && customDomain.trim()) {
+        try {
+          await updateShopDomain({ type: "custom", customDomain: normalizeCustomDomain(customDomain) });
+        } catch {
+          toast("Account created, but your custom domain couldn't be connected. Add it later in Settings.");
+        }
+      }
       return { ok: true, errors: {} };
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Failed to create account");
@@ -334,8 +405,12 @@ export function useAccountSetupForm() {
     setBusinessType,
     trn,
     trnHandlers,
-    websiteUrl,
-    websiteUrlHandlers,
+    domainType,
+    setDomainType,
+    subdomain,
+    subdomainHandlers,
+    customDomain,
+    customDomainHandlers,
     address,
     addressHandlers,
     operatingModel,
