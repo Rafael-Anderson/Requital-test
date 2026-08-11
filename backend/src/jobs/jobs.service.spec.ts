@@ -166,6 +166,75 @@ describe('JobsService.failJob — retry-with-backoff / dead-letter transition', 
   });
 });
 
+// job.payload is a LONGTEXT column, not a real MySQL JSON column (see
+// JobsService.parseJobRow's own comment) — mysql2 hands it back as a raw
+// string, not an already-parsed object. fakeJob()'s payload above is
+// pre-parsed, which is exactly what let the real bug (every read site
+// returning payload as an unparsed string, crashing every downstream
+// handler) ship unnoticed — these tests exercise the actual string-payload
+// shape a real DB round-trip returns.
+const SAMPLE_PAYLOAD = { to: 'a@b.com', subject: 's', bodyText: 'b' };
+
+describe('JobsService — payload parsing (LONGTEXT, not a real JSON column)', () => {
+  it('parses a raw JSON string payload into an object on findById (via claimJobById)', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ affectedRows: 1 });
+    db.query.mockResolvedValue([
+      fakeJob({ payload: JSON.stringify(SAMPLE_PAYLOAD) }),
+    ]);
+    const service = new JobsService(db);
+
+    const result = await service.claimJobById(1);
+
+    expect(result?.payload).toEqual(SAMPLE_PAYLOAD);
+  });
+
+  it('parses a raw JSON string payload on claimNextJob', async () => {
+    const db = createMockDb();
+    const stringPayloadJob = fakeJob({
+      payload: JSON.stringify(SAMPLE_PAYLOAD),
+    });
+    db.transaction.mockImplementation(
+      async (fn: (conn: unknown) => Promise<unknown>) =>
+        fn({
+          query: jest
+            .fn()
+            .mockResolvedValueOnce([[{ id: 1 }]])
+            .mockResolvedValueOnce([[]])
+            .mockResolvedValueOnce([[stringPayloadJob]]),
+        }),
+    );
+    const service = new JobsService(db);
+
+    const result = await service.claimNextJob();
+
+    expect(result?.payload).toEqual(SAMPLE_PAYLOAD);
+  });
+
+  it('parses a raw JSON string payload on listDeadLetter', async () => {
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      fakeJob({ payload: JSON.stringify(SAMPLE_PAYLOAD) }),
+    ]);
+    const service = new JobsService(db);
+
+    const [result] = await service.listDeadLetter(10);
+
+    expect(result.payload).toEqual(SAMPLE_PAYLOAD);
+  });
+
+  it('leaves an already-object payload untouched (defensive — never double-parses)', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ affectedRows: 1 });
+    db.query.mockResolvedValue([fakeJob({ payload: SAMPLE_PAYLOAD })]);
+    const service = new JobsService(db);
+
+    const result = await service.claimJobById(1);
+
+    expect(result?.payload).toEqual(SAMPLE_PAYLOAD);
+  });
+});
+
 describe('JobsService.retry / dismiss — tenant scoping', () => {
   it('retry only succeeds when the job belongs to the given shopId', async () => {
     const db = createMockDb();

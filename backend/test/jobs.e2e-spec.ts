@@ -24,6 +24,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Same "spy on sendEmailStub's console.log" technique
+// order-notifications.e2e-spec.ts uses — the only way to observe what a
+// send_email job actually handed to the email layer without mocking the
+// module outright. Used below to prove the worker's real dispatch path
+// (JobsService's DB round-trip -> JobsWorkerService -> handleSendEmailJob)
+// hands the handler real payload values, not a raw unparsed JSON string
+// masquerading as an object (see JobsService.parseJobRow's own comment for
+// the bug this guards against).
+function emailStubCalls(spy: jest.SpyInstance, to: string): string[] {
+  return spy.mock.calls
+    .map((args) => String(args[0]))
+    .filter(
+      (line) => line.startsWith('[email:stub]') && line.includes(`to=${to}`),
+    );
+}
+
 // Phase 5 job queue — see JobsService/JobsWorkerService/SchedulerService.
 // Deliberately drives JobsService's claim/fail/complete methods directly for
 // the retry/DLQ tests rather than waiting on the real @Interval poller: the
@@ -49,6 +65,7 @@ describe('Job queue (e2e)', () => {
   let shopAId: number;
   let shopAAdminToken: string;
   let shopBAdminToken: string;
+  let logSpy: jest.SpyInstance;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -97,6 +114,14 @@ describe('Job queue (e2e)', () => {
     shopAAdminToken = a.token;
     const b = await setupShop('jobs-shop-b');
     shopBAdminToken = b.token;
+  });
+
+  beforeEach(() => {
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
   });
 
   afterAll(async () => {
@@ -260,11 +285,12 @@ describe('Job queue (e2e)', () => {
 
   describe('worker end-to-end wiring', () => {
     it('processJobById() claims and completes a real send_email job (stub mode)', async () => {
+      const to = `worker-e2e-${runId}@b.com`;
       const key = `worker-e2e-${runId}`;
       const enqueued = await jobsService.enqueue(
         shopAId,
         'send_email',
-        { to: 'a@b.com', subject: 'wired?', bodyText: 'yes' },
+        { to, subject: 'wired?', bodyText: 'yes' },
         key,
       );
 
@@ -284,6 +310,20 @@ describe('Job queue (e2e)', () => {
 
       const row = await getJob(enqueued.id);
       expect(row.status).toBe('completed');
+
+      // A "completed" status alone doesn't prove the handler saw real
+      // payload values — job.payload is a LONGTEXT column with no
+      // automatic JSON parsing (see JobsService.parseJobRow), and the
+      // failure mode this guards against (an unparsed JSON string handed
+      // to handleSendEmailJob) still reaches sendEmailStub without
+      // throwing, since string interpolation of undefined just prints the
+      // word "undefined" rather than crashing — completed but silently
+      // wrong. Asserting on the stub's own logged to/bodyText is what
+      // actually proves the real values survived the round trip.
+      const calls = emailStubCalls(logSpy, to);
+      expect(calls.length).toBe(1);
+      expect(calls[0]).toContain('subject="wired?"');
+      expect(calls[0]).toContain('yes');
     });
   });
 

@@ -69,7 +69,7 @@ export class JobsService {
           `SELECT * FROM job WHERE id = ?`,
           [result.insertId],
         );
-        return rows[0] as unknown as JobRecord;
+        return this.parseJobRow(rows[0] as unknown as JobRow);
       }
       const result = await this.db.execute(
         `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, updatedAt)
@@ -126,7 +126,7 @@ export class JobsService {
         `SELECT * FROM job WHERE id = ?`,
         [id],
       );
-      return jobRows[0] as unknown as JobRecord;
+      return this.parseJobRow(jobRows[0] as unknown as JobRow);
     });
   }
 
@@ -183,10 +183,11 @@ export class JobsService {
   }
 
   async listDeadLetter(shopId: number): Promise<JobRecord[]> {
-    return this.db.query<(JobRow & RowDataPacket)[]>(
+    const rows = await this.db.query<(JobRow & RowDataPacket)[]>(
       `SELECT * FROM job WHERE shopId = ? AND status = 'dead_letter' ORDER BY updatedAt DESC`,
       [shopId],
     );
+    return rows.map((row) => this.parseJobRow(row));
   }
 
   // Both scoped by (id, shopId) via an UPDATE checking affectedRows rather
@@ -220,7 +221,7 @@ export class JobsService {
       `SELECT * FROM job WHERE id = ?`,
       [id],
     );
-    return rows[0] ?? null;
+    return rows[0] ? this.parseJobRow(rows[0]) : null;
   }
 
   private async findByIdempotencyKey(key: string): Promise<JobRecord | null> {
@@ -228,7 +229,23 @@ export class JobsService {
       `SELECT * FROM job WHERE idempotencyKey = ?`,
       [key],
     );
-    return rows[0] ?? null;
+    return rows[0] ? this.parseJobRow(rows[0]) : null;
+  }
+
+  // job.payload is a LONGTEXT column with only a `CHECK (json_valid(payload))`
+  // constraint, not a real MySQL JSON column — so DatabaseService's
+  // pool-level JSON auto-parsing (see CLAUDE.md's "Database access" note,
+  // TINYINT(1)/JSON columns "come back already parsed") never applies to
+  // it, and every read site got back the raw stored string. Every caller
+  // downstream (JobsWorkerService, the per-type handlers) expects an
+  // already-parsed object — every read site in this file routes through
+  // here rather than each re-implementing the same typeof check.
+  private parseJobRow(row: JobRow): JobRecord {
+    return {
+      ...row,
+      payload:
+        typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
+    };
   }
 }
 
