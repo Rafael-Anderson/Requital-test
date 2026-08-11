@@ -5,7 +5,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -47,7 +46,6 @@ jest.setTimeout(30000);
 
 describe('Order item editing after placement (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -63,7 +61,6 @@ describe('Order item editing after placement (e2e)', () => {
       }),
     );
     await app.init();
-    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {

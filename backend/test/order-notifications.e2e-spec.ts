@@ -237,7 +237,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const job = await processOwnEmailJob(`order:${order.id}:confirmed-email`);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.to).toBe(email);
     expect(payload.subject).toContain(`Order confirmation — #${order.id}`);
   });
@@ -305,7 +305,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const job = await processOwnEmailJob(jobKey);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('out for delivery');
     expect(payload.subject).not.toContain('ready for pickup');
   });
@@ -342,7 +342,7 @@ describe('Order status customer email notifications (e2e)', () => {
     );
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('ready for pickup');
   });
 
@@ -426,7 +426,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const job = await processOwnEmailJob(`order:${orderId}:confirmed-email`);
     expect(job).not.toBeNull();
     expect(job!.status).toBe('completed');
-    const payload = job!.payload as unknown as EmailJobPayload;
+    const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('Order confirmation');
   });
 
@@ -625,7 +625,7 @@ describe('Order status customer email notifications (e2e)', () => {
       );
       expect(job).not.toBeNull();
       expect(job!.status).toBe('completed');
-      const payload = job!.payload as unknown as WhatsAppAlertJobPayload;
+      const payload = job!.payload as WhatsAppAlertJobPayload;
       expect(payload.to).toBe('+971507654321');
       expect(payload.body).toContain(`New order #${order.id}`);
       expect(payload.orderId).toBe(order.id);
@@ -648,7 +648,7 @@ describe('Order status customer email notifications (e2e)', () => {
         `order:${order.id}:merchant-whatsapp-alert`,
       );
       expect(job).not.toBeNull();
-      const payload = job!.payload as unknown as WhatsAppAlertJobPayload;
+      const payload = job!.payload as WhatsAppAlertJobPayload;
       expect(payload.to).toBe('+971507654399');
     });
 
@@ -870,7 +870,6 @@ describe('Order status customer email notifications (e2e)', () => {
 // behavior the describe blocks above already cover one layer down.
 describe('Order creation is non-blocking against a hanging or throwing notification provider (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const runId = Date.now();
 
   async function buildApp(
@@ -963,7 +962,6 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
     // Never resolves — if the call site still awaited this, the request
     // itself would time out; asserting a fast response is the whole point.
     app = await buildApp(() => new Promise<void>(() => {}));
-    db = app.get(DatabaseService);
     const { slug, outletId, productId } =
       await setupPublishedShop('notify-hang');
 
@@ -989,7 +987,6 @@ describe('Order creation is non-blocking against a hanging or throwing notificat
 
   it('a notification provider that throws does not fail order creation', async () => {
     app = await buildApp(() => Promise.reject(new Error('provider down')));
-    db = app.get(DatabaseService);
     const { slug, outletId, productId } =
       await setupPublishedShop('notify-throw');
 

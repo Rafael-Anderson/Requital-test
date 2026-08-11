@@ -21,10 +21,7 @@ interface NotifiableOrder {
   customerEmail: string | null;
   customerPhone: string;
   orderType: string | null;
-  // string once every caller is converted off Prisma (Phase 5) — until
-  // then, still-Prisma callers pass a Decimal here, which template-literal
-  // interpolation handles identically to a string via its own toString().
-  total: string | { toString(): string };
+  total: string;
   outletId: number;
 }
 

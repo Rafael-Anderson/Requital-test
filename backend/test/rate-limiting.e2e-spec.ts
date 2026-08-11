@@ -4,7 +4,6 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
 
 // Regression coverage for a real finding: prior to this fix, nothing in the
 // app rate-limited /auth/login, /auth/signup, password reset, or any public
@@ -20,7 +19,6 @@ import { DatabaseService } from '../src/database/database.service';
 // @nestjs/throttler source before writing this test).
 describe('Rate limiting (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const originalNodeEnv = process.env.NODE_ENV;
 
   beforeAll(async () => {
@@ -36,7 +34,6 @@ describe('Rate limiting (e2e)', () => {
       }),
     );
     await app.init();
-    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {

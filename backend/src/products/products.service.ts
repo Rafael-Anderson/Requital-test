@@ -649,7 +649,6 @@ export class ProductsService {
         ? this.resolveFeaturedThumbnail(dto.images, current.thumbnail as string)
         : undefined;
 
-    let product: AssembledProduct;
     try {
       await this.db.transaction(async (conn) => {
         if (dto.collectionIds) {
@@ -864,7 +863,7 @@ export class ProductsService {
       this.handleDbError(error);
     }
     const products = await this.loadProductsWithRelations([id], undefined);
-    product = products.get(id)!;
+    const product = products.get(id)!;
     if (
       (dto.price !== undefined &&
         Number(dto.price) !== Number(current.price)) ||

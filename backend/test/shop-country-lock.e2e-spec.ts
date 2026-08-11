@@ -5,7 +5,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -24,7 +23,6 @@ function body<T>(res: Response): T {
 // — see ShopService.update's dto.country check.
 describe('Shop country lock (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -40,7 +38,6 @@ describe('Shop country lock (e2e)', () => {
       }),
     );
     await app.init();
-    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {

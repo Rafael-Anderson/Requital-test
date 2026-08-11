@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
 import type { OrderreturnRow } from '../db/types';

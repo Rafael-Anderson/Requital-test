@@ -5,7 +5,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -66,7 +65,6 @@ function body<T>(res: Response): T {
 
 describe('Affiliate (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -82,7 +80,6 @@ describe('Affiliate (e2e)', () => {
       }),
     );
     await app.init();
-    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {

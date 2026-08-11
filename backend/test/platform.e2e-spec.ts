@@ -5,7 +5,6 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -38,7 +37,6 @@ const LONG_TEXT =
 
 describe('Platform (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -54,7 +52,6 @@ describe('Platform (e2e)', () => {
       }),
     );
     await app.init();
-    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {

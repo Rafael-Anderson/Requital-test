@@ -7,7 +7,6 @@ import { App } from 'supertest/types';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
 
 interface AuthResponse {
   accessToken: string;
@@ -76,7 +75,6 @@ const RECEIPT_FIXTURE = readFileSync(
 
 describe('Scan to Stock (e2e)', () => {
   let app: INestApplication<App>;
-  let db: DatabaseService;
   const runId = Date.now();
 
   // Real tesseract.js OCR calls (not mocked) take a few seconds each — well
@@ -98,7 +96,6 @@ describe('Scan to Stock (e2e)', () => {
       }),
     );
     await app.init();
-    db = app.get(DatabaseService);
   });
 
   afterAll(async () => {

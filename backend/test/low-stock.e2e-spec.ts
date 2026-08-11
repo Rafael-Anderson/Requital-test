@@ -27,9 +27,6 @@ interface StockSnapshotRow {
   stockQuantity: number;
   lowStockThreshold: number | null;
 }
-interface StockSnapshot {
-  products: StockSnapshotRow[];
-}
 
 function body<T>(res: Response): T {
   return res.body as T;
