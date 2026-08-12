@@ -14,13 +14,23 @@ export class DomainsService {
 
   // Backs Caddy's on-demand TLS `ask` config — called on every TLS handshake
   // for a hostname Caddy hasn't already got a cert for, so this needs to
-  // stay a single indexed lookup and nothing heavier. Two shapes of "known"
-  // domain, matching the two site blocks that both point `ask` at this
-  // endpoint (see the Caddyfile): a `{subdomain}.requital.io` wildcard host
-  // (real for any shop with that subdomain, regardless of its current
-  // domainType — a shop that switched to a custom domain shouldn't suddenly
-  // break its old default URL), or a shop's own connected customDomain.
+  // stay a single indexed lookup and nothing heavier.
   async isKnownDomain(domain: string): Promise<boolean> {
+    return (await this.resolveSubdomain(domain)) !== null;
+  }
+
+  // Backs the storefront's own middleware (see storefront/middleware.ts) —
+  // it needs the shop's real subdomain to rewrite an incoming request onto
+  // the existing /[shop]/... route tree, not just a yes/no. Two shapes of
+  // "known" domain, matching the two site blocks that both point Caddy's
+  // `ask` at isKnownDomain above (see the Caddyfile): a
+  // `{subdomain}.requital.io` wildcard host (real for any shop with that
+  // subdomain, regardless of its current domainType — a shop that switched
+  // to a custom domain shouldn't suddenly break its old default URL), or a
+  // shop's own connected customDomain, which resolves back to that same
+  // shop's subdomain (the app's internal routing key is always the
+  // subdomain, never the custom domain itself).
+  async resolveSubdomain(domain: string): Promise<string | null> {
     const suffix = `.${STOREFRONT_ROOT_DOMAIN}`;
     if (domain.endsWith(suffix)) {
       const subdomain = domain.slice(0, -suffix.length);
@@ -28,12 +38,12 @@ export class DomainsService {
         `SELECT id FROM shop WHERE subdomain = ? LIMIT 1`,
         [subdomain],
       );
-      return rows.length > 0;
+      return rows.length > 0 ? subdomain : null;
     }
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id FROM shop WHERE customDomain = ? AND domainType = 'custom' LIMIT 1`,
+      `SELECT subdomain FROM shop WHERE customDomain = ? AND domainType = 'custom' LIMIT 1`,
       [domain],
     );
-    return rows.length > 0;
+    return rows.length > 0 ? (rows[0].subdomain as string) : null;
   }
 }

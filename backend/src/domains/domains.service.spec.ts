@@ -45,3 +45,40 @@ describe('DomainsService.isKnownDomain', () => {
     expect(await service.isKnownDomain('nobody.example.com')).toBe(false);
   });
 });
+
+describe('DomainsService.resolveSubdomain', () => {
+  it('resolves a {subdomain}.requital.io host directly from the hostname, no lookup needed for the value itself', async () => {
+    const db = createMockDb([{ id: 1 }]);
+    const service = new DomainsService(db);
+
+    expect(await service.resolveSubdomain('acme.requital.io')).toBe('acme');
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('subdomain = ?');
+    expect(params).toEqual(['acme']);
+  });
+
+  it('returns null for an unclaimed {subdomain}.requital.io host', async () => {
+    const db = createMockDb([]);
+    const service = new DomainsService(db);
+
+    expect(await service.resolveSubdomain('nobody.requital.io')).toBeNull();
+  });
+
+  it('resolves a custom domain to its shop\'s real subdomain, not the custom domain itself', async () => {
+    const db = createMockDb([{ subdomain: 'acme' }]);
+    const service = new DomainsService(db);
+
+    expect(await service.resolveSubdomain('shop.acme.com')).toBe('acme');
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('customDomain = ?');
+    expect(sql).toContain('subdomain');
+    expect(params).toEqual(['shop.acme.com']);
+  });
+
+  it('returns null for an unclaimed custom domain', async () => {
+    const db = createMockDb([]);
+    const service = new DomainsService(db);
+
+    expect(await service.resolveSubdomain('nobody.example.com')).toBeNull();
+  });
+});
