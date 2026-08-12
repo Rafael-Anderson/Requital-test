@@ -27,13 +27,13 @@ const SECTIONS = [
 // (not outlet-scoped), same reasoning as Settings, which is why this lives
 // here rather than in SECTIONS.
 const ADMIN_SECTIONS = [
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/affiliate", label: "Affiliate", icon: Share2 },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/theme", label: "Theme", icon: Palette },
-  { href: "/affiliate", label: "Affiliate", icon: Share2 },
   { href: "/bio-links", label: "Bio Links", icon: Link2 },
   { href: "/activity-log", label: "Activity Log", icon: History },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function HomePage() {
