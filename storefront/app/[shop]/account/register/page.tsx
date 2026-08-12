@@ -11,7 +11,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { shopSlug } = useShop();
+  const { shopBasePath } = useShop();
   const { register } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -26,7 +26,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       await register({ name, phone, email: email || undefined, password });
-      router.push(`/${shopSlug}/account`);
+      router.push(`${shopBasePath}/account`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create your account");
     } finally {
@@ -84,7 +84,7 @@ export default function RegisterPage() {
 
       <p className="text-sm text-zinc-500">
         Already have an account?{" "}
-        <Link href={`/${shopSlug}/account/login`} className="text-accent hover:underline">
+        <Link href={`${shopBasePath}/account/login`} className="text-accent hover:underline">
           Sign in
         </Link>
       </p>

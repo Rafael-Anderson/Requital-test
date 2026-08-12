@@ -46,4 +46,16 @@ export class DomainsService {
     );
     return rows.length > 0 ? (rows[0].subdomain as string) : null;
   }
+
+  // Backs the CORS origin check in main.ts — narrower than isKnownDomain on
+  // purpose: the *.requital.io shape is already covered by a static regex
+  // there before this is ever called, so the only case worth a DB round-trip
+  // is a merchant's own connected custom domain.
+  async isCustomDomain(domain: string): Promise<boolean> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM shop WHERE customDomain = ? AND domainType = 'custom' LIMIT 1`,
+      [domain],
+    );
+    return rows.length > 0;
+  }
 }

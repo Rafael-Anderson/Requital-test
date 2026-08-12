@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { getShop, listOutlets } from "./api";
 import { getReadableTextColor } from "./color-contrast";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
@@ -9,6 +10,19 @@ import type { Outlet, Shop } from "./types";
 
 interface ShopContextValue {
   shopSlug: string;
+  // Internal links must adapt to how THIS request reached the app:
+  // proxy.ts rewrites a hostname-resolved request (subdomain/custom domain)
+  // onto /[shop]/... server-side, invisibly to the browser's own address
+  // bar — so on that path, an internal href must be root-relative (no
+  // prefix), since the browser has no /{shop} in its URL to begin with. But
+  // proxy.ts deliberately leaves bare localhost/127.0.0.1 alone (no per-shop
+  // host to resolve there), so local dev and the e2e suite (see
+  // e2e/urls.ts) still navigate via a literal /{shop}/... path, where the
+  // browser's address bar DOES carry the prefix — an unprefixed href there
+  // would 404. shopBasePath is "" in the first case, "/${shopSlug}" in the
+  // second, detected from the CURRENT pathname (the one signal available
+  // that's always correct regardless of which flow got us here).
+  shopBasePath: string;
   shop: Shop | null;
   outlets: Outlet[];
   loading: boolean;
@@ -96,6 +110,8 @@ function applyTheme(shop: Shop | null) {
 }
 
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const shopBasePath = pathname === `/${shopSlug}` || pathname.startsWith(`/${shopSlug}/`) ? `/${shopSlug}` : "";
   const [shop, setShop] = useState<Shop | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,7 +142,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   }, [shop]);
 
   return (
-    <ShopContext.Provider value={{ shopSlug, shop, outlets, loading, error }}>
+    <ShopContext.Provider value={{ shopSlug, shopBasePath, shop, outlets, loading, error }}>
       {children}
     </ShopContext.Provider>
   );

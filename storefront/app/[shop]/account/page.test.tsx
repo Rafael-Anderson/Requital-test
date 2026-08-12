@@ -21,7 +21,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shopSlug: "test-shop", shop: { currency: "AED" } }),
+  useShop: () => ({ shopSlug: "test-shop", shopBasePath: "/test-shop", shop: { currency: "AED" } }),
 }));
 
 vi.mock("@/lib/api", () => ({

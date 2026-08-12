@@ -9,7 +9,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 function ResetPasswordContent() {
   const router = useRouter();
-  const { shopSlug } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
   const [newPassword, setNewPassword] = useState("");
@@ -24,7 +24,7 @@ function ResetPasswordContent() {
     try {
       await resetCustomerPassword(shopSlug, token, newPassword);
       setDone(true);
-      setTimeout(() => router.push(`/${shopSlug}/account/login`), 1500);
+      setTimeout(() => router.push(`${shopBasePath}/account/login`), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "This reset link is invalid or has expired");
     } finally {

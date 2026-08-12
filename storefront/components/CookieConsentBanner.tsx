@@ -16,7 +16,7 @@ export function cookieConsentStorageKey(shopSlug: string): string {
 // requital_storefront_cookie_consent's own comment for what a future
 // analytics-gating consumer would read).
 export default function CookieConsentBanner() {
-  const { shopSlug } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const [choice, setChoice] = useState<CookieConsentChoice | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -47,7 +47,7 @@ export default function CookieConsentBanner() {
       <div className="mx-auto max-w-5xl flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
         <p className="text-sm text-zinc-500 flex-1">
           We use cookies to run this store and improve your experience.{" "}
-          <Link href={`/${shopSlug}/policies/privacy`} className="underline">
+          <Link href={`${shopBasePath}/policies/privacy`} className="underline">
             Learn more
           </Link>
           .

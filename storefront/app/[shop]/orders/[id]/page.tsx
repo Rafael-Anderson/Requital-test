@@ -16,7 +16,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 function OrderConfirmationContent() {
   const params = useParams<{ shop: string; id: string }>();
   const searchParams = useSearchParams();
-  const { shopSlug, shop } = useShop();
+  const { shop, shopBasePath } = useShop();
   const [order, setOrder] = useState<OrderResult | null>(null);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ function OrderConfirmationContent() {
           </p>
           <p className="mt-2 font-mono text-lg tracking-wide">{order.trackingToken}</p>
           <Link
-            href={`/${shopSlug}/orders/track?token=${order.trackingToken}`}
+            href={`${shopBasePath}/orders/track?token=${order.trackingToken}`}
             className="inline-block mt-2 text-sm text-accent hover:underline"
           >
             Track this order →
@@ -90,7 +90,7 @@ function OrderConfirmationContent() {
           </div>
         </div>
       )}
-      <Link href={`/${shopSlug}`} className="inline-block mt-6 text-accent hover:underline">
+      <Link href={shopBasePath || "/"} className="inline-block mt-6 text-accent hover:underline">
         Continue shopping
       </Link>
     </div>

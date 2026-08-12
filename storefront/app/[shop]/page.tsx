@@ -21,7 +21,6 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 // ever set directly some other way — same "never render broken/unstyled"
 // rule as everywhere else in Theme.
 function HomepageTop({
-  shopSlug,
   layout,
   bannerUrl,
   banners,
@@ -29,7 +28,6 @@ function HomepageTop({
   products,
   collections,
 }: {
-  shopSlug: string;
   layout: HomepageLayout;
   bannerUrl: string | null;
   banners: BannerImageInput[];
@@ -41,7 +39,7 @@ function HomepageTop({
     return <SlideshowHero banners={banners} heroText={heroText} products={products} />;
   }
   if (layout === "featured_grid") {
-    return <FeaturedGrid shopSlug={shopSlug} bannerUrl={bannerUrl} heroText={heroText} collections={collections} />;
+    return <FeaturedGrid bannerUrl={bannerUrl} heroText={heroText} collections={collections} />;
   }
   if (layout === "grid_first") {
     return <GridFirstHero heroText={heroText} />;
@@ -99,7 +97,6 @@ function HomeContent() {
   const fullBleedHero = layout === "classic" || layout === "slideshow" || layout === "custom";
   const heroNode = (
     <HomepageTop
-      shopSlug={shopSlug}
       layout={layout}
       bannerUrl={shop?.bannerUrl ?? null}
       banners={shop?.banners ?? []}

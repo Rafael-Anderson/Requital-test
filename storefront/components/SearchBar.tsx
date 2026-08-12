@@ -15,7 +15,7 @@ const DEBOUNCE_MS = 300;
 // separate results page, matching the header's existing icon-triggered
 // affordances (cart drawer, mobile menu).
 export default function SearchBar() {
-  const { shopSlug, shop } = useShop();
+  const { shopSlug, shopBasePath, shop } = useShop();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -115,7 +115,7 @@ export default function SearchBar() {
               results.map((r) => (
                 <Link
                   key={r.id}
-                  href={`/${shopSlug}/products/${r.slug}`}
+                  href={`${shopBasePath}/products/${r.slug}`}
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-3 p-2.5 hover:bg-mouse-over/10 transition-colors"
                 >

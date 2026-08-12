@@ -10,7 +10,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { shopSlug } = useShop();
+  const { shopBasePath } = useShop();
   const { login } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +23,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(identifier, password);
-      router.push(`/${shopSlug}/account`);
+      router.push(`${shopBasePath}/account`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
@@ -64,13 +64,13 @@ export default function LoginPage() {
 
       <div className="text-sm text-zinc-500 space-y-1">
         <p>
-          <Link href={`/${shopSlug}/account/forgot-password`} className="text-accent hover:underline">
+          <Link href={`${shopBasePath}/account/forgot-password`} className="text-accent hover:underline">
             Forgot your password?
           </Link>
         </p>
         <p>
           No account yet?{" "}
-          <Link href={`/${shopSlug}/account/register`} className="text-accent hover:underline">
+          <Link href={`${shopBasePath}/account/register`} className="text-accent hover:underline">
             Create one
           </Link>
         </p>

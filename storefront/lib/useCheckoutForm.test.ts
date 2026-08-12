@@ -37,6 +37,7 @@ let mockOutlets: { id: number; name: string; deliveryEnabled: boolean; pickupEna
 vi.mock("@/lib/shop-context", () => ({
   useShop: () => ({
     shopSlug: "test-shop",
+    shopBasePath: "",
     shop: { currency: "AED" },
     outlets: mockOutlets,
   }),

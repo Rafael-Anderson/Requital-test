@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { StructuredLoggerService } from './common/logging/structured-logger.service';
 import { validateEnv } from './common/env-validation';
+import { DomainsService } from './domains/domains.service';
 
 // Constructed standalone (no Nest DI needed yet) so even the fail-fast
 // validation error itself goes out as a structured JSON line, not a raw
@@ -61,10 +62,31 @@ async function bootstrap() {
   // `credentials: true` isn't needed here. Storefront (:3002) calls the
   // @Public() routes under /public/:shopSlug with no token at all — still
   // needs to be in this allowlist for the browser to permit the request.
+  //
+  // Every shop's storefront is now reachable at its own {subdomain}.
+  // requital.io host, or at a merchant-connected custom domain (see
+  // "Domains" in CLAUDE.md) — neither shape can be enumerated as a static
+  // list, so ADMIN_ORIGINS (local dev + the fixed admin/api hosts) is
+  // checked first as a fast path, then a *.requital.io regex, then a DB
+  // lookup against shop.customDomain for anything else.
   const allowedOrigins = (
     process.env.ADMIN_ORIGINS ?? 'http://localhost:3001,http://localhost:3002'
   ).split(',');
-  app.enableCors({ origin: allowedOrigins });
+  const REQUITAL_SUBDOMAIN_ORIGIN = /^https:\/\/([a-z0-9-]+\.)?requital\.io$/;
+  const domainsService = app.get(DomainsService);
+  app.enableCors({
+    origin: (origin, callback) => {
+      // No Origin header at all — a server-to-server call (curl, a webhook,
+      // Caddy's own health check), never a browser request CORS gates.
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (REQUITAL_SUBDOMAIN_ORIGIN.test(origin)) return callback(null, true);
+      domainsService
+        .isCustomDomain(origin.replace(/^https?:\/\//, ''))
+        .then((allowed) => callback(null, allowed))
+        .catch(() => callback(null, false));
+    },
+  });
   // Local-disk image uploads — only ever served from here when
   // STORAGE_PROVIDER=local (the default; see src/storage/). Left
   // unconditional rather than gated on the active provider: every file

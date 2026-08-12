@@ -6,6 +6,7 @@ import { Menu, Phone, PackageSearch, ShoppingCart, User, X } from "lucide-react"
 import { resolveImageUrl } from "@/lib/api";
 import { iconStyleProps } from "@/lib/icon-style";
 import { useCartDrawer } from "@/lib/cart-drawer";
+import { useShop } from "@/lib/shop-context";
 import SearchBar from "@/components/SearchBar";
 import type { Customer, Density, Shop } from "@/lib/types";
 
@@ -29,8 +30,9 @@ interface TopBarProps {
 }
 
 function Logo({ shopSlug, shop }: { shopSlug: string; shop: Shop | null }) {
+  const { shopBasePath } = useShop();
   return (
-    <Link href={`/${shopSlug}`} className="flex items-center gap-2 min-w-0">
+    <Link href={shopBasePath || "/"} className="flex items-center gap-2 min-w-0">
       {shop?.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={resolveImageUrl(shop.logoUrl) ?? undefined} alt={shop.displayName ?? shop.name} className="h-8 max-w-40 object-contain shrink-0" />
@@ -45,7 +47,8 @@ function Logo({ shopSlug, shop }: { shopSlug: string; shop: Shop | null }) {
 // ShopLayoutClient, regardless of cartLayout) so this never conditionally
 // calls a hook — only the click behavior/element type branches on
 // theme.cartLayout, never the hook call itself.
-function CartIconButton({ shopSlug, shop, count }: { shopSlug: string; shop: Shop | null; count: number }) {
+function CartIconButton({ shop, count }: { shop: Shop | null; count: number }) {
+  const { shopBasePath } = useShop();
   const { openDrawer } = useCartDrawer();
   // Guarded here (the one place every layout's cart icon renders through),
   // not per call site — see ProductDetailClient.tsx for the matching
@@ -70,13 +73,14 @@ function CartIconButton({ shopSlug, shop, count }: { shopSlug: string; shop: Sho
     );
   }
   return (
-    <Link href={`/${shopSlug}/cart`} className={className}>
+    <Link href={`${shopBasePath}/cart`} className={className}>
       {content}
     </Link>
   );
 }
 
-function NavIcons({ shopSlug, shop, customer, count, showPhone = true, showAccount = true }: TopBarProps & { showPhone?: boolean; showAccount?: boolean }) {
+function NavIcons({ shop, customer, count, showPhone = true, showAccount = true }: TopBarProps & { showPhone?: boolean; showAccount?: boolean }) {
+  const { shopBasePath } = useShop();
   const contactNumber = shop?.contactNumbers?.[0];
   const iconProps = iconStyleProps(shop?.iconStyle, 1.75);
 
@@ -87,12 +91,12 @@ function NavIcons({ shopSlug, shop, customer, count, showPhone = true, showAccou
           <Phone className="size-5" {...iconProps} />
         </a>
       )}
-      <Link href={`/${shopSlug}/orders/track`} title="Track an order" className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors">
+      <Link href={`${shopBasePath}/orders/track`} title="Track an order" className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors">
         <PackageSearch className="size-5" {...iconProps} />
       </Link>
       {showAccount && (
         <Link
-          href={customer ? `/${shopSlug}/account` : `/${shopSlug}/account/login`}
+          href={customer ? `${shopBasePath}/account` : `${shopBasePath}/account/login`}
           title={customer ? `Signed in as ${customer.name}` : "Sign in"}
           className="flex items-center gap-1.5 px-2 h-9 rounded-full hover:bg-mouse-over/10 transition-colors"
         >
@@ -101,7 +105,7 @@ function NavIcons({ shopSlug, shop, customer, count, showPhone = true, showAccou
         </Link>
       )}
       <SearchBar />
-      <CartIconButton shopSlug={shopSlug} shop={shop} count={count} />
+      <CartIconButton shop={shop} count={count} />
     </div>
   );
 }
@@ -138,6 +142,7 @@ function TopBarLogoCenter(props: TopBarProps) {
 }
 
 function TopBarMinimal(props: TopBarProps) {
+  const { shopBasePath } = useShop();
   const [menuOpen, setMenuOpen] = useState(false);
   const iconProps = iconStyleProps(props.shop?.iconStyle, 1.75);
 
@@ -155,7 +160,7 @@ function TopBarMinimal(props: TopBarProps) {
         <Logo shopSlug={props.shopSlug} shop={props.shop} />
         <div className="flex items-center gap-1">
           <SearchBar />
-          <CartIconButton shopSlug={props.shopSlug} shop={props.shop} count={props.count} />
+          <CartIconButton shop={props.shop} count={props.count} />
         </div>
       </div>
       {menuOpen && (
@@ -165,11 +170,11 @@ function TopBarMinimal(props: TopBarProps) {
               <Phone className="size-4" {...iconProps} /> Call {props.shop.contactNumbers[0]}
             </a>
           )}
-          <Link href={`/${props.shopSlug}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent" onClick={() => setMenuOpen(false)}>
+          <Link href={`${shopBasePath}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent" onClick={() => setMenuOpen(false)}>
             <PackageSearch className="size-4" {...iconProps} /> Track an order
           </Link>
           <Link
-            href={props.customer ? `/${props.shopSlug}/account` : `/${props.shopSlug}/account/login`}
+            href={props.customer ? `${shopBasePath}/account` : `${shopBasePath}/account/login`}
             className="flex items-center gap-2 py-2 text-sm hover:text-accent"
             onClick={() => setMenuOpen(false)}
           >

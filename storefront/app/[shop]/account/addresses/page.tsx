@@ -25,7 +25,7 @@ const EMPTY_FORM: AddressFormState = { label: "", address: "", emirate: EMIRATES
 
 export default function AddressesPage() {
   const router = useRouter();
-  const { shopSlug } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const { customer, loading: authLoading } = useAuth();
 
   const [addresses, setAddresses] = useState<CustomerAddress[] | null>(null);
@@ -35,8 +35,8 @@ export default function AddressesPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !customer) router.replace(`/${shopSlug}/account/login`);
-  }, [authLoading, customer, shopSlug, router]);
+    if (!authLoading && !customer) router.replace(`${shopBasePath}/account/login`);
+  }, [authLoading, customer, shopBasePath, router]);
 
   function refresh() {
     return listMyAddresses(shopSlug)
@@ -108,7 +108,7 @@ export default function AddressesPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href={`/${shopSlug}/account`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href={`${shopBasePath}/account`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
         ← Back to account
       </Link>
       <div className="flex items-center justify-between mb-4">

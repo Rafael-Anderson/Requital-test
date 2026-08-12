@@ -49,7 +49,7 @@ function formatDeliveryEstimate(shop: Shop): string | null {
 export default function ProductDetailClient() {
   const params = useParams<{ shop: string; slug: string }>();
   const router = useRouter();
-  const { shopSlug, shop, outlets } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets } = useShop();
   const { addItem, clear } = useCart();
   const defaultOutletId = outlets[0]?.id;
 
@@ -164,7 +164,7 @@ export default function ProductDetailClient() {
       // single-item purchase, not a continuation of prior browsing.
       clear();
       addItem(item, quantity, defaultOutletId);
-      router.push(`/${shopSlug}/checkout`);
+      router.push(`${shopBasePath}/checkout`);
       return;
     }
     addItem(item, quantity, defaultOutletId);

@@ -6,7 +6,7 @@ import CookieConsentBanner, { cookieConsentStorageKey } from "./CookieConsentBan
 afterEach(cleanup);
 
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shopSlug: "test-shop" }),
+  useShop: () => ({ shopSlug: "test-shop", shopBasePath: "" }),
 }));
 
 describe("CookieConsentBanner", () => {

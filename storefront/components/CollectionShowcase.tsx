@@ -14,7 +14,7 @@ import type { Collection } from "@/lib/types";
 // what to search for still has somewhere obvious to go) — see the Phase 2
 // design brief. Horizontal scroll on narrow screens, a real grid from sm up.
 export default function CollectionShowcase() {
-  const { shopSlug } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const [collections, setCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function CollectionShowcase() {
         {collections.map((c) => (
           <Link
             key={c.id}
-            href={`/${shopSlug}/collections/${c.slug}`}
+            href={`${shopBasePath}/collections/${c.slug}`}
             className="group relative shrink-0 w-40 sm:w-auto aspect-[4/5] rounded-xl overflow-hidden snap-start"
           >
             {c.image ? (
