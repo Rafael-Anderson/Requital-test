@@ -10,6 +10,7 @@ import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
 import type { GiftcardRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
+import { escapeHtml } from '../common/email';
 import type { TenantContext } from '../common/tenant-context';
 import { CreateGiftCardDto } from './dto/create-gift-card.dto';
 import { UpdateGiftCardDto } from './dto/update-gift-card.dto';
@@ -219,6 +220,26 @@ export class GiftCardsService {
         '',
         ...issued.map((g) => `${g.code} — ${g.initialValue}`),
       ];
+      const codeRows = issued
+        .map(
+          (g) =>
+            `<tr><td style="padding:10px 16px;background-color:#f4f4f4;border-radius:6px;font-family:monospace;font-size:15px;color:#111111;">${escapeHtml(g.code)}</td><td style="padding:10px 16px;font-size:14px;color:#111111;text-align:right;">${escapeHtml(String(g.initialValue))}</td></tr><tr><td colspan="2" style="height:8px;line-height:8px;font-size:0;">&nbsp;</td></tr>`,
+        )
+        .join('');
+      const giftCardHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">Thanks for your purchase from ${escapeHtml(shopName)}! Here ${issued.length === 1 ? 'is your gift card code' : 'are your gift card codes'}:</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${codeRows}</table>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by ${escapeHtml(shopName)} via Requital.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
       // Enqueued via `conn` (not the plain injected db pool) so the job
       // row commits atomically with the gift cards it describes — if the
       // surrounding order-creation transaction rolls back, this job row
@@ -232,6 +253,7 @@ export class GiftCardsService {
           to: recipientEmail,
           subject: `Your ${shopName} gift card`,
           bodyText: bodyLines.join('\n'),
+          html: giftCardHtml,
           fromName: shopName,
         },
         `gift-card-issued-email:${orderId}`,

@@ -15,6 +15,7 @@ import { buildSetClause } from '../database/update.util';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { UserRow } from '../db/types';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
+import { escapeHtml } from '../common/email';
 import { JobsService } from '../jobs/jobs.service';
 import { SignupDto } from './dto/signup.dto';
 import { RESERVED_SUBDOMAINS } from '../shop/constants';
@@ -556,6 +557,23 @@ export class AuthService {
       ],
     );
     const resetLink = `${ADMIN_URL}/reset-password?token=${raw}`;
+    const resetHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(user.name)},</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">We received a request to reset your Requital password. This link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${resetLink}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Reset password</a></td></tr></table>
+<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
+<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${resetLink}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by Requital. If you didn't request a password reset, you can ignore this email.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await this.jobsService.enqueue(
       user.shopId,
       'send_email',
@@ -563,6 +581,7 @@ export class AuthService {
         to: user.email,
         subject: 'Reset your Requital password',
         bodyText: `Reset your password: ${resetLink}\nThis link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
+        html: resetHtml,
       },
       `staff-password-reset-email:${user.id}:${raw}`,
     );
@@ -703,6 +722,7 @@ export class AuthService {
     id: number;
     email: string;
     shopId: number;
+    name: string;
   }): Promise<string | undefined> {
     // Same supersession rule as forgotPassword above — a resend must kill
     // any still-outstanding verification token rather than leaving multiple
@@ -721,6 +741,23 @@ export class AuthService {
       ],
     );
     const link = `${ADMIN_URL}/verify-email?token=${raw}`;
+    const verifyHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(user.name)},</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">Please verify your email address to activate your Requital account.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Verify email</a></td></tr></table>
+<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
+<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${link}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by Requital. If you didn't create an account, you can ignore this email.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await this.jobsService.enqueue(
       user.shopId,
       'send_email',
@@ -728,6 +765,7 @@ export class AuthService {
         to: user.email,
         subject: 'Verify your Requital email',
         bodyText: `Verify your email: ${link}`,
+        html: verifyHtml,
       },
       `staff-verify-email:${user.id}:${raw}`,
     );
@@ -738,6 +776,7 @@ export class AuthService {
     id: number;
     email: string;
     shopId: number;
+    name: string;
   }): Promise<string | undefined> {
     const raw = generateOpaqueToken();
     await this.db.execute(
@@ -750,6 +789,23 @@ export class AuthService {
       ],
     );
     const link = `${ADMIN_URL}/accept-invite?token=${raw}`;
+    const inviteHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(user.name)},</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">You've been invited to a Requital staff account. Set your password to activate it — this link expires in ${INVITE_TOKEN_LIFETIME_DAYS} days.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Set password</a></td></tr></table>
+<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
+<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${link}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by Requital. If you weren't expecting a staff invite, you can ignore this email.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await this.jobsService.enqueue(
       user.shopId,
       'send_email',
@@ -757,6 +813,7 @@ export class AuthService {
         to: user.email,
         subject: "You've been invited to a Requital staff account",
         bodyText: `Set your password to activate your account: ${link}\nThis link expires in ${INVITE_TOKEN_LIFETIME_DAYS} days.`,
+        html: inviteHtml,
       },
       `staff-invite-email:${user.id}:${raw}`,
     );

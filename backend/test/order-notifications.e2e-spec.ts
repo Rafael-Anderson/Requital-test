@@ -30,7 +30,19 @@ interface EmailJobPayload {
   to: string;
   subject: string;
   bodyText: string;
+  html?: string;
   fromName?: string;
+}
+
+// Structural markers every redesigned HTML email template carries — the
+// teal brand header, and the divider+copyright footer. Checked wherever an
+// existing test already has the job payload in hand, rather than a
+// dedicated new test per email type (see CLAUDE.md's email templates note).
+function expectHtmlStructure(html: string | undefined) {
+  expect(html).toBeDefined();
+  expect(html).toContain('#0d9488');
+  expect(html).toContain('Requital');
+  expect(html).toContain('&copy; 2026 Requital');
 }
 
 function body<T>(res: Response): T {
@@ -240,6 +252,8 @@ describe('Order status customer email notifications (e2e)', () => {
     const payload = job!.payload as EmailJobPayload;
     expect(payload.to).toBe(email);
     expect(payload.subject).toContain(`Order confirmation — #${order.id}`);
+    expectHtmlStructure(payload.html);
+    expect(payload.html).toContain(`#${order.id}`);
   });
 
   it('does NOT send anything when the shop has notifications disabled', async () => {
@@ -308,6 +322,8 @@ describe('Order status customer email notifications (e2e)', () => {
     const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('out for delivery');
     expect(payload.subject).not.toContain('ready for pickup');
+    expectHtmlStructure(payload.html);
+    expect(payload.html).toContain('on its way to you now');
   });
 
   it('words the same transition as "ready for pickup" for a pickup order', async () => {
@@ -344,6 +360,8 @@ describe('Order status customer email notifications (e2e)', () => {
     expect(job!.status).toBe('completed');
     const payload = job!.payload as EmailJobPayload;
     expect(payload.subject).toContain('ready for pickup');
+    expectHtmlStructure(payload.html);
+    expect(payload.html).toContain('ready for pickup at your selected outlet');
   });
 
   it('a storefront checkout order also triggers the confirmation email (not just admin-created orders)', async () => {

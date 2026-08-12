@@ -27,7 +27,11 @@ export function sendEmailStub(
   console.log(`[email:stub] to=${to} subject="${subject}"\n${bodyText}`);
 }
 
-function escapeHtml(s: string): string {
+// Exported for reuse by every call site's own HTML email template (see
+// auth.service.ts, order-notifications.service.ts, etc.) — a pure escaping
+// utility, not a template, so sharing it doesn't create the
+// one-email-type-breaks-another risk a shared *render* function would.
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 

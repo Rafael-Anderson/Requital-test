@@ -4,6 +4,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { sendWhatsAppStub } from '../common/whatsapp';
 import { normalizePhoneToE164 } from '../common/phone';
 import { generateSurveyToken } from '../common/token-hash';
+import { escapeHtml } from '../common/email';
 import { WhatsAppSettingsService } from '../whatsapp/whatsapp-settings.service';
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
 import { createLogger } from '../common/logging/logger';
@@ -63,12 +64,30 @@ export class OrderNotificationsService {
 
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
     const bodyText = `Hi ${order.customerName}, we've received your order #${order.id} (total ${order.total} AED). We'll message you again once it's on its way.`;
+    // Standalone literal, not shared with notifyOutForDelivery's own HTML
+    // below — deliberately duplicated rather than factored into a common
+    // renderer, so a future change to one order email type can't silently
+    // alter another's markup.
+    const html = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
+<p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">We've received your order <strong>#${order.id}</strong> (total ${escapeHtml(order.total)} AED). We'll message you again once it's on its way.</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await Promise.all([
       this.sendEmail(
         shopId,
         order,
         `Order confirmation — #${order.id}`,
         bodyText,
+        html,
         `order:${order.id}:confirmed-email`,
       ),
       this.sendWhatsApp(shopId, order, bodyText),
@@ -84,12 +103,32 @@ export class OrderNotificationsService {
     const bodyText = isPickup
       ? `Hi ${order.customerName}, order #${order.id} is ready for pickup at your selected outlet.`
       : `Hi ${order.customerName}, order #${order.id} is on its way to you now.`;
+    const messageHtml = isPickup
+      ? `Order <strong>#${order.id}</strong> is ready for pickup at your selected outlet.`
+      : `Order <strong>#${order.id}</strong> is on its way to you now.`;
+    // Standalone literal (see notifyOrderConfirmed's own comment above) —
+    // the pickup/delivery wording branch lives inside this one email type's
+    // own template, not shared across types.
+    const html = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
+<p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">${messageHtml}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await Promise.all([
       this.sendEmail(
         shopId,
         order,
         subject,
         bodyText,
+        html,
         `order:${order.id}:out-for-delivery-email`,
       ),
       this.sendWhatsApp(shopId, order, bodyText),
@@ -126,6 +165,24 @@ export class OrderNotificationsService {
 
     if (!shop.notifyEmail || !order.customerEmail) return;
     const link = `${STOREFRONT_URL}/${shop.subdomain as string}/survey?token=${token}`;
+    const shopDisplayName = (shop.displayName as string | null) ?? (shop.name as string);
+    const surveyHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">We'd love your feedback on order <strong>#${order.id}</strong> from ${escapeHtml(shopDisplayName)}.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Leave feedback</a></td></tr></table>
+<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
+<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${link}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by ${escapeHtml(shopDisplayName)} via Requital.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await this.jobsService.enqueue(
       shopId,
       'send_email',
@@ -133,7 +190,8 @@ export class OrderNotificationsService {
         to: order.customerEmail,
         subject: `How was your order? — #${order.id}`,
         bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.id}: ${link}`,
-        fromName: (shop.displayName as string | null) ?? (shop.name as string),
+        html: surveyHtml,
+        fromName: shopDisplayName,
       },
       `order:${order.id}:survey-email`,
     );
@@ -144,6 +202,7 @@ export class OrderNotificationsService {
     order: NotifiableOrder,
     subject: string,
     bodyText: string,
+    html: string,
     idempotencyKey: string,
   ) {
     if (!order.customerEmail) return;
@@ -160,6 +219,7 @@ export class OrderNotificationsService {
         to: order.customerEmail,
         subject,
         bodyText,
+        html,
         fromName: (shop.displayName as string | null) ?? (shop.name as string),
       },
       idempotencyKey,
