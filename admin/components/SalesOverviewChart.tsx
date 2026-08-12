@@ -54,7 +54,7 @@ export default function SalesOverviewChart({ data }: { data: DailyRevenuePoint[]
         onMouseLeave={() => !pinned && setActiveIndex(null)}
       >
         {points.length > 1 && <path d={areaPath} className="fill-black/10 dark:fill-white/10" />}
-        <path d={linePath} fill="none" strokeWidth={2} className="stroke-black dark:stroke-white" />
+        <path d={linePath} fill="none" strokeWidth={2} className="stroke-[#2dd4bf]" />
         {active && (
           <line
             x1={active.x}
@@ -66,30 +66,38 @@ export default function SalesOverviewChart({ data }: { data: DailyRevenuePoint[]
           />
         )}
         {points.map((p, i) => (
-          <g key={p.date}>
-            {/* wide invisible hit target per day — easier to hover/tap than the dot itself */}
-            <rect
-              x={p.x - colWidth / 2}
-              y={0}
-              width={colWidth}
-              height={height}
-              fill="transparent"
-              className="cursor-pointer"
-              onMouseEnter={() => setActiveIndex(i)}
-              onClick={() => {
-                setPinned((wasPinned) => !(activeIndex === i && wasPinned));
-                setActiveIndex(i);
-              }}
-            />
-            <circle
-              cx={p.x}
-              cy={p.y}
-              r={activeIndex === i ? 4 : 2.5}
-              className={activeIndex === i ? "fill-black dark:fill-white" : "fill-black/40 dark:fill-white/40"}
-            />
-          </g>
+          // wide invisible hit target per day — easier to hover/tap than the dot itself
+          <rect
+            key={p.date}
+            x={p.x - colWidth / 2}
+            y={0}
+            width={colWidth}
+            height={height}
+            fill="transparent"
+            className="cursor-pointer"
+            onMouseEnter={() => setActiveIndex(i)}
+            onClick={() => {
+              setPinned((wasPinned) => !(activeIndex === i && wasPinned));
+              setActiveIndex(i);
+            }}
+          />
         ))}
       </svg>
+      {/* Dots rendered as their own absolutely-positioned (percentage, same
+          as the tooltip below) circles rather than SVG <circle> elements —
+          this <svg> uses preserveAspectRatio="none" so it can stretch X and
+          Y independently to fill a responsive container, which also
+          stretches a viewBox-space circle into a visible oval. A div sized
+          in real CSS pixels has no such distortion. */}
+      {points.map((p, i) => (
+        <div
+          key={`dot-${p.date}`}
+          className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none ${
+            activeIndex === i ? "size-2 bg-[#2dd4bf]" : "size-1.5 bg-[#2dd4bf]/50"
+          }`}
+          style={{ left: `${(p.x / width) * 100}%`, top: `${(p.y / height) * 100}%` }}
+        />
+      ))}
       {active && (
         <div
           className="absolute pointer-events-none -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 px-3 py-1.5 text-xs shadow-lg"
