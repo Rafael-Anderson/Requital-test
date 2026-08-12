@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import AttributesSection from "./AttributesSection";
 
 // Spot-check for the icon-only row-action tooltip pattern applied across
@@ -19,7 +19,11 @@ describe("AttributesSection remove-row tooltip", () => {
         onDisable={() => {}}
       />,
     );
-    expect(screen.getByRole("button", { name: "Remove attribute" })).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Remove attribute" });
+    expect(button).toBeInTheDocument();
+    // Tooltip.tsx portals and only mounts its content on hover/focus (not
+    // unconditionally in the DOM) — see that component's own tests.
+    fireEvent.mouseEnter(button.parentElement!);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Remove this attribute");
   });
 
