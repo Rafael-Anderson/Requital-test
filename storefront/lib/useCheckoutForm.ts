@@ -21,7 +21,7 @@ import type { CustomerAddress, OrderType, PaymentMethod } from "@/lib/types";
 // differs, entirely in the presentational components that call this.
 export function useCheckoutForm() {
   const router = useRouter();
-  const { shopSlug, shop, outlets } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets } = useShop();
   const { items, subtotal, discountCode, giftCardCode, clear } = useCart();
   const { customer } = useAuth();
   const [discountAmount, setDiscountAmount] = useState<number | null>(null);
@@ -210,7 +210,7 @@ export function useCheckoutForm() {
       }
       sessionStorage.setItem(`requital_order:${res.order.id}`, JSON.stringify(res.order));
       clear();
-      router.push(`/orders/${res.order.id}`);
+      router.push(`${shopBasePath}/orders/${res.order.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not place order");
     } finally {

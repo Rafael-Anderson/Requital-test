@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isLocalHost } from "./lib/is-local-host";
 
 // Runs on every real navigation (see matcher below) before the app/[shop]/...
 // route tree ever sees the request. Requital's own tenant resolution is a
@@ -11,10 +12,6 @@ import type { NextRequest } from "next/server";
 // resolved shop slug. Every existing /<shopSlug>/... page, layout, and data
 // fetch is completely unaware this happened.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-
-function isLocalHost(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".local");
-}
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { resolveImageUrl } from "@/lib/api";
+import { useShop } from "@/lib/shop-context";
 import type { Collection } from "@/lib/types";
 import ClassicHero from "./ClassicHero";
 
@@ -45,6 +48,7 @@ export default function FeaturedGrid({
   heroText: string | null;
   collections: Collection[];
 }) {
+  const { shopBasePath } = useShop();
   const topLevel = selectTiles(collections);
 
   return (
@@ -56,7 +60,7 @@ export default function FeaturedGrid({
             {topLevel.map((c, i) => (
               <Link
                 key={c.id}
-                href={`/collections/${c.slug}`}
+                href={`${shopBasePath}/collections/${c.slug}`}
                 className={`group rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-stroke ${tileClassName(topLevel.length, i)}`}
               >
                 <div className="aspect-square bg-black/5 overflow-hidden">

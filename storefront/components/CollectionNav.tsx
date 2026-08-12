@@ -18,10 +18,11 @@ const ARROW_CLASS =
   "sm:hidden shrink-0 flex items-center justify-center size-7 rounded-full text-[var(--color-collection-arrow)] hover:text-[var(--color-collection-arrow-active)] transition-colors cursor-pointer";
 
 export default function CollectionNav() {
-  const { shopSlug } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const pathname = usePathname();
-  const activeSlug = pathname.startsWith("/collections/")
-    ? pathname.slice("/collections/".length)
+  const relativePathname = shopBasePath ? pathname.slice(shopBasePath.length) : pathname;
+  const activeSlug = relativePathname.startsWith("/collections/")
+    ? relativePathname.slice("/collections/".length)
     : null;
   const [collections, setCollections] = useState<Collection[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,7 +47,7 @@ export default function CollectionNav() {
         </button>
         <div ref={scrollRef} className="flex items-center gap-1 overflow-x-auto py-2 text-sm scroll-smooth">
           <Link
-            href="/"
+            href={shopBasePath || "/"}
             className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
               !activeSlug ? "bg-accent text-accent-foreground" : "text-zinc-600 hover:bg-mouse-over/10"
             }`}
@@ -56,7 +57,7 @@ export default function CollectionNav() {
           {collections.map((c) => (
             <Link
               key={c.id}
-              href={`/collections/${c.slug}`}
+              href={`${shopBasePath}/collections/${c.slug}`}
               className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
                 activeSlug === c.slug ? "bg-accent text-accent-foreground" : "text-zinc-600 hover:bg-mouse-over/10"
               }`}

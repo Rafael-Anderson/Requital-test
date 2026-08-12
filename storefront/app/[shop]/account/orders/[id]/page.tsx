@@ -11,7 +11,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 export default function OrderDetailPage() {
   const router = useRouter();
-  const { shopSlug, shop } = useShop();
+  const { shopSlug, shopBasePath, shop } = useShop();
   const { customer, loading: authLoading } = useAuth();
   const params = useParams<{ id: string }>();
   const orderId = Number(params.id);
@@ -21,8 +21,8 @@ export default function OrderDetailPage() {
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !customer) router.replace("/account/login");
-  }, [authLoading, customer, shopSlug, router]);
+    if (!authLoading && !customer) router.replace(`${shopBasePath}/account/login`);
+  }, [authLoading, customer, shopBasePath, router]);
 
   useEffect(() => {
     if (!customer) return;
@@ -57,7 +57,7 @@ export default function OrderDetailPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href="/account/orders" className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href={`${shopBasePath}/account/orders`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
         ← Back to order history
       </Link>
       <h1 className="text-2xl font-semibold mb-4">Order #{orderId}</h1>
@@ -153,7 +153,7 @@ export default function OrderDetailPage() {
           <div className="flex items-center gap-4">
             {order.trackingToken && (
               <Link
-                href={`/orders/track?token=${order.trackingToken}`}
+                href={`${shopBasePath}/orders/track?token=${order.trackingToken}`}
                 className="text-sm text-accent hover:underline"
               >
                 Track this order

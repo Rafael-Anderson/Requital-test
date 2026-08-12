@@ -6,7 +6,7 @@ import SearchBar from "./SearchBar";
 afterEach(cleanup);
 
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shopSlug: "test-shop", shop: { currency: "AED" } }),
+  useShop: () => ({ shopSlug: "test-shop", shopBasePath: "", shop: { currency: "AED" } }),
 }));
 
 vi.mock("@/lib/api", () => ({

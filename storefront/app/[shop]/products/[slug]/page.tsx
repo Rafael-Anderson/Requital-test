@@ -1,5 +1,7 @@
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getProduct } from "@/lib/api";
+import { isLocalHost } from "@/lib/is-local-host";
 import ProductDetailClient from "./ProductDetailClient";
 
 // Next.js doesn't allow two dynamic segments at the same route depth
@@ -23,7 +25,16 @@ export default async function ProductRoute({
     } catch {
       notFound();
     }
-    redirect(`/products/${canonicalSlug}`);
+    // Mirrors proxy.ts's own isLocalHost check: on a hostname-resolved
+    // request (subdomain/custom domain) the rewrite already stripped the
+    // /<shop> prefix from the browser's own URL, so the redirect must stay
+    // unprefixed too — but proxy.ts leaves local/CI requests (bare
+    // localhost, matching e2e/urls.ts's STOREFRONT_URL) on the original
+    // /<shop>/... path, where an unprefixed redirect would 404.
+    const host = (await headers()).get("host") ?? "";
+    const hostname = host.split(":")[0];
+    const prefix = isLocalHost(hostname) ? `/${shopSlug}` : "";
+    redirect(`${prefix}/products/${canonicalSlug}`);
   }
 
   return <ProductDetailClient />;

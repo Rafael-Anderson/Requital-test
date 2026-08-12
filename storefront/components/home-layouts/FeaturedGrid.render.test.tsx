@@ -5,11 +5,11 @@ import type { Collection } from "@/lib/types";
 
 afterEach(cleanup);
 
-// FeaturedGrid always renders ClassicHero above the tile grid, which calls
-// useShop() unconditionally — mocked here since this suite is only
-// exercising the tile-count/grid-structure logic below it.
+// FeaturedGrid and ClassicHero both call useShop() unconditionally — mocked
+// here since this suite is only exercising the tile-count/grid-structure
+// logic below it.
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shop: null }),
+  useShop: () => ({ shop: null, shopBasePath: "" }),
 }));
 
 function collection(id: number): Collection {

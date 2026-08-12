@@ -92,7 +92,7 @@ function ContactList({ shop, center = false }: { shop: Shop; center?: boolean })
 // links/social+contact side by side) and "centered" (a single simplified
 // stacked column) — each independently sized via footerDensity.
 export default function Footer() {
-  const { shop } = useShop();
+  const { shop, shopBasePath } = useShop();
   if (!shop) return null;
 
   const socialEntries = Object.entries(shop.socialLinks ?? {}).filter(([, url]) => !!url) as [string, string][];
@@ -143,7 +143,7 @@ export default function Footer() {
             <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm opacity-80">
               {usefulLinks.map((type) => (
                 <li key={type}>
-                  <Link href={`/policies/${POLICY_URL_SLUGS[type]}`} className="hover:underline hover:opacity-100 transition-opacity">
+                  <Link href={`${shopBasePath}/policies/${POLICY_URL_SLUGS[type]}`} className="hover:underline hover:opacity-100 transition-opacity">
                     {POLICY_PAGE_LABELS[type]}
                   </Link>
                 </li>
@@ -191,7 +191,7 @@ export default function Footer() {
             <ul className="space-y-2 text-sm opacity-80">
               {usefulLinks.map((type) => (
                 <li key={type}>
-                  <Link href={`/policies/${POLICY_URL_SLUGS[type]}`} className="hover:underline hover:opacity-100 transition-opacity">
+                  <Link href={`${shopBasePath}/policies/${POLICY_URL_SLUGS[type]}`} className="hover:underline hover:opacity-100 transition-opacity">
                     {POLICY_PAGE_LABELS[type]}
                   </Link>
                 </li>

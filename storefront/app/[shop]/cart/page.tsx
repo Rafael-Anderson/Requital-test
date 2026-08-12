@@ -14,7 +14,7 @@ import { storeButtonClassName } from "@/lib/button-style";
 // whether this page exists (a merchant can still link to /cart directly,
 // and this is where the drawer's own "View full cart" goes).
 export default function CartPage() {
-  const { shopSlug, shop } = useShop();
+  const { shopSlug, shopBasePath, shop } = useShop();
   const { items, subtotal } = useCart();
   const [discountAmount, setDiscountAmount] = useState<number | null>(null);
   const total = Math.max(0, subtotal - (discountAmount ?? 0));
@@ -24,7 +24,7 @@ export default function CartPage() {
       <StorefrontPageShell variant="medium">
         <h1 className="text-2xl font-semibold mb-4">Your cart</h1>
         <p className="text-zinc-500">Your cart is empty.</p>
-        <Link href="/" className="text-accent hover:underline mt-2 inline-block">
+        <Link href={shopBasePath || "/"} className="text-accent hover:underline mt-2 inline-block">
           Continue shopping
         </Link>
       </StorefrontPageShell>
@@ -66,7 +66,7 @@ export default function CartPage() {
         </div>
       </div>
       <Link
-        href="/checkout"
+        href={`${shopBasePath}/checkout`}
         className={`mt-4 block w-full text-center h-11 leading-[44px] font-medium ${storeButtonClassName(shop)}`}
       >
         Proceed to checkout

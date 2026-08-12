@@ -20,7 +20,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 function RecoverContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { outlets, loading: shopLoading } = useShop();
+  const { shopBasePath, outlets, loading: shopLoading } = useShop();
   const { addItem } = useCart();
   const [status, setStatus] = useState<"loading" | "error">("loading");
 
@@ -53,7 +53,7 @@ function RecoverContent() {
             resolvedOutletId,
           );
         }
-        router.replace("/cart");
+        router.replace(`${shopBasePath}/cart`);
       })
       .catch(() => setStatus("error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,7 +67,7 @@ function RecoverContent() {
           <p className="text-sm text-zinc-500 mb-4">
             That cart has already been checked out, or this recovery link is no longer valid.
           </p>
-          <Link href="/" className="text-accent hover:underline">
+          <Link href={shopBasePath || "/"} className="text-accent hover:underline">
             Continue shopping
           </Link>
         </div>
