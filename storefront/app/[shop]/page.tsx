@@ -14,6 +14,7 @@ import GridFirstHero from "@/components/home-layouts/GridFirstHero";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
 import StorefrontErrorState from "@/components/StorefrontErrorState";
+import SectionRenderer from "@/components/theme-sections/SectionRenderer";
 
 // The Home tab's hero, always shown — collection browsing lives on its own
 // real /collections/[slug] pages now, so there's no "filtered view" here to
@@ -50,7 +51,7 @@ function HomepageTop({
 }
 
 function HomeContent() {
-  const { shopSlug, shop, outlets, loading: shopLoading, error: shopError } = useShop();
+  const { shopSlug, shop, outlets, loading: shopLoading, error: shopError, themeConfig } = useShop();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
 
@@ -67,11 +68,14 @@ function HomeContent() {
   // fetched here only for the hero components that want a product-thumbnail
   // fallback (SlideshowHero) or the featured_grid tile set (FeaturedGrid).
   useEffect(() => {
-    if (shopLoading) return;
+    // Unused by a themed shop (SectionRenderer's own sections fetch what
+    // they need) — skipped so a shop that published a new-system theme
+    // doesn't pay for a legacy fetch nothing reads.
+    if (shopLoading || themeConfig) return;
     listProducts(shopSlug, defaultOutletId)
       .then(setProducts)
       .catch(() => setProducts([]));
-  }, [shopSlug, defaultOutletId, shopLoading]);
+  }, [shopSlug, defaultOutletId, shopLoading, themeConfig]);
 
   // Featured Grid needs collections for its own tile set; 'collections'
   // Home tab mode needs them for CollectionShowcase, which fetches its own
@@ -79,14 +83,31 @@ function HomeContent() {
   // pattern used throughout this app) — this effect only covers Featured
   // Grid's need.
   useEffect(() => {
-    if (shopLoading || layout !== "featured_grid") return;
+    if (shopLoading || themeConfig || layout !== "featured_grid") return;
     listCollections(shopSlug)
       .then(setCollections)
       .catch(() => setCollections([]));
-  }, [shopSlug, layout, shopLoading]);
+  }, [shopSlug, layout, shopLoading, themeConfig]);
 
   if (shopError) return <StorefrontErrorState variant="error" />;
-  if (shopLoading || products === null) return <StorefrontLoadingSkeleton />;
+  if (shopLoading) return <StorefrontLoadingSkeleton />;
+
+  // New visual theme builder's homepage body, checked first — supersedes
+  // the entire legacy homepage (hero + TrustStrip + CollectionShowcase/
+  // TemplateSections) when the shop has a published new-system theme.
+  // Header/Footer are handled independently by TopBar.tsx/Footer.tsx, not
+  // here. Falls through to the unchanged legacy dispatch below when
+  // themeConfig is null.
+  if (themeConfig) {
+    return (
+      <>
+        <SectionRenderer sections={themeConfig.sections} />
+        <div id="shop" />
+      </>
+    );
+  }
+
+  if (products === null) return <StorefrontLoadingSkeleton />;
 
   // Only "classic" and "slideshow" are a genuine image/banner hero — those
   // render full-bleed, edge to edge, outside the page's own width cap (see

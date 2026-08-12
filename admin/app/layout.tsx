@@ -4,10 +4,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { OutletFilterProvider } from "@/lib/outlet-context";
 import RequireAuth from "@/components/RequireAuth";
-import TopBar from "@/components/TopBar";
-import EmailVerificationBanner from "@/components/EmailVerificationBanner";
-import NewOrderBanner from "@/components/NewOrderBanner";
-import CommandPalette from "@/components/CommandPalette";
+import AppChrome from "@/components/AppChrome";
 import NavigationProgress from "@/components/ui/NavigationProgress";
 import "./globals.css";
 
@@ -64,11 +61,7 @@ export default function RootLayout({
           <AuthProvider>
             <OutletFilterProvider>
               <RequireAuth>
-                <TopBar />
-                <EmailVerificationBanner />
-                <NewOrderBanner />
-                <CommandPalette />
-                <main className="p-6">{children}</main>
+                <AppChrome>{children}</AppChrome>
               </RequireAuth>
             </OutletFilterProvider>
           </AuthProvider>

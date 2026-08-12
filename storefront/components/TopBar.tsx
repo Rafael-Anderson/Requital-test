@@ -8,6 +8,7 @@ import { iconStyleProps } from "@/lib/icon-style";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { useShop } from "@/lib/shop-context";
 import SearchBar from "@/components/SearchBar";
+import ThemeDrivenHeader from "@/components/theme-sections/ThemeDrivenHeader";
 import type { Customer, Density, Shop } from "@/lib/types";
 
 // Height/padding only — independent of which of the 3 layout variants below
@@ -193,6 +194,22 @@ function TopBarMinimal(props: TopBarProps) {
 // (see ShopLayoutClient) regardless of cartLayout — CartIconButton always
 // calls useCartDrawer(), never conditionally.
 export default function TopBar(props: TopBarProps) {
+  // New visual theme builder's global header chrome, checked first — falls
+  // through to the existing legacy dispatch unchanged when the shop has no
+  // published new-system theme (themeConfig is null). See shop-context.tsx.
+  const { themeConfig } = useShop();
+  if (themeConfig?.header) {
+    return (
+      <ThemeDrivenHeader
+        shopSlug={props.shopSlug}
+        shop={props.shop}
+        customer={props.customer}
+        count={props.count}
+        config={themeConfig.header}
+      />
+    );
+  }
+
   const layout = props.shop?.topBarLayout ?? "logo_left";
   if (layout === "logo_center") return <TopBarLogoCenter {...props} />;
   if (layout === "minimal") return <TopBarMinimal {...props} />;

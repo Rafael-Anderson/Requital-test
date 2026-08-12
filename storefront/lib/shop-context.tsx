@@ -1,12 +1,14 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { getShop, listOutlets } from "./api";
+import { usePathname, useSearchParams } from "next/navigation";
+import { getShop, getThemeConfig, listOutlets } from "./api";
 import { getReadableTextColor } from "./color-contrast";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
 import { captureReferralFromUrl } from "./referral";
+import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import type { Outlet, Shop } from "./types";
+import type { ThemeConfig } from "./theme-config-types";
 
 interface ShopContextValue {
   shopSlug: string;
@@ -27,6 +29,17 @@ interface ShopContextValue {
   outlets: Outlet[];
   loading: boolean;
   error: string | null;
+  // New visual theme builder's published (or, in ?preview=true mode, draft)
+  // config — null for a shop that's never published a new-system theme, in
+  // which case every consumer falls back to its existing legacy dispatch
+  // (shop.homepageLayout/topBarLayout/footerLayout/etc.). See
+  // app/[shop]/page.tsx, TopBar.tsx, Footer.tsx.
+  themeConfig: ThemeConfig | null;
+  // True only when this page was loaded as the admin builder's live
+  // preview iframe (?preview=true). Gates the postMessage listener below
+  // and SectionWrapper's click-to-select reverse channel — never true for
+  // a real shopper's storefront visit.
+  previewMode: boolean;
 }
 
 const ShopContext = createContext<ShopContextValue | null>(null);
@@ -109,13 +122,71 @@ function applyTheme(shop: Shop | null) {
   }
 }
 
+const RADIUS_PX: Record<NonNullable<ThemeConfig["globalSettings"]["borderRadius"]>, string> = {
+  sharp: "0px",
+  soft: "8px",
+  round: "9999px",
+};
+
+// next/font/google requires statically-known font imports at build time —
+// it cannot load a font chosen at runtime from DB-stored config (that's how
+// the legacy shop.fontFamily/--font-sans mechanism works, and why it's
+// limited to a curated 4-font list). A dynamic <link> tag is the standard
+// workaround, at the cost of next/font's self-hosting/layout-shift-avoidance
+// benefits — the accepted trade-off for arbitrary Google Fonts selection.
+// Module-level Set (not component state) so the same family is never
+// injected twice across re-renders or shop navigations in one tab session.
+const loadedGoogleFonts = new Set<string>();
+function loadGoogleFont(family: string | undefined) {
+  if (!family || loadedGoogleFonts.has(family)) return;
+  loadedGoogleFonts.add(family);
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;500;600;700&display=swap`;
+  document.head.appendChild(link);
+}
+
+// New visual theme builder's global settings — applied as a second, smaller
+// layer on top of applyTheme() above (not folded into resolveThemeCssVars,
+// which stays a pure function with existing unit test coverage keyed on
+// `Shop` alone) only when a shop has a published/previewed theme. Section
+// components read --theme-radius/--theme-body-font/--theme-heading-font
+// directly; --color-accent/--color-accent-hover are the same vars every
+// existing themed element already reads.
+function applyThemeConfigOverrides(config: ThemeConfig | null) {
+  const root = document.documentElement;
+  const g = config?.globalSettings;
+  if (!g) return;
+  if (g.primaryColor && HEX_COLOR.test(g.primaryColor)) {
+    root.style.setProperty("--color-accent", g.primaryColor);
+    root.style.setProperty("--color-accent-foreground", getReadableTextColor(g.primaryColor));
+  }
+  if (g.secondaryColor && HEX_COLOR.test(g.secondaryColor)) {
+    root.style.setProperty("--color-accent-hover", g.secondaryColor);
+  }
+  root.style.setProperty("--theme-radius", RADIUS_PX[g.borderRadius ?? "soft"]);
+  if (g.bodyFont) {
+    loadGoogleFont(g.bodyFont);
+    root.style.setProperty("--theme-body-font", `"${g.bodyFont}", sans-serif`);
+  }
+  if (g.headingFont) {
+    loadGoogleFont(g.headingFont);
+    root.style.setProperty("--theme-heading-font", `"${g.headingFont}", sans-serif`);
+  }
+}
+
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const shopBasePath = pathname === `/${shopSlug}` || pathname.startsWith(`/${shopSlug}/`) ? `/${shopSlug}` : "";
   const [shop, setShop] = useState<Shop | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
+
+  const preview = searchParams.get("preview") === "true";
+  const previewThemeId = searchParams.get("themeId");
 
   useEffect(() => {
     // Runs on every page under this shop, not just checkout — a ?ref=<code>
@@ -137,12 +208,53 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
       .finally(() => setLoading(false));
   }, [shopSlug]);
 
+  // Separate fetch from getShop/listOutlets above — a themeConfig fetch
+  // failure (e.g. a stale/invalid preview themeId) shouldn't surface as a
+  // whole-shop error page, it should just fall back to null (legacy
+  // rendering). Re-fires when the preview query params change (the admin
+  // editor's iframe src always carries a fixed themeId per session, but this
+  // still needs to react to a genuine navigation between two preview
+  // sessions or into/out of preview mode). This initial fetch covers a
+  // direct refresh/navigation into the preview iframe; the postMessage
+  // listener below overrides it after that with zero network round-trips,
+  // per the spec's "no saving required to see changes in preview."
+  useEffect(() => {
+    getThemeConfig(shopSlug, {
+      preview,
+      themeId: previewThemeId ? Number(previewThemeId) : undefined,
+    })
+      .then(setThemeConfig)
+      .catch(() => setThemeConfig(null));
+  }, [shopSlug, preview, previewThemeId]);
+
+  // Live preview sync — only registered in preview mode, never for a real
+  // shopper visit. Validates event.origin against the known admin
+  // origin(s) before accepting a config update; an untrusted origin (or a
+  // malformed payload) is silently ignored, not applied.
+  useEffect(() => {
+    if (!preview) return;
+    function handleMessage(event: MessageEvent) {
+      if (!isTrustedAdminOrigin(event.origin)) return;
+      if (event.data?.type === "theme-config-update" && event.data.config) {
+        setThemeConfig(event.data.config as ThemeConfig);
+      }
+    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [preview]);
+
   useEffect(() => {
     applyTheme(shop);
   }, [shop]);
 
+  useEffect(() => {
+    applyThemeConfigOverrides(themeConfig);
+  }, [themeConfig]);
+
   return (
-    <ShopContext.Provider value={{ shopSlug, shopBasePath, shop, outlets, loading, error }}>
+    <ShopContext.Provider
+      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview }}
+    >
       {children}
     </ShopContext.Provider>
   );

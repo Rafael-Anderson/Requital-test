@@ -129,8 +129,13 @@ body {
      whole per-shop font picker has been rendering as plain Arial for every
      shop, regardless of what's selected in Theme > Appearance. This restores
      the mechanism to actually do what it was already built to do — var(--font-sans)
-     first, same Arial/Helvetica as the final fallback if that's ever unset. */
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+     first, same Arial/Helvetica as the final fallback if that's ever unset.
+     --theme-body-font (new visual theme builder, Phase 5) takes priority
+     over --font-sans when set — only a shop with a published/previewed
+     new-system theme ever sets it, via a dynamic Google Fonts <link> (see
+     shop-context.tsx's loadGoogleFont), so this is a no-op for every shop
+     still on the legacy curated-font picker. */
+  font-family: var(--theme-body-font, var(--font-sans)), Arial, Helvetica, sans-serif;
 }
 
 /* Announcement bar's scrolling/marquee mode — pure CSS animation (translateX
@@ -159,6 +164,97 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .marquee-track {
+    animation: none;
+  }
+}
+
+/* New visual theme builder — per-section scroll-triggered entrance
+   animations (Phase 5). Same pattern as marquee-track above: hand-written
+   keyframes + explicit classes (NOT animate-* prefixed, same Tailwind v4
+   --animate-* token collision this file already documents), applied by
+   theme-sections/ScrollAnimatedWrapper.tsx via IntersectionObserver. The
+   base theme-anim-* class sets the "not yet visible" starting state
+   (element still occupies layout space, just invisible/offset); adding
+   theme-anim-visible triggers the animation into its final state — this
+   two-class split (rather than putting the animation directly on the base
+   class) avoids a flash of the final state before JS ever runs. */
+.theme-anim-fade-in {
+  opacity: 0;
+}
+.theme-anim-fade-in.theme-anim-visible {
+  animation: theme-fade-in 0.6s ease-out forwards;
+}
+
+.theme-anim-slide-up {
+  opacity: 0;
+  transform: translateY(24px);
+}
+.theme-anim-slide-up.theme-anim-visible {
+  animation: theme-slide-up 0.6s ease-out forwards;
+}
+
+.theme-anim-slide-left {
+  opacity: 0;
+  transform: translateX(24px);
+}
+.theme-anim-slide-left.theme-anim-visible {
+  animation: theme-slide-left 0.6s ease-out forwards;
+}
+
+.theme-anim-slide-right {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+.theme-anim-slide-right.theme-anim-visible {
+  animation: theme-slide-right 0.6s ease-out forwards;
+}
+
+@keyframes theme-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes theme-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes theme-slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes theme-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-anim-fade-in,
+  .theme-anim-slide-up,
+  .theme-anim-slide-left,
+  .theme-anim-slide-right {
+    opacity: 1;
+    transform: none;
     animation: none;
   }
 }

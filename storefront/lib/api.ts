@@ -25,6 +25,7 @@ import type {
   ValidateDiscountResult,
   ValidateGiftCardResult,
 } from "./types";
+import type { ThemeConfig } from "./theme-config-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -133,6 +134,22 @@ export async function getHomepageTemplates(shopSlug: string, outletId?: number) 
 // Storefront top-bar "Menu" — direct Collection links + Dropdowns.
 export function getMenu(shopSlug: string) {
   return get<MenuItem[]>(`/public/${shopSlug}/menu`);
+}
+
+// New visual theme builder's storefront-facing config read. Returns null
+// when the shop has no published new-system theme — callers fall back to
+// the legacy homepageLayout/topBarLayout/etc. dispatch in that case (see
+// shop-context.tsx's own ThemeConfig fetch, and app/[shop]/page.tsx,
+// TopBar.tsx, Footer.tsx).
+export function getThemeConfig(
+  shopSlug: string,
+  opts: { preview: boolean; themeId?: number },
+) {
+  const params = new URLSearchParams();
+  if (opts.preview) params.set("preview", "true");
+  if (opts.themeId !== undefined) params.set("themeId", String(opts.themeId));
+  const qs = params.toString();
+  return get<ThemeConfig | null>(`/public/${shopSlug}/theme-config${qs ? `?${qs}` : ""}`);
 }
 
 export function getBioLinks(shopSlug: string) {

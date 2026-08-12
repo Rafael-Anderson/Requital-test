@@ -3,6 +3,7 @@ import { CreditCard, Banknote, Mail, Phone } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
+import ThemeDrivenFooter from "@/components/theme-sections/ThemeDrivenFooter";
 import { POLICY_PAGE_LABELS, POLICY_PAGE_TYPES, type Density, type Shop } from "@/lib/types";
 
 // URL segment -> PolicyPageType — lowercase/hyphenated in the URL, the
@@ -92,8 +93,15 @@ function ContactList({ shop, center = false }: { shop: Shop; center?: boolean })
 // links/social+contact side by side) and "centered" (a single simplified
 // stacked column) — each independently sized via footerDensity.
 export default function Footer() {
-  const { shop, shopBasePath } = useShop();
+  const { shop, shopBasePath, themeConfig } = useShop();
   if (!shop) return null;
+
+  // New visual theme builder's global footer chrome, checked first — falls
+  // through to the existing legacy columns/centered dispatch unchanged when
+  // themeConfig is null.
+  if (themeConfig?.footer) {
+    return <ThemeDrivenFooter shop={shop} config={themeConfig.footer} />;
+  }
 
   const socialEntries = Object.entries(shop.socialLinks ?? {}).filter(([, url]) => !!url) as [string, string][];
   const availablePolicyTypes = new Set(shop.policyPageTypes);

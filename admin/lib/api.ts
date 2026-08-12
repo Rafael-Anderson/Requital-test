@@ -76,6 +76,9 @@ import type {
   ShopDomainConfig,
   StockMovementType,
   ThemeSettings,
+  Theme,
+  ThemeListItem,
+  ThemeConfig,
   TopProduct,
   UserRole,
 } from "./types";
@@ -567,6 +570,36 @@ export function uploadThemeImage(file: File) {
   const formData = new FormData();
   formData.append("file", file);
   return apiFetch<{ url: string }>("/theme/upload", { method: "POST", body: formData });
+}
+
+// --- New visual theme builder (deliberately separate `/themes` endpoints —
+// see backend/src/themes/themes.controller.ts's own header comment for why
+// this doesn't reuse the legacy `/theme` singular routes above). ---
+
+export function listThemes() {
+  return apiFetch<ThemeListItem[]>("/themes");
+}
+
+// Named getThemeBuilder, not getTheme, to avoid clobbering the legacy
+// singular getTheme() above — same theme/themes naming split as the backend.
+export function getThemeBuilder(id: number) {
+  return apiFetch<Theme>(`/themes/${id}`);
+}
+
+export function createTheme(data: { name: string; duplicateFromId?: number }) {
+  return apiFetch<Theme>("/themes", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateThemeDraft(id: number, data: { name?: string; config?: ThemeConfig }) {
+  return apiFetch<Theme>(`/themes/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function publishTheme(id: number) {
+  return apiFetch<Theme>(`/themes/${id}/publish`, { method: "POST" });
+}
+
+export function deleteTheme(id: number) {
+  return apiFetch<{ success: boolean }>(`/themes/${id}`, { method: "DELETE" });
 }
 
 // --- Menu (Phase C) — the storefront top bar's merchant-configured nav. ---

@@ -33,6 +33,7 @@ import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { SubmitSurveyDto } from './dto/submit-survey.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
+import { ThemesService } from '../themes/themes.service';
 import {
   POLICY_PAGE_TYPES,
   type PolicyPageType,
@@ -103,7 +104,24 @@ export class PublicService {
     private readonly abandonedCartsService: AbandonedCartsService,
     private readonly giftCardsService: GiftCardsService,
     private readonly policyPagesService: PolicyPagesService,
+    private readonly themesService: ThemesService,
   ) {}
+
+  // New visual theme builder's storefront-facing read. Non-preview responses
+  // are cached (see ThemeConfigCache); preview responses (draft config, live
+  // while the merchant edits) are never cached and require themeId, scoped
+  // to this shop by ThemesService.getPublicConfig itself. Returns null when
+  // the shop has no published new-system theme — the storefront falls back
+  // to its existing legacy homepageLayout/topBarLayout/etc. dispatch in that
+  // case (see app/[shop]/page.tsx, TopBar.tsx, Footer.tsx,
+  // AnnouncementBar.tsx).
+  async getThemeConfig(
+    shopSlug: string,
+    opts: { preview: boolean; themeId?: number },
+  ) {
+    const shop = await this.resolveShop(shopSlug);
+    return this.themesService.getPublicConfig(shop.id, opts);
+  }
 
   async getPolicyPage(shopSlug: string, type: string) {
     const shop = await this.resolveShop(shopSlug);
