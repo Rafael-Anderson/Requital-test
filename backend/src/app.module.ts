@@ -23,6 +23,7 @@ import { CustomersModule } from './customers/customers.module';
 import { ReportsModule } from './reports/reports.module';
 import { ExternalDeliveriesModule } from './external-deliveries/external-deliveries.module';
 import { ThemeModule } from './theme/theme.module';
+import { ThemesModule } from './themes/themes.module';
 import { SeoModule } from './seo/seo.module';
 import { AffiliateModule } from './affiliate/affiliate.module';
 import { BioLinksModule } from './bio-links/bio-links.module';
@@ -88,6 +89,7 @@ import { DomainsModule } from './domains/domains.module';
     ReportsModule,
     ExternalDeliveriesModule,
     ThemeModule,
+    ThemesModule,
     SeoModule,
     AffiliateModule,
     BioLinksModule,

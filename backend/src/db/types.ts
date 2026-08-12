@@ -838,6 +838,23 @@ export interface JobRow {
   completedAt: Date | null;
 }
 
+// New visual theme builder — see prisma/migrations/20260812130000_create_theme_table.
+// `config`/`publishedConfig` are real JSON columns (auto-parsed by
+// DatabaseService), typed `unknown` here and narrowed to `ThemeConfig` at the
+// service boundary, same convention as every other JSON column in this file.
+export interface ThemeRow {
+  id: number;
+  shopId: number;
+  name: string;
+  isPublished: boolean;
+  config: unknown;
+  publishedConfig: unknown | null;
+  publishedAt: Date | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ScheduledjoblockRow {
   name: string;
   lockedUntil: Date | null;

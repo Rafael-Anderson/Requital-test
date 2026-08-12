@@ -73,6 +73,23 @@ export class PublicController {
     return this.publicService.getMenu(shopSlug);
   }
 
+  // New visual theme builder's storefront-facing config read. preview=true
+  // requires themeId and returns that theme's live draft (never cached);
+  // otherwise returns the shop's published theme's config (cached, 60s TTL)
+  // or null if the shop has no published new-system theme yet.
+  @Public()
+  @Get('theme-config')
+  getThemeConfig(
+    @Param('shopSlug') shopSlug: string,
+    @Query('preview') preview?: string,
+    @Query('themeId') themeId?: string,
+  ) {
+    return this.publicService.getThemeConfig(shopSlug, {
+      preview: preview === 'true',
+      themeId: themeId ? Number(themeId) : undefined,
+    });
+  }
+
   @Public()
   @Get('bio-links')
   listBioLinks(@Param('shopSlug') shopSlug: string) {
