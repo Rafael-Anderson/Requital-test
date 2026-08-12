@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
+import { upsert } from '../database/upsert.util';
 import type { TenantContext } from '../common/tenant-context';
 import type { ThemeRow } from '../db/types';
 import { CreateThemeDto } from './dto/create-theme.dto';
@@ -99,11 +100,15 @@ export class ThemesService {
   // Publish is the one-published-theme-per-shop CAS: unpublish whatever was
   // published, then publish this one, inside one transaction — MySQL has no
   // partial-unique-index equivalent to enforce "at most one isPublished=true
-  // row per shopId" declaratively. Also flips shop.homepageLayout to
-  // 'custom' (the value theme/constants.ts already reserves for this
-  // builder) so the storefront's existing homepageLayout dispatch picks up
-  // section-driven rendering as a side effect of this specific action only —
-  // never touched by any other code path.
+  // row per shopId" declaratively. Also flips themesettings.homepageLayout
+  // (NOT a shop column — see theme/theme.service.ts, homepageLayout has
+  // always lived on themesettings) to 'custom' (the value theme/constants.ts
+  // already reserves for this builder) so the storefront's existing
+  // homepageLayout dispatch picks up section-driven rendering as a side
+  // effect of this specific action only — never touched by any other code
+  // path. Upserted, not a plain UPDATE — a shop may not have a themesettings
+  // row yet (see ThemeService.findOne's own "no row yet is a valid state"
+  // comment); every other column falls back to its DB-level default.
   async publish(ctx: TenantContext, id: number) {
     await this.getOwnedTheme(ctx, id);
     await this.db.transaction(async (conn) => {
@@ -116,16 +121,18 @@ export class ThemesService {
          WHERE id = ? AND shopId = ?`,
         [id, ctx.shopId],
       );
-      await conn.query(`UPDATE shop SET homepageLayout = 'custom' WHERE id = ?`, [ctx.shopId]);
+      await upsert(conn, 'themesettings', { shopId: ctx.shopId, homepageLayout: 'custom' }, [
+        'homepageLayout',
+      ]);
     });
     this.cache.invalidate(ctx.shopId);
     return this.getOwnedTheme(ctx, id);
   }
 
   // Soft delete. If the deleted theme was the published one, resets
-  // shop.homepageLayout back to 'classic' and invalidates the cache — a
-  // merchant should never be left with a live storefront pointing at a
-  // deleted theme's now-stale published config.
+  // themesettings.homepageLayout back to 'classic' and invalidates the
+  // cache — a merchant should never be left with a live storefront pointing
+  // at a deleted theme's now-stale published config.
   async remove(ctx: TenantContext, id: number) {
     const theme = await this.getOwnedTheme(ctx, id);
     await this.db.execute(`UPDATE theme SET deletedAt = NOW(3) WHERE id = ? AND shopId = ?`, [
@@ -133,8 +140,8 @@ export class ThemesService {
       ctx.shopId,
     ]);
     if (theme.isPublished) {
-      await this.db.execute(`UPDATE shop SET homepageLayout = 'classic' WHERE id = ?`, [
-        ctx.shopId,
+      await upsert(this.db.pool, 'themesettings', { shopId: ctx.shopId, homepageLayout: 'classic' }, [
+        'homepageLayout',
       ]);
       this.cache.invalidate(ctx.shopId);
     }
