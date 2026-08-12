@@ -7,6 +7,8 @@ import { getCollectionBySlug, resolveImageUrl } from "@/lib/api";
 import type { CollectionDetail } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
+import StorefrontErrorState from "@/components/StorefrontErrorState";
 
 // Collection (taxonomy node) detail — /[shop]/collections/[slug]. Repurposed
 // from the pre-Phase-C curated-list detail that used to live at this same
@@ -27,9 +29,9 @@ export default function CollectionPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Collection not found"));
   }, [shopSlug, params.slug, defaultOutletId, shopLoading]);
 
-  if (shopError) return <p className="text-red-600">{shopError}</p>;
+  if (shopError) return <StorefrontErrorState variant="error" />;
   if (error) return <p className="text-red-600">{error}</p>;
-  if (shopLoading || collection === null) return <p className="text-zinc-500">Loading…</p>;
+  if (shopLoading || collection === null) return <StorefrontLoadingSkeleton />;
 
   const orientation = shop?.productDisplayOrientation ?? "grid";
   const bannerImage = resolveImageUrl(collection.image);

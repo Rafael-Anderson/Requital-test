@@ -12,6 +12,8 @@ import SlideshowHero, { type BannerImageInput } from "@/components/home-layouts/
 import FeaturedGrid from "@/components/home-layouts/FeaturedGrid";
 import GridFirstHero from "@/components/home-layouts/GridFirstHero";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
+import StorefrontErrorState from "@/components/StorefrontErrorState";
 
 // The Home tab's hero, always shown — collection browsing lives on its own
 // real /collections/[slug] pages now, so there's no "filtered view" here to
@@ -83,8 +85,8 @@ function HomeContent() {
       .catch(() => setCollections([]));
   }, [shopSlug, layout, shopLoading]);
 
-  if (shopError) return <p className="text-red-600">{shopError}</p>;
-  if (shopLoading || products === null) return <p className="text-zinc-500">Loading…</p>;
+  if (shopError) return <StorefrontErrorState variant="error" />;
+  if (shopLoading || products === null) return <StorefrontLoadingSkeleton />;
 
   // Only "classic" and "slideshow" are a genuine image/banner hero — those
   // render full-bleed, edge to edge, outside the page's own width cap (see
@@ -129,7 +131,7 @@ function HomeContent() {
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<p className="text-zinc-500">Loading…</p>}>
+    <Suspense fallback={<StorefrontLoadingSkeleton />}>
       <HomeContent />
     </Suspense>
   );
