@@ -848,7 +848,7 @@ export interface ThemeRow {
   name: string;
   isPublished: boolean;
   config: unknown;
-  publishedConfig: unknown | null;
+  publishedConfig: unknown;
   publishedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
