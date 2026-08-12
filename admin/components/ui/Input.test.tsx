@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import Input from "./Input";
 
 // Spot-check for the settings-field tooltip pattern: an optional Info-icon
@@ -12,7 +12,7 @@ describe("Input tooltip", () => {
   });
 
   it("renders an info icon with a Tooltip next to the label when tooltip is set", () => {
-    render(
+    const { container } = render(
       <Input
         label="TRN"
         value=""
@@ -21,6 +21,9 @@ describe("Input tooltip", () => {
       />,
     );
     expect(screen.getByText("TRN")).toBeInTheDocument();
+    // Tooltip.tsx portals and only mounts its content on hover/focus (not
+    // unconditionally in the DOM) — see that component's own tests.
+    fireEvent.mouseEnter(container.querySelector("[aria-describedby]")!);
     expect(screen.getByRole("tooltip")).toHaveTextContent("Tax Registration Number");
   });
 
