@@ -6,6 +6,7 @@ import { getShop, getThemeConfig, listOutlets } from "./api";
 import { getReadableTextColor } from "./color-contrast";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
 import { captureReferralFromUrl } from "./referral";
+import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import type { Outlet, Shop } from "./types";
 import type { ThemeConfig } from "./theme-config-types";
 
@@ -34,6 +35,11 @@ interface ShopContextValue {
   // (shop.homepageLayout/topBarLayout/footerLayout/etc.). See
   // app/[shop]/page.tsx, TopBar.tsx, Footer.tsx.
   themeConfig: ThemeConfig | null;
+  // True only when this page was loaded as the admin builder's live
+  // preview iframe (?preview=true). Gates the postMessage listener below
+  // and SectionWrapper's click-to-select reverse channel — never true for
+  // a real shopper's storefront visit.
+  previewMode: boolean;
 }
 
 const ShopContext = createContext<ShopContextValue | null>(null);
@@ -181,7 +187,10 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   // rendering). Re-fires when the preview query params change (the admin
   // editor's iframe src always carries a fixed themeId per session, but this
   // still needs to react to a genuine navigation between two preview
-  // sessions or into/out of preview mode).
+  // sessions or into/out of preview mode). This initial fetch covers a
+  // direct refresh/navigation into the preview iframe; the postMessage
+  // listener below overrides it after that with zero network round-trips,
+  // per the spec's "no saving required to see changes in preview."
   useEffect(() => {
     getThemeConfig(shopSlug, {
       preview,
@@ -190,6 +199,22 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
       .then(setThemeConfig)
       .catch(() => setThemeConfig(null));
   }, [shopSlug, preview, previewThemeId]);
+
+  // Live preview sync — only registered in preview mode, never for a real
+  // shopper visit. Validates event.origin against the known admin
+  // origin(s) before accepting a config update; an untrusted origin (or a
+  // malformed payload) is silently ignored, not applied.
+  useEffect(() => {
+    if (!preview) return;
+    function handleMessage(event: MessageEvent) {
+      if (!isTrustedAdminOrigin(event.origin)) return;
+      if (event.data?.type === "theme-config-update" && event.data.config) {
+        setThemeConfig(event.data.config as ThemeConfig);
+      }
+    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [preview]);
 
   useEffect(() => {
     applyTheme(shop);
@@ -200,7 +225,9 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   }, [themeConfig]);
 
   return (
-    <ShopContext.Provider value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig }}>
+    <ShopContext.Provider
+      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview }}
+    >
       {children}
     </ShopContext.Provider>
   );

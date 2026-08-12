@@ -32,7 +32,7 @@ export default function SectionRenderer({ sections }: { sections: ThemeSection[]
       {visible.map((section) => {
         const Component = SECTION_COMPONENTS[section.type];
         return (
-          <SectionWrapper key={section.id} settings={section.settings}>
+          <SectionWrapper key={section.id} sectionId={section.id} settings={section.settings}>
             <Component settings={section.settings} />
           </SectionWrapper>
         );
