@@ -6,6 +6,7 @@ import { bioLinkClickUrl, getBioLinks, getBioPageConfig, resolveImageUrl } from 
 import { resolveBioPageDisplay } from "@/lib/bio-page";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
 import type { BioLink, BioPageConfig } from "@/lib/types";
+import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
 
 const EMPTY_CONFIG: BioPageConfig = {
   logoUrl: null,
@@ -37,7 +38,7 @@ export default function BioPage() {
   }, [shopSlug, shopLoading]);
 
   if (shopLoading || links === null || bioPageConfig === null || !shop) {
-    return <p className="text-zinc-500 text-center">Loading…</p>;
+    return <StorefrontLoadingSkeleton />;
   }
 
   const socialLinks = links.filter((l) => l.type === "SOCIAL_ICON");
