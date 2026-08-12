@@ -19,4 +19,21 @@ export class DomainsController {
     }
     return { status: 'ok' };
   }
+
+  // Backs storefront/middleware.ts's subdomain-aware routing — resolves the
+  // real Host header (a {subdomain}.requital.io wildcard host or a
+  // connected custom domain) to the shop's actual subdomain, which is what
+  // the storefront app's own /[shop]/... route tree is keyed on internally.
+  // Unauthenticated for the same reason as verify() above: the storefront
+  // server itself calls this on every request, before any user session
+  // exists.
+  @Public()
+  @Get('resolve')
+  async resolve(@Query('host') host?: string) {
+    const subdomain = host ? await this.domainsService.resolveSubdomain(host) : null;
+    if (!subdomain) {
+      throw new NotFoundException();
+    }
+    return { subdomain };
+  }
 }

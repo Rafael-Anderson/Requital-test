@@ -241,4 +241,40 @@ describe('Shop domain configuration (e2e)', () => {
       .query({ domain })
       .expect(404);
   });
+
+  it('GET /domains/resolve is public and returns the real subdomain for a {subdomain}.requital.io host', async () => {
+    const shop = await setupShop('domain-resolve-sub');
+    const res = await request(app.getHttpServer())
+      .get('/domains/resolve')
+      .query({ host: `${shop.subdomain}.requital.io` })
+      .expect(200);
+    expect(body<{ subdomain: string }>(res).subdomain).toBe(shop.subdomain);
+  });
+
+  it('GET /domains/resolve returns the real subdomain (not the custom domain itself) for a connected custom domain', async () => {
+    const shop = await setupShop('domain-resolve-custom');
+    const domain = `shop-${runId}-resolve.example.com`;
+    await request(app.getHttpServer())
+      .patch('/shop/domain')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({ type: 'custom', customDomain: domain })
+      .expect(200);
+
+    const res = await request(app.getHttpServer())
+      .get('/domains/resolve')
+      .query({ host: domain })
+      .expect(200);
+    expect(body<{ subdomain: string }>(res).subdomain).toBe(shop.subdomain);
+  });
+
+  it('GET /domains/resolve returns 404 for a host that matches no shop', async () => {
+    await request(app.getHttpServer())
+      .get('/domains/resolve')
+      .query({ host: `never-claimed-${runId}.example.com` })
+      .expect(404);
+  });
+
+  it('GET /domains/resolve returns 404 when no host query param is given', async () => {
+    await request(app.getHttpServer()).get('/domains/resolve').expect(404);
+  });
 });

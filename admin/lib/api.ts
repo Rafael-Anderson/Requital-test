@@ -85,12 +85,33 @@ import type {
 // not just for this file's own fetch calls.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 // Public storefront origin — mirrors backend PublicService's own
-// STOREFRONT_URL fallback (http://localhost:3002) so admin's "View store"
-// links point at the same place the backend already builds order/payment
-// links against.
+// STOREFRONT_URL fallback (http://localhost:3002) so admin's internal
+// storefront navigation (order/payment links, none of which are exposed to
+// the merchant as "your store's address") points at the same place the
+// backend already builds those against. NOT used by storefrontUrlFor below —
+// see its own comment for why that one resolves differently.
 export const STOREFRONT_URL = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://localhost:3002";
-export function storefrontUrlFor(shop: { subdomain: string }) {
-  return `${STOREFRONT_URL}/${shop.subdomain}`;
+// Mirrors backend ShopService's own STOREFRONT_ROOT_DOMAIN fallback
+// ('requital.io') — the domain a shop's own subdomain hangs off of.
+const STOREFRONT_ROOT_DOMAIN = process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN ?? "requital.io";
+
+// The merchant-facing "your store's public address" — shown on Business
+// Information's "Your store is live at", the outlet QR code, and TopBar's
+// "View store" link. Mirrors ShopService.getDomainConfig's own
+// storefrontUrl computation exactly (see that method's comment): a shop on
+// a connected custom domain resolves to it directly, everyone else resolves
+// to their own {subdomain}.requital.io — never the old bare-path
+// {STOREFRONT_URL}/{subdomain} shape, which stopped being this shop's real
+// public address once per-shop domains shipped.
+export function storefrontUrlFor(shop: {
+  subdomain: string;
+  domainType: "subdomain" | "custom";
+  customDomain: string | null;
+}) {
+  if (shop.domainType === "custom" && shop.customDomain) {
+    return `https://${shop.customDomain}`;
+  }
+  return `https://${shop.subdomain}.${STOREFRONT_ROOT_DOMAIN}`;
 }
 const ACCESS_TOKEN_KEY = "requital_admin_access_token";
 const REFRESH_TOKEN_KEY = "requital_admin_refresh_token";
