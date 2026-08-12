@@ -14,11 +14,18 @@ import RichTextSettings from "./settings/RichTextSettings";
 import ImageTextSettings from "./settings/ImageTextSettings";
 import NewsletterSettings from "./settings/NewsletterSettings";
 import AnnouncementBarSettings from "./settings/AnnouncementBarSettings";
-import { SECTION_TYPE_LABELS, type ThemeSectionType } from "@/lib/types";
+import { SECTION_TYPE_LABELS, type ThemeElement, type ThemeSectionType } from "@/lib/types";
 
 type SectionSettingsProps = {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
+  // Only HeroSettings actually renders an ElementDragZone with these — the
+  // other 7 section types simply don't declare them in their own props
+  // (optional here so they don't have to). Shared on the type so
+  // SettingsPanel's dispatch below stays one uniform call shape rather than
+  // special-casing Hero outside the Record lookup.
+  elements?: ThemeElement[];
+  onUpdateElements?: (elements: ThemeElement[]) => void;
 };
 
 const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<SectionSettingsProps>> = {
@@ -51,6 +58,8 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
         <HeaderSettings
           settings={config.header.settings}
           onUpdate={(key, value) => editor.updateHeaderSetting(key, value)}
+          elements={config.header.elements ?? []}
+          onUpdateElements={editor.updateHeaderElements}
         />
       </div>
     );
@@ -77,6 +86,8 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
         <SettingsComponent
           settings={section.settings}
           onUpdate={(key, value) => editor.updateSectionSetting(section.id, key, value)}
+          elements={section.elements ?? []}
+          onUpdateElements={(els) => editor.updateSectionElements(section.id, els)}
         />
       </div>
     );

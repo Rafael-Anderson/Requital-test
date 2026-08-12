@@ -161,6 +161,27 @@ export function useThemeEditor(themeId: number) {
     }));
   }
 
+  // Whole-array replace, not a single-element update like
+  // updateElementPosition below — ElementDragZone's consumers (HeaderSettings/
+  // FooterSettings/HeroSettings) always compute the full next elements array
+  // themselves (starting from a hardcoded default set when the theme has
+  // none yet), which naturally handles "seed real elements on the first
+  // drag" without a separate seeding action.
+  function updateHeaderElements(elements: ThemeElement[]) {
+    updateConfig((prev) => ({ ...prev, header: { ...prev.header, elements } }));
+  }
+
+  function updateFooterElements(elements: ThemeElement[]) {
+    updateConfig((prev) => ({ ...prev, footer: { ...prev.footer, elements } }));
+  }
+
+  function updateSectionElements(sectionId: string, elements: ThemeElement[]) {
+    updateConfig((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) => (s.id === sectionId ? { ...s, elements } : s)),
+    }));
+  }
+
   function addSection(type: ThemeSectionType) {
     const newSection: ThemeSection = {
       id: generateSectionId(type),
@@ -294,6 +315,9 @@ export function useThemeEditor(themeId: number) {
     updateGlobalSetting,
     updateHeaderSetting,
     updateFooterSetting,
+    updateHeaderElements,
+    updateFooterElements,
+    updateSectionElements,
     addSection,
     removeSection,
     toggleSectionVisibility,
