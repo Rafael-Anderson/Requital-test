@@ -28,6 +28,7 @@ interface EmailJobPayload {
   to: string;
   subject: string;
   bodyText: string;
+  html?: string;
 }
 
 function body<T>(res: Response): T {
@@ -238,6 +239,12 @@ describe('Post-purchase survey (e2e)', () => {
     expect(payload.to).toBe(email);
     expect(payload.subject).toContain('How was your order');
     expect(payload.bodyText).toContain(`#${order.id}`);
+    // Structural markers the redesigned HTML email template carries — the
+    // teal brand header/CTA button and the divider+copyright footer.
+    expect(payload.html).toBeDefined();
+    expect(payload.html).toContain('#0d9488');
+    expect(payload.html).toContain('Leave feedback');
+    expect(payload.html).toContain('&copy; 2026 Requital');
   });
 
   it('does NOT create a survey row when customerSurveyEnabled is off', async () => {

@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { JobsService } from '../jobs/jobs.service';
 import { SchedulerService } from '../jobs/scheduler.service';
 import { buildVariantLabel } from './variant-generator';
+import { escapeHtml } from '../common/email';
 
 interface LowStockLine {
   label: string;
@@ -107,6 +108,26 @@ export class LowStockDigestService {
           `- ${l.label} @ ${l.outletName}: ${l.stockQuantity} left (threshold ${l.lowStockThreshold})`,
       ),
     ].join('\n');
+    const lineRows = lines
+      .map(
+        (l) =>
+          `<tr><td style="padding:6px 0;font-size:14px;color:#111111;">${escapeHtml(l.label)} @ ${escapeHtml(l.outletName)}</td><td style="padding:6px 0;font-size:14px;color:#111111;text-align:right;">${l.stockQuantity} left (threshold ${l.lowStockThreshold})</td></tr>`,
+      )
+      .join('');
+    const digestHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">${lines.length} item${lines.length === 1 ? ' is' : 's are'} at or below ${lines.length === 1 ? 'its' : 'their'} reorder threshold:</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e5e5;border-bottom:1px solid #e5e5e5;">${lineRows}</table>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by ${escapeHtml(shopName)} via Requital.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
     await this.jobsService.enqueue(
       shopId,
       'send_email',
@@ -114,6 +135,7 @@ export class LowStockDigestService {
         to: recipient,
         subject: `${shopName}: ${lines.length} low-stock item${lines.length === 1 ? '' : 's'}`,
         bodyText,
+        html: digestHtml,
         fromName: shopName,
       },
       `low-stock-digest-email:${shopId}:${startOfToday.toISOString().slice(0, 10)}`,

@@ -7,6 +7,7 @@ import { DatabaseService } from '../database/database.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { NotifysubscriptionRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
+import { escapeHtml } from '../common/email';
 import { SubscribeDto } from './dto/subscribe.dto';
 
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
@@ -125,20 +126,39 @@ export class NotifySubscriptionsService {
       await Promise.allSettled(
         chunk.map(async (sub) => {
           const unsubscribeUrl = `${STOREFRONT_URL}/${product.shopSubdomain as string}/unsubscribe-notify?email=${encodeURIComponent(sub.email)}&productId=${productId}`;
+          const productName = product.name as string;
+          const shopName = product.shopName as string;
+          const backInStockHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">Good news — ${escapeHtml(productName)} is back in stock at ${escapeHtml(shopName)}.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${productUrl}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">View product</a></td></tr></table>
+<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
+<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${productUrl}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by ${escapeHtml(shopName)} via Requital. Don't want these emails? <a href="${unsubscribeUrl}" style="color:#999999;">Unsubscribe</a>.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
           await this.jobsService.enqueue(
             shopId,
             'send_email',
             {
               to: sub.email,
-              subject: `${product.name as string} is back in stock!`,
+              subject: `${productName} is back in stock!`,
               bodyText: [
-                `Good news — ${product.name as string} is back in stock at ${product.shopName as string}.`,
+                `Good news — ${productName} is back in stock at ${shopName}.`,
                 '',
                 `View it here: ${productUrl}`,
                 '',
                 `Don't want these emails? Unsubscribe: ${unsubscribeUrl}`,
               ].join('\n'),
-              fromName: product.shopName as string,
+              html: backInStockHtml,
+              fromName: shopName,
             },
             `back-in-stock-email:${sub.id}`,
           );

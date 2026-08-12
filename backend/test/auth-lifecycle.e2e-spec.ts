@@ -6,8 +6,9 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 import type { RowDataPacket } from 'mysql2/promise';
-import type { UserRow } from '../src/db/types';
+import type { UserRow, JobRow } from '../src/db/types';
 
 interface TokenPair {
   accessToken: string;
@@ -42,6 +43,7 @@ function messageOf(res: Response): string {
 describe('Auth lifecycle: progressive lockout, token supersession, adversarial cases (e2e)', () => {
   let app: INestApplication<App>;
   let db: DatabaseService;
+  let jobsWorker: JobsWorkerService;
   const runId = Date.now();
 
   beforeAll(async () => {
@@ -58,6 +60,7 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
     );
     await app.init();
     db = app.get(DatabaseService);
+    jobsWorker = app.get(JobsWorkerService);
   });
 
   afterAll(async () => {
@@ -239,6 +242,38 @@ describe('Auth lifecycle: progressive lockout, token supersession, adversarial c
         .post('/auth/verify-email')
         .send({ token: secondToken })
         .expect(201);
+    });
+  });
+
+  describe('verification email HTML template', () => {
+    it('the queued verification email has the redesigned structure: teal header, CTA button, footer', async () => {
+      const signup = await signupShop('verify-html');
+      const jobs = await db.query<(JobRow & RowDataPacket)[]>(
+        `SELECT * FROM job WHERE type = 'send_email' AND idempotencyKey LIKE ? ORDER BY id DESC LIMIT 1`,
+        [`staff-verify-email:${signup.user.id}:%`],
+      );
+      const job = jobs[0];
+      expect(job).toBeDefined();
+      if (job.status === 'pending') await jobsWorker.processJobById(job.id);
+
+      const payload = (typeof job.payload === 'string'
+        ? (JSON.parse(job.payload) as Record<string, unknown>)
+        : (job.payload as Record<string, unknown>)) as {
+        html?: string;
+      };
+      const html = payload.html!;
+      expect(html).toBeDefined();
+      // Header: teal brand bar + wordmark.
+      expect(html).toContain('#0d9488');
+      expect(html).toContain('Requital');
+      // Greeting uses the signup name.
+      expect(html).toContain('Hi Test Admin,');
+      // CTA button linking to the verify-email page.
+      expect(html).toContain('Verify email');
+      expect(html).toContain('/verify-email?token=');
+      // Footer: divider + disclaimer + copyright.
+      expect(html).toContain("If you didn't create an account");
+      expect(html).toContain('&copy; 2026 Requital');
     });
   });
 
