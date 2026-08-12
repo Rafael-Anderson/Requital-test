@@ -35,7 +35,7 @@ export default function AddressesPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !customer) router.replace(`/${shopSlug}/account/login`);
+    if (!authLoading && !customer) router.replace("/account/login");
   }, [authLoading, customer, shopSlug, router]);
 
   function refresh() {
@@ -108,7 +108,7 @@ export default function AddressesPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href={`/${shopSlug}/account`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href="/account" className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
         ← Back to account
       </Link>
       <div className="flex items-center justify-between mb-4">

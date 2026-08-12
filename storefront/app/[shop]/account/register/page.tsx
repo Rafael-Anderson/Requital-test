@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
 import { sanitizePhoneInput } from "@/lib/phone";
 import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, AUTH_CARD_CLASS, AUTH_HEADING_CLASS } from "@/lib/form-styles";
@@ -11,7 +10,6 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { shopSlug } = useShop();
   const { register } = useAuth();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -26,7 +24,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       await register({ name, phone, email: email || undefined, password });
-      router.push(`/${shopSlug}/account`);
+      router.push("/account");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create your account");
     } finally {
@@ -84,7 +82,7 @@ export default function RegisterPage() {
 
       <p className="text-sm text-zinc-500">
         Already have an account?{" "}
-        <Link href={`/${shopSlug}/account/login`} className="text-accent hover:underline">
+        <Link href="/account/login" className="text-accent hover:underline">
           Sign in
         </Link>
       </p>

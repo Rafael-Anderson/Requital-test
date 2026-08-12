@@ -18,7 +18,7 @@ export default function OrderHistoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !customer) router.replace(`/${shopSlug}/account/login`);
+    if (!authLoading && !customer) router.replace("/account/login");
   }, [authLoading, customer, shopSlug, router]);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function OrderHistoryPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href={`/${shopSlug}/account`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href="/account" className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
         ← Back to account
       </Link>
       <h1 className="text-2xl font-semibold mb-4">Order history</h1>
@@ -48,7 +48,7 @@ export default function OrderHistoryPage() {
         {orders?.map((order) => (
           <Link
             key={order.id}
-            href={`/${shopSlug}/account/orders/${order.id}`}
+            href={`/account/orders/${order.id}`}
             className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:border-accent/50 transition-colors"
           >
             <div className="flex justify-between items-start">

@@ -20,8 +20,8 @@ const ARROW_CLASS =
 export default function CollectionNav() {
   const { shopSlug } = useShop();
   const pathname = usePathname();
-  const activeSlug = pathname.startsWith(`/${shopSlug}/collections/`)
-    ? pathname.slice(`/${shopSlug}/collections/`.length)
+  const activeSlug = pathname.startsWith("/collections/")
+    ? pathname.slice("/collections/".length)
     : null;
   const [collections, setCollections] = useState<Collection[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ export default function CollectionNav() {
         </button>
         <div ref={scrollRef} className="flex items-center gap-1 overflow-x-auto py-2 text-sm scroll-smooth">
           <Link
-            href={`/${shopSlug}`}
+            href="/"
             className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
               !activeSlug ? "bg-accent text-accent-foreground" : "text-zinc-600 hover:bg-mouse-over/10"
             }`}
@@ -56,7 +56,7 @@ export default function CollectionNav() {
           {collections.map((c) => (
             <Link
               key={c.id}
-              href={`/${shopSlug}/collections/${c.slug}`}
+              href={`/collections/${c.slug}`}
               className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
                 activeSlug === c.slug ? "bg-accent text-accent-foreground" : "text-zinc-600 hover:bg-mouse-over/10"
               }`}

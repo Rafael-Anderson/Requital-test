@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
@@ -19,7 +20,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 function RecoverContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { shopSlug, outlets, loading: shopLoading } = useShop();
+  const { outlets, loading: shopLoading } = useShop();
   const { addItem } = useCart();
   const [status, setStatus] = useState<"loading" | "error">("loading");
 
@@ -52,7 +53,7 @@ function RecoverContent() {
             resolvedOutletId,
           );
         }
-        router.replace(`/${shopSlug}/cart`);
+        router.replace("/cart");
       })
       .catch(() => setStatus("error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,9 +67,9 @@ function RecoverContent() {
           <p className="text-sm text-zinc-500 mb-4">
             That cart has already been checked out, or this recovery link is no longer valid.
           </p>
-          <a href={`/${shopSlug}`} className="text-accent hover:underline">
+          <Link href="/" className="text-accent hover:underline">
             Continue shopping
-          </a>
+          </Link>
         </div>
       </StorefrontPageShell>
     );

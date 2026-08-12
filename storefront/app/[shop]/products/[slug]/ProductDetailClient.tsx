@@ -164,7 +164,7 @@ export default function ProductDetailClient() {
       // single-item purchase, not a continuation of prior browsing.
       clear();
       addItem(item, quantity, defaultOutletId);
-      router.push(`/${shopSlug}/checkout`);
+      router.push("/checkout");
       return;
     }
     addItem(item, quantity, defaultOutletId);

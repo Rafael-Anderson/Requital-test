@@ -24,7 +24,7 @@ export default function CartPage() {
       <StorefrontPageShell variant="medium">
         <h1 className="text-2xl font-semibold mb-4">Your cart</h1>
         <p className="text-zinc-500">Your cart is empty.</p>
-        <Link href={`/${shopSlug}`} className="text-accent hover:underline mt-2 inline-block">
+        <Link href="/" className="text-accent hover:underline mt-2 inline-block">
           Continue shopping
         </Link>
       </StorefrontPageShell>
@@ -66,7 +66,7 @@ export default function CartPage() {
         </div>
       </div>
       <Link
-        href={`/${shopSlug}/checkout`}
+        href="/checkout"
         className={`mt-4 block w-full text-center h-11 leading-[44px] font-medium ${storeButtonClassName(shop)}`}
       >
         Proceed to checkout

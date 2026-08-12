@@ -115,7 +115,7 @@ export default function SearchBar() {
               results.map((r) => (
                 <Link
                   key={r.id}
-                  href={`/${shopSlug}/products/${r.slug}`}
+                  href={`/products/${r.slug}`}
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-3 p-2.5 hover:bg-mouse-over/10 transition-colors"
                 >

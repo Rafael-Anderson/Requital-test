@@ -3,14 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
 import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, AUTH_CARD_CLASS, AUTH_HEADING_CLASS } from "@/lib/form-styles";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { shopSlug } = useShop();
   const { login } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +21,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(identifier, password);
-      router.push(`/${shopSlug}/account`);
+      router.push("/account");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
     } finally {
@@ -64,13 +62,13 @@ export default function LoginPage() {
 
       <div className="text-sm text-zinc-500 space-y-1">
         <p>
-          <Link href={`/${shopSlug}/account/forgot-password`} className="text-accent hover:underline">
+          <Link href="/account/forgot-password" className="text-accent hover:underline">
             Forgot your password?
           </Link>
         </p>
         <p>
           No account yet?{" "}
-          <Link href={`/${shopSlug}/account/register`} className="text-accent hover:underline">
+          <Link href="/account/register" className="text-accent hover:underline">
             Create one
           </Link>
         </p>

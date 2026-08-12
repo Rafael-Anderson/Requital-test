@@ -81,7 +81,7 @@ function TrackOrderContent() {
         <p className="text-sm text-zinc-500 mb-6">
           Signed in as {customer.name}. Look up any order below by its tracking code, or see everything at once in
           your{" "}
-          <Link href={`/${shopSlug}/account/orders`} className="text-accent hover:underline">
+          <Link href="/account/orders" className="text-accent hover:underline">
             order history
           </Link>
           .
@@ -90,7 +90,7 @@ function TrackOrderContent() {
         <p className="text-sm text-zinc-500 mb-6">
           Enter the tracking code from your order confirmation to check its status. No account needed. Already have
           an account?{" "}
-          <Link href={`/${shopSlug}/account/login`} className="text-accent hover:underline">
+          <Link href="/account/login" className="text-accent hover:underline">
             Sign in
           </Link>{" "}
           to see your full order history instead of tracking one order at a time.
@@ -126,7 +126,7 @@ function TrackOrderContent() {
           {ownedByCurrentCustomer && (
             <div className="flex items-center justify-between gap-3 -mt-1 -mx-1 mb-1 px-1 pb-3 border-b border-black/10 dark:border-white/10">
               <p className="text-xs text-accent">This is one of your orders.</p>
-              <Link href={`/${shopSlug}/account/orders/${order.id}`} className="text-xs text-accent hover:underline shrink-0">
+              <Link href={`/account/orders/${order.id}`} className="text-xs text-accent hover:underline shrink-0">
                 View full details →
               </Link>
             </div>
@@ -188,7 +188,7 @@ function TrackOrderContent() {
             <div className="border-t border-black/10 dark:border-white/10 pt-3">
               <p className="text-xs text-zinc-500">
                 This order is linked to an account on {shop?.name ?? "this store"}.{" "}
-                <Link href={`/${shopSlug}/account/login`} className="text-accent hover:underline">
+                <Link href="/account/login" className="text-accent hover:underline">
                   Sign in
                 </Link>{" "}
                 to see all your orders in one place.

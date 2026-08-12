@@ -13,7 +13,7 @@ import CartLineItems from "@/components/CartLineItems";
 // as the full-page cart, in an overlay instead of a navigation. Only
 // mounted at all when theme.cartLayout === "drawer" (see ShopLayoutClient).
 export default function CartDrawer() {
-  const { shopSlug, shop } = useShop();
+  const { shop } = useShop();
   const { items, subtotal } = useCart();
   const { open, closeDrawer } = useCartDrawer();
 
@@ -59,13 +59,13 @@ export default function CartDrawer() {
                 </span>
               </div>
               <Link
-                href={`/${shopSlug}/checkout`}
+                href="/checkout"
                 onClick={closeDrawer}
                 className={`block w-full text-center h-11 leading-[44px] font-medium ${storeButtonClassName(shop)}`}
               >
                 Proceed to checkout
               </Link>
-              <Link href={`/${shopSlug}/cart`} onClick={closeDrawer} className="block w-full text-center text-sm text-zinc-500 hover:text-accent">
+              <Link href="/cart" onClick={closeDrawer} className="block w-full text-center text-sm text-zinc-500 hover:text-accent">
                 View full cart
               </Link>
             </div>

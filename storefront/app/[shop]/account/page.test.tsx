@@ -88,7 +88,7 @@ describe("AccountDashboardPage — Privacy", () => {
     await waitFor(() => expect(requestMyAccountDeletion).toHaveBeenCalledWith("test-shop"));
     await waitFor(() => expect(confirmMyAccountDeletion).toHaveBeenCalledWith("test-shop", "tok123"));
     await waitFor(() => expect(logout).toHaveBeenCalled());
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/test-shop"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
     expect(screen.queryByText("Delete your account?")).not.toBeInTheDocument();
   });
 

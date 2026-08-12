@@ -30,7 +30,7 @@ export default function MenuBar() {
     <nav className="border-t border-stroke">
       <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto">
         <Link
-          href={`/${shopSlug}`}
+          href="/"
           className="px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors"
         >
           Home
@@ -40,7 +40,7 @@ export default function MenuBar() {
             item.collection && (
               <Link
                 key={item.id}
-                href={`/${shopSlug}/collections/${item.collection.slug}`}
+                href={`/collections/${item.collection.slug}`}
                 className="px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors"
               >
                 {item.label}
@@ -63,7 +63,7 @@ export default function MenuBar() {
                       c.collection ? (
                         <li key={c.collectionId}>
                           <Link
-                            href={`/${shopSlug}/collections/${c.collection.slug}`}
+                            href={`/collections/${c.collection.slug}`}
                             className="block px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                           >
                             {c.collection.name}

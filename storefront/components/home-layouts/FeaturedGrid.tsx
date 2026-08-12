@@ -37,12 +37,10 @@ export function tileClassName(count: number, index: number): string {
 // "Featured Grid" layout — the same banner/heroText top strip as Classic,
 // plus a prominent grid of collection tiles above the product listing.
 export default function FeaturedGrid({
-  shopSlug,
   bannerUrl,
   heroText,
   collections,
 }: {
-  shopSlug: string;
   bannerUrl: string | null;
   heroText: string | null;
   collections: Collection[];
@@ -58,7 +56,7 @@ export default function FeaturedGrid({
             {topLevel.map((c, i) => (
               <Link
                 key={c.id}
-                href={`/${shopSlug}/collections/${c.slug}`}
+                href={`/collections/${c.slug}`}
                 className={`group rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-stroke ${tileClassName(topLevel.length, i)}`}
               >
                 <div className="aspect-square bg-black/5 overflow-hidden">

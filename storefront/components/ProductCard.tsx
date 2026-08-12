@@ -17,14 +17,14 @@ function cardExcerpt(product: Product): string | null {
 }
 
 export default function ProductCard({ product, orientation }: { product: Product; orientation: "grid" | "list" }) {
-  const { shopSlug, shop } = useShop();
+  const { shop } = useShop();
   const outOfStock = product.stockQuantity !== null && product.stockQuantity <= 0;
   const excerpt = cardExcerpt(product);
 
   if (orientation === "list") {
     return (
       <Link
-        href={`/${shopSlug}/products/${product.slug}`}
+        href={`/products/${product.slug}`}
         className="flex gap-4 items-center border-b border-stroke py-4"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -42,7 +42,7 @@ export default function ProductCard({ product, orientation }: { product: Product
   }
 
   return (
-    <Link href={`/${shopSlug}/products/${product.slug}`} className="block group">
+    <Link href={`/products/${product.slug}`} className="block group">
       <div className="aspect-square rounded-xl overflow-hidden bg-black/5 relative shadow-sm shadow-black/5 group-hover:shadow-lg group-hover:shadow-black/10 transition-shadow duration-300">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

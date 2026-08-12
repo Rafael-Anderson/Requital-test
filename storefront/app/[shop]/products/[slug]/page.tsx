@@ -23,7 +23,7 @@ export default async function ProductRoute({
     } catch {
       notFound();
     }
-    redirect(`/${shopSlug}/products/${canonicalSlug}`);
+    redirect(`/products/${canonicalSlug}`);
   }
 
   return <ProductDetailClient />;

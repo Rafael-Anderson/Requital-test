@@ -9,7 +9,7 @@ afterEach(cleanup);
 // useShop() unconditionally — mocked here since this suite is only
 // exercising the tile-count/grid-structure logic below it.
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shop: null, shopSlug: "test-shop" }),
+  useShop: () => ({ shop: null }),
 }));
 
 function collection(id: number): Collection {
@@ -27,7 +27,7 @@ function collection(id: number): Collection {
 function renderGrid(count: number) {
   const collections = Array.from({ length: count }, (_, i) => collection(i + 1));
   return render(
-    <FeaturedGrid shopSlug="test-shop" bannerUrl={null} heroText={null} collections={collections} />,
+    <FeaturedGrid bannerUrl={null} heroText={null} collections={collections} />,
   );
 }
 

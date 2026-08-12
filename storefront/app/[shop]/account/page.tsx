@@ -17,7 +17,7 @@ export default function AccountDashboardPage() {
   const { customer, loading, logout, refreshProfile } = useAuth();
 
   useEffect(() => {
-    if (!loading && !customer) router.replace(`/${shopSlug}/account/login`);
+    if (!loading && !customer) router.replace("/account/login");
   }, [loading, customer, shopSlug, router]);
 
   const [editing, setEditing] = useState(false);
@@ -56,7 +56,7 @@ export default function AccountDashboardPage() {
 
   async function handleLogout() {
     await logout();
-    router.push(`/${shopSlug}`);
+    router.push("/");
   }
 
   // Fetched via an authenticated JS fetch (not a plain <a href>, which
@@ -84,7 +84,7 @@ export default function AccountDashboardPage() {
   async function handleAccountDeleted() {
     setShowDeleteModal(false);
     await logout();
-    router.push(`/${shopSlug}`);
+    router.push("/");
   }
 
   if (loading || !customer) {
@@ -162,14 +162,14 @@ export default function AccountDashboardPage() {
 
       <div className="grid grid-cols-2 gap-3">
         <Link
-          href={`/${shopSlug}/account/orders`}
+          href="/account/orders"
           className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:border-accent/50 transition-colors"
         >
           <p className="font-medium">Order history</p>
           <p className="text-sm text-zinc-500">View your past orders</p>
         </Link>
         <Link
-          href={`/${shopSlug}/account/addresses`}
+          href="/account/addresses"
           className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:border-accent/50 transition-colors"
         >
           <p className="font-medium">Saved addresses</p>

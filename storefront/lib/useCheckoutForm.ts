@@ -210,7 +210,7 @@ export function useCheckoutForm() {
       }
       sessionStorage.setItem(`requital_order:${res.order.id}`, JSON.stringify(res.order));
       clear();
-      router.push(`/${shopSlug}/orders/${res.order.id}`);
+      router.push(`/orders/${res.order.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not place order");
     } finally {

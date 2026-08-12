@@ -38,7 +38,7 @@ export default function CollectionShowcase() {
         {collections.map((c) => (
           <Link
             key={c.id}
-            href={`/${shopSlug}/collections/${c.slug}`}
+            href={`/collections/${c.slug}`}
             className="group relative shrink-0 w-40 sm:w-auto aspect-[4/5] rounded-xl overflow-hidden snap-start"
           >
             {c.image ? (

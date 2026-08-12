@@ -24,7 +24,7 @@ function ResetPasswordContent() {
     try {
       await resetCustomerPassword(shopSlug, token, newPassword);
       setDone(true);
-      setTimeout(() => router.push(`/${shopSlug}/account/login`), 1500);
+      setTimeout(() => router.push("/account/login"), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "This reset link is invalid or has expired");
     } finally {

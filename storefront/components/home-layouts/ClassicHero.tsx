@@ -28,7 +28,7 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 // Color) overrides the computed accent tint when a merchant explicitly sets
 // it; left unset (the common case), the tint stays exactly as before.
 export default function ClassicHero({ bannerUrl, heroText }: { bannerUrl: string | null; heroText: string | null }) {
-  const { shop, shopSlug } = useShop();
+  const { shop } = useShop();
 
   if (!bannerUrl && !heroText) {
     if (!shop) return null;
@@ -44,7 +44,7 @@ export default function ClassicHero({ bannerUrl, heroText }: { bannerUrl: string
           {shop.description || "Thoughtfully curated, delivered to your door."}
         </p>
         <Link
-          href={`/${shopSlug}#shop`}
+          href="/#shop"
           className={`inline-flex items-center justify-center h-11 px-6 mt-8 font-medium ${storeButtonClassName(shop)}`}
         >
           Shop now
