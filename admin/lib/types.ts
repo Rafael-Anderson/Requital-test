@@ -982,6 +982,114 @@ export interface ThemeSettings {
   updatedAt: string | null;
 }
 
+// --- New visual theme builder (Theme library + /theme/[id]/builder) ---
+// Deliberately a separate model from ThemeSettings above (a real `theme`
+// table, not `themesettings`) — mirrors backend/src/themes/theme-config.
+// types.ts by hand, same no-shared-package convention as everything else
+// in this file. See that file's own header comment for why Header/Footer
+// are separate global-chrome slots, not members of `sections[]`.
+
+export type ThemeSectionType =
+  | "announcement_bar"
+  | "hero"
+  | "featured_collections"
+  | "product_grid"
+  | "testimonials"
+  | "rich_text"
+  | "image_text"
+  | "newsletter";
+
+export const SECTION_TYPES: ThemeSectionType[] = [
+  "announcement_bar",
+  "hero",
+  "featured_collections",
+  "product_grid",
+  "testimonials",
+  "rich_text",
+  "image_text",
+  "newsletter",
+];
+
+export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
+  announcement_bar: "Announcement Bar",
+  hero: "Hero",
+  featured_collections: "Featured Collections",
+  product_grid: "Product Grid",
+  testimonials: "Testimonials",
+  rich_text: "Rich Text",
+  image_text: "Image + Text",
+  newsletter: "Newsletter Signup",
+};
+
+export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
+export type SectionVisibility = "desktop" | "mobile" | "both";
+
+// Freeform element positioning within a section's own drag context — data
+// shape defined now (schema is complete from Phase 1) even though no UI
+// writes non-default positions until the Phase 6 drag-and-drop editor.
+export interface ThemeElement {
+  id: string;
+  type: string;
+  position: { zone: string; x?: number; y?: number };
+  settings: Record<string, unknown>;
+}
+
+export interface SectionSettings {
+  typography?: Record<string, unknown>;
+  spacing?: { top?: number; bottom?: number; left?: number; right?: number };
+  background?: Record<string, unknown>;
+  scrollAnimation?: ScrollAnimation;
+  visibility?: SectionVisibility;
+  [key: string]: unknown;
+}
+
+export interface ThemeSection {
+  id: string;
+  type: ThemeSectionType;
+  visible: boolean;
+  order: number;
+  settings: SectionSettings;
+  elements?: ThemeElement[];
+}
+
+export interface GlobalThemeSettings {
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  bodyFont?: string;
+  headingFont?: string;
+  borderRadius?: "sharp" | "soft" | "round";
+  buttonStyle?: "filled" | "outline" | "ghost";
+  maxWidth?: number;
+}
+
+export interface HeaderFooterConfig {
+  settings: Record<string, unknown>;
+  elements?: ThemeElement[];
+}
+
+export interface ThemeConfig {
+  globalSettings: GlobalThemeSettings;
+  header: HeaderFooterConfig;
+  footer: HeaderFooterConfig;
+  sections: ThemeSection[];
+}
+
+// GET /themes list item — deliberately lighter than the full Theme shape
+// below (no config body), matching every other list-vs-detail split in this
+// codebase.
+export interface ThemeListItem {
+  id: number;
+  name: string;
+  isPublished: boolean;
+  publishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface Theme extends ThemeListItem {
+  config: ThemeConfig;
+}
+
 // Mirrors backend/src/theme/constants.ts's HOMEPAGE_LAYOUTS by hand. 'custom'
 // exists in the type (forward-compatible with a future full drag-and-drop
 // builder slotting in as a fourth option) but is deliberately absent from
