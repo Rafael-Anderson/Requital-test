@@ -20,10 +20,18 @@ const POSITION_CLASS: Record<string, string> = {
   "bottom-right": "items-end justify-end text-right",
 };
 
+// Falls back to the global heading font (--theme-heading-font, see
+// shop-context.tsx's Google Fonts loader) when this section has no explicit
+// per-section typography override — matches how every other themed element
+// on this storefront layers a section-specific choice over a global default.
 function typographyStyle(typography: SectionSettings["typography"]): CSSProperties {
-  if (!typography) return {};
+  const fontFamily =
+    typography && typeof typography.fontFamily === "string"
+      ? typography.fontFamily
+      : "var(--theme-heading-font, inherit)";
+  if (!typography) return { fontFamily };
   return {
-    fontFamily: typeof typography.fontFamily === "string" ? typography.fontFamily : undefined,
+    fontFamily,
     fontSize: typeof typography.fontSize === "number" ? `${typography.fontSize}px` : undefined,
     fontWeight: typeof typography.fontWeight === "string" ? typography.fontWeight : undefined,
     color: typeof typography.color === "string" ? typography.color : undefined,

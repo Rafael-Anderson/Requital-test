@@ -128,12 +128,31 @@ const RADIUS_PX: Record<NonNullable<ThemeConfig["globalSettings"]["borderRadius"
   round: "9999px",
 };
 
+// next/font/google requires statically-known font imports at build time —
+// it cannot load a font chosen at runtime from DB-stored config (that's how
+// the legacy shop.fontFamily/--font-sans mechanism works, and why it's
+// limited to a curated 4-font list). A dynamic <link> tag is the standard
+// workaround, at the cost of next/font's self-hosting/layout-shift-avoidance
+// benefits — the accepted trade-off for arbitrary Google Fonts selection.
+// Module-level Set (not component state) so the same family is never
+// injected twice across re-renders or shop navigations in one tab session.
+const loadedGoogleFonts = new Set<string>();
+function loadGoogleFont(family: string | undefined) {
+  if (!family || loadedGoogleFonts.has(family)) return;
+  loadedGoogleFonts.add(family);
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, "+")}:wght@400;500;600;700&display=swap`;
+  document.head.appendChild(link);
+}
+
 // New visual theme builder's global settings — applied as a second, smaller
 // layer on top of applyTheme() above (not folded into resolveThemeCssVars,
 // which stays a pure function with existing unit test coverage keyed on
 // `Shop` alone) only when a shop has a published/previewed theme. Section
-// components read --theme-radius directly; --color-accent/--color-accent-hover
-// are the same vars every existing themed element already reads.
+// components read --theme-radius/--theme-body-font/--theme-heading-font
+// directly; --color-accent/--color-accent-hover are the same vars every
+// existing themed element already reads.
 function applyThemeConfigOverrides(config: ThemeConfig | null) {
   const root = document.documentElement;
   const g = config?.globalSettings;
@@ -146,6 +165,14 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     root.style.setProperty("--color-accent-hover", g.secondaryColor);
   }
   root.style.setProperty("--theme-radius", RADIUS_PX[g.borderRadius ?? "soft"]);
+  if (g.bodyFont) {
+    loadGoogleFont(g.bodyFont);
+    root.style.setProperty("--theme-body-font", `"${g.bodyFont}", sans-serif`);
+  }
+  if (g.headingFont) {
+    loadGoogleFont(g.headingFont);
+    root.style.setProperty("--theme-heading-font", `"${g.headingFont}", sans-serif`);
+  }
 }
 
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {

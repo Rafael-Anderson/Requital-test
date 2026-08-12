@@ -2,6 +2,7 @@
 
 import ColorPicker from "@/components/ui/ColorPicker";
 import Input from "@/components/ui/Input";
+import FontPicker from "@/components/ui/FontPicker";
 import PresetPicker from "@/components/PresetPicker";
 import type { GlobalThemeSettings } from "@/lib/types";
 
@@ -50,21 +51,16 @@ export default function GlobalSettingsPanel({
 
       <div>
         <h3 className="mb-3 text-sm font-semibold">Fonts</h3>
-        {/* Plain text fields for Phase 2 — the real Google Fonts picker
-            (FontPicker.tsx) is a Phase 5 addition; swaps in here without
-            changing this panel's own contract. */}
         <div className="space-y-3">
-          <Input
+          <FontPicker
             label="Body font"
-            value={settings.bodyFont ?? ""}
-            onChange={(e) => onUpdate("bodyFont", e.target.value)}
-            placeholder="Inter"
+            value={settings.bodyFont ?? "Inter"}
+            onChange={(v) => onUpdate("bodyFont", v)}
           />
-          <Input
+          <FontPicker
             label="Heading font"
-            value={settings.headingFont ?? ""}
-            onChange={(e) => onUpdate("headingFont", e.target.value)}
-            placeholder="Inter"
+            value={settings.headingFont ?? "Inter"}
+            onChange={(v) => onUpdate("headingFont", v)}
           />
         </div>
       </div>

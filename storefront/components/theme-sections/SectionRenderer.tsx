@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { SectionSettings, ThemeSection, ThemeSectionType } from "@/lib/theme-config-types";
 import SectionWrapper from "./SectionWrapper";
+import ScrollAnimatedWrapper from "./ScrollAnimatedWrapper";
 import AnnouncementBarSectionThemed from "./AnnouncementBarSectionThemed";
 import HeroSection from "./HeroSection";
 import FeaturedCollectionsSection from "./FeaturedCollectionsSection";
@@ -32,9 +33,11 @@ export default function SectionRenderer({ sections }: { sections: ThemeSection[]
       {visible.map((section) => {
         const Component = SECTION_COMPONENTS[section.type];
         return (
-          <SectionWrapper key={section.id} sectionId={section.id} settings={section.settings}>
-            <Component settings={section.settings} />
-          </SectionWrapper>
+          <ScrollAnimatedWrapper key={section.id} animation={section.settings.scrollAnimation}>
+            <SectionWrapper sectionId={section.id} settings={section.settings}>
+              <Component settings={section.settings} />
+            </SectionWrapper>
+          </ScrollAnimatedWrapper>
         );
       })}
     </>
