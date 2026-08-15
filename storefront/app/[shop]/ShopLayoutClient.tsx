@@ -63,13 +63,6 @@ function ComingSoon({ shop }: { shop: Shop }) {
   );
 }
 
-// No width/padding of its own — every page decides its own width via
-// StorefrontPageShell (see that component), which is what lets a hero
-// section render truly edge to edge while an account/checkout page still
-// gets a sensibly capped, centered column. Previously a single blanket
-// max-w-6xl wrapper here capped literally everything, including hero
-// banners that should bleed to the viewport edge, while giving narrow forms
-// no positioning of their own beyond hugging that box's left edge.
 // Already length/reject-list validated server-side at save time (see
 // backend theme-config.validation.ts's assertValidCustomCss) — no
 // client-side re-sanitization here beyond that.
@@ -80,10 +73,25 @@ function CustomCss() {
   return <style>{css}</style>;
 }
 
+// No width/padding of its own — every page decides its own width via
+// StorefrontPageShell (see that component), which is what lets a hero
+// section render truly edge to edge while an account/checkout page still
+// gets a sensibly capped, centered column. Previously a single blanket
+// max-w-6xl wrapper here capped literally everything, including hero
+// banners that should bleed to the viewport edge, while giving narrow forms
+// no positioning of their own beyond hugging that box's left edge.
+//
+// previewMode bypasses the unpublished-shop gate below — a merchant setting
+// up their first theme, before ever publishing, still needs to see it in
+// the builder's live preview iframe (see PreviewFrame.tsx/shop-context.tsx).
+// Every content endpoint this page's real children would call is still
+// independently published-gated server-side (PublicService.assertPublished)
+// regardless of what renders here, so this is purely a friendlier preview
+// experience, not a new way to leak an unpublished shop's content.
 function Body({ children }: { children: React.ReactNode }) {
-  const { shop, loading } = useShop();
+  const { shop, loading, previewMode } = useShop();
 
-  if (!loading && shop && !shop.published) {
+  if (!loading && shop && !shop.published && !previewMode) {
     return (
       <>
         <CustomCss />

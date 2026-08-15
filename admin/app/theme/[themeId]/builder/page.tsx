@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useThemeEditor } from "@/lib/useThemeEditor";
 import { getShop } from "@/lib/api";
+import type { Shop } from "@/lib/types";
 import PageLoader from "@/components/ui/PageLoader";
 import BuilderTopBar from "@/components/theme-builder/BuilderTopBar";
 import ModeSwitcher from "@/components/theme-builder/ModeSwitcher";
@@ -18,15 +19,18 @@ export default function ThemeBuilderPage() {
   const params = useParams<{ themeId: string }>();
   const themeId = Number(params.themeId);
   const editor = useThemeEditor(themeId);
-  const [shopSlug, setShopSlug] = useState<string | null>(null);
+  // Full Shop, not just its subdomain — PreviewFrame needs domainType/
+  // customDomain too, to build the real per-shop preview address (see its
+  // own comment).
+  const [shop, setShop] = useState<Shop | null>(null);
 
   useEffect(() => {
     getShop()
-      .then((shop) => setShopSlug(shop.subdomain))
+      .then(setShop)
       .catch(() => {});
   }, []);
 
-  if (editor.loading || !editor.config || !shopSlug) {
+  if (editor.loading || !editor.config || !shop) {
     return <PageLoader />;
   }
 
@@ -45,7 +49,7 @@ export default function ThemeBuilderPage() {
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <PreviewFrame editor={editor} shopSlug={shopSlug} />
+          <PreviewFrame editor={editor} shop={shop} />
         </div>
         <div className="w-80 shrink-0 overflow-y-auto border-l border-black/10 dark:border-white/10">
           <SettingsPanel editor={editor} />
