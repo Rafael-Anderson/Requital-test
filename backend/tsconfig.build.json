@@ -1,7 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // Keeps the incremental build cache INSIDE dist, so nest-cli's own
+    // deleteOutDir:true (nest-cli.json) wipes it together with the rest of
+    // dist on every build — see this file's own CLAUDE.md entry for the
+    // real deploy failure this caused when the cache survived a dist wipe.
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
   },
   "exclude": ["node_modules", "test", "dist", "prisma", "scripts", "**/*spec.ts"]
 }
