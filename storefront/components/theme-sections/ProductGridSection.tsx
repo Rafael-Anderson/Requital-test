@@ -66,15 +66,15 @@ function QuickAddButton({
 // three when no product_card block exists (a theme predating this rework
 // would have none, per the breaking-migration note in the plan).
 export default function ProductGridSection({ settings, blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, shopBasePath, outlets, themeConfig } = useShop();
+  const { shopSlug, shopBasePath, outlets, themeConfig, previewToken } = useShop();
   const [products, setProducts] = useState<Product[] | null>(null);
   const outletId = outlets[0]?.id;
 
   useEffect(() => {
-    listProducts(shopSlug, outletId)
+    listProducts(shopSlug, outletId, undefined, undefined, previewToken)
       .then((res) => setProducts(res.slice(0, MAX_PRODUCTS)))
       .catch(() => setProducts([]));
-  }, [shopSlug, outletId]);
+  }, [shopSlug, outletId, previewToken]);
 
   const columns = COLUMNS_CLASS[(settings.columns as number) ?? 3] ?? COLUMNS_CLASS[3];
   const cardStyle = CARD_STYLE_CLASS[(settings.cardStyle as string) ?? "minimal"] ?? "";

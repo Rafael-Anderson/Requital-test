@@ -15,14 +15,14 @@ import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 // so "view all" links home, where CollectionNav already lists every
 // collection as a pill row.
 export default function FeaturedCollectionsSection({ blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, shopBasePath } = useShop();
+  const { shopSlug, shopBasePath, previewToken } = useShop();
   const [collections, setCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
-    listCollections(shopSlug)
+    listCollections(shopSlug, previewToken)
       .then(setCollections)
       .catch(() => setCollections([]));
-  }, [shopSlug]);
+  }, [shopSlug, previewToken]);
 
   const headerBlock = blocks.find((b) => b.type === "collection_header" && b.visible);
   const titleBlock = headerBlock?.blocks?.find((b) => b.type === "collection_title");

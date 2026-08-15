@@ -18,7 +18,7 @@ const ARROW_CLASS =
   "sm:hidden shrink-0 flex items-center justify-center size-7 rounded-full text-[var(--color-collection-arrow)] hover:text-[var(--color-collection-arrow-active)] transition-colors cursor-pointer";
 
 export default function CollectionNav() {
-  const { shopSlug, shopBasePath } = useShop();
+  const { shopSlug, shopBasePath, previewToken } = useShop();
   const pathname = usePathname();
   const relativePathname = shopBasePath ? pathname.slice(shopBasePath.length) : pathname;
   const activeSlug = relativePathname.startsWith("/collections/")
@@ -28,10 +28,10 @@ export default function CollectionNav() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listCollections(shopSlug)
+    listCollections(shopSlug, previewToken)
       .then((all) => setCollections(all.filter((c) => c.parentCollectionId === null)))
       .catch(() => setCollections([]));
-  }, [shopSlug]);
+  }, [shopSlug, previewToken]);
 
   if (collections.length === 0) return null;
 

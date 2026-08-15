@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
@@ -105,7 +106,49 @@ export class PublicService {
     private readonly giftCardsService: GiftCardsService,
     private readonly policyPagesService: PolicyPagesService,
     private readonly themesService: ThemesService,
+    private readonly jwtService: JwtService,
   ) {}
+
+  // Backs the theme builder's live preview for a shop that hasn't published
+  // yet — the most common time to actually use the builder, since a
+  // merchant setting up their very first theme typically hasn't gone live.
+  // assertPublished's own gate has no notion of "the shop's own staff,
+  // previewing their own unpublished shop" vs. "the public" — bypassing it
+  // needs real proof of the former, not just a client-suppliable
+  // ?preview=true flag, which would let anyone view any unpublished shop's
+  // real catalog/pricing/outlet data by guessing its slug (exactly what
+  // assertPublished's own comment says must stay hidden). previewToken is
+  // the staff member's own existing JWT (already sitting in the admin app's
+  // localStorage — see admin's PreviewFrame.tsx), passed as a query param
+  // since an iframe's initial navigation can't carry a custom Authorization
+  // header; verified the same way AuthGuard verifies it for a real request.
+  private async isAuthorizedPreview(
+    shopId: number,
+    previewToken?: string,
+  ): Promise<boolean> {
+    if (!previewToken) return false;
+    let payload: { sub: number; typ?: string };
+    try {
+      payload = await this.jwtService.verifyAsync(previewToken);
+    } catch {
+      return false;
+    }
+    if (payload.typ !== 'staff') return false;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT shopId FROM user WHERE id = ?`,
+      [payload.sub],
+    );
+    return rows[0]?.shopId === shopId;
+  }
+
+  private async assertPublishedOrPreview(
+    shop: { id: number; subdomain: string; published: boolean },
+    previewToken?: string,
+  ) {
+    if (shop.published) return;
+    if (await this.isAuthorizedPreview(shop.id, previewToken)) return;
+    throw new NotFoundException(`Shop '${shop.subdomain}' not found`);
+  }
 
   // New visual theme builder's storefront-facing read. Non-preview responses
   // are cached (see ThemeConfigCache); preview responses (draft config, live
@@ -335,9 +378,9 @@ export class PublicService {
     }));
   }
 
-  async listCollections(shopSlug: string) {
+  async listCollections(shopSlug: string, previewToken?: string) {
     const shop = await this.resolveShop(shopSlug);
-    this.assertPublished(shop);
+    await this.assertPublishedOrPreview(shop, previewToken);
     return this.db.query<(CollectionRow & RowDataPacket)[]>(
       `SELECT * FROM collection WHERE shopId = ? ORDER BY displayOrder ASC, name ASC`,
       [shop.id],
@@ -427,9 +470,9 @@ export class PublicService {
     );
   }
 
-  async getMenu(shopSlug: string) {
+  async getMenu(shopSlug: string, previewToken?: string) {
     const shop = await this.resolveShop(shopSlug);
-    this.assertPublished(shop);
+    await this.assertPublishedOrPreview(shop, previewToken);
     return this.menuService.listPublic(shop.id);
   }
 
@@ -496,9 +539,10 @@ export class PublicService {
     outletId?: number,
     collectionId?: number,
     isCheckoutAddon?: boolean,
+    previewToken?: string,
   ) {
     const shop = await this.resolveShop(shopSlug);
-    this.assertPublished(shop);
+    await this.assertPublishedOrPreview(shop, previewToken);
     const conditions = ['shopId = ?', "status = 'Available'"];
     const params: QueryParam[] = [shop.id];
     if (collectionId !== undefined) {
@@ -873,9 +917,9 @@ export class PublicService {
     return result;
   }
 
-  async listOutlets(shopSlug: string) {
+  async listOutlets(shopSlug: string, previewToken?: string) {
     const shop = await this.resolveShop(shopSlug);
-    this.assertPublished(shop);
+    await this.assertPublishedOrPreview(shop, previewToken);
     const outlets = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE shopId = ? AND active = 1 ORDER BY id ASC`,
       [shop.id],

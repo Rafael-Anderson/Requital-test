@@ -14,14 +14,14 @@ import CollectionNav from "@/components/CollectionNav";
 // (backward-compatible default, matching every other opt-in theme feature's
 // convention in this app — no merchant is forced to configure anything).
 export default function MenuBar() {
-  const { shopSlug, shopBasePath } = useShop();
+  const { shopSlug, shopBasePath, previewToken } = useShop();
   const [items, setItems] = useState<MenuItem[] | null>(null);
 
   useEffect(() => {
-    getMenu(shopSlug)
+    getMenu(shopSlug, previewToken)
       .then(setItems)
       .catch(() => setItems([]));
-  }, [shopSlug]);
+  }, [shopSlug, previewToken]);
 
   if (items === null) return null;
   if (items.length === 0) return <CollectionNav />;

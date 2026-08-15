@@ -103,8 +103,9 @@ export function listShopsForSitemap() {
   return get<{ slug: string; updatedAt: string }[]>(`/public/shops/sitemap`);
 }
 
-export function listCollections(shopSlug: string) {
-  return get<Collection[]>(`/public/${shopSlug}/collections`);
+export function listCollections(shopSlug: string, previewToken?: string) {
+  const qs = previewToken ? `?previewToken=${encodeURIComponent(previewToken)}` : "";
+  return get<Collection[]>(`/public/${shopSlug}/collections${qs}`);
 }
 
 // Collection (taxonomy node) detail page — /[shop]/collections/[slug].
@@ -132,8 +133,9 @@ export async function getHomepageTemplates(shopSlug: string, outletId?: number) 
 }
 
 // Storefront top-bar "Menu" — direct Collection links + Dropdowns.
-export function getMenu(shopSlug: string) {
-  return get<MenuItem[]>(`/public/${shopSlug}/menu`);
+export function getMenu(shopSlug: string, previewToken?: string) {
+  const qs = previewToken ? `?previewToken=${encodeURIComponent(previewToken)}` : "";
+  return get<MenuItem[]>(`/public/${shopSlug}/menu${qs}`);
 }
 
 // New visual theme builder's storefront-facing config read. Returns null
@@ -186,11 +188,13 @@ export async function listProducts(
   outletId?: number,
   collectionId?: number,
   isCheckoutAddon?: boolean,
+  previewToken?: string,
 ) {
   const params = new URLSearchParams();
   if (outletId !== undefined) params.set("outletId", String(outletId));
   if (collectionId !== undefined) params.set("collectionId", String(collectionId));
   if (isCheckoutAddon !== undefined) params.set("isCheckoutAddon", String(isCheckoutAddon));
+  if (previewToken) params.set("previewToken", previewToken);
   const qs = params.toString();
   const products = await get<Product[]>(`/public/${shopSlug}/products${qs ? `?${qs}` : ""}`);
   return products.map(resolveProductImage);
@@ -219,8 +223,9 @@ export async function getRelatedProducts(shopSlug: string, slug: string, outletI
   return products.map(resolveProductImage);
 }
 
-export function listOutlets(shopSlug: string) {
-  return get<Outlet[]>(`/public/${shopSlug}/outlets`);
+export function listOutlets(shopSlug: string, previewToken?: string) {
+  const qs = previewToken ? `?previewToken=${encodeURIComponent(previewToken)}` : "";
+  return get<Outlet[]>(`/public/${shopSlug}/outlets${qs}`);
 }
 
 export function listDeliveryZones(shopSlug: string, outletId: number) {

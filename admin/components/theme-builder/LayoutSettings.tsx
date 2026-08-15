@@ -55,6 +55,7 @@ export function HomepageLayoutSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={HOMEPAGE_LAYOUT_OPTIONS}
       value={theme.homepageLayout}
       onChange={(key) => void save({ homepageLayout: key })}
@@ -68,6 +69,7 @@ export function TopBarLayoutSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={TOP_BAR_LAYOUT_OPTIONS}
       value={theme.topBarLayout}
       onChange={(key) => void save({ topBarLayout: key })}
@@ -81,6 +83,7 @@ export function HeaderSizeSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={HEADER_DENSITY_OPTIONS}
       value={theme.headerDensity}
       onChange={(key) => void save({ headerDensity: key })}
@@ -94,6 +97,7 @@ export function FooterLayoutSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={FOOTER_LAYOUT_OPTIONS}
       value={theme.footerLayout}
       onChange={(key) => void save({ footerLayout: key })}
@@ -107,6 +111,7 @@ export function FooterSizeSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={FOOTER_DENSITY_OPTIONS}
       value={theme.footerDensity}
       onChange={(key) => void save({ footerDensity: key })}
@@ -120,6 +125,7 @@ export function ProductPageLayoutSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={PDP_LAYOUT_OPTIONS}
       value={theme.pdpLayout}
       onChange={(key) => void save({ pdpLayout: key })}
@@ -133,6 +139,7 @@ export function CartLayoutSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={CART_LAYOUT_OPTIONS}
       value={theme.cartLayout}
       onChange={(key) => void save({ cartLayout: key })}
@@ -146,6 +153,7 @@ export function CheckoutLayoutSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={CHECKOUT_LAYOUT_OPTIONS}
       value={theme.checkoutLayout}
       onChange={(key) => void save({ checkoutLayout: key })}
@@ -159,6 +167,7 @@ export function IconStyleSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={ICON_STYLE_OPTIONS}
       value={theme.iconStyle}
       onChange={(key) => void save({ iconStyle: key })}
@@ -172,6 +181,7 @@ export function ButtonShapeSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={BUTTON_RADIUS_OPTIONS}
       value={theme.buttonRadius}
       onChange={(key) => void save({ buttonRadius: key })}
@@ -185,6 +195,7 @@ export function ButtonFillSetting() {
   if (!theme) return null;
   return (
     <PresetPicker
+      singleColumn
       options={BUTTON_FILL_OPTIONS}
       value={theme.buttonFill}
       onChange={(key) => void save({ buttonFill: key })}
