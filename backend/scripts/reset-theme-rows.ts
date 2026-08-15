@@ -64,7 +64,16 @@ async function main() {
     }`,
   );
 
-  if (looksLikeRealMerchant) {
+  // A real merchant's unpublished draft was found in production once (2026-08-15) —
+  // the heuristic above correctly stopped rather than silently resetting it. This
+  // flag is the explicit "I've reviewed the printed rows above by hand and want to
+  // proceed anyway" override for that case — never pass it without actually reading
+  // the row list first. Unpublished rows are safe to reset regardless (a customer
+  // never saw them; the storefront only ever renders publishedConfig for real
+  // traffic), but a *published* real-merchant row would need a real decision, not
+  // this flag.
+  if (looksLikeRealMerchant && !process.argv.includes('--confirm-real-shops')) {
+    console.log('Re-run with --confirm-real-shops (in addition to --apply) once you have reviewed the rows above.');
     await pool.end();
     process.exit(1);
   }
