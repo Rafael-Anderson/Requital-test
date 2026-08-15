@@ -22,7 +22,7 @@ import type {
 import { useToast } from "@/components/ui/Toast";
 
 export type DevicePreview = "desktop" | "tablet" | "mobile";
-export type EditorMode = "sections" | "theme_settings" | "app_embeds";
+export type EditorMode = "sections" | "theme_settings" | "layout";
 
 // Sentinel ids for the two fixed global-chrome rows — Header/Footer aren't
 // members of ThemeConfig.sections[] (see the plan's scope decision), so
@@ -158,10 +158,13 @@ export function useThemeEditor(themeId: number) {
   const [config, setConfig] = useState<ThemeConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [editorMode, setEditorMode] = useState<EditorMode>("sections");
-  // Which of the 18 Theme Settings accordion categories is expanded — lives
-  // here (not local Accordion state) so a "Edit scheme" jump link anywhere
-  // in the tree can switch both editorMode and the open category together.
+  // Which of the 18 Theme Settings categories is selected — lives here
+  // (not local component state) so a "Edit scheme" jump link anywhere in
+  // the tree can switch both editorMode and the selected category
+  // together, the same way selecting a section/block does.
   const [themeSettingsCategory, setThemeSettingsCategory] = useState<string | null>(null);
+  // Same idea as themeSettingsCategory, for Layout mode's own category list.
+  const [layoutCategory, setLayoutCategory] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [device, setDevice] = useState<DevicePreview>("desktop");
   const [dirty, setDirty] = useState(false);
@@ -443,6 +446,8 @@ export function useThemeEditor(themeId: number) {
     setEditorMode,
     themeSettingsCategory,
     setThemeSettingsCategory,
+    layoutCategory,
+    setLayoutCategory,
     selectedId,
     selectNode,
     selection,

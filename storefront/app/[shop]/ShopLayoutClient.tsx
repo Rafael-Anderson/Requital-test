@@ -33,7 +33,14 @@ function Header() {
   const { customer } = useAuth();
 
   return (
-    <header className="border-b border-stroke bg-header text-header-fg">
+    // relative + z-30 gives the header its own stacking context so it
+    // always paints above <main>'s content, regardless of DOM order — a
+    // section using scroll-animation's opacity/transform (see globals.css's
+    // theme-anim-* classes) creates ITS OWN stacking context too, and
+    // without this the header (which had no z-index of its own, hence no
+    // context) could end up painted underneath it, hiding MenuBar's hover
+    // dropdown (z-20, scoped to its own parent) behind that section.
+    <header className="relative z-30 border-b border-stroke bg-header text-header-fg">
       <AnnouncementBar />
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />
       {showMenuBar(shop, themeConfig) && <MenuBar />}

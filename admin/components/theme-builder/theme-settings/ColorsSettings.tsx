@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import ColorPicker from "@/components/ui/ColorPicker";
+import LegacyColorsSettings from "../LegacyColorsSettings";
 import type { ColorScheme } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
@@ -82,6 +83,8 @@ export default function ColorsSettings({ editor }: { editor: ThemeEditorState })
           ))}
         </div>
       )}
+
+      <LegacyColorsSettings />
     </div>
   );
 }

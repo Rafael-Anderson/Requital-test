@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useShop } from "@/lib/shop-context";
+import { resolveImageUrl } from "@/lib/api";
 import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
 import { resolveScheme } from "@/lib/theme-color-scheme";
 import type { SectionSettings } from "@/lib/theme-config-types";
@@ -16,7 +17,15 @@ function backgroundStyle(bg: SectionSettings["background"]): CSSProperties {
     return { background: `linear-gradient(135deg, ${bg.gradientFrom}, ${bg.gradientTo})` };
   }
   if (type === "image" && typeof bg.imageUrl === "string") {
-    return { backgroundImage: `url(${bg.imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" };
+    // bg.imageUrl is a backend-relative upload path (e.g. /uploads/theme/...)
+    // — used raw here, this 404s: the storefront and backend are different
+    // origins, so a bare url(/uploads/...) resolves against the storefront's
+    // own origin, which never served that file. Every other image reference
+    // in this app already goes through resolveImageUrl for exactly this
+    // reason (see ImageTextSection.tsx); this was the one place that didn't.
+    const resolved = resolveImageUrl(bg.imageUrl);
+    if (!resolved) return {};
+    return { backgroundImage: `url(${resolved})`, backgroundSize: "cover", backgroundPosition: "center" };
   }
   return {};
 }

@@ -3,6 +3,7 @@
 import Toggle from "@/components/ui/Toggle";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
+import LegacyHeaderSettings from "../LegacyHeaderSettings";
 
 // Header is global chrome (pinned to every page, not part of the
 // reorderable sections list) — see the plan's scope decision. It gets a
@@ -40,6 +41,8 @@ export default function HeaderSettings({
         value={settings.background as BackgroundValue}
         onChange={(v) => onUpdate("background", v)}
       />
+
+      <LegacyHeaderSettings />
     </div>
   );
 }

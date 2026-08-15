@@ -13,13 +13,15 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
 
-// Two systems, deliberately not merged: the "Current theme" card below still
-// edits the legacy themesettings-backed site-settings/appearance-color/
-// advanced tabs (PDP/cart/checkout layout, etc. — out of the new builder's
-// scope). "Custom themes" is the new section-based visual builder — a real
-// library now (create/publish/delete), replacing the single dashed "Add
-// theme" placeholder this page used to ship with no feature behind it.
-// Available to every shop immediately, not gated behind any flag.
+// Two data models, deliberately not merged (see CLAUDE.md's "two systems"
+// note), but ONE editor now: "Edit theme" on the Current theme card used to
+// open the old /theme/edit/* tabs directly — it now opens the same builder
+// every custom theme uses instead, which folds every one of those tabs'
+// fields in as "classic ..." sub-sections (Layout mode, and collapsible
+// blocks inside Header/Footer/Announcement Bar/Hero/Colors) so nothing on
+// the old pages became unreachable. "Custom themes" is the new
+// section-based visual builder — a real library (create/publish/delete),
+// available to every shop immediately, not gated behind any flag.
 export default function ThemeLibraryPage() {
   const router = useRouter();
   const toast = useToast();
@@ -51,6 +53,20 @@ export default function ThemeLibraryPage() {
       toast("Failed to create theme", "error");
       setCreating(false);
     }
+  }
+
+  // The published custom theme is what's actually live for shoppers right
+  // now, so that's what "Edit theme" opens — falling back to the most
+  // recently updated one if nothing's published yet, and creating a first
+  // theme (same as "Add theme") if this shop has none at all, rather than
+  // ever falling back to the old /theme/edit/* pages.
+  async function handleEditCurrentTheme() {
+    if (themes && themes.length > 0) {
+      const target = themes.find((t) => t.isPublished) ?? themes[0];
+      router.push(`/theme/${target.id}/builder`);
+      return;
+    }
+    await handleAddTheme();
   }
 
   async function handleDelete(id: number) {
@@ -99,9 +115,9 @@ export default function ThemeLibraryPage() {
             </p>
           </div>
 
-          <Link href="/theme/edit" className="shrink-0">
-            <Button variant="primary">Edit theme</Button>
-          </Link>
+          <Button variant="primary" className="shrink-0" loading={creating} onClick={() => void handleEditCurrentTheme()}>
+            Edit theme
+          </Button>
         </Card>
       )}
 

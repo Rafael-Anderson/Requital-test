@@ -5,6 +5,7 @@ import TypographyControls, { type TypographyValue } from "./shared/TypographyCon
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
+import LegacyAnnouncementSettings from "../LegacyAnnouncementSettings";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
 // Announcement text now lives on this section's own (repeatable)
@@ -42,6 +43,8 @@ export default function AnnouncementBarSettings({
         value={settings.visibility as SectionVisibility}
         onChange={(v) => onUpdate("visibility", v)}
       />
+
+      <LegacyAnnouncementSettings />
     </div>
   );
 }
