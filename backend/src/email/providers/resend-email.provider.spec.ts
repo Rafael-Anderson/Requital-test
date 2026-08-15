@@ -9,7 +9,6 @@ describe('ResendEmailProvider', () => {
 
   afterEach(() => {
     fetchSpy.mockRestore();
-    delete process.env.EMAIL_FROM_ADDRESS;
   });
 
   it('formats and sends a real request against the Resend API', async () => {
@@ -36,34 +35,13 @@ describe('ResendEmailProvider', () => {
     expect(init.headers['Content-Type']).toBe('application/json');
 
     const sentBody = JSON.parse(init.body);
-    expect(sentBody.from).toBe('Test Shop <notifications@requital.app>');
+    expect(sentBody.from).toBe('Requital <noreply@requital.io>');
     expect(sentBody.to).toBe('customer@example.com');
     expect(sentBody.subject).toBe('Order confirmation — #42');
     expect(sentBody.text).toBe('Thanks for your order.');
     expect(sentBody.html).toBe('<p>Thanks for your order.</p>');
 
     expect(result).toEqual({ providerReference: 're_fake123' });
-  });
-
-  it('uses EMAIL_FROM_ADDRESS when set, keeping the caller-supplied display name', async () => {
-    process.env.EMAIL_FROM_ADDRESS = 'orders@verified-domain.com';
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 're_2' }),
-    });
-
-    const provider = new ResendEmailProvider();
-    await provider.sendEmail({
-      to: 'a@example.com',
-      subject: 'Subject',
-      text: 'Text',
-      html: '<p>Text</p>',
-      fromName: 'Requital',
-      credentials: { apiKey: 'key' },
-    });
-
-    const sentBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
-    expect(sentBody.from).toBe('Requital <orders@verified-domain.com>');
   });
 
   it('throws when the API key is missing', async () => {

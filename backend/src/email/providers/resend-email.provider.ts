@@ -6,12 +6,6 @@ import type {
 } from '../email-provider.interface';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
-// Platform's verified sending domain — see the deliverability report for the
-// SPF/DKIM records Resend's dashboard generates for it at verification time.
-// This is a placeholder until that domain is actually verified; sending
-// will fail with a real Resend API error until then, which common/email.ts
-// catches and falls back to stub logging rather than crashing the caller.
-const DEFAULT_FROM_ADDRESS = 'notifications@requital.app';
 
 interface ResendSendResponse {
   id?: string;
@@ -33,7 +27,6 @@ export class ResendEmailProvider implements EmailProvider {
       throw new InternalServerErrorException('Resend API key is missing');
     }
 
-    const fromAddress = process.env.EMAIL_FROM_ADDRESS || DEFAULT_FROM_ADDRESS;
     const res = await fetch(RESEND_API_URL, {
       method: 'POST',
       headers: {
@@ -41,7 +34,7 @@ export class ResendEmailProvider implements EmailProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${params.fromName} <${fromAddress}>`,
+        from: 'Requital <noreply@requital.io>',
         to: params.to,
         subject: params.subject,
         text: params.text,
