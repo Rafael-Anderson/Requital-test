@@ -772,13 +772,6 @@ describe('Order status customer email notifications (e2e)', () => {
   describe('Real email provider (Resend)', () => {
     let fetchSpy: jest.SpyInstance;
     const originalKey = process.env.RESEND_API_KEY;
-    // Also isolated, not just RESEND_API_KEY — this suite runs against
-    // whatever real .env is loaded in this environment (see the "Wire in
-    // the Resend API key for testing" task, which points the real
-    // EMAIL_FROM_ADDRESS at Resend's sandbox sender), and asserting against
-    // a hardcoded address would make this test's pass/fail depend on that
-    // unrelated real config rather than on the code being tested.
-    const originalFromAddress = process.env.EMAIL_FROM_ADDRESS;
 
     beforeEach(() => {
       fetchSpy = jest.spyOn(global, 'fetch');
@@ -788,14 +781,10 @@ describe('Order status customer email notifications (e2e)', () => {
       fetchSpy.mockRestore();
       if (originalKey === undefined) delete process.env.RESEND_API_KEY;
       else process.env.RESEND_API_KEY = originalKey;
-      if (originalFromAddress === undefined)
-        delete process.env.EMAIL_FROM_ADDRESS;
-      else process.env.EMAIL_FROM_ADDRESS = originalFromAddress;
     });
 
     it('calls the real Resend API (not the stub) once RESEND_API_KEY is configured', async () => {
       process.env.RESEND_API_KEY = 'test-resend-key';
-      process.env.EMAIL_FROM_ADDRESS = 'notifications@requital.app';
       fetchSpy.mockResolvedValue({
         ok: true,
         json: async () => ({ id: 're_fake' }),
@@ -831,7 +820,7 @@ describe('Order status customer email notifications (e2e)', () => {
       const sentBody = JSON.parse(init.body);
       expect(sentBody.to).toBe(email);
       expect(sentBody.subject).toContain(`Order confirmation — #${order.id}`);
-      expect(sentBody.from).toContain('<notifications@requital.app>');
+      expect(sentBody.from).toBe('Requital <noreply@requital.io>');
       expect(sentBody.html).toContain('<p style=');
 
       // Real path taken — the stub must not also have logged for this order.

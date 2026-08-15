@@ -73,7 +73,7 @@ describe('sendEmail', () => {
     const [, init] = fetchSpy.mock.calls[0];
     expect(init.headers.Authorization).toBe('Bearer real-key');
     const sentBody = JSON.parse(init.body);
-    expect(sentBody.from).toBe('Test Shop <notifications@requital.app>');
+    expect(sentBody.from).toBe('Requital <noreply@requital.io>');
     expect(sentBody.text).toBe(
       'Thanks for your order.\n\nSee it here: https://example.com/o/1',
     );
