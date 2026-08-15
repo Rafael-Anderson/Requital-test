@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useShop } from "@/lib/shop-context";
 import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
+import { resolveScheme } from "@/lib/theme-color-scheme";
 import type { SectionSettings } from "@/lib/theme-config-types";
 
 function backgroundStyle(bg: SectionSettings["background"]): CSSProperties {
@@ -42,11 +43,13 @@ export default function SectionWrapper({
   settings: SectionSettings;
   children: ReactNode;
 }) {
-  const { previewMode } = useShop();
+  const { previewMode, themeConfig } = useShop();
   const spacing = settings.spacing ?? {};
   const visibility = settings.visibility ?? "both";
   const visibilityClass =
     visibility === "desktop" ? "hidden md:block" : visibility === "mobile" ? "block md:hidden" : "";
+  const scheme = resolveScheme(settings.schemeId, themeConfig?.globalSettings.colorSchemes ?? []);
+  const schemeStyle: CSSProperties = scheme ? { background: scheme.background, color: scheme.text } : {};
 
   function handleClick() {
     if (!previewMode || !document.referrer) return;
@@ -64,6 +67,7 @@ export default function SectionWrapper({
         paddingBottom: spacing.bottom !== undefined ? `${spacing.bottom}px` : undefined,
         paddingLeft: spacing.left !== undefined ? `${spacing.left}px` : undefined,
         paddingRight: spacing.right !== undefined ? `${spacing.right}px` : undefined,
+        ...schemeStyle,
         ...backgroundStyle(settings.background),
       }}
     >

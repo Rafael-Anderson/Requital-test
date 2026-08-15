@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { SectionSettings, ThemeElement } from "@/lib/theme-config-types";
+import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const HEIGHT_CLASS: Record<string, string> = {
   small: "min-h-[240px]",
@@ -20,16 +20,6 @@ const POSITION_CLASS: Record<string, string> = {
   "bottom-right": "items-end justify-end text-right",
 };
 
-// Mirrors admin/lib/default-theme-elements.ts's DEFAULT_HERO_ELEMENTS by
-// hand — an untouched theme's `elements` array is empty, so this reproduces
-// the original fixed heading-then-subheading-then-CTA stacking order.
-const DEFAULT_ELEMENTS: ThemeElement[] = [
-  { id: "heading", type: "heading", position: { zone: "top" }, settings: {} },
-  { id: "subheading", type: "subheading", position: { zone: "middle" }, settings: {} },
-  { id: "cta", type: "cta", position: { zone: "bottom" }, settings: {} },
-];
-const ZONE_ORDER = ["top", "middle", "bottom"];
-
 // Falls back to the global heading font (--theme-heading-font, see
 // shop-context.tsx's Google Fonts loader) when this section has no explicit
 // per-section typography override — matches how every other themed element
@@ -49,54 +39,54 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
   };
 }
 
-export default function HeroSection({
-  settings,
-  elements,
-}: {
-  settings: SectionSettings;
-  elements?: ThemeElement[];
-}) {
-  const heading = typeof settings.heading === "string" ? settings.heading : "";
-  const subheading = typeof settings.subheading === "string" ? settings.subheading : "";
-  const ctaLabel = typeof settings.ctaLabel === "string" ? settings.ctaLabel : "";
+export default function HeroSection({ settings, blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
   const height = HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium;
   const position = POSITION_CLASS[settings.contentPosition as string] ?? POSITION_CLASS["center-center"];
 
-  const nodes: Record<string, ReactNode> = {
-    heading: heading && (
-      <h1 key="heading" className="text-3xl sm:text-4xl font-bold" style={typographyStyle(settings.typography)}>
-        {heading}
-      </h1>
-    ),
-    subheading: subheading && (
-      <p key="subheading" className="mt-3 text-lg opacity-80">
-        {subheading}
-      </p>
-    ),
-    cta: ctaLabel && (
-      <a
-        key="cta"
-        href="#shop"
-        className="mt-6 inline-block px-6 py-3 text-sm font-medium text-accent-foreground bg-accent"
-        style={{ borderRadius: "var(--theme-radius, 8px)" }}
-      >
-        {ctaLabel}
-      </a>
-    ),
-  };
+  const visible = [...blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
 
-  // Order elements by their assigned zone (top/middle/bottom, per Phase 6's
-  // ElementDragZone) rather than the fixed heading/subheading/CTA order —
-  // an untouched theme's elements array is empty, so DEFAULT_ELEMENTS
-  // reproduces that original order exactly.
-  const activeElements = elements && elements.length > 0 ? elements : DEFAULT_ELEMENTS;
-  const orderedTypes = [...activeElements]
-    .sort((a, b) => ZONE_ORDER.indexOf(a.position.zone) - ZONE_ORDER.indexOf(b.position.zone))
-    .map((el) => el.type);
+  function renderBlock(block: ThemeBlock): ReactNode {
+    switch (block.type) {
+      case "heading": {
+        const text = typeof block.settings.text === "string" ? block.settings.text : "";
+        if (!text) return null;
+        return (
+          <h1 key={block.id} className="text-3xl sm:text-4xl font-bold" style={typographyStyle(settings.typography)}>
+            {text}
+          </h1>
+        );
+      }
+      case "subheading": {
+        const text = typeof block.settings.text === "string" ? block.settings.text : "";
+        if (!text) return null;
+        return (
+          <p key={block.id} className="mt-3 text-lg opacity-80">
+            {text}
+          </p>
+        );
+      }
+      case "cta": {
+        const label = typeof block.settings.label === "string" ? block.settings.label : "";
+        if (!label) return null;
+        return (
+          <a
+            key={block.id}
+            href="#shop"
+            className="mt-6 inline-block px-6 py-3 text-sm font-medium text-accent-foreground bg-accent"
+            style={{ borderRadius: "var(--theme-radius, 8px)" }}
+          >
+            {label}
+          </a>
+        );
+      }
+      default:
+        return null;
+    }
+  }
 
   return (
     <div className={`flex ${height} ${position} px-6 py-12`}>
-      <div className="max-w-2xl">{orderedTypes.map((type) => nodes[type] ?? null)}</div>
+      <div className="max-w-2xl">{visible.map(renderBlock)}</div>
     </div>
   );
 }

@@ -6,12 +6,17 @@ import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
 import { selectTiles } from "@/components/home-layouts/FeaturedGrid";
 import type { Collection } from "@/lib/types";
-import type { SectionSettings } from "@/lib/theme-config-types";
+import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
-export default function FeaturedCollectionsSection({ settings }: { settings: SectionSettings }) {
+// collection_header's own sub-blocks carry the section's title/"view all"
+// copy — there's no separate section.settings.heading field anymore (see
+// backend constants.ts's BLOCK_TYPES.featured_collections). No "browse all
+// collections" index route exists in this app (only /collections/[slug]),
+// so "view all" links home, where CollectionNav already lists every
+// collection as a pill row.
+export default function FeaturedCollectionsSection({ blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
   const { shopSlug, shopBasePath } = useShop();
   const [collections, setCollections] = useState<Collection[]>([]);
-  const heading = typeof settings.heading === "string" ? settings.heading : "";
 
   useEffect(() => {
     listCollections(shopSlug)
@@ -19,12 +24,27 @@ export default function FeaturedCollectionsSection({ settings }: { settings: Sec
       .catch(() => setCollections([]));
   }, [shopSlug]);
 
+  const headerBlock = blocks.find((b) => b.type === "collection_header" && b.visible);
+  const titleBlock = headerBlock?.blocks?.find((b) => b.type === "collection_title");
+  const viewAllBlock = headerBlock?.blocks?.find((b) => b.type === "view_all_button");
+  const heading = (titleBlock?.visible && typeof titleBlock.settings.text === "string" && titleBlock.settings.text) || "Featured Collections";
+  const viewAllLabel = (typeof viewAllBlock?.settings.label === "string" && viewAllBlock.settings.label) || "View all";
+
   const tiles = selectTiles(collections);
   if (tiles.length === 0) return null;
 
   return (
     <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
-      {heading && <h2 className="text-xl font-semibold mb-4">{heading}</h2>}
+      {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
+        <div className="flex items-center justify-between mb-4">
+          {titleBlock?.visible !== false && <h2 className="text-xl font-semibold">{heading}</h2>}
+          {viewAllBlock?.visible && (
+            <Link href={shopBasePath || "/"} className="text-sm font-medium text-accent hover:underline">
+              {viewAllLabel}
+            </Link>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {tiles.map((c) => (
           <Link

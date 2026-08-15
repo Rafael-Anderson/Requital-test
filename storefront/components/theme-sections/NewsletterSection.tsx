@@ -1,15 +1,23 @@
-import type { SectionSettings } from "@/lib/theme-config-types";
+import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Presentational only — no newsletter/email-capture backend endpoint exists
 // anywhere in this codebase, and none was scoped for this plan (the spec
 // names "Newsletter signup" as a section type, not a capture feature). The
 // form renders but intentionally does nothing on submit rather than either
 // crashing or faking a success message; wiring a real capture endpoint is a
-// separate, out-of-scope addition.
-export default function NewsletterSection({ settings }: { settings: SectionSettings }) {
-  const heading = typeof settings.heading === "string" ? settings.heading : "";
-  const subtext = typeof settings.subtext === "string" ? settings.subtext : "";
-  const buttonLabel = typeof settings.buttonLabel === "string" && settings.buttonLabel ? settings.buttonLabel : "Subscribe";
+// separate, out-of-scope addition. heading/text/button copy now come from
+// this section's own blocks (see backend constants.ts's
+// BLOCK_TYPES.newsletter), not flat section.settings fields.
+export default function NewsletterSection({ blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const headingBlock = blocks.find((b) => b.type === "heading" && b.visible);
+  const textBlock = blocks.find((b) => b.type === "text" && b.visible);
+  const formBlock = blocks.find((b) => b.type === "email_form" && b.visible);
+  const heading = typeof headingBlock?.settings.text === "string" ? headingBlock.settings.text : "";
+  const subtext = typeof textBlock?.settings.text === "string" ? textBlock.settings.text : "";
+  const buttonLabel =
+    typeof formBlock?.settings.buttonLabel === "string" && formBlock.settings.buttonLabel ? formBlock.settings.buttonLabel : "Subscribe";
+
+  if (!formBlock) return null;
 
   return (
     <div className="px-4 sm:px-6 py-10 max-w-xl mx-auto text-center">

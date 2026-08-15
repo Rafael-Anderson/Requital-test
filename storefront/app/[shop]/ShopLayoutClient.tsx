@@ -16,8 +16,19 @@ import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import type { Shop } from "@/lib/types";
 
+// Whether the MenuBar row shows: a themed shop's own nav_menu header block
+// visibility wins (set in the builder's Header tree node), falling back to
+// the legacy shop.showCollectionMenu toggle for a shop with no published
+// new-system theme.
+function showMenuBar(shop: ReturnType<typeof useShop>["shop"], themeConfig: ReturnType<typeof useShop>["themeConfig"]) {
+  if (themeConfig?.header) {
+    return themeConfig.header.blocks.some((b) => b.type === "nav_menu" && b.visible);
+  }
+  return shop?.showCollectionMenu !== false;
+}
+
 function Header() {
-  const { shopSlug, shop } = useShop();
+  const { shopSlug, shop, themeConfig } = useShop();
   const { count } = useCart();
   const { customer } = useAuth();
 
@@ -25,7 +36,7 @@ function Header() {
     <header className="border-b border-stroke bg-header text-header-fg">
       <AnnouncementBar />
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />
-      {shop?.showCollectionMenu !== false && <MenuBar />}
+      {showMenuBar(shop, themeConfig) && <MenuBar />}
       {shop?.cartLayout === "drawer" && <CartDrawer />}
     </header>
   );
@@ -59,12 +70,23 @@ function ComingSoon({ shop }: { shop: Shop }) {
 // max-w-6xl wrapper here capped literally everything, including hero
 // banners that should bleed to the viewport edge, while giving narrow forms
 // no positioning of their own beyond hugging that box's left edge.
+// Already length/reject-list validated server-side at save time (see
+// backend theme-config.validation.ts's assertValidCustomCss) — no
+// client-side re-sanitization here beyond that.
+function CustomCss() {
+  const { themeConfig } = useShop();
+  const css = themeConfig?.globalSettings.customCss.css;
+  if (!css) return null;
+  return <style>{css}</style>;
+}
+
 function Body({ children }: { children: React.ReactNode }) {
   const { shop, loading } = useShop();
 
   if (!loading && shop && !shop.published) {
     return (
       <>
+        <CustomCss />
         <Header />
         <main>
           <StorefrontPageShell variant="narrow">
@@ -77,6 +99,7 @@ function Body({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <CustomCss />
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />
