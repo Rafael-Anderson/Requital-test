@@ -1,6 +1,5 @@
 "use client";
 
-import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -8,6 +7,9 @@ import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
+// Announcement text now lives on this section's own (repeatable)
+// announcement blocks — select one in the tree to edit it, or add more via
+// "+ Add block" for a rotating set of messages.
 export default function AnnouncementBarSettings({
   settings,
   onUpdate,
@@ -17,11 +19,6 @@ export default function AnnouncementBarSettings({
 }) {
   return (
     <div className="space-y-4">
-      <Input
-        label="Text"
-        value={(settings.text as string) ?? ""}
-        onChange={(e) => onUpdate("text", e.target.value)}
-      />
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Scrolling</span>
         <Toggle checked={!!settings.scrolling} onChange={(v) => onUpdate("scrolling", v)} />

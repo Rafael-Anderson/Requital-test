@@ -7,8 +7,10 @@ import { getReadableTextColor } from "./color-contrast";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
+import { resolveScheme } from "./theme-color-scheme";
+import { resolveLetterSpacing, resolveLineHeight } from "./theme-typography";
 import type { Outlet, Shop } from "./types";
-import type { ThemeConfig } from "./theme-config-types";
+import type { HeadingTextPreset, ThemeConfig } from "./theme-config-types";
 
 interface ShopContextValue {
   shopSlug: string;
@@ -122,11 +124,20 @@ function applyTheme(shop: Shop | null) {
   }
 }
 
-const RADIUS_PX: Record<NonNullable<ThemeConfig["globalSettings"]["borderRadius"]>, string> = {
-  sharp: "0px",
-  soft: "8px",
-  round: "9999px",
+const PAGE_WIDTH_PX: Record<ThemeConfig["globalSettings"]["pageLayout"]["width"], string> = {
+  narrow: "960px",
+  normal: "1280px",
+  wide: "1600px",
 };
+
+const HEADING_KEYS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
+
+function applyHeadingPreset(root: CSSStyleDeclaration, key: string, preset: HeadingTextPreset) {
+  root.setProperty(`--text-${key}-size`, `${preset.size}px`);
+  root.setProperty(`--text-${key}-line-height`, String(resolveLineHeight(preset.lineHeight)));
+  root.setProperty(`--text-${key}-letter-spacing`, resolveLetterSpacing(preset.letterSpacing));
+  root.setProperty(`--text-${key}-transform`, preset.case === "uppercase" ? "uppercase" : "none");
+}
 
 // next/font/google requires statically-known font imports at build time —
 // it cannot load a font chosen at runtime from DB-stored config (that's how
@@ -157,21 +168,35 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   const root = document.documentElement;
   const g = config?.globalSettings;
   if (!g) return;
-  if (g.primaryColor && HEX_COLOR.test(g.primaryColor)) {
-    root.style.setProperty("--color-accent", g.primaryColor);
-    root.style.setProperty("--color-accent-foreground", getReadableTextColor(g.primaryColor));
+
+  // Default active scheme is the first entry in colorSchemes — there's no
+  // separate "defaultSchemeId" field; a section/badge/drawer/popover can
+  // still reference a different scheme by id via its own schemeId (see
+  // theme-color-scheme.ts's resolveScheme, used at those call sites).
+  const scheme = resolveScheme(g.colorSchemes[0]?.id, g.colorSchemes);
+  if (scheme) {
+    root.style.setProperty("--color-accent", scheme.button);
+    root.style.setProperty("--color-accent-hover", scheme.button);
+    root.style.setProperty("--color-accent-foreground", scheme.buttonLabel);
   }
-  if (g.secondaryColor && HEX_COLOR.test(g.secondaryColor)) {
-    root.style.setProperty("--color-accent-hover", g.secondaryColor);
+
+  root.style.setProperty("--theme-max-width", PAGE_WIDTH_PX[g.pageLayout?.width ?? "normal"]);
+
+  if (g.typography?.bodyFont) {
+    loadGoogleFont(g.typography.bodyFont);
+    root.style.setProperty("--theme-body-font", `"${g.typography.bodyFont}", sans-serif`);
   }
-  root.style.setProperty("--theme-radius", RADIUS_PX[g.borderRadius ?? "soft"]);
-  if (g.bodyFont) {
-    loadGoogleFont(g.bodyFont);
-    root.style.setProperty("--theme-body-font", `"${g.bodyFont}", sans-serif`);
+  if (g.typography?.headingFont) {
+    loadGoogleFont(g.typography.headingFont);
+    root.style.setProperty("--theme-heading-font", `"${g.typography.headingFont}", sans-serif`);
   }
-  if (g.headingFont) {
-    loadGoogleFont(g.headingFont);
-    root.style.setProperty("--theme-heading-font", `"${g.headingFont}", sans-serif`);
+  if (g.typography?.paragraph) {
+    root.style.setProperty("--text-paragraph-size", `${g.typography.paragraph.size}px`);
+    root.style.setProperty("--text-paragraph-line-height", String(resolveLineHeight(g.typography.paragraph.lineHeight)));
+  }
+  for (const key of HEADING_KEYS) {
+    const preset = g.typography?.[key];
+    if (preset) applyHeadingPreset(root.style, key, preset);
   }
 }
 

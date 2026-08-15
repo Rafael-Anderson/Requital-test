@@ -1,6 +1,5 @@
 "use client";
 
-import Input from "@/components/ui/Input";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -8,6 +7,8 @@ import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
+// Heading/subtext/button label now live on this section's heading/text/
+// email_form blocks — select one in the tree to edit it.
 export default function NewsletterSettings({
   settings,
   onUpdate,
@@ -17,26 +18,6 @@ export default function NewsletterSettings({
 }) {
   return (
     <div className="space-y-4">
-      <Input
-        label="Heading"
-        value={(settings.heading as string) ?? ""}
-        onChange={(e) => onUpdate("heading", e.target.value)}
-        placeholder="Join our mailing list"
-      />
-      <Input
-        label="Subtext"
-        value={(settings.subtext as string) ?? ""}
-        onChange={(e) => onUpdate("subtext", e.target.value)}
-      />
-      <Input
-        label="Button label"
-        value={(settings.buttonLabel as string) ?? ""}
-        onChange={(e) => onUpdate("buttonLabel", e.target.value)}
-        placeholder="Subscribe"
-      />
-
-      <hr className="border-black/10 dark:border-white/10" />
-
       <TypographyControls
         value={settings.typography as TypographyValue}
         onChange={(v) => onUpdate("typography", v)}

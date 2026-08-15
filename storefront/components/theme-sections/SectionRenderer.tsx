@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { SectionSettings, ThemeElement, ThemeSection, ThemeSectionType } from "@/lib/theme-config-types";
+import type { SectionSettings, ThemeBlock, ThemeSection, ThemeSectionType } from "@/lib/theme-config-types";
 import SectionWrapper from "./SectionWrapper";
 import ScrollAnimatedWrapper from "./ScrollAnimatedWrapper";
 import AnnouncementBarSectionThemed from "./AnnouncementBarSectionThemed";
@@ -11,11 +11,9 @@ import RichTextSection from "./RichTextSection";
 import ImageTextSection from "./ImageTextSection";
 import NewsletterSection from "./NewsletterSection";
 
-// elements is optional — only HeroSection actually reads it (heading/
-// subheading/CTA zone order), the other 7 section types ignore it.
 const SECTION_COMPONENTS: Record<
   ThemeSectionType,
-  ComponentType<{ settings: SectionSettings; elements?: ThemeElement[] }>
+  ComponentType<{ settings: SectionSettings; blocks: ThemeBlock[] }>
 > = {
   announcement_bar: AnnouncementBarSectionThemed,
   hero: HeroSection,
@@ -40,7 +38,7 @@ export default function SectionRenderer({ sections }: { sections: ThemeSection[]
         return (
           <ScrollAnimatedWrapper key={section.id} animation={section.settings.scrollAnimation}>
             <SectionWrapper sectionId={section.id} settings={section.settings}>
-              <Component settings={section.settings} elements={section.elements} />
+              <Component settings={section.settings} blocks={section.blocks} />
             </SectionWrapper>
           </ScrollAnimatedWrapper>
         );

@@ -8,27 +8,18 @@ import { useCartDrawer } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import SearchBar from "@/components/SearchBar";
 import type { Customer, Shop } from "@/lib/types";
-import type { HeaderFooterConfig, ThemeElement } from "@/lib/theme-config-types";
-
-// Mirrors admin/lib/default-theme-elements.ts's DEFAULT_HEADER_ELEMENTS by
-// hand (no shared package) — used whenever a theme hasn't had its header
-// elements dragged yet, so an untouched theme renders the same layout this
-// component always rendered before Phase 6.
-const DEFAULT_ELEMENTS: ThemeElement[] = [
-  { id: "logo", type: "logo", position: { zone: "left" }, settings: {} },
-  { id: "search", type: "search", position: { zone: "right" }, settings: {} },
-  { id: "cart", type: "cart", position: { zone: "right" }, settings: {} },
-  { id: "account", type: "account", position: { zone: "right" }, settings: {} },
-];
+import type { HeaderFooterConfig } from "@/lib/theme-config-types";
 
 const ZONES = ["left", "center", "right"] as const;
 
 // Global chrome — pinned to every page, not part of the reorderable
-// sections list (see the plan's scope decision). Renders each element
-// (logo/search/cart/account) into whichever of the three zone columns its
-// `position.zone` names — the admin's Phase 6 ElementDragZone is what
-// actually writes non-default zones; an untouched theme's elements array is
-// empty, so DEFAULT_ELEMENTS reproduces the original fixed layout exactly.
+// sections list (see the plan's scope decision). Each block's own
+// settings.zone (left/center/right, defaulting to left) places it in the
+// 3-column header row. nav_menu has no zone rendering of its own here — the
+// existing MenuBar row (ShopLayoutClient.tsx's Header()) already renders
+// full-width below this component for both themed and legacy shops; that
+// component reads this same config to decide whether to show it, so the
+// block's visibility is still honored, just not by this file.
 // `transparentOnHero` is collected in the admin settings panel but not yet
 // visually wired here — flagged, not silently dropped.
 export default function ThemeDrivenHeader({
@@ -54,7 +45,7 @@ export default function ThemeDrivenHeader({
     style.background = background.color;
   }
 
-  const elements = config.elements && config.elements.length > 0 ? config.elements : DEFAULT_ELEMENTS;
+  const blocks = [...config.blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
 
   const cartButtonClass =
     "relative flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors";
@@ -69,7 +60,7 @@ export default function ThemeDrivenHeader({
     </>
   );
 
-  function renderElement(type: string): ReactNode {
+  function renderBlock(type: string): ReactNode {
     switch (type) {
       case "logo":
         return (
@@ -88,9 +79,9 @@ export default function ThemeDrivenHeader({
             )}
           </Link>
         );
-      case "search":
+      case "search_icon":
         return <SearchBar key="search" />;
-      case "cart":
+      case "cart_icon":
         if (shop?.disableStoreCart) return null;
         return shop?.cartLayout === "drawer" ? (
           <button
@@ -107,7 +98,7 @@ export default function ThemeDrivenHeader({
             {cartContent}
           </Link>
         );
-      case "account":
+      case "account_icon":
         return (
           <Link
             key="account"
@@ -131,9 +122,9 @@ export default function ThemeDrivenHeader({
             key={zone}
             className={`flex items-center gap-1 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
           >
-            {elements
-              .filter((el) => el.position.zone === zone)
-              .map((el) => renderElement(el.type))}
+            {blocks
+              .filter((b) => (b.settings.zone as string | undefined) === zone || (zone === "left" && !b.settings.zone))
+              .map((b) => renderBlock(b.type))}
           </div>
         ))}
       </div>

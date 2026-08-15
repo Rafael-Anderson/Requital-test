@@ -1024,20 +1024,24 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
 export type SectionVisibility = "desktop" | "mobile" | "both";
 
-// Freeform element positioning within a section's own drag context — data
-// shape defined now (schema is complete from Phase 1) even though no UI
-// writes non-default positions until the Phase 6 drag-and-drop editor.
-export interface ThemeElement {
+// REWORK NOTE (Shopify-parity rework): from-scratch replacement of the flat
+// PR #31 shape (ThemeElement -> ThemeBlock, now recursive; GlobalThemeSettings
+// expanded from 8 flat fields to 18 nested categories). Mirrors
+// backend/src/themes/theme-config.types.ts by hand.
+export interface ThemeBlock {
   id: string;
   type: string;
-  position: { zone: string; x?: number; y?: number };
+  visible: boolean;
+  order: number;
   settings: Record<string, unknown>;
+  blocks?: ThemeBlock[];
 }
 
 export interface SectionSettings {
   typography?: Record<string, unknown>;
   spacing?: { top?: number; bottom?: number; left?: number; right?: number };
   background?: Record<string, unknown>;
+  schemeId?: string;
   scrollAnimation?: ScrollAnimation;
   visibility?: SectionVisibility;
   [key: string]: unknown;
@@ -1049,23 +1053,202 @@ export interface ThemeSection {
   visible: boolean;
   order: number;
   settings: SectionSettings;
-  elements?: ThemeElement[];
-}
-
-export interface GlobalThemeSettings {
-  primaryColor?: string;
-  secondaryColor?: string;
-  accentColor?: string;
-  bodyFont?: string;
-  headingFont?: string;
-  borderRadius?: "sharp" | "soft" | "round";
-  buttonStyle?: "filled" | "outline" | "ghost";
-  maxWidth?: number;
+  blocks: ThemeBlock[];
 }
 
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
-  elements?: ThemeElement[];
+  blocks: ThemeBlock[];
+}
+
+// --- Theme Settings: 18 categories, matching Shopify Horizon's real
+// settings_schema.json, with a deliberate Dawn-style multi-scheme color
+// system layered in per the confirmed spec. Mirrors backend's
+// theme-config.types.ts field-for-field. ---
+
+export interface LogoSettings {
+  defaultLogoUrl?: string;
+  inverseLogoUrl?: string;
+  desktopHeight: number;
+  mobileHeight: number;
+  faviconUrl?: string;
+}
+
+export interface ColorScheme {
+  id: string;
+  name: string;
+  background: string;
+  backgroundGradient?: string;
+  text: string;
+  button: string;
+  buttonLabel: string;
+  secondaryButtonLabel: string;
+  border?: string;
+  shadow?: string;
+}
+
+export type TextLineHeight = "tight" | "normal" | "loose";
+export type TextLetterSpacing = "tight" | "normal" | "wide";
+export type TextCase = "default" | "uppercase";
+export type FontRole = "heading" | "accent";
+
+export interface ParagraphTextPreset {
+  size: number;
+  lineHeight: TextLineHeight;
+}
+
+export interface HeadingTextPreset {
+  font: FontRole;
+  size: number;
+  lineHeight: TextLineHeight;
+  letterSpacing: TextLetterSpacing;
+  case: TextCase;
+}
+
+export interface TypographySettings {
+  bodyFont: string;
+  subheadingFont: string;
+  headingFont: string;
+  accentFont: string;
+  paragraph: ParagraphTextPreset;
+  h1: HeadingTextPreset;
+  h2: HeadingTextPreset;
+  h3: HeadingTextPreset;
+  h4: HeadingTextPreset;
+  h5: HeadingTextPreset;
+  h6: HeadingTextPreset;
+}
+
+export interface PageLayoutSettings {
+  width: "narrow" | "normal" | "wide";
+}
+
+export interface AnimationSettings {
+  pageTransition: boolean;
+  productCardTransition: boolean;
+  addToCart: boolean;
+  cardHoverEffect: "none" | "lift" | "scale" | "zoom";
+}
+
+export interface BadgeSettings {
+  position: "top_right" | "top_left" | "bottom_right" | "bottom_left";
+  cornerRadius: number;
+  saleSchemeId: string;
+  soldOutSchemeId: string;
+  font: "body" | "accent";
+  case: TextCase;
+}
+
+export interface ButtonStyleSettings {
+  borderThickness: number;
+  cornerRadius: number;
+  font: "body" | "accent";
+  case: TextCase;
+}
+
+export interface ButtonSettings {
+  primary: ButtonStyleSettings;
+  secondary: ButtonStyleSettings;
+  pillCornerRadius: number;
+}
+
+export interface CartSettings {
+  allowNote: boolean;
+  allowDiscounts: boolean;
+  installments: boolean;
+  acceleratedCheckout: boolean;
+  emptyCartLink?: string;
+  mediaBorderStyle: "none" | "solid";
+  mediaCornerRadius: number;
+}
+
+export interface DrawerSettings {
+  schemeId: string;
+  bordersStyle: "none" | "solid";
+  dropShadow: boolean;
+}
+
+export interface IconSettings {
+  stroke: "thin" | "default" | "heavy";
+}
+
+export interface InputFieldSettings {
+  borderThickness: number;
+  cornerRadius: number;
+  textPreset: string;
+}
+
+export interface PopoverSettings {
+  schemeId: string;
+  cornerRadius: number;
+  borders: "none" | "solid";
+  dropShadow: boolean;
+}
+
+export interface PriceSettings {
+  currencyCode: {
+    productPages: boolean;
+    productCards: boolean;
+    cartItems: boolean;
+    cartTotal: boolean;
+  };
+}
+
+export interface ProductCardSettings {
+  quickAdd: boolean;
+  mobileQuickAdd: boolean;
+  quickAddBackground: string;
+  quickAddText: string;
+  showSecondImageOnHover: boolean;
+  showCarousel: boolean;
+}
+
+export interface SearchSettings {
+  emptyStateCollectionId?: number;
+  productCornerRadius: number;
+  cardCornerRadius: number;
+  titleCase: TextCase;
+}
+
+export interface SwatchSettings {
+  variantImages: boolean;
+  width: number;
+  height: number;
+  cornerRadius: number;
+  borders: "none" | "solid";
+  borderThickness: number;
+  borderOpacity: number;
+}
+
+export interface VariantPickerSettings {
+  borderThickness: number;
+  cornerRadius: number;
+  width: "fit" | "fill";
+}
+
+export interface CustomCssSettings {
+  css: string;
+}
+
+export interface GlobalThemeSettings {
+  logo: LogoSettings;
+  colorSchemes: ColorScheme[];
+  typography: TypographySettings;
+  pageLayout: PageLayoutSettings;
+  animations: AnimationSettings;
+  badges: BadgeSettings;
+  buttons: ButtonSettings;
+  cart: CartSettings;
+  drawers: DrawerSettings;
+  icons: IconSettings;
+  inputFields: InputFieldSettings;
+  popovers: PopoverSettings;
+  prices: PriceSettings;
+  productCards: ProductCardSettings;
+  search: SearchSettings;
+  swatches: SwatchSettings;
+  variantPickers: VariantPickerSettings;
+  customCss: CustomCssSettings;
 }
 
 export interface ThemeConfig {
@@ -1073,6 +1256,65 @@ export interface ThemeConfig {
   header: HeaderFooterConfig;
   footer: HeaderFooterConfig;
   sections: ThemeSection[];
+}
+
+// Mirrors backend/src/themes/constants.ts's BlockContainer/BLOCK_TYPES/
+// BLOCK_TYPE_LABELS/CHILD_BLOCK_TYPES/MAX_BLOCK_DEPTH by hand — the "+ Add
+// block" modal and the tree's depth guard both read these.
+export type BlockContainer = ThemeSectionType | "header" | "footer";
+
+export const BLOCK_TYPE_LABELS: Record<string, string> = {
+  logo: "Logo",
+  nav_menu: "Menu",
+  search_icon: "Search",
+  cart_icon: "Cart",
+  account_icon: "Account",
+  footer_column: "Column",
+  footer_social: "Social Links",
+  footer_copyright: "Copyright",
+  announcement: "Announcement",
+  heading: "Heading",
+  subheading: "Subheading",
+  cta: "CTA Button",
+  collection_header: "Header",
+  collection_title: "Collection title",
+  view_all_button: "View all button",
+  product_card: "Product card",
+  product_media: "Media",
+  product_title: "Product title",
+  product_price: "Price",
+  testimonial: "Testimonial",
+  text: "Text",
+  image: "Image",
+  email_form: "Email form",
+};
+
+export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
+  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon"],
+  footer: ["footer_column", "footer_social", "footer_copyright"],
+  announcement_bar: ["announcement"],
+  hero: ["heading", "subheading", "cta"],
+  featured_collections: ["collection_header", "product_card"],
+  product_grid: ["product_card"],
+  testimonials: ["testimonial"],
+  rich_text: ["text"],
+  image_text: ["image", "text"],
+  newsletter: ["heading", "text", "email_form"],
+};
+
+export const CHILD_BLOCK_TYPES: Record<string, string[]> = {
+  collection_header: ["collection_title", "view_all_button"],
+  product_card: ["product_media", "product_title", "product_price"],
+};
+
+export const MAX_BLOCK_DEPTH = 4;
+
+// parentType null looks up the container's own top-level catalog
+// (BLOCK_TYPES); a real block type looks up what can nest inside it
+// (CHILD_BLOCK_TYPES) — a type absent from CHILD_BLOCK_TYPES is a leaf.
+export function allowedBlockTypesFor(container: BlockContainer, parentType: string | null): string[] {
+  if (parentType) return CHILD_BLOCK_TYPES[parentType] ?? [];
+  return BLOCK_TYPES[container] ?? [];
 }
 
 // GET /themes list item — deliberately lighter than the full Theme shape

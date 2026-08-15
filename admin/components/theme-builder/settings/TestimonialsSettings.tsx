@@ -1,12 +1,14 @@
 "use client";
 
-import Input from "@/components/ui/Input";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
+// No section-level heading field for this section type (no "heading" block
+// is in its catalog, see backend constants.ts's BLOCK_TYPES.testimonials) —
+// add testimonial blocks in the tree to give this section real content.
 export default function TestimonialsSettings({
   settings,
   onUpdate,
@@ -16,15 +18,6 @@ export default function TestimonialsSettings({
 }) {
   return (
     <div className="space-y-4">
-      <Input
-        label="Heading"
-        value={(settings.heading as string) ?? ""}
-        onChange={(e) => onUpdate("heading", e.target.value)}
-        placeholder="What our customers say"
-      />
-
-      <hr className="border-black/10 dark:border-white/10" />
-
       <SpacingControls
         value={settings.spacing as SpacingValue}
         onChange={(v) => onUpdate("spacing", v)}

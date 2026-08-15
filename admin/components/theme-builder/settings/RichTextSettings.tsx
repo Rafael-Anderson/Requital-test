@@ -1,6 +1,5 @@
 "use client";
 
-import Textarea from "@/components/ui/Textarea";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -8,6 +7,8 @@ import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
+// Content now lives on this section's own "text" block — select it in the
+// tree to edit it.
 export default function RichTextSettings({
   settings,
   onUpdate,
@@ -17,15 +18,6 @@ export default function RichTextSettings({
 }) {
   return (
     <div className="space-y-4">
-      <Textarea
-        label="Content"
-        rows={5}
-        value={(settings.text as string) ?? ""}
-        onChange={(e) => onUpdate("text", e.target.value)}
-      />
-
-      <hr className="border-black/10 dark:border-white/10" />
-
       <TypographyControls
         value={settings.typography as TypographyValue}
         onChange={(v) => onUpdate("typography", v)}

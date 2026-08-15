@@ -1,12 +1,14 @@
 "use client";
 
-import Input from "@/components/ui/Input";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
+// Heading and "View all" button text now live on this section's Header
+// block's collection_title/view_all_button sub-blocks — expand the section
+// in the tree to edit them.
 export default function FeaturedCollectionsSettings({
   settings,
   onUpdate,
@@ -16,15 +18,6 @@ export default function FeaturedCollectionsSettings({
 }) {
   return (
     <div className="space-y-4">
-      <Input
-        label="Heading"
-        value={(settings.heading as string) ?? ""}
-        onChange={(e) => onUpdate("heading", e.target.value)}
-        placeholder="Shop by category"
-      />
-
-      <hr className="border-black/10 dark:border-white/10" />
-
       <SpacingControls
         value={settings.spacing as SpacingValue}
         onChange={(v) => onUpdate("spacing", v)}

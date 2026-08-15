@@ -1,18 +1,41 @@
-import type { SectionSettings } from "@/lib/theme-config-types";
+import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
-// No real testimonial-content data model exists in this codebase (no CRUD,
-// no storage) — the admin's TestimonialsSettings only exposes a heading
-// today, so this renders that heading plus an honest empty-state rather
-// than fabricating customer quotes. A real content mechanism (quotes,
-// author, rating) would be a separate, larger addition to both the admin
-// settings panel and this component, out of this plan's scope.
-export default function TestimonialsSection({ settings }: { settings: SectionSettings }) {
-  const heading = typeof settings.heading === "string" ? settings.heading : "";
+interface TestimonialBlockSettings {
+  quote?: string;
+  author?: string;
+}
+
+// No dedicated testimonial data model exists in this codebase (no CRUD, no
+// storage) — but a testimonial is now a real, admin-addable block (settings
+// is free-form JSON, shallow-validated like every other block), so a
+// merchant who adds testimonial blocks in the builder gets real rendered
+// quotes here. Zero blocks still falls back to an honest empty state rather
+// than fabricating customer quotes.
+export default function TestimonialsSection({ blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const testimonials = [...blocks]
+    .filter((b) => b.visible && b.type === "testimonial")
+    .sort((a, b) => a.order - b.order)
+    .map((b) => b.settings as TestimonialBlockSettings)
+    .filter((t) => t.quote);
+
+  if (testimonials.length === 0) {
+    return (
+      <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto text-center">
+        <p className="text-sm text-zinc-500">Customer testimonials coming soon.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto text-center">
-      {heading && <h2 className="text-xl font-semibold mb-2">{heading}</h2>}
-      <p className="text-sm text-zinc-500">Customer testimonials coming soon.</p>
+    <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {testimonials.map((t, i) => (
+          <div key={i} className="p-4 border border-stroke rounded-lg">
+            <p className="text-sm leading-relaxed">&ldquo;{t.quote}&rdquo;</p>
+            {t.author && <p className="mt-3 text-xs font-medium opacity-70">{t.author}</p>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
