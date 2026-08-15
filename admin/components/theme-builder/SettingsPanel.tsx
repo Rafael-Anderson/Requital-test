@@ -4,6 +4,24 @@ import type { ComponentType } from "react";
 import Accordion from "@/components/ui/Accordion";
 import AppEmbedsPanel from "./AppEmbedsPanel";
 import BlockSettingsForm from "./BlockSettingsForm";
+import LogoSettings from "./theme-settings/LogoSettings";
+import ColorsSettings from "./theme-settings/ColorsSettings";
+import TypographySettings from "./theme-settings/TypographySettings";
+import PageLayoutSettings from "./theme-settings/PageLayoutSettings";
+import AnimationsSettings from "./theme-settings/AnimationsSettings";
+import BadgesSettings from "./theme-settings/BadgesSettings";
+import ButtonsSettings from "./theme-settings/ButtonsSettings";
+import CartSettings from "./theme-settings/CartSettings";
+import DrawersSettings from "./theme-settings/DrawersSettings";
+import IconsSettings from "./theme-settings/IconsSettings";
+import InputFieldsSettings from "./theme-settings/InputFieldsSettings";
+import PopoversSettings from "./theme-settings/PopoversSettings";
+import PricesSettings from "./theme-settings/PricesSettings";
+import ProductCardsSettings from "./theme-settings/ProductCardsSettings";
+import SearchSettings from "./theme-settings/SearchSettings";
+import SwatchesSettings from "./theme-settings/SwatchesSettings";
+import VariantPickersSettings from "./theme-settings/VariantPickersSettings";
+import CustomCssSettings from "./theme-settings/CustomCssSettings";
 import HeaderSettings from "./settings/HeaderSettings";
 import FooterSettings from "./settings/FooterSettings";
 import HeroSettings from "./settings/HeroSettings";
@@ -33,29 +51,28 @@ const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<Sectio
   newsletter: NewsletterSettings,
 };
 
-// The 18 Theme Settings categories, in the confirmed spec order. Category
-// bodies are placeholders here — Phase 4 replaces each with its real form
-// (Logo/Colors/Typography/... /Custom CSS); this phase's job is the
-// accordion shell + editorMode dispatch, not the forms themselves.
-const THEME_SETTINGS_CATEGORIES = [
-  "Logo and favicon",
-  "Colors",
-  "Typography",
-  "Page layout",
-  "Animations",
-  "Badges",
-  "Buttons",
-  "Cart",
-  "Drawers",
-  "Icons",
-  "Input fields",
-  "Popovers and modals",
-  "Prices",
-  "Product cards",
-  "Search",
-  "Swatches",
-  "Variant pickers",
-  "Custom CSS",
+// The 18 Theme Settings categories, in the confirmed spec order. Each
+// category's key is also what SchemePicker's "Edit scheme" jump link (in
+// Badges/Drawers/Popovers) targets via setThemeSettingsCategory("Colors").
+const THEME_SETTINGS_CATEGORIES: { label: string; Component: ComponentType<{ editor: ThemeEditorState }> }[] = [
+  { label: "Logo and favicon", Component: LogoSettings },
+  { label: "Colors", Component: ColorsSettings },
+  { label: "Typography", Component: TypographySettings },
+  { label: "Page layout", Component: PageLayoutSettings },
+  { label: "Animations", Component: AnimationsSettings },
+  { label: "Badges", Component: BadgesSettings },
+  { label: "Buttons", Component: ButtonsSettings },
+  { label: "Cart", Component: CartSettings },
+  { label: "Drawers", Component: DrawersSettings },
+  { label: "Icons", Component: IconsSettings },
+  { label: "Input fields", Component: InputFieldsSettings },
+  { label: "Popovers and modals", Component: PopoversSettings },
+  { label: "Prices", Component: PricesSettings },
+  { label: "Product cards", Component: ProductCardsSettings },
+  { label: "Search", Component: SearchSettings },
+  { label: "Swatches", Component: SwatchesSettings },
+  { label: "Variant pickers", Component: VariantPickersSettings },
+  { label: "Custom CSS", Component: CustomCssSettings },
 ];
 
 function ThemeSettingsAccordion({ editor }: { editor: ThemeEditorState }) {
@@ -66,10 +83,10 @@ function ThemeSettingsAccordion({ editor }: { editor: ThemeEditorState }) {
       <Accordion
         open={themeSettingsCategory}
         onToggle={(key) => setThemeSettingsCategory(themeSettingsCategory === key ? null : key)}
-        items={THEME_SETTINGS_CATEGORIES.map((label) => ({
+        items={THEME_SETTINGS_CATEGORIES.map(({ label, Component }) => ({
           key: label,
           label,
-          content: <p className="text-xs text-zinc-500">Coming in the next phase.</p>,
+          content: <Component editor={editor} />,
         }))}
       />
     </div>
