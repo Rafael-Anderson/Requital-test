@@ -6,6 +6,7 @@ import { useThemeEditor } from "@/lib/useThemeEditor";
 import { getShop } from "@/lib/api";
 import PageLoader from "@/components/ui/PageLoader";
 import BuilderTopBar from "@/components/theme-builder/BuilderTopBar";
+import ModeSwitcher from "@/components/theme-builder/ModeSwitcher";
 import SectionTree from "@/components/theme-builder/SectionTree";
 import PreviewFrame from "@/components/theme-builder/PreviewFrame";
 import SettingsPanel from "@/components/theme-builder/SettingsPanel";
@@ -33,19 +34,15 @@ export default function ThemeBuilderPage() {
     <div className="flex h-screen flex-col">
       <BuilderTopBar editor={editor} />
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-64 shrink-0 overflow-y-auto border-r border-black/10 dark:border-white/10">
-          <SectionTree
-            sections={editor.config.sections}
-            selectedSectionId={editor.selectedSectionId}
-            onSelectSection={(id) => {
-              editor.setSelectedSectionId(id);
-              editor.setSelectedElementId(null);
-            }}
-            onToggleVisibility={editor.toggleSectionVisibility}
-            onReorder={editor.reorderSections}
-            onAddSection={editor.addSection}
-            onRemoveSection={editor.removeSection}
-          />
+        <div className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-black/10 dark:border-white/10">
+          <ModeSwitcher mode={editor.editorMode} onChange={editor.setEditorMode} />
+          {editor.editorMode === "sections" ? (
+            <div className="flex-1 overflow-y-auto">
+              <SectionTree editor={editor} />
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <PreviewFrame editor={editor} shopSlug={shopSlug} />

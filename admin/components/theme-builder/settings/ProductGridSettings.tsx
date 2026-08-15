@@ -1,6 +1,5 @@
 "use client";
 
-import Toggle from "@/components/ui/Toggle";
 import Select from "@/components/ui/Select";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -10,6 +9,10 @@ import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
 const CARD_STYLES = ["minimal", "bordered", "shadowed"] as const;
 
+// Whether media/title/price show on each card is now controlled per
+// sub-block (expand the section's Product card node in the tree) —
+// "Show rating" was dropped entirely rather than migrated: it never did
+// anything (Product has no rating field anywhere in this codebase).
 export default function ProductGridSettings({
   settings,
   onUpdate,
@@ -39,20 +42,6 @@ export default function ProductGridSettings({
           </option>
         ))}
       </Select>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Show rating</span>
-        <Toggle
-          checked={!!settings.showRating}
-          onChange={(v) => onUpdate("showRating", v)}
-        />
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Show price</span>
-        <Toggle
-          checked={settings.showPrice !== false}
-          onChange={(v) => onUpdate("showPrice", v)}
-        />
-      </div>
 
       <hr className="border-black/10 dark:border-white/10" />
 

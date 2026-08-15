@@ -31,7 +31,7 @@ export default function PreviewFrame({
   const [manualRefreshCount, setManualRefreshCount] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, device, setSelectedSectionId, setSelectedElementId } = editor;
+  const { theme, config, device, selectNode } = editor;
 
   useEffect(() => {
     if (!config) return;
@@ -51,13 +51,12 @@ export default function PreviewFrame({
     function handleMessage(event: MessageEvent) {
       if (event.origin !== STOREFRONT_ORIGIN) return;
       if (event.data?.type === "theme-section-selected" && typeof event.data.sectionId === "string") {
-        setSelectedSectionId(event.data.sectionId);
-        setSelectedElementId(null);
+        selectNode(event.data.sectionId);
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [setSelectedSectionId, setSelectedElementId]);
+  }, [selectNode]);
 
   if (!theme) return null;
 

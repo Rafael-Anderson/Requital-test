@@ -1,12 +1,6 @@
 "use client";
 
-import Input from "@/components/ui/Input";
-import Textarea from "@/components/ui/Textarea";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
-import ImageDropzone from "@/components/ui/ImageDropzone";
-import { uploadThemeImage, resolveImageUrl } from "@/lib/api";
-import { useToast } from "@/components/ui/Toast";
-import { useState } from "react";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -14,6 +8,9 @@ import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
+// The image and its text now live on this section's own image/text blocks
+// — select one in the tree to edit it. imagePosition stays here since it's
+// a layout choice about the section, not block content.
 export default function ImageTextSettings({
   settings,
   onUpdate,
@@ -21,28 +18,8 @@ export default function ImageTextSettings({
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
 }) {
-  const toast = useToast();
-  const [uploading, setUploading] = useState(false);
-
-  async function handleImage(file: File) {
-    setUploading(true);
-    try {
-      const { url } = await uploadThemeImage(file);
-      onUpdate("imageUrl", url);
-    } catch {
-      toast("Failed to upload image", "error");
-    } finally {
-      setUploading(false);
-    }
-  }
-
   return (
     <div className="space-y-4">
-      <ImageDropzone
-        preview={resolveImageUrl((settings.imageUrl as string) ?? null)}
-        onFileSelected={(file) => void handleImage(file)}
-        label={uploading ? "Uploading..." : "Image"}
-      />
       <SegmentedToggle
         value={(settings.imagePosition as string) ?? "left"}
         options={[
@@ -50,17 +27,6 @@ export default function ImageTextSettings({
           { value: "right", label: "Image right" },
         ]}
         onChange={(v) => onUpdate("imagePosition", v)}
-      />
-      <Input
-        label="Heading"
-        value={(settings.heading as string) ?? ""}
-        onChange={(e) => onUpdate("heading", e.target.value)}
-      />
-      <Textarea
-        label="Text"
-        rows={4}
-        value={(settings.text as string) ?? ""}
-        onChange={(e) => onUpdate("text", e.target.value)}
       />
 
       <hr className="border-black/10 dark:border-white/10" />
