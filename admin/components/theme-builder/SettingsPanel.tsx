@@ -1,8 +1,6 @@
 "use client";
 
 import type { ComponentType } from "react";
-import Accordion from "@/components/ui/Accordion";
-import AppEmbedsPanel from "./AppEmbedsPanel";
 import BlockSettingsForm from "./BlockSettingsForm";
 import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
@@ -32,7 +30,24 @@ import RichTextSettings from "./settings/RichTextSettings";
 import ImageTextSettings from "./settings/ImageTextSettings";
 import NewsletterSettings from "./settings/NewsletterSettings";
 import AnnouncementBarSettings from "./settings/AnnouncementBarSettings";
+import {
+  HomeTabSetting,
+  MenuSetting,
+  HomepageLayoutSetting,
+  TopBarLayoutSetting,
+  HeaderSizeSetting,
+  FooterLayoutSetting,
+  FooterSizeSetting,
+  ProductPageLayoutSetting,
+  CartLayoutSetting,
+  CheckoutLayoutSetting,
+  IconStyleSetting,
+  ButtonShapeSetting,
+  ButtonFillSetting,
+} from "./LayoutSettings";
 import { SECTION_TYPE_LABELS, type ThemeSectionType } from "@/lib/types";
+import { THEME_SETTINGS_CATEGORY_LABELS } from "@/lib/theme-settings-categories";
+import { THEME_LAYOUT_CATEGORY_LABELS } from "@/lib/theme-layout-categories";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
 type SectionSettingsProps = {
@@ -51,59 +66,97 @@ const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<Sectio
   newsletter: NewsletterSettings,
 };
 
-// The 18 Theme Settings categories, in the confirmed spec order. Each
-// category's key is also what SchemePicker's "Edit scheme" jump link (in
-// Badges/Drawers/Popovers) targets via setThemeSettingsCategory("Colors").
-const THEME_SETTINGS_CATEGORIES: { label: string; Component: ComponentType<{ editor: ThemeEditorState }> }[] = [
-  { label: "Logo and favicon", Component: LogoSettings },
-  { label: "Colors", Component: ColorsSettings },
-  { label: "Typography", Component: TypographySettings },
-  { label: "Page layout", Component: PageLayoutSettings },
-  { label: "Animations", Component: AnimationsSettings },
-  { label: "Badges", Component: BadgesSettings },
-  { label: "Buttons", Component: ButtonsSettings },
-  { label: "Cart", Component: CartSettings },
-  { label: "Drawers", Component: DrawersSettings },
-  { label: "Icons", Component: IconsSettings },
-  { label: "Input fields", Component: InputFieldsSettings },
-  { label: "Popovers and modals", Component: PopoversSettings },
-  { label: "Prices", Component: PricesSettings },
-  { label: "Product cards", Component: ProductCardsSettings },
-  { label: "Search", Component: SearchSettings },
-  { label: "Swatches", Component: SwatchesSettings },
-  { label: "Variant pickers", Component: VariantPickersSettings },
-  { label: "Custom CSS", Component: CustomCssSettings },
-];
+// The 18 Theme Settings categories, in the confirmed spec order — keyed by
+// the same labels ThemeSettingsList.tsx renders as the left column, so
+// clicking one there shows its form here, exactly like selecting a section
+// or block does in Sections mode. Each category's label is also what
+// SchemePicker's "Edit scheme" jump link (in Badges/Drawers/Popovers)
+// targets via setThemeSettingsCategory("Colors").
+const THEME_SETTINGS_COMPONENTS: Record<
+  (typeof THEME_SETTINGS_CATEGORY_LABELS)[number],
+  ComponentType<{ editor: ThemeEditorState }>
+> = {
+  "Logo and favicon": LogoSettings,
+  Colors: ColorsSettings,
+  Typography: TypographySettings,
+  "Page layout": PageLayoutSettings,
+  Animations: AnimationsSettings,
+  Badges: BadgesSettings,
+  Buttons: ButtonsSettings,
+  Cart: CartSettings,
+  Drawers: DrawersSettings,
+  Icons: IconsSettings,
+  "Input fields": InputFieldsSettings,
+  "Popovers and modals": PopoversSettings,
+  Prices: PricesSettings,
+  "Product cards": ProductCardsSettings,
+  Search: SearchSettings,
+  Swatches: SwatchesSettings,
+  "Variant pickers": VariantPickersSettings,
+  "Custom CSS": CustomCssSettings,
+};
 
-function ThemeSettingsAccordion({ editor }: { editor: ThemeEditorState }) {
-  const { themeSettingsCategory, setThemeSettingsCategory } = editor;
-  return (
-    <div className="p-4">
-      <h2 className="mb-2 text-sm font-semibold">Theme settings</h2>
-      <Accordion
-        open={themeSettingsCategory}
-        onToggle={(key) => setThemeSettingsCategory(themeSettingsCategory === key ? null : key)}
-        items={THEME_SETTINGS_CATEGORIES.map(({ label, Component }) => ({
-          key: label,
-          label,
-          content: <Component editor={editor} />,
-        }))}
-      />
-    </div>
-  );
-}
+// Layout mode's 13 categories — a straight port of the old Theme
+// Customizer's Advanced tab into the same left-list/right-detail pattern,
+// each backed by the legacy `themesettings` row (useLegacyTheme), not
+// theme.config. Menu/Home tab don't take an editor prop (self-contained via
+// their own API calls), so this map is prop-less rather than reusing
+// THEME_SETTINGS_COMPONENTS' `{ editor }` shape.
+const LAYOUT_COMPONENTS: Record<(typeof THEME_LAYOUT_CATEGORY_LABELS)[number], ComponentType> = {
+  "Home tab": HomeTabSetting,
+  Menu: MenuSetting,
+  "Homepage layout": HomepageLayoutSetting,
+  "Top bar layout": TopBarLayoutSetting,
+  "Header size": HeaderSizeSetting,
+  "Footer layout": FooterLayoutSetting,
+  "Footer size": FooterSizeSetting,
+  "Product page layout": ProductPageLayoutSetting,
+  "Cart layout": CartLayoutSetting,
+  "Checkout layout": CheckoutLayoutSetting,
+  "Icon style": IconStyleSetting,
+  "Button shape": ButtonShapeSetting,
+  "Button fill": ButtonFillSetting,
+};
 
-// Dispatches on editorMode first (sections / theme settings / app embeds),
-// then — in sections mode — on the selected tree node: Header/Footer
-// chrome, a section (shared controls + that type's own settings, content
-// fields now live on blocks), a block (BlockSettingsForm's per-type
-// dispatch), or nothing selected (a hint to pick something in the tree).
+// Dispatches on editorMode first (sections / theme settings / layout), then
+// — in sections mode — on the selected tree node: Header/Footer chrome, a
+// section (shared controls + that type's own settings, content fields now
+// live on blocks), a block (BlockSettingsForm's per-type dispatch), or
+// nothing selected (a hint to pick something in the tree). In theme
+// settings/layout mode, the selected category (ThemeSettingsList.tsx/
+// LayoutList.tsx's left column) dispatches the same way a tree selection
+// does.
 export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) {
   const { config, selection } = editor;
   if (!config) return null;
 
-  if (editor.editorMode === "theme_settings") return <ThemeSettingsAccordion editor={editor} />;
-  if (editor.editorMode === "app_embeds") return <AppEmbedsPanel />;
+  if (editor.editorMode === "theme_settings") {
+    const category = editor.themeSettingsCategory;
+    if (!category) {
+      return <p className="p-4 text-sm text-zinc-500">Select a category on the left to edit it.</p>;
+    }
+    const Component = THEME_SETTINGS_COMPONENTS[category as (typeof THEME_SETTINGS_CATEGORY_LABELS)[number]];
+    return (
+      <div className="p-4">
+        <h2 className="mb-4 text-sm font-semibold">{category}</h2>
+        <Component editor={editor} />
+      </div>
+    );
+  }
+
+  if (editor.editorMode === "layout") {
+    const category = editor.layoutCategory;
+    if (!category) {
+      return <p className="p-4 text-sm text-zinc-500">Select a category on the left to edit it.</p>;
+    }
+    const Component = LAYOUT_COMPONENTS[category as (typeof THEME_LAYOUT_CATEGORY_LABELS)[number]];
+    return (
+      <div className="p-4">
+        <h2 className="mb-4 text-sm font-semibold">{category}</h2>
+        <Component />
+      </div>
+    );
+  }
 
   if (!selection) {
     return <p className="p-4 text-sm text-zinc-500">Select a section or block on the left to edit it.</p>;

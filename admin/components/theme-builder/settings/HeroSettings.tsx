@@ -7,6 +7,7 @@ import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
+import LegacyHeroSettings from "../LegacyHeroSettings";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
 const HEIGHTS = ["small", "medium", "large", "full"] as const;
@@ -62,6 +63,8 @@ export default function HeroSettings({
         value={settings.visibility as SectionVisibility}
         onChange={(v) => onUpdate("visibility", v)}
       />
+
+      <LegacyHeroSettings />
     </div>
   );
 }

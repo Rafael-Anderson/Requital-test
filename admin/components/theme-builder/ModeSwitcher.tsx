@@ -1,17 +1,23 @@
 "use client";
 
-import { Blocks, Layers, Settings } from "lucide-react";
+import { Layers, Settings, SlidersHorizontal } from "lucide-react";
 import type { EditorMode } from "@/lib/useThemeEditor";
 
 const MODES: { key: EditorMode; label: string; Icon: typeof Layers }[] = [
   { key: "sections", label: "Sections", Icon: Layers },
   { key: "theme_settings", label: "Theme settings", Icon: Settings },
-  { key: "app_embeds", label: "App embeds", Icon: Blocks },
+  { key: "layout", label: "Layout", Icon: SlidersHorizontal },
 ];
 
-// The 3-icon row above the section tree, matching Shopify's real editor
-// placement — dispatches what the left/right panels show (SettingsPanel.tsx
-// reads editorMode first, before any node-selection dispatch).
+// The 3-icon row above the section tree — dispatches what the left/right
+// panels show (SettingsPanel.tsx reads editorMode first, before any
+// node-selection dispatch). App embeds was dropped: this app has no
+// app-extensibility model to list real embeds for, and a permanently-empty
+// placeholder mode wasn't worth the dead click. Layout replaces it — a
+// full port of the old Theme Customizer's Advanced tab (homepage/top bar/
+// PDP/cart/checkout layout, header/footer size, icon style, button shape/
+// fill, home tab mode, menu) into this builder's own left-list/right-detail
+// pattern, backed by the same legacy `themesettings` row via useLegacyTheme.
 export default function ModeSwitcher({ mode, onChange }: { mode: EditorMode; onChange: (mode: EditorMode) => void }) {
   return (
     <div className="flex items-center gap-1 border-b border-black/10 p-2 dark:border-white/10">

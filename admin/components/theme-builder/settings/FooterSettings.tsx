@@ -2,6 +2,7 @@
 
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
+import LegacyFooterSettings from "../LegacyFooterSettings";
 
 // Footer is global chrome (pinned to every page), same reasoning as
 // HeaderSettings — no scroll-animation control here either. Copyright text
@@ -24,6 +25,8 @@ export default function FooterSettings({
         value={settings.background as BackgroundValue}
         onChange={(v) => onUpdate("background", v)}
       />
+
+      <LegacyFooterSettings />
     </div>
   );
 }
