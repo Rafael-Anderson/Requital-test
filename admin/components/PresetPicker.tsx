@@ -14,14 +14,24 @@ export default function PresetPicker<T extends string>({
   value,
   onChange,
   renderThumbnail,
+  singleColumn = false,
 }: {
   options: { key: T; label: string; description?: string }[];
   value: T;
   onChange: (key: T) => void;
   renderThumbnail: (key: T) => ReactNode;
+  // Layout mode (LayoutSettings.tsx) renders this inside the builder's
+  // w-80 right panel, not a full-width page — the default sm:grid-cols-3
+  // breakpoint is a *viewport* width check, so it still forced 3 columns
+  // into a ~288px-wide parent regardless of how little room that left per
+  // card (squished thumbnails, labels wrapping to one word). singleColumn
+  // stacks one full-width card per row instead; the old Advanced page
+  // (theme/edit/advanced) keeps the 3-column default since it's not
+  // panel-constrained.
+  singleColumn?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className={`grid gap-4 ${singleColumn ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-3"}`}>
       {options.map((option) => {
         const selected = value === option.key;
         return (

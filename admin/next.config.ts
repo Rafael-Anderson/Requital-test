@@ -5,6 +5,24 @@ import type { NextConfig } from "next";
 // thumbnail and fetch() call breaks under the CSP below.
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+// The theme builder's live preview (PreviewFrame.tsx) embeds the shop's own
+// storefront in an iframe — a second, independent CSP gate from the
+// storefront's own frame-ancestors (next.config.ts in storefront/), which
+// only controls who may embed IT. This directive controls whether THIS app
+// is allowed to embed anyone at all. With no frame-src set, the browser
+// falls back to default-src 'self' for framing decisions and silently
+// blocks any cross-origin iframe — the actual reason the preview stayed
+// blank even after the storefront-side frame-ancestors fix landed (confirmed
+// via a real browser console: "Framing '...' violates ... default-src
+// 'self'", not a frame-ancestors violation). A shop's real storefront
+// address is either *.requital.io or an arbitrary merchant-connected custom
+// domain (see backend "Domains" in CLAUDE.md) — there's no fixed origin
+// list to enumerate for the latter, so this is scoped to the https: scheme
+// rather than a specific host (every real shop domain is served over HTTPS
+// via Caddy's on-demand TLS); the exact configured dev storefront origin is
+// added alongside since local dev is plain http.
+const STOREFRONT_ORIGIN = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://localhost:3002";
+
 // script-src needs 'unsafe-inline' for the dark-mode init script in
 // app/layout.tsx's <head> (must run before paint, so it can't be an external
 // bundle) and for Next's own inline hydration payloads — a nonce-based CSP
@@ -30,6 +48,7 @@ const CSP = [
   `connect-src 'self' ${API_ORIGIN}`,
   "font-src 'self' data:",
   "object-src 'none'",
+  `frame-src 'self' ${STOREFRONT_ORIGIN} https:`,
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self'",

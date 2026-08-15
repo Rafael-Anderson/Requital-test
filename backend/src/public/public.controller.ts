@@ -32,8 +32,11 @@ export class PublicController {
 
   @Public()
   @Get('collections')
-  listCollections(@Param('shopSlug') shopSlug: string) {
-    return this.publicService.listCollections(shopSlug);
+  listCollections(
+    @Param('shopSlug') shopSlug: string,
+    @Query('previewToken') previewToken?: string,
+  ) {
+    return this.publicService.listCollections(shopSlug, previewToken);
   }
 
   // Collection (taxonomy node) detail page, /[shop]/collections/[slug] —
@@ -69,8 +72,11 @@ export class PublicController {
   // Storefront top-bar "Menu" — direct Collection links + Dropdowns.
   @Public()
   @Get('menu')
-  getMenu(@Param('shopSlug') shopSlug: string) {
-    return this.publicService.getMenu(shopSlug);
+  getMenu(
+    @Param('shopSlug') shopSlug: string,
+    @Query('previewToken') previewToken?: string,
+  ) {
+    return this.publicService.getMenu(shopSlug, previewToken);
   }
 
   // New visual theme builder's storefront-facing config read. preview=true
@@ -129,19 +135,24 @@ export class PublicController {
     @Query('outletId') outletId?: string,
     @Query('collectionId') collectionId?: string,
     @Query('isCheckoutAddon') isCheckoutAddon?: string,
+    @Query('previewToken') previewToken?: string,
   ) {
     return this.publicService.listProducts(
       shopSlug,
       outletId ? Number(outletId) : undefined,
       collectionId ? Number(collectionId) : undefined,
       isCheckoutAddon !== undefined ? isCheckoutAddon === 'true' : undefined,
+      previewToken,
     );
   }
 
   @Public()
   @Get('outlets')
-  listOutlets(@Param('shopSlug') shopSlug: string) {
-    return this.publicService.listOutlets(shopSlug);
+  listOutlets(
+    @Param('shopSlug') shopSlug: string,
+    @Query('previewToken') previewToken?: string,
+  ) {
+    return this.publicService.listOutlets(shopSlug, previewToken);
   }
 
   // Registered before 'products/:id' resolution order doesn't matter here

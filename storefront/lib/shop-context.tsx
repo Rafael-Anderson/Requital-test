@@ -42,6 +42,13 @@ interface ShopContextValue {
   // and SectionWrapper's click-to-select reverse channel — never true for
   // a real shopper's storefront visit.
   previewMode: boolean;
+  // The previewing staff member's own JWT, carried in via ?previewToken=
+  // (see admin's PreviewFrame.tsx) — undefined outside preview mode. Every
+  // fetch that's gated by PublicService.assertPublishedOrPreview (outlets,
+  // menu, collections, products) needs this passed through so an unpublished
+  // shop's own staff can preview it before ever going live; see that
+  // method's own comment for why a bare ?preview=true flag isn't enough.
+  previewToken: string | undefined;
 }
 
 const ShopContext = createContext<ShopContextValue | null>(null);
@@ -212,6 +219,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
 
   const preview = searchParams.get("preview") === "true";
   const previewThemeId = searchParams.get("themeId");
+  const previewToken = searchParams.get("previewToken") ?? undefined;
 
   useEffect(() => {
     // Runs on every page under this shop, not just checkout — a ?ref=<code>
@@ -224,14 +232,14 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
     setLoading(true);
     setError(null);
     setShop(null);
-    Promise.all([getShop(shopSlug), listOutlets(shopSlug)])
+    Promise.all([getShop(shopSlug), listOutlets(shopSlug, previewToken)])
       .then(([shopRes, outletsRes]) => {
         setShop(shopRes);
         setOutlets(outletsRes);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load shop"))
       .finally(() => setLoading(false));
-  }, [shopSlug]);
+  }, [shopSlug, previewToken]);
 
   // Separate fetch from getShop/listOutlets above — a themeConfig fetch
   // failure (e.g. a stale/invalid preview themeId) shouldn't surface as a
@@ -278,7 +286,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
 
   return (
     <ShopContext.Provider
-      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview }}
+      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview, previewToken }}
     >
       {children}
     </ShopContext.Provider>

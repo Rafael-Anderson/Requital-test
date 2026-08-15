@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { STOREFRONT_URL, storefrontUrlFor } from "@/lib/api";
+import { STOREFRONT_URL, storefrontUrlFor, getAccessToken } from "@/lib/api";
 import type { Shop } from "@/lib/types";
 import type { ThemeEditorState, DevicePreview } from "@/lib/useThemeEditor";
 
@@ -41,7 +41,25 @@ function isLocalHost(hostname: string): boolean {
 //    the bare apex domain, which just 301s to admin.requital.io) since this
 //    branch never uses STOREFRONT_URL for the URL itself, only to decide
 //    which branch to take.
+// previewToken (this staff member's own access token) lets the storefront's
+// outlets/menu/collections/products fetches pass PublicService's
+// assertPublishedOrPreview check for a shop that hasn't published yet — the
+// most common time to actually be in the builder. Without it those calls
+// 404 (shop.published === false), which used to surface as a full-page
+// "This store is unavailable" inside the iframe even after the frame-src/
+// frame-ancestors CSP fixes let the iframe load at all — see
+// PublicService.isAuthorizedPreview for the verification side. The token
+// is embedded once, at src-build time, and only refreshed by remounting the
+// iframe (theme-id change or the manual "Refresh preview" button) — a
+// preview session left open past the access token's 15-minute lifetime
+// (AuthModule's DEFAULT_TOKEN_LIFETIME) without a refresh will see this
+// content fall back to empty rather than erroring, since every one of those
+// storefront fetches already catches its own failure. Not worth wiring a
+// live-refresh mechanism into the iframe for a 15-minute edge case.
 function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
+  const previewToken = getAccessToken();
+  const tokenParam = previewToken ? `&previewToken=${encodeURIComponent(previewToken)}` : "";
+
   const storefrontHostname = (() => {
     try {
       return new URL(STOREFRONT_URL).hostname;
@@ -51,7 +69,7 @@ function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
   })();
 
   if (storefrontHostname && isLocalHost(storefrontHostname)) {
-    return `${STOREFRONT_URL}/${shop.subdomain}?preview=true&themeId=${themeId}`;
+    return `${STOREFRONT_URL}/${shop.subdomain}?preview=true&themeId=${themeId}${tokenParam}`;
   }
 
   try {
@@ -61,7 +79,7 @@ function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
     // domain env var), treat it as unresolvable rather than loading a dead
     // iframe silently.
     if (isLocalHost(new URL(base).hostname)) return null;
-    return `${base}?preview=true&themeId=${themeId}`;
+    return `${base}?preview=true&themeId=${themeId}${tokenParam}`;
   } catch {
     return null;
   }
