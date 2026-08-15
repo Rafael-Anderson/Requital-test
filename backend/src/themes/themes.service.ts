@@ -10,31 +10,105 @@ import { UpdateThemeDraftDto } from './dto/update-theme-draft.dto';
 import { DEFAULT_THEME_CONFIG } from './constants';
 import { assertValidThemeConfig } from './theme-config.validation';
 import { ThemeConfigCache } from './theme-config-cache';
-import type { ThemeConfig, ThemeElement, ThemeSection } from './theme-config.types';
+import type {
+  ColorScheme,
+  GlobalThemeSettings,
+  ThemeBlock,
+  ThemeConfig,
+  ThemeSection,
+} from './theme-config.types';
 
 function generateId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Fresh ids on clone (theme duplication and the DEFAULT_THEME_CONFIG
-// starting point) so two themes never share a section/element id — the
-// admin editor's selectedSectionId/selectedElementId and the storefront's
-// React key both rely on ids being unique per theme.
-function cloneConfigWithFreshIds(source: ThemeConfig): ThemeConfig {
-  const cloneElement = (el: ThemeElement): ThemeElement => ({
-    ...el,
-    id: generateId('el'),
-  });
-  const cloneSection = (section: ThemeSection): ThemeSection => ({
+// Recursive — a block's own `blocks` (sub-blocks, e.g. Product card ->
+// Media/Title/Price) get fresh ids too, at every depth.
+function cloneBlock(block: ThemeBlock): ThemeBlock {
+  return {
+    ...block,
+    id: generateId('blk'),
+    settings: { ...block.settings },
+    blocks: block.blocks?.map(cloneBlock),
+  };
+}
+
+function cloneSectionShell(section: ThemeSection): ThemeSection {
+  return {
     ...section,
     id: generateId('sec'),
     settings: { ...section.settings },
-    elements: section.elements?.map(cloneElement),
+    blocks: section.blocks.map(cloneBlock),
+  };
+}
+
+// Color scheme ids are referenced from several places (a section's own
+// settings.schemeId, badges' saleSchemeId/soldOutSchemeId, drawers'/
+// popovers' schemeId) — a naive fresh-id pass on colorSchemes alone would
+// silently break every one of those references in the clone (they'd keep
+// pointing at the SOURCE theme's scheme ids, which no longer exist in the
+// clone). Build an old-id -> new-id map first, then rewrite every
+// reference against it in a second pass, so a duplicated theme's "Edit
+// scheme" links always point at its own cloned scheme.
+function cloneColorSchemesWithRemap(schemes: ColorScheme[]): {
+  clonedSchemes: ColorScheme[];
+  idMap: Map<string, string>;
+} {
+  const idMap = new Map<string, string>();
+  const clonedSchemes = schemes.map((scheme) => {
+    const newId = generateId('scheme');
+    idMap.set(scheme.id, newId);
+    return { ...scheme, id: newId };
   });
+  return { clonedSchemes, idMap };
+}
+
+// Unknown id (shouldn't happen against a well-formed config) passes
+// through unchanged rather than silently vanishing the reference.
+function remapSchemeId(id: string, idMap: Map<string, string>): string {
+  return idMap.get(id) ?? id;
+}
+
+// Fresh ids on clone (theme duplication and the DEFAULT_THEME_CONFIG
+// starting point) so two themes never share a section/block/scheme id — the
+// admin editor's selection state and the storefront's React keys both rely
+// on ids being unique per theme. Exported (not just used internally) since
+// it's a pure function directly unit-tested in themes.service.spec.ts —
+// see that file for the scheme-reference-remap-on-clone case specifically.
+export function cloneConfigWithFreshIds(source: ThemeConfig): ThemeConfig {
+  const { clonedSchemes, idMap } = cloneColorSchemesWithRemap(source.globalSettings.colorSchemes);
+
+  const globalSettings: GlobalThemeSettings = {
+    ...source.globalSettings,
+    colorSchemes: clonedSchemes,
+    badges: {
+      ...source.globalSettings.badges,
+      saleSchemeId: remapSchemeId(source.globalSettings.badges.saleSchemeId, idMap),
+      soldOutSchemeId: remapSchemeId(source.globalSettings.badges.soldOutSchemeId, idMap),
+    },
+    drawers: {
+      ...source.globalSettings.drawers,
+      schemeId: remapSchemeId(source.globalSettings.drawers.schemeId, idMap),
+    },
+    popovers: {
+      ...source.globalSettings.popovers,
+      schemeId: remapSchemeId(source.globalSettings.popovers.schemeId, idMap),
+    },
+  };
+
+  const cloneSection = (section: ThemeSection): ThemeSection => {
+    const cloned = cloneSectionShell(section);
+    const schemeId = cloned.settings.schemeId;
+    if (typeof schemeId === 'string') {
+      cloned.settings = { ...cloned.settings, schemeId: remapSchemeId(schemeId, idMap) };
+    }
+    return cloned;
+  };
+
   return {
-    globalSettings: { ...source.globalSettings },
-    header: { ...source.header, elements: source.header.elements?.map(cloneElement) },
-    footer: { ...source.footer, elements: source.footer.elements?.map(cloneElement) },
+    globalSettings,
+    header: { ...source.header, blocks: source.header.blocks.map(cloneBlock) },
+    footer: { ...source.footer, blocks: source.footer.blocks.map(cloneBlock) },
     sections: source.sections.map(cloneSection),
   };
 }

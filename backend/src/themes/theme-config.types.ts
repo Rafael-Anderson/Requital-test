@@ -1,14 +1,22 @@
-// Shape of the `theme.config`/`theme.publishedConfig` JSON blob — the new
+// Shape of the `theme.config`/`theme.publishedConfig` JSON blob — the
 // visual theme builder's data model (see prisma/migrations/
 // 20260812130000_create_theme_table). Mirrored by hand in
 // admin/lib/types.ts and storefront/lib/theme-config-types.ts, same
 // no-shared-package convention as every other cross-app type in this
-// codebase (FONT_CHOICES, THEME_COLOR_FIELDS, etc.).
+// codebase.
+//
+// REWORK NOTE: this is a from-scratch replacement of the flat PR #31 shape
+// (ThemeElement -> ThemeBlock, now recursive; GlobalThemeSettings expanded
+// from 8 flat fields to 18 nested categories matching Shopify's real
+// Horizon theme settings schema, with a deliberate Dawn-style multi-scheme
+// color system layered in per the user's explicit spec). Existing `theme`
+// rows predate this shape and are reset, not migrated — see the plan's
+// "breaking migration accepted" note.
 //
 // Header/Footer are global chrome (rendered on every storefront page, not
-// just the homepage) — they get their own settings/elements slots here but
+// just the homepage) — they get their own settings/blocks slots here but
 // are deliberately NOT part of `sections[]`, which governs homepage body
-// content only. See the plan's "Scope decision" note.
+// content only.
 
 export type ThemeSectionType =
   | 'announcement_bar'
@@ -23,28 +31,35 @@ export type ThemeSectionType =
 export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | 'slide-right';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';
 
-// Freeform element positioning within a section's own drag context (Header's
-// logo/nav/search/cart/account; Hero's heading/subheading/CTA) — the data
-// shape both the Phase 6 admin editor and the storefront's rendering must
-// agree on. Defined now (Phase 1) since it's part of the schema/type shape,
-// even though no UI writes non-default positions until Phase 6.
-export interface ThemeElement {
+// A block within a section (or Header/Footer) — the real Shopify-style
+// content-piece-inside-a-container model, replacing PR #31's flat
+// `ThemeElement`. Self-referential `blocks` supports sub-blocks (e.g.
+// Featured Collections' "Product card" block containing Media/Title/Price
+// sub-blocks) — depth-capped at 4 in theme-config.validation.ts (real
+// Shopify allows 8 for app-extensible theme blocks; our fixed,
+// non-app-extensible catalog doesn't need that depth).
+export interface ThemeBlock {
   id: string;
   type: string;
-  position: { zone: string; x?: number; y?: number };
+  visible: boolean;
+  order: number;
   settings: Record<string, unknown>;
+  blocks?: ThemeBlock[];
 }
 
-// Every section's shared controls (spec: "every section exposes at
-// minimum" typography/spacing/background/scrollAnimation/visibility) plus
-// whatever section-specific fields that type needs — deliberately not typed
-// per-field beyond the shared ones, since section-specific settings vary by
-// `type` and are only deep-validated client-side (see
-// theme-config.validation.ts's own comment on why this is shallow).
+// Every section's shared controls (typography/spacing/background/
+// scrollAnimation/visibility) plus whatever section-specific fields that
+// type needs — deliberately not typed per-field beyond the shared ones,
+// since section-specific settings vary by `type` and are only
+// deep-validated client-side. `schemeId` is new: an optional reference to a
+// GlobalThemeSettings.colorSchemes[].id — when set, the storefront resolves
+// colors from the named scheme; `background` stays as the custom-override
+// escape hatch when no scheme is chosen (or to override on top of one).
 export interface SectionSettings {
   typography?: Record<string, unknown>;
   spacing?: { top?: number; bottom?: number; left?: number; right?: number };
   background?: Record<string, unknown>;
+  schemeId?: string;
   scrollAnimation?: ScrollAnimation;
   visibility?: SectionVisibility;
   [key: string]: unknown;
@@ -56,23 +71,219 @@ export interface ThemeSection {
   visible: boolean;
   order: number;
   settings: SectionSettings;
-  elements?: ThemeElement[];
+  blocks: ThemeBlock[];
+}
+
+// Global chrome (Header/Footer) — same block-tree shape as a section, but a
+// fixed named slot rather than a sections[] array member (not reorderable
+// relative to page content; see the scope decision).
+export interface HeaderFooterConfig {
+  settings: Record<string, unknown>;
+  blocks: ThemeBlock[];
+}
+
+// --- Theme Settings: 18 categories, matching Shopify Horizon's real
+// settings_schema.json structure (verified against Shopify/horizon), with
+// a deliberate Dawn-style (Shopify/dawn) multi-scheme color system layered
+// in per the user's explicit spec — Horizon itself only has a single
+// color_palette, not reusable named schemes with an "Edit scheme" jump-link
+// UX. See the plan's "Scope decisions" section for the full reasoning. ---
+
+export interface LogoSettings {
+  defaultLogoUrl?: string;
+  inverseLogoUrl?: string;
+  desktopHeight: number;
+  mobileHeight: number;
+  faviconUrl?: string;
+}
+
+// A reusable named color set, referenced by id from section settings and
+// from Badges/Drawers/Popovers below (Dawn's color_scheme_group model).
+export interface ColorScheme {
+  id: string;
+  name: string;
+  background: string;
+  backgroundGradient?: string;
+  text: string;
+  button: string;
+  buttonLabel: string;
+  secondaryButtonLabel: string;
+  border?: string;
+  shadow?: string;
+}
+
+export type TextLineHeight = 'tight' | 'normal' | 'loose';
+export type TextLetterSpacing = 'tight' | 'normal' | 'wide';
+export type TextCase = 'default' | 'uppercase';
+export type FontRole = 'heading' | 'accent';
+
+// Paragraph only gets size + line height (no font-role/letter-spacing/case)
+// — matches Horizon's real schema exactly (confirmed: Paragraph has fewer
+// controls than H1-H6 there).
+export interface ParagraphTextPreset {
+  size: number;
+  lineHeight: TextLineHeight;
+}
+
+export interface HeadingTextPreset {
+  font: FontRole;
+  size: number;
+  lineHeight: TextLineHeight;
+  letterSpacing: TextLetterSpacing;
+  case: TextCase;
+}
+
+export interface TypographySettings {
+  bodyFont: string;
+  subheadingFont: string;
+  headingFont: string;
+  accentFont: string;
+  paragraph: ParagraphTextPreset;
+  h1: HeadingTextPreset;
+  h2: HeadingTextPreset;
+  h3: HeadingTextPreset;
+  h4: HeadingTextPreset;
+  h5: HeadingTextPreset;
+  h6: HeadingTextPreset;
+}
+
+export interface PageLayoutSettings {
+  width: 'narrow' | 'normal' | 'wide';
+}
+
+export interface AnimationSettings {
+  pageTransition: boolean;
+  productCardTransition: boolean;
+  addToCart: boolean;
+  cardHoverEffect: 'none' | 'lift' | 'scale' | 'zoom';
+}
+
+export interface BadgeSettings {
+  position: 'top_right' | 'top_left' | 'bottom_right' | 'bottom_left';
+  cornerRadius: number;
+  saleSchemeId: string;
+  soldOutSchemeId: string;
+  font: 'body' | 'accent';
+  case: TextCase;
+}
+
+export interface ButtonStyleSettings {
+  borderThickness: number;
+  cornerRadius: number;
+  font: 'body' | 'accent';
+  case: TextCase;
+}
+
+export interface ButtonSettings {
+  primary: ButtonStyleSettings;
+  secondary: ButtonStyleSettings;
+  pillCornerRadius: number;
+}
+
+export interface CartSettings {
+  allowNote: boolean;
+  allowDiscounts: boolean;
+  installments: boolean;
+  acceleratedCheckout: boolean;
+  emptyCartLink?: string;
+  mediaBorderStyle: 'none' | 'solid';
+  mediaCornerRadius: number;
+}
+
+export interface DrawerSettings {
+  schemeId: string;
+  bordersStyle: 'none' | 'solid';
+  dropShadow: boolean;
+}
+
+export interface IconSettings {
+  stroke: 'thin' | 'default' | 'heavy';
+}
+
+export interface InputFieldSettings {
+  borderThickness: number;
+  cornerRadius: number;
+  textPreset: string;
+}
+
+export interface PopoverSettings {
+  schemeId: string;
+  cornerRadius: number;
+  borders: 'none' | 'solid';
+  dropShadow: boolean;
+}
+
+export interface PriceSettings {
+  currencyCode: {
+    productPages: boolean;
+    productCards: boolean;
+    cartItems: boolean;
+    cartTotal: boolean;
+  };
+}
+
+// Quick-add colors are two plain color settings, not a scheme reference —
+// verified against Horizon's real schema (quick_add_background/
+// quick_add_text are discrete `color` settings, not a color_scheme picker).
+export interface ProductCardSettings {
+  quickAdd: boolean;
+  mobileQuickAdd: boolean;
+  quickAddBackground: string;
+  quickAddText: string;
+  showSecondImageOnHover: boolean;
+  showCarousel: boolean;
+}
+
+export interface SearchSettings {
+  emptyStateCollectionId?: number;
+  productCornerRadius: number;
+  cardCornerRadius: number;
+  titleCase: TextCase;
+}
+
+export interface SwatchSettings {
+  variantImages: boolean;
+  width: number;
+  height: number;
+  cornerRadius: number;
+  borders: 'none' | 'solid';
+  borderThickness: number;
+  borderOpacity: number;
+}
+
+export interface VariantPickerSettings {
+  borderThickness: number;
+  cornerRadius: number;
+  width: 'fit' | 'fill';
+}
+
+// Real functionality, not a placeholder — injected as a raw <style> tag on
+// the storefront when published. Server-validated (length cap + reject
+// list) in theme-config.validation.ts, matching Shopify's own real
+// theme-level Custom CSS limits (1500 chars, no @import/@charset/@namespace).
+export interface CustomCssSettings {
+  css: string;
 }
 
 export interface GlobalThemeSettings {
-  primaryColor?: string;
-  secondaryColor?: string;
-  accentColor?: string;
-  bodyFont?: string;
-  headingFont?: string;
-  borderRadius?: 'sharp' | 'soft' | 'round';
-  buttonStyle?: 'filled' | 'outline' | 'ghost';
-  maxWidth?: number;
-}
-
-export interface HeaderFooterConfig {
-  settings: Record<string, unknown>;
-  elements?: ThemeElement[];
+  logo: LogoSettings;
+  colorSchemes: ColorScheme[];
+  typography: TypographySettings;
+  pageLayout: PageLayoutSettings;
+  animations: AnimationSettings;
+  badges: BadgeSettings;
+  buttons: ButtonSettings;
+  cart: CartSettings;
+  drawers: DrawerSettings;
+  icons: IconSettings;
+  inputFields: InputFieldSettings;
+  popovers: PopoverSettings;
+  prices: PriceSettings;
+  productCards: ProductCardSettings;
+  search: SearchSettings;
+  swatches: SwatchSettings;
+  variantPickers: VariantPickerSettings;
+  customCss: CustomCssSettings;
 }
 
 export interface ThemeConfig {
