@@ -103,7 +103,7 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
 
   return (
     <footer style={style} className="py-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         {(columns.length > 0 || socialBlock) && (
           <div className="flex flex-wrap justify-between gap-8 pb-8 mb-6 border-b border-white/10">
             {columns.map((block) => (

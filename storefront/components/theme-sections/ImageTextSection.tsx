@@ -3,7 +3,7 @@
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveImageElementStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveImageElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // image/text content now each live on their own block (see backend
@@ -20,7 +20,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
   if (!imageUrl && !text) return null;
 
   return (
-    <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
+    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       <div className={`flex flex-col sm:flex-row items-center gap-8 ${imageOnRight ? "sm:flex-row-reverse" : ""}`}>
         {imageUrl && imageBlock && (
           <div
@@ -37,7 +37,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
             <p
               {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
               className="whitespace-pre-line text-sm leading-relaxed opacity-80"
-              style={resolveTextElementStyle(textBlock.settings)}
+              style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
             >
               {text}
             </p>

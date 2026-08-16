@@ -43,6 +43,21 @@ export default function StorefrontPageShell({
     );
   }
 
-  const maxWidth = variant === "medium" ? "max-w-2xl" : "max-w-7xl";
-  return <div className={`mx-auto px-4 sm:px-6 py-6 sm:py-10 ${maxWidth} ${className}`}>{children}</div>;
+  // "wide" reads Theme Settings > Page layout's width (--theme-max-width,
+  // set in shop-context.tsx) — confirmed dead until this fix (set but never
+  // consumed anywhere). "medium"/"narrow" stay fixed Tailwind widths on
+  // purpose (per this component's own doc comment, they're deliberately
+  // narrower single-column/transactional layouts, not the merchant's chosen
+  // page width).
+  if (variant === "medium") {
+    return <div className={`mx-auto px-4 sm:px-6 py-6 sm:py-10 max-w-2xl ${className}`}>{children}</div>;
+  }
+  return (
+    <div
+      className={`mx-auto px-4 sm:px-6 py-6 sm:py-10 ${className}`}
+      style={{ maxWidth: "var(--theme-max-width, 80rem)" }}
+    >
+      {children}
+    </div>
+  );
 }
