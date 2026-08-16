@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { STOREFRONT_URL, storefrontUrlFor, getAccessToken } from "@/lib/api";
 import type { Shop } from "@/lib/types";
-import type { ThemeEditorState, DevicePreview } from "@/lib/useThemeEditor";
+import {
+  HEADER_CHROME_ID,
+  FOOTER_CHROME_ID,
+  type BlockContainerRef,
+  type ThemeEditorState,
+  type DevicePreview,
+} from "@/lib/useThemeEditor";
 
 const DEVICE_WIDTH: Record<DevicePreview, string> = {
   desktop: "100%",
@@ -12,7 +18,7 @@ const DEVICE_WIDTH: Record<DevicePreview, string> = {
   mobile: "390px",
 };
 
-const POST_DEBOUNCE_MS = 250;
+const POST_DEBOUNCE_MS = 200;
 
 // Mirrors storefront/lib/is-local-host.ts by hand — same no-shared-package
 // convention as every other cross-app helper in this codebase.
@@ -102,7 +108,7 @@ export default function PreviewFrame({
   const [manualRefreshCount, setManualRefreshCount] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, device, selectNode } = editor;
+  const { theme, config, device, selectNode, reorderBlocks, publishVersion } = editor;
 
   const src = theme ? resolvePreviewUrl(shop, theme.id) : null;
   const previewOrigin = useMemo(() => {
@@ -128,17 +134,56 @@ export default function PreviewFrame({
     };
   }, [config, previewOrigin]);
 
+  // Reverse channel from the iframe — every handler validates event.origin
+  // against the resolved preview origin (never '*') before acting, same as
+  // the existing theme-section-selected handling this replaces/extends.
+  // element-selected/element-deselected reuse the editor's own single
+  // selectedId + resolveSelection (see useThemeEditor.ts) rather than
+  // tracking a separate selectedElementId here — selecting a block by id
+  // already resolves its full section/container context on its own, so
+  // there's nothing extra to store.
   useEffect(() => {
-    if (!previewOrigin) return;
+    if (!previewOrigin || !config) return;
+    const currentConfig = config;
     function handleMessage(event: MessageEvent) {
       if (event.origin !== previewOrigin) return;
-      if (event.data?.type === "theme-section-selected" && typeof event.data.sectionId === "string") {
-        selectNode(event.data.sectionId);
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+
+      if (data.type === "theme-section-selected" && typeof data.sectionId === "string") {
+        selectNode(data.sectionId);
+        return;
+      }
+      if (data.type === "element-selected" && typeof data.elementId === "string") {
+        selectNode(data.elementId);
+        return;
+      }
+      if (data.type === "element-deselected") {
+        selectNode(null);
+        return;
+      }
+      if (
+        data.type === "element-moved" &&
+        typeof data.sectionId === "string" &&
+        Array.isArray(data.orderedIds) &&
+        data.orderedIds.every((id: unknown) => typeof id === "string")
+      ) {
+        const container: BlockContainerRef =
+          data.sectionId === HEADER_CHROME_ID
+            ? { kind: "header" }
+            : data.sectionId === FOOTER_CHROME_ID
+              ? { kind: "footer" }
+              : {
+                  kind: "section",
+                  sectionId: data.sectionId,
+                  sectionType: currentConfig.sections.find((s) => s.id === data.sectionId)?.type ?? "hero",
+                };
+        reorderBlocks(container, null, data.orderedIds as string[]);
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [previewOrigin, selectNode]);
+  }, [previewOrigin, config, selectNode, reorderBlocks]);
 
   if (!theme) return null;
 
@@ -158,7 +203,7 @@ export default function PreviewFrame({
         {src ? (
           <iframe
             ref={iframeRef}
-            key={`${theme.id}-${manualRefreshCount}`}
+            key={`${theme.id}-${manualRefreshCount}-${publishVersion}`}
             title="Storefront preview"
             src={src}
             style={{ width: DEVICE_WIDTH[device], maxWidth: "100%" }}

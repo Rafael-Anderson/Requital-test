@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -22,6 +22,7 @@ import Toggle from "@/components/ui/Toggle";
 import TreeNode from "./TreeNode";
 import AddSectionModal from "./AddSectionModal";
 import AddBlockModal from "./AddBlockModal";
+import { findNodeInTree } from "@/lib/theme-tree";
 import { SECTION_TYPE_LABELS, type ThemeSection } from "@/lib/types";
 import { HEADER_CHROME_ID, FOOTER_CHROME_ID, type BlockContainerRef, type ThemeEditorState } from "@/lib/useThemeEditor";
 
@@ -123,6 +124,35 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevSelectedIdRef = useRef<string | null>(null);
+
+  // Syncs the tree to a selection made elsewhere — specifically, a
+  // double-click in the live preview (PreviewInteraction.tsx ->
+  // PreviewFrame.tsx -> selectNode) — by expanding the block's containing
+  // section (or Header/Footer) if collapsed and scrolling it into view.
+  // Doesn't re-run for a selection the tree's own click already made (same
+  // id twice in a row is a no-op here, harmless either way).
+  useEffect(() => {
+    if (!config || !selectedId || selectedId === prevSelectedIdRef.current) return;
+    prevSelectedIdRef.current = selectedId;
+
+    let containingId: string | null = null;
+    if (selectedId === HEADER_CHROME_ID || findNodeInTree(config.header.blocks, selectedId)) {
+      containingId = HEADER_CHROME_ID;
+    } else if (selectedId === FOOTER_CHROME_ID || findNodeInTree(config.footer.blocks, selectedId)) {
+      containingId = FOOTER_CHROME_ID;
+    } else {
+      containingId = config.sections.find((s) => s.id === selectedId || findNodeInTree(s.blocks, selectedId))?.id ?? null;
+    }
+    if (!containingId) return;
+
+    const resolvedId = containingId;
+    setExpandedIds((prev) => (prev.has(resolvedId) ? prev : new Set(prev).add(resolvedId)));
+    requestAnimationFrame(() => {
+      containerRef.current?.querySelector(`[data-section-row="${window.CSS.escape(resolvedId)}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+  }, [selectedId, config]);
 
   if (!config) return null;
 
@@ -169,15 +199,17 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 p-3">
-      <ChromeRow
-        label="Header"
-        Icon={Layout}
-        selected={selectedId === HEADER_CHROME_ID}
-        expanded={expandedIds.has(HEADER_CHROME_ID)}
-        onSelect={() => selectNode(HEADER_CHROME_ID)}
-        onToggleExpand={() => toggleExpanded(HEADER_CHROME_ID)}
-      />
+    <div ref={containerRef} className="flex h-full flex-col gap-3 p-3">
+      <div data-section-row={HEADER_CHROME_ID}>
+        <ChromeRow
+          label="Header"
+          Icon={Layout}
+          selected={selectedId === HEADER_CHROME_ID}
+          expanded={expandedIds.has(HEADER_CHROME_ID)}
+          onSelect={() => selectNode(HEADER_CHROME_ID)}
+          onToggleExpand={() => toggleExpanded(HEADER_CHROME_ID)}
+        />
+      </div>
       {expandedIds.has(HEADER_CHROME_ID) && treeNodeFor({ kind: "header" }, "header", config.header.blocks)}
 
       <div className="flex-1 space-y-1.5 overflow-y-auto">
@@ -185,7 +217,7 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={ordered.map((s) => s.id)} strategy={verticalListSortingStrategy}>
             {ordered.map((section) => (
-              <div key={section.id}>
+              <div key={section.id} data-section-row={section.id}>
                 <SortableSectionRow
                   section={section}
                   selected={selectedId === section.id}
@@ -212,14 +244,16 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
         Add section
       </button>
 
-      <ChromeRow
-        label="Footer"
-        Icon={PanelBottom}
-        selected={selectedId === FOOTER_CHROME_ID}
-        expanded={expandedIds.has(FOOTER_CHROME_ID)}
-        onSelect={() => selectNode(FOOTER_CHROME_ID)}
-        onToggleExpand={() => toggleExpanded(FOOTER_CHROME_ID)}
-      />
+      <div data-section-row={FOOTER_CHROME_ID}>
+        <ChromeRow
+          label="Footer"
+          Icon={PanelBottom}
+          selected={selectedId === FOOTER_CHROME_ID}
+          expanded={expandedIds.has(FOOTER_CHROME_ID)}
+          onSelect={() => selectNode(FOOTER_CHROME_ID)}
+          onToggleExpand={() => toggleExpanded(FOOTER_CHROME_ID)}
+        />
+      </div>
       {expandedIds.has(FOOTER_CHROME_ID) && treeNodeFor({ kind: "footer" }, "footer", config.footer.blocks)}
 
       {addSectionOpen && (
