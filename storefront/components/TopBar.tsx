@@ -9,6 +9,7 @@ import { useCartDrawer } from "@/lib/cart-drawer";
 import { useShop } from "@/lib/shop-context";
 import SearchBar from "@/components/SearchBar";
 import ThemeDrivenHeader from "@/components/theme-sections/ThemeDrivenHeader";
+import { parseJsonField } from "@/lib/notification-text";
 import type { Customer, Density, Shop } from "@/lib/types";
 
 // Height/padding only — independent of which of the 3 layout variants below
@@ -21,6 +22,17 @@ const DENSITY_PADDING: Record<Density, string> = {
 };
 function headerPadding(shop: Shop | null) {
   return DENSITY_PADDING[shop?.headerDensity ?? "regular"];
+}
+
+// themesettings.contactNumbers was LONGTEXT, not real JSON, until
+// 20260816140000_fix_contact_numbers_colors_columns — see that migration's
+// comment (same bug class as notificationText, PR #44). Every call site
+// below goes through this instead of `shop?.contactNumbers?.[0]` directly
+// so a pre-migration or otherwise-malformed row degrades to "no number
+// shown" rather than crashing (or, before this fix, silently printing the
+// wrong thing — string indexing doesn't throw, `"[]"[0]` is just `"["`).
+function firstContactNumber(shop: Shop | null | undefined): string | undefined {
+  return parseJsonField<string[]>(shop?.contactNumbers, [])[0];
 }
 
 interface TopBarProps {
@@ -82,7 +94,7 @@ function CartIconButton({ shop, count }: { shop: Shop | null; count: number }) {
 
 function NavIcons({ shop, customer, count, showPhone = true, showAccount = true }: TopBarProps & { showPhone?: boolean; showAccount?: boolean }) {
   const { shopBasePath } = useShop();
-  const contactNumber = shop?.contactNumbers?.[0];
+  const contactNumber = firstContactNumber(shop);
   const iconProps = iconStyleProps(shop?.iconStyle, 1.75);
 
   return (
@@ -122,7 +134,7 @@ function TopBarLogoLeft(props: TopBarProps) {
 
 function TopBarLogoCenter(props: TopBarProps) {
   const iconProps = iconStyleProps(props.shop?.iconStyle, 1.75);
-  const contactNumber = props.shop?.contactNumbers?.[0];
+  const contactNumber = firstContactNumber(props.shop);
   return (
     <div className={`mx-auto max-w-7xl px-4 ${headerPadding(props.shop)} grid grid-cols-3 items-center gap-4`}>
       <div className="flex items-center gap-1">
@@ -146,6 +158,7 @@ function TopBarMinimal(props: TopBarProps) {
   const { shopBasePath } = useShop();
   const [menuOpen, setMenuOpen] = useState(false);
   const iconProps = iconStyleProps(props.shop?.iconStyle, 1.75);
+  const contactNumber = firstContactNumber(props.shop);
 
   return (
     <div className={`mx-auto max-w-7xl px-4 ${headerPadding(props.shop)}`}>
@@ -166,9 +179,9 @@ function TopBarMinimal(props: TopBarProps) {
       </div>
       {menuOpen && (
         <div className="flex flex-col gap-1 pt-2 mt-2 border-t border-stroke">
-          {props.shop?.contactNumbers?.[0] && (
-            <a href={`tel:${props.shop.contactNumbers[0]}`} className="flex items-center gap-2 py-2 text-sm hover:text-accent">
-              <Phone className="size-4" {...iconProps} /> Call {props.shop.contactNumbers[0]}
+          {contactNumber && (
+            <a href={`tel:${contactNumber}`} className="flex items-center gap-2 py-2 text-sm hover:text-accent">
+              <Phone className="size-4" {...iconProps} /> Call {contactNumber}
             </a>
           )}
           <Link href={`${shopBasePath}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent" onClick={() => setMenuOpen(false)}>

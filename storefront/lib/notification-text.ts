@@ -21,3 +21,21 @@ export function parseNotificationMessages(raw: unknown): string[] {
   }
   return [];
 }
+
+// Generic sibling for themesettings.contactNumbers/colors — the same
+// LONGTEXT-vs-JSON bug class as notificationText above (see
+// 20260816140000_fix_contact_numbers_colors_columns), just without
+// notificationText's "wrap a plain string as a single message" fallback,
+// which doesn't make sense for an array-of-phone-numbers or a color-key
+// object: a non-JSON string here is unusable data, so it falls back to the
+// caller's own default shape instead of being force-fit into it.
+export function parseJsonField<T>(raw: unknown, fallback: T): T {
+  if (raw === null || raw === undefined) return fallback;
+  if (typeof raw !== "string") return raw as T;
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
