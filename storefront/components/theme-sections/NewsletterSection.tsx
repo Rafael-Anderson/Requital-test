@@ -2,7 +2,7 @@
 
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle, resolveButtonFillStyle, themeButtonBaseStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveButtonElementStyle, resolveButtonFillStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Presentational only — no newsletter/email-capture backend endpoint exists
@@ -31,7 +31,7 @@ export default function NewsletterSection({ sectionId, blocks }: { sectionId: st
         <h2
           {...editableAttrs(previewMode, { id: headingBlock.id, sectionId, type: "heading", reorderable: true })}
           className="text-xl font-semibold mb-2"
-          style={resolveTextElementStyle(headingBlock.settings)}
+          style={{ ...themeTextPresetStyle("h2"), ...resolveTextElementStyle(headingBlock.settings) }}
         >
           {heading}
         </h2>
@@ -40,7 +40,7 @@ export default function NewsletterSection({ sectionId, blocks }: { sectionId: st
         <p
           {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "subtext", reorderable: true })}
           className="text-sm opacity-70 mb-5"
-          style={resolveTextElementStyle(textBlock.settings)}
+          style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
         >
           {subtext}
         </p>

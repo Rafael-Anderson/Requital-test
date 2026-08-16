@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 function typographyStyle(typography: SectionSettings["typography"]): CSSProperties {
@@ -33,7 +33,7 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
       <p
         className="whitespace-pre-line leading-relaxed"
         {...(textBlock ? editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text" }) : {})}
-        style={{ ...typographyStyle(settings.typography), ...(textBlock ? resolveTextElementStyle(textBlock.settings) : {}) }}
+        style={{ ...themeTextPresetStyle("paragraph"), ...typographyStyle(settings.typography), ...(textBlock ? resolveTextElementStyle(textBlock.settings) : {}) }}
       >
         {text}
       </p>

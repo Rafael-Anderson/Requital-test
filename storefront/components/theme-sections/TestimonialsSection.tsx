@@ -2,7 +2,7 @@
 
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 interface TestimonialBlockSettings {
@@ -29,21 +29,21 @@ export default function TestimonialsSection({ sectionId, blocks }: { sectionId: 
 
   if (testimonials.length === 0) {
     return (
-      <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto text-center">
+      <div className="px-4 sm:px-6 py-8 mx-auto text-center" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         <p className="text-sm text-zinc-500">Customer testimonials coming soon.</p>
       </div>
     );
   }
 
   return (
-    <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
+    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {testimonials.map((t) => (
           <div key={t.id} className="p-4 border border-stroke rounded-lg">
             <p
               className="text-sm leading-relaxed"
               {...editableAttrs(previewMode, { id: t.id, sectionId, type: "testimonial_text" })}
-              style={resolveTextElementStyle(t.settings as Record<string, unknown>)}
+              style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(t.settings as Record<string, unknown>) }}
             >
               &ldquo;{t.settings.quote}&rdquo;
             </p>

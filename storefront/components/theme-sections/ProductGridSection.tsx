@@ -122,7 +122,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   if (!products || products.length === 0) return null;
 
   return (
-    <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
+    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       <div className={`grid ${columns} gap-4 sm:gap-6`}>
         {products.map((product) => (
           <Link key={product.id} href={`${shopBasePath}/products/${product.slug}`} className={`block group relative ${cardStyle}`}>
@@ -132,7 +132,8 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 <img
                   src={product.thumbnail}
                   alt={product.name}
-                  className="theme-product-image w-full h-full object-cover transition-transform duration-300"
+                  className="theme-product-image w-full h-full object-cover transition-transform"
+                  style={{ transitionDuration: "var(--theme-card-hover-transition-duration, 300ms)" }}
                 />
                 {shopCartUsable && productCards.quickAdd && (
                   <QuickAddButton

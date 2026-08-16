@@ -9,6 +9,7 @@ import {
   resolveIconElementStyle,
   themeButtonBaseStyle,
   resolveButtonFillStyle,
+  themeTextPresetStyle,
 } from "./theme-element-style";
 
 describe("resolveTextElementStyle", () => {
@@ -144,6 +145,31 @@ describe("themeButtonBaseStyle", () => {
     expect(style.borderWidth).toBe("var(--theme-button-border-width, 0px)");
     expect(style.borderStyle).toBe("solid");
     expect(style.textTransform).toBe("var(--theme-button-text-transform, none)");
+    expect(style.fontFamily).toBe("var(--theme-button-font, inherit)");
+  });
+});
+
+describe("themeTextPresetStyle", () => {
+  it("resolves size/line-height/letter-spacing/transform/font as var() lookups with a real fallback for a heading preset", () => {
+    const style = themeTextPresetStyle("h1");
+    expect(style.fontSize).toBe("var(--text-h1-size, 36px)");
+    expect(style.lineHeight).toBe("var(--text-h1-line-height, 1.4)");
+    expect(style.letterSpacing).toBe("var(--text-h1-letter-spacing, normal)");
+    expect(style.textTransform).toBe("var(--text-h1-transform, none)");
+    expect(style.fontFamily).toBe("var(--text-h1-font, var(--theme-heading-font, inherit))");
+  });
+
+  it("uses a smaller fallback size per heading level", () => {
+    expect(themeTextPresetStyle("h6").fontSize).toBe("var(--text-h6-size, 16px)");
+  });
+
+  it("paragraph has no letterSpacing/textTransform/fontFamily — those fields don't exist on ParagraphTextPreset", () => {
+    const style = themeTextPresetStyle("paragraph");
+    expect(style.fontSize).toBe("var(--text-paragraph-size, 16px)");
+    expect(style.lineHeight).toBe("var(--text-paragraph-line-height, 1.4)");
+    expect(style.letterSpacing).toBeUndefined();
+    expect(style.textTransform).toBeUndefined();
+    expect(style.fontFamily).toBeUndefined();
   });
 });
 
