@@ -3,7 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle, themeButtonBaseStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveButtonElementStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const HEIGHT_CLASS: Record<string, string> = {
@@ -61,7 +61,7 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
             key={block.id}
             {...editableAttrs(previewMode, { id: block.id, sectionId, type: "heading", reorderable: true })}
             className="text-3xl sm:text-4xl font-bold"
-            style={{ ...typographyStyle(settings.typography), ...resolveTextElementStyle(block.settings) }}
+            style={{ ...themeTextPresetStyle("h1"), ...typographyStyle(settings.typography), ...resolveTextElementStyle(block.settings) }}
           >
             {text}
           </h1>
@@ -75,7 +75,7 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
             key={block.id}
             {...editableAttrs(previewMode, { id: block.id, sectionId, type: "subheading", reorderable: true })}
             className="mt-3 text-lg opacity-80"
-            style={resolveTextElementStyle(block.settings)}
+            style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(block.settings) }}
           >
             {text}
           </p>

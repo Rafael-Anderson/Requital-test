@@ -151,6 +151,11 @@ function applyHeadingPreset(root: CSSStyleDeclaration, key: string, preset: Head
   root.setProperty(`--text-${key}-line-height`, String(resolveLineHeight(preset.lineHeight)));
   root.setProperty(`--text-${key}-letter-spacing`, resolveLetterSpacing(preset.letterSpacing));
   root.setProperty(`--text-${key}-transform`, preset.case === "uppercase" ? "uppercase" : "none");
+  // Each heading level independently picks the heading or accent font role
+  // (HeadingTextPreset.font) — resolved to whichever of those two roles'
+  // already-loaded font vars it names, so h1-h6 can genuinely differ from
+  // each other, not just share one global heading font.
+  root.setProperty(`--text-${key}-font`, preset.font === "accent" ? "var(--theme-accent-font, inherit)" : "var(--theme-heading-font, inherit)");
 }
 
 // next/font/google requires statically-known font imports at build time —
@@ -204,6 +209,13 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     loadGoogleFont(g.typography.headingFont);
     root.style.setProperty("--theme-heading-font", `"${g.typography.headingFont}", sans-serif`);
   }
+  // accentFont had no reader at all until this fix — HeadingTextPreset.font
+  // can name "accent" per heading level (see applyHeadingPreset above), and
+  // Buttons > Primary's font role (below) can too.
+  if (g.typography?.accentFont) {
+    loadGoogleFont(g.typography.accentFont);
+    root.style.setProperty("--theme-accent-font", `"${g.typography.accentFont}", sans-serif`);
+  }
   if (g.typography?.paragraph) {
     root.style.setProperty("--text-paragraph-size", `${g.typography.paragraph.size}px`);
     root.style.setProperty("--text-paragraph-line-height", String(resolveLineHeight(g.typography.paragraph.lineHeight)));
@@ -224,7 +236,16 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     root.style.setProperty("--theme-radius", `${g.buttons.primary.cornerRadius}px`);
     root.style.setProperty("--theme-button-border-width", `${g.buttons.primary.borderThickness}px`);
     root.style.setProperty("--theme-button-text-transform", g.buttons.primary.case === "uppercase" ? "uppercase" : "none");
+    root.style.setProperty("--theme-button-font", g.buttons.primary.font === "accent" ? "var(--theme-accent-font, inherit)" : "var(--theme-body-font, inherit)");
   }
+
+  // buttons.secondary and buttons.pillCornerRadius have no CSS var here —
+  // confirmed via grep, no button anywhere in the theme sections renders a
+  // "secondary" or "pill" variant (Hero's CTA and Newsletter's submit are
+  // the only two themeButtonBaseStyle() consumers, and both are always
+  // primary-styled). Setting vars nothing reads would be dead code; flagged
+  // here rather than fabricated, same as the pre-existing transparentOnHero
+  // note in ThemeDrivenHeader.tsx.
 
   // Icons: no CSS var here — lucide's strokeWidth is a numeric SVG prop,
   // not something a CSS custom property can feed into a React component
@@ -245,6 +266,19 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   if (g.animations?.cardHoverEffect) {
     root.style.setProperty("--theme-card-hover-transform", CARD_HOVER_TRANSFORM[g.animations.cardHoverEffect] ?? "none");
   }
+
+  // productCardTransition gates whether the hover transform above animates
+  // or snaps instantly — ProductGridSection previously hardcoded
+  // `transition-transform duration-300` on every card image regardless of
+  // this boolean, so turning it off in Theme Settings did nothing.
+  root.style.setProperty("--theme-card-hover-transition-duration", g.animations?.productCardTransition === false ? "0ms" : "300ms");
+
+  // animations.pageTransition and animations.addToCart have no CSS var
+  // here — this storefront has no route-transition wrapper and no
+  // add-to-cart flying/motion animation anywhere in its codebase for either
+  // toggle to gate (confirmed via grep). Building those animation systems
+  // from scratch is a new feature, not a wiring fix; flagged rather than
+  // fabricated, same reasoning as buttons.secondary/pillCornerRadius above.
 }
 
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {

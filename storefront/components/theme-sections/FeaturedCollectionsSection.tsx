@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveButtonElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import { selectTiles } from "@/components/home-layouts/FeaturedGrid";
 import type { Collection } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -36,14 +36,14 @@ export default function FeaturedCollectionsSection({ sectionId, blocks }: { sect
   if (tiles.length === 0) return null;
 
   return (
-    <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
+    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
         <div className="flex items-center justify-between mb-4">
           {titleBlock?.visible !== false && (
             <h2
               className="text-xl font-semibold"
               {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "section_heading" }) : {})}
-              style={titleBlock ? resolveTextElementStyle(titleBlock.settings) : undefined}
+              style={{ ...themeTextPresetStyle("h2"), ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
             >
               {heading}
             </h2>

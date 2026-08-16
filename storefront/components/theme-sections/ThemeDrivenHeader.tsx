@@ -153,7 +153,7 @@ export default function ThemeDrivenHeader({
 
   return (
     <div className={`${sticky ? "sticky top-0 z-30" : ""} border-b border-stroke`} style={style}>
-      <div className="mx-auto max-w-7xl px-4 py-3 grid grid-cols-3 items-center gap-4">
+      <div className="mx-auto px-4 py-3 grid grid-cols-3 items-center gap-4" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         {ZONES.map((zone) => (
           <div
             key={zone}

@@ -51,6 +51,7 @@ export function themeButtonBaseStyle(): CSSProperties {
     borderStyle: "solid",
     borderColor: "currentColor",
     textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
+    fontFamily: "var(--theme-button-font, inherit)",
   };
 }
 
@@ -156,6 +157,45 @@ export function resolveIconElementStyle(settings: Record<string, unknown>): CSSP
   if (typeof s.size === "number") {
     style.width = `${s.size}px`;
     style.height = `${s.size}px`;
+  }
+  return style;
+}
+
+// Theme Settings > Typography's 7 text presets (paragraph, h1-h6) — the CSS
+// vars themselves have been set in shop-context.tsx's applyThemeConfigOverrides
+// since this system shipped, but nothing ever read them (confirmed via grep:
+// zero references outside that one file), so every one of these presets was
+// a dead setting. Fallbacks match this app's pre-existing Tailwind defaults
+// for each tag (text-4xl/3xl/2xl/xl/lg/base/sm, leading-normal) so a shop with
+// no theme.config (or a preset field left at its seed default) renders
+// pixel-identical to before this was wired up. A single non-responsive value,
+// same simplification themeButtonBaseStyle's --theme-radius already makes —
+// true per-breakpoint theme sizing isn't worth a media query here.
+const TEXT_PRESET_FALLBACK_SIZE: Record<string, string> = {
+  h1: "36px",
+  h2: "30px",
+  h3: "24px",
+  h4: "20px",
+  h5: "18px",
+  h6: "16px",
+  paragraph: "16px",
+};
+
+export type TextPresetKey = keyof typeof TEXT_PRESET_FALLBACK_SIZE;
+
+export function themeTextPresetStyle(preset: TextPresetKey): CSSProperties {
+  const style: CSSProperties = {
+    fontSize: `var(--text-${preset}-size, ${TEXT_PRESET_FALLBACK_SIZE[preset]})`,
+    lineHeight: `var(--text-${preset}-line-height, 1.4)`,
+  };
+  // Paragraph has no letterSpacing/case fields (ParagraphTextPreset is
+  // size+lineHeight only, per the real Horizon schema) — shop-context.tsx
+  // never sets --text-paragraph-letter-spacing/-transform, so referencing
+  // them here would just be dead var() lookups.
+  if (preset !== "paragraph") {
+    style.letterSpacing = `var(--text-${preset}-letter-spacing, normal)`;
+    style.textTransform = `var(--text-${preset}-transform, none)` as CSSProperties["textTransform"];
+    style.fontFamily = `var(--text-${preset}-font, var(--theme-heading-font, inherit))`;
   }
   return style;
 }
