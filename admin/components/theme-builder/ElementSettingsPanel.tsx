@@ -206,6 +206,9 @@ function NavElementSettings({ block, onUpdate }: FamilyProps) {
   const s = block.settings;
   return (
     <div className="space-y-4">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        The navigation menu position is fixed below the header. Use Header settings to control style.
+      </p>
       <Slider label="Font size" min={10} max={24} value={(s.fontSize as number) ?? 14} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Font color</span>

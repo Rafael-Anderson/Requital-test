@@ -1296,7 +1296,7 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   hero: ["heading", "subheading", "cta"],
   featured_collections: ["collection_header", "product_card"],
   product_grid: ["product_card"],
-  testimonials: ["testimonial"],
+  testimonials: ["heading", "testimonial"],
   rich_text: ["text"],
   image_text: ["image", "text"],
   newsletter: ["heading", "text", "email_form"],

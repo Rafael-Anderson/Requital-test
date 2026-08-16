@@ -258,6 +258,26 @@ export function validateGiftCard(shopSlug: string, code: string) {
   return post<ValidateGiftCardResult>(`/public/${shopSlug}/gift-cards/validate`, { code });
 }
 
+// A 409 (email already subscribed) reads as success to the shopper — they
+// asked to be on the list and they already are — so it's folded into the
+// resolved value rather than thrown like a real failure. Doesn't reuse the
+// generic post() helper since that always throws on a non-2xx status.
+export async function subscribeNewsletter(shopSlug: string, email: string): Promise<{ alreadySubscribed: boolean }> {
+  const res = await fetch(`${API_URL}/public/${shopSlug}/newsletter-subscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (res.status === 409) return { alreadySubscribed: true };
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(
+      Array.isArray(body?.message) ? body.message.join(", ") : (body?.message ?? `Request failed (${res.status})`),
+    );
+  }
+  return { alreadySubscribed: false };
+}
+
 // Fired once name+phone are both filled in at checkout — see
 // AbandonedCartsService.capture. Never surfaced to the shopper; call sites
 // fire-and-forget this.

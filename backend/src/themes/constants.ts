@@ -67,7 +67,10 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   hero: ['heading', 'subheading', 'cta'],
   featured_collections: ['collection_header', 'product_card'],
   product_grid: ['product_card'],
-  testimonials: ['testimonial'],
+  // 'heading' added alongside the testimonial rating/photo fields — mirrors
+  // Featured Collections' collection_header pattern (an optional intro
+  // heading), rather than repurposing a testimonial block for it.
+  testimonials: ['heading', 'testimonial'],
   rich_text: ['text'],
   image_text: ['image', 'text'],
   newsletter: ['heading', 'text', 'email_form'],

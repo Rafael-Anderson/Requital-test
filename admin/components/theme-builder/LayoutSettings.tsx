@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import PresetPicker from "@/components/PresetPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import MenuBuilder from "@/components/MenuBuilder";
@@ -49,16 +50,48 @@ import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
 type LayoutSettingProps = { editor: ThemeEditorState };
 
+// Homepage arrangement/layout (Home tab, Homepage layout, Top bar layout)
+// is decided by the new Sections builder the instant a shop has a
+// published theme.config — storefront/app/[shop]/page.tsx and TopBar.tsx
+// both check themeConfig first and never fall through to these legacy
+// themesettings fields once it exists. Editing them here is then a dead
+// control: it saves, but nothing on the live storefront reads it anymore.
+// Gray the control out and explain where the real control moved, rather
+// than let a merchant think they changed something. `editor.theme.isPublished`
+// is the same "does this shop have a live new-system theme" signal the
+// storefront's own dispatch is keyed on.
+function DeadOnceSectionsPublished({ editor, children }: { editor: LayoutSettingProps["editor"]; children: ReactNode }) {
+  const disabled = editor.theme?.isPublished ?? false;
+  if (!disabled) return <>{children}</>;
+  return (
+    <div className="relative">
+      <div className="pointer-events-none opacity-40">{children}</div>
+      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/70 p-4 text-center dark:bg-zinc-900/70">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          Your storefront uses the Sections builder. Manage your homepage layout in the Sections tab.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function HomeTabSetting({ editor }: LayoutSettingProps) {
   const { legacyTheme, updateLegacyTheme } = editor;
   if (!legacyTheme) return null;
-  return <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />;
+  return (
+    <DeadOnceSectionsPublished editor={editor}>
+      <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />
+    </DeadOnceSectionsPublished>
+  );
 }
 
 // Self-contained via its own API calls (own menu-item CRUD, not the
 // legacy `themesettings` row) — takes the same { editor } prop as every
 // other Layout category component for a uniform call site in
-// SettingsPanel.tsx, but doesn't use it.
+// SettingsPanel.tsx, but doesn't use it. Not gated by DeadOnceSectionsPublished:
+// the menu-item CRUD it drives (backend menu/ module) powers MenuBar.tsx on
+// the storefront regardless of which homepage system is active — it's a
+// genuinely separate, still-live feature, not a dead legacy control.
 export function MenuSetting(_props: LayoutSettingProps) {
   return <MenuBuilder />;
 }
@@ -67,13 +100,15 @@ export function HomepageLayoutSetting({ editor }: LayoutSettingProps) {
   const { legacyTheme, updateLegacyTheme } = editor;
   if (!legacyTheme) return null;
   return (
-    <PresetPicker
-      singleColumn
-      options={HOMEPAGE_LAYOUT_OPTIONS}
-      value={legacyTheme.homepageLayout}
-      onChange={(key) => void updateLegacyTheme({ homepageLayout: key })}
-      renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />}
-    />
+    <DeadOnceSectionsPublished editor={editor}>
+      <PresetPicker
+        singleColumn
+        options={HOMEPAGE_LAYOUT_OPTIONS}
+        value={legacyTheme.homepageLayout}
+        onChange={(key) => void updateLegacyTheme({ homepageLayout: key })}
+        renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />}
+      />
+    </DeadOnceSectionsPublished>
   );
 }
 
@@ -81,13 +116,15 @@ export function TopBarLayoutSetting({ editor }: LayoutSettingProps) {
   const { legacyTheme, updateLegacyTheme } = editor;
   if (!legacyTheme) return null;
   return (
-    <PresetPicker
-      singleColumn
-      options={TOP_BAR_LAYOUT_OPTIONS}
-      value={legacyTheme.topBarLayout}
-      onChange={(key) => void updateLegacyTheme({ topBarLayout: key })}
-      renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
-    />
+    <DeadOnceSectionsPublished editor={editor}>
+      <PresetPicker
+        singleColumn
+        options={TOP_BAR_LAYOUT_OPTIONS}
+        value={legacyTheme.topBarLayout}
+        onChange={(key) => void updateLegacyTheme({ topBarLayout: key })}
+        renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
+      />
+    </DeadOnceSectionsPublished>
   );
 }
 

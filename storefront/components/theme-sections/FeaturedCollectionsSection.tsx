@@ -16,7 +16,7 @@ import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 // collections" index route exists in this app (only /collections/[slug]),
 // so "view all" links home, where CollectionNav already lists every
 // collection as a pill row.
-export default function FeaturedCollectionsSection({ sectionId, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
+export default function FeaturedCollectionsSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
   const { shopSlug, shopBasePath, previewToken, previewMode } = useShop();
   const [collections, setCollections] = useState<Collection[]>([]);
 
@@ -32,7 +32,22 @@ export default function FeaturedCollectionsSection({ sectionId, blocks }: { sect
   const heading = (titleBlock?.visible && typeof titleBlock.settings.text === "string" && titleBlock.settings.text) || "Featured Collections";
   const viewAllLabel = (typeof viewAllBlock?.settings.label === "string" && viewAllBlock.settings.label) || "View all";
 
-  const tiles = selectTiles(collections);
+  // A merchant-chosen, ordered collectionIds list wins outright; otherwise
+  // fall back to the auto "every top-level collection, featured-first" rule
+  // (optionally capped by maxCollections), unchanged from before this
+  // section had any picker — a theme saved before these settings existed
+  // renders exactly as it did before.
+  const collectionIds = Array.isArray(settings.collectionIds) ? (settings.collectionIds as string[]) : [];
+  const maxCollections = typeof settings.maxCollections === "number" && settings.maxCollections > 0 ? settings.maxCollections : undefined;
+
+  let tiles: Collection[];
+  if (collectionIds.length > 0) {
+    const byId = new Map(collections.map((c) => [String(c.id), c]));
+    tiles = collectionIds.map((id) => byId.get(id)).filter((c): c is Collection => c !== undefined);
+  } else {
+    tiles = selectTiles(collections);
+    if (maxCollections !== undefined) tiles = tiles.slice(0, maxCollections);
+  }
   if (tiles.length === 0) return null;
 
   return (
