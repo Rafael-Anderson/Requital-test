@@ -232,6 +232,30 @@ export default function PreviewFrame({
     return () => window.removeEventListener("message", handleMessage);
   }, [previewOrigin, config, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks]);
 
+  // The iframe's own `load` event only fires for a genuine new-document
+  // load — the initial src load, or a real full navigation/reload inside
+  // it (e.g. following a plain, non-Next-<Link> anchor, or the merchant
+  // hitting refresh). It does NOT fire for an in-app SPA transition
+  // (clicking a themed section's Next <Link>, or browser back/forward
+  // across those) — those never tear down the iframe's document, so
+  // nothing there needs restoring. A hard load DOES wipe whatever
+  // in-memory state the previous document had, including any live-edited
+  // config/legacyTheme that had only ever reached it via postMessage and
+  // was never saved — so a freshly-loaded document falls back to whatever
+  // it re-fetches from the backend on mount (the last saved draft), which
+  // can lag behind the merchant's actual unsaved edits. Re-posting both
+  // current values immediately (no debounce — this is a one-shot resync,
+  // not a rapid-edit stream) on every load closes that gap.
+  function handleIframeLoad() {
+    if (!previewOrigin) return;
+    if (config) {
+      iframeRef.current?.contentWindow?.postMessage({ type: "theme-config-update", config }, previewOrigin);
+    }
+    if (legacyTheme) {
+      iframeRef.current?.contentWindow?.postMessage({ type: "legacy-theme-update", legacyTheme }, previewOrigin);
+    }
+  }
+
   if (!theme) return null;
 
   return (
@@ -243,6 +267,7 @@ export default function PreviewFrame({
             key={`${theme.id}-${publishVersion}`}
             title="Storefront preview"
             src={src}
+            onLoad={handleIframeLoad}
             style={{ width: DEVICE_WIDTH[device], maxWidth: "100%" }}
             className="h-full min-h-[600px] rounded-lg border border-black/10 bg-white shadow-sm dark:border-white/10"
           />

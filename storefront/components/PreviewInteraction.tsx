@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { createPortal } from "react-dom";
 import { GripVertical, X } from "lucide-react";
 import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
@@ -74,33 +75,62 @@ const ELEMENT_TYPE_LABELS: Record<string, string> = {
   copyright_text: "Footer text",
 };
 
-// Neutralizes the real page in preview mode: no text highlighting, no
-// navigating/submitting/mutating anything by clicking a real link/button/
-// form. data-requital-editable elements get pointer-events restored so
-// they stay clickable for selection — the click handler below still
-// preventDefaults on them (blocking e.g. an <a>'s navigation) without
-// relying on pointer-events alone, since a pointer-events:auto descendant
-// inside a pointer-events:none ancestor link can still trigger that
-// ancestor's native navigation on click (CSS hit-testing isn't the same
-// thing as "this click can't activate a link").
+// Neutralizes real form/cart actions in preview mode: no text highlighting,
+// no submitting/mutating anything by clicking a real button/form. Plain
+// <a> links are deliberately NOT blanket-disabled here (unlike button/
+// [role=button], which always stay inert) — internal browsing (following a
+// product/collection link to see how that page looks themed) is a real,
+// useful part of previewing a theme; only genuinely cross-origin links get
+// blocked, and only in the click handler below, since CSS alone can't tell
+// same-origin from external. data-requital-editable elements get
+// pointer-events restored so they stay clickable for selection — the click
+// handler still preventDefaults on them regardless of tag (blocking e.g. a
+// tagged <a> like the Hero CTA from navigating instead of being selected)
+// without relying on pointer-events alone, since a pointer-events:auto
+// descendant inside a pointer-events:none ancestor can still trigger that
+// ancestor's native action on click (CSS hit-testing isn't the same thing
+// as "this click can't activate the control").
 const PREVIEW_MODE_CSS = `
   * { user-select: none !important; -webkit-user-select: none !important; }
-  a, button, [role="button"] {
+  button, [role="button"] {
     pointer-events: none !important;
   }
   [data-requital-editable="true"] {
     pointer-events: auto !important;
     cursor: pointer;
   }
+  [data-requital-reorderable="true"] {
+    -webkit-user-drag: none;
+  }
 `;
 
 export default function PreviewInteraction() {
+  const pathname = usePathname();
   const [selected, setSelected] = useState<Selected | null>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ rect: DOMRect } | null>(null);
-  const draggedElRef = useRef<HTMLElement | null>(null);
   const dragOrderRef = useRef<string[]>([]);
   const dragOverStateRef = useRef<{ targetId: string; before: boolean } | null>(null);
+
+  // Reset a stale selection after navigating to a different page — the
+  // previously-selected element (e.g. a Hero heading) doesn't exist on the
+  // new page's DOM at all, so there's nothing to keep it selected against.
+  // This is the one real piece of state that doesn't survive navigation on
+  // its own: the click/drag listeners below are registered on `document`
+  // once and stay valid for the component's whole lifetime regardless of
+  // navigation — a client-side route change never destroys `document`
+  // (this component, mounted once at the root layout, doesn't even
+  // remount), and a genuine full reload remounts this whole component
+  // fresh anyway (its effects re-run naturally, no manual "reinitialize"
+  // step needed) — so the only real navigation-shaped bug here is exactly
+  // this stale reference, not lost listeners.
+  useEffect(() => {
+    setSelected(null);
+    postToAdmin({ type: "element-deselected" });
+    // Deliberately excludes `selected`/postToAdmin from deps — this must
+    // fire once per real navigation (pathname change), not every time
+    // `selected` itself changes via a normal click.
+  }, [pathname]);
 
   // Keep the overlay/toolbar glued to the selected element across
   // scroll/resize — re-measures rather than trying to transform the
@@ -130,11 +160,29 @@ export default function PreviewInteraction() {
     function handleClick(e: MouseEvent) {
       const el = findEditable(e.target);
       if (!el) {
-        // Click landed outside any tagged element — deselect for real
-        // (both locally and on the admin side), not just hide this
-        // component's own overlay. A real click on a real link/button
-        // never gets here in the first place (pointer-events:none, see
-        // PREVIEW_MODE_CSS), so this is genuinely "clicked empty space."
+        // Click landed outside any tagged element. A real click on a real
+        // button/[role=button] never gets here (pointer-events:none, see
+        // PREVIEW_MODE_CSS) — those stay fully inert. A plain <a> is NOT
+        // blocked by CSS, so it can genuinely be a click on one: internal
+        // storefront links (every Next <Link> in theme-sections/*, which
+        // is all of them today) are left alone — Link's own click handler
+        // already calls preventDefault()+does its own client-side
+        // transition before this document-level listener even runs, so
+        // there's nothing further to do for those. Only a genuinely
+        // cross-origin <a> (e.g. the footer's real social icon links) gets
+        // stopped here, since nothing else would.
+        const anchor = e.target instanceof Element ? e.target.closest("a") : null;
+        if (anchor) {
+          try {
+            const url = new URL(anchor.href, document.baseURI);
+            if (url.origin !== window.location.origin) {
+              e.preventDefault();
+            }
+          } catch {
+            // Malformed/non-navigating href (mailto:, tel:, javascript:) —
+            // none of those leave the preview, nothing to block.
+          }
+        }
         if (selected) {
           setSelected(null);
           postToAdmin({ type: "element-deselected" });
@@ -172,70 +220,151 @@ export default function PreviewInteraction() {
   // Drag-and-drop — only wired for the currently selected element, and
   // only when it's tagged reorderable (top-level section/header/footer
   // blocks; see lib/editable-attrs.ts callers for which ones opt in).
+  //
+  // Pointer Events, not the HTML5 drag-and-drop API: draggable="true" +
+  // dragstart/dragover/drop gave the browser's own default drag ghost (a
+  // screenshot of the element trailing the cursor) and required every
+  // valid drop target to call preventDefault() in dragover just to avoid
+  // showing a "not allowed" cursor — both purely native-drag artifacts,
+  // not anything this feature actually needs. A pointer-based drag has
+  // neither problem by construction: nothing native is happening, so
+  // there's no ghost to suppress and no drop-target contract to satisfy —
+  // the dragged element is just repositioned with a CSS transform while
+  // the pointer moves, snapped back to a real position (a reorder) on
+  // release. setPointerCapture keeps move/up events routed to `el` even
+  // once the cursor leaves its bounds, so the drag doesn't drop out
+  // mid-gesture the way plain hover-based listeners would.
   useEffect(() => {
     if (!selected?.reorderable) return;
     const current = selected;
     const found = document.querySelector<HTMLElement>(`[data-requital-id="${CSS.escape(current.id)}"]`);
     if (!found) return;
     const el: HTMLElement = found;
-    el.setAttribute("draggable", "true");
 
-    function handleDragStart(e: DragEvent) {
-      if (e.target !== el) return;
-      draggedElRef.current = el;
-      dragOrderRef.current = Array.from(
+    // A small movement threshold before treating this as a drag (rather
+    // than a click) — pointerdown+pointerup with near-zero movement is a
+    // normal click and must keep working exactly as it already does via
+    // the document-level click handler above; only real movement should
+    // ever engage the transform/reorder machinery below.
+    const DRAG_THRESHOLD_PX = 4;
+    let pointerId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let dragging = false;
+    let siblingEls: HTMLElement[] = [];
+
+    function beginDrag() {
+      dragging = true;
+      el.style.willChange = "transform";
+      siblingEls = Array.from(
         document.querySelectorAll<HTMLElement>(
           `[data-requital-section="${CSS.escape(current.sectionId)}"][data-requital-reorderable="true"]`,
         ),
-      ).map((n) => n.dataset.requitalId!);
-      e.dataTransfer?.setData("text/plain", current.id);
-      requestAnimationFrame(() => el.classList.add("opacity-50"));
-      postToAdmin({ type: "element-drag-start", sectionId: current.sectionId, elementId: current.id });
+      );
+      dragOrderRef.current = siblingEls.map((n) => n.dataset.requitalId!);
     }
 
-    function handleDragOver(e: DragEvent) {
-      const target = findEditable(e.target);
-      if (!target || target.dataset.requitalReorderable !== "true") return;
-      if (target.dataset.requitalSection !== current.sectionId) return;
-      e.preventDefault();
-      const targetRect = target.getBoundingClientRect();
-      const before = e.clientY < targetRect.top + targetRect.height / 2;
-      const lineRect = new DOMRect(targetRect.left, before ? targetRect.top - 1 : targetRect.bottom - 1, targetRect.width, 2);
-      setDropIndicator({ rect: lineRect });
+    function updateDropTarget(clientY: number) {
+      // Which sibling's vertical band the drag point currently sits in —
+      // geometric containment, not elementFromPoint, so it works
+      // regardless of what's actually painted on top during the drag.
+      const target = siblingEls.find((sib) => {
+        if (sib === el) return false;
+        const r = sib.getBoundingClientRect();
+        return clientY >= r.top && clientY <= r.bottom;
+      });
+      if (!target) {
+        setDropIndicator(null);
+        dragOverStateRef.current = null;
+        return;
+      }
+      const r = target.getBoundingClientRect();
+      const before = clientY < r.top + r.height / 2;
+      setDropIndicator({ rect: new DOMRect(r.left, before ? r.top - 1 : r.bottom - 1, r.width, 2) });
       dragOverStateRef.current = { targetId: target.dataset.requitalId!, before };
     }
 
-    function handleDrop(e: DragEvent) {
-      const target = findEditable(e.target);
-      if (!target || target.dataset.requitalReorderable !== "true") return;
-      e.preventDefault();
-      const state = dragOverStateRef.current;
-      const draggedId = current.id;
-      if (!state || state.targetId === draggedId) return;
-      const order = dragOrderRef.current.filter((id) => id !== draggedId);
-      const targetIndex = order.indexOf(state.targetId);
-      const insertAt = state.before ? targetIndex : targetIndex + 1;
-      order.splice(insertAt, 0, draggedId);
-      postToAdmin({ type: "element-moved", sectionId: current.sectionId, elementId: draggedId, orderedIds: order });
-    }
-
-    function handleDragEnd() {
-      draggedElRef.current?.classList.remove("opacity-50");
-      draggedElRef.current = null;
-      dragOverStateRef.current = null;
+    function endDrag() {
+      el.style.transform = "";
+      el.style.willChange = "";
       setDropIndicator(null);
+      dragOverStateRef.current = null;
+      dragging = false;
+      pointerId = null;
     }
 
-    document.addEventListener("dragstart", handleDragStart);
-    document.addEventListener("dragover", handleDragOver);
-    document.addEventListener("drop", handleDrop);
-    document.addEventListener("dragend", handleDragEnd);
+    function handlePointerDown(e: PointerEvent) {
+      if (e.target !== el && !el.contains(e.target as Node)) return;
+      if (!e.isPrimary) return;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      dragging = false;
+      // Capture immediately, before knowing whether this becomes a real
+      // drag — deferring it into pointermove (only once the threshold is
+      // crossed) let Chrome fire a spurious pointercancel on the very next
+      // move in some environments; capturing up front is the more common,
+      // more robust pattern and doesn't affect plain-click behavior (a
+      // captured pointer still fires its native click normally on release
+      // with no real movement).
+      el.setPointerCapture(pointerId);
+    }
+
+    function handlePointerMove(e: PointerEvent) {
+      if (pointerId === null || e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!dragging) {
+        if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+        beginDrag();
+        postToAdmin({ type: "element-drag-start", sectionId: current.sectionId, elementId: current.id });
+      }
+      // Suppress the browser's own default drag/text-selection behavior
+      // while a real drag is in progress — user-select is already none
+      // globally (PREVIEW_MODE_CSS), this covers the rest.
+      e.preventDefault();
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      // Keep the selection outline glued to the element as it moves —
+      // getBoundingClientRect() already reflects the transform above, so
+      // this is the same measurement the scroll/resize effect does, just
+      // driven by the drag itself instead.
+      setRect(el.getBoundingClientRect());
+      updateDropTarget(e.clientY);
+    }
+
+    function handlePointerUp(e: PointerEvent) {
+      if (pointerId === null || e.pointerId !== pointerId) return;
+      if (dragging) {
+        el.releasePointerCapture(pointerId);
+        const state = dragOverStateRef.current;
+        const draggedId = current.id;
+        if (state && state.targetId !== draggedId) {
+          const order = dragOrderRef.current.filter((id) => id !== draggedId);
+          const targetIndex = order.indexOf(state.targetId);
+          const insertAt = state.before ? targetIndex : targetIndex + 1;
+          order.splice(insertAt, 0, draggedId);
+          postToAdmin({ type: "element-moved", sectionId: current.sectionId, elementId: draggedId, orderedIds: order });
+        }
+      }
+      endDrag();
+    }
+
+    function handlePointerCancel() {
+      if (pointerId !== null) el.releasePointerCapture(pointerId);
+      endDrag();
+    }
+
+    el.addEventListener("pointerdown", handlePointerDown);
+    el.addEventListener("pointermove", handlePointerMove);
+    el.addEventListener("pointerup", handlePointerUp);
+    el.addEventListener("pointercancel", handlePointerCancel);
     return () => {
-      el.removeAttribute("draggable");
-      document.removeEventListener("dragstart", handleDragStart);
-      document.removeEventListener("dragover", handleDragOver);
-      document.removeEventListener("drop", handleDrop);
-      document.removeEventListener("dragend", handleDragEnd);
+      el.removeEventListener("pointerdown", handlePointerDown);
+      el.removeEventListener("pointermove", handlePointerMove);
+      el.removeEventListener("pointerup", handlePointerUp);
+      el.removeEventListener("pointercancel", handlePointerCancel);
+      el.style.transform = "";
+      el.style.willChange = "";
     };
   }, [selected]);
 
