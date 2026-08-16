@@ -131,6 +131,77 @@ function applyTheme(shop: Shop | null) {
   }
 }
 
+// Layout mode's 13 categories (button shape, button fill, icon style,
+// homepage layout, ...) are the legacy `themesettings` row, admin-side
+// lifted into useThemeEditor.legacyTheme and posted here as
+// {type: "legacy-theme-update", legacyTheme} (see PreviewFrame.tsx's own
+// comment on why this is a second message type rather than folded into
+// theme-config-update — two genuinely different JSON shapes from two
+// different backend endpoints).
+//
+// Every one of these field names already exists on Shop itself
+// (storefront/lib/types.ts) — a live (non-preview) storefront visit already
+// gets the current values for free from GET /public/:shopSlug, and every
+// consumer already reads them off `shop` directly (iconStyleProps(shop?.
+// iconStyle, ...) in ThemeDrivenHeader, storeButtonClassName(shop) in
+// button-style.ts, the shop.homepageLayout dispatch in app/[shop]/page.tsx,
+// etc.) — not off some separate concept. So rather than introduce a second,
+// parallel "legacyTheme" context field nothing else would read (which would
+// just create a NEW inconsistency between two copies of the same data),
+// the postMessage handler merges the received fields straight into `shop`
+// state. That's what makes this fix cover all 13 categories at once: every
+// one of those pre-existing shop.* consumers starts reflecting live
+// Layout-mode edits in preview for free, not just the two new CSS vars
+// below.
+const LEGACY_THEME_SHOP_FIELDS = [
+  "homepageLayout",
+  "homeTabMode",
+  "topBarLayout",
+  "iconStyle",
+  "buttonRadius",
+  "buttonFill",
+  "pdpLayout",
+  "cartLayout",
+  "checkoutLayout",
+  "footerLayout",
+  "headerDensity",
+  "footerDensity",
+] as const satisfies readonly (keyof Shop)[];
+
+function mergeLegacyThemeIntoShop(shop: Shop, legacyTheme: Record<string, unknown>): Shop {
+  const patch: Partial<Shop> = {};
+  for (const field of LEGACY_THEME_SHOP_FIELDS) {
+    if (field in legacyTheme) (patch as Record<string, unknown>)[field] = legacyTheme[field];
+  }
+  return { ...shop, ...patch };
+}
+
+const BUTTON_RADIUS_PX: Record<string, string> = {
+  sharp: "0px",
+  rounded: "8px",
+  pill: "9999px",
+};
+
+// New, additive wiring surface: the pre-existing legacy consumers above
+// (storeButtonClassName, iconStyleProps, the homepageLayout dispatch) are
+// class/prop-based, not CSS vars, and already cover the OLD, non-theme-
+// builder rendering path (ClassicHero, checkout, cart, PDP). The new
+// theme-driven sections (HeroSection/ProductGridSection/NewsletterSection)
+// have no legacy-aware button styling at all — these two vars are what
+// let THOSE components' buttons respect Layout mode's Button shape/fill
+// too. Deliberately takes legacy precedence over the new Buttons category's
+// own --theme-radius (set in applyThemeConfigOverrides) for these two
+// properties specifically — Button shape/fill is what this fix is actually
+// about, and --theme-radius is otherwise always present once a shop has
+// any theme.config at all, which would silently shadow legacy forever
+// otherwise. A real, flagged precedence call between two independently-
+// editable systems, not an oversight.
+function applyLegacyThemeOverrides(shop: Shop | null) {
+  const root = document.documentElement;
+  root.style.setProperty("--theme-btn-primary-radius", BUTTON_RADIUS_PX[shop?.buttonRadius ?? "rounded"] ?? "8px");
+  root.style.setProperty("--theme-btn-fill", shop?.buttonFill ?? "solid");
+}
+
 const PAGE_WIDTH_PX: Record<ThemeConfig["globalSettings"]["pageLayout"]["width"], string> = {
   narrow: "960px",
   normal: "1280px",
@@ -311,6 +382,9 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
       if (event.data?.type === "theme-config-update" && event.data.config) {
         setThemeConfig(event.data.config as ThemeConfig);
       }
+      if (event.data?.type === "legacy-theme-update" && event.data.legacyTheme) {
+        setShop((prev) => (prev ? mergeLegacyThemeIntoShop(prev, event.data.legacyTheme) : prev));
+      }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
@@ -318,6 +392,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
 
   useEffect(() => {
     applyTheme(shop);
+    applyLegacyThemeOverrides(shop);
   }, [shop]);
 
   useEffect(() => {

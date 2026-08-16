@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getThemeBuilder, publishTheme, updateThemeDraft } from "@/lib/api";
+import { getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
 import {
   findNodeInTree,
   insertNodeInTree,
@@ -18,6 +18,7 @@ import type {
   ThemeConfig,
   ThemeSection,
   ThemeSectionType,
+  ThemeSettings,
 } from "@/lib/types";
 import { useToast } from "@/components/ui/Toast";
 
@@ -156,6 +157,17 @@ export function useThemeEditor(themeId: number) {
 
   const [theme, setTheme] = useState<Theme | null>(null);
   const [config, setConfig] = useState<ThemeConfig | null>(null);
+  // Layout mode's 13 categories (Home tab, Menu, Homepage layout, ..., Icon
+  // style, Button shape, Button fill) are backed by the separate legacy
+  // `themesettings` row, not theme.config — this used to be fetched
+  // independently by each of the 13 LayoutSettings.tsx components (each its
+  // own useLegacyTheme() instance), which is exactly why none of them ever
+  // reached the preview iframe: there was no single, shared piece of state
+  // for a postMessage effect to watch in the first place. Lifted here so
+  // every Layout category reads/writes through one shared instance, and
+  // PreviewFrame.tsx can watch it the same way it already watches `config`.
+  const [legacyTheme, setLegacyTheme] = useState<ThemeSettings | null>(null);
+  const [legacyThemeSaving, setLegacyThemeSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editorMode, setEditorMode] = useState<EditorMode>("sections");
   // Which of the 18 Theme Settings categories is selected — lives here
@@ -208,6 +220,28 @@ export function useThemeEditor(themeId: number) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    getTheme()
+      .then(setLegacyTheme)
+      .catch(() => {});
+  }, []);
+
+  const updateLegacyTheme = useCallback(
+    async (patch: Partial<Omit<ThemeSettings, "shopId" | "updatedAt">>) => {
+      setLegacyThemeSaving(true);
+      try {
+        const updated = await updateTheme(patch);
+        setLegacyTheme(updated);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setLegacyThemeSaving(false);
+      }
+    },
+    [],
+  );
 
   const save = useCallback(async () => {
     if (!dirtyRef.current || !configRef.current) return;
@@ -449,6 +483,9 @@ export function useThemeEditor(themeId: number) {
     router,
     theme,
     config,
+    legacyTheme,
+    legacyThemeSaving,
+    updateLegacyTheme,
     loading,
     editorMode,
     setEditorMode,

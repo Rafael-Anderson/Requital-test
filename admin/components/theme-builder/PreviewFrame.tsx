@@ -124,7 +124,8 @@ export default function PreviewFrame({
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion } = editor;
+  const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion } = editor;
 
   const src = theme ? resolvePreviewUrl(shop, theme.id) : null;
   const previewOrigin = useMemo(() => {
@@ -149,6 +150,31 @@ export default function PreviewFrame({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [config, previewOrigin]);
+
+  // Layout mode's 13 categories (button shape, button fill, menu bar,
+  // homepage layout, ...) live in the separate legacy `themesettings` row
+  // (editor.legacyTheme), not theme.config — this is the second, symmetric
+  // half of lifting that state into useThemeEditor (see that file's own
+  // comment): a legacyTheme change now has exactly one shared piece of
+  // state to watch, the same way a theme.config change already does above.
+  // Same 200ms debounce, same explicit-origin-never-'*' rule, deliberately
+  // a second message type rather than folding these fields into
+  // theme-config-update — legacyTheme and config are genuinely different
+  // JSON shapes from two different backend endpoints, not one config with
+  // two names for the same data.
+  useEffect(() => {
+    if (!legacyTheme || !previewOrigin) return;
+    if (legacyDebounceRef.current) clearTimeout(legacyDebounceRef.current);
+    legacyDebounceRef.current = setTimeout(() => {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "legacy-theme-update", legacyTheme },
+        previewOrigin,
+      );
+    }, POST_DEBOUNCE_MS);
+    return () => {
+      if (legacyDebounceRef.current) clearTimeout(legacyDebounceRef.current);
+    };
+  }, [legacyTheme, previewOrigin]);
 
   // Reverse channel from the iframe — every handler validates event.origin
   // against the resolved preview origin (never '*') before acting, same as

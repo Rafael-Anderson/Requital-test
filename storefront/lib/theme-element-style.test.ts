@@ -8,6 +8,7 @@ import {
   resolveIconStrokeWidth,
   resolveIconElementStyle,
   themeButtonBaseStyle,
+  resolveButtonFillStyle,
 } from "./theme-element-style";
 
 describe("resolveTextElementStyle", () => {
@@ -137,11 +138,34 @@ describe("resolveIconElementStyle", () => {
 });
 
 describe("themeButtonBaseStyle", () => {
-  it("returns the CSS-var-driven defaults every primary button starts from", () => {
+  it("returns the CSS-var-driven defaults every primary button starts from, legacy Layout mode's button shape taking precedence over the new Buttons category's own corner radius", () => {
     const style = themeButtonBaseStyle();
-    expect(style.borderRadius).toBe("var(--theme-radius, 8px)");
+    expect(style.borderRadius).toBe("var(--theme-btn-primary-radius, var(--theme-radius, 8px))");
     expect(style.borderWidth).toBe("var(--theme-button-border-width, 0px)");
     expect(style.borderStyle).toBe("solid");
     expect(style.textTransform).toBe("var(--theme-button-text-transform, none)");
+  });
+});
+
+describe("resolveButtonFillStyle", () => {
+  it("solid (or unset) returns an empty style — the element's own bg-accent/text-accent-foreground classes already render it", () => {
+    expect(resolveButtonFillStyle("solid")).toEqual({});
+    expect(resolveButtonFillStyle(undefined)).toEqual({});
+  });
+
+  it("outline is a transparent background with a colored border and text", () => {
+    const style = resolveButtonFillStyle("outline");
+    expect(style.background).toBe("transparent");
+    expect(style.color).toBe("var(--color-accent)");
+    expect(style.borderColor).toBe("var(--color-accent)");
+    expect(style.borderWidth).toBe("2px");
+  });
+
+  it("ghost is a transparent background with colored text and no border", () => {
+    const style = resolveButtonFillStyle("ghost");
+    expect(style.background).toBe("transparent");
+    expect(style.color).toBe("var(--color-accent)");
+    expect(style.borderColor).toBe("transparent");
+    expect(style.borderWidth).toBe("0px");
   });
 });
