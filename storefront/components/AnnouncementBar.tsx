@@ -1,6 +1,7 @@
 "use client";
 
 import { useShop } from "@/lib/shop-context";
+import { parseNotificationMessages } from "@/lib/notification-text";
 
 // Slim bar above the header. Color is bg-accent/text-accent-foreground —
 // the same theme-derived, WCAG-guarded pairing every other themed element
@@ -15,7 +16,7 @@ import { useShop } from "@/lib/shop-context";
 // comment) — a merchant can hide the bar without losing their saved text.
 export default function AnnouncementBar() {
   const { shop } = useShop();
-  const messages = shop?.notificationText ?? [];
+  const messages = parseNotificationMessages(shop?.notificationText);
   if (!shop?.announcementBarEnabled || messages.length === 0) return null;
 
   const text = messages.join("   •   ");

@@ -662,9 +662,16 @@ export interface ThemesettingsRow {
   fontFamily: string | null;
   footerLogoUrl: string | null;
   footerDescription: string | null;
-  notificationText: unknown | null;
+  // Real JSON column as of 20260816130000_fix_notification_text_column (was
+  // LONGTEXT — see that migration's comment) — mysql2 now auto-parses it on
+  // read, same as every other real JSON column in this schema.
+  notificationText: string[] | null;
   announcementBarEnabled: boolean;
   announcementBarScrolling: boolean;
+  // Still LONGTEXT, not real JSON — unlike notificationText above, these two
+  // were out of scope for that fix even though they carry the identical
+  // latent bug (write-side JSON.stringify with no read-side parse). Flagged,
+  // not fixed here.
   contactNumbers: unknown | null;
   colors: unknown | null;
   homepageLayout: string;
