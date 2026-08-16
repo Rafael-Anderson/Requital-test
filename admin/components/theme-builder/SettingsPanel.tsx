@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType } from "react";
-import BlockSettingsForm from "./BlockSettingsForm";
+import ElementSettingsPanel from "./ElementSettingsPanel";
 import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
 import TypographySettings from "./theme-settings/TypographySettings";
@@ -197,7 +197,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Block settings</h2>
       </div>
-      <BlockSettingsForm block={block} onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)} />
+      <ElementSettingsPanel block={block} onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)} />
     </div>
   );
 }

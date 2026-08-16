@@ -11,10 +11,13 @@ import RichTextSection from "./RichTextSection";
 import ImageTextSection from "./ImageTextSection";
 import NewsletterSection from "./NewsletterSection";
 
-const SECTION_COMPONENTS: Record<
-  ThemeSectionType,
-  ComponentType<{ settings: SectionSettings; blocks: ThemeBlock[] }>
-> = {
+export interface SectionComponentProps {
+  sectionId: string;
+  settings: SectionSettings;
+  blocks: ThemeBlock[];
+}
+
+const SECTION_COMPONENTS: Record<ThemeSectionType, ComponentType<SectionComponentProps>> = {
   announcement_bar: AnnouncementBarSectionThemed,
   hero: HeroSection,
   featured_collections: FeaturedCollectionsSection,
@@ -38,7 +41,7 @@ export default function SectionRenderer({ sections }: { sections: ThemeSection[]
         return (
           <ScrollAnimatedWrapper key={section.id} animation={section.settings.scrollAnimation}>
             <SectionWrapper sectionId={section.id} settings={section.settings}>
-              <Component settings={section.settings} blocks={section.blocks} />
+              <Component sectionId={section.id} settings={section.settings} blocks={section.blocks} />
             </SectionWrapper>
           </ScrollAnimatedWrapper>
         );

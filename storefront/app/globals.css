@@ -168,6 +168,15 @@ body {
   }
 }
 
+/* Theme builder's per-element NAV editing (ElementSettingsPanel's "Hover
+   color" field, admin-side) — a hover color can't be expressed as a React
+   inline style, so it rides in as the --theme-nav-hover-color custom
+   property (set inline by MenuBar.tsx per lib/theme-element-style.ts's
+   resolveNavElementStyle) and this is the one rule that reads it. */
+.theme-nav-link:hover {
+  color: var(--theme-nav-hover-color, inherit);
+}
+
 /* New visual theme builder — per-section scroll-triggered entrance
    animations (Phase 5). Same pattern as marquee-track above: hand-written
    keyframes + explicit classes (NOT animate-* prefixed, same Tailwind v4

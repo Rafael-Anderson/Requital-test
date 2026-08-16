@@ -170,6 +170,13 @@ export function useThemeEditor(themeId: number) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // Bumped only on a successful publish — PreviewFrame includes this in the
+  // iframe's `key`, forcing a full remount (not just a postMessage config
+  // update) so the preview re-fetches the newly published config straight
+  // from the backend instead of continuing to show draft state relayed over
+  // postMessage. A plain postMessage update can't be trusted to prove "this
+  // is really what's live now" the way a fresh network fetch can.
+  const [publishVersion, setPublishVersion] = useState(0);
 
   // Autosave/save-on-unmount read the latest config/dirty state without
   // needing to be in those effects' own dependency arrays (which would
@@ -422,6 +429,7 @@ export function useThemeEditor(themeId: number) {
       }
       const updated = await publishTheme(themeId);
       setTheme(updated);
+      setPublishVersion((v) => v + 1);
       toast("Theme published", "success");
     } catch {
       toast("Failed to publish theme", "error");
@@ -456,6 +464,7 @@ export function useThemeEditor(themeId: number) {
     dirty,
     saving,
     publishing,
+    publishVersion,
     save,
     publish,
     discard,

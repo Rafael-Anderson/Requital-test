@@ -1,7 +1,16 @@
+"use client";
+
 import type { CSSProperties } from "react";
+import { useShop } from "@/lib/shop-context";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
 import type { Shop } from "@/lib/types";
 import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
+
+// Matches admin/lib/useThemeEditor.ts's FOOTER_CHROME_ID by hand — same
+// convention as ThemeDrivenHeader.tsx's own HEADER_CHROME_ID copy.
+const FOOTER_CHROME_ID = "__footer__";
 
 interface FooterColumnSettings {
   title?: string;
@@ -58,6 +67,7 @@ function FooterSocial({ shop }: { shop: Shop }) {
 // never touched the builder still gets the same single copyright line via
 // the backend's DEFAULT_THEME_CONFIG (one footer_copyright block).
 export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config: HeaderFooterConfig }) {
+  const { previewMode } = useShop();
   const blocks = [...config.blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
   const columns = blocks.filter((b) => b.type === "footer_column");
   const socialBlock = blocks.find((b) => b.type === "footer_social");
@@ -84,7 +94,15 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
             {socialBlock && <FooterSocial shop={shop} />}
           </div>
         )}
-        <p className="text-center text-xs opacity-80">{copyrightText}</p>
+        <p
+          className="text-center text-xs opacity-80"
+          {...(copyrightBlock
+            ? editableAttrs(previewMode, { id: copyrightBlock.id, sectionId: FOOTER_CHROME_ID, type: "footer_copyright" })
+            : {})}
+          style={copyrightBlock ? resolveTextElementStyle(copyrightBlock.settings) : undefined}
+        >
+          {copyrightText}
+        </p>
       </div>
     </footer>
   );

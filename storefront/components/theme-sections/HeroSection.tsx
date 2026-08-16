@@ -1,4 +1,9 @@
+"use client";
+
 import type { CSSProperties, ReactNode } from "react";
+import { useShop } from "@/lib/shop-context";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveTextElementStyle, resolveButtonElementStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const HEIGHT_CLASS: Record<string, string> = {
@@ -39,19 +44,26 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
   };
 }
 
-export default function HeroSection({ settings, blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
+export default function HeroSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const { previewMode } = useShop();
   const height = HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium;
   const position = POSITION_CLASS[settings.contentPosition as string] ?? POSITION_CLASS["center-center"];
 
   const visible = [...blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
 
   function renderBlock(block: ThemeBlock): ReactNode {
+    const tagProps = editableAttrs(previewMode, { id: block.id, sectionId, type: block.type, reorderable: true });
     switch (block.type) {
       case "heading": {
         const text = typeof block.settings.text === "string" ? block.settings.text : "";
         if (!text) return null;
         return (
-          <h1 key={block.id} className="text-3xl sm:text-4xl font-bold" style={typographyStyle(settings.typography)}>
+          <h1
+            key={block.id}
+            {...tagProps}
+            className="text-3xl sm:text-4xl font-bold"
+            style={{ ...typographyStyle(settings.typography), ...resolveTextElementStyle(block.settings) }}
+          >
             {text}
           </h1>
         );
@@ -60,7 +72,7 @@ export default function HeroSection({ settings, blocks }: { settings: SectionSet
         const text = typeof block.settings.text === "string" ? block.settings.text : "";
         if (!text) return null;
         return (
-          <p key={block.id} className="mt-3 text-lg opacity-80">
+          <p key={block.id} {...tagProps} className="mt-3 text-lg opacity-80" style={resolveTextElementStyle(block.settings)}>
             {text}
           </p>
         );
@@ -71,9 +83,10 @@ export default function HeroSection({ settings, blocks }: { settings: SectionSet
         return (
           <a
             key={block.id}
+            {...tagProps}
             href="#shop"
             className="mt-6 inline-block px-6 py-3 text-sm font-medium text-accent-foreground bg-accent"
-            style={{ borderRadius: "var(--theme-radius, 8px)" }}
+            style={{ borderRadius: "var(--theme-radius, 8px)", ...resolveButtonElementStyle(block.settings) }}
           >
             {label}
           </a>

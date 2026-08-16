@@ -1,3 +1,8 @@
+"use client";
+
+import { useShop } from "@/lib/shop-context";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveTextElementStyle, resolveButtonElementStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Presentational only — no newsletter/email-capture backend endpoint exists
@@ -8,7 +13,8 @@ import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 // separate, out-of-scope addition. heading/text/button copy now come from
 // this section's own blocks (see backend constants.ts's
 // BLOCK_TYPES.newsletter), not flat section.settings fields.
-export default function NewsletterSection({ blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
+export default function NewsletterSection({ sectionId, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const { previewMode } = useShop();
   const headingBlock = blocks.find((b) => b.type === "heading" && b.visible);
   const textBlock = blocks.find((b) => b.type === "text" && b.visible);
   const formBlock = blocks.find((b) => b.type === "email_form" && b.visible);
@@ -21,8 +27,24 @@ export default function NewsletterSection({ blocks }: { settings: SectionSetting
 
   return (
     <div className="px-4 sm:px-6 py-10 max-w-xl mx-auto text-center">
-      {heading && <h2 className="text-xl font-semibold mb-2">{heading}</h2>}
-      {subtext && <p className="text-sm opacity-70 mb-5">{subtext}</p>}
+      {heading && headingBlock && (
+        <h2
+          {...editableAttrs(previewMode, { id: headingBlock.id, sectionId, type: "heading", reorderable: true })}
+          className="text-xl font-semibold mb-2"
+          style={resolveTextElementStyle(headingBlock.settings)}
+        >
+          {heading}
+        </h2>
+      )}
+      {subtext && textBlock && (
+        <p
+          {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "text", reorderable: true })}
+          className="text-sm opacity-70 mb-5"
+          style={resolveTextElementStyle(textBlock.settings)}
+        >
+          {subtext}
+        </p>
+      )}
       <form onSubmit={(e) => e.preventDefault()} className="flex flex-col sm:flex-row gap-2">
         <input
           type="email"
@@ -32,8 +54,9 @@ export default function NewsletterSection({ blocks }: { settings: SectionSetting
         />
         <button
           type="submit"
+          {...editableAttrs(previewMode, { id: formBlock.id, sectionId, type: "email_form", reorderable: true })}
           className="h-10 px-5 text-sm font-medium text-accent-foreground bg-accent"
-          style={{ borderRadius: "var(--theme-radius, 8px)" }}
+          style={{ borderRadius: "var(--theme-radius, 8px)", ...resolveButtonElementStyle(formBlock.settings) }}
         >
           {buttonLabel}
         </button>

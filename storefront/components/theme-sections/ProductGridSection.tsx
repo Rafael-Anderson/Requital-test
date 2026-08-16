@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { listProducts } from "@/lib/api";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveTextElementStyle, resolvePriceElementStyle } from "@/lib/theme-element-style";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -65,8 +67,8 @@ function QuickAddButton({
 // what used to be fixed hardcoded card markup. Falls back to showing all
 // three when no product_card block exists (a theme predating this rework
 // would have none, per the breaking-migration note in the plan).
-export default function ProductGridSection({ settings, blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, shopBasePath, outlets, themeConfig, previewToken } = useShop();
+export default function ProductGridSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, previewMode } = useShop();
   const [products, setProducts] = useState<Product[] | null>(null);
   const outletId = outlets[0]?.id;
 
@@ -81,9 +83,12 @@ export default function ProductGridSection({ settings, blocks }: { settings: Sec
 
   const cardBlock = blocks.find((b) => b.type === "product_card" && b.visible);
   const subBlocks = cardBlock?.blocks ?? [];
+  const titleBlock = subBlocks.find((b) => b.type === "product_title");
+  const priceBlock = subBlocks.find((b) => b.type === "product_price");
   const showMedia = subBlocks.length === 0 || subBlocks.some((b) => b.type === "product_media" && b.visible);
-  const showTitle = subBlocks.length === 0 || subBlocks.some((b) => b.type === "product_title" && b.visible);
-  const showPrice = subBlocks.length === 0 || subBlocks.some((b) => b.type === "product_price" && b.visible);
+  const showTitle = subBlocks.length === 0 || !!titleBlock?.visible;
+  const showPrice = subBlocks.length === 0 || !!priceBlock?.visible;
+  const showCurrencyCode = priceBlock?.settings.showCurrencyCode === true;
 
   const productCards = themeConfig?.globalSettings.productCards;
   const shopCartUsable = !!cardBlock && !!productCards;
@@ -114,8 +119,25 @@ export default function ProductGridSection({ settings, blocks }: { settings: Sec
                 )}
               </div>
             )}
-            {showTitle && <p className="mt-3 text-sm font-medium line-clamp-2">{product.name}</p>}
-            {showPrice && <p className="mt-1 text-sm font-semibold">{product.price}</p>}
+            {showTitle && (
+              <p
+                className="mt-3 text-sm font-medium line-clamp-2"
+                {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "product_title" }) : {})}
+                style={titleBlock ? resolveTextElementStyle(titleBlock.settings) : undefined}
+              >
+                {product.name}
+              </p>
+            )}
+            {showPrice && (
+              <p
+                className="mt-1 text-sm font-semibold"
+                {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
+                style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
+              >
+                {showCurrencyCode && shop ? `${shop.currency} ` : ""}
+                {product.price}
+              </p>
+            )}
             {shopCartUsable && productCards.mobileQuickAdd && (
               <QuickAddButton
                 product={product}

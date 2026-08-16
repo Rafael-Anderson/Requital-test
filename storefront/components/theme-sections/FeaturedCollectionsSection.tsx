@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveTextElementStyle, resolveButtonElementStyle } from "@/lib/theme-element-style";
 import { selectTiles } from "@/components/home-layouts/FeaturedGrid";
 import type { Collection } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -14,8 +16,8 @@ import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 // collections" index route exists in this app (only /collections/[slug]),
 // so "view all" links home, where CollectionNav already lists every
 // collection as a pill row.
-export default function FeaturedCollectionsSection({ blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, shopBasePath, previewToken } = useShop();
+export default function FeaturedCollectionsSection({ sectionId, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const { shopSlug, shopBasePath, previewToken, previewMode } = useShop();
   const [collections, setCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
@@ -37,9 +39,22 @@ export default function FeaturedCollectionsSection({ blocks }: { settings: Secti
     <div className="px-4 sm:px-6 py-8 max-w-7xl mx-auto">
       {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
         <div className="flex items-center justify-between mb-4">
-          {titleBlock?.visible !== false && <h2 className="text-xl font-semibold">{heading}</h2>}
+          {titleBlock?.visible !== false && (
+            <h2
+              className="text-xl font-semibold"
+              {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "collection_title" }) : {})}
+              style={titleBlock ? resolveTextElementStyle(titleBlock.settings) : undefined}
+            >
+              {heading}
+            </h2>
+          )}
           {viewAllBlock?.visible && (
-            <Link href={shopBasePath || "/"} className="text-sm font-medium text-accent hover:underline">
+            <Link
+              href={shopBasePath || "/"}
+              {...editableAttrs(previewMode, { id: viewAllBlock.id, sectionId, type: "view_all_button" })}
+              className="text-sm font-medium text-accent hover:underline"
+              style={resolveButtonElementStyle(viewAllBlock.settings)}
+            >
               {viewAllLabel}
             </Link>
           )}

@@ -1,4 +1,9 @@
+"use client";
+
 import type { CSSProperties } from "react";
+import { useShop } from "@/lib/shop-context";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 function typographyStyle(typography: SectionSettings["typography"]): CSSProperties {
@@ -17,14 +22,19 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
 // render here (see that file's own comment on the choice). Text lives on
 // the section's one "text" block (see backend constants.ts's
 // BLOCK_TYPES.rich_text), not a flat section.settings.text field.
-export default function RichTextSection({ settings, blocks }: { settings: SectionSettings; blocks: ThemeBlock[] }) {
+export default function RichTextSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
+  const { previewMode } = useShop();
   const textBlock = blocks.find((b) => b.type === "text" && b.visible);
   const text = typeof textBlock?.settings.text === "string" ? textBlock.settings.text : "";
   if (!text) return null;
 
   return (
     <div className="px-4 sm:px-6 py-8 max-w-3xl mx-auto">
-      <p className="whitespace-pre-line leading-relaxed" style={typographyStyle(settings.typography)}>
+      <p
+        className="whitespace-pre-line leading-relaxed"
+        {...(textBlock ? editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "text" }) : {})}
+        style={{ ...typographyStyle(settings.typography), ...(textBlock ? resolveTextElementStyle(textBlock.settings) : {}) }}
+      >
         {text}
       </p>
     </div>

@@ -6,11 +6,20 @@ import { ShoppingCart, User } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
+import { editableAttrs } from "@/lib/editable-attrs";
+import { resolveImageElementStyle } from "@/lib/theme-element-style";
 import SearchBar from "@/components/SearchBar";
 import type { Customer, Shop } from "@/lib/types";
-import type { HeaderFooterConfig } from "@/lib/theme-config-types";
+import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
 
 const ZONES = ["left", "center", "right"] as const;
+
+// Matches admin/lib/useThemeEditor.ts's HEADER_CHROME_ID by hand — same
+// no-shared-package convention as every other cross-app constant. Only
+// used as the data-requital-section grouping key for the in-preview
+// selection/drag feature (PreviewInteraction.tsx); PreviewFrame.tsx's
+// element-moved handler checks for this exact string.
+const HEADER_CHROME_ID = "__header__";
 
 // Global chrome — pinned to every page, not part of the reorderable
 // sections list (see the plan's scope decision). Each block's own
@@ -35,7 +44,7 @@ export default function ThemeDrivenHeader({
   count: number;
   config: HeaderFooterConfig;
 }) {
-  const { shopBasePath } = useShop();
+  const { shopBasePath, previewMode } = useShop();
   const { openDrawer } = useCartDrawer();
   const sticky = !!config.settings.sticky;
   const background = config.settings.background as Record<string, unknown> | undefined;
@@ -60,17 +69,23 @@ export default function ThemeDrivenHeader({
     </>
   );
 
-  function renderBlock(type: string): ReactNode {
-    switch (type) {
+  function renderBlock(block: ThemeBlock): ReactNode {
+    switch (block.type) {
       case "logo":
         return (
-          <Link key="logo" href={shopBasePath || "/"} className="flex items-center gap-2 min-w-0">
+          <Link
+            key="logo"
+            href={shopBasePath || "/"}
+            {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "logo" })}
+            className="flex items-center gap-2 min-w-0"
+          >
             {shop?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={resolveImageUrl(shop.logoUrl) ?? undefined}
                 alt={shop?.displayName ?? shop?.name}
                 className="h-8 max-w-40 object-contain shrink-0"
+                style={resolveImageElementStyle(block.settings)}
               />
             ) : (
               <span className="font-semibold text-lg truncate">
@@ -124,7 +139,7 @@ export default function ThemeDrivenHeader({
           >
             {blocks
               .filter((b) => (b.settings.zone as string | undefined) === zone || (zone === "left" && !b.settings.zone))
-              .map((b) => renderBlock(b.type))}
+              .map((b) => renderBlock(b))}
           </div>
         ))}
       </div>
