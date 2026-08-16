@@ -1,6 +1,5 @@
 "use client";
 
-import { useLegacyTheme } from "@/lib/useLegacyTheme";
 import PresetPicker from "@/components/PresetPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import MenuBuilder from "@/components/MenuBuilder";
@@ -29,6 +28,7 @@ import {
   BUTTON_RADIUS_OPTIONS,
   BUTTON_FILL_OPTIONS,
 } from "@/lib/types";
+import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
 // Layout mode's 13 category components — a straight port of the old Theme
 // Customizer's Advanced tab (app/theme/edit/advanced/page.tsx), each now
@@ -37,168 +37,181 @@ import {
 // long scrolling page. Every one of these auto-saves immediately on
 // selection (no separate Save button), same as a Toggle or Theme Settings'
 // own category fields — there's exactly one control per category here.
-// All backed by the legacy `themesettings` row (useLegacyTheme), not the
-// new builder's own theme.config.
+// All backed by the legacy `themesettings` row, via the SAME shared
+// editor.legacyTheme/editor.updateLegacyTheme instance every other panel in
+// the builder already gets from useThemeEditor — not the new builder's own
+// theme.config, and (as of 2026-08-16) no longer each component's own
+// independent useLegacyTheme() call either. That per-component-independent
+// fetch was exactly why none of these 13 categories ever reached the
+// preview iframe: 13 separate hook instances meant no single piece of
+// state PreviewFrame.tsx could watch and postMessage on change. See that
+// file's own legacyTheme debounced-effect for the other half of this fix.
 
-export function HomeTabSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
-  return <SegmentedToggle value={theme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void save({ homeTabMode: v })} />;
+type LayoutSettingProps = { editor: ThemeEditorState };
+
+export function HomeTabSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
+  return <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />;
 }
 
-export function MenuSetting() {
+// Self-contained via its own API calls (own menu-item CRUD, not the
+// legacy `themesettings` row) — takes the same { editor } prop as every
+// other Layout category component for a uniform call site in
+// SettingsPanel.tsx, but doesn't use it.
+export function MenuSetting(_props: LayoutSettingProps) {
   return <MenuBuilder />;
 }
 
-export function HomepageLayoutSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function HomepageLayoutSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={HOMEPAGE_LAYOUT_OPTIONS}
-      value={theme.homepageLayout}
-      onChange={(key) => void save({ homepageLayout: key })}
+      value={legacyTheme.homepageLayout}
+      onChange={(key) => void updateLegacyTheme({ homepageLayout: key })}
       renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />}
     />
   );
 }
 
-export function TopBarLayoutSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function TopBarLayoutSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={TOP_BAR_LAYOUT_OPTIONS}
-      value={theme.topBarLayout}
-      onChange={(key) => void save({ topBarLayout: key })}
+      value={legacyTheme.topBarLayout}
+      onChange={(key) => void updateLegacyTheme({ topBarLayout: key })}
       renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
     />
   );
 }
 
-export function HeaderSizeSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function HeaderSizeSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={HEADER_DENSITY_OPTIONS}
-      value={theme.headerDensity}
-      onChange={(key) => void save({ headerDensity: key })}
+      value={legacyTheme.headerDensity}
+      onChange={(key) => void updateLegacyTheme({ headerDensity: key })}
       renderThumbnail={(key) => <DensityThumbnail density={key} />}
     />
   );
 }
 
-export function FooterLayoutSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function FooterLayoutSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={FOOTER_LAYOUT_OPTIONS}
-      value={theme.footerLayout}
-      onChange={(key) => void save({ footerLayout: key })}
+      value={legacyTheme.footerLayout}
+      onChange={(key) => void updateLegacyTheme({ footerLayout: key })}
       renderThumbnail={(key) => <FooterLayoutThumbnail layout={key} />}
     />
   );
 }
 
-export function FooterSizeSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function FooterSizeSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={FOOTER_DENSITY_OPTIONS}
-      value={theme.footerDensity}
-      onChange={(key) => void save({ footerDensity: key })}
+      value={legacyTheme.footerDensity}
+      onChange={(key) => void updateLegacyTheme({ footerDensity: key })}
       renderThumbnail={(key) => <DensityThumbnail density={key} />}
     />
   );
 }
 
-export function ProductPageLayoutSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function ProductPageLayoutSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={PDP_LAYOUT_OPTIONS}
-      value={theme.pdpLayout}
-      onChange={(key) => void save({ pdpLayout: key })}
+      value={legacyTheme.pdpLayout}
+      onChange={(key) => void updateLegacyTheme({ pdpLayout: key })}
       renderThumbnail={(key) => <PdpLayoutThumbnail layout={key} />}
     />
   );
 }
 
-export function CartLayoutSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function CartLayoutSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={CART_LAYOUT_OPTIONS}
-      value={theme.cartLayout}
-      onChange={(key) => void save({ cartLayout: key })}
+      value={legacyTheme.cartLayout}
+      onChange={(key) => void updateLegacyTheme({ cartLayout: key })}
       renderThumbnail={(key) => <CartLayoutThumbnail layout={key} />}
     />
   );
 }
 
-export function CheckoutLayoutSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function CheckoutLayoutSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={CHECKOUT_LAYOUT_OPTIONS}
-      value={theme.checkoutLayout}
-      onChange={(key) => void save({ checkoutLayout: key })}
+      value={legacyTheme.checkoutLayout}
+      onChange={(key) => void updateLegacyTheme({ checkoutLayout: key })}
       renderThumbnail={(key) => <CheckoutLayoutThumbnail layout={key} />}
     />
   );
 }
 
-export function IconStyleSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function IconStyleSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={ICON_STYLE_OPTIONS}
-      value={theme.iconStyle}
-      onChange={(key) => void save({ iconStyle: key })}
+      value={legacyTheme.iconStyle}
+      onChange={(key) => void updateLegacyTheme({ iconStyle: key })}
       renderThumbnail={(key) => <IconStyleThumbnail style={key} />}
     />
   );
 }
 
-export function ButtonShapeSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function ButtonShapeSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={BUTTON_RADIUS_OPTIONS}
-      value={theme.buttonRadius}
-      onChange={(key) => void save({ buttonRadius: key })}
+      value={legacyTheme.buttonRadius}
+      onChange={(key) => void updateLegacyTheme({ buttonRadius: key })}
       renderThumbnail={(key) => <ButtonStyleThumbnail radius={key} fill="solid" />}
     />
   );
 }
 
-export function ButtonFillSetting() {
-  const { theme, save } = useLegacyTheme();
-  if (!theme) return null;
+export function ButtonFillSetting({ editor }: LayoutSettingProps) {
+  const { legacyTheme, updateLegacyTheme } = editor;
+  if (!legacyTheme) return null;
   return (
     <PresetPicker
       singleColumn
       options={BUTTON_FILL_OPTIONS}
-      value={theme.buttonFill}
-      onChange={(key) => void save({ buttonFill: key })}
+      value={legacyTheme.buttonFill}
+      onChange={(key) => void updateLegacyTheme({ buttonFill: key })}
       renderThumbnail={(key) => <ButtonStyleThumbnail radius="rounded" fill={key} />}
     />
   );

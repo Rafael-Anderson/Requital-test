@@ -1,11 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useThemeEditor } from "./useThemeEditor";
-import type { Theme, ThemeConfig } from "./types";
+import type { Theme, ThemeConfig, ThemeSettings } from "./types";
 
 const getThemeBuilder = vi.fn();
 const updateThemeDraft = vi.fn();
 const publishTheme = vi.fn();
+const getTheme = vi.fn();
+const updateTheme = vi.fn();
 const push = vi.fn();
 
 vi.mock("next/navigation", () => ({
@@ -20,7 +22,17 @@ vi.mock("@/lib/api", () => ({
   getThemeBuilder: (...args: unknown[]) => getThemeBuilder(...args),
   updateThemeDraft: (...args: unknown[]) => updateThemeDraft(...args),
   publishTheme: (...args: unknown[]) => publishTheme(...args),
+  // Layout mode's legacy theme row — a separate hook effect/action from the
+  // theme.config fetch above (see useThemeEditor.ts's own legacyTheme
+  // comment). Mocked here purely so that effect doesn't throw on an
+  // undefined import; not the focus of this file's own tests.
+  getTheme: (...args: unknown[]) => getTheme(...args),
+  updateTheme: (...args: unknown[]) => updateTheme(...args),
 }));
+
+function fixtureLegacyTheme(): ThemeSettings {
+  return { shopId: 1 } as ThemeSettings;
+}
 
 function fixtureConfig(): ThemeConfig {
   return {
@@ -59,12 +71,16 @@ beforeEach(() => {
   getThemeBuilder.mockReset();
   updateThemeDraft.mockReset();
   publishTheme.mockReset();
+  getTheme.mockReset();
+  updateTheme.mockReset();
   getThemeBuilder.mockResolvedValue(fixtureTheme(fixtureConfig()));
   // Exercised by the unmount-time "save on close" cleanup effect even when
   // a test never calls save() itself — needs a real resolved Promise, not
   // vitest's default undefined return, since that effect always calls
   // .catch() on the result.
   updateThemeDraft.mockResolvedValue(fixtureTheme(fixtureConfig()));
+  getTheme.mockResolvedValue(fixtureLegacyTheme());
+  updateTheme.mockResolvedValue(fixtureLegacyTheme());
 });
 
 describe("useThemeEditor — updateBlockSetting propagation", () => {
@@ -124,5 +140,28 @@ describe("useThemeEditor — updateBlockSetting propagation", () => {
         sectionType: "hero",
       });
     }
+  });
+});
+
+describe("useThemeEditor — legacyTheme (Layout mode)", () => {
+  it("loads the legacy theme row on mount, independently of the theme.config fetch", async () => {
+    getTheme.mockResolvedValue({ shopId: 1, buttonRadius: "sharp", buttonFill: "outline" } as ThemeSettings);
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.legacyTheme).not.toBeNull());
+    expect(result.current.legacyTheme?.buttonRadius).toBe("sharp");
+    expect(getTheme).toHaveBeenCalled();
+  });
+
+  it("updateLegacyTheme PATCHes and replaces legacyTheme with the server's response, the one shared instance every Layout category component now reads/writes through", async () => {
+    updateTheme.mockResolvedValue({ shopId: 1, buttonRadius: "pill", buttonFill: "solid" } as ThemeSettings);
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.legacyTheme).not.toBeNull());
+
+    act(() => {
+      void result.current.updateLegacyTheme({ buttonRadius: "pill" });
+    });
+
+    await waitFor(() => expect(result.current.legacyTheme?.buttonRadius).toBe("pill"));
+    expect(updateTheme).toHaveBeenCalledWith({ buttonRadius: "pill" });
   });
 });

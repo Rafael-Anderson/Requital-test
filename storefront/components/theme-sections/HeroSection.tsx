@@ -3,7 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveButtonElementStyle, resolveButtonFillStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const HEIGHT_CLASS: Record<string, string> = {
@@ -45,7 +45,7 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
 }
 
 export default function HeroSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { previewMode } = useShop();
+  const { previewMode, shop } = useShop();
   const height = HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium;
   const position = POSITION_CLASS[settings.contentPosition as string] ?? POSITION_CLASS["center-center"];
 
@@ -90,7 +90,7 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
             {...editableAttrs(previewMode, { id: block.id, sectionId, type: "cta_button", reorderable: true })}
             href="#shop"
             className="mt-6 inline-block px-6 py-3 text-sm font-medium text-accent-foreground bg-accent"
-            style={{ ...themeButtonBaseStyle(), ...resolveButtonElementStyle(block.settings) }}
+            style={{ ...themeButtonBaseStyle(), ...resolveButtonFillStyle(shop?.buttonFill), ...resolveButtonElementStyle(block.settings) }}
           >
             {label}
           </a>

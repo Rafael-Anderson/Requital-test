@@ -2,7 +2,7 @@
 
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveButtonElementStyle, resolveButtonFillStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Presentational only — no newsletter/email-capture backend endpoint exists
@@ -14,7 +14,7 @@ import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 // this section's own blocks (see backend constants.ts's
 // BLOCK_TYPES.newsletter), not flat section.settings fields.
 export default function NewsletterSection({ sectionId, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { previewMode } = useShop();
+  const { previewMode, shop } = useShop();
   const headingBlock = blocks.find((b) => b.type === "heading" && b.visible);
   const textBlock = blocks.find((b) => b.type === "text" && b.visible);
   const formBlock = blocks.find((b) => b.type === "email_form" && b.visible);
@@ -56,7 +56,7 @@ export default function NewsletterSection({ sectionId, blocks }: { sectionId: st
           type="submit"
           {...editableAttrs(previewMode, { id: formBlock.id, sectionId, type: "cta_button", reorderable: true })}
           className="h-10 px-5 text-sm font-medium text-accent-foreground bg-accent"
-          style={{ ...themeButtonBaseStyle(), ...resolveButtonElementStyle(formBlock.settings) }}
+          style={{ ...themeButtonBaseStyle(), ...resolveButtonFillStyle(shop?.buttonFill), ...resolveButtonElementStyle(formBlock.settings) }}
         >
           {buttonLabel}
         </button>

@@ -102,7 +102,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
 // theme.config. Menu/Home tab don't take an editor prop (self-contained via
 // their own API calls), so this map is prop-less rather than reusing
 // THEME_SETTINGS_COMPONENTS' `{ editor }` shape.
-const LAYOUT_COMPONENTS: Record<(typeof THEME_LAYOUT_CATEGORY_LABELS)[number], ComponentType> = {
+const LAYOUT_COMPONENTS: Record<(typeof THEME_LAYOUT_CATEGORY_LABELS)[number], ComponentType<{ editor: ThemeEditorState }>> = {
   "Home tab": HomeTabSetting,
   Menu: MenuSetting,
   "Homepage layout": HomepageLayoutSetting,
@@ -153,7 +153,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     return (
       <div className="p-4">
         <h2 className="mb-4 text-sm font-semibold">{category}</h2>
-        <Component />
+        <Component editor={editor} />
       </div>
     );
   }

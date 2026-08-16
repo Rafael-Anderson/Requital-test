@@ -6,7 +6,7 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { listProducts } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolvePriceElementStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle } from "@/lib/theme-element-style";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -43,6 +43,7 @@ function QuickAddButton({
   className,
   background,
   color,
+  fill,
   previewMode,
   tagProps,
 }: {
@@ -51,6 +52,7 @@ function QuickAddButton({
   className: string;
   background?: string;
   color?: string;
+  fill?: string;
   previewMode: boolean;
   tagProps: ReturnType<typeof editableAttrs>;
 }) {
@@ -77,7 +79,7 @@ function QuickAddButton({
           outletId,
         );
       }}
-      style={{ background, color }}
+      style={{ ...resolveButtonFillStyle(fill), background, color }}
       className={className}
     >
       Add
@@ -139,6 +141,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                     outletId={outletId}
                     background={productCards.quickAddBackground}
                     color={productCards.quickAddText}
+                    fill={shop?.buttonFill}
                     previewMode={previewMode}
                     tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
                     className="hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow"
@@ -171,6 +174,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 outletId={outletId}
                 background={productCards.quickAddBackground}
                 color={productCards.quickAddText}
+                fill={shop?.buttonFill}
                 previewMode={previewMode}
                 tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
                 className="sm:hidden mt-2 w-full h-8 text-xs font-medium rounded-full border border-stroke"

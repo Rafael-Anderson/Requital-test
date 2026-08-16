@@ -46,13 +46,46 @@ export function resolveTextElementStyle(settings: Record<string, unknown>): CSSP
 // one specific button still sees that win over the global default.
 export function themeButtonBaseStyle(): CSSProperties {
   return {
-    borderRadius: "var(--theme-radius, 8px)",
+    // Legacy Layout mode's Button shape (--theme-btn-primary-radius, see
+    // shop-context.tsx's applyLegacyThemeOverrides) takes precedence over
+    // the new Buttons category's own cornerRadius (--theme-radius) here —
+    // a deliberate, flagged precedence call (see that function's own
+    // comment), not an oversight.
+    borderRadius: "var(--theme-btn-primary-radius, var(--theme-radius, 8px))",
     borderWidth: "var(--theme-button-border-width, 0px)",
     borderStyle: "solid",
     borderColor: "currentColor",
     textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
     fontFamily: "var(--theme-button-font, inherit)",
   };
+}
+
+// Legacy Layout mode's Button fill (solid/outline — "ghost" is handled
+// defensively even though the real ButtonFill schema only has these two
+// values today, since the union is easy to extend later and costs nothing
+// to handle now). Reads the raw --theme-btn-fill CSS var (a string, not a
+// px/color value) rather than a JS prop, matching applyLegacyThemeOverrides'
+// own choice to expose it that way. "solid" (or unset) returns {} — the
+// element's own bg-accent/text-accent-foreground classes already render
+// the solid look, no override needed.
+export function resolveButtonFillStyle(fill: string | undefined): CSSProperties {
+  if (fill === "outline") {
+    return {
+      background: "transparent",
+      color: "var(--color-accent)",
+      borderColor: "var(--color-accent)",
+      borderWidth: "2px",
+    };
+  }
+  if (fill === "ghost") {
+    return {
+      background: "transparent",
+      color: "var(--color-accent)",
+      borderColor: "transparent",
+      borderWidth: "0px",
+    };
+  }
+  return {};
 }
 
 export interface ButtonElementSettings {
