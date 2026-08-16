@@ -4,6 +4,7 @@ import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
 import ThemeDrivenFooter from "@/components/theme-sections/ThemeDrivenFooter";
+import { parseJsonField } from "@/lib/notification-text";
 import { POLICY_PAGE_LABELS, POLICY_PAGE_TYPES, type Density, type Shop } from "@/lib/types";
 
 // URL segment -> PolicyPageType — lowercase/hyphenated in the URL, the
@@ -63,9 +64,15 @@ function FollowUs({ socialEntries }: { socialEntries: [string, string][] }) {
 }
 
 function ContactList({ shop, center = false }: { shop: Shop; center?: boolean }) {
+  // themesettings.contactNumbers was LONGTEXT, not real JSON, until
+  // 20260816140000_fix_contact_numbers_colors_columns — see that
+  // migration's comment (same bug class as notificationText, PR #44). This
+  // is the exact call site that crashed in production (a string has no
+  // .map method).
+  const contactNumbers = parseJsonField<string[]>(shop.contactNumbers, []);
   return (
     <ul className={`space-y-2 text-sm opacity-80 ${center ? "flex flex-wrap items-center justify-center gap-x-5 gap-y-1 space-y-0" : ""}`}>
-      {shop.contactNumbers?.map((number) => (
+      {contactNumbers.map((number) => (
         <li key={number} className="flex items-center gap-2">
           <Phone className="size-3.5 shrink-0" />
           <a href={`tel:${number}`} className="hover:underline hover:opacity-100 transition-opacity">
@@ -107,7 +114,7 @@ export default function Footer() {
   const availablePolicyTypes = new Set(shop.policyPageTypes);
   const usefulLinks = POLICY_PAGE_TYPES.filter((type) => availablePolicyTypes.has(type));
   const badges = paymentBadges(shop);
-  const hasContact = !!(shop.email || shop.contactNumbers?.length);
+  const hasContact = !!(shop.email || parseJsonField<string[]>(shop.contactNumbers, []).length);
   const padding = FOOTER_DENSITY_PADDING[shop.footerDensity ?? "regular"];
 
   const copyrightName =

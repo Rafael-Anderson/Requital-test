@@ -668,12 +668,12 @@ export interface ThemesettingsRow {
   notificationText: string[] | null;
   announcementBarEnabled: boolean;
   announcementBarScrolling: boolean;
-  // Still LONGTEXT, not real JSON — unlike notificationText above, these two
-  // were out of scope for that fix even though they carry the identical
-  // latent bug (write-side JSON.stringify with no read-side parse). Flagged,
-  // not fixed here.
-  contactNumbers: unknown | null;
-  colors: unknown | null;
+  // Real JSON columns as of 20260816140000_fix_contact_numbers_colors_columns
+  // (were LONGTEXT — see that migration's comment) — same fix as
+  // notificationText above, just applied one PR later once the sibling bug
+  // was confirmed to be live-crashing two real shops.
+  contactNumbers: string[] | null;
+  colors: Record<string, string> | null;
   homepageLayout: string;
   homeTabMode: string;
   topBarLayout: string;

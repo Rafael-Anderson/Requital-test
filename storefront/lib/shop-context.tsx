@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { getShop, getThemeConfig, listOutlets } from "./api";
 import { getReadableTextColor } from "./color-contrast";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
+import { parseJsonField } from "./notification-text";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
@@ -91,8 +92,11 @@ export function resolveThemeCssVars(shop: Shop | null): Record<string, string> {
   };
 
   // Granular Appearance Color overrides — only the fields with a real
-  // storefront element to apply to (see theme-colors.ts).
-  const colors = shop?.colors ?? {};
+  // storefront element to apply to (see theme-colors.ts). themesettings.colors
+  // was LONGTEXT, not real JSON, until
+  // 20260816140000_fix_contact_numbers_colors_columns — see that
+  // migration's comment (same bug class as notificationText, PR #44).
+  const colors = parseJsonField<Record<string, string>>(shop?.colors, {});
   for (const field of WIRED_THEME_COLOR_FIELDS) {
     const override = colors[field.key];
     vars[field.cssVar] = override && HEX_COLOR.test(override) ? override : field.default;

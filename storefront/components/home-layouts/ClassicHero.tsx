@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { storeButtonClassName } from "@/lib/button-style";
+import { parseJsonField } from "@/lib/notification-text";
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -32,7 +33,7 @@ export default function ClassicHero({ bannerUrl, heroText }: { bannerUrl: string
 
   if (!bannerUrl && !heroText) {
     if (!shop) return null;
-    const brandBg = shop.colors?.brandBackgroundColor;
+    const brandBg = parseJsonField<Record<string, string>>(shop.colors, {}).brandBackgroundColor;
     const background =
       brandBg && HEX_COLOR.test(brandBg) ? brandBg : "color-mix(in srgb, var(--color-accent) 8%, var(--background))";
     return (
