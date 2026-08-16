@@ -5,6 +5,9 @@ import {
   resolveImageElementStyle,
   resolveNavElementStyle,
   resolvePriceElementStyle,
+  resolveIconStrokeWidth,
+  resolveIconElementStyle,
+  themeButtonBaseStyle,
 } from "./theme-element-style";
 
 describe("resolveTextElementStyle", () => {
@@ -104,5 +107,41 @@ describe("resolvePriceElementStyle", () => {
   it("resolves fontSize/color only — no currency/sale-price fields (those aren't style)", () => {
     const style = resolvePriceElementStyle({ fontSize: 18, color: "#18181b", showCurrencyCode: true });
     expect(style).toEqual({ fontSize: "18px", color: "#18181b" });
+  });
+});
+
+describe("resolveIconStrokeWidth", () => {
+  it("maps the three named presets to real lucide strokeWidth numbers", () => {
+    expect(resolveIconStrokeWidth("thin")).toBe(1.25);
+    expect(resolveIconStrokeWidth("default")).toBe(2);
+    expect(resolveIconStrokeWidth("heavy")).toBe(2.75);
+  });
+
+  it("falls back to lucide's own default (2) for an unset/unknown value — pixel-identical to before this setting existed", () => {
+    expect(resolveIconStrokeWidth(undefined)).toBe(2);
+    expect(resolveIconStrokeWidth("not-a-real-value")).toBe(2);
+  });
+});
+
+describe("resolveIconElementStyle", () => {
+  it("maps color and size (as an explicit width+height pair, not a font-size-like single value)", () => {
+    const style = resolveIconElementStyle({ color: "#069494", size: 24 });
+    expect(style.color).toBe("#069494");
+    expect(style.width).toBe("24px");
+    expect(style.height).toBe("24px");
+  });
+
+  it("returns an empty style when nothing is set", () => {
+    expect(resolveIconElementStyle({})).toEqual({});
+  });
+});
+
+describe("themeButtonBaseStyle", () => {
+  it("returns the CSS-var-driven defaults every primary button starts from", () => {
+    const style = themeButtonBaseStyle();
+    expect(style.borderRadius).toBe("var(--theme-radius, 8px)");
+    expect(style.borderWidth).toBe("var(--theme-button-border-width, 0px)");
+    expect(style.borderStyle).toBe("solid");
+    expect(style.textTransform).toBe("var(--theme-button-text-transform, none)");
   });
 });

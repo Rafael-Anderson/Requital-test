@@ -2,7 +2,7 @@
 
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolveButtonElementStyle, themeButtonBaseStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Presentational only — no newsletter/email-capture backend endpoint exists
@@ -38,7 +38,7 @@ export default function NewsletterSection({ sectionId, blocks }: { sectionId: st
       )}
       {subtext && textBlock && (
         <p
-          {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "text", reorderable: true })}
+          {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "subtext", reorderable: true })}
           className="text-sm opacity-70 mb-5"
           style={resolveTextElementStyle(textBlock.settings)}
         >
@@ -54,9 +54,9 @@ export default function NewsletterSection({ sectionId, blocks }: { sectionId: st
         />
         <button
           type="submit"
-          {...editableAttrs(previewMode, { id: formBlock.id, sectionId, type: "email_form", reorderable: true })}
+          {...editableAttrs(previewMode, { id: formBlock.id, sectionId, type: "cta_button", reorderable: true })}
           className="h-10 px-5 text-sm font-medium text-accent-foreground bg-accent"
-          style={{ borderRadius: "var(--theme-radius, 8px)", ...resolveButtonElementStyle(formBlock.settings) }}
+          style={{ ...themeButtonBaseStyle(), ...resolveButtonElementStyle(formBlock.settings) }}
         >
           {buttonLabel}
         </button>

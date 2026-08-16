@@ -26,26 +26,50 @@ const CARD_STYLE_CLASS: Record<string, string> = {
 // already has its own real pages (see /[shop]/collections/[slug]).
 const MAX_PRODUCTS = 8;
 
+// No per-instance theme block backs the quick-add button — it's governed
+// entirely by globalSettings.productCards (quickAdd/quickAddBackground/
+// quickAddText/mobileQuickAdd), a Theme Settings category, not a block in
+// any section's tree. PRODUCT_CARDS_SENTINEL_ID gives it something to
+// carry as data-requital-id anyway: PreviewFrame.tsx's message handler
+// special-cases this exact id to jump the editor straight to the Product
+// cards category (same "Edit scheme" jump-link pattern SchemePicker.tsx
+// already uses) instead of trying — and failing — to resolve it as a
+// block selection.
+export const PRODUCT_CARDS_SENTINEL_ID = "__product-cards__";
+
 function QuickAddButton({
   product,
   outletId,
   className,
   background,
   color,
+  previewMode,
+  tagProps,
 }: {
   product: Product;
   outletId: number | undefined;
   className: string;
   background?: string;
   color?: string;
+  previewMode: boolean;
+  tagProps: ReturnType<typeof editableAttrs>;
 }) {
   const { addItem } = useCart();
   if (outletId === undefined || product.hasVariants || product.isGiftCard) return null;
   return (
     <button
       type="button"
+      {...tagProps}
       onClick={(e) => {
+        // Always prevent the parent <Link>'s navigation, in every mode.
         e.preventDefault();
+        // Selection-only in preview — deliberately does NOT stopPropagation
+        // here (unlike the real-mode path below): the click must keep
+        // bubbling to PreviewInteraction.tsx's document-level listener so
+        // single-clicking this button selects it like every other tagged
+        // element, rather than performing the real add-to-cart action a
+        // "cart action" must never do inside the builder's preview.
+        if (previewMode) return;
         e.stopPropagation();
         addItem(
           { productId: product.id, name: product.name, price: Number(product.price), thumbnail: product.thumbnail, maxStock: product.stockQuantity },
@@ -106,7 +130,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 <img
                   src={product.thumbnail}
                   alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-300"
+                  className="theme-product-image w-full h-full object-cover transition-transform duration-300"
                 />
                 {shopCartUsable && productCards.quickAdd && (
                   <QuickAddButton
@@ -114,6 +138,8 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                     outletId={outletId}
                     background={productCards.quickAddBackground}
                     color={productCards.quickAddText}
+                    previewMode={previewMode}
+                    tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
                     className="hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow"
                   />
                 )}
@@ -144,6 +170,8 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 outletId={outletId}
                 background={productCards.quickAddBackground}
                 color={productCards.quickAddText}
+                previewMode={previewMode}
+                tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
                 className="sm:hidden mt-2 w-full h-8 text-xs font-medium rounded-full border border-stroke"
               />
             )}

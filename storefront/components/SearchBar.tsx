@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
@@ -13,8 +13,18 @@ const DEBOUNCE_MS = 300;
 // Header search — icon toggles a dropdown with a debounced product search
 // (typo-tolerant, see backend StorefrontSearchService) rather than a
 // separate results page, matching the header's existing icon-triggered
-// affordances (cart drawer, mobile menu).
-export default function SearchBar() {
+// affordances (cart drawer, mobile menu). iconStrokeWidth/iconOverrideStyle
+// are optional so this component's other real caller (none currently, but
+// kept generic) doesn't need to know about the theme builder's global
+// icon-stroke setting or an in-preview per-element color/size override —
+// ThemeDrivenHeader.tsx is the only caller passing them today.
+export default function SearchBar({
+  iconStrokeWidth,
+  iconOverrideStyle,
+}: {
+  iconStrokeWidth?: number;
+  iconOverrideStyle?: CSSProperties;
+} = {}) {
   const { shopSlug, shopBasePath, shop } = useShop();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -65,7 +75,7 @@ export default function SearchBar() {
     return () => clearTimeout(timer);
   }, [query, shopSlug]);
 
-  const iconProps = iconStyleProps(shop?.iconStyle, 1.75);
+  const iconProps = iconStyleProps(shop?.iconStyle, iconStrokeWidth ?? 1.75);
 
   return (
     <div ref={rootRef} className="relative">
@@ -75,7 +85,7 @@ export default function SearchBar() {
         aria-label="Search"
         className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors cursor-pointer"
       >
-        <Search className="size-5" {...iconProps} />
+        <Search className="size-5" {...iconProps} style={iconOverrideStyle} />
       </button>
 
       {open && (

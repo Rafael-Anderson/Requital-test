@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import { STOREFRONT_URL, storefrontUrlFor, getAccessToken } from "@/lib/api";
 import type { Shop } from "@/lib/types";
 import {
@@ -18,7 +17,18 @@ const DEVICE_WIDTH: Record<DevicePreview, string> = {
   mobile: "390px",
 };
 
-const POST_DEBOUNCE_MS = 200;
+const POST_DEBOUNCE_MS = 150;
+
+// Governs everything that jumps the editor to a global Theme Settings
+// category instead of resolving as a normal block selection — the
+// quick-add button (see storefront ProductGridSection.tsx's own
+// PRODUCT_CARDS_SENTINEL_ID, duplicated here by hand, same no-shared-
+// package convention as HEADER_CHROME_ID/FOOTER_CHROME_ID below) has no
+// backing block of its own; it's governed entirely by
+// globalSettings.productCards, a Theme Settings category, not anything in
+// a section's block tree. Same "Edit scheme" jump-link pattern
+// SchemePicker.tsx already uses elsewhere in this app.
+const PRODUCT_CARDS_SENTINEL_ID = "__product-cards__";
 
 // Mirrors storefront/lib/is-local-host.ts by hand — same no-shared-package
 // convention as every other cross-app helper in this codebase.
@@ -55,13 +65,16 @@ function isLocalHost(hostname: string): boolean {
 // "This store is unavailable" inside the iframe even after the frame-src/
 // frame-ancestors CSP fixes let the iframe load at all — see
 // PublicService.isAuthorizedPreview for the verification side. The token
-// is embedded once, at src-build time, and only refreshed by remounting the
-// iframe (theme-id change or the manual "Refresh preview" button) — a
-// preview session left open past the access token's 15-minute lifetime
-// (AuthModule's DEFAULT_TOKEN_LIFETIME) without a refresh will see this
-// content fall back to empty rather than erroring, since every one of those
-// storefront fetches already catches its own failure. Not worth wiring a
-// live-refresh mechanism into the iframe for a 15-minute edge case.
+// is embedded once, at src-build time, and only refreshed by remounting
+// the iframe — a theme-id change, or a successful publish (see
+// publishVersion below); there's no more manual "Refresh preview" button
+// to fall back on (removed — a reliably auto-updating preview shouldn't
+// need one). A preview session left open past the access token's 15-minute
+// lifetime (AuthModule's DEFAULT_TOKEN_LIFETIME) without either of those
+// will see this content fall back to empty rather than erroring, since
+// every one of those storefront fetches already catches its own failure —
+// an accepted edge case, not worth wiring a live token-refresh mechanism
+// into the iframe for.
 function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
   const previewToken = getAccessToken();
   const tokenParam = previewToken ? `&previewToken=${encodeURIComponent(previewToken)}` : "";
@@ -94,9 +107,13 @@ function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
 // Live preview: every config edit is posted to the iframe (debounced, so a
 // fast typing burst doesn't flood postMessage), no save/reload needed to
 // see it reflected — per the spec. The iframe itself only remounts on a
-// theme-id change or manual "Refresh preview" click, not on every edit or
-// autosave. Explicit target origin throughout, never '*'. The reverse
-// channel (clicking a section inside the preview selects it here) is the
+// theme-id change or a successful publish (publishVersion), never on a
+// plain edit/autosave — and there's no manual "Refresh preview" button to
+// fall back on if that pipeline is ever wrong, which is deliberate: it
+// forces every config-change path to actually go through the postMessage
+// effect below rather than "just click refresh" papering over a real gap.
+// Explicit target origin throughout, never '*'. The reverse channel
+// (clicking a section inside the preview selects it here) is the
 // same window 'message' listener, discriminated by payload type.
 export default function PreviewFrame({
   editor,
@@ -105,10 +122,9 @@ export default function PreviewFrame({
   editor: ThemeEditorState;
   shop: Shop;
 }) {
-  const [manualRefreshCount, setManualRefreshCount] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, device, selectNode, reorderBlocks, publishVersion } = editor;
+  const { theme, config, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion } = editor;
 
   const src = theme ? resolvePreviewUrl(shop, theme.id) : null;
   const previewOrigin = useMemo(() => {
@@ -155,6 +171,11 @@ export default function PreviewFrame({
         return;
       }
       if (data.type === "element-selected" && typeof data.elementId === "string") {
+        if (data.elementId === PRODUCT_CARDS_SENTINEL_ID) {
+          setEditorMode("theme_settings");
+          setThemeSettingsCategory("Product cards");
+          return;
+        }
         selectNode(data.elementId);
         return;
       }
@@ -183,27 +204,17 @@ export default function PreviewFrame({
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [previewOrigin, config, selectNode, reorderBlocks]);
+  }, [previewOrigin, config, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks]);
 
   if (!theme) return null;
 
   return (
     <div className="flex h-full flex-col bg-zinc-100 dark:bg-zinc-950">
-      <div className="flex items-center justify-end border-b border-black/10 px-3 py-1.5 dark:border-white/10">
-        <button
-          type="button"
-          onClick={() => setManualRefreshCount((n) => n + 1)}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10"
-        >
-          <RefreshCw className="size-3.5" />
-          Refresh preview
-        </button>
-      </div>
       <div className="flex flex-1 items-start justify-center overflow-auto p-4">
         {src ? (
           <iframe
             ref={iframeRef}
-            key={`${theme.id}-${manualRefreshCount}-${publishVersion}`}
+            key={`${theme.id}-${publishVersion}`}
             title="Storefront preview"
             src={src}
             style={{ width: DEVICE_WIDTH[device], maxWidth: "100%" }}

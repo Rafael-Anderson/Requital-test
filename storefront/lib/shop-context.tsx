@@ -139,6 +139,13 @@ const PAGE_WIDTH_PX: Record<ThemeConfig["globalSettings"]["pageLayout"]["width"]
 
 const HEADING_KEYS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 
+const CARD_HOVER_TRANSFORM: Record<string, string> = {
+  none: "none",
+  lift: "translateY(-4px)",
+  scale: "scale(1.04)",
+  zoom: "scale(1.08)",
+};
+
 function applyHeadingPreset(root: CSSStyleDeclaration, key: string, preset: HeadingTextPreset) {
   root.setProperty(`--text-${key}-size`, `${preset.size}px`);
   root.setProperty(`--text-${key}-line-height`, String(resolveLineHeight(preset.lineHeight)));
@@ -204,6 +211,39 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   for (const key of HEADING_KEYS) {
     const preset = g.typography?.[key];
     if (preset) applyHeadingPreset(root.style, key, preset);
+  }
+
+  // Buttons — --theme-radius has been read by half a dozen section
+  // components (Hero's CTA, Newsletter, FeaturedCollections/ProductGrid/
+  // ImageText images, ...) since the visual theme builder shipped, but
+  // nothing ever actually called setProperty for it — a real, confirmed
+  // gap (grep found only comments referencing it, no write site), not a
+  // guess. Sourced from the primary button style since that's what every
+  // one of those call sites is really styling.
+  if (g.buttons?.primary) {
+    root.style.setProperty("--theme-radius", `${g.buttons.primary.cornerRadius}px`);
+    root.style.setProperty("--theme-button-border-width", `${g.buttons.primary.borderThickness}px`);
+    root.style.setProperty("--theme-button-text-transform", g.buttons.primary.case === "uppercase" ? "uppercase" : "none");
+  }
+
+  // Icons: no CSS var here — lucide's strokeWidth is a numeric SVG prop,
+  // not something a CSS custom property can feed into a React component
+  // prop. ThemeDrivenHeader.tsx/SearchBar.tsx read
+  // themeConfig.globalSettings.icons.stroke directly via useShop() instead
+  // (see theme-element-style.ts's resolveIconStrokeWidth).
+
+  // Logo — desktopHeight/mobileHeight had no reader either; ThemeDrivenHeader
+  // rendered the logo at a hardcoded height regardless of this setting.
+  if (g.logo) {
+    root.style.setProperty("--theme-logo-height", `${g.logo.desktopHeight}px`);
+    root.style.setProperty("--theme-logo-height-mobile", `${g.logo.mobileHeight}px`);
+  }
+
+  // Product card hover — same "hardcoded class instead of the setting"
+  // gap as --theme-radius; ProductGridSection previously always applied
+  // `group-hover:scale-[1.04]` regardless of this field's value.
+  if (g.animations?.cardHoverEffect) {
+    root.style.setProperty("--theme-card-hover-transform", CARD_HOVER_TRANSFORM[g.animations.cardHoverEffect] ?? "none");
   }
 }
 

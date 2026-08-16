@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
@@ -42,7 +42,7 @@ export default function FeaturedCollectionsSection({ sectionId, blocks }: { sect
           {titleBlock?.visible !== false && (
             <h2
               className="text-xl font-semibold"
-              {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "collection_title" }) : {})}
+              {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "section_heading" }) : {})}
               style={titleBlock ? resolveTextElementStyle(titleBlock.settings) : undefined}
             >
               {heading}
@@ -53,7 +53,10 @@ export default function FeaturedCollectionsSection({ sectionId, blocks }: { sect
               href={shopBasePath || "/"}
               {...editableAttrs(previewMode, { id: viewAllBlock.id, sectionId, type: "view_all_button" })}
               className="text-sm font-medium text-accent hover:underline"
-              style={resolveButtonElementStyle(viewAllBlock.settings)}
+              style={{
+                textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
+                ...resolveButtonElementStyle(viewAllBlock.settings),
+              }}
             >
               {viewAllLabel}
             </Link>

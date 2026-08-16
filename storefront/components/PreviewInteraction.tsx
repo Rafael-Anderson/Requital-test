@@ -7,13 +7,21 @@ import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
 
 // Preview-mode-only (mounted by ShopLayoutClient.tsx only when
 // useShop().previewMode is true — never for a real shopper visit, so this
-// entire component and its event listeners simply don't exist outside the
-// admin builder's iframe). Double-click any element tagged with
-// data-requital-editable="true" (see lib/editable-attrs.ts, applied
-// throughout theme-sections/*) to select it: shows a blue outline + a
-// floating toolbar, and — for elements additionally tagged
-// data-requital-reorderable="true" — makes it draggable among its section
-// siblings.
+// entire component, its event listeners, and the injected <style> below
+// simply don't exist outside the admin builder's iframe). Single-click any
+// element tagged with data-requital-editable="true" (see
+// lib/editable-attrs.ts, applied throughout theme-sections/*) to select
+// it: shows a blue outline + a floating toolbar, and — for elements
+// additionally tagged data-requital-reorderable="true" — makes it
+// draggable among its section siblings.
+//
+// Single click, not double: a merchant previewing a real page full of
+// links/buttons/forms needs those completely inert (no navigation, no
+// form submission, no cart mutation) and needs body text to not be
+// mouse-selectable, both handled by the injected <style> tag below. With
+// interactive elements neutralized this way, a single click is
+// unambiguous and safe to use as the selection gesture — double-click
+// would just be an extra, unnecessary step.
 //
 // Deliberately uses ONE document-level listener per event type (delegation
 // via closest()) rather than a per-element wrapper component: the element
@@ -23,16 +31,6 @@ import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
 // "also wire up handlers." Overlay/toolbar/drop-indicator are portaled to
 // document.body so position:fixed coordinates from getBoundingClientRect()
 // are never fought by an ancestor's own transform/overflow.
-//
-// Selection-clearing note: a plain single click that lands inside a
-// section but not on a specific tagged element still triggers
-// SectionWrapper's own pre-existing click-to-select-the-section behavior
-// (unchanged, not this component's concern) — this component only hides
-// its OWN outline/toolbar in that case, it does not post element-deselected
-// for every such click (that would race against SectionWrapper's own
-// postMessage from the same click and could undo a legitimate section
-// selection). element-deselected is posted only for the toolbar's explicit
-// close button — a deliberate, unambiguous deselect action.
 function findEditable(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) return null;
   return target.closest<HTMLElement>('[data-requital-editable="true"]');
@@ -55,18 +53,46 @@ interface Selected {
 const ELEMENT_TYPE_LABELS: Record<string, string> = {
   heading: "Heading",
   subheading: "Subheading",
-  cta: "Button",
+  cta_button: "Button",
   logo: "Logo",
   nav_menu: "Menu",
-  collection_title: "Heading",
+  nav_link: "Footer links",
+  search_icon: "Search icon",
+  cart_icon: "Cart icon",
+  account_icon: "Account icon",
+  section_heading: "Section heading",
   view_all_button: "Button",
   product_title: "Product title",
   product_price: "Price",
-  text: "Text",
-  image: "Image",
-  footer_copyright: "Footer text",
-  email_form: "Button",
+  add_to_cart_button: "Add to cart button",
+  testimonial_text: "Testimonial",
+  author_name: "Author name",
+  body_text: "Text",
+  subtext: "Text",
+  section_image: "Image",
+  announcement_text: "Announcement",
+  copyright_text: "Footer text",
 };
+
+// Neutralizes the real page in preview mode: no text highlighting, no
+// navigating/submitting/mutating anything by clicking a real link/button/
+// form. data-requital-editable elements get pointer-events restored so
+// they stay clickable for selection — the click handler below still
+// preventDefaults on them (blocking e.g. an <a>'s navigation) without
+// relying on pointer-events alone, since a pointer-events:auto descendant
+// inside a pointer-events:none ancestor link can still trigger that
+// ancestor's native navigation on click (CSS hit-testing isn't the same
+// thing as "this click can't activate a link").
+const PREVIEW_MODE_CSS = `
+  * { user-select: none !important; -webkit-user-select: none !important; }
+  a, button, [role="button"] {
+    pointer-events: none !important;
+  }
+  [data-requital-editable="true"] {
+    pointer-events: auto !important;
+    cursor: pointer;
+  }
+`;
 
 export default function PreviewInteraction() {
   const [selected, setSelected] = useState<Selected | null>(null);
@@ -79,7 +105,8 @@ export default function PreviewInteraction() {
   // Keep the overlay/toolbar glued to the selected element across
   // scroll/resize — re-measures rather than trying to transform the
   // original rect, since layout can shift for reasons unrelated to the
-  // scroll delta alone (e.g. a responsive breakpoint change).
+  // scroll delta alone (e.g. a responsive breakpoint change, or the
+  // element's own content changing size after a live style edit).
   useEffect(() => {
     if (!selected) {
       setRect(null);
@@ -100,14 +127,32 @@ export default function PreviewInteraction() {
   }, [selected]);
 
   useEffect(() => {
-    function handleDoubleClick(e: MouseEvent) {
+    function handleClick(e: MouseEvent) {
       const el = findEditable(e.target);
-      if (!el) return;
-      e.preventDefault(); // no native text-selection on double-click
+      if (!el) {
+        // Click landed outside any tagged element — deselect for real
+        // (both locally and on the admin side), not just hide this
+        // component's own overlay. A real click on a real link/button
+        // never gets here in the first place (pointer-events:none, see
+        // PREVIEW_MODE_CSS), so this is genuinely "clicked empty space."
+        if (selected) {
+          setSelected(null);
+          postToAdmin({ type: "element-deselected" });
+        }
+        return;
+      }
+      // Always prevent the default action (navigate/submit/etc.) for a
+      // tagged element, regardless of what kind of element it is — the
+      // single, centralized place this is enforced, rather than trusting
+      // every current and future taggable component to remember it. See
+      // the file-level comment on why pointer-events:auto alone isn't
+      // sufficient for this.
+      e.preventDefault();
       const id = el.dataset.requitalId;
       const sectionId = el.dataset.requitalSection;
       const elementType = el.dataset.requitalType;
       if (!id || !sectionId || !elementType) return;
+      if (selected?.id === id) return; // already selected, nothing to do
       const reorderable = el.dataset.requitalReorderable === "true";
       setSelected({ id, sectionId, elementType, reorderable });
       const elRect = el.getBoundingClientRect();
@@ -120,20 +165,9 @@ export default function PreviewInteraction() {
       });
     }
 
-    // Clicking outside any editable element hides this component's own
-    // outline/toolbar — see the file-level comment for why this does not
-    // also post element-deselected.
-    function handleClick(e: MouseEvent) {
-      if (!findEditable(e.target)) setSelected(null);
-    }
-
-    document.addEventListener("dblclick", handleDoubleClick);
     document.addEventListener("click", handleClick);
-    return () => {
-      document.removeEventListener("dblclick", handleDoubleClick);
-      document.removeEventListener("click", handleClick);
-    };
-  }, []);
+    return () => document.removeEventListener("click", handleClick);
+  }, [selected]);
 
   // Drag-and-drop — only wired for the currently selected element, and
   // only when it's tagged reorderable (top-level section/header/footer
@@ -210,9 +244,38 @@ export default function PreviewInteraction() {
     postToAdmin({ type: "element-deselected" });
   }
 
-  if (typeof document === "undefined") return null;
+  // The <style> tag renders unconditionally, on both server and client —
+  // deliberately NOT inside the portal below. A previous version put it
+  // inside the portal and broke hydration: this component returns null
+  // during SSR (no `document` in Node), so the server never renders the
+  // portal at all, but the CSS tag rendered on every client mount
+  // regardless of selection state — an unconditional DOM insertion into
+  // document.body the server never produced, which is exactly the
+  // "server and client don't match" case React's hydration warns about.
+  // Splitting it out fixes that: the style tag is identical on both
+  // sides, and the portal's own content is null on both sides until a
+  // real selection sets state (a normal post-hydration update, not a
+  // hydration mismatch).
+  return (
+    <>
+      <style>{PREVIEW_MODE_CSS}</style>
+      {typeof document !== "undefined" && createPortal(<PreviewOverlay rect={rect} selected={selected} dropIndicator={dropIndicator} onClose={handleClose} />, document.body)}
+    </>
+  );
+}
 
-  return createPortal(
+function PreviewOverlay({
+  rect,
+  selected,
+  dropIndicator,
+  onClose,
+}: {
+  rect: DOMRect | null;
+  selected: Selected | null;
+  dropIndicator: { rect: DOMRect } | null;
+  onClose: () => void;
+}) {
+  return (
     <>
       {rect && (
         <div
@@ -236,7 +299,7 @@ export default function PreviewInteraction() {
           <span>{ELEMENT_TYPE_LABELS[selected.elementType] ?? selected.elementType}</span>
           <button
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             aria-label="Deselect"
             className="flex items-center justify-center rounded hover:bg-white/20"
           >
@@ -255,7 +318,6 @@ export default function PreviewInteraction() {
           }}
         />
       )}
-    </>,
-    document.body,
+    </>
   );
 }

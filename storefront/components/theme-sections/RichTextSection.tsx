@@ -32,7 +32,7 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
     <div className="px-4 sm:px-6 py-8 max-w-3xl mx-auto">
       <p
         className="whitespace-pre-line leading-relaxed"
-        {...(textBlock ? editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "text" }) : {})}
+        {...(textBlock ? editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text" }) : {})}
         style={{ ...typographyStyle(settings.typography), ...(textBlock ? resolveTextElementStyle(textBlock.settings) : {}) }}
       >
         {text}

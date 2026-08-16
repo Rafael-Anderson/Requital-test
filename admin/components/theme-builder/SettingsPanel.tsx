@@ -197,7 +197,11 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Block settings</h2>
       </div>
-      <ElementSettingsPanel block={block} onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)} />
+      <ElementSettingsPanel
+        block={block}
+        onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)}
+        onToggleVisibility={() => editor.toggleBlockVisibility(container, block.id)}
+      />
     </div>
   );
 }
