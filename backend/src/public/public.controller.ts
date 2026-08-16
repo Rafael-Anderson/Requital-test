@@ -14,6 +14,7 @@ import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandoned-cart.dto';
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
+import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
 
 // Unauthenticated, shop-scoped by a path-prefixed slug (shop.subdomain) —
 // the storefront app resolves which shop it's serving from its own URL
@@ -301,5 +302,18 @@ export class PublicController {
     @Body() dto: ValidateGiftCardDto,
   ) {
     return this.publicService.validateGiftCard(shopSlug, dto);
+  }
+
+  // Newsletter section's signup form (storefront/components/theme-sections/
+  // NewsletterSection.tsx) — same rate-limit shape as this file's other
+  // unauthenticated write endpoints.
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Public()
+  @Post('newsletter-subscribe')
+  subscribeNewsletter(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: SubscribeNewsletterDto,
+  ) {
+    return this.publicService.subscribeNewsletter(shopSlug, dto);
   }
 }

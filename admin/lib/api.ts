@@ -152,6 +152,28 @@ export function clearTokens() {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
+// clearTokens() above only touches localStorage — it doesn't tell
+// AuthProvider's `user` state that the session just died. Without this,
+// RequireAuth's own (already-correct) `if (!user) redirect to /login` logic
+// never fires when a 401 happens mid-session (refresh token expired,
+// revoked, or a JWT_SECRET rotation invalidated every outstanding token at
+// once): `user` stays stale-truthy in React state, so the merchant is left
+// staring at whatever partial/broken page they were on instead of being
+// bounced to /login, until they manually navigate somewhere that happens to
+// re-run AuthProvider's mount check. AuthProvider subscribes to this so a
+// 401-triggered clearTokens() call also flips `user` to null immediately,
+// letting RequireAuth's existing redirect do its job without a page reload.
+let unauthorizedListeners: Array<() => void> = [];
+export function onUnauthorized(listener: () => void): () => void {
+  unauthorizedListeners.push(listener);
+  return () => {
+    unauthorizedListeners = unauthorizedListeners.filter((l) => l !== listener);
+  };
+}
+function notifyUnauthorized() {
+  unauthorizedListeners.forEach((listener) => listener());
+}
+
 // Carries the HTTP status alongside the message so callers can distinguish
 // e.g. a 404 "not found" from a genuine failure without string-matching
 // error text — see geocodeAddress for the motivating case.
@@ -226,9 +248,11 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
         return apiFetch<T>(path, init, true);
       } catch {
         clearTokens();
+        notifyUnauthorized();
       }
     } else if (res.status === 401) {
       clearTokens();
+      notifyUnauthorized();
     }
     const body = await res.json().catch(() => null);
     throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
@@ -257,9 +281,11 @@ async function apiFetchText(path: string, isRetry = false): Promise<string> {
         return apiFetchText(path, true);
       } catch {
         clearTokens();
+        notifyUnauthorized();
       }
     } else if (res.status === 401) {
       clearTokens();
+      notifyUnauthorized();
     }
     throw new ApiError(`Request failed (${res.status})`, res.status);
   }

@@ -68,15 +68,25 @@ function BlockRow({
         ) : (
           <span className="w-3.5 shrink-0" />
         )}
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-label="Drag to reorder"
-          className="shrink-0 cursor-grab touch-none text-zinc-400 active:cursor-grabbing"
-        >
-          <GripVertical className="size-3.5" />
-        </button>
+        {block.type === "nav_menu" ? (
+          // The nav menu always renders as a fixed row below the header
+          // (see ThemeDrivenHeader.tsx/MenuBar.tsx) — its order within
+          // Header's block tree has no effect on the storefront, so a drag
+          // handle here would promise repositioning this block can't do.
+          <span aria-hidden="true" className="shrink-0 text-zinc-200 dark:text-zinc-700">
+            <GripVertical className="size-3.5" />
+          </span>
+        ) : (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label="Drag to reorder"
+            className="shrink-0 cursor-grab touch-none text-zinc-400 active:cursor-grabbing"
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        )}
         <button type="button" onClick={() => props.onSelect(block.id)} className="flex-1 truncate text-left text-sm">
           {BLOCK_TYPE_LABELS[block.type] ?? block.type}
         </button>

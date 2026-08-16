@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
+import { isDuplicateKeyError } from '../database/mysql-errors';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import { createLogger } from '../common/logging/logger';
@@ -33,6 +35,7 @@ import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandone
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { SubmitSurveyDto } from './dto/submit-survey.dto';
+import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
 import { ThemesService } from '../themes/themes.service';
 import {
@@ -186,6 +189,28 @@ export class PublicService {
   async validateGiftCard(shopSlug: string, dto: ValidateGiftCardDto) {
     const shop = await this.resolveShop(shopSlug);
     return this.giftCardsService.validateCode(shop.id, dto.code);
+  }
+
+  // No dedicated module for this — it's a single insert-or-409, not enough
+  // surface to justify a service of its own the way abandoned carts/gift
+  // cards have. Dedup is enforced by the table's own (shopId, email) unique
+  // index (see that migration's comment for why this isn't `customer`), not
+  // a pre-check — same TOCTOU-avoidance reasoning as the webhook/discount
+  // idempotency patterns elsewhere in this codebase.
+  async subscribeNewsletter(shopSlug: string, dto: SubscribeNewsletterDto) {
+    const shop = await this.resolveShop(shopSlug);
+    try {
+      await this.db.execute(
+        `INSERT INTO newslettersubscriber (shopId, email, source) VALUES (?, ?, ?)`,
+        [shop.id, dto.email, 'newsletter_widget'],
+      );
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw new ConflictException('This email is already subscribed');
+      }
+      throw error;
+    }
+    return { subscribed: true };
   }
 
   async getShop(shopSlug: string) {

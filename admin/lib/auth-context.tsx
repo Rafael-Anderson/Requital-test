@@ -54,6 +54,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Any API call, anywhere in the app, that ends up fully logged out (both
+  // the access token and its refresh attempt rejected) reports it here —
+  // see api.onUnauthorized's own comment for why this can't just be
+  // api.clearTokens() alone. This is what makes a session invalidated
+  // mid-use (expired/revoked refresh token, or every token at once if
+  // JWT_SECRET ever rotates) redirect to /login immediately via
+  // RequireAuth's existing logic, instead of leaving the merchant stuck on
+  // a broken page until they happen to reload.
+  useEffect(() => {
+    return api.onUnauthorized(() => setUser(null));
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
     api.setTokens(result);

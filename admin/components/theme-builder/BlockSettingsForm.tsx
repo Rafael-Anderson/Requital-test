@@ -88,13 +88,47 @@ export default function BlockSettingsForm({
         />
       );
 
-    case "testimonial":
+    case "testimonial": {
+      async function handlePhoto(file: File) {
+        setUploading(true);
+        try {
+          const { url } = await uploadThemeImage(file);
+          onUpdate("photoUrl", url);
+        } catch {
+          toast("Failed to upload image", "error");
+        } finally {
+          setUploading(false);
+        }
+      }
+      const rating = (block.settings.rating as number) ?? 0;
       return (
         <div className="space-y-3">
           <Textarea label="Quote" rows={3} value={(block.settings.quote as string) ?? ""} onChange={(e) => onUpdate("quote", e.target.value)} />
           <Input label="Author" value={(block.settings.author as string) ?? ""} onChange={(e) => onUpdate("author", e.target.value)} />
+          <ImageDropzone
+            preview={resolveImageUrl((block.settings.photoUrl as string) ?? null)}
+            onFileSelected={(file) => void handlePhoto(file)}
+            label={uploading ? "Uploading..." : "Author photo"}
+          />
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Rating</span>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => onUpdate("rating", rating === star ? undefined : star)}
+                  aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                  className={`text-xl leading-none ${star <= rating ? "text-amber-500" : "text-zinc-300 dark:text-zinc-700"}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       );
+    }
 
     case "text":
       return <Textarea label="Text" rows={4} value={(block.settings.text as string) ?? ""} onChange={(e) => onUpdate("text", e.target.value)} />;

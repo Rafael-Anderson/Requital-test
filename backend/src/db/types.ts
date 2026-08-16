@@ -479,6 +479,14 @@ export interface ShoppaymentproviderRow {
   updatedAt: Date;
 }
 
+export interface NewslettersubscriberRow {
+  id: number;
+  shopId: number;
+  email: string;
+  source: string;
+  createdAt: Date;
+}
+
 export interface CustomerRow {
   id: number;
   shopId: number;

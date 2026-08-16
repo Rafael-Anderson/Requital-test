@@ -23,8 +23,11 @@ const CARD_STYLE_CLASS: Record<string, string> = {
 };
 
 // Homepage teaser, not the full catalog — collection/product browsing
-// already has its own real pages (see /[shop]/collections/[slug]).
-const MAX_PRODUCTS = 8;
+// already has its own real pages (see /[shop]/collections/[slug]). The
+// merchant-configurable "Number of products" setting (settings.productLimit)
+// overrides this default; it stays as the fallback for sections saved
+// before that control existed.
+const DEFAULT_PRODUCT_LIMIT = 8;
 
 // No per-instance theme block backs the quick-add button — it's governed
 // entirely by globalSettings.productCards (quickAdd/quickAddBackground/
@@ -44,6 +47,7 @@ function QuickAddButton({
   background,
   color,
   fill,
+  label,
   previewMode,
   tagProps,
 }: {
@@ -53,6 +57,7 @@ function QuickAddButton({
   background?: string;
   color?: string;
   fill?: string;
+  label: string;
   previewMode: boolean;
   tagProps: ReturnType<typeof editableAttrs>;
 }) {
@@ -82,7 +87,7 @@ function QuickAddButton({
       style={{ ...resolveButtonFillStyle(fill), background, color }}
       className={className}
     >
-      Add
+      {label}
     </button>
   );
 }
@@ -97,12 +102,15 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, previewMode } = useShop();
   const [products, setProducts] = useState<Product[] | null>(null);
   const outletId = outlets[0]?.id;
+  const collectionId = typeof settings.collectionId === "number" ? settings.collectionId : undefined;
+  const productLimit = typeof settings.productLimit === "number" && settings.productLimit > 0 ? settings.productLimit : DEFAULT_PRODUCT_LIMIT;
+  const quickAddLabel = typeof settings.quickAddLabel === "string" && settings.quickAddLabel ? settings.quickAddLabel : "Add";
 
   useEffect(() => {
-    listProducts(shopSlug, outletId, undefined, undefined, previewToken)
-      .then((res) => setProducts(res.slice(0, MAX_PRODUCTS)))
+    listProducts(shopSlug, outletId, collectionId, undefined, previewToken)
+      .then((res) => setProducts(res.slice(0, productLimit)))
       .catch(() => setProducts([]));
-  }, [shopSlug, outletId, previewToken]);
+  }, [shopSlug, outletId, collectionId, productLimit, previewToken]);
 
   const columns = COLUMNS_CLASS[(settings.columns as number) ?? 3] ?? COLUMNS_CLASS[3];
   const cardStyle = CARD_STYLE_CLASS[(settings.cardStyle as string) ?? "minimal"] ?? "";
@@ -142,6 +150,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                     background={productCards.quickAddBackground}
                     color={productCards.quickAddText}
                     fill={shop?.buttonFill}
+                    label={quickAddLabel}
                     previewMode={previewMode}
                     tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
                     className="hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow"
@@ -175,6 +184,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 background={productCards.quickAddBackground}
                 color={productCards.quickAddText}
                 fill={shop?.buttonFill}
+                label={quickAddLabel}
                 previewMode={previewMode}
                 tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
                 className="sm:hidden mt-2 w-full h-8 text-xs font-medium rounded-full border border-stroke"
