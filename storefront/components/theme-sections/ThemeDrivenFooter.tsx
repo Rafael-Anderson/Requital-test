@@ -17,17 +17,35 @@ interface FooterColumnSettings {
   links?: { label: string; url: string }[];
 }
 
-function FooterColumn({ block }: { block: ThemeBlock }) {
+function FooterColumn({ block, sectionId, previewMode }: { block: ThemeBlock; sectionId: string; previewMode: boolean }) {
   const settings = block.settings as FooterColumnSettings;
   const links = settings.links ?? [];
   if (!settings.title && links.length === 0) return null;
   return (
     <div>
-      {settings.title && <p className="text-sm font-semibold mb-2">{settings.title}</p>}
+      {settings.title && (
+        <p
+          className="text-sm font-semibold mb-2"
+          {...editableAttrs(previewMode, { id: block.id, sectionId, type: "heading" })}
+          style={resolveTextElementStyle(block.settings)}
+        >
+          {settings.title}
+        </p>
+      )}
       <ul className="space-y-1.5 text-sm opacity-80">
         {links.map((link, i) => (
           <li key={i}>
-            <a href={link.url} className="hover:underline hover:opacity-100 transition-opacity">
+            {/* Individual links are plain array entries on this column's
+                own settings.links, not separate theme blocks — there's no
+                per-link id to select, so every link in a column shares the
+                column's own block id (its BlockSettingsForm already edits
+                the full title+links list together, which is the correct
+                surface for "adjust this link" anyway). */}
+            <a
+              href={link.url}
+              {...editableAttrs(previewMode, { id: block.id, sectionId, type: "nav_link" })}
+              className="hover:underline hover:opacity-100 transition-opacity"
+            >
               {link.label}
             </a>
           </li>
@@ -89,7 +107,7 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
         {(columns.length > 0 || socialBlock) && (
           <div className="flex flex-wrap justify-between gap-8 pb-8 mb-6 border-b border-white/10">
             {columns.map((block) => (
-              <FooterColumn key={block.id} block={block} />
+              <FooterColumn key={block.id} block={block} sectionId={FOOTER_CHROME_ID} previewMode={previewMode} />
             ))}
             {socialBlock && <FooterSocial shop={shop} />}
           </div>
@@ -97,7 +115,7 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
         <p
           className="text-center text-xs opacity-80"
           {...(copyrightBlock
-            ? editableAttrs(previewMode, { id: copyrightBlock.id, sectionId: FOOTER_CHROME_ID, type: "footer_copyright" })
+            ? editableAttrs(previewMode, { id: copyrightBlock.id, sectionId: FOOTER_CHROME_ID, type: "copyright_text" })
             : {})}
           style={copyrightBlock ? resolveTextElementStyle(copyrightBlock.settings) : undefined}
         >

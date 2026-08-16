@@ -177,6 +177,26 @@ body {
   color: var(--theme-nav-hover-color, inherit);
 }
 
+/* Theme Settings > Logo's desktopHeight/mobileHeight (globalSettings.logo,
+   see shop-context.tsx's applyThemeConfigOverrides) — ThemeDrivenHeader.tsx
+   applies this class to the logo <img> instead of a hardcoded h-8. */
+.theme-logo-img {
+  height: var(--theme-logo-height, 32px);
+}
+@media (max-width: 639px) {
+  .theme-logo-img {
+    height: var(--theme-logo-height-mobile, 24px);
+  }
+}
+
+/* Theme Settings > Animations' cardHoverEffect (globalSettings.animations,
+   see shop-context.tsx) — ProductGridSection.tsx's card image uses this
+   class instead of a hardcoded group-hover:scale-[1.04], so the actual
+   transform (or none) comes from the merchant's own setting. */
+.group:hover .theme-product-image {
+  transform: var(--theme-card-hover-transform, none);
+}
+
 /* New visual theme builder — per-section scroll-triggered entrance
    animations (Phase 5). Same pattern as marquee-track above: hand-written
    keyframes + explicit classes (NOT animate-* prefixed, same Tailwind v4

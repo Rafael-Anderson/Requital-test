@@ -29,10 +29,12 @@ const IMAGE_TYPES = new Set(["logo", "image"]);
 const BUTTON_TYPES = new Set(["cta", "view_all_button", "email_form"]);
 const NAV_TYPES = new Set(["nav_menu"]);
 const PRICE_TYPES = new Set(["product_price"]);
+const ICON_TYPES = new Set(["search_icon", "cart_icon", "account_icon"]);
 
 interface FamilyProps {
   block: ThemeBlock;
   onUpdate: (key: string, value: unknown) => void;
+  onToggleVisibility: () => void;
 }
 
 const FONT_WEIGHTS = [
@@ -249,11 +251,43 @@ function PriceElementSettings({ block, onUpdate }: FamilyProps) {
   );
 }
 
-export default function ElementSettingsPanel({ block, onUpdate }: FamilyProps) {
-  if (TEXT_TYPES.has(block.type)) return <TextElementSettings block={block} onUpdate={onUpdate} />;
-  if (IMAGE_TYPES.has(block.type)) return <ImageElementSettings block={block} onUpdate={onUpdate} />;
-  if (BUTTON_TYPES.has(block.type)) return <ButtonElementSettings block={block} onUpdate={onUpdate} />;
-  if (NAV_TYPES.has(block.type)) return <NavElementSettings block={block} onUpdate={onUpdate} />;
-  if (PRICE_TYPES.has(block.type)) return <PriceElementSettings block={block} onUpdate={onUpdate} />;
+const ZONE_OPTIONS = ["left", "center", "right"] as const;
+
+// The minimum bar Part 5 asks for on a type without its own rich panel:
+// visibility + color + size, on top of the position selector
+// BlockSettingsForm already gave these three (logo/nav_menu share that
+// selector too, but they get the richer Image/Nav panels above instead —
+// only the plain icon types land here).
+function IconElementSettings({ block, onUpdate, onToggleVisibility }: FamilyProps) {
+  const s = block.settings;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Visible</span>
+        <Toggle checked={block.visible} onChange={onToggleVisibility} />
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Color</span>
+        <ColorPicker value={(s.color as string) ?? "#18181b"} onChange={(hex) => onUpdate("color", hex)} />
+      </div>
+      <Slider label="Size" min={12} max={40} value={(s.size as number) ?? 20} onChange={(v) => onUpdate("size", v)} suffix="px" />
+      <Select label="Position" value={(s.zone as string) ?? "left"} onChange={(e) => onUpdate("zone", e.target.value)}>
+        {ZONE_OPTIONS.map((zone) => (
+          <option key={zone} value={zone}>
+            {zone[0].toUpperCase() + zone.slice(1)}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
+export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibility }: FamilyProps) {
+  if (TEXT_TYPES.has(block.type)) return <TextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+  if (IMAGE_TYPES.has(block.type)) return <ImageElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+  if (BUTTON_TYPES.has(block.type)) return <ButtonElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+  if (NAV_TYPES.has(block.type)) return <NavElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+  if (PRICE_TYPES.has(block.type)) return <PriceElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+  if (ICON_TYPES.has(block.type)) return <IconElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   return <BlockSettingsForm block={block} onUpdate={onUpdate} />;
 }

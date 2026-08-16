@@ -24,7 +24,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
       <div className={`flex flex-col sm:flex-row items-center gap-8 ${imageOnRight ? "sm:flex-row-reverse" : ""}`}>
         {imageUrl && imageBlock && (
           <div
-            {...editableAttrs(previewMode, { id: imageBlock.id, sectionId, type: "image", reorderable: true })}
+            {...editableAttrs(previewMode, { id: imageBlock.id, sectionId, type: "section_image", reorderable: true })}
             className="w-full sm:w-1/2 aspect-video overflow-hidden bg-black/5"
             style={{ borderRadius: "var(--theme-radius, 8px)" }}
           >
@@ -35,7 +35,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
         {text && textBlock && (
           <div className="w-full sm:w-1/2">
             <p
-              {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "text", reorderable: true })}
+              {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
               className="whitespace-pre-line text-sm leading-relaxed opacity-80"
               style={resolveTextElementStyle(textBlock.settings)}
             >

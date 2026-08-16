@@ -38,6 +38,22 @@ export function resolveTextElementStyle(settings: Record<string, unknown>): CSSP
   return style;
 }
 
+// Global Theme Settings > Buttons style (globalSettings.buttons.primary,
+// applied via CSS vars set in shop-context.tsx's applyThemeConfigOverrides)
+// — every primary-style button in a section (Hero CTA, Newsletter submit,
+// ...) starts from this, then layers its own per-block override
+// (resolveButtonElementStyle below) on top so a merchant who's customized
+// one specific button still sees that win over the global default.
+export function themeButtonBaseStyle(): CSSProperties {
+  return {
+    borderRadius: "var(--theme-radius, 8px)",
+    borderWidth: "var(--theme-button-border-width, 0px)",
+    borderStyle: "solid",
+    borderColor: "currentColor",
+    textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
+  };
+}
+
 export interface ButtonElementSettings {
   backgroundColor?: string;
   textColor?: string;
@@ -111,6 +127,36 @@ export function resolveNavElementStyle(settings: Record<string, unknown>): CSSPr
   if (typeof s.color === "string") style.color = s.color;
   if (typeof s.fontWeight === "string") style.fontWeight = s.fontWeight;
   if (typeof s.hoverColor === "string") style["--theme-nav-hover-color"] = s.hoverColor;
+  return style;
+}
+
+// lucide-react's own default strokeWidth is 2 — "default" maps to that
+// exact value so a shop that never touches Theme Settings > Icons renders
+// pixel-identical to before this was wired up. A numeric SVG prop, not a
+// CSS var — every icon-rendering component (ThemeDrivenHeader, SearchBar)
+// reads globalSettings.icons.stroke directly via useShop() and calls this.
+const ICON_STROKE_WIDTH: Record<string, number> = { thin: 1.25, default: 2, heavy: 2.75 };
+
+export function resolveIconStrokeWidth(stroke: string | undefined): number {
+  return ICON_STROKE_WIDTH[stroke ?? "default"] ?? 2;
+}
+
+export interface IconElementSettings {
+  color?: string;
+  size?: number;
+}
+
+// Per-element override for a single icon (search/cart/account) selected in
+// preview — layered on top of the global stroke-width above, same
+// "specific overrides general" pattern as every other resolve* function.
+export function resolveIconElementStyle(settings: Record<string, unknown>): CSSProperties {
+  const s = settings as IconElementSettings;
+  const style: CSSProperties = {};
+  if (typeof s.color === "string") style.color = s.color;
+  if (typeof s.size === "number") {
+    style.width = `${s.size}px`;
+    style.height = `${s.size}px`;
+  }
   return style;
 }
 
