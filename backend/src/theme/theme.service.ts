@@ -40,6 +40,18 @@ const THEME_FIELD_DEFAULTS: Record<string, QueryParam> = {
   headerDensity: 'regular',
   footerDensity: 'regular',
 };
+// All three still go through JSON.stringify() here even though
+// notificationText became a real JSON column (see
+// 20260816130000_fix_notification_text_column) — don't "fix" that by
+// passing the raw array straight through as a query param instead.
+// Confirmed empirically against this DB: mysql2 splats a raw array
+// parameter into multiple bound values ("Column count doesn't match value
+// count"), it does not JSON-encode it. JSON.stringify()-then-pass-as-string
+// is correct and necessary here — a real MySQL JSON column parses a
+// JSON-text string value back into the document it represents at insert
+// time (confirmed: JSON_TYPE() reports ARRAY, not STRING), so this was
+// never the bug. The bug was purely the column's LONGTEXT type providing no
+// such parsing at all, on either the write or read side.
 const THEME_JSON_COLUMNS = new Set(['notificationText', 'contactNumbers', 'colors']);
 
 @Injectable()

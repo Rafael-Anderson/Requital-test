@@ -292,6 +292,7 @@ describe('Footer/announcement/banners (e2e)', () => {
         footerDescription: string | null;
         announcementBarEnabled: boolean;
         announcementBarScrolling: boolean;
+        notificationText: unknown;
         banners: { url: string; order: number }[];
         policyPageTypes: string[];
         email: string | null;
@@ -304,6 +305,12 @@ describe('Footer/announcement/banners (e2e)', () => {
       );
       expect(shop.announcementBarEnabled).toBe(true);
       expect(shop.announcementBarScrolling).toBe(true);
+      // Regression for the notificationText LONGTEXT-vs-JSON bug (see
+      // 20260816130000_fix_notification_text_column): must come back as a
+      // real array from the public endpoint, not the JSON-encoded string
+      // that column type used to silently produce.
+      expect(Array.isArray(shop.notificationText)).toBe(true);
+      expect(shop.notificationText).toEqual(['Free delivery over 100 AED']);
       expect(shop.banners.map((b) => b.url)).toEqual([
         '/uploads/theme/hero1.jpg',
         '/uploads/theme/hero2.jpg',
