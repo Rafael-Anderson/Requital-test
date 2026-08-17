@@ -26,7 +26,30 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
+}
 
+/* Plain (non-"inline") @theme block for the 2026-08 admin redesign's literal
+   color tokens — see README design handoff in feature/admin-redesign, and
+   `admin/tools`/CLAUDE.md for why this is split from the block above.
+   Empirically confirmed (2026-08-17, fix/admin-redesign-fidelity): stuffing
+   plain literal hex values into the SAME `@theme inline { ... }` block as
+   `var(--background)`-style indirected entries silently drops most of them
+   from the compiled CSS under this repo's Next 16 + Turbopack + Tailwind v4
+   toolchain — inspected the actual served `.css` response directly (not
+   guessed): out of ~20 new literal tokens defined that way, only 3 survived
+   compilation (`--color-accent`/`--color-accent-hover`, which already
+   existed pre-redesign as names, and `--color-accent-tint`), the rest
+   (`--color-border`, `--color-surface`, every `--color-text-*`, etc.) never
+   made it into the stylesheet at all — their utility classes (`border-
+   border`, `bg-surface`, ...) then fell back to Tailwind's documented bare-
+   `border`-is-`currentColor` behavior (see this file's own note on that
+   elsewhere in CLAUDE.md), which is what actually caused the "borders too
+   harsh" bug: every card rendered with a near-black border instead of the
+   intended near-invisible #E4E7E7, because the color simply didn't exist.
+   Moving every literal-value token to its own plain `@theme` block (below)
+   fixed this for real — reverified via the same served-CSS inspection that
+   every token here is now present, not just assumed from a visual check. */
+@theme {
   /* Brand accent (teal) — single source of truth for every active/selected
      UI state, primary button, and focus ring. Change the color here, not at
      the call sites. `--color-accent-text` is a darker shade reserved for
@@ -41,10 +64,6 @@
   --color-accent-tint: #e6f5f3;
   --color-accent-mid: #93d5cb;
 
-  /* 2026-08 admin redesign tokens (see README design handoff in
-     feature/admin-redesign) — light-mode values only; every component keeps
-     its existing dark: variant untouched, since the redesign brief doesn't
-     cover dark mode and light stays the hard default (see layout.tsx). */
   --color-surface: #ffffff;
   --color-page: #f7f8f8;
   --color-border: #e4e7e7;

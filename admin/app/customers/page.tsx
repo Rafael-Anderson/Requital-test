@@ -156,7 +156,7 @@ export default function CustomersPage() {
                 <button
                   type="button"
                   onClick={() => toggleSort(field)}
-                  className="flex items-center gap-1 cursor-pointer hover:text-text-secondary dark:hover:text-zinc-200"
+                  className="flex items-center gap-1 cursor-pointer uppercase tracking-wide hover:text-text-secondary dark:hover:text-zinc-200"
                 >
                   {label}
                   {sortBy === field && <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>}
