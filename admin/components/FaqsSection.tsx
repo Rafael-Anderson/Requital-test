@@ -54,7 +54,7 @@ export default function FaqsSection({
       onDisable={onDisable}
     >
       <div className="flex items-center justify-between">
-        <p className="text-xs text-zinc-400">Question/answer pairs shown on the product page.</p>
+        <p className="text-xs text-text-faint">Question/answer pairs shown on the product page.</p>
         <button
           type="button"
           onClick={addRow}
@@ -89,7 +89,7 @@ export default function FaqsSection({
                   type="button"
                   onClick={() => removeRow(i)}
                   aria-label="Remove FAQ"
-                  className="mt-1 flex items-center justify-center px-1 text-zinc-400 hover:text-red-600 cursor-pointer"
+                  className="mt-1 flex items-center justify-center px-1 text-text-faint hover:text-red-600 cursor-pointer"
                 >
                   <X className="size-4" />
                 </button>

@@ -52,7 +52,7 @@ export default function OutletAddressTab({
       </Card>
 
       <Card>
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Coordinates</p>
+        <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">Coordinates</p>
         <MapPicker
           className="mb-3"
           latitude={latitude ? Number(latitude) : null}
@@ -78,7 +78,7 @@ export default function OutletAddressTab({
             onChange={(e) => setLongitude(e.target.value)}
           />
         </div>
-        <p className="text-xs text-zinc-400 mt-1.5">Drag the pin or search above, or enter coordinates manually.</p>
+        <p className="text-xs text-text-faint mt-1.5">Drag the pin or search above, or enter coordinates manually.</p>
       </Card>
 
       <Button variant="primary" onClick={handleSave} disabled={saving}>

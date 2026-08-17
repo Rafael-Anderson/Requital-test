@@ -17,13 +17,13 @@ const PAYMENT_MODES = [
 // Exported so callers building their own date/month control (Monthly
 // Report's month picker) match this bar's other inputs exactly.
 export const reportsFilterInputClass =
-  "h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
+  "h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 text-[13.5px] font-semibold outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 const selectClass = reportsFilterInputClass;
 
 function DefaultDateRangeControl({ value, onChange }: { value: ReportsFilters; onChange: (filters: ReportsFilters) => void }) {
   return (
     <div className="flex items-center gap-1.5">
-      <Calendar className="size-4 text-zinc-400 shrink-0" />
+      <Calendar className="size-4 text-text-faint shrink-0" />
       <input
         type="date"
         value={value.dateFrom ?? ""}
@@ -31,7 +31,7 @@ function DefaultDateRangeControl({ value, onChange }: { value: ReportsFilters; o
         onChange={(e) => onChange({ ...value, dateFrom: e.target.value || undefined })}
         className={selectClass}
       />
-      <span className="text-zinc-400 text-sm">to</span>
+      <span className="text-text-faint text-[12.5px]">to</span>
       <input
         type="date"
         value={value.dateTo ?? ""}

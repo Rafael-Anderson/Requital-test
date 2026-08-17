@@ -62,7 +62,7 @@ export default function AffiliateFormModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

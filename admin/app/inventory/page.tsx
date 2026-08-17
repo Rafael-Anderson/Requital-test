@@ -97,14 +97,14 @@ export default function IngredientsPage() {
     <PageShell>
       <BranchBar left={<BackButton href="/" />} />
       <InventoryTabs />
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Ingredients</h1>
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Ingredients</h1>
         <div className="flex items-center gap-2">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             aria-label="Filter by category"
-            className="h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2.5 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -113,7 +113,7 @@ export default function IngredientsPage() {
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-[13.5px] text-text-secondary dark:text-zinc-400 cursor-pointer select-none">
             <Checkbox checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} aria-label="Low stock only" />
             Low stock only
           </label>
@@ -160,7 +160,7 @@ export default function IngredientsPage() {
           </DropdownMenu>
         </div>
       </div>
-      <p className="text-sm text-zinc-500 -mt-2 mb-4">
+      <p className="text-[13.5px] text-text-faint mb-5">
         These items do not appear for sale
       </p>
 
@@ -207,35 +207,34 @@ export default function IngredientsPage() {
                 ingredient.stockQuantity <= ingredient.lowStockThreshold;
               return (
                 <TR key={ingredient.id}>
-                  <TD className="font-medium">
+                  <TD>
                     <div className="flex items-center gap-3">
                       <Thumbnail src={ingredient.image} size="size-10" />
-                      <span>{ingredient.name}</span>
+                      <span className="text-sm font-semibold text-text-primary dark:text-zinc-100">{ingredient.name}</span>
                     </div>
                   </TD>
-                  <TD className="text-zinc-500 text-xs">{ingredient.categoryName ?? "-"}</TD>
-                  <TD className="text-zinc-500">{ingredient.unit}</TD>
+                  <TD className="text-text-muted text-[13px]">{ingredient.categoryName ?? "-"}</TD>
+                  <TD className="text-text-secondary text-[13.5px]">{ingredient.unit}</TD>
                   <TD>
                     {ingredient.stockQuantity !== null ? (
-                      <span
-                        className={
-                          lowStock
-                            ? "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                            : ""
-                        }
-                      >
-                        {ingredient.stockQuantity} {ingredient.unit}
-                        {lowStock ? " (low stock)" : ""}
-                      </span>
+                      lowStock ? (
+                        <span className="inline-flex w-fit items-center rounded-full bg-danger-bg px-2.5 py-1 text-[11.5px] font-bold text-danger-text dark:bg-red-900 dark:text-red-200">
+                          {ingredient.stockQuantity} {ingredient.unit} (low)
+                        </span>
+                      ) : (
+                        <span className="text-[13.5px] text-text-primary dark:text-zinc-100">
+                          {ingredient.stockQuantity} {ingredient.unit}
+                        </span>
+                      )
                     ) : (
-                      <span className="text-zinc-400">Pick a branch to see stock</span>
+                      <span className="text-text-faint">Pick a branch to see stock</span>
                     )}
                   </TD>
                   <TD>
                     <Tooltip label={`Edit ${ingredient.name}`}>
                       <button
                         onClick={() => setEditing(ingredient)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         aria-label={`Edit ${ingredient.name}`}
                       >
                         <Pencil className="size-4" />
@@ -247,7 +246,7 @@ export default function IngredientsPage() {
                       <Tooltip label={`Adjust stock for ${ingredient.name}`}>
                         <button
                           onClick={() => setAdjusting(ingredient)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                           aria-label={`Adjust stock for ${ingredient.name}`}
                         >
                           <SlidersHorizontal className="size-4" />
@@ -259,7 +258,7 @@ export default function IngredientsPage() {
                     <Tooltip label={`Transfer stock for ${ingredient.name} to another branch`}>
                       <button
                         onClick={() => setTransferring(ingredient)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         aria-label={`Transfer stock for ${ingredient.name}`}
                       >
                         <ArrowLeftRight className="size-4" />
@@ -270,7 +269,7 @@ export default function IngredientsPage() {
                     <Tooltip label={`Delete ${ingredient.name}. This cannot be undone.`} align="end">
                       <button
                         onClick={() => handleDelete(ingredient)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                         aria-label={`Delete ${ingredient.name}`}
                       >
                         <Trash2 className="size-4" />

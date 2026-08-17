@@ -223,7 +223,7 @@ export default function OrderDetailModal({
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-4 flex-wrap text-sm text-zinc-500 mb-6">
+            <div className="flex items-center gap-4 flex-wrap text-sm text-text-muted mb-6">
               <span>Placed {relativeTime(order.createdAt)}</span>
               {order.deliveryDate && (
                 <span>
@@ -269,11 +269,11 @@ export default function OrderDetailModal({
                             {item.productName}
                             {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                           </div>
-                          <div className="text-xs text-zinc-500">
+                          <div className="text-xs text-text-muted">
                             {item.quantity} × {item.priceAtPurchase} AED
                           </div>
                           {item.note && (
-                            <div className="text-xs italic text-zinc-500 mt-0.5">Customer: {item.note}</div>
+                            <div className="text-xs italic text-text-muted mt-0.5">Customer: {item.note}</div>
                           )}
                         </div>
                         <div className="text-sm font-medium">
@@ -299,11 +299,11 @@ export default function OrderDetailModal({
                     return (
                       <>
                         <div className="flex justify-between text-sm">
-                          <span className="text-zinc-500">Subtotal</span>
+                          <span className="text-text-muted">Subtotal</span>
                           <span>{subtotal.toFixed(2)} AED</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-zinc-500">Delivery fee</span>
+                          <span className="text-text-muted">Delivery fee</span>
                           {editingFee ? (
                             <div className="flex items-center gap-1.5">
                               <input
@@ -313,7 +313,7 @@ export default function OrderDetailModal({
                                 autoFocus
                                 value={feeInput}
                                 onChange={(e) => setFeeInput(e.target.value)}
-                                className="h-7 w-24 rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
+                                className="h-7 w-24 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
                               />
                               <button
                                 onClick={handleSaveFee}
@@ -324,7 +324,7 @@ export default function OrderDetailModal({
                               </button>
                               <button
                                 onClick={() => setEditingFee(false)}
-                                className="text-xs text-zinc-400 underline decoration-transparent hover:decoration-current"
+                                className="text-xs text-text-faint underline decoration-transparent hover:decoration-current"
                               >
                                 Cancel
                               </button>
@@ -339,7 +339,7 @@ export default function OrderDetailModal({
                                       setFeeInput(deliveryFee.toFixed(2));
                                       setEditingFee(true);
                                     }}
-                                    className="text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                    className="text-text-faint hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
                                     aria-label="Edit delivery fee"
                                   >
                                     <Pencil className="size-3" />
@@ -354,7 +354,7 @@ export default function OrderDetailModal({
                           <span>{order.total} AED</span>
                         </div>
                         {taxDisplayText && (
-                          <p className="text-xs text-zinc-400 mt-1 text-right">{taxDisplayText}</p>
+                          <p className="text-xs text-text-faint mt-1 text-right">{taxDisplayText}</p>
                         )}
                       </>
                     );
@@ -373,7 +373,7 @@ export default function OrderDetailModal({
                     <h3 className="font-medium mb-2">Customer survey</h3>
                     <p className="text-sm">Rating: {order.surveyresponse.rating}/5</p>
                     {order.surveyresponse.comment && (
-                      <p className="text-sm text-zinc-500 mt-1 whitespace-pre-wrap">{order.surveyresponse.comment}</p>
+                      <p className="text-sm text-text-muted mt-1 whitespace-pre-wrap">{order.surveyresponse.comment}</p>
                     )}
                   </section>
                 )}
@@ -393,16 +393,16 @@ export default function OrderDetailModal({
                   <div className="space-y-2">
                     {order.orderType && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">Type</span>
+                        <span className="text-text-muted">Type</span>
                         <span className="font-medium capitalize">{order.orderType}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-start text-sm">
-                      <span className="text-zinc-500">Payment</span>
+                      <span className="text-text-muted">Payment</span>
                       <div className="text-right">
                         <StatusBadge status={order.paymentStatus} />
                         {latestTxn && (
-                          <div className="text-xs text-zinc-500 mt-1 capitalize">
+                          <div className="text-xs text-text-muted mt-1 capitalize">
                             via {latestTxn.gateway}
                           </div>
                         )}
@@ -410,7 +410,7 @@ export default function OrderDetailModal({
                     </div>
                     {order.channel && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">Channel</span>
+                        <span className="text-text-muted">Channel</span>
                         <span className="font-medium">{order.channel}</span>
                       </div>
                     )}
@@ -428,22 +428,22 @@ export default function OrderDetailModal({
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-zinc-500 mt-1">{order.customerPhone}</p>
+                  <p className="text-sm text-text-muted mt-1">{order.customerPhone}</p>
                   {order.customerEmail && (
-                    <p className="text-sm text-zinc-500">{order.customerEmail}</p>
+                    <p className="text-sm text-text-muted">{order.customerEmail}</p>
                   )}
                 </section>
 
                 <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-2">Delivery address</h3>
                   <p className="text-sm">{order.customerAddress}</p>
-                  <p className="text-sm text-zinc-500">
+                  <p className="text-sm text-text-muted">
                     {order.area ? `${order.area}, ` : ""}
                     {order.emirate}
                   </p>
                   {order.deliveryNotes && (
-                    <p className="text-sm text-zinc-500 mt-2">
-                      <span className="text-zinc-400">Notes: </span>
+                    <p className="text-sm text-text-muted mt-2">
+                      <span className="text-text-faint">Notes: </span>
                       {order.deliveryNotes}
                     </p>
                   )}
@@ -454,25 +454,25 @@ export default function OrderDetailModal({
                   {order.externaldelivery ? (
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">Carrier</span>
+                        <span className="text-text-muted">Carrier</span>
                         <span className="font-medium">{order.externaldelivery.carrier}</span>
                       </div>
                       {order.externaldelivery.vehicleType && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-zinc-500">Vehicle</span>
+                          <span className="text-text-muted">Vehicle</span>
                           <span>{order.externaldelivery.vehicleType}</span>
                         </div>
                       )}
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">Destination</span>
+                        <span className="text-text-muted">Destination</span>
                         <span className="text-right">{order.externaldelivery.destination}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">Paid to carrier</span>
+                        <span className="text-text-muted">Paid to carrier</span>
                         <span>{order.externaldelivery.price} AED</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-zinc-500">Status</span>
+                        <span className="text-text-muted">Status</span>
                         {user?.role === "admin" ? (
                           <div className="w-36">
                             <Combobox
@@ -519,7 +519,7 @@ export default function OrderDetailModal({
                       </Button>
                     )
                   ) : (
-                    <p className="text-sm text-zinc-400">Not sent via an external courier.</p>
+                    <p className="text-sm text-text-faint">Not sent via an external courier.</p>
                   )}
                 </section>
               </div>

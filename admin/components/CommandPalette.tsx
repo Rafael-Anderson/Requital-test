@@ -134,30 +134,30 @@ export default function CommandPalette() {
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 pt-24 px-4" onClick={close}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-lg bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 shadow-xl overflow-hidden"
+        className="w-full max-w-lg rounded-lg bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 shadow-xl overflow-hidden"
       >
         <div className="flex items-center gap-2 border-b border-gray-200 dark:border-white/10 px-4 py-3">
-          <Search className="size-4 text-zinc-400 shrink-0" />
+          <Search className="size-4 text-text-faint shrink-0" />
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleInputKeyDown}
             placeholder="Search products, orders, customers…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-400"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-text-faint"
           />
-          <kbd className="text-xs text-zinc-400 border border-black/15 rounded px-1.5 py-0.5 dark:border-white/15 shrink-0">Esc</kbd>
+          <kbd className="text-xs text-text-faint border border-border rounded px-1.5 py-0.5 dark:border-white/15 shrink-0">Esc</kbd>
         </div>
 
         <div className="max-h-96 overflow-y-auto">
           {loading ? (
-            <p className="px-4 py-6 text-sm text-zinc-400 text-center">Searching…</p>
+            <p className="px-4 py-6 text-sm text-text-faint text-center">Searching…</p>
           ) : !query.trim() ? (
-            <p className="px-4 py-6 text-sm text-zinc-400 text-center">
+            <p className="px-4 py-6 text-sm text-text-faint text-center">
               Type to search products, orders, and customers.
             </p>
           ) : flat.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-zinc-400 text-center">No results for &quot;{query}&quot;.</p>
+            <p className="px-4 py-6 text-sm text-text-faint text-center">No results for &quot;{query}&quot;.</p>
           ) : (
             <div className="py-1.5">
               {flat.map((item, i) => {
@@ -172,12 +172,12 @@ export default function CommandPalette() {
                       i === activeIndex ? "bg-black/5 dark:bg-white/10" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                     }`}
                   >
-                    <Icon className="size-4 text-zinc-400 shrink-0" />
+                    <Icon className="size-4 text-text-faint shrink-0" />
                     <span className="flex-1 min-w-0">
                       <span className="block truncate font-medium">{item.label}</span>
-                      <span className="block truncate text-xs text-zinc-500">{item.sublabel}</span>
+                      <span className="block truncate text-xs text-text-muted">{item.sublabel}</span>
                     </span>
-                    <span className="text-xs text-zinc-400 shrink-0">{TYPE_LABEL[item.type]}</span>
+                    <span className="text-xs text-text-faint shrink-0">{TYPE_LABEL[item.type]}</span>
                   </button>
                 );
               })}

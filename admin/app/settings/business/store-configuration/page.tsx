@@ -24,7 +24,7 @@ const CURRENCIES = ["AED", "SAR", "KWD", "QAR", "BHD", "OMR", "USD"];
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">{label}</label>
+      <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">{label}</label>
       {children}
     </div>
   );
@@ -33,7 +33,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Card>
-      <h3 className="text-sm font-semibold mb-3">{title}</h3>
+      <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">{title}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
     </Card>
   );
@@ -123,7 +123,7 @@ export default function StoreConfigurationPage() {
     }
   }
 
-  if (!shop) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
 
   return (
     <PageShell>
@@ -133,7 +133,7 @@ export default function StoreConfigurationPage() {
             <select
               value={businessType}
               onChange={(e) => setBusinessType(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             >
               {BUSINESS_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -147,7 +147,7 @@ export default function StoreConfigurationPage() {
             <select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             >
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>
@@ -177,7 +177,7 @@ export default function StoreConfigurationPage() {
               value={defaultDeliveryFee}
               onChange={(e) => setDefaultDeliveryFee(e.target.value)}
             />
-            <p className="text-xs text-zinc-400 mt-1.5">
+            <p className="text-xs text-text-faint mt-1.5">
               Added to every order&apos;s total automatically. Orders don&apos;t set their own fee yet.
             </p>
           </div>
@@ -193,7 +193,7 @@ export default function StoreConfigurationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <div className="space-y-4">
             <Card>
-              <h3 className="text-sm font-semibold mb-3">Storefront Display</h3>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Storefront Display</h3>
               <div className="space-y-4">
                 <div>
                   <Field label="Product Display Orientation">
@@ -206,7 +206,7 @@ export default function StoreConfigurationPage() {
                       ]}
                     />
                   </Field>
-                  <p className="text-xs text-zinc-400 mt-1.5">
+                  <p className="text-xs text-text-faint mt-1.5">
                     Saved as a preference only. No storefront exists yet to apply it to.
                   </p>
                 </div>
@@ -237,7 +237,7 @@ export default function StoreConfigurationPage() {
             </Card>
 
             <Card>
-              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Business Hours</p>
+              <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">Business Hours</p>
               <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} />
             </Card>
 
@@ -249,7 +249,7 @@ export default function StoreConfigurationPage() {
 
           <div className="space-y-4">
             <Card>
-              <h3 className="text-sm font-semibold mb-3">Delivery & Fulfillment</h3>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Delivery & Fulfillment</h3>
               <div className="space-y-2">
                 <Checkbox
                   label="External delivery enabled"
@@ -270,7 +270,7 @@ export default function StoreConfigurationPage() {
             </Card>
 
             <Card>
-              <h3 className="text-sm font-semibold mb-3">Engagement</h3>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Engagement</h3>
               <div className="space-y-2">
                 <Checkbox
                   label="WhatsApp floating button enabled"
@@ -283,13 +283,13 @@ export default function StoreConfigurationPage() {
                   onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
                 />
               </div>
-              <p className="text-xs text-zinc-400 mt-3">
+              <p className="text-xs text-text-faint mt-3">
                 UI toggles only. No WhatsApp integration or discount engine is connected yet.
               </p>
             </Card>
 
             <Card>
-              <h3 className="text-sm font-semibold mb-3">Cart & Checkout</h3>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Cart & Checkout</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Toggle checked={disableStoreCart} onChange={setDisableStoreCart} />
@@ -315,7 +315,7 @@ export default function StoreConfigurationPage() {
                   </div>
                 )}
               </div>
-              <p className="text-xs text-zinc-400 mt-3">
+              <p className="text-xs text-text-faint mt-3">
                 &quot;Buy now&quot; skips the cart page. Add to Cart on a product takes the customer straight to
                 checkout with just that item. &quot;Contact to order&quot; removes checkout entirely and shows a
                 WhatsApp button instead.
@@ -323,19 +323,19 @@ export default function StoreConfigurationPage() {
             </Card>
 
             <Card>
-              <h3 className="text-sm font-semibold mb-3">Post-Purchase</h3>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Post-Purchase</h3>
               <div className="flex items-center gap-2">
                 <Toggle checked={customerSurveyEnabled} onChange={setCustomerSurveyEnabled} />
                 <span className="text-sm">Customer survey for order enabled</span>
               </div>
-              <p className="text-xs text-zinc-400 mt-3">
+              <p className="text-xs text-text-faint mt-3">
                 Emails the customer a short rating + comment survey once their order is marked delivered.
               </p>
             </Card>
 
             <Card>
-              <h3 className="text-sm font-semibold mb-1">Coming Soon</h3>
-              <p className="text-xs text-zinc-400 mb-3">
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-1">Coming Soon</h3>
+              <p className="text-xs text-text-faint mb-3">
                 Saves a preference now, but the feature behind it doesn&apos;t exist yet. Toggling has no effect
                 until it&apos;s built.
               </p>

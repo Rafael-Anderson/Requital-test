@@ -113,7 +113,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
               <a
                 key={s.id}
                 href={`#${s.id}`}
-                className="block px-3 py-1.5 rounded-lg text-sm text-zinc-600 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                className="block px-3 py-1.5 rounded-lg text-sm text-text-secondary dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
               >
                 {s.label}
               </a>

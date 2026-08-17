@@ -52,7 +52,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <div>
       <h3 className="text-sm font-semibold mb-1">{title}</h3>
-      {hint && <p className="text-xs text-zinc-400 mb-4">{hint}</p>}
+      {hint && <p className="text-xs text-text-faint mb-4">{hint}</p>}
       {children}
     </div>
   );

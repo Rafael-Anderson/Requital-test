@@ -59,7 +59,7 @@ export default function ProductMediaGallery({
 
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Media</label>
+      <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Media</label>
       {images.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-3">
           {images.map((img, i) => (
@@ -69,7 +69,7 @@ export default function ProductMediaGallery({
               onDragStart={() => setDragIndex(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(i)}
-              className="relative group aspect-square rounded-lg border border-black/10 dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5 cursor-grab"
+              className="relative group aspect-square rounded-lg border border-border dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5 cursor-grab"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={resolveImageUrl(img.url) ?? ""} alt="" className="w-full h-full object-cover" />

@@ -119,7 +119,7 @@ export default function OrdersPage() {
   return (
     <PageShell>
       <BranchBar left={<BackButton href="/" />} />
-      <h1 className="text-2xl font-semibold mb-1">Orders</h1>
+      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Orders</h1>
       <OrdersTabs />
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
@@ -134,17 +134,17 @@ export default function OrdersPage() {
           : columns.map((col) => (
               <div
                 key={col.key}
-                className="flex-1 min-w-64 border border-gray-200 rounded-lg dark:border-white/10 bg-black/[0.015] dark:bg-white/[0.02] p-3"
+                className="flex-1 min-w-64 rounded-2xl bg-[#EFF1F0] dark:bg-white/[0.03] dark:border dark:border-white/10 p-4"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-medium text-sm">{col.title}</h2>
-                  <span className="text-xs font-medium bg-black text-white dark:bg-white dark:text-black rounded-full px-2 py-0.5 min-w-5 text-center">
+                <div className="flex items-center justify-between mb-3.5">
+                  <h2 className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">{col.title}</h2>
+                  <span className="text-[11.5px] font-bold bg-text-primary text-white dark:bg-white dark:text-black rounded-full px-2 py-0.5 min-w-5 text-center">
                     {col.orders.length}
                   </span>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2.5">
                   {col.orders.length === 0 && (
-                    <p className="text-xs text-zinc-400 text-center py-8">No orders</p>
+                    <p className="text-[13px] text-text-faint text-center py-8">No orders</p>
                   )}
                   {col.orders.map((order) => {
                     const nextAction = getNextAction(order.status);
@@ -154,22 +154,22 @@ export default function OrdersPage() {
                       <div
                         key={order.id}
                         onClick={() => setSelectedOrderId(order.id)}
-                        className="cursor-pointer rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-3 hover:border-gray-300 dark:hover:border-white/30 hover:shadow-md transition-[border-color,box-shadow] duration-150"
+                        className="cursor-pointer rounded-xl border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 p-3.5 hover:border-accent-mid hover:shadow-[0_6px_18px_rgba(15,23,22,.07)] transition-[border-color,box-shadow] duration-150"
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="font-medium text-sm">#{order.id}</span>
+                          <span className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">#{order.id}</span>
                           <StatusBadge status={order.status} />
                         </div>
-                        <div className="text-sm">{order.customerName}</div>
-                        <div className="text-sm font-medium">{order.total} AED</div>
+                        <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
+                        <div className="text-sm font-bold text-text-primary dark:text-zinc-50">{order.total} AED</div>
                         {!isSimple && order.deliveryDate && (
-                          <div className="text-xs text-zinc-500 mt-1">
+                          <div className="text-xs text-text-muted mt-1">
                             {new Date(order.deliveryDate).toLocaleDateString()}
                             {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}
                           </div>
                         )}
                         {!isSimple && (
-                          <div className="text-xs text-zinc-400 mt-1">
+                          <div className="text-xs text-text-faint mt-1">
                             Ordered {relativeTime(order.createdAt)}
                           </div>
                         )}
@@ -185,9 +185,9 @@ export default function OrdersPage() {
                           </div>
                         )}
 
-                        <div className="flex gap-1.5 mt-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
                           {showAdvance && (
-                            <Button size="sm" variant="primary" onClick={() => handleAdvance(order)}>
+                            <Button size="sm" variant="primary" className="flex-1" onClick={() => handleAdvance(order)}>
                               {nextAction!.label}
                             </Button>
                           )}

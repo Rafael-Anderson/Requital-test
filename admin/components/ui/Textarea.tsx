@@ -24,7 +24,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textare
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-1">
-        <label htmlFor={inputId} className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+        <label htmlFor={inputId} className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">
           {label}
         </label>
         {tooltip && (
@@ -38,10 +38,10 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textare
         id={inputId}
         rows={rows}
         aria-invalid={!!error}
-        className={`flex w-full rounded-lg border bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 resize-y ${
+        className={`flex w-full rounded-[10px] border bg-surface dark:bg-zinc-900 px-3 py-2 text-sm transition-shadow outline-none placeholder:text-text-faint disabled:cursor-not-allowed disabled:opacity-50 resize-y ${
           error
             ? "border-red-400 dark:border-red-700 text-red-700 dark:text-red-400 focus:border-red-400 focus:ring-[3px] focus:ring-red-500/20"
-            : "border-black/15 dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            : "border-border dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         } ${className}`}
         {...props}
       />

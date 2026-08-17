@@ -16,7 +16,7 @@ export interface MapPickerProps {
 // of the Leaflet+Next.js setup (marker icon assets, CSS import).
 const MapPickerLeaflet = dynamic(() => import("./MapPickerLeaflet"), {
   ssr: false,
-  loading: () => <div className="w-full h-64 rounded-lg border border-black/15 dark:border-white/15 animate-pulse bg-zinc-100 dark:bg-zinc-800" />,
+  loading: () => <div className="w-full h-64 rounded-lg border border-border dark:border-white/15 animate-pulse bg-zinc-100 dark:bg-zinc-800" />,
 });
 
 export default function MapPicker(props: MapPickerProps) {

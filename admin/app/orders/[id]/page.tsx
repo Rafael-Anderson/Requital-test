@@ -109,12 +109,12 @@ export default function OrderDetailPage() {
       <Card className="mb-4">
         <h2 className="font-medium mb-2">Customer</h2>
         <p>{order.customerName}</p>
-        <p className="text-sm text-zinc-500">{order.customerPhone}</p>
+        <p className="text-sm text-text-muted">{order.customerPhone}</p>
         {order.customerEmail && (
-          <p className="text-sm text-zinc-500">{order.customerEmail}</p>
+          <p className="text-sm text-text-muted">{order.customerEmail}</p>
         )}
         <p className="text-sm mt-2">{order.customerAddress}</p>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-text-muted">
           {order.area ? `${order.area}, ` : ""}
           {order.emirate}
         </p>
@@ -147,7 +147,7 @@ export default function OrderDetailPage() {
                   {item.productName}
                   {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                 </td>
-                <td className="py-2 text-zinc-500">× {item.quantity}</td>
+                <td className="py-2 text-text-muted">× {item.quantity}</td>
                 <td className="py-2 text-right">{item.priceAtPurchase} AED</td>
               </tr>
             ))}
@@ -166,9 +166,9 @@ export default function OrderDetailPage() {
       <Card className="mb-4">
         <h2 className="font-medium mb-3">Actions</h2>
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <label className="text-sm text-zinc-500">Move to:</label>
+          <label className="text-sm text-text-muted">Move to:</label>
           <select
-            className="border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+            className="border border-border dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             value=""
             disabled={!canCancel}
             onChange={(e) => e.target.value && handleStatusChange(e.target.value as OrderStatus)}
@@ -200,7 +200,7 @@ export default function OrderDetailPage() {
               <Link href={linkResult.url} className="underline" target="_blank">
                 {linkResult.url}
               </Link>
-              <span className="text-zinc-500">
+              <span className="text-text-muted">
                 {" "}
                 (expires {new Date(linkResult.expiresAt).toLocaleString()})
               </span>

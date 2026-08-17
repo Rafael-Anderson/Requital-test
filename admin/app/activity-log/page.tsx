@@ -100,13 +100,13 @@ export default function ActivityLogPage() {
   return (
     <PageShell>
       <BackButton href="/" />
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Activity Log</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Activity Log</h1>
+        <div className="flex items-center gap-2.5">
           <select
             value={entityType}
             onChange={(e) => setEntityType(e.target.value)}
-            className="border border-black/15 dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+            className="h-9 border border-border dark:border-white/15 rounded-[10px] px-3 text-[13.5px] font-semibold bg-surface dark:bg-zinc-900 transition-colors hover:border-[#D3D8D7] dark:hover:border-white/30 cursor-pointer"
           >
             <option value="">All entities</option>
             {ENTITY_TYPES.map((t) => (
@@ -118,7 +118,7 @@ export default function ActivityLogPage() {
           <select
             value={actorUserId}
             onChange={(e) => setActorUserId(e.target.value)}
-            className="border border-black/15 dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+            className="h-9 border border-border dark:border-white/15 rounded-[10px] px-3 text-[13.5px] font-semibold bg-surface dark:bg-zinc-900 transition-colors hover:border-[#D3D8D7] dark:hover:border-white/30 cursor-pointer"
           >
             <option value="">All staff</option>
             {actors.map((a) => (
@@ -157,14 +157,14 @@ export default function ActivityLogPage() {
           ) : (
             entries.map((e) => (
               <TR key={e.id}>
-                <TD className="font-medium">{ACTION_LABELS[e.action] ?? e.action}</TD>
-                <TD className="text-zinc-500">
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{ACTION_LABELS[e.action] ?? e.action}</TD>
+                <TD className="text-text-muted text-[13px]">
                   {e.entityType}
                   {e.entityId ? ` #${e.entityId}` : ""}
                 </TD>
-                <TD className="text-xs text-zinc-500">{describe(e)}</TD>
-                <TD className="text-zinc-500">{e.actorName}</TD>
-                <TD className="text-xs text-zinc-500">{new Date(e.createdAt).toLocaleString()}</TD>
+                <TD className="text-[13px] text-text-muted">{describe(e)}</TD>
+                <TD className="text-text-muted text-[13px]">{e.actorName}</TD>
+                <TD className="text-xs text-text-faint">{new Date(e.createdAt).toLocaleString()}</TD>
               </TR>
             ))
           )}
@@ -172,7 +172,7 @@ export default function ActivityLogPage() {
       </Table>
 
       {entries !== null && entries.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-[13px] text-text-faint">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

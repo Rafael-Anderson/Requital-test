@@ -60,7 +60,7 @@ export default function IngredientCategoriesPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+      <div className="rounded-lg border border-border dark:border-white/10 overflow-hidden">
         {ingredientCategories === null ? (
           <TableSkeleton rows={4} cols={2} />
         ) : ingredientCategories.length === 0 ? (
@@ -80,7 +80,7 @@ export default function IngredientCategoriesPage() {
                   <Tooltip label={`Edit ${c.name}`}>
                     <button
                       onClick={() => setEditing(c)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                       aria-label={`Edit ${c.name}`}
                     >
                       <Pencil className="size-4" />
@@ -89,7 +89,7 @@ export default function IngredientCategoriesPage() {
                   <Tooltip label={`Delete ${c.name}. This cannot be undone.`} align="end">
                     <button
                       onClick={() => handleDelete(c)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                       aria-label={`Delete ${c.name}`}
                     >
                       <Trash2 className="size-4" />

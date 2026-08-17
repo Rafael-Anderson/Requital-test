@@ -101,7 +101,7 @@ export default function OrderReturnsSection({
   }
 
   return (
-    <section className="border border-black/10 rounded-lg p-4 dark:border-white/10">
+    <section className="border border-border rounded-lg p-4 dark:border-white/10">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-medium">Returns / refunds</h3>
         {order.status === "delivered" && !initiating && returnableItems.length > 0 && (
@@ -112,16 +112,16 @@ export default function OrderReturnsSection({
       </div>
 
       {returns === null ? (
-        <p className="text-sm text-zinc-400">Loading…</p>
+        <p className="text-sm text-text-faint">Loading…</p>
       ) : returns.length > 0 ? (
         <div className="space-y-2 mb-3">
           {returns.map((r) => (
-            <div key={r.id} className="text-sm border border-black/10 rounded-md p-2.5 dark:border-white/10">
+            <div key={r.id} className="text-sm border border-border rounded-md p-2.5 dark:border-white/10">
               <div className="flex justify-between">
                 <span className="font-medium">{r.refundAmount} AED refunded</span>
-                <span className="text-xs text-zinc-500">{new Date(r.createdAt).toLocaleDateString()}</span>
+                <span className="text-xs text-text-muted">{new Date(r.createdAt).toLocaleDateString()}</span>
               </div>
-              <div className="text-xs text-zinc-500 mt-0.5 capitalize">
+              <div className="text-xs text-text-muted mt-0.5 capitalize">
                 {r.reason.replace(/_/g, " ")} · {r.refundMethod === "provider" ? "refunded via gateway" : "manual refund"} ·{" "}
                 {r.restocked ? "restocked" : "not restocked"} · by {r.staff.name}
               </div>
@@ -129,7 +129,7 @@ export default function OrderReturnsSection({
           ))}
         </div>
       ) : (
-        !initiating && <p className="text-sm text-zinc-400">No returns yet.</p>
+        !initiating && <p className="text-sm text-text-faint">No returns yet.</p>
       )}
 
       {initiating && (
@@ -146,7 +146,7 @@ export default function OrderReturnsSection({
                   <div className="flex-1 min-w-0 text-sm">
                     {item.productName}
                     {item.variantLabel ? ` · ${item.variantLabel}` : ""}
-                    <span className="text-zinc-400"> ({remaining} eligible)</span>
+                    <span className="text-text-faint"> ({remaining} eligible)</span>
                   </div>
                   {checked && (
                     <input
@@ -155,7 +155,7 @@ export default function OrderReturnsSection({
                       max={remaining}
                       value={selected[item.id]}
                       onChange={(e) => setQty(item.id, Number(e.target.value), remaining)}
-                      className="h-7 w-16 rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
+                      className="h-7 w-16 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
                     />
                   )}
                 </div>
@@ -165,7 +165,7 @@ export default function OrderReturnsSection({
 
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-zinc-500 shrink-0">Reason</span>
+              <span className="text-sm text-text-muted shrink-0">Reason</span>
               <div className="w-44">
                 <Combobox
                   value={reason}
@@ -181,7 +181,7 @@ export default function OrderReturnsSection({
             />
           </div>
 
-          <label className="text-sm text-zinc-500 flex items-center gap-2">
+          <label className="text-sm text-text-muted flex items-center gap-2">
             Refund amount
             <input
               type="number"
@@ -192,7 +192,7 @@ export default function OrderReturnsSection({
                 setAmountTouched(true);
                 setRefundAmount(e.target.value);
               }}
-              className="h-8 w-28 rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
+              className="h-8 w-28 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
             />
             AED
           </label>

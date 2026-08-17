@@ -62,7 +62,7 @@ export default function AttributesSection({
       onDisable={onDisable}
     >
       <div className="flex items-center justify-between">
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-text-faint">
           Informational facts shown on the product page, not purchasable options like Size/Color.
         </p>
         <button
@@ -75,7 +75,7 @@ export default function AttributesSection({
       </div>
       {attributes.length > 0 && (
         <div className="space-y-2">
-          <div className="flex gap-2 text-xs font-medium text-zinc-500">
+          <div className="flex gap-2 text-xs font-medium text-text-muted">
             <span className="flex-1">Name</span>
             <span className="flex-1">Value</span>
             <span className="w-7" />
@@ -101,7 +101,7 @@ export default function AttributesSection({
                   type="button"
                   onClick={() => removeRow(i)}
                   aria-label="Remove attribute"
-                  className="h-9 flex items-center justify-center px-1 text-zinc-400 hover:text-red-600 cursor-pointer"
+                  className="h-9 flex items-center justify-center px-1 text-text-faint hover:text-red-600 cursor-pointer"
                 >
                   <X className="size-4" />
                 </button>

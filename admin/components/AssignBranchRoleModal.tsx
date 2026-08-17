@@ -55,7 +55,7 @@ export default function AssignBranchRoleModal({
     <Modal onClose={onClose} size="sm" title="Assign branch role">
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
-        <p className="text-sm text-zinc-500 -mt-2 mb-4">
+        <p className="text-sm text-text-muted -mt-2 mb-4">
           Overrides this staff member&apos;s access at one specific outlet only. Their access at every
           other outlet is unaffected.
         </p>
@@ -89,7 +89,7 @@ export default function AssignBranchRoleModal({
           </Select>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

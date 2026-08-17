@@ -13,7 +13,7 @@ export default function BackButton({ href }: { href: string }) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline mb-4 transition-colors"
+      className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-text-muted transition-colors hover:text-accent-text dark:hover:text-zinc-200"
     >
       <ArrowLeft className="size-4" />
       Back

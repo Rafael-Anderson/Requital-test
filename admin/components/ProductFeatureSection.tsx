@@ -52,7 +52,7 @@ export default function ProductFeatureSection({
           <button
             type="button"
             onClick={onDisable}
-            className="text-xs text-zinc-400 hover:text-red-600 cursor-pointer"
+            className="text-xs text-text-faint hover:text-red-600 cursor-pointer"
           >
             Remove {title.toLowerCase()}
           </button>

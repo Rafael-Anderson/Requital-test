@@ -33,7 +33,7 @@ export default function OrderStatusTimeline({ orderId, refreshKey }: { orderId: 
   if (!history || history.length === 0) return null;
 
   return (
-    <section className="border border-black/10 rounded-lg p-4 dark:border-white/10 mb-4">
+    <section className="border border-border rounded-lg p-4 dark:border-white/10 mb-4">
       <h3 className="font-medium mb-3">Status timeline</h3>
       <ol>
         {history.map((entry, i) => (
@@ -46,11 +46,11 @@ export default function OrderStatusTimeline({ orderId, refreshKey }: { orderId: 
               <span className="text-sm font-medium">
                 {entry.status ? (TIMELINE_LABELS[entry.status] ?? entry.status.replace(/_/g, " ")) : "Unknown"}
               </span>
-              <span className="text-xs text-zinc-400 whitespace-nowrap">
+              <span className="text-xs text-text-faint whitespace-nowrap">
                 {new Date(entry.timestamp).toLocaleString()}
               </span>
             </div>
-            {entry.actorName && <p className="text-xs text-zinc-500 mt-0.5">by {entry.actorName}</p>}
+            {entry.actorName && <p className="text-xs text-text-muted mt-0.5">by {entry.actorName}</p>}
           </li>
         ))}
       </ol>

@@ -92,7 +92,7 @@ export default function CollectionsPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+      <div className="rounded-lg border border-border dark:border-white/10 overflow-hidden">
         {collections === null ? (
           <TableSkeleton rows={4} cols={3} />
         ) : rows.length === 0 ? (
@@ -129,17 +129,17 @@ export default function CollectionsPage() {
                 }`}
               >
                 <div style={{ paddingLeft: `${c.depth * 20 + 8}px` }} className="flex items-center gap-2 text-sm">
-                  <span className="cursor-grab active:cursor-grabbing text-zinc-400 shrink-0" aria-hidden>
+                  <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
                     <GripVertical className="size-4" />
                   </span>
                   <span className="font-medium">{c.name}</span>
-                  <span className="text-zinc-400 ml-2 text-xs">{c.slug}</span>
+                  <span className="text-text-faint ml-2 text-xs">{c.slug}</span>
                 </div>
                 <div className="flex gap-1">
                   <Tooltip label={`Edit ${c.name}`}>
                     <button
                       onClick={() => setEditing(c)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                       aria-label={`Edit ${c.name}`}
                     >
                       <Pencil className="size-4" />
@@ -148,7 +148,7 @@ export default function CollectionsPage() {
                   <Tooltip label={`Delete ${c.name}. This cannot be undone.`} align="end">
                     <button
                       onClick={() => handleDelete(c)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                       aria-label={`Delete ${c.name}`}
                     >
                       <Trash2 className="size-4" />

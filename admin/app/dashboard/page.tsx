@@ -15,6 +15,7 @@ import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import Card from "@/components/ui/Card";
 import PageShell from "@/components/ui/PageShell";
+import EmptyState from "@/components/ui/EmptyState";
 
 const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] = [
   { key: "placed", label: "Placed" },
@@ -59,11 +60,8 @@ export default function DashboardPage() {
 
   return (
     <PageShell>
-      <BranchBar left={<BackButton href="/" />} />
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold">Sales dashboard</h1>
-        <DateRangePicker value={range} onChange={setRange} />
-      </div>
+      <BranchBar left={<BackButton href="/" />} right={<DateRangePicker value={range} onChange={setRange} />} />
+      <h1 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Sales dashboard</h1>
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -107,19 +105,19 @@ export default function DashboardPage() {
       </div>
 
       {/* Sale overview */}
-      <Card className="mb-6">
-        <h2 className="font-medium mb-3">Sale Overview</h2>
+      <Card className="mb-5">
+        <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-5">Sale Overview</h2>
         {daily === null ? <Skeleton className="h-56 w-full" /> : <SalesOverviewChart data={daily} />}
       </Card>
 
       {/* Outlet / Sales activity / Customer growth */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <Card>
-          <h2 className="font-medium mb-4">Outlet Distribution</h2>
+          <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-[18px]">Outlet Distribution</h2>
           {!summary ? (
             <Skeleton className="h-32 w-32 rounded-full mx-auto" />
           ) : summary.outlets.length === 0 ? (
-            <p className="text-sm text-zinc-400">No outlets yet.</p>
+            <EmptyState title="No outlets yet." />
           ) : (
             <div className="flex items-center gap-6">
               <DonutChart
@@ -134,7 +132,7 @@ export default function DashboardPage() {
                       />
                       <span className="truncate">{o.name}</span>
                     </span>
-                    <span className="text-zinc-500 shrink-0">
+                    <span className="text-text-muted shrink-0">
                       {o.percentage.toFixed(0)}% · {o.orderCount}
                     </span>
                   </div>
@@ -145,7 +143,7 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <h2 className="font-medium mb-4">Sales Activity</h2>
+          <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-[18px]">Sales Activity</h2>
           {!summary ? (
             <div className="space-y-3">
               {STAGES.map((s) => (
@@ -158,13 +156,13 @@ export default function DashboardPage() {
                 const count = summary.ordersByStage[key];
                 return (
                   <div key={key}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-zinc-600 dark:text-zinc-300">{label}</span>
-                      <span className="font-medium">{count}</span>
+                    <div className="flex justify-between text-[13.5px] mb-1.5">
+                      <span className="text-text-secondary dark:text-zinc-300">{label}</span>
+                      <span className="font-bold text-text-primary dark:text-zinc-50">{count}</span>
                     </div>
-                    <div className="h-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+                    <div className="h-[5px] rounded-full bg-border-light dark:bg-white/10 overflow-hidden">
                       <div
-                        className="h-full bg-black dark:bg-white rounded-full transition-all"
+                        className="h-full bg-accent rounded-full transition-all"
                         style={{ width: `${(count / maxStage) * 100}%` }}
                       />
                     </div>
@@ -190,12 +188,14 @@ export default function DashboardPage() {
 
       {/* Channel distribution / Top products */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-        <Card>
-          <h2 className="font-medium mb-4">Sales Distribution by Channel</h2>
+        <Card className="flex min-h-[200px] flex-col">
+          <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Sales Distribution by Channel</h2>
           {!summary ? (
             <Skeleton className="h-32 w-full" />
           ) : summary.channels.length === 0 ? (
-            <p className="text-sm text-zinc-400">No orders in this range.</p>
+            <div className="flex flex-1 items-center justify-center">
+              <EmptyState title="No orders in this range." />
+            </div>
           ) : (
             <div className="flex items-center gap-6">
               <DonutChart
@@ -210,7 +210,7 @@ export default function DashboardPage() {
                       />
                       <span className="truncate">{c.channel}</span>
                     </span>
-                    <span className="text-zinc-500 shrink-0">
+                    <span className="text-text-muted shrink-0">
                       {c.percentage.toFixed(0)}% · {c.count}
                     </span>
                   </div>
@@ -220,8 +220,8 @@ export default function DashboardPage() {
           )}
         </Card>
 
-        <Card>
-          <h2 className="font-medium mb-4">Top Selling Products</h2>
+        <Card className="flex min-h-[200px] flex-col">
+          <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Top Selling Products</h2>
           {topProducts === null ? (
             <div className="space-y-3">
               <Skeleton className="h-12 w-full" />
@@ -229,16 +229,18 @@ export default function DashboardPage() {
               <Skeleton className="h-12 w-full" />
             </div>
           ) : topProducts.length === 0 ? (
-            <p className="text-sm text-zinc-400">No sales in this range.</p>
+            <div className="flex flex-1 items-center justify-center">
+              <EmptyState title="No sales in this range." />
+            </div>
           ) : (
             <div className="space-y-3">
               {topProducts.map((p, i) => (
                 <div key={p.productId} className="flex items-center gap-3">
-                  <span className="text-xs text-zinc-400 w-4 text-right">{i + 1}</span>
+                  <span className="text-xs text-text-faint w-4 text-right">{i + 1}</span>
                   <Thumbnail src={p.thumbnail} size="size-10" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{p.name}</div>
-                    <div className="text-xs text-zinc-500">{p.unitsSold} sold</div>
+                    <div className="text-xs text-text-muted">{p.unitsSold} sold</div>
                   </div>
                   <div className="text-sm font-medium shrink-0">{p.revenue.toFixed(2)} AED</div>
                 </div>

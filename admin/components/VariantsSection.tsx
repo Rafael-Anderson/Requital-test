@@ -72,7 +72,7 @@ export default function VariantsSection({
         onEnable={onEnable}
         onDisable={onDisable}
       >
-        <p className="text-sm text-zinc-500">Save the product first to add options like size or color.</p>
+        <p className="text-sm text-text-muted">Save the product first to add options like size or color.</p>
       </ProductFeatureSection>
     );
   }
@@ -149,13 +149,13 @@ export default function VariantsSection({
     >
       <div>
         <h3 className="text-sm font-semibold mb-1">Options</h3>
-        <p className="text-xs text-zinc-400 mb-3">
+        <p className="text-xs text-text-faint mb-3">
           Up to {MAX_OPTIONS} options (e.g. Size, Color). Adding or editing values regenerates the variant list below;
           variants that still match an existing combination keep their price/SKU/stock.
         </p>
         <div className="space-y-3">
           {options.map((option, index) => (
-            <div key={index} className="rounded-lg border border-black/10 dark:border-white/10 p-3">
+            <div key={index} className="rounded-lg border border-border dark:border-white/10 p-3">
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex-1">
                   <Input
@@ -170,13 +170,13 @@ export default function VariantsSection({
                     type="button"
                     onClick={() => removeOption(index)}
                     aria-label="Remove option"
-                    className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                    className="p-1.5 rounded text-text-faint hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                   >
                     <X className="size-4" />
                   </button>
                 </Tooltip>
               </div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+              <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
                 Option values
               </label>
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -191,7 +191,7 @@ export default function VariantsSection({
                         type="button"
                         onClick={() => removeValue(index, value)}
                         aria-label={`Remove ${value}`}
-                        className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                        className="text-text-faint hover:text-red-600 cursor-pointer"
                       >
                         <X className="size-3" />
                       </button>
@@ -210,7 +210,7 @@ export default function VariantsSection({
                   }
                 }}
                 placeholder="Add a value and press Enter"
-                className="w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                className="w-full border border-border dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
               />
             </div>
           ))}
@@ -225,7 +225,7 @@ export default function VariantsSection({
               Save options
             </Button>
           )}
-          {totalVariants > 0 && <span className="text-xs text-zinc-400">{totalVariants} variants</span>}
+          {totalVariants > 0 && <span className="text-xs text-text-faint">{totalVariants} variants</span>}
         </div>
       </div>
 
@@ -251,13 +251,13 @@ export default function VariantsSection({
                     </div>
                   </TD>
                   <TD>{v.price ?? product.price} AED</TD>
-                  <TD className="text-zinc-500">{v.stockQuantity ?? "-"}</TD>
+                  <TD className="text-text-muted">{v.stockQuantity ?? "-"}</TD>
                   <TD>
                     <Tooltip label={`Edit ${v.label}`} align="end">
                       <button
                         type="button"
                         onClick={() => setEditingVariant(v)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         aria-label={`Edit ${v.label}`}
                       >
                         <Pencil className="size-4" />

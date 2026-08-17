@@ -23,24 +23,24 @@ export default function StatCard({
   subtext?: string;
 }) {
   return (
-    <div className="rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 p-4 transition-shadow hover:shadow-md dark:hover:shadow-none dark:hover:border-white/20">
-      <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+    <div className="rounded-2xl border border-border bg-surface p-5 dark:border-white/10 dark:bg-zinc-900">
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-text-muted dark:text-zinc-400">
         {icon}
         {label}
       </div>
-      <div className="text-2xl font-semibold mt-2 text-zinc-900 dark:text-zinc-50">{value}</div>
-      {subtext && <div className="text-xs mt-1.5 text-zinc-400">{subtext}</div>}
+      <div className="mt-3.5 text-2xl font-extrabold text-text-primary dark:text-zinc-50">{value}</div>
+      {subtext && <div className="mt-2 text-[12.5px] text-text-faint dark:text-zinc-500">{subtext}</div>}
       {change && (
-        <div className="text-xs mt-1.5 flex items-center gap-1">
+        <div className="mt-2 flex items-center gap-1 text-[12.5px]">
           {change.pct === null ? (
-            <span className="text-zinc-400">New this period</span>
+            <span className="text-text-faint dark:text-zinc-500">New this period</span>
           ) : (
             <>
               <span
                 className={`flex items-center gap-0.5 font-medium ${
                   change.pct >= 0
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-red-600 dark:text-red-400"
+                    ? "text-success dark:text-green-400"
+                    : "text-danger-text dark:text-red-400"
                 }`}
               >
                 {change.pct >= 0 ? (
@@ -50,7 +50,7 @@ export default function StatCard({
                 )}
                 {Math.abs(change.pct).toFixed(1)}%
               </span>
-              <span className="text-zinc-400">vs previous period</span>
+              <span className="text-text-faint dark:text-zinc-500">vs previous period</span>
             </>
           )}
         </div>

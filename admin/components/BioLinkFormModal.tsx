@@ -165,7 +165,7 @@ export default function BioLinkFormModal({
                   </option>
                 ))}
               </Select>
-              <p className="text-xs text-zinc-400 mt-1.5">
+              <p className="text-xs text-text-faint mt-1.5">
                 Uses the URL already set for this platform on Online Presence (or your WhatsApp number for
                 WhatsApp), nothing more to enter here. The icon won&apos;t appear on your bio page until that&apos;s
                 configured.
@@ -181,7 +181,7 @@ export default function BioLinkFormModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

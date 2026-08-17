@@ -92,14 +92,14 @@ export default function GeneralReportView({
         )}
       </div>
 
-      <div className="flex items-center justify-end mb-3">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+      <div className="flex items-center justify-end mb-4">
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => onSearchInputChange(e.target.value)}
             placeholder="Search…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>
@@ -137,8 +137,8 @@ export default function GeneralReportView({
           ) : (
             orders.map((order) => (
               <TR key={order.id}>
-                <TD className="font-medium">#{order.id}</TD>
-                <TD className="text-zinc-500">{order.outletName}</TD>
+                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">#{order.id}</TD>
+                <TD className="text-text-muted text-[13.5px]">{order.outletName}</TD>
                 <TD>
                   <StatusBadge status={order.status} />
                 </TD>
@@ -150,13 +150,13 @@ export default function GeneralReportView({
                   ) : (
                     <span>{order.customerName}</span>
                   )}
-                  <div className="text-xs text-zinc-500">{order.customerPhone}</div>
+                  <div className="text-xs text-text-faint">{order.customerPhone}</div>
                 </TD>
-                <TD className="capitalize text-zinc-500">{order.orderType ?? "-"}</TD>
-                <TD className="text-zinc-500">{formatPaymentMode(order.paymentMethod)}</TD>
-                <TD>{order.total} AED</TD>
-                <TD className="text-zinc-500">{order.channel ?? "-"}</TD>
-                <TD className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleString()}</TD>
+                <TD className="capitalize text-text-muted text-[13.5px]">{order.orderType ?? "-"}</TD>
+                <TD className="text-text-muted text-[13.5px]">{formatPaymentMode(order.paymentMethod)}</TD>
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{order.total} AED</TD>
+                <TD className="text-text-muted text-[13.5px]">{order.channel ?? "-"}</TD>
+                <TD className="text-xs text-text-faint">{new Date(order.createdAt).toLocaleString()}</TD>
               </TR>
             ))
           )}
@@ -164,7 +164,7 @@ export default function GeneralReportView({
       </Table>
 
       {orders !== null && orders.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-[13px] text-text-faint">
           <span>
             {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
           </span>

@@ -85,7 +85,7 @@ function WhatsAppCredentialsCard() {
     <Card className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold">WhatsApp Business API</h3>
-        <p className="text-xs text-zinc-400 mt-1">
+        <p className="text-xs text-text-faint mt-1">
           Meta WhatsApp Cloud API credentials, used to send customer order notifications when
           &quot;Notify Customers via WhatsApp&quot; is on above. Business verification and number setup happen in
           Meta&apos;s own Business Manager, then paste the resulting values here.
@@ -103,7 +103,7 @@ function WhatsAppCredentialsCard() {
               onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
             />
             {settings.maskedCredentials?.[field.key] && (
-              <p className="mt-1 text-xs text-zinc-400">
+              <p className="mt-1 text-xs text-text-faint">
                 Currently saved: {settings.maskedCredentials[field.key]}. Re-enter both fields to change either one.
               </p>
             )}
@@ -111,7 +111,7 @@ function WhatsAppCredentialsCard() {
         ))}
       </div>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-400">Saves on its own, separate from the page's Save changes button below.</p>
+        <p className="text-xs text-text-faint">Saves on its own, separate from the page's Save changes button below.</p>
         <div className="flex gap-2 shrink-0">
           {settings.hasCredentials && (
             <Button variant="secondary" onClick={handleClear} disabled={saving}>
@@ -177,8 +177,8 @@ function PublishCard({ shop, onChange }: { shop: Shop; onChange: (published: boo
   return (
     <Card className="flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-medium">{shop.published ? "Store published" : "Publish your store"}</p>
-        <p className="text-xs text-zinc-400 mt-1">
+        <p className="text-[14.5px] font-bold text-text-primary dark:text-zinc-50">{shop.published ? "Store published" : "Publish your store"}</p>
+        <p className="text-xs text-text-faint mt-1">
           {shop.published
             ? "Your storefront is live and listed in the sitemap."
             : "Your storefront isn't visible to customers yet."}
@@ -196,7 +196,7 @@ function PublishCard({ shop, onChange }: { shop: Shop; onChange: (published: boo
             </a>
           </p>
         ) : (
-          <p className="text-xs mt-1.5 text-zinc-400" title="Your store link will be live once published">
+          <p className="text-xs mt-1.5 text-text-faint" title="Your store link will be live once published">
             Store link (available once published)
           </p>
         )}
@@ -348,7 +348,7 @@ export default function BusinessInformationPage() {
     }
   }
 
-  if (!shop) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
 
   return (
     // "wide", not "form" — this page's own Card already manages a real
@@ -375,23 +375,23 @@ export default function BusinessInformationPage() {
           <Input label="Legal Business Name" value={legalName} onChange={(e) => setLegalName(e.target.value)} />
 
           <div className="sm:col-span-2 lg:col-span-3">
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+            <label className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 block mb-1.5">
               Trademark / Copyright format
             </label>
             <div className="space-y-2">
               {trademarkPresets.map((preset) => (
                 <label
                   key={preset.id}
-                  className={`flex items-center gap-3 rounded-lg border p-3 text-sm cursor-pointer transition-colors ${
+                  className={`flex items-center gap-3 rounded-[10px] border p-3 text-[13.5px] cursor-pointer transition-colors ${
                     trademarkFormat === preset.id
-                      ? "border-black/40 dark:border-white/40 bg-black/[0.02] dark:bg-white/[0.03]"
-                      : "border-black/15 dark:border-white/15 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                      ? "border-accent bg-[#FAFCFC] dark:border-white/40 dark:bg-white/[0.03]"
+                      : "border-border dark:border-white/15 hover:bg-[#FAFCFC] dark:hover:bg-white/[0.03]"
                   }`}
                 >
                   <input
                     type="radio"
                     name="trademarkFormat"
-                    className="accent-black dark:accent-white shrink-0"
+                    className="accent-accent shrink-0"
                     checked={trademarkFormat === preset.id}
                     onChange={() => setTrademarkFormat(preset.id)}
                   />
@@ -404,14 +404,14 @@ export default function BusinessInformationPage() {
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
 
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+            <label className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 block mb-1.5">
               WhatsApp Number
             </label>
             <div className="flex gap-2">
               <select
                 value={whatsappCountryCode}
                 onChange={(e) => setWhatsappCountryCode(e.target.value)}
-                className="h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                className="h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               >
                 {WHATSAPP_COUNTRY_CODES.map((code) => (
                   <option key={code} value={code}>
@@ -422,7 +422,7 @@ export default function BusinessInformationPage() {
               <input
                 value={whatsappNumber}
                 onChange={(e) => setWhatsappNumber(e.target.value)}
-                className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               />
             </div>
           </div>
@@ -454,7 +454,7 @@ export default function BusinessInformationPage() {
               ))}
             </Select>
             {countryLocked && (
-              <p className="text-xs text-zinc-500 mt-1">Country is locked once set.</p>
+              <p className="text-xs text-text-muted mt-1">Country is locked once set.</p>
             )}
           </div>
 
@@ -463,13 +463,13 @@ export default function BusinessInformationPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+            <label className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 block mb-1.5">
               Time Zone
             </label>
             <select
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             >
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>
@@ -482,10 +482,10 @@ export default function BusinessInformationPage() {
       </Card>
 
       <Card>
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
+        <p className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 mb-2">
           Notification Settings
         </p>
-        <p className="text-xs text-zinc-400 mb-3">
+        <p className="text-xs text-text-faint mb-3">
           &quot;Notify Customers via WhatsApp&quot; and &quot;Allow Email Notifications&quot; send real order-confirmation
           and delivery/pickup updates to customers. &quot;Allow WhatsApp Notifications&quot; only saves a preference;
           it doesn&apos;t control customer messaging.
@@ -510,8 +510,8 @@ export default function BusinessInformationPage() {
       </Card>
 
       <Card>
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Growth &amp; Alerts</p>
-        <p className="text-xs text-zinc-400 mb-3">
+        <p className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 mb-2">Growth &amp; Alerts</p>
+        <p className="text-xs text-text-faint mb-3">
           Both off by default. These email potential/at-risk situations (an incomplete purchase, a running-low
           shelf), not existing-customer order updates, so they get their own deliberate opt-in.
         </p>
@@ -543,13 +543,13 @@ export default function BusinessInformationPage() {
       </Card>
 
       <Card>
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Inventory</p>
+        <p className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 mb-2">Inventory</p>
         <Checkbox
           label="Auto-deduct ingredient stock on order completion"
           checked={autoDeductIngredientStock}
           onChange={(e) => setAutoDeductIngredientStock(e.target.checked)}
         />
-        <p className="text-xs text-zinc-400 mt-1.5 ml-6">
+        <p className="text-xs text-text-faint mt-1.5 ml-6">
           On by default. When a product has a recipe linked (Inventory &gt; Products), completing an order
           automatically deducts the linked ingredients&apos; stock at the fulfilling branch. Turn this off to keep
           recipe data for costing purposes only, without the system touching ingredient counts.
@@ -557,8 +557,8 @@ export default function BusinessInformationPage() {
       </Card>
 
       <Card>
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Product Editor</p>
-        <p className="text-xs text-zinc-400 mb-3">
+        <p className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 mb-2">Product Editor</p>
+        <p className="text-xs text-text-faint mb-3">
           Simple starts with a focused form. Variants and extras are off by default but available on any product.
           Advanced shows everything expanded from the start.
         </p>

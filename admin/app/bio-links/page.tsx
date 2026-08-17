@@ -39,7 +39,7 @@ import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
 
 const TYPE_BADGE_CLASS =
-  "inline-flex items-center rounded-full border border-black/10 dark:border-white/10 px-2 py-0.5 text-xs text-zinc-500";
+  "inline-flex items-center rounded-full bg-neutral-chip-bg dark:bg-zinc-800 px-2 py-0.5 text-[10.5px] font-semibold text-neutral-chip-text dark:text-zinc-400";
 
 // Logo/background upload widgets mirror Theme's own (ImageDropzone,
 // preview + "Change image" on click/drop) — plus an explicit Remove button,
@@ -129,7 +129,7 @@ function BioPageConfigCard() {
 
   return (
     <Card className="space-y-4">
-      <h2 className="text-sm font-semibold">Bio page settings</h2>
+      <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Bio page settings</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
@@ -138,13 +138,13 @@ function BioPageConfigCard() {
             <button
               type="button"
               onClick={handleRemoveLogo}
-              className="mt-1.5 flex items-center gap-1 text-xs text-zinc-500 hover:text-red-600 transition-colors cursor-pointer"
+              className="mt-1.5 flex items-center gap-1 text-xs text-text-muted hover:text-red-600 transition-colors cursor-pointer"
             >
               <X className="size-3" />
               Remove logo
             </button>
           )}
-          <p className="mt-1.5 text-xs text-zinc-400">Falls back to your Theme logo if left unset.</p>
+          <p className="mt-1.5 text-xs text-text-faint">Falls back to your Theme logo if left unset.</p>
         </div>
 
         <div>
@@ -153,13 +153,13 @@ function BioPageConfigCard() {
             <button
               type="button"
               onClick={handleRemoveBackground}
-              className="mt-1.5 flex items-center gap-1 text-xs text-zinc-500 hover:text-red-600 transition-colors cursor-pointer"
+              className="mt-1.5 flex items-center gap-1 text-xs text-text-muted hover:text-red-600 transition-colors cursor-pointer"
             >
               <X className="size-3" />
               Remove background
             </button>
           )}
-          <p className="mt-1.5 text-xs text-zinc-400">
+          <p className="mt-1.5 text-xs text-text-faint">
             Falls back to your Theme banner if left unset. Your accent color shows through if neither is set.
           </p>
         </div>
@@ -180,7 +180,7 @@ function BioPageConfigCard() {
           placeholder="Your Shop Name: Bio Links"
           maxLength={255}
         />
-        <p className="mt-1.5 text-xs text-zinc-400">
+        <p className="mt-1.5 text-xs text-text-faint">
           Shown in browser tabs and search results for your bio page. Falls back to your shop&apos;s general SEO
           title if left blank.
         </p>
@@ -194,7 +194,7 @@ function BioPageConfigCard() {
           placeholder="All our links in one place."
           maxLength={500}
         />
-        <p className="mt-1.5 text-xs text-zinc-400">
+        <p className="mt-1.5 text-xs text-text-faint">
           Shown under the title in search results and link previews. Falls back to your shop&apos;s general SEO
           description if left blank.
         </p>
@@ -283,17 +283,17 @@ export default function BioLinksPage() {
   return (
     <PageShell>
       <BackButton href="/" />
-      <h1 className="text-2xl font-semibold mb-1">Bio Links</h1>
-      <p className="text-sm text-zinc-500 mb-4">
+      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-1.5">Bio Links</h1>
+      <p className="text-[13.5px] text-text-faint mb-6">
         A shareable link-in-bio page for your storefront. Drag rows to reorder them.
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <BioPageConfigCard />
 
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold">Links</h2>
+          <div className="flex items-center justify-between mb-3.5">
+            <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Links</h2>
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus className="size-4 inline -mt-0.5 mr-1" />
               Add link
@@ -302,13 +302,13 @@ export default function BioLinksPage() {
 
           {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+          <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden bg-surface dark:bg-zinc-900">
             {bioLinks === null ? (
               <TableSkeleton rows={4} cols={3} />
             ) : bioLinks.length === 0 ? (
               <EmptyState title="No bio links yet" description="Add a link to start building your bio page." />
             ) : (
-              <div className="divide-y divide-black/5 dark:divide-white/10">
+              <div className="divide-y divide-border-light dark:divide-white/10">
                 {bioLinks.map((link) => (
                   <div
                     key={link.id}
@@ -316,19 +316,19 @@ export default function BioLinksPage() {
                     onDragStart={() => setDraggedId(link.id)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => handleDrop(link.id)}
-                    className={`flex items-center gap-3 px-3 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${
+                    className={`flex items-center gap-3 px-4 py-3.5 hover:bg-[#FAFBFB] dark:hover:bg-white/[0.03] transition-colors ${
                       draggedId === link.id ? "opacity-40" : ""
                     }`}
                   >
-                    <span className="cursor-grab active:cursor-grabbing text-zinc-400 shrink-0" aria-hidden>
-                      <GripVertical className="size-4" />
+                    <span className="cursor-grab active:cursor-grabbing text-[#C9D0CE] dark:text-zinc-500 shrink-0" aria-hidden>
+                      <GripVertical className="size-3.5" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium truncate">{link.label}</span>
+                        <span className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100 truncate">{link.label}</span>
                         <span className={TYPE_BADGE_CLASS}>{BIO_LINK_TYPE_LABELS[link.type]}</span>
                       </div>
-                      <div className="flex items-center gap-1 text-xs text-zinc-400 mt-0.5">
+                      <div className="flex items-center gap-1 text-[11.5px] text-text-faint mt-0.5">
                         <MousePointerClick className="size-3" />
                         {link.clickCount} click{link.clickCount === 1 ? "" : "s"}
                       </div>
@@ -338,7 +338,7 @@ export default function BioLinksPage() {
                       <Tooltip label={`Edit ${link.label}`}>
                         <button
                           onClick={() => setEditing(link)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                           aria-label={`Edit ${link.label}`}
                         >
                           <Pencil className="size-4" />
@@ -347,7 +347,7 @@ export default function BioLinksPage() {
                       <Tooltip label={`Delete ${link.label}. This cannot be undone.`} align="end">
                         <button
                           onClick={() => handleDelete(link)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                          className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                           aria-label={`Delete ${link.label}`}
                         >
                           <Trash2 className="size-4" />

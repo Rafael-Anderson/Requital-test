@@ -22,7 +22,7 @@ export function defaultDateRange(days = 30): DateRange {
 }
 
 const dateInputClass =
-  "h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
+  "h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 text-[13.5px] font-semibold outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 export default function DateRangePicker({
   value,

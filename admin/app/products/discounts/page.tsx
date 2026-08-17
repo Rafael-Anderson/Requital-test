@@ -117,14 +117,14 @@ export default function DiscountsPage() {
               <TR key={d.id}>
                 <TD className="font-medium">{d.code}</TD>
                 <TD>{DISCOUNT_TYPE_LABELS[d.type]}</TD>
-                <TD className="text-zinc-500">
+                <TD className="text-text-muted">
                   {d.type === "FREE_SHIPPING" ? "-" : d.type === "PERCENTAGE" ? `${d.value}%` : d.value}
                 </TD>
-                <TD className="text-zinc-500">
+                <TD className="text-text-muted">
                   {d.timesUsed}
                   {d.usageLimit !== null ? ` / ${d.usageLimit}` : ""}
                 </TD>
-                <TD className="text-xs text-zinc-500">{formatValidity(d.startsAt, d.endsAt)}</TD>
+                <TD className="text-xs text-text-muted">{formatValidity(d.startsAt, d.endsAt)}</TD>
                 <TD>
                   <button
                     onClick={() => handleToggleActive(d)}
@@ -141,7 +141,7 @@ export default function DiscountsPage() {
                   <Tooltip label={`Edit ${d.code}`}>
                     <button
                       onClick={() => setEditing(d)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                       aria-label={`Edit ${d.code}`}
                     >
                       <Pencil className="size-4" />
@@ -152,7 +152,7 @@ export default function DiscountsPage() {
                   <Tooltip label={`Delete ${d.code}. This cannot be undone.`} align="end">
                     <button
                       onClick={() => handleDelete(d)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                       aria-label={`Delete ${d.code}`}
                     >
                       <Trash2 className="size-4" />

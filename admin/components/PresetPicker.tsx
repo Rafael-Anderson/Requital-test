@@ -49,7 +49,7 @@ export default function PresetPicker<T extends string>({
                 </span>
               )}
             </div>
-            {option.description && <p className="text-xs text-zinc-500 mt-1">{option.description}</p>}
+            {option.description && <p className="text-xs text-text-muted mt-1">{option.description}</p>}
           </Card>
         );
       })}

@@ -77,12 +77,12 @@ export default function AffiliateCodesPage() {
     <PageShell>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search code or promotion…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
         <Button variant="primary" onClick={() => setEditing("new")}>
@@ -127,7 +127,7 @@ export default function AffiliateCodesPage() {
               <TR key={c.id}>
                 <TD className="font-medium">{c.code}</TD>
                 <TD>{c.ordersCount}</TD>
-                <TD className="text-zinc-500">{c.promotionFor}</TD>
+                <TD className="text-text-muted">{c.promotionFor}</TD>
                 <TD>
                   <button
                     type="button"
@@ -141,7 +141,7 @@ export default function AffiliateCodesPage() {
                 <TD className={`capitalize font-medium ${STATUS_CLASS[c.status] ?? ""}`}>{c.status}</TD>
                 <TD className="capitalize">{c.commissionType}</TD>
                 <TD>{c.commissionType === "percentage" ? `${c.commissionValue}%` : c.commissionValue.toFixed(2)}</TD>
-                <TD className="text-xs text-zinc-500">{formatValidity(c.validFrom, c.validUntil)}</TD>
+                <TD className="text-xs text-text-muted">{formatValidity(c.validFrom, c.validUntil)}</TD>
                 <TD>
                   <Button size="sm" variant="secondary" onClick={() => setEditing(c)}>
                     Edit
@@ -154,7 +154,7 @@ export default function AffiliateCodesPage() {
       </Table>
 
       {codes !== null && codes.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

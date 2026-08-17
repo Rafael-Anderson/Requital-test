@@ -102,7 +102,7 @@ export default function SettingsUsersPage() {
       <div className="space-y-8">
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="text-lg font-semibold">Branch accounts</h2>
+            <h2 className="text-lg font-bold text-text-primary dark:text-zinc-50">Branch accounts</h2>
             <Button
               variant="primary"
               onClick={() => setAddingUser(true)}
@@ -134,15 +134,15 @@ export default function SettingsUsersPage() {
                 users.map((u) => (
                   <TR key={u.id}>
                     <TD>{u.name}</TD>
-                    <TD className="text-zinc-500">{u.email}</TD>
-                    <TD className="capitalize text-zinc-500">{u.role}</TD>
-                    <TD className="text-zinc-500">{u.outlet?.name ?? "All branches"}</TD>
+                    <TD className="text-text-muted">{u.email}</TD>
+                    <TD className="capitalize text-text-muted">{u.role}</TD>
+                    <TD className="text-text-muted">{u.outlet?.name ?? "All branches"}</TD>
                     <TD>
                       <div className="flex gap-1 justify-end">
                         <Tooltip label={`Edit ${u.name}`}>
                           <button
                             onClick={() => setEditingUser(u)}
-                            className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                            className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                             aria-label={`Edit ${u.name}`}
                           >
                             <Pencil className="size-4" />
@@ -151,7 +151,7 @@ export default function SettingsUsersPage() {
                         <Tooltip label={`Delete ${u.name}. This cannot be undone.`} align="end">
                           <button
                             onClick={() => handleDeleteUser(u)}
-                            className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                            className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                             aria-label={`Delete ${u.name}`}
                           >
                             <Trash2 className="size-4" />
@@ -169,8 +169,8 @@ export default function SettingsUsersPage() {
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
-              <h2 className="text-lg font-semibold">Branch roles</h2>
-              <p className="text-sm text-zinc-500">
+              <h2 className="text-lg font-bold text-text-primary dark:text-zinc-50">Branch roles</h2>
+              <p className="text-sm text-text-muted">
                 Reusable permission bundles you can assign to a staff member at one specific outlet,
                 layered on top of, not replacing, their role above.
               </p>
@@ -181,7 +181,7 @@ export default function SettingsUsersPage() {
             </Button>
           </div>
 
-          <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+          <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden">
             {branchRoles === null ? (
               <TableSkeleton rows={2} cols={2} />
             ) : branchRoles.length === 0 ? (
@@ -198,7 +198,7 @@ export default function SettingsUsersPage() {
                   >
                     <div>
                       <span className="text-sm font-medium">{r.name}</span>
-                      <span className="text-zinc-400 ml-2 text-xs">
+                      <span className="text-text-faint ml-2 text-xs">
                         {r.permissions.length} permission{r.permissions.length === 1 ? "" : "s"}
                       </span>
                     </div>
@@ -206,7 +206,7 @@ export default function SettingsUsersPage() {
                       <Tooltip label={`Edit ${r.name}`}>
                         <button
                           onClick={() => setEditingRole(r)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                           aria-label={`Edit ${r.name}`}
                         >
                           <Pencil className="size-4" />
@@ -215,7 +215,7 @@ export default function SettingsUsersPage() {
                       <Tooltip label={`Delete ${r.name}. This cannot be undone.`} align="end">
                         <button
                           onClick={() => handleDeleteRole(r)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                          className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                           aria-label={`Delete ${r.name}`}
                         >
                           <Trash2 className="size-4" />
@@ -232,8 +232,8 @@ export default function SettingsUsersPage() {
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div>
-              <h2 className="text-lg font-semibold">Branch-role assignments</h2>
-              <p className="text-sm text-zinc-500">
+              <h2 className="text-lg font-bold text-text-primary dark:text-zinc-50">Branch-role assignments</h2>
+              <p className="text-sm text-text-muted">
                 Overrides one staff member&apos;s access at one specific outlet. Every other outlet stays
                 on their role above, unaffected.
               </p>
@@ -278,10 +278,10 @@ export default function SettingsUsersPage() {
                   <TR key={a.id}>
                     <TD>
                       {a.user.name}
-                      <span className="text-zinc-400 ml-2 text-xs">{a.user.email}</span>
+                      <span className="text-text-faint ml-2 text-xs">{a.user.email}</span>
                     </TD>
-                    <TD className="text-zinc-500">{a.outlet.name}</TD>
-                    <TD className="text-zinc-500">{a.branchrole.name}</TD>
+                    <TD className="text-text-muted">{a.outlet.name}</TD>
+                    <TD className="text-text-muted">{a.branchrole.name}</TD>
                     <TD>
                       <div className="flex justify-end">
                         <Tooltip
@@ -290,7 +290,7 @@ export default function SettingsUsersPage() {
                         >
                           <button
                             onClick={() => handleUnassign(a)}
-                            className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                            className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                             aria-label={`Remove assignment for ${a.user.name} at ${a.outlet.name}`}
                           >
                             <Trash2 className="size-4" />

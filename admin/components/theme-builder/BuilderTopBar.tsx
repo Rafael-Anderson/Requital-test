@@ -23,9 +23,9 @@ export default function BuilderTopBar({ editor }: { editor: ThemeEditorState }) 
   }
 
   return (
-    <div className="flex h-14 items-center justify-between border-b border-black/10 bg-white px-4 dark:border-white/10 dark:bg-zinc-900">
+    <div className="flex h-14 items-center justify-between border-b border-border bg-surface px-4 dark:border-white/10 dark:bg-zinc-900">
       <div className="flex min-w-0 items-center gap-3">
-        <Link href="/theme" className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300">
+        <Link href="/theme" className="text-text-faint hover:text-accent-text dark:hover:text-zinc-300">
           <ArrowLeft className="size-4" />
         </Link>
         {editingName ? (
@@ -35,7 +35,7 @@ export default function BuilderTopBar({ editor }: { editor: ThemeEditorState }) 
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={() => void commitName(theme.id, theme.name)}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-            className="rounded border border-black/15 px-2 py-1 text-sm font-medium dark:border-white/15 dark:bg-zinc-900"
+            className="rounded-[10px] border border-border px-2 py-1 text-sm font-semibold dark:border-white/15 dark:bg-zinc-900"
           />
         ) : (
           <button
@@ -44,12 +44,12 @@ export default function BuilderTopBar({ editor }: { editor: ThemeEditorState }) 
               setNameDraft(theme.name);
               setEditingName(true);
             }}
-            className="truncate text-sm font-medium hover:underline"
+            className="truncate text-sm font-bold text-text-primary hover:underline dark:text-zinc-50"
           >
             {theme.name}
           </button>
         )}
-        {saving && <span className="shrink-0 text-xs text-zinc-400">Saving…</span>}
+        {saving && <span className="shrink-0 text-xs text-text-faint">Saving…</span>}
       </div>
 
       <SegmentedToggle<DevicePreview>

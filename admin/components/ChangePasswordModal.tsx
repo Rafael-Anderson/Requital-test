@@ -62,11 +62,11 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
       <form onSubmit={handleSubmit}>
         {user && !user.emailVerified ? (
           <div className="space-y-3">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm text-text-secondary dark:text-zinc-400">
               Verify your email before changing your password.
             </p>
             {devVerificationLink && (
-              <p className="text-xs text-zinc-400 break-all">
+              <p className="text-xs text-text-faint break-all">
                 Dev-only (no email sending yet):{" "}
                 <a href={devVerificationLink} className="text-accent hover:underline">
                   {devVerificationLink}
@@ -112,7 +112,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
           </>
         )}
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             {user && !user.emailVerified ? "Close" : "Cancel"}
           </Button>

@@ -22,7 +22,7 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
   return (
     <div className="page-transition">
       <BackButton href="/" />
-      <h1 className="text-2xl font-semibold mb-4">Reports</h1>
+      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-5">Reports</h1>
       <ReportsTabs />
       {children}
     </div>

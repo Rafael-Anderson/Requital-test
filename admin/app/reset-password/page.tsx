@@ -51,7 +51,7 @@ function ResetPasswordForm() {
     <AuthCard heading="Set a new password">
       <div className="space-y-4">
         {done ? (
-          <p className="text-sm text-center text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm text-center text-text-secondary dark:text-zinc-400">
             Password updated. Redirecting to sign in…
           </p>
         ) : !token ? (
@@ -91,7 +91,7 @@ function ResetPasswordForm() {
           </form>
         )}
 
-        <p className="text-sm text-center text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-center text-text-muted dark:text-zinc-400">
           <Link href="/login" className="underline decoration-transparent hover:decoration-current">
             Back to sign in
           </Link>

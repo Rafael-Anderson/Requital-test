@@ -141,7 +141,7 @@ export default function EditOrderItemsModal({
         </>
       )}
     >
-        <p className="text-sm text-zinc-500 -mt-2 mb-4">Order #{order.id}</p>
+        <p className="text-sm text-text-muted -mt-2 mb-4">Order #{order.id}</p>
 
         <Table>
           <THead>
@@ -161,7 +161,7 @@ export default function EditOrderItemsModal({
                     min="1"
                     value={item.quantity}
                     onChange={(e) => updateQuantity(item.productId, item.variantId, Number(e.target.value) || 1)}
-                    className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                    className="w-16 border border-border dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                   />
                 </TD>
                 <TD>
@@ -170,7 +170,7 @@ export default function EditOrderItemsModal({
                       type="button"
                       onClick={() => removeItem(item.productId, item.variantId)}
                       aria-label={`Remove ${item.productName}`}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -212,7 +212,7 @@ export default function EditOrderItemsModal({
               min="1"
               value={addQuantity}
               onChange={(e) => setAddQuantity(e.target.value)}
-              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent transition-shadow focus:ring-[3px] focus:ring-accent/20"
+              className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent transition-shadow focus:ring-[3px] focus:ring-accent/20"
             />
           </div>
           <Button type="button" variant="secondary" onClick={handleAdd} disabled={!addProductId}>

@@ -126,12 +126,12 @@ export default function OrderHistoryPage() {
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Orders</h1>
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search ref no, customer, or phone…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>
@@ -143,7 +143,7 @@ export default function OrderHistoryPage() {
         <select
           value={bulkStatus}
           onChange={(e) => setBulkStatus(e.target.value as OrderStatus | "")}
-          className="border border-black/15 dark:border-white/15 rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
+          className="border border-border dark:border-white/15 rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
         >
           <option value="">Move to…</option>
           {ORDER_STATUSES.map((s) => (
@@ -218,18 +218,18 @@ export default function OrderHistoryPage() {
                     <StatusBadge status={order.status} />
                   </TD>
                   <TD>{order.customerName}</TD>
-                  <TD className="capitalize text-zinc-500">{order.orderType ?? "-"}</TD>
+                  <TD className="capitalize text-text-muted">{order.orderType ?? "-"}</TD>
                   <TD>
                     <StatusBadge status={order.paymentStatus} />
                     {latestTxn && (
-                      <div className="text-xs text-zinc-500 mt-1 capitalize">
+                      <div className="text-xs text-text-muted mt-1 capitalize">
                         via {latestTxn.gateway}
                       </div>
                     )}
                   </TD>
                   <TD>{order.total} AED</TD>
-                  <TD className="text-zinc-500">{order.channel ?? "-"}</TD>
-                  <TD className="text-xs text-zinc-500">
+                  <TD className="text-text-muted">{order.channel ?? "-"}</TD>
+                  <TD className="text-xs text-text-muted">
                     {new Date(order.createdAt).toLocaleString()}
                   </TD>
                   <TD>
@@ -245,7 +245,7 @@ export default function OrderHistoryPage() {
       </Table>
 
       {orders !== null && orders.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

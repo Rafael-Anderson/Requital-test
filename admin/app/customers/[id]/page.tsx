@@ -174,9 +174,9 @@ export default function CustomerDetailPage() {
                       <TD>
                         <StatusBadge status={order.status} />
                       </TD>
-                      <TD className="capitalize text-zinc-500">{order.orderType ?? "-"}</TD>
+                      <TD className="capitalize text-text-muted">{order.orderType ?? "-"}</TD>
                       <TD>{order.total} AED</TD>
-                      <TD className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleString()}</TD>
+                      <TD className="text-xs text-text-muted">{new Date(order.createdAt).toLocaleString()}</TD>
                     </TR>
                   ))
                 )}

@@ -25,7 +25,7 @@ export default function Loading() {
             </div>
             <div className="flex flex-col gap-2">
               {Array.from({ length: 3 }).map((_, card) => (
-                <div key={card} className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-3">
+                <div key={card} className="rounded-lg border border-gray-200 dark:border-white/10 bg-surface dark:bg-zinc-900 p-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <Skeleton className="h-4 w-12" />
                     <Skeleton className="h-4 w-16 rounded-full" />

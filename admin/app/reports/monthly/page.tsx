@@ -83,7 +83,7 @@ export default function MonthlyReportPage() {
           }}
           dateControl={
             <div className="flex items-center gap-1.5">
-              <CalendarDays className="size-4 text-zinc-400 shrink-0" />
+              <CalendarDays className="size-4 text-text-faint shrink-0" />
               <input
                 type="month"
                 value={draftMonth}

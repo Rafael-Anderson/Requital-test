@@ -12,30 +12,29 @@ export interface TabItem {
   exact?: boolean;
 }
 
-// Shared "browser tab" style tab row — every sub-nav across the admin app
-// (Orders, Products, Settings, Affiliate, Theme, Reports, Inventory) used to
-// hand-roll the same flat underline-tabs markup per component; consolidated
-// here so the look only needs to change in one place. The container's
-// border-gray-200 (not a bare `border-b`, which resolves to `currentColor` —
-// i.e. black — under Tailwind v4, see CLAUDE.md's own documented gotcha) is
-// what fixed the previously-black tab underline. The active tab's matching
-// background plus a same-color bottom border cancels the container's line
-// under just that tab, visually fusing it with the content panel below —
-// the actual "looks like a real browser tab" part.
+// Shared underline-style tab row (2026-08 admin redesign) — every sub-nav
+// across the admin app (Orders, Products, Settings, Affiliate, Theme,
+// Reports, Inventory) routes through this one component so the look only
+// needs to change in one place. Replaces the old "browser tab" boxed style:
+// active tab = teal text + 2px teal bottom border; inactive = muted gray,
+// no underline. The container's border-gray-200 (not a bare `border-b`,
+// which resolves to `currentColor` — i.e. black — under Tailwind v4, see
+// CLAUDE.md's own documented gotcha) is the shared baseline every tab's
+// bottom border sits on.
 export default function Tabs({ tabs, className = "mb-4" }: { tabs: TabItem[]; className?: string }) {
   const pathname = usePathname();
   return (
-    <div className={`flex gap-1.5 overflow-x-auto border-b border-gray-200 dark:border-white/10 ${className}`}>
+    <div className={`flex gap-7 overflow-x-auto border-b border-gray-200 dark:border-white/10 ${className}`}>
       {tabs.map((tab) => {
         const active = tab.exact === false ? pathname.startsWith(tab.href) : pathname === tab.href;
         return (
           <Link
             key={tab.href}
             href={tab.href}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg border transition-colors -mb-px ${
+            className={`whitespace-nowrap border-b-2 pb-3 text-sm font-semibold transition-colors ${
               active
-                ? "bg-white dark:bg-zinc-900 border-gray-200 dark:border-white/10 border-b-white dark:border-b-zinc-900 text-accent-text dark:text-accent relative z-10"
-                : "bg-zinc-100 dark:bg-zinc-800/60 border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                ? "border-accent text-accent-text dark:text-accent"
+                : "border-transparent text-text-faint hover:text-text-secondary dark:text-zinc-500 dark:hover:text-zinc-300"
             }`}
           >
             {tab.label}

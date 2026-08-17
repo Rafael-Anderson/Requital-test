@@ -63,7 +63,7 @@ export default function BranchRoleFormModal({
     <Modal onClose={onClose} size="sm" title={role ? "Edit branch role" : "New branch role"}>
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
-        <p className="text-sm text-zinc-500 -mt-2 mb-4">
+        <p className="text-sm text-text-muted -mt-2 mb-4">
           A reusable permission bundle you can assign to a staff member at a specific outlet.
         </p>
 
@@ -71,7 +71,7 @@ export default function BranchRoleFormModal({
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
 
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
               Permissions
             </label>
             <div className="space-y-2">
@@ -84,7 +84,7 @@ export default function BranchRoleFormModal({
                 />
               ))}
             </div>
-            <p className="mt-2 text-xs text-zinc-400">
+            <p className="mt-2 text-xs text-text-faint">
               A staff member assigned this bundle at an outlet can never end up with more access than
               their existing shop-wide role already allows. An outlet assignment can only restrict, never
               upgrade.
@@ -92,7 +92,7 @@ export default function BranchRoleFormModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

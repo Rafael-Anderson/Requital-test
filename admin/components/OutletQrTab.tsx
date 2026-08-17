@@ -32,7 +32,7 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
     document.body.removeChild(a);
   }
 
-  if (!shop) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
 
   const url = storefrontUrlFor(shop);
 
@@ -40,7 +40,7 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
     <Card className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold mb-1">Storefront QR Code</h3>
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-text-faint">
           Scan to open your storefront. Print this for signage at {outlet.name}.
         </p>
       </div>
@@ -51,11 +51,11 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
         </p>
       )}
 
-      <div ref={canvasRef} className="inline-block rounded-lg border border-black/10 dark:border-white/10 p-4 bg-white">
+      <div ref={canvasRef} className="inline-block rounded-lg border border-border dark:border-white/10 p-4 bg-surface">
         <QRCodeCanvas value={url} size={200} level="M" marginSize={0} />
       </div>
 
-      <p className="text-xs text-zinc-500 break-all">{url}</p>
+      <p className="text-xs text-text-muted break-all">{url}</p>
 
       <Button variant="secondary" onClick={handleDownload}>
         <Download className="size-4 inline -mt-0.5 mr-1" />

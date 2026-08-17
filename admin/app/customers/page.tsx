@@ -116,15 +116,15 @@ export default function CustomersPage() {
   return (
     <PageShell>
       <BackButton href="/" />
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Customers</h1>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Customers</h1>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search name or phone…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>
@@ -156,7 +156,7 @@ export default function CustomersPage() {
                 <button
                   type="button"
                   onClick={() => toggleSort(field)}
-                  className="flex items-center gap-1 cursor-pointer hover:text-zinc-800 dark:hover:text-zinc-200"
+                  className="flex items-center gap-1 cursor-pointer hover:text-text-secondary dark:hover:text-zinc-200"
                 >
                   {label}
                   {sortBy === field && <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>}
@@ -202,14 +202,14 @@ export default function CustomersPage() {
                     />
                   </TD>
                 )}
-                <TD className="font-medium">{c.name}</TD>
-                <TD className="text-zinc-500">{c.phone}</TD>
-                <TD>{c.orderCount}</TD>
-                <TD>{c.lifetimeValue.toFixed(2)} AED</TD>
-                <TD className="text-xs text-zinc-500">
+                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</TD>
+                <TD className="text-text-muted text-[13.5px]">{c.phone}</TD>
+                <TD className="text-[13.5px]">{c.orderCount}</TD>
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{c.lifetimeValue.toFixed(2)} AED</TD>
+                <TD className="text-xs text-text-faint">
                   {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "-"}
                 </TD>
-                {isSimple && <TD className="text-zinc-500">{c.email ?? "-"}</TD>}
+                {isSimple && <TD className="text-text-muted">{c.email ?? "-"}</TD>}
               </TR>
             ))
           )}
@@ -217,7 +217,7 @@ export default function CustomersPage() {
       </Table>
 
       {customers !== null && customers.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-[13px] text-text-faint">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

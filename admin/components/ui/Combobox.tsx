@@ -78,7 +78,7 @@ export default function Combobox({
 
   return (
     <div className={className}>
-      {label && <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">{label}</label>}
+      {label && <label className="text-[13px] font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">{label}</label>}
       <div className="relative" ref={rootRef}>
         <button
           type="button"
@@ -87,19 +87,19 @@ export default function Combobox({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={listboxId}
-          className="flex h-9 w-full items-center justify-between rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+          className="flex h-9 w-full items-center justify-between rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         >
-          <span className={`truncate text-left ${selected ? "" : "text-zinc-400"}`}>
+          <span className={`truncate text-left ${selected ? "" : "text-text-faint"}`}>
             {selected ? selected.label : placeholder}
           </span>
-          <ChevronsUpDown className="size-4 shrink-0 text-zinc-400 ml-2" />
+          <ChevronsUpDown className="size-4 shrink-0 text-text-faint ml-2" />
         </button>
 
         {open && (
           <div
             id={listboxId}
             role="listbox"
-            className="popover-in absolute left-0 top-full z-50 mt-1.5 w-full rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg shadow-black/10 overflow-hidden"
+            className="popover-in absolute left-0 top-full z-50 mt-1.5 w-full rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 overflow-hidden"
           >
             <input
               ref={inputRef}

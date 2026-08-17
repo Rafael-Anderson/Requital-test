@@ -9,8 +9,11 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Page background is the soft gray from the 2026-08 admin redesign (see
+     README design handoff) — cards/surfaces sit on top of this at
+     --color-surface (white), not the page color itself. */
+  --background: #f7f8f8;
+  --foreground: #1b1f1e;
 }
 
 .dark {
@@ -21,27 +24,48 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 
   /* Brand accent (teal) — single source of truth for every active/selected
      UI state, primary button, and focus ring. Change the color here, not at
      the call sites. `--color-accent-text` is a darker shade reserved for
-     text sitting directly on a light background: #069494 at normal text
-     size is only ~3.7:1 against white (fails WCAG AA's 4.5:1), so light-mode
-     text uses the darker shade while dark-mode text (~5:1 against the near-
-     black page background) uses the standard one. Backgrounds, borders, and
-     focus rings don't have this problem (WCAG's non-text 3:1 threshold, or
-     white-on-accent for filled buttons) and use --color-accent everywhere. */
-  --color-accent: #069494;
-  --color-accent-hover: #057a7a;
-  --color-accent-text: #046e6e;
+     text sitting directly on a light background — reuses the hover/pressed
+     shade, which already clears WCAG AA's 4.5:1 against white. Backgrounds,
+     borders, and focus rings don't have this problem (WCAG's non-text 3:1
+     threshold, or white-on-accent for filled buttons) and use
+     --color-accent everywhere. */
+  --color-accent: #0f766e;
+  --color-accent-hover: #0b5c56;
+  --color-accent-text: #0b5c56;
+  --color-accent-tint: #e6f5f3;
+  --color-accent-mid: #93d5cb;
+
+  /* 2026-08 admin redesign tokens (see README design handoff in
+     feature/admin-redesign) — light-mode values only; every component keeps
+     its existing dark: variant untouched, since the redesign brief doesn't
+     cover dark mode and light stays the hard default (see layout.tsx). */
+  --color-surface: #ffffff;
+  --color-page: #f7f8f8;
+  --color-border: #e4e7e7;
+  --color-border-light: #f1f2f2;
+  --color-text-primary: #1b1f1e;
+  --color-text-secondary: #3e4443;
+  --color-text-muted: #6b7573;
+  --color-text-faint: #8b9391;
+  --color-success: #1c9a6c;
+  --color-warning-bg: #fff4e0;
+  --color-warning-text: #8a5a00;
+  --color-danger-bg: #fceeee;
+  --color-danger-text: #b3261e;
+  --color-neutral-chip-bg: #f1f2f2;
+  --color-neutral-chip-text: #8b9391;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
 }
 
 /* NProgress (components/ui/NavigationProgress.tsx) — override the library's

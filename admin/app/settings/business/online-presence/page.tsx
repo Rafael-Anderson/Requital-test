@@ -113,7 +113,7 @@ export default function OnlinePresencePage() {
     }
   }
 
-  if (!shop) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
 
   return (
     // "wide", not "form" — same PageShell variant-misclassification as
@@ -124,8 +124,8 @@ export default function OnlinePresencePage() {
     <PageShell variant="wide">
       <div className="space-y-4">
       <Card>
-        <h3 className="text-sm font-semibold mb-1">Platforms</h3>
-        <p className="text-xs text-zinc-400 mb-3">
+        <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-1">Platforms</h3>
+        <p className="text-xs text-text-faint mb-3">
           Toggle the platforms you&apos;re active on to add a link for each.
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -140,7 +140,7 @@ export default function OnlinePresencePage() {
                 className={`flex flex-col items-center justify-center gap-2 rounded-lg border p-4 text-sm font-medium transition-colors cursor-pointer ${
                   active
                     ? "border-black/40 dark:border-white/40 bg-black/[0.02] dark:bg-white/[0.03] text-black dark:text-white"
-                    : "border-black/15 dark:border-white/15 text-zinc-500 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                    : "border-border dark:border-white/15 text-text-muted hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                 }`}
               >
                 <Icon className="size-5" strokeWidth={1.5} />
@@ -153,7 +153,7 @@ export default function OnlinePresencePage() {
 
       {enabled.size > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold mb-3">Social Media Links</h3>
+          <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Social Media Links</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {SOCIAL_PLATFORMS.filter((p) => enabled.has(p)).map((platform) => (
               <Input

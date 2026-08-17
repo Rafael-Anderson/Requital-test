@@ -112,7 +112,7 @@ export default function LoginPage() {
           {submitting ? "Signing in…" : "Sign in"}
         </Button>
 
-        <p className="text-sm text-center text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-center text-text-muted dark:text-zinc-400">
           New shop?{" "}
           <Link href="/signup" className="underline decoration-transparent hover:decoration-current">
             Create one

@@ -41,13 +41,13 @@ function StripeWebhookInstructions({ shopId }: { shopId: number }) {
   }
 
   return (
-    <div className="rounded-lg border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03] p-3 space-y-2">
-      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+    <div className="rounded-lg border border-border dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03] p-3 space-y-2">
+      <p className="text-xs font-medium text-text-secondary dark:text-zinc-300">
         Using your own Stripe account? Add this URL as a webhook endpoint in your Stripe Dashboard
         (Developers → Webhooks), then paste the signing secret it gives you into the Webhook Secret field above.
       </p>
       <div className="flex items-center gap-2">
-        <code className="flex-1 text-xs bg-white dark:bg-zinc-900 border border-black/10 dark:border-white/10 rounded px-2 py-1.5 overflow-x-auto whitespace-nowrap">
+        <code className="flex-1 text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5 overflow-x-auto whitespace-nowrap">
           {url}
         </code>
         <button
@@ -94,7 +94,7 @@ function CredentialFields({
             placeholder={maskedCredentials?.[field.key] ? "Leave blank to keep current value" : undefined}
           />
           {maskedCredentials?.[field.key] && (
-            <p className="mt-1 text-xs text-zinc-400">Currently saved: {maskedCredentials[field.key]}</p>
+            <p className="mt-1 text-xs text-text-faint">Currently saved: {maskedCredentials[field.key]}</p>
           )}
         </div>
       ))}
@@ -213,8 +213,8 @@ export default function PaymentGatewaysPage() {
       <div className="space-y-4">
       <Card className="space-y-4">
         <div>
-          <h3 className="text-sm font-semibold">Card processing</h3>
-          <p className="text-xs text-zinc-400 mt-1">
+          <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Card processing</h3>
+          <p className="text-xs text-text-faint mt-1">
             Choose one. Nomod and Stripe can&apos;t both be active at the same time.
           </p>
         </div>
@@ -225,7 +225,7 @@ export default function PaymentGatewaysPage() {
               className={`flex items-center gap-3 rounded-lg border p-3 text-sm cursor-pointer transition-colors ${
                 cardProcessor === provider
                   ? "border-black/40 dark:border-white/40 bg-black/[0.02] dark:bg-white/[0.03]"
-                  : "border-black/15 dark:border-white/15 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                  : "border-border dark:border-white/15 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
               }`}
             >
               <input
@@ -260,8 +260,8 @@ export default function PaymentGatewaysPage() {
         <Card key={provider} className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold">{PAYMENT_PROVIDER_LABELS[provider]}</h3>
-              <p className="text-xs text-zinc-400 mt-1">Independent of card processing, enable it on its own.</p>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">{PAYMENT_PROVIDER_LABELS[provider]}</h3>
+              <p className="text-xs text-text-faint mt-1">Independent of card processing, enable it on its own.</p>
             </div>
             <Toggle
               checked={independentEnabled[provider] ?? false}
@@ -295,8 +295,8 @@ export default function PaymentGatewaysPage() {
       <Card>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold">Cash on Delivery</h3>
-            <p className="text-xs text-zinc-400 mt-1">
+            <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Cash on Delivery</h3>
+            <p className="text-xs text-text-faint mt-1">
               No API key needed, just a visibility toggle. Sets both delivery and pickup Cash on Delivery
               together (see Outlets for finer per-context control).
             </p>

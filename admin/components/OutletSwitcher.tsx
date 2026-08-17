@@ -16,7 +16,7 @@ export default function OutletSwitcher() {
 
   return (
     <div className="flex items-center gap-1.5">
-      <Store className="size-4 text-zinc-400" />
+      <Store className="size-4 text-text-faint" />
       <div className={`w-40 ${loading ? "pointer-events-none opacity-60" : ""}`}>
         <Combobox
           value={selectedOutletId !== null ? String(selectedOutletId) : ""}

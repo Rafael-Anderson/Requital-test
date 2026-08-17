@@ -63,7 +63,7 @@ export default function AccountSetupStepBusiness({
 
       <div>
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Storefront domain</label>
+          <label className="text-sm font-medium text-text-secondary dark:text-zinc-400">Storefront domain</label>
           <SegmentedToggle<DomainType>
             value={form.domainType}
             onChange={form.setDomainType}
@@ -80,7 +80,7 @@ export default function AccountSetupStepBusiness({
               className={`flex h-9 w-full overflow-hidden rounded-lg border shadow-sm shadow-black/5 transition-shadow focus-within:ring-[3px] ${
                 subdomainError
                   ? "border-red-400 dark:border-red-700 focus-within:border-red-400 focus-within:ring-red-500/20"
-                  : "border-black/15 dark:border-white/15 focus-within:border-accent focus-within:ring-accent/20"
+                  : "border-border dark:border-white/15 focus-within:border-accent focus-within:ring-accent/20"
               }`}
             >
               <input
@@ -91,11 +91,11 @@ export default function AccountSetupStepBusiness({
                 onChange={(e) => form.subdomainHandlers.onChange(e.target.value)}
                 onBlur={(e) => form.subdomainHandlers.onBlur(e.target.value)}
                 aria-invalid={!!subdomainError}
-                className={`h-full min-w-0 flex-1 border-0 bg-white dark:bg-zinc-900 px-3 text-sm outline-none placeholder:text-zinc-400 ${
+                className={`h-full min-w-0 flex-1 border-0 bg-surface dark:bg-zinc-900 px-3 text-sm outline-none placeholder:text-text-faint ${
                   subdomainError ? "text-red-700 dark:text-red-400" : ""
                 }`}
               />
-              <span className="flex shrink-0 items-center rounded-r-lg border-l border-black/15 dark:border-white/15 bg-zinc-100 dark:bg-zinc-800 px-3 text-sm text-zinc-500 dark:text-zinc-400">
+              <span className="flex shrink-0 items-center rounded-r-lg border-l border-border dark:border-white/15 bg-zinc-100 dark:bg-zinc-800 px-3 text-sm text-text-muted dark:text-zinc-400">
                 {SUBDOMAIN_SUFFIX}
               </span>
             </div>
@@ -112,25 +112,25 @@ export default function AccountSetupStepBusiness({
               onChange={(e) => form.customDomainHandlers.onChange(e.target.value)}
               onBlur={(e) => form.customDomainHandlers.onBlur(e.target.value)}
               aria-invalid={!!customDomainError}
-              className={`flex h-9 w-full rounded-lg border bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow outline-none placeholder:text-zinc-400 ${
+              className={`flex h-9 w-full rounded-lg border bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow outline-none placeholder:text-text-faint ${
                 customDomainError
                   ? "border-red-400 dark:border-red-700 text-red-700 dark:text-red-400 focus:border-red-400 focus:ring-[3px] focus:ring-red-500/20"
-                  : "border-black/15 dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                  : "border-border dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               }`}
             />
             {customDomainError && <FieldErrorMessage message={customDomainError} />}
 
-            <div className="mt-3 rounded-lg border border-black/10 dark:border-white/10 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2">
+            <div className="mt-3 rounded-lg border border-border dark:border-white/10 bg-zinc-50 dark:bg-zinc-800/50 px-3 py-2">
               <button
                 type="button"
                 onClick={() => setHowToOpen((v) => !v)}
-                className="flex w-full items-center justify-between text-left text-xs font-medium text-zinc-600 dark:text-zinc-400 cursor-pointer"
+                className="flex w-full items-center justify-between text-left text-xs font-medium text-text-secondary dark:text-zinc-400 cursor-pointer"
               >
                 How to connect your domain
                 <ChevronDown className={`size-3.5 transition-transform ${howToOpen ? "rotate-180" : ""}`} />
               </button>
               {howToOpen && (
-                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-zinc-500 dark:text-zinc-400">
+                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-text-muted dark:text-zinc-400">
                   <li>Log in to your domain registrar</li>
                   <li>
                     Add an A record pointing to <span className="font-mono">{VPS_IP}</span>

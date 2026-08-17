@@ -24,7 +24,7 @@ export default function CollectionCheckboxTree({
 
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-zinc-400 border rounded-lg border-black/15 dark:border-white/15 px-3 py-4 text-center">
+      <p className="text-sm text-text-faint border rounded-lg border-border dark:border-white/15 px-3 py-4 text-center">
         No collections yet. Create one on the Collections page first.
       </p>
     );
@@ -39,7 +39,7 @@ export default function CollectionCheckboxTree({
 
   return (
     <div
-      className="relative rounded-lg border border-black/15 dark:border-white/15 max-h-56 overflow-y-auto p-1.5 before:absolute before:top-0 before:bottom-0 before:left-0 before:-ml-1 before:w-(--tree-guide-width) before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)))] dark:before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)))]"
+      className="relative rounded-lg border border-border dark:border-white/15 max-h-56 overflow-y-auto p-1.5 before:absolute before:top-0 before:bottom-0 before:left-0 before:-ml-1 before:w-(--tree-guide-width) before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)))] dark:before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)))]"
       style={{ "--tree-indent": `${TREE_INDENT}px`, "--tree-guide-width": `${guideWidth}px` } as React.CSSProperties}
     >
       {rows.map((c) => (

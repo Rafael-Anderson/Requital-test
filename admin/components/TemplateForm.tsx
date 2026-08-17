@@ -314,7 +314,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
 
           {type === "RULE_BASED" ? (
             <div className="space-y-3.5">
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-text-muted">
                 Products matching every condition set below are included automatically. Leave a condition blank to
                 ignore it.
               </p>
@@ -344,7 +344,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
             </div>
           ) : type === "COLLECTION_GROUP" ? (
             <div className="space-y-3">
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-text-muted">
                 The products from every Collection listed below are shown together in this Template&apos;s storefront
                 homepage section.
               </p>
@@ -359,7 +359,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                 <TBody>
                   {collectionMembers.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="p-3 text-sm text-zinc-400">
+                      <td colSpan={3} className="p-3 text-sm text-text-faint">
                         No collections added yet.
                       </td>
                     </tr>
@@ -374,7 +374,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                               type="number"
                               value={m.sortOrder}
                               onChange={(e) => updateCollectionMemberOrder(m.collectionId, Number(e.target.value) || 0)}
-                              className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                              className="w-16 border border-border dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                             />
                           </TD>
                           <TD>
@@ -383,7 +383,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                                 type="button"
                                 onClick={() => removeCollectionMember(m.collectionId)}
                                 aria-label={`Remove ${m.collectionName}`}
-                                className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                                className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="size-4" />
                               </button>
@@ -423,7 +423,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                 <TBody>
                   {members.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="p-3 text-sm text-zinc-400">
+                      <td colSpan={3} className="p-3 text-sm text-text-faint">
                         No products added yet.
                       </td>
                     </tr>
@@ -438,7 +438,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                               type="number"
                               value={m.sortOrder}
                               onChange={(e) => updateMemberOrder(m.productId, Number(e.target.value) || 0)}
-                              className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                              className="w-16 border border-border dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                             />
                           </TD>
                           <TD>
@@ -447,7 +447,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                                 type="button"
                                 onClick={() => removeMember(m.productId)}
                                 aria-label={`Remove ${m.productName}`}
-                                className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                                className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="size-4" />
                               </button>

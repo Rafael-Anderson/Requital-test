@@ -27,7 +27,7 @@ export default function OutletEditSidebar({
 }) {
   return (
     <nav className="sm:w-64 shrink-0 space-y-4">
-      <div className="flex items-center justify-between rounded-lg border border-black/10 dark:border-white/10 p-3">
+      <div className="flex items-center justify-between rounded-lg border border-border dark:border-white/10 p-3">
         <span className="text-sm font-medium">Outlet is {outletActive ? "Active" : "Inactive"}</span>
         <Toggle checked={outletActive} onChange={onToggleActive} />
       </div>
@@ -43,13 +43,13 @@ export default function OutletEditSidebar({
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer ${
                 isActive
                   ? "bg-accent/10 text-accent-text dark:text-accent"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] hover:text-zinc-800 dark:hover:text-zinc-200"
+                  : "text-text-secondary dark:text-zinc-400 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] hover:text-zinc-800 dark:hover:text-zinc-200"
               }`}
             >
               <Icon className="size-4.5 shrink-0" strokeWidth={1.75} />
               <span className="min-w-0">
                 <span className="block text-sm font-semibold truncate">{label}</span>
-                <span className="block text-xs text-zinc-400 truncate">{sublabel}</span>
+                <span className="block text-xs text-text-faint truncate">{sublabel}</span>
               </span>
             </button>
           );

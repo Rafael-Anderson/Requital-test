@@ -117,7 +117,7 @@ export default function AdjustStockModal({
         </Button>
       )}
     >
-      <p className="text-sm text-zinc-500 -mt-2 mb-4">
+      <p className="text-sm text-text-muted -mt-2 mb-4">
         {name} · {outletName}
       </p>
 
@@ -153,8 +153,8 @@ export default function AdjustStockModal({
           </div>
         </form>
 
-        <div className="mt-5 pt-5 border-t border-black/10 dark:border-white/10">
-          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Low stock alert</label>
+        <div className="mt-5 pt-5 border-t border-border dark:border-white/10">
+          <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Low stock alert</label>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -162,13 +162,13 @@ export default function AdjustStockModal({
               placeholder="Off"
               value={threshold}
               onChange={(e) => setThreshold(e.target.value)}
-              className="flex h-9 w-28 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              className="flex h-9 w-28 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             />
             <Button type="button" variant="secondary" size="sm" onClick={handleSaveThreshold} disabled={savingThreshold}>
               {savingThreshold ? "Saving…" : "Save"}
             </Button>
           </div>
-          <p className="mt-1.5 text-xs text-zinc-400">Flags this item as low stock once it drops to or below this number. Leave blank to turn off.</p>
+          <p className="mt-1.5 text-xs text-text-faint">Flags this item as low stock once it drops to or below this number. Leave blank to turn off.</p>
         </div>
     </Modal>
   );

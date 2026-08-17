@@ -33,7 +33,7 @@ export default function AbandonedCartsPage() {
       <BackButton href="/orders" />
       <OrdersTabs />
       <h1 className="text-2xl font-semibold mb-1">Abandoned Carts</h1>
-      <p className="text-sm text-zinc-500 mb-4">
+      <p className="text-sm text-text-muted mb-4">
         Shoppers who started checkout but didn&apos;t complete an order. Turn on recovery emails in Settings &gt;
         Business Information.
       </p>
@@ -71,10 +71,10 @@ export default function AbandonedCartsPage() {
               <TR key={c.id}>
                 <TD>
                   <p className="font-medium">{c.customerName}</p>
-                  <p className="text-xs text-zinc-500">{c.customerEmail ?? c.customerPhone}</p>
+                  <p className="text-xs text-text-muted">{c.customerEmail ?? c.customerPhone}</p>
                 </TD>
-                <TD className="text-zinc-500">{c.cartValue}</TD>
-                <TD className="text-zinc-500" title={new Date(c.capturedAt).toLocaleString()}>
+                <TD className="text-text-muted">{c.cartValue}</TD>
+                <TD className="text-text-muted" title={new Date(c.capturedAt).toLocaleString()}>
                   {timeAgo(c.capturedAt)}
                 </TD>
                 <TD>
@@ -83,7 +83,7 @@ export default function AbandonedCartsPage() {
                       Sent
                     </span>
                   ) : (
-                    <span className="text-xs text-zinc-400">Not yet</span>
+                    <span className="text-xs text-text-faint">Not yet</span>
                   )}
                 </TD>
                 <TD>
@@ -92,7 +92,7 @@ export default function AbandonedCartsPage() {
                       Yes (#{c.recoveredOrderId})
                     </span>
                   ) : (
-                    <span className="text-xs text-zinc-400">No</span>
+                    <span className="text-xs text-text-faint">No</span>
                   )}
                 </TD>
               </TR>
