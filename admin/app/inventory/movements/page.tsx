@@ -64,11 +64,11 @@ export default function StockMovementsPage() {
       <BranchBar left={<BackButton href="/inventory" />} />
       <InventoryTabs />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Movement History</h1>
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Movement History</h1>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as StockMovementType | "")}
-          className="border border-border dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+          className="h-9 border border-border dark:border-white/15 rounded-[10px] px-3 text-[13.5px] font-semibold bg-surface dark:bg-zinc-900 transition-colors hover:border-[#D3D8D7] dark:hover:border-white/30 cursor-pointer"
         >
           <option value="">All movements</option>
           <option value="ADJUSTMENT">Adjustments only</option>

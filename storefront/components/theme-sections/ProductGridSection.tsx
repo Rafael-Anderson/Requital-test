@@ -6,7 +6,7 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { listProducts } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -105,6 +105,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   const collectionId = typeof settings.collectionId === "number" ? settings.collectionId : undefined;
   const productLimit = typeof settings.productLimit === "number" && settings.productLimit > 0 ? settings.productLimit : DEFAULT_PRODUCT_LIMIT;
   const quickAddLabel = typeof settings.quickAddLabel === "string" && settings.quickAddLabel ? settings.quickAddLabel : "Add";
+  const sectionTitle = typeof settings.sectionTitle === "string" ? settings.sectionTitle.trim() : "";
 
   useEffect(() => {
     listProducts(shopSlug, outletId, collectionId, undefined, previewToken)
@@ -131,6 +132,11 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
 
   return (
     <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+      {sectionTitle && (
+        <h2 className="text-xl font-semibold mb-4" style={themeTextPresetStyle("h2")}>
+          {sectionTitle}
+        </h2>
+      )}
       <div className={`grid ${columns} gap-4 sm:gap-6`}>
         {products.map((product) => (
           <Link key={product.id} href={`${shopBasePath}/products/${product.slug}`} className={`block group relative ${cardStyle}`}>

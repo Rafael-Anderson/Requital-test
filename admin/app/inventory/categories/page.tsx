@@ -50,8 +50,8 @@ export default function IngredientCategoriesPage() {
       <BackButton href="/inventory" />
       <InventoryTabs />
 
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Ingredient Categories</h1>
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Ingredient Categories</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus className="size-4 inline -mt-0.5 mr-1" />
           New category
@@ -60,7 +60,7 @@ export default function IngredientCategoriesPage() {
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
-      <div className="rounded-lg border border-border dark:border-white/10 overflow-hidden">
+      <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden bg-surface dark:bg-zinc-900">
         {ingredientCategories === null ? (
           <TableSkeleton rows={4} cols={2} />
         ) : ingredientCategories.length === 0 ? (
@@ -69,13 +69,13 @@ export default function IngredientCategoriesPage() {
             description="Create categories to organize raw materials: flowers, packaging, add-ons."
           />
         ) : (
-          <div className="divide-y divide-black/5 dark:divide-white/10">
+          <div className="divide-y divide-border-light dark:divide-white/10">
             {ingredientCategories.map((c) => (
               <div
                 key={c.id}
-                className="flex items-center justify-between px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
+                className="flex items-center justify-between px-4 py-2.5 hover:bg-[#FAFBFB] dark:hover:bg-white/[0.03] transition-colors"
               >
-                <span className="text-sm font-medium">{c.name}</span>
+                <span className="text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</span>
                 <div className="flex gap-1">
                   <Tooltip label={`Edit ${c.name}`}>
                     <button

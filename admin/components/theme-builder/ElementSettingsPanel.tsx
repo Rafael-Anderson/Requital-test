@@ -11,9 +11,11 @@ import FontPicker from "@/components/ui/FontPicker";
 import Toggle from "@/components/ui/Toggle";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import BlockSettingsForm from "./BlockSettingsForm";
+import RichTextBlockEditor from "./RichTextBlockEditor";
 import { uploadThemeImage, resolveImageUrl } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import type { ThemeBlock } from "@/lib/types";
+import type { BlockContainerRef } from "@/lib/useThemeEditor";
 
 // Richer per-element-type style controls for the block types a merchant can
 // double-click select in the live preview (PreviewInteraction.tsx,
@@ -35,6 +37,7 @@ interface FamilyProps {
   block: ThemeBlock;
   onUpdate: (key: string, value: unknown) => void;
   onToggleVisibility: () => void;
+  container?: BlockContainerRef;
 }
 
 const FONT_WEIGHTS = [
@@ -58,18 +61,36 @@ const TEXT_CONTENT_KEY: Record<string, string | undefined> = {
   product_title: undefined,
 };
 
-function TextElementSettings({ block, onUpdate }: FamilyProps) {
+// The rich_text section's own "text" block gets the contenteditable
+// bold/italic/underline editor (RichTextBlockEditor) instead of a plain
+// Textarea — every other TEXT_TYPES member (heading/subheading/
+// collection_title/footer_copyright, and "text" blocks belonging to
+// image_text/newsletter, which share the same block *type* but aren't rich
+// text) keeps the existing plain-text field. `container.sectionType` is
+// what disambiguates "text" here, since block.type alone can't: it's the
+// shared child type of three different sections (backend constants.ts's
+// BLOCK_TYPES.rich_text/image_text/newsletter).
+function isRichTextBlock(block: ThemeBlock, container?: BlockContainerRef): boolean {
+  return block.type === "text" && container?.kind === "section" && container.sectionType === "rich_text";
+}
+
+function TextElementSettings({ block, onUpdate, container }: FamilyProps) {
   const s = block.settings;
   const contentKey = TEXT_CONTENT_KEY[block.type];
+  const richText = isRichTextBlock(block, container);
   return (
     <div className="space-y-4">
-      {contentKey && (
-        <Textarea
-          label="Text content"
-          rows={3}
-          value={(s[contentKey] as string) ?? ""}
-          onChange={(e) => onUpdate(contentKey, e.target.value)}
-        />
+      {contentKey && richText ? (
+        <RichTextBlockEditor blockId={block.id} value={(s[contentKey] as string) ?? ""} onChange={(html) => onUpdate(contentKey, html)} />
+      ) : (
+        contentKey && (
+          <Textarea
+            label="Text content"
+            rows={3}
+            value={(s[contentKey] as string) ?? ""}
+            onChange={(e) => onUpdate(contentKey, e.target.value)}
+          />
+        )
       )}
       <Slider label="Font size" min={10} max={96} value={(s.fontSize as number) ?? 16} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
       <Select label="Font weight" value={(s.fontWeight as string) ?? "400"} onChange={(e) => onUpdate("fontWeight", e.target.value)}>
@@ -285,8 +306,8 @@ function IconElementSettings({ block, onUpdate, onToggleVisibility }: FamilyProp
   );
 }
 
-export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibility }: FamilyProps) {
-  if (TEXT_TYPES.has(block.type)) return <TextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibility, container }: FamilyProps) {
+  if (TEXT_TYPES.has(block.type)) return <TextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} container={container} />;
   if (IMAGE_TYPES.has(block.type)) return <ImageElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (BUTTON_TYPES.has(block.type)) return <ButtonElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (NAV_TYPES.has(block.type)) return <NavElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;

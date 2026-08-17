@@ -18,13 +18,20 @@ import PreviewInteraction from "@/components/PreviewInteraction";
 import type { Shop } from "@/lib/types";
 
 // Whether the MenuBar row shows: a themed shop's own nav_menu header block
-// visibility wins (set in the builder's Header tree node), falling back to
-// the legacy shop.showCollectionMenu toggle for a shop with no published
-// new-system theme.
+// visibility wins (set in the builder's Header tree node) *when that block
+// actually exists* — falling back to the legacy shop.showCollectionMenu
+// toggle both for a shop with no published new-system theme AND for one
+// whose theme predates this block existing in DEFAULT_THEME_CONFIG (see
+// backend constants.ts — every real theme created before nav_menu was added
+// to the default header seed has no such block in its saved header.blocks
+// at all, which used to read as "explicitly hidden" via .some() finding
+// nothing, permanently hiding the menu for those shops regardless of what
+// the merchant configured in the separate Menu Builder). Absence of the
+// block is "no opinion," not "hidden" — only an existing block with
+// visible: false is a real, merchant-made "hide this" choice.
 function showMenuBar(shop: ReturnType<typeof useShop>["shop"], themeConfig: ReturnType<typeof useShop>["themeConfig"]) {
-  if (themeConfig?.header) {
-    return themeConfig.header.blocks.some((b) => b.type === "nav_menu" && b.visible);
-  }
+  const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
+  if (navBlock) return navBlock.visible;
   return shop?.showCollectionMenu !== false;
 }
 
