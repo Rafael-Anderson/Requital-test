@@ -80,38 +80,37 @@ export default function ThemeLibraryPage() {
   }
 
   return (
-    <PageShell variant="form">
+    <PageShell variant="wide">
       <BackButton href="/" />
-      <h1 className="text-2xl font-semibold mb-1">Theme</h1>
-      <p className="text-sm text-zinc-500 mb-6">Your storefront's current look, content, and layout.</p>
+      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-1.5">Theme</h1>
+      <p className="text-[13.5px] text-text-faint mb-6">Your storefront's current look, content, and layout.</p>
 
       {!theme ? (
         <CardSkeleton />
       ) : (
-        <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-5 mb-8">
+        <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-[18px] mb-8">
           <div
-            className="size-20 rounded-lg shrink-0 flex items-center justify-center overflow-hidden"
-            style={{ background: `${brandColor}1a` }}
+            className="size-16 rounded-xl shrink-0 flex items-center justify-center overflow-hidden bg-accent-tint dark:bg-accent/15"
           >
             {logoPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoPreview} alt="" className="max-w-full max-h-full object-contain p-2" />
             ) : (
-              <Palette className="size-8" style={{ color: brandColor }} />
+              <Palette className="size-[26px] text-accent" style={{ color: brandColor }} />
             )}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="font-medium">Current theme</h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-xs font-medium">
-                <Check className="size-3" />
+              <h2 className="text-base font-bold text-text-primary dark:text-zinc-50">Current theme</h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent px-2.5 py-0.5 text-[11px] font-bold">
+                <Check className="size-2.5" strokeWidth={3} />
                 Active
               </span>
             </div>
-            <p className="text-sm text-zinc-500">
+            <p className="text-[13.5px] text-text-muted">
               {layoutOption?.label ?? "Classic"} layout
-              {theme.updatedAt && ` (last saved ${new Date(theme.updatedAt).toLocaleString()})`}
+              {theme.updatedAt && ` · last saved ${new Date(theme.updatedAt).toLocaleString()}`}
             </p>
           </div>
 
@@ -121,8 +120,8 @@ export default function ThemeLibraryPage() {
         </Card>
       )}
 
-      <h2 className="text-lg font-semibold mb-1">Custom themes</h2>
-      <p className="text-sm text-zinc-500 mb-4">
+      <h2 className="text-[17px] font-extrabold text-text-primary dark:text-zinc-50 mb-1.5">Custom themes</h2>
+      <p className="text-[13.5px] text-text-faint mb-[18px]">
         Build a section-based homepage with the visual editor. Publishing a custom theme takes over your
         homepage, header, and footer.
       </p>
@@ -132,21 +131,20 @@ export default function ThemeLibraryPage() {
           <CardSkeleton />
         ) : (
           themes.map((t) => (
-            <Card key={t.id} className="flex items-center gap-4">
-              <div className="size-12 rounded-lg shrink-0 flex items-center justify-center bg-accent/10">
-                <Palette className="size-5 text-accent-text dark:text-accent" />
+            <Card key={t.id} className="flex items-center gap-3.5 p-[18px]">
+              <div className="size-11 rounded-[10px] shrink-0 flex items-center justify-center bg-accent-tint dark:bg-accent/15">
+                <Palette className="size-[19px] text-accent-text dark:text-accent" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-medium truncate">{t.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[14.5px] font-bold text-text-primary dark:text-zinc-50 truncate">{t.name}</h3>
                   {t.isPublished && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-xs font-medium shrink-0">
-                      <Check className="size-3" />
+                    <span className="inline-flex items-center gap-1 rounded-full bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent px-2 py-0.5 text-[10.5px] font-bold shrink-0">
                       Published
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-zinc-500">
+                <p className="text-[12.5px] text-text-faint mt-0.5">
                   Updated {new Date(t.updatedAt).toLocaleDateString()}
                 </p>
               </div>
@@ -160,7 +158,7 @@ export default function ThemeLibraryPage() {
                   type="button"
                   onClick={() => void handleDelete(t.id)}
                   aria-label="Delete theme"
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                  className="p-1.5 rounded-lg text-text-faint hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -173,10 +171,10 @@ export default function ThemeLibraryPage() {
           type="button"
           onClick={() => void handleAddTheme()}
           disabled={creating}
-          className="rounded-lg border-2 border-dashed border-black/15 dark:border-white/15 flex flex-col items-center justify-center gap-2 p-5 text-zinc-500 hover:border-black/30 dark:hover:border-white/30 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="rounded-2xl border-[1.5px] border-dashed border-[#D3D8D7] dark:border-white/15 flex flex-col items-center justify-center gap-2 p-[18px] min-h-20 text-text-muted hover:border-accent-mid hover:text-accent-text hover:bg-[#FAFCFC] dark:hover:border-white/30 dark:hover:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Plus className="size-6" />
-          <span className="text-sm font-medium">{creating ? "Creating…" : "Add theme"}</span>
+          <Plus className="size-5" />
+          <span className="text-[13.5px] font-semibold">{creating ? "Creating…" : "Add theme"}</span>
         </button>
       </div>
     </PageShell>

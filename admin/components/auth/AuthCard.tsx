@@ -79,7 +79,7 @@ export default function AuthCard({
       <div
         aria-hidden
         className="pointer-events-none absolute -top-16 -right-12 h-[320px] w-[320px] rounded-full opacity-[0.24] blur-[70px] dark:-top-28 dark:-right-20 dark:h-[600px] dark:w-[600px] dark:opacity-[0.35] dark:blur-[120px]"
-        style={{ background: "radial-gradient(circle, #069494 0%, transparent 70%)" }}
+        style={{ background: "radial-gradient(circle, #0F766E 0%, transparent 70%)" }}
       />
       <div className="relative flex min-h-full items-center justify-center px-4 py-12">
         <div

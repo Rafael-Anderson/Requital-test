@@ -91,7 +91,7 @@ export default function CsvImportModal({
         </>
       )}
     >
-        <p className="text-sm text-zinc-500 -mt-2 mb-4">
+        <p className="text-sm text-text-muted -mt-2 mb-4">
           Nothing is saved until you review the preview below and confirm.
         </p>
 
@@ -109,13 +109,13 @@ export default function CsvImportModal({
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
         {preview && (
-          <div className="border border-black/10 rounded-lg dark:border-white/10 overflow-hidden mb-4">
+          <div className="border border-border rounded-lg dark:border-white/10 overflow-hidden mb-4">
             <div className="max-h-72 overflow-y-auto divide-y divide-black/5 dark:divide-white/10">
               {preview.map((row, i) => (
                 <div key={i} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0">
                     <div className="truncate">
-                      Row {row.rowNumber} · {row.kind} · <span className="text-zinc-500">{row.identifier}</span>
+                      Row {row.rowNumber} · {row.kind} · <span className="text-text-muted">{row.identifier}</span>
                     </div>
                     {row.errors.length > 0 && (
                       <ul className="text-xs text-red-600 dark:text-red-400 mt-0.5">
@@ -131,7 +131,7 @@ export default function CsvImportModal({
                 </div>
               ))}
             </div>
-            <div className="px-3 py-2 text-xs text-zinc-500 border-t border-gray-200 dark:border-white/10">
+            <div className="px-3 py-2 text-xs text-text-muted border-t border-gray-200 dark:border-white/10">
               {importable} row{importable === 1 ? "" : "s"} will be imported
               {rejected > 0 ? `, ${rejected} rejected (won't be written)` : ""}.
             </div>

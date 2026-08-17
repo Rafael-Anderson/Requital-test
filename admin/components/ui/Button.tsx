@@ -6,10 +6,10 @@ type Variant = "primary" | "secondary" | "danger" | "ghost";
 const VARIANT_STYLES: Record<Variant, string> = {
   primary: "bg-accent text-white hover:bg-accent-hover",
   secondary:
-    "border border-black/15 dark:border-white/15 hover:bg-black/5 dark:hover:bg-white/10",
+    "border border-border bg-surface text-text-primary hover:bg-page dark:border-white/15 dark:bg-transparent dark:text-inherit dark:hover:bg-white/10",
   danger:
-    "border border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950",
-  ghost: "hover:bg-black/5 dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-400",
+    "border border-[#F3D9D7] bg-surface text-danger-text hover:bg-danger-bg dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-950",
+  ghost: "hover:bg-black/5 dark:hover:bg-white/10 text-text-muted dark:text-zinc-400",
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -35,7 +35,7 @@ export default function Button({
     <button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-[background-color,border-color,color,transform] duration-100 ease-out cursor-pointer active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${sizeClass} ${VARIANT_STYLES[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] font-semibold transition-[background-color,border-color,color,transform] duration-100 ease-out cursor-pointer active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 ${sizeClass} ${VARIANT_STYLES[variant]} ${className}`}
       {...props}
     >
       {loading && <Spinner size="sm" />}

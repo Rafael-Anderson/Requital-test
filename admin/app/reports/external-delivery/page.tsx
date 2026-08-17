@@ -80,12 +80,12 @@ export default function ExternalDeliveryReportPage() {
 
       <div className="flex items-center justify-end mb-3">
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>
@@ -128,19 +128,19 @@ export default function ExternalDeliveryReportPage() {
             rows.map((row) => (
               <TR key={row.id}>
                 <TD className="font-medium">#{row.orderId}</TD>
-                <TD className="text-zinc-500">{row.outletName}</TD>
+                <TD className="text-text-muted">{row.outletName}</TD>
                 <TD>
                   <span>{row.customerName}</span>
-                  <div className="text-xs text-zinc-500">{row.customerPhone}</div>
+                  <div className="text-xs text-text-muted">{row.customerPhone}</div>
                 </TD>
                 <TD>{row.carrier}</TD>
-                <TD className="text-zinc-500">{row.vehicleType ?? "-"}</TD>
-                <TD className="text-zinc-500">{row.destination}</TD>
+                <TD className="text-text-muted">{row.vehicleType ?? "-"}</TD>
+                <TD className="text-text-muted">{row.destination}</TD>
                 <TD>{Number(row.price).toFixed(2)} AED</TD>
                 <TD>
                   <StatusBadge status={row.status} />
                 </TD>
-                <TD className="text-xs text-zinc-500">{new Date(row.createdAt).toLocaleString()}</TD>
+                <TD className="text-xs text-text-muted">{new Date(row.createdAt).toLocaleString()}</TD>
               </TR>
             ))
           )}
@@ -148,7 +148,7 @@ export default function ExternalDeliveryReportPage() {
       </Table>
 
       {rows !== null && rows.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

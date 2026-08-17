@@ -1,11 +1,11 @@
 import Tooltip from "./ui/Tooltip";
 
-// Pill shape adapted from "Status Badge" by Serafim on 21st.dev
-// (https://21st.dev/@serafimcloud/components/status-badge, itself credited
-// there as "inspired by Tremor") — rounded-full bordered pill with a leading
-// dot, swapped in place of the old solid-fill badge. Tremor-specific classes
-// (rounded-tremor-full, text-tremor-label) were translated to this project's
-// plain Tailwind palette rather than pulling in the Tremor preset.
+// Solid-tint status chip (2026-08 admin redesign) — replaces the old
+// bordered-pill-with-leading-dot treatment. Every status this component
+// renders (order status, paymentStatus, externaldelivery.status, open/
+// closed) is bucketed into one of the design system's four chip categories
+// (accent/warning/danger/neutral) rather than getting its own unique color,
+// matching the design handoff's "Status chip" spec.
 //
 // Tooltip copy is keyed by order-status values only (pending/confirmed/...)
 // — this component is also reused for paymentStatus/externaldelivery.status/
@@ -22,31 +22,39 @@ const ORDER_STATUS_TOOLTIPS: Record<string, string> = {
   cancelled: "The order was cancelled and any deducted stock was restored.",
 };
 
-const DOT_STYLES: Record<string, string> = {
-  pending: "bg-amber-500",
-  confirmed: "bg-blue-500",
-  preparing: "bg-indigo-500",
-  out_for_delivery: "bg-purple-500",
-  delivered: "bg-green-500",
-  cancelled: "bg-red-500",
-  unpaid: "bg-amber-500",
-  paid: "bg-green-500",
-  refunded: "bg-zinc-400",
-  open: "bg-green-500",
-  closed: "bg-red-500",
+type ChipCategory = "accent" | "warning" | "danger" | "neutral";
+
+const CHIP_STYLES: Record<ChipCategory, string> = {
+  accent: "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent",
+  warning: "bg-warning-bg text-warning-text dark:bg-amber-500/15 dark:text-amber-400",
+  danger: "bg-danger-bg text-danger-text dark:bg-red-500/15 dark:text-red-400",
+  neutral: "bg-neutral-chip-bg text-neutral-chip-text dark:bg-zinc-800 dark:text-zinc-400",
+};
+
+const STATUS_CATEGORY: Record<string, ChipCategory> = {
+  pending: "warning",
+  unpaid: "warning",
+  confirmed: "accent",
+  preparing: "accent",
+  out_for_delivery: "accent",
+  delivered: "accent",
+  paid: "accent",
+  open: "accent",
   // External delivery (courier handoff) statuses — distinct from the
   // order's own status above, see externaldelivery model.
-  picked_up: "bg-blue-500",
-  failed: "bg-red-500",
+  picked_up: "accent",
+  cancelled: "danger",
+  failed: "danger",
+  refunded: "neutral",
+  closed: "neutral",
 };
 
 export default function StatusBadge({ status }: { status: string }) {
+  const category = STATUS_CATEGORY[status] ?? "neutral";
   const badge = (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs font-medium capitalize text-zinc-700 dark:text-zinc-200">
-      <span
-        className={`size-1.5 rounded-full ${DOT_STYLES[status] ?? "bg-zinc-400"}`}
-        aria-hidden="true"
-      />
+    <span
+      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold capitalize ${CHIP_STYLES[category]}`}
+    >
       {status.replace(/_/g, " ")}
     </span>
   );

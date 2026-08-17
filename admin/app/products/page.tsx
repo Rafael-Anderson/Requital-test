@@ -254,8 +254,8 @@ function InventoryPageContent() {
     <PageShell>
       <BranchBar left={<BackButton href="/" />} />
       <ProductsTabs />
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Products</h1>
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Products</h1>
         <div className="flex items-center gap-2">
           <div className="w-44">
             <Select
@@ -315,7 +315,7 @@ function InventoryPageContent() {
         <select
           value={bulkStatus}
           onChange={(e) => setBulkStatus(e.target.value)}
-          className="border border-black/15 dark:border-white/15 rounded px-2 py-1.5 text-sm dark:bg-zinc-900 cursor-pointer"
+          className="border border-border dark:border-white/15 rounded-[10px] px-2 py-1.5 text-sm bg-surface dark:bg-zinc-900 cursor-pointer"
         >
           <option value="">Set status…</option>
           {Object.keys(PRODUCT_STATUS_LABELS).map((s) => (
@@ -398,22 +398,22 @@ function InventoryPageContent() {
                   <TD>
                     <div className="flex items-center gap-3">
                       <Thumbnail src={p.thumbnail} size="size-10" />
-                      <span className="font-medium">{p.name}</span>
+                      <span className="text-sm font-semibold text-text-primary dark:text-zinc-100">{p.name}</span>
                     </div>
                   </TD>
-                  <TD>{p.price} AED</TD>
-                  <TD className="text-zinc-500">{p.sku}</TD>
-                  <TD className="text-zinc-500">{p.totalSold} sold</TD>
-                  <TD className="text-xs text-zinc-500">
+                  <TD className="text-[13.5px]">{p.price} AED</TD>
+                  <TD className="text-text-muted">{p.sku}</TD>
+                  <TD className="text-text-muted">{p.totalSold} sold</TD>
+                  <TD className="text-xs text-text-muted">
                     {p.collections.length > 0 ? p.collections.map((c) => c.name).join(", ") : "-"}
                   </TD>
                   <TD>
                     <button
                       onClick={() => handleToggleStatus(p)}
-                      className={`text-xs rounded px-2 py-1 border transition-colors cursor-pointer ${
+                      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold transition-colors cursor-pointer ${
                         active
-                          ? "border-green-400 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950"
-                          : "border-red-300 text-red-600 dark:border-red-800 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
+                          ? "bg-accent-tint text-accent-text hover:bg-accent-mid/40 dark:bg-accent/15 dark:text-accent"
+                          : "bg-neutral-chip-bg text-neutral-chip-text hover:bg-border dark:bg-zinc-800 dark:text-zinc-400"
                       }`}
                     >
                       {active ? "Active" : "Disabled"}
@@ -421,18 +421,12 @@ function InventoryPageContent() {
                   </TD>
                   <TD>
                     {p.trackInventory && p.stockQuantity !== null ? (
-                      <span
-                        className={
-                          lowStock
-                            ? "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                            : ""
-                        }
-                      >
+                      <span className={`text-[13.5px] ${lowStock ? "font-bold text-danger-text" : ""}`}>
                         {p.stockQuantity}
-                        {lowStock ? " (low stock)" : ""}
+                        {lowStock ? " (low)" : ""}
                       </span>
                     ) : (
-                      <span className="text-zinc-400">-</span>
+                      <span className="text-text-faint">-</span>
                     )}
                     {/* Bill of Materials — informational only, doesn't gate the
                         Active toggle or checkout (see backend
@@ -453,7 +447,7 @@ function InventoryPageContent() {
                     <Tooltip label={`Edit ${p.name}`}>
                       <Link
                         href={`/products/${p.id}/edit`}
-                        className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                        className="inline-flex p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                         aria-label={`Edit ${p.name}`}
                       >
                         <Pencil className="size-4" />
@@ -465,7 +459,7 @@ function InventoryPageContent() {
                       <Tooltip label={`Adjust stock for ${p.name}`}>
                         <button
                           onClick={() => setAdjustingProduct(p)}
-                          className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                          className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                           aria-label={`Adjust stock for ${p.name}`}
                         >
                           <SlidersHorizontal className="size-4" />
@@ -477,7 +471,7 @@ function InventoryPageContent() {
                     <Tooltip label={`Transfer stock for ${p.name} to another branch`}>
                       <button
                         onClick={() => setTransferringProduct(p)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         aria-label={`Transfer stock for ${p.name}`}
                       >
                         <ArrowLeftRight className="size-4" />
@@ -488,7 +482,7 @@ function InventoryPageContent() {
                     <Tooltip label={`Create a copy of ${p.name}`}>
                       <button
                         onClick={() => handleDuplicate(p)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                         aria-label={`Duplicate ${p.name}`}
                       >
                         <Copy className="size-4" />
@@ -499,7 +493,7 @@ function InventoryPageContent() {
                     <Tooltip label={`Delete ${p.name}. This cannot be undone.`} align="end">
                       <button
                         onClick={() => handleDelete(p)}
-                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                         aria-label={`Delete ${p.name}`}
                       >
                         <Trash2 className="size-4" />

@@ -150,7 +150,7 @@ export default function AccountSetup() {
           )}
         </div>
 
-        <p className="text-sm text-center text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-center text-text-muted dark:text-zinc-400">
           Already have a shop?{" "}
           <Link href="/login" className="underline decoration-transparent hover:decoration-current">
             Sign in
@@ -206,7 +206,7 @@ export default function AccountSetup() {
             </>
           )}
         >
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{form.submitError}</p>
+          <p className="text-sm text-text-secondary dark:text-zinc-400">{form.submitError}</p>
         </Modal>
       )}
 
@@ -220,7 +220,7 @@ export default function AccountSetup() {
         <Modal title={undefined} size="sm" onClose={handleEnterApp} bodyClassName="text-center">
           <CheckCircle2 className="mx-auto size-12 text-accent" />
           <h2 className="mt-4 text-lg font-semibold text-zinc-900 dark:text-white">Welcome, {form.firstName}!</h2>
-          <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1.5 text-sm text-text-muted dark:text-zinc-400">
             Your account is ready. Let&apos;s get you set up.
           </p>
           <Button variant="primary" className="w-full mt-6" onClick={handleEnterApp}>

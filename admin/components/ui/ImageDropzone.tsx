@@ -34,7 +34,7 @@ export default function ImageDropzone({
 
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">{label}</label>
+      <label className="text-[13px] font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">{label}</label>
       <div
         role="button"
         tabIndex={0}
@@ -50,12 +50,12 @@ export default function ImageDropzone({
         }}
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
-        className={`flex items-center gap-4 rounded-lg border border-dashed p-4 cursor-pointer transition-colors ${
+        className={`flex items-center gap-4 rounded-xl border-[1.5px] border-dashed p-4 cursor-pointer transition-colors ${
           error
             ? "border-red-400 dark:border-red-700"
             : dragActive
-              ? "border-black/40 dark:border-white/40 bg-black/5 dark:bg-white/5"
-              : "border-black/20 dark:border-white/20 hover:border-black/35 dark:hover:border-white/35 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+              ? "border-accent-mid bg-[#FAFCFC] dark:bg-white/5"
+              : "border-[#D3D8D7] dark:border-white/20 hover:border-accent-mid hover:bg-[#FAFCFC] dark:hover:bg-white/[0.03]"
         }`}
       >
         <input
@@ -73,13 +73,13 @@ export default function ImageDropzone({
             className="size-16 rounded-md object-cover border border-black/10 dark:border-white/10 shrink-0"
           />
         ) : (
-          <div className="size-16 rounded-md bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-400 shrink-0">
-            <ImagePlus className="size-6" />
+          <div className="size-11 rounded-[10px] bg-neutral-chip-bg dark:bg-white/10 flex items-center justify-center text-text-faint shrink-0">
+            <ImagePlus className="size-5" />
           </div>
         )}
-        <div className="text-sm">
-          <p className="font-medium">{preview ? "Change image" : "Upload an image"}</p>
-          <p className="text-xs text-zinc-500">Drag and drop, or click to browse</p>
+        <div className="text-[13.5px]">
+          <p className="font-semibold text-text-primary dark:text-zinc-100">{preview ? "Change image" : "Upload an image"}</p>
+          <p className="text-[12.5px] text-text-faint">Drag and drop, or click to browse</p>
         </div>
       </div>
       {error && (
@@ -87,7 +87,7 @@ export default function ImageDropzone({
           {error}
         </p>
       )}
-      {hint && !error && <p className="mt-1.5 text-xs text-zinc-400">{hint}</p>}
+      {hint && !error && <p className="mt-1.5 text-xs text-text-faint">{hint}</p>}
     </div>
   );
 }

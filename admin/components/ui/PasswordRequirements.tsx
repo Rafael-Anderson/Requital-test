@@ -14,7 +14,7 @@ export default function PasswordRequirements({ password }: { password: string })
         <li
           key={req.label}
           className={`flex items-center gap-1.5 text-xs ${
-            req.met ? "text-green-600 dark:text-green-400" : "text-zinc-400"
+            req.met ? "text-green-600 dark:text-green-400" : "text-text-faint"
           }`}
         >
           {req.met ? <Check className="size-3.5 shrink-0" /> : <Minus className="size-3.5 shrink-0" />}

@@ -59,7 +59,7 @@ export default function IngredientRecipeEditor({
 
   if (ingredients.length === 0) {
     return (
-      <p className="text-xs text-zinc-400">
+      <p className="text-xs text-text-faint">
         No ingredients yet. Add some in Inventory &gt; Ingredients first.
       </p>
     );
@@ -102,15 +102,15 @@ export default function IngredientRecipeEditor({
             step={1}
             value={row.quantityPerUnit}
             onChange={(e) => updateRow(index, { quantityPerUnit: e.target.value })}
-            className="w-20 h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-2.5 text-sm outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-20 h-9 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2.5 text-sm outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
-          <span className="text-xs text-zinc-400 w-14 shrink-0">{unitFor(row.ingredientId)}</span>
+          <span className="text-xs text-text-faint w-14 shrink-0">{unitFor(row.ingredientId)}</span>
           <Tooltip label="Remove this ingredient from the recipe">
             <button
               type="button"
               onClick={() => removeRow(index)}
               aria-label="Remove ingredient"
-              className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+              className="p-1.5 rounded text-text-faint hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
             >
               <X className="size-4" />
             </button>

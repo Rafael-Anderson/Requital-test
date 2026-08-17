@@ -38,7 +38,7 @@ export default function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex size-8 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black text-sm font-medium cursor-pointer hover:opacity-90 transition-opacity"
+        className="flex size-9 items-center justify-center rounded-full bg-text-primary text-white dark:bg-white dark:text-black text-sm font-semibold cursor-pointer hover:opacity-90 transition-opacity"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -48,29 +48,29 @@ export default function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 w-64 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg shadow-black/10 py-1.5 z-50"
+          className="absolute right-0 top-full mt-2 w-64 rounded-lg border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 py-1.5 z-50"
         >
-          <div className="px-3.5 py-2.5 border-b border-black/10 dark:border-white/10">
+          <div className="px-3.5 py-2.5 border-b border-border dark:border-white/10">
             <p className="text-sm font-medium truncate">{user.name}</p>
-            {user.shopName && <p className="text-xs text-zinc-500 truncate">{user.shopName}</p>}
+            {user.shopName && <p className="text-xs text-text-muted truncate">{user.shopName}</p>}
           </div>
 
-          <div className="px-3.5 py-2.5 border-b border-black/10 dark:border-white/10">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1.5">Language</p>
+          <div className="px-3.5 py-2.5 border-b border-border dark:border-white/10">
+            <p className="text-xs font-medium text-text-faint uppercase tracking-wide mb-1.5">Language</p>
             <div className="space-y-0.5">
               <div className="flex items-center justify-between rounded px-1.5 py-1 text-sm">
                 <span>🇬🇧 English</span>
                 <Check className="size-3.5 text-accent-text dark:text-accent" />
               </div>
-              <div className="flex items-center justify-between rounded px-1.5 py-1 text-sm text-zinc-400 cursor-not-allowed">
+              <div className="flex items-center justify-between rounded px-1.5 py-1 text-sm text-text-faint cursor-not-allowed">
                 <span>🇦🇪 Arabic</span>
                 <span className="text-xs">Coming soon</span>
               </div>
             </div>
           </div>
 
-          <div className="px-3.5 py-2.5 border-b border-black/10 dark:border-white/10">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1.5">Theme</p>
+          <div className="px-3.5 py-2.5 border-b border-border dark:border-white/10">
+            <p className="text-xs font-medium text-text-faint uppercase tracking-wide mb-1.5">Theme</p>
             <SegmentedToggle
               value={isDark ? "dark" : "light"}
               onChange={(v) => setTheme(v === "dark")}

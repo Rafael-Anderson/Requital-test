@@ -14,7 +14,7 @@ import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
 
 const STATUS_CLASS: Record<DraftOrderStatus, string> = {
-  OPEN: "text-zinc-600 dark:text-zinc-400",
+  OPEN: "text-text-secondary dark:text-zinc-400",
   INVOICE_SENT: "text-amber-600 dark:text-amber-400",
   COMPLETED: "text-green-600 dark:text-green-400",
   CANCELLED: "text-red-600 dark:text-red-400",
@@ -86,12 +86,12 @@ export default function DraftOrdersPage() {
                   <Link href={`/orders/draft-orders/${d.id}`} className="font-medium hover:underline">
                     {d.customerName}
                   </Link>
-                  <div className="text-xs text-zinc-500">{d.customerPhone}</div>
+                  <div className="text-xs text-text-muted">{d.customerPhone}</div>
                 </TD>
-                <TD className="text-zinc-500">{d.items.length} item{d.items.length === 1 ? "" : "s"}</TD>
+                <TD className="text-text-muted">{d.items.length} item{d.items.length === 1 ? "" : "s"}</TD>
                 <TD>{d.total.toFixed(2)} AED</TD>
                 <TD className={`font-medium ${STATUS_CLASS[d.status]}`}>{DRAFT_ORDER_STATUS_LABELS[d.status]}</TD>
-                <TD className="text-xs text-zinc-500">{new Date(d.createdAt).toLocaleDateString()}</TD>
+                <TD className="text-xs text-text-muted">{new Date(d.createdAt).toLocaleDateString()}</TD>
               </TR>
             ))
           )}

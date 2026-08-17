@@ -33,7 +33,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
     <div>
       {label && (
         <div className="mb-1.5 flex items-center gap-1">
-          <label htmlFor={selectId} className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          <label htmlFor={selectId} className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">
             {label}
           </label>
           {tooltip && (
@@ -49,12 +49,12 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
           id={selectId}
           multiple={multiple}
           aria-invalid={!!error}
-          className={`flex h-9 w-full rounded-lg border bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow appearance-none disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`flex h-9 w-full rounded-[10px] border bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none cursor-pointer transition-shadow appearance-none disabled:cursor-not-allowed disabled:opacity-50 ${
             multiple ? "" : "pr-8"
           } ${
             error
               ? "border-red-400 dark:border-red-700 text-red-700 dark:text-red-400 focus:border-red-400 focus:ring-[3px] focus:ring-red-500/20"
-              : "border-black/15 dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              : "border-border dark:border-white/15 focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           } ${className}`}
           {...props}
         >

@@ -17,17 +17,17 @@ export default function BusinessSettingsSubNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="sm:w-48 shrink-0 flex sm:flex-col gap-1">
+    <nav className="sm:w-[220px] shrink-0 flex sm:flex-col gap-0.5">
       {ITEMS.map(({ href, label }) => {
         const active = pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
-            className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            className={`px-3.5 py-2.5 rounded-[10px] text-[13.5px] font-bold transition-colors ${
               active
-                ? "bg-accent/10 text-accent-text dark:text-accent"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
+                ? "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent"
+                : "text-text-secondary dark:text-zinc-400 hover:bg-neutral-chip-bg dark:hover:bg-white/10"
             }`}
           >
             {label}

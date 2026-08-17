@@ -112,24 +112,24 @@ export default function OutletPickupTab({
       </Card>
 
       {!shop ? (
-        <p className="text-sm text-zinc-500">Loading pickup settings…</p>
+        <p className="text-sm text-text-muted">Loading pickup settings…</p>
       ) : (
         <>
           <div className="space-y-4">
             <Card>
               <h3 className="text-sm font-semibold mb-1">Pickup Settings</h3>
-              <p className="text-xs text-zinc-400 mb-4">
+              <p className="text-xs text-text-faint mb-4">
                 These apply shop-wide, across every outlet, not just this one.
               </p>
 
               <div className="space-y-6">
                 <div>
-                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Payment Methods</p>
+                  <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">Payment Methods</p>
                   <PaymentMethodsEditor context="pickup" value={paymentMethods} onChange={setPaymentMethods} />
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
+                  <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">
                     Opening Hours for Pickup
                   </p>
                   <BusinessHoursEditor value={hours} onChange={setHours} />

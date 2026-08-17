@@ -159,15 +159,15 @@ export default function MenuBuilder() {
   }
 
   if (items === null) {
-    return <p className="text-sm text-zinc-400">Loading…</p>;
+    return <p className="text-sm text-text-faint">Loading…</p>;
   }
 
   return (
     <div className="space-y-3">
       {items.length === 0 && editingId === null ? (
-        <p className="text-sm text-zinc-400">No menu items yet. The storefront falls back to an automatic list of top-level collections.</p>
+        <p className="text-sm text-text-faint">No menu items yet. The storefront falls back to an automatic list of top-level collections.</p>
       ) : (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 divide-y divide-black/5 dark:divide-white/10 overflow-hidden">
+        <div className="rounded-lg border border-border dark:border-white/10 divide-y divide-black/5 dark:divide-white/10 overflow-hidden">
           {items.map((item) => (
             <div
               key={item.id}
@@ -179,12 +179,12 @@ export default function MenuBuilder() {
                 draggedId === item.id ? "opacity-40" : ""
               }`}
             >
-              <span className="cursor-grab active:cursor-grabbing text-zinc-400 shrink-0" aria-hidden>
+              <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
                 <GripVertical className="size-4" />
               </span>
               <div className="min-w-0 flex-1">
                 <span className="text-sm font-medium">{item.label}</span>
-                <span className="text-zinc-400 ml-2 text-xs">
+                <span className="text-text-faint ml-2 text-xs">
                   {item.type === "LINK"
                     ? item.collection?.name ?? "Link"
                     : `Dropdown · ${item.collections.length} collection${item.collections.length === 1 ? "" : "s"}`}
@@ -194,7 +194,7 @@ export default function MenuBuilder() {
                 <Tooltip label={`Edit ${item.label}`}>
                   <button
                     onClick={() => startEdit(item)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                     aria-label={`Edit ${item.label}`}
                   >
                     <Pencil className="size-4" />
@@ -203,7 +203,7 @@ export default function MenuBuilder() {
                 <Tooltip label={`Remove ${item.label} from the menu`} align="end">
                   <button
                     onClick={() => handleDelete(item)}
-                    className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                    className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                     aria-label={`Remove ${item.label}`}
                   >
                     <Trash2 className="size-4" />
@@ -216,7 +216,7 @@ export default function MenuBuilder() {
       )}
 
       {editingId !== null ? (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-3 space-y-3">
+        <div className="rounded-lg border border-border dark:border-white/10 p-3 space-y-3">
           <Input label="Label" value={label} onChange={(e) => setLabel(e.target.value)} />
           <SegmentedToggle
             value={type}
@@ -246,7 +246,7 @@ export default function MenuBuilder() {
                             setDropdownCollections((prev) => prev.filter((x) => x.collectionId !== c.collectionId))
                           }
                           aria-label={`Remove ${c.name}`}
-                          className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                          className="text-text-faint hover:text-red-600 cursor-pointer"
                         >
                           <X className="size-3.5" />
                         </button>

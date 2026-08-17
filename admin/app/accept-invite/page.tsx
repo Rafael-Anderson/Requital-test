@@ -82,7 +82,7 @@ function AcceptInviteForm() {
           </form>
         )}
 
-        <p className="text-sm text-center text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-center text-text-muted dark:text-zinc-400">
           <Link href="/login" className="underline decoration-transparent hover:decoration-current">
             Back to sign in
           </Link>

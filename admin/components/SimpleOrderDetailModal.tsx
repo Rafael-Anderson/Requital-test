@@ -114,7 +114,7 @@ export default function SimpleOrderDetailModal({
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="text-sm text-zinc-500">
+          <div className="text-sm text-text-muted">
             <div className="font-medium text-zinc-800 dark:text-zinc-200">{order.customerName}</div>
             <div>{order.customerPhone}</div>
             <div className="mt-1">Placed {relativeTime(order.createdAt)}</div>
@@ -131,7 +131,7 @@ export default function SimpleOrderDetailModal({
                       {item.productName}
                       {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                     </div>
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-xs text-text-muted">
                       {item.quantity} × {item.priceAtPurchase} AED
                     </div>
                   </div>

@@ -78,7 +78,7 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
   }
 
   if (invoices === null) {
-    return <p className="text-sm text-zinc-400">Loading…</p>;
+    return <p className="text-sm text-text-faint">Loading…</p>;
   }
 
   const byType = (type: InvoiceType) => invoices.find((i) => i.type === type);
@@ -119,9 +119,9 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
               Print / Download PDF
             </Button>
           </div>
-          <div className="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white">
+          <div className="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-surface">
             {loadingHtml ? (
-              <p className="text-sm text-zinc-400 p-4">Loading preview…</p>
+              <p className="text-sm text-text-faint p-4">Loading preview…</p>
             ) : (
               <iframe
                 title={`${TYPE_LABEL[selected.type]} preview`}

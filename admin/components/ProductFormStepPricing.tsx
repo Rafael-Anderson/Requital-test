@@ -84,7 +84,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
               </div>
               {form.trackInventory && (
                 <div>
-                  <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+                  <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
                     Quantity by branch
                   </label>
                   <OutletQuantityTable
@@ -117,7 +117,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
           form.setUsesIngredients(false);
         }}
       >
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-text-faint">
           Ingredients consumed to make one unit of this product. Used as the default for every variant that
           doesn&apos;t have its own override (set per-variant in the Variants section on the next step).
         </p>

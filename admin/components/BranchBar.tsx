@@ -11,17 +11,30 @@ import OutletSwitcher from "./OutletSwitcher";
 // `left` lets a page's BackButton share this same row instead of stacking
 // above it as its own full-width block (the two used to be separate
 // siblings, which left a whole empty row of vertical space between the
-// back button and the page title). Non-admins get no OutletSwitcher, but
-// still need `left` rendered — so the early return renders `left` alone
-// rather than dropping the row entirely.
-export default function BranchBar({ left }: { left?: ReactNode } = {}) {
+// back button and the page title). `right` lets a page-specific control
+// (Dashboard/Reports' DateRangePicker) sit alongside the OutletSwitcher in
+// that same row, matching the design handoff's back-row layout, instead of
+// stacking as its own row below the page title. Non-admins get no
+// OutletSwitcher, but still need `left`/`right` rendered — so the early
+// return renders those alone rather than dropping the row entirely.
+export default function BranchBar({ left, right }: { left?: ReactNode; right?: ReactNode } = {}) {
   const { user } = useAuth();
-  if (!user || user.role !== "admin") return left ? <div className="mb-4">{left}</div> : null;
+  if (!user || user.role !== "admin") {
+    return left || right ? (
+      <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+        {left}
+        {right}
+      </div>
+    ) : null;
+  }
 
   return (
-    <div className="flex items-center justify-between mb-4">
+    <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
       {left}
-      <OutletSwitcher />
+      <div className="flex items-center gap-2.5">
+        <OutletSwitcher />
+        {right}
+      </div>
     </div>
   );
 }

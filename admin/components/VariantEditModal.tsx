@@ -169,19 +169,19 @@ export default function VariantEditModal({
       <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <div className="relative">
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Image</label>
+            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Image</label>
             <button
               type="button"
               onClick={() => setPickerOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={pickerOpen}
-              className="size-16 rounded-md border-2 border-dashed border-black/15 dark:border-white/15 flex items-center justify-center overflow-hidden cursor-pointer hover:border-accent/60 transition-colors"
+              className="size-16 rounded-md border-2 border-dashed border-border dark:border-white/15 flex items-center justify-center overflow-hidden cursor-pointer hover:border-accent/60 transition-colors"
             >
               {selectedImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={resolveImageUrl(selectedImageUrl) ?? ""} alt="" className="w-full h-full object-cover" />
               ) : (
-                <Plus className="size-5 text-zinc-400" />
+                <Plus className="size-5 text-text-faint" />
               )}
             </button>
 
@@ -195,7 +195,7 @@ export default function VariantEditModal({
                 <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
                 <div
                   role="menu"
-                  className="absolute z-20 top-full left-0 mt-1.5 w-64 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg p-3"
+                  className="absolute z-20 top-full left-0 mt-1.5 w-64 rounded-lg border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg p-3"
                 >
                   <button
                     type="button"
@@ -220,7 +220,7 @@ export default function VariantEditModal({
 
                   {images.length > 0 && (
                     <>
-                      <p className="text-xs text-zinc-400 mt-2 mb-1.5 px-2 border-t border-black/5 dark:border-white/10 pt-2">
+                      <p className="text-xs text-text-faint mt-2 mb-1.5 px-2 border-t border-black/5 dark:border-white/10 pt-2">
                         Or choose from existing photos:
                       </p>
                       <div className="flex flex-wrap gap-1.5 px-2">
@@ -232,7 +232,7 @@ export default function VariantEditModal({
                             setPickerOpen(false);
                           }}
                           aria-label="No image"
-                          className={`size-10 rounded border-2 flex items-center justify-center text-[9px] text-zinc-400 cursor-pointer transition-colors ${
+                          className={`size-10 rounded border-2 flex items-center justify-center text-[9px] text-text-faint cursor-pointer transition-colors ${
                             selectedImageUrl === null
                               ? "border-accent"
                               : "border-transparent hover:border-black/20 dark:hover:border-white/20"
@@ -305,7 +305,7 @@ export default function VariantEditModal({
 
           {product.trackInventory && !product.usesIngredients && (
             <div>
-              <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+              <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
                 Inventory
               </label>
               {variant.stockByOutlet ? (
@@ -315,16 +315,16 @@ export default function VariantEditModal({
                   onChangeValue={(outletId, value) => setStockValues((v) => ({ ...v, [outletId]: value }))}
                 />
               ) : (
-                <p className="text-xs text-zinc-400">Stock quantities load once opened from the edit page.</p>
+                <p className="text-xs text-text-faint">Stock quantities load once opened from the edit page.</p>
               )}
             </div>
           )}
 
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
               Recipe override
             </label>
-            <p className="text-xs text-zinc-400 mb-1.5">
+            <p className="text-xs text-text-faint mb-1.5">
               Leave empty to use the product&apos;s default recipe for this variant. Add rows here only if this
               variant consumes a different amount (e.g. Large uses more than Small).
             </p>
@@ -337,7 +337,7 @@ export default function VariantEditModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

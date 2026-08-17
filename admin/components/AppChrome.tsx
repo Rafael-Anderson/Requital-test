@@ -33,7 +33,12 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       <EmailVerificationBanner />
       <NewOrderBanner />
       <CommandPalette />
-      <main className="p-6">{children}</main>
+      {/* 1600px/48px-side/28px-top content wrapper from the 2026-08 admin
+          redesign — applied once here rather than per-page, since every page
+          renders through this shared chrome (see CLAUDE.md's Page width
+          convention note, which still governs which PageShell variant a page
+          itself picks inside this wrapper). */}
+      <main className="mx-auto max-w-[1600px] px-12 pt-7 pb-16">{children}</main>
     </>
   );
 }

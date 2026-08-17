@@ -138,7 +138,7 @@ export default function ThemeSiteSettingsPage() {
       <div className="space-y-4">
       <Card>
         <h3 className="text-sm font-semibold mb-1">Header &amp; Footer Preview</h3>
-        <p className="text-xs text-zinc-400 mb-4">
+        <p className="text-xs text-text-faint mb-4">
           Reflects your logo, announcement bar, and footer content as you edit below. Colors and layout come from
           Appearance Color and Theme &gt; Advanced.
         </p>
@@ -173,11 +173,11 @@ export default function ThemeSiteSettingsPage() {
             rows={4}
           />
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
               Site Header Notification Text
             </label>
             <TagInput tags={notificationText} onChange={setNotificationText} />
-            <p className="mt-1.5 text-xs text-zinc-400">Shown as an announcement bar above the storefront header.</p>
+            <p className="mt-1.5 text-xs text-text-faint">Shown as an announcement bar above the storefront header.</p>
             <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
               <div className="flex items-center gap-2">
                 <Toggle checked={announcementBarEnabled} onChange={setAnnouncementBarEnabled} />
@@ -195,7 +195,7 @@ export default function ThemeSiteSettingsPage() {
             )}
           </div>
           <div>
-            <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Contact Number</label>
+            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Contact Number</label>
             <div className="space-y-2">
               {(showMultipleNumbers ? contactNumbers : contactNumbers.slice(0, 1)).map((number, i) => (
                 <input
@@ -205,7 +205,7 @@ export default function ThemeSiteSettingsPage() {
                     setContactNumbers((prev) => prev.map((n, idx) => (idx === i ? e.target.value : n)))
                   }
                   placeholder="+1-555-123-4567"
-                  className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                  className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
                 />
               ))}
             </div>
@@ -271,7 +271,7 @@ export default function ThemeSiteSettingsPage() {
                 }}
                 hint="Recommended size: Square/Vertical logo 300 x 150 px, Horizontal logo 300 x 90 px (WxH)"
               />
-              <p className="mt-1.5 text-xs text-zinc-400">Shown in the footer&apos;s brand column. Falls back to your regular logo if left unset.</p>
+              <p className="mt-1.5 text-xs text-text-faint">Shown in the footer&apos;s brand column. Falls back to your regular logo if left unset.</p>
             </div>
           </div>
         </Card>
@@ -279,7 +279,7 @@ export default function ThemeSiteSettingsPage() {
         <Card className="space-y-4">
           <div>
             <h3 className="text-sm font-semibold mb-1">Footer</h3>
-            <p className="text-xs text-zinc-400">Shown in the footer&apos;s brand column, alongside your logo and TRN (if set).</p>
+            <p className="text-xs text-text-faint">Shown in the footer&apos;s brand column, alongside your logo and TRN (if set).</p>
           </div>
           <Textarea
             label="Footer Description"
@@ -293,7 +293,7 @@ export default function ThemeSiteSettingsPage() {
         <Card className="space-y-4">
           <div>
             <h3 className="text-sm font-semibold mb-1">Homepage Content</h3>
-            <p className="text-xs text-zinc-400">Used by the Classic and Slideshow homepage layouts (see Theme &gt; Advanced).</p>
+            <p className="text-xs text-text-faint">Used by the Classic and Slideshow homepage layouts (see Theme &gt; Advanced).</p>
           </div>
           <Input
             label="Hero / Banner Text"

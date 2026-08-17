@@ -58,7 +58,7 @@ interface ReviewRow {
 }
 
 const SELECT_CLASS =
-  "flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
+  "flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 function KeywordChips({
   label,
@@ -80,8 +80,8 @@ function KeywordChips({
   }
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1">{label}</label>
-      <p className="text-xs text-zinc-400 mb-2">{hint}</p>
+      <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1">{label}</label>
+      <p className="text-xs text-text-faint mb-2">{hint}</p>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {values.map((v) => (
           <span
@@ -94,14 +94,14 @@ function KeywordChips({
                 type="button"
                 onClick={() => onChange(values.filter((x) => x !== v))}
                 aria-label={`Remove ${v}`}
-                className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                className="text-text-faint hover:text-red-600 cursor-pointer"
               >
                 ×
               </button>
             </Tooltip>
           </span>
         ))}
-        {values.length === 0 && <span className="text-xs text-zinc-400">None</span>}
+        {values.length === 0 && <span className="text-xs text-text-faint">None</span>}
       </div>
       <input
         type="text"
@@ -114,7 +114,7 @@ function KeywordChips({
           }
         }}
         placeholder="Add a keyword and press Enter"
-        className="w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+        className="w-full border border-border dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
       />
     </div>
   );
@@ -283,7 +283,7 @@ export default function ScanToStockPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Scan to Stock</h1>
       </div>
-      <p className="text-sm text-zinc-500 -mt-2 mb-4">
+      <p className="text-sm text-text-muted -mt-2 mb-4">
         Photograph a supplier invoice or receipt. OCR pulls out candidate line items for you to review before
         anything is added to stock.
       </p>
@@ -313,7 +313,7 @@ export default function ScanToStockPage() {
             />
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+                <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
                   Default outlet
                 </label>
                 <select
@@ -330,7 +330,7 @@ export default function ScanToStockPage() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+                <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
                   Unmatched items default to
                 </label>
                 <div className="flex items-center gap-2 h-9">
@@ -376,7 +376,7 @@ export default function ScanToStockPage() {
 
           {rows.length === 0 ? (
             <Card>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-text-muted">
                 No candidate lines survived filtering. Check Scan settings, or use the raw OCR text above to add
                 items in the normal Inventory pages.
               </p>
@@ -388,17 +388,17 @@ export default function ScanToStockPage() {
                   <Card key={row.key} data-row-key={row.key} className={row.skip ? "opacity-50" : ""}>
                     <div className="flex items-start gap-3 mb-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-zinc-400 truncate" title={row.rawLine}>
+                        <p className="text-xs text-text-faint truncate" title={row.rawLine}>
                           {row.rawLine}
                         </p>
                         <input
                           type="text"
                           value={row.name}
                           onChange={(e) => updateRow(row.key, { name: e.target.value })}
-                          className="mt-1 w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm font-medium dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                          className="mt-1 w-full border border-border dark:border-white/15 rounded px-2.5 py-1.5 text-sm font-medium dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                         />
                       </div>
-                      <label className="flex items-center gap-1.5 text-xs text-zinc-500 shrink-0 pt-1 cursor-pointer">
+                      <label className="flex items-center gap-1.5 text-xs text-text-muted shrink-0 pt-1 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={row.skip}
@@ -411,7 +411,7 @@ export default function ScanToStockPage() {
                     {!row.skip && (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div>
-                          <label className="text-xs text-zinc-500 block mb-1">Match / create as</label>
+                          <label className="text-xs text-text-muted block mb-1">Match / create as</label>
                           <select
                             value={row.matchedId === null ? `new:${row.targetType}` : `${row.targetType}:${row.matchedId}`}
                             onChange={(e) => {
@@ -474,7 +474,7 @@ export default function ScanToStockPage() {
                             if (!matchedProduct?.hasVariants) return null;
                             return (
                               <div>
-                                <label className="text-xs text-zinc-500 block mb-1">Variant</label>
+                                <label className="text-xs text-text-muted block mb-1">Variant</label>
                                 <select
                                   value={row.variantId ?? ""}
                                   onChange={(e) =>
@@ -494,30 +494,30 @@ export default function ScanToStockPage() {
                           })()}
 
                         <div>
-                          <label className="text-xs text-zinc-500 block mb-1">Cost price (AED)</label>
+                          <label className="text-xs text-text-muted block mb-1">Cost price (AED)</label>
                           <input
                             type="number"
                             min="0"
                             step="0.01"
                             value={row.costPrice}
                             onChange={(e) => updateRow(row.key, { costPrice: e.target.value })}
-                            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                            className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
                           />
                         </div>
 
                         <div>
-                          <label className="text-xs text-zinc-500 block mb-1">Quantity to add</label>
+                          <label className="text-xs text-text-muted block mb-1">Quantity to add</label>
                           <input
                             type="number"
                             min="0"
                             value={row.quantity}
                             onChange={(e) => updateRow(row.key, { quantity: e.target.value })}
-                            className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                            className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
                           />
                         </div>
 
                         <div>
-                          <label className="text-xs text-zinc-500 block mb-1">Outlet</label>
+                          <label className="text-xs text-text-muted block mb-1">Outlet</label>
                           <select
                             value={row.outletId}
                             onChange={(e) => updateRow(row.key, { outletId: e.target.value ? Number(e.target.value) : "" })}
@@ -535,18 +535,18 @@ export default function ScanToStockPage() {
                         {row.matchedId === null && row.targetType === "product" && (
                           <>
                             <div>
-                              <label className="text-xs text-zinc-500 block mb-1">New product price (AED)</label>
+                              <label className="text-xs text-text-muted block mb-1">New product price (AED)</label>
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
                                 value={row.newPrice}
                                 onChange={(e) => updateRow(row.key, { newPrice: e.target.value })}
-                                className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                                className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
                               />
                             </div>
                             <div>
-                              <label className="text-xs text-zinc-500 block mb-1">New product collection</label>
+                              <label className="text-xs text-text-muted block mb-1">New product collection</label>
                               <select
                                 value={row.newCollectionId}
                                 onChange={(e) =>
@@ -567,13 +567,13 @@ export default function ScanToStockPage() {
 
                         {row.matchedId === null && row.targetType === "ingredient" && (
                           <div>
-                            <label className="text-xs text-zinc-500 block mb-1">New ingredient unit</label>
+                            <label className="text-xs text-text-muted block mb-1">New ingredient unit</label>
                             <input
                               type="text"
                               placeholder="e.g. stems, grams"
                               value={row.newUnit}
                               onChange={(e) => updateRow(row.key, { newUnit: e.target.value })}
-                              className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                              className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
                             />
                           </div>
                         )}

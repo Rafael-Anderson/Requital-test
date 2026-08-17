@@ -124,10 +124,10 @@ export default function DraftOrderDetailPage() {
 
             <Card className="space-y-3">
               <p className="text-sm">
-                <span className="text-zinc-500">Customer:</span> {draft.customerName} ({draft.customerPhone})
+                <span className="text-text-muted">Customer:</span> {draft.customerName} ({draft.customerPhone})
               </p>
               <p className="text-sm">
-                <span className="text-zinc-500">Branch:</span> {draft.outlet.name}
+                <span className="text-text-muted">Branch:</span> {draft.outlet.name}
               </p>
               <div className="divide-y divide-black/5 dark:divide-white/10">
                 {draft.items.map((item) => (
@@ -165,7 +165,7 @@ export default function DraftOrderDetailPage() {
                     <input
                       readOnly
                       value={paymentLinkUrl}
-                      className="flex-1 h-8 rounded border border-black/15 dark:border-white/15 bg-transparent px-2 text-xs"
+                      className="flex-1 h-8 rounded border border-border dark:border-white/15 bg-transparent px-2 text-xs"
                     />
                     <Button size="sm" variant="secondary" onClick={() => copyLink(paymentLinkUrl)}>
                       Copy

@@ -65,7 +65,7 @@ export default function FailedJobsPage() {
   return (
     <PageShell>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Failed Jobs</h1>
+        <h1 className="text-lg font-bold text-text-primary dark:text-zinc-50">Failed Jobs</h1>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 
@@ -97,19 +97,19 @@ export default function FailedJobsPage() {
             jobs.map((j) => (
               <TR key={j.id}>
                 <TD className="font-medium">{j.type}</TD>
-                <TD className="text-xs text-zinc-500 max-w-md truncate" title={j.lastError ?? ""}>
+                <TD className="text-xs text-text-muted max-w-md truncate" title={j.lastError ?? ""}>
                   {j.lastError ?? "-"}
                 </TD>
-                <TD className="text-zinc-500">
+                <TD className="text-text-muted">
                   {j.attempts}/{j.maxAttempts}
                 </TD>
-                <TD className="text-xs text-zinc-500">{new Date(j.updatedAt).toLocaleString()}</TD>
+                <TD className="text-xs text-text-muted">{new Date(j.updatedAt).toLocaleString()}</TD>
                 <TD>
                   <Tooltip label="Retry this job now">
                     <button
                       onClick={() => handleRetry(j)}
                       disabled={busyId === j.id}
-                      className="p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       aria-label={`Retry job ${j.id}`}
                     >
                       <RotateCcw className="size-4" />
@@ -121,7 +121,7 @@ export default function FailedJobsPage() {
                     <button
                       onClick={() => handleDismiss(j)}
                       disabled={busyId === j.id}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       aria-label={`Dismiss job ${j.id}`}
                     >
                       <X className="size-4" />

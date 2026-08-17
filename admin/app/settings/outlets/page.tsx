@@ -46,7 +46,7 @@ export default function SettingsOutletsPage() {
   return (
     <PageShell>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold">Branches</h2>
+        <h2 className="text-lg font-bold text-text-primary dark:text-zinc-50">Branches</h2>
         <Button variant="primary" onClick={() => setShowCreateModal(true)}>
           <Plus className="size-4 inline -mt-0.5 mr-1" />
           New outlet
@@ -79,19 +79,19 @@ export default function SettingsOutletsPage() {
                 <TD>
                   <StatusBadge status={o.isOpen ? "open" : "closed"} />
                   {o.closedOverride && (
-                    <span className="ml-1.5 text-xs text-zinc-400">(manual)</span>
+                    <span className="ml-1.5 text-xs text-text-faint">(manual)</span>
                   )}
                 </TD>
-                <TD className="text-zinc-500">{locationLabel(o)}</TD>
-                <TD className="text-zinc-500">
+                <TD className="text-text-muted">{locationLabel(o)}</TD>
+                <TD className="text-text-muted">
                   {o.deliveryEnabled ? `Yes · ${o.deliveryRadiusKm ?? "?"}km` : "No"}
                 </TD>
-                <TD className="text-zinc-500">{o.pickupEnabled ? "Yes" : "No"}</TD>
+                <TD className="text-text-muted">{o.pickupEnabled ? "Yes" : "No"}</TD>
                 <TD>
                   <Tooltip label={`Edit ${o.name}`}>
                     <Link
                       href={`/settings/outlets/${o.id}/edit`}
-                      className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                      className="inline-flex p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                       aria-label={`Edit ${o.name}`}
                     >
                       <Pencil className="size-4" />
@@ -102,7 +102,7 @@ export default function SettingsOutletsPage() {
                   <Tooltip label={`Delete ${o.name}. This cannot be undone.`} align="end">
                     <button
                       onClick={() => handleDelete(o)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                       aria-label={`Delete ${o.name}`}
                     >
                       <Trash2 className="size-4" />

@@ -89,13 +89,13 @@ export default function MapPickerLeaflet({ latitude, longitude, onPick, classNam
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Search an address"
-          className="flex h-9 w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+          className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         />
         <button
           type="button"
           onClick={handleSearch}
           disabled={searching}
-          className="shrink-0 h-9 px-3 rounded-lg text-sm cursor-pointer disabled:opacity-50 border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200"
+          className="shrink-0 h-9 px-3 rounded-lg text-sm cursor-pointer disabled:opacity-50 border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200"
         >
           {searching ? "Searching…" : "Search"}
         </button>
@@ -104,7 +104,7 @@ export default function MapPickerLeaflet({ latitude, longitude, onPick, classNam
         center={position}
         zoom={latitude !== null ? 15 : 11}
         scrollWheelZoom
-        className="w-full h-64 rounded-lg overflow-hidden border border-black/15 dark:border-white/15"
+        className="w-full h-64 rounded-lg overflow-hidden border border-border dark:border-white/15"
       >
         <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} />
         <Marker

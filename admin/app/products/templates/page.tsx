@@ -56,7 +56,7 @@ export default function TemplatesPage() {
           </Button>
         </Link>
       </div>
-      <p className="text-sm text-zinc-500 mb-4">
+      <p className="text-sm text-text-muted mb-4">
         Marketing groupings that cut across collections, like &quot;Summer Sale&quot; or &quot;New Arrivals&quot;.
       </p>
 
@@ -93,8 +93,8 @@ export default function TemplatesPage() {
             templates.map((c) => (
               <TR key={c.id}>
                 <TD className="font-medium">{c.title}</TD>
-                <TD className="text-zinc-500">{TEMPLATE_TYPE_LABELS[c.type]}</TD>
-                <TD className="text-zinc-500">{c.productCount}</TD>
+                <TD className="text-text-muted">{TEMPLATE_TYPE_LABELS[c.type]}</TD>
+                <TD className="text-text-muted">{c.productCount}</TD>
                 <TD>
                   <span
                     className={`text-xs rounded px-2 py-1 border ${
@@ -110,7 +110,7 @@ export default function TemplatesPage() {
                   <Tooltip label={`Edit ${c.title}`}>
                     <Link
                       href={`/products/templates/${c.id}/edit`}
-                      className="inline-flex p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                      className="inline-flex p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                       aria-label={`Edit ${c.title}`}
                     >
                       <Pencil className="size-4" />
@@ -121,7 +121,7 @@ export default function TemplatesPage() {
                   <Tooltip label={`Delete ${c.title}. This cannot be undone.`} align="end">
                     <button
                       onClick={() => handleDelete(c)}
-                      className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                      className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                       aria-label={`Delete ${c.title}`}
                     >
                       <Trash2 className="size-4" />

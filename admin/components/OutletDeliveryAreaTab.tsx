@@ -48,7 +48,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-sm font-semibold">Delivery Zones</h3>
-          <p className="text-xs text-zinc-400 mt-0.5">
+          <p className="text-xs text-text-faint mt-0.5">
             Flat-fee named areas, additive to the radius set on the Delivery tab.
           </p>
         </div>
@@ -78,7 +78,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
             </tr>
           ) : zones.length === 0 ? (
             <tr>
-              <td colSpan={6} className="text-center text-sm text-zinc-400 py-8">
+              <td colSpan={6} className="text-center text-sm text-text-faint py-8">
                 No delivery zones yet
               </td>
             </tr>
@@ -98,8 +98,8 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
                   </button>
                 </TD>
                 <TD className="font-medium">{z.name}</TD>
-                <TD className="text-zinc-500">{z.fee} AED</TD>
-                <TD className="text-zinc-500">{z.minOrderAmount} AED</TD>
+                <TD className="text-text-muted">{z.fee} AED</TD>
+                <TD className="text-text-muted">{z.minOrderAmount} AED</TD>
                 <TD>
                   <button
                     onClick={() => setEditingZone(z)}

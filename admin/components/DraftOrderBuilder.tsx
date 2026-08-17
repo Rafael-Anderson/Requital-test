@@ -198,19 +198,19 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
     <Card className="space-y-3">
       <h3 className="text-sm font-semibold">Order summary</h3>
       <div>
-        <p className="text-xs text-zinc-500">Customer</p>
+        <p className="text-xs text-text-muted">Customer</p>
         <p className="text-sm font-medium truncate">{customerName.trim() || "No customer yet"}</p>
-        {customerPhone.trim() && <p className="text-xs text-zinc-500">{customerPhone}</p>}
+        {customerPhone.trim() && <p className="text-xs text-text-muted">{customerPhone}</p>}
       </div>
 
       <div className="border-t border-black/5 dark:border-white/10 pt-3">
         {items.length === 0 ? (
-          <p className="text-xs text-zinc-400">No items added yet</p>
+          <p className="text-xs text-text-faint">No items added yet</p>
         ) : (
           <ul className="space-y-1.5">
             {items.map((item, index) => (
               <li key={index} className="flex justify-between gap-2 text-sm">
-                <span className="text-zinc-600 dark:text-zinc-300 truncate">
+                <span className="text-text-secondary dark:text-zinc-300 truncate">
                   {item.quantity} × {item.productName}
                 </span>
                 <span className="shrink-0">{(Number(item.price) * item.quantity).toFixed(2)} AED</span>
@@ -222,7 +222,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
 
       <div className="border-t border-black/5 dark:border-white/10 pt-3 space-y-1">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-zinc-500">Subtotal</span>
+          <span className="text-text-muted">Subtotal</span>
           <span>{subtotal.toFixed(2)} AED</span>
         </div>
         {discountAmount > 0 && (
@@ -349,7 +349,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                       min="1"
                       value={item.quantity}
                       onChange={(e) => updateItem(index, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                      className="w-16 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                      className="w-16 border border-border dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                     />
                   </TD>
                   <TD>
@@ -359,7 +359,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                       step="0.01"
                       value={item.price}
                       onChange={(e) => updateItem(index, { price: e.target.value })}
-                      className="w-20 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+                      className="w-20 border border-border dark:border-white/15 rounded px-2 py-1 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
                     />
                   </TD>
                   <TD>
@@ -368,7 +368,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                         type="button"
                         onClick={() => removeItem(index)}
                         aria-label="Remove item"
-                        className="p-1.5 rounded text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                        className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
                       >
                         <Trash2 className="size-4" />
                       </button>

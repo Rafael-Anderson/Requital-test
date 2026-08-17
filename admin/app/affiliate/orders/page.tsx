@@ -91,9 +91,9 @@ export default function AffiliateOrdersPage() {
             orders.map((o) => (
               <TR key={o.id}>
                 <TD className="font-medium">
-                  #{o.orderId} <span className="text-zinc-500 font-normal">{o.customerName}</span>
+                  #{o.orderId} <span className="text-text-muted font-normal">{o.customerName}</span>
                 </TD>
-                <TD className="text-zinc-500">
+                <TD className="text-text-muted">
                   {o.affiliateName} <span className="text-xs">({o.code})</span>
                 </TD>
                 <TD>{o.orderTotal.toFixed(2)}</TD>
@@ -110,7 +110,7 @@ export default function AffiliateOrdersPage() {
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-xs text-zinc-400">-</span>
+                    <span className="text-xs text-text-faint">-</span>
                   )}
                 </TD>
               </TR>
@@ -120,7 +120,7 @@ export default function AffiliateOrdersPage() {
       </Table>
 
       {orders !== null && orders.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

@@ -29,8 +29,8 @@ function VerifyEmailContent() {
   return (
     <AuthCard heading="Email verification">
       <div className="text-center space-y-4">
-        {status === "pending" && <p className="text-zinc-500 dark:text-zinc-400">Verifying…</p>}
-        {status === "success" && <p className="text-zinc-600 dark:text-zinc-400">Your email is verified.</p>}
+        {status === "pending" && <p className="text-text-muted dark:text-zinc-400">Verifying…</p>}
+        {status === "success" && <p className="text-text-secondary dark:text-zinc-400">Your email is verified.</p>}
         {status === "error" && <p className="text-red-600 dark:text-red-400">{error}</p>}
         <Link href="/" className="inline-block text-accent hover:underline">
           Continue to Requital

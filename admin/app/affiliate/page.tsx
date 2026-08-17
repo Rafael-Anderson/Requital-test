@@ -12,14 +12,15 @@ import Card from "@/components/ui/Card";
 import StatCard from "@/components/ui/StatCard";
 import AffiliateFormModal from "@/components/AffiliateFormModal";
 import PageShell from "@/components/ui/PageShell";
+import BackButton from "@/components/ui/BackButton";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const STATUS_CLASS: Record<string, string> = {
-  active: "text-green-600 dark:text-green-400",
-  inactive: "text-zinc-400",
-  blocked: "text-red-600 dark:text-red-400",
+  active: "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent",
+  inactive: "bg-neutral-chip-bg text-neutral-chip-text dark:bg-zinc-800 dark:text-zinc-400",
+  blocked: "bg-danger-bg text-danger-text dark:bg-red-900 dark:text-red-200",
 };
 
 export default function AffiliatePage() {
@@ -64,19 +65,23 @@ export default function AffiliatePage() {
 
   return (
     <PageShell>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
-          <input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search name or mobile…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-          />
+      <BackButton href="/" />
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Affiliate</h1>
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search name or mobile…"
+              className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            />
+          </div>
+          <Button variant="primary" onClick={() => setEditing("new")}>
+            Add User
+          </Button>
         </div>
-        <Button variant="primary" onClick={() => setEditing("new")}>
-          Add User
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -115,19 +120,19 @@ export default function AffiliatePage() {
           <CardSkeleton />
         ) : (
           <Card>
-            <p className="text-sm text-zinc-500 mb-3">Affiliate Code Status ({summary.codeStatus.approved + summary.codeStatus.pending + summary.codeStatus.blocked})</p>
+            <p className="text-[13.5px] text-text-muted mb-4">Affiliate Code Status ({summary.codeStatus.approved + summary.codeStatus.pending + summary.codeStatus.blocked})</p>
             <div className="grid grid-cols-3 text-center">
               <div>
-                <div className="text-2xl font-semibold text-green-600 dark:text-green-400">{summary.codeStatus.approved}</div>
-                <div className="text-xs text-zinc-500 mt-1">Approved</div>
+                <div className="text-[22px] font-extrabold text-success dark:text-green-400">{summary.codeStatus.approved}</div>
+                <div className="text-xs text-text-faint mt-1">Approved</div>
               </div>
               <div>
-                <div className="text-2xl font-semibold text-amber-600 dark:text-amber-400">{summary.codeStatus.pending}</div>
-                <div className="text-xs text-zinc-500 mt-1">Pending</div>
+                <div className="text-[22px] font-extrabold text-warning-text dark:text-amber-400">{summary.codeStatus.pending}</div>
+                <div className="text-xs text-text-faint mt-1">Pending</div>
               </div>
               <div>
-                <div className="text-2xl font-semibold text-red-600 dark:text-red-400">{summary.codeStatus.blocked}</div>
-                <div className="text-xs text-zinc-500 mt-1">Blocked</div>
+                <div className="text-[22px] font-extrabold text-danger-text dark:text-red-400">{summary.codeStatus.blocked}</div>
+                <div className="text-xs text-text-faint mt-1">Blocked</div>
               </div>
             </div>
           </Card>
@@ -167,12 +172,18 @@ export default function AffiliatePage() {
           ) : (
             affiliates.map((a) => (
               <TR key={a.id}>
-                <TD className="font-medium">{a.name}</TD>
-                <TD className="text-zinc-500">{a.mobile}</TD>
-                <TD className={`capitalize font-medium ${STATUS_CLASS[a.status] ?? ""}`}>{a.status}</TD>
-                <TD>{a.codesCount}</TD>
-                <TD>{a.ordersCount}</TD>
-                <TD className="text-xs text-zinc-500">{new Date(a.createdAt).toLocaleDateString()}</TD>
+                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">{a.name}</TD>
+                <TD className="text-text-muted text-[13.5px]">{a.mobile}</TD>
+                <TD>
+                  <span
+                    className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold capitalize ${STATUS_CLASS[a.status] ?? "bg-neutral-chip-bg text-neutral-chip-text"}`}
+                  >
+                    {a.status}
+                  </span>
+                </TD>
+                <TD className="text-[13.5px]">{a.codesCount}</TD>
+                <TD className="text-[13.5px]">{a.ordersCount}</TD>
+                <TD className="text-xs text-text-faint">{new Date(a.createdAt).toLocaleDateString()}</TD>
                 <TD>
                   <Button size="sm" variant="secondary" onClick={() => setEditing(a)}>
                     Edit
@@ -185,7 +196,7 @@ export default function AffiliatePage() {
       </Table>
 
       {affiliates !== null && affiliates.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-[13px] text-text-faint">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

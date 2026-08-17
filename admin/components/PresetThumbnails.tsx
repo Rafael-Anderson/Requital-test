@@ -90,9 +90,9 @@ export function TopBarLayoutThumbnail({ layout }: { layout: TopBarLayout }) {
     return (
       <div className={FRAME}>
         <div className="flex items-center justify-between h-6">
-          <Menu className="size-4 text-zinc-400" />
+          <Menu className="size-4 text-text-faint" />
           <div className="h-3 w-10 rounded bg-accent/30" />
-          <ShoppingCart className="size-4 text-zinc-400" />
+          <ShoppingCart className="size-4 text-text-faint" />
         </div>
         <div className="flex-1" />
       </div>
@@ -147,7 +147,7 @@ export function CartLayoutThumbnail({ layout }: { layout: CartLayout }) {
     return (
       <div className={`${FRAME} !flex-row !p-0 overflow-hidden`}>
         <div className="flex-1 bg-zinc-100 dark:bg-zinc-800" />
-        <div className="w-8 bg-white dark:bg-zinc-900 border-l border-black/10 dark:border-white/10 flex flex-col gap-1 p-1">
+        <div className="w-8 bg-surface dark:bg-zinc-900 border-l border-border dark:border-white/10 flex flex-col gap-1 p-1">
           {[0, 1].map((i) => (
             <div key={i} className="h-2.5 rounded bg-accent/25" />
           ))}

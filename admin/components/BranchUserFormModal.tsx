@@ -77,11 +77,11 @@ export default function BranchUserFormModal({
           </Button>
         )}
       >
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-text-secondary dark:text-zinc-400">
           {invited.email} will receive an email with a link to set their own password and activate the account.
         </p>
         {invited.devInviteLink && (
-          <p className="text-xs text-zinc-400 break-all mt-3">
+          <p className="text-xs text-text-faint break-all mt-3">
             Dev-only (no email sending yet):{" "}
             <a href={invited.devInviteLink} className="text-accent hover:underline">
               {invited.devInviteLink}
@@ -96,7 +96,7 @@ export default function BranchUserFormModal({
     <Modal onClose={onClose} size="sm" title="New staff account">
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
-        <p className="text-sm text-zinc-500 -mt-2 mb-4">
+        <p className="text-sm text-text-muted -mt-2 mb-4">
           A real, separate login for this staff member. The role picked below decides what they can
           see and do.
         </p>
@@ -130,7 +130,7 @@ export default function BranchUserFormModal({
                 onChange={setOutletId}
                 options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
               />
-              <p className="mt-1.5 text-xs text-zinc-400">
+              <p className="mt-1.5 text-xs text-text-faint">
                 Scoped to this outlet only. Can&apos;t see or manage any other branch&apos;s orders or inventory.
               </p>
             </div>
@@ -152,13 +152,13 @@ export default function BranchUserFormModal({
               required
             />
           ) : (
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-text-faint">
               An invite link will be emailed to this address so they can set their own password.
             </p>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

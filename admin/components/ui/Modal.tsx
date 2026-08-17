@@ -83,7 +83,7 @@ export default function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`flex w-full flex-col rounded-lg bg-white dark:bg-zinc-900 border dark:border-white/10 max-h-[90vh] ${
+        className={`flex w-full flex-col rounded-2xl bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 max-h-[90vh] ${
           closing ? "modal-out" : "modal-in"
         } ${SIZE_CLASS[size]} ${panelClassName}`}
       >

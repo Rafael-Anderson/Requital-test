@@ -20,7 +20,7 @@ const LANGUAGE_LABELS: Record<string, string> = { en: "English", ar: "Arabic" };
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">{label}</label>
+      <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">{label}</label>
       {children}
     </div>
   );
@@ -154,7 +154,7 @@ export default function OutletBasicInfoTab({
             disabled
           />
 
-          <p className="sm:col-span-2 text-xs text-zinc-400 -mt-2">
+          <p className="sm:col-span-2 text-xs text-text-faint -mt-2">
             Country, Time Zone, Currency, and Default Language are shop-wide. Change them under
             Settings → Business Settings, not per outlet.
           </p>
@@ -172,13 +172,13 @@ export default function OutletBasicInfoTab({
 
       <Card>
         <h3 className="text-sm font-semibold mb-1">Order Setting</h3>
-        <p className="text-xs text-zinc-400 mb-4">
+        <p className="text-xs text-text-faint mb-4">
           These apply shop-wide, across every outlet, not just this one.
         </p>
 
         <div className="space-y-5">
           <div>
-            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
+            <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">
               Select the dates customers can place orders for
             </p>
             <div className="space-y-2">

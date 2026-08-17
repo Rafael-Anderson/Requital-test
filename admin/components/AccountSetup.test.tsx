@@ -92,7 +92,7 @@ describe("AccountSetup wizard", () => {
     const user = userEvent.setup();
     renderWizard();
     const passwordInput = screen.getByLabelText("Password");
-    expect(screen.getByText("At least 8 characters").className).toMatch(/text-zinc-400/);
+    expect(screen.getByText("At least 8 characters").className).toMatch(/text-text-faint/);
 
     await user.type(passwordInput, "Password1!");
     await waitFor(() => expect(screen.getByText("At least 8 characters").className).toMatch(/text-green/));

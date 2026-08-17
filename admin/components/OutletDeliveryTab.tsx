@@ -149,24 +149,24 @@ export default function OutletDeliveryTab({
       </Card>
 
       {!shop ? (
-        <p className="text-sm text-zinc-500">Loading delivery settings…</p>
+        <p className="text-sm text-text-muted">Loading delivery settings…</p>
       ) : (
         <>
           <div className="space-y-4">
             <Card>
               <h3 className="text-sm font-semibold mb-1">Delivery Settings</h3>
-              <p className="text-xs text-zinc-400 mb-4">
+              <p className="text-xs text-text-faint mb-4">
                 These apply shop-wide, across every outlet, not just this one.
               </p>
 
               <div className="space-y-6">
                 <div>
-                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Payment Methods</p>
+                  <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">Payment Methods</p>
                   <PaymentMethodsEditor context="delivery" value={paymentMethods} onChange={setPaymentMethods} />
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">
+                  <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">
                     Opening Hours for Delivery
                   </p>
                   <BusinessHoursEditor value={hours} onChange={setHours} />
@@ -202,7 +202,7 @@ export default function OutletDeliveryTab({
 
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Estimated Delivery Time</h3>
-                  <p className="text-xs text-zinc-400 mb-2">Shown to customers on the order-tracking page.</p>
+                  <p className="text-xs text-text-faint mb-2">Shown to customers on the order-tracking page.</p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Input
                       label="From"

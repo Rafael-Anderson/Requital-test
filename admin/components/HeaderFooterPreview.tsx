@@ -35,7 +35,7 @@ export default function HeaderFooterPreview({
   const barText = notificationText.join("   •   ");
 
   return (
-    <div className="rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+    <div className="rounded-lg border border-border dark:border-white/10 overflow-hidden">
       {announcementBarEnabled && barText && (
         <div
           className={`text-[10px] text-center py-1 px-3 whitespace-nowrap overflow-hidden ${announcementBarScrolling ? "text-ellipsis" : ""}`}
@@ -60,8 +60,8 @@ export default function HeaderFooterPreview({
         </div>
       </div>
 
-      <div className="p-3 bg-white dark:bg-zinc-900 text-center">
-        <p className="text-[10px] text-zinc-400">Page content…</p>
+      <div className="p-3 bg-surface dark:bg-zinc-900 text-center">
+        <p className="text-[10px] text-text-faint">Page content…</p>
       </div>
 
       <div className="px-4 py-4" style={{ background: footerBg, color: footerFg }}>

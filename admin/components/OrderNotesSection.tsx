@@ -38,10 +38,10 @@ export default function OrderNotesSection({
   }
 
   return (
-    <section className="border border-black/10 rounded-lg p-4 dark:border-white/10">
+    <section className="border border-border rounded-lg p-4 dark:border-white/10">
       <h3 className="font-medium mb-3">
         Internal notes
-        <span className="ml-1.5 text-xs font-normal text-zinc-400">staff-only, never shown to the customer</span>
+        <span className="ml-1.5 text-xs font-normal text-text-faint">staff-only, never shown to the customer</span>
       </h3>
 
       <div className="flex gap-2 mb-3">
@@ -59,13 +59,13 @@ export default function OrderNotesSection({
       </div>
 
       {notes.length === 0 ? (
-        <p className="text-xs text-zinc-400">No notes yet.</p>
+        <p className="text-xs text-text-faint">No notes yet.</p>
       ) : (
         <div className="space-y-3">
           {notes.map((n) => (
             <div key={n.id} className="text-sm border-t border-gray-200 pt-2 dark:border-white/10 first:border-t-0 first:pt-0">
               <p className="whitespace-pre-wrap">{n.note}</p>
-              <p className="text-xs text-zinc-400 mt-1">
+              <p className="text-xs text-text-faint mt-1">
                 {n.author.name} · {new Date(n.createdAt).toLocaleString()}
               </p>
             </div>

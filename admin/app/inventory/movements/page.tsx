@@ -68,7 +68,7 @@ export default function StockMovementsPage() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as StockMovementType | "")}
-          className="border border-black/15 dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
+          className="border border-border dark:border-white/15 rounded px-3 py-1.5 text-sm dark:bg-zinc-900 transition-colors hover:border-black/30 dark:hover:border-white/30 cursor-pointer"
         >
           <option value="">All movements</option>
           <option value="ADJUSTMENT">Adjustments only</option>
@@ -113,21 +113,21 @@ export default function StockMovementsPage() {
                     <>
                       <div className="flex items-center gap-1.5">
                         <span className="font-medium">{m.ingredientName}</span>
-                        <span className="inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-black/5 dark:bg-white/10 text-zinc-500">
+                        <span className="inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-black/5 dark:bg-white/10 text-text-muted">
                           Ingredient
                         </span>
                       </div>
-                      <div className="text-xs text-zinc-500">{m.ingredientUnit}</div>
+                      <div className="text-xs text-text-muted">{m.ingredientUnit}</div>
                     </>
                   ) : (
                     <>
                       <div className="font-medium">{m.productName}</div>
-                      {m.variantLabel && <div className="text-xs text-zinc-500">{m.variantLabel}</div>}
+                      {m.variantLabel && <div className="text-xs text-text-muted">{m.variantLabel}</div>}
                     </>
                   )}
                 </TD>
-                <TD className="text-zinc-500">{TYPE_LABEL[m.type]}</TD>
-                <TD className="text-xs text-zinc-500">
+                <TD className="text-text-muted">{TYPE_LABEL[m.type]}</TD>
+                <TD className="text-xs text-text-muted">
                   {m.type === "ADJUSTMENT"
                     ? (m.reason && ADJUSTMENT_REASON_LABELS[m.reason]) ?? "-"
                     : m.toOutletName
@@ -143,9 +143,9 @@ export default function StockMovementsPage() {
                 <TD className={m.delta < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}>
                   {deltaLabel(m)}
                 </TD>
-                <TD className="text-zinc-500">{m.type === "ADJUSTMENT" ? m.outletName : m.outletName}</TD>
-                <TD className="text-zinc-500">{m.actorName}</TD>
-                <TD className="text-xs text-zinc-500">{new Date(m.createdAt).toLocaleString()}</TD>
+                <TD className="text-text-muted">{m.type === "ADJUSTMENT" ? m.outletName : m.outletName}</TD>
+                <TD className="text-text-muted">{m.actorName}</TD>
+                <TD className="text-xs text-text-muted">{new Date(m.createdAt).toLocaleString()}</TD>
               </TR>
             ))
           )}
@@ -153,7 +153,7 @@ export default function StockMovementsPage() {
       </Table>
 
       {movements !== null && movements.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

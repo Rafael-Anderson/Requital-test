@@ -38,11 +38,11 @@ export default function ForgotPasswordPage() {
       <div className="space-y-4">
         {sent ? (
           <div className="space-y-3 text-center">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm text-text-secondary dark:text-zinc-400">
               If an account exists for that email, a reset link is on its way.
             </p>
             {devResetLink && (
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 break-all">
+              <p className="text-xs text-text-faint dark:text-zinc-500 break-all">
                 Dev-only (no email sending yet):{" "}
                 <a href={devResetLink} className="text-accent hover:underline">
                   {devResetLink}
@@ -68,7 +68,7 @@ export default function ForgotPasswordPage() {
           </form>
         )}
 
-        <p className="text-sm text-center text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-center text-text-muted dark:text-zinc-400">
           <Link href="/login" className="underline decoration-transparent hover:decoration-current">
             Back to sign in
           </Link>

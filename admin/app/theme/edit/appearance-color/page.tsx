@@ -84,7 +84,7 @@ export default function ThemeAppearanceColorPage() {
       <div className="space-y-6">
         <Card>
           <h3 className="text-sm font-semibold text-accent-text dark:text-accent mb-1">Brand Colors</h3>
-          <p className="text-xs text-zinc-400 mb-3">
+          <p className="text-xs text-text-faint mb-3">
             Your primary color drives the storefront's buttons and accents everywhere below that isn't overridden
             individually.
           </p>
@@ -92,14 +92,14 @@ export default function ThemeAppearanceColorPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm">Primary color</p>
-                <p className="text-xs text-zinc-400">Any color, not a locked palette.</p>
+                <p className="text-xs text-text-faint">Any color, not a locked palette.</p>
               </div>
               <ColorPicker value={brandColor} onChange={setBrandColor} />
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm">Secondary color</p>
-                <p className="text-xs text-zinc-400">Optional. Derived from primary if unset.</p>
+                <p className="text-xs text-text-faint">Optional. Derived from primary if unset.</p>
               </div>
               <ColorPicker value={secondaryColor || brandColor} onChange={setSecondaryColor} />
             </div>
@@ -108,7 +108,7 @@ export default function ThemeAppearanceColorPage() {
             <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">{brandContrastWarning}</p>
           )}
           <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-zinc-400">Button text auto-picks for contrast:</span>
+            <span className="text-xs text-text-faint">Button text auto-picks for contrast:</span>
             <span
               className="inline-flex items-center h-6 px-2 rounded text-xs font-medium"
               style={{ background: brandColor, color: brandTextColor }}
@@ -153,8 +153,8 @@ export default function ThemeAppearanceColorPage() {
         </div>
 
         <div>
-          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">Live preview</p>
-          <div className="max-w-sm rounded-lg border border-black/10 dark:border-white/10 overflow-hidden">
+          <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">Live preview</p>
+          <div className="max-w-sm rounded-lg border border-border dark:border-white/10 overflow-hidden">
             <div
               className="flex items-center justify-between px-4 py-3"
               style={{ background: headerBg, color: headerFg }}
@@ -162,8 +162,8 @@ export default function ThemeAppearanceColorPage() {
               <span className="font-semibold">Your Shop</span>
               <ShoppingCart className="size-4" />
             </div>
-            <div className="p-4 bg-white">
-              <div className="rounded-lg border border-black/10 p-3 max-w-[180px]">
+            <div className="p-4 bg-surface">
+              <div className="rounded-lg border border-border p-3 max-w-[180px]">
                 <div className="aspect-square rounded-md bg-black/5 mb-2" />
                 <p className="text-sm font-medium" style={{ color: nameColor }}>
                   Sample Product

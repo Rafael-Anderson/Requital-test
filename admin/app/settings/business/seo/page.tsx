@@ -56,14 +56,14 @@ export default function SeoSettingsPage() {
     }
   }
 
-  if (!seo) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (!seo) return <p className="text-sm text-text-muted">Loading…</p>;
 
   return (
     <PageShell variant="form">
       <div className="space-y-4">
       <Card className="space-y-4">
-        <h3 className="text-sm font-semibold">Search & social preview</h3>
-        <p className="text-xs text-zinc-400">
+        <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Search & social preview</h3>
+        <p className="text-xs text-text-faint">
           Controls what shows up in Google search results and when a link to your storefront is shared on
           WhatsApp, Instagram, etc. Falls back to your shop name if left blank.
         </p>
@@ -86,14 +86,14 @@ export default function SeoSettingsPage() {
           preview={ogImagePreview}
           onFileSelected={handleOgImageSelected}
         />
-        <p className="text-xs text-zinc-400 -mt-2">
+        <p className="text-xs text-text-faint -mt-2">
           Falls back to your Theme banner or logo if left unset. Never blank on a shared link.
         </p>
       </Card>
 
       <Card className="space-y-4">
-        <h3 className="text-sm font-semibold">Keywords</h3>
-        <p className="text-xs text-zinc-400">
+        <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Keywords</h3>
+        <p className="text-xs text-text-faint">
           Low impact on modern search rankings, but included for parity. Comma-separated, optional.
         </p>
         <Input

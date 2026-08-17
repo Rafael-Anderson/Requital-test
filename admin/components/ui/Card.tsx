@@ -1,20 +1,16 @@
 import type { HTMLAttributes } from "react";
 
-// Section-container shade — same border/background pairing as StatCard and
-// the outlet Table wrapper, so panels read consistently across the app: a
-// visible border in light mode (bg-white sits flush against the white page)
-// and a genuinely distinct zinc-900-on-near-black shade in dark mode.
-// shadow-sm shadow-black/5 is the same soft-elevation treatment already used
-// on every form field in the app (Input, Textarea, the various FIELD_CLASS
-// inputs) — border alone was too close in value against the white page
-// background to read as a distinct panel; the shadow is what actually
-// separates it, same as it does for those fields. Barely visible in dark
-// mode (shadow-black/5 against a near-black page), which is fine — dark
-// mode's zinc-900-on-black contrast already reads fine without it.
+// Section-container shade — 2026-08 admin redesign: 16px radius, 1px border,
+// no shadow at rest (the page background is now a soft gray, #F7F8F8, so a
+// plain white card with a 1px border already reads as a distinct panel —
+// the old shadow-as-separator crutch from a white-on-white page is no
+// longer needed in light mode). Dark mode keeps its existing zinc-900-on-
+// near-black shade + soft shadow untouched, since the redesign brief
+// doesn't cover dark mode.
 export default function Card({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-sm shadow-black/5 p-6 ${className}`}
+      className={`rounded-2xl border border-border bg-surface p-6 dark:border-white/10 dark:bg-zinc-900 dark:shadow-sm dark:shadow-black/5 ${className}`}
       {...props}
     />
   );

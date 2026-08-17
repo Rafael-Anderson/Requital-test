@@ -16,7 +16,7 @@ import PageShell from "@/components/ui/PageShell";
 
 const STATUS_STYLE: Record<GiftCard["status"], string> = {
   active: "border-green-400 text-green-700 dark:text-green-400",
-  redeemed: "border-zinc-300 text-zinc-500 dark:border-zinc-700",
+  redeemed: "border-zinc-300 text-text-muted dark:border-zinc-700",
   expired: "border-amber-400 text-amber-700 dark:text-amber-400",
   disabled: "border-red-300 text-red-600 dark:border-red-800 dark:text-red-400",
 };
@@ -76,7 +76,7 @@ export default function GiftCardsPage() {
       <BackButton href="/products" />
       <ProductsTabs />
       <h1 className="text-2xl font-semibold mb-1">Gift Cards</h1>
-      <p className="text-sm text-zinc-500 mb-4">
+      <p className="text-sm text-text-muted mb-4">
         Cards purchased on your storefront show up automatically. Issue one by hand below for service credit or a
         promotion.
       </p>
@@ -126,17 +126,17 @@ export default function GiftCardsPage() {
             cards.map((c) => (
               <TR key={c.id}>
                 <TD className="font-mono text-xs">{c.code}</TD>
-                <TD className="text-zinc-500">{c.remainingBalance}</TD>
-                <TD className="text-zinc-500">{c.initialValue}</TD>
+                <TD className="text-text-muted">{c.remainingBalance}</TD>
+                <TD className="text-text-muted">{c.initialValue}</TD>
                 <TD>
                   <span className={`text-xs rounded px-2 py-1 border capitalize ${STATUS_STYLE[c.status]}`}>{c.status}</span>
                 </TD>
-                <TD className="text-zinc-500">{c.purchasedByCustomer?.name ?? "-"}</TD>
+                <TD className="text-text-muted">{c.purchasedByCustomer?.name ?? "-"}</TD>
                 <TD>
                   {(c.status === "active" || c.status === "disabled") && (
                     <button
                       onClick={() => toggleDisabled(c)}
-                      className="text-xs text-zinc-500 hover:text-accent-text dark:hover:text-accent cursor-pointer"
+                      className="text-xs text-text-muted hover:text-accent-text dark:hover:text-accent cursor-pointer"
                     >
                       {c.status === "disabled" ? "Enable" : "Disable"}
                     </button>

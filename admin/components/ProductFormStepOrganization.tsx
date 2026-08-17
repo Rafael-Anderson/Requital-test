@@ -30,14 +30,14 @@ export default function ProductFormStepOrganization({
         <Thumbnail src={sortedImages[0]?.url} size="size-14" />
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{form.name || "Untitled product"}</p>
-          <p className="text-sm text-zinc-500">{form.price ? `AED ${form.price}` : "No price set"}</p>
+          <p className="text-sm text-text-muted">{form.price ? `AED ${form.price}` : "No price set"}</p>
         </div>
       </Card>
 
       <Card className="space-y-4">
         <h3 className="text-sm font-semibold">Organization</h3>
         <div>
-          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Collections</label>
+          <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Collections</label>
           <CollectionCheckboxTree
             collections={form.collections ?? []}
             selected={form.collectionIds}
@@ -54,7 +54,7 @@ export default function ProductFormStepOrganization({
           <Input label="Vendor" value={form.vendor} onChange={(e) => form.setVendor(e.target.value)} />
         </div>
         <div>
-          <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">Tags</label>
+          <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Tags</label>
           <div className="flex flex-wrap gap-1.5 mb-2">
             {form.tags.map((tag) => (
               <span
@@ -67,7 +67,7 @@ export default function ProductFormStepOrganization({
                     type="button"
                     onClick={() => form.removeTag(tag)}
                     aria-label={`Remove ${tag}`}
-                    className="text-zinc-400 hover:text-red-600 cursor-pointer"
+                    className="text-text-faint hover:text-red-600 cursor-pointer"
                   >
                     ×
                   </button>
@@ -86,7 +86,7 @@ export default function ProductFormStepOrganization({
               }
             }}
             placeholder="Add a tag and press Enter"
-            className="w-full border border-black/15 dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+            className="w-full border border-border dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
           />
         </div>
       </Card>
@@ -128,7 +128,7 @@ export default function ProductFormStepOrganization({
         <details>
           <summary className="text-sm font-medium cursor-pointer select-none">
             Search engine listing{" "}
-            <span className="text-xs font-normal text-zinc-400">(optional, sensible defaults apply)</span>
+            <span className="text-xs font-normal text-text-faint">(optional, sensible defaults apply)</span>
           </summary>
           <div className="mt-4 space-y-4">
             <Input
@@ -150,7 +150,7 @@ export default function ProductFormStepOrganization({
               placeholder="Falls back to a truncated product description"
               maxLength={500}
               rows={3}
-              className="flex w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow outline-none placeholder:text-zinc-400 resize-y focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+              className="flex w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 transition-shadow outline-none placeholder:text-text-faint resize-y focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             />
           </div>
         </details>

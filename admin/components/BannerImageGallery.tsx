@@ -57,7 +57,7 @@ export default function BannerImageGallery({
 
   return (
     <div>
-      <label className="text-sm font-medium text-zinc-600 dark:text-zinc-400 block mb-1.5">
+      <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
         Homepage Banners
       </label>
       {images.length > 0 && (
@@ -69,9 +69,9 @@ export default function BannerImageGallery({
               onDragStart={() => setDragIndex(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(i)}
-              className="flex items-center gap-3 rounded-lg border border-black/10 dark:border-white/10 p-2 cursor-grab"
+              className="flex items-center gap-3 rounded-lg border border-border dark:border-white/10 p-2 cursor-grab"
             >
-              <span className="text-zinc-400 shrink-0">
+              <span className="text-text-faint shrink-0">
                 <GripVertical className="size-4" />
               </span>
               <div className="size-14 shrink-0 rounded-md overflow-hidden bg-black/5 dark:bg-white/5">
@@ -82,14 +82,14 @@ export default function BannerImageGallery({
                 value={img.linkUrl ?? ""}
                 onChange={(e) => handleLinkChange(i, e.target.value)}
                 placeholder="Optional link (e.g. /templates/sale). Leave blank for no click-through"
-                className="flex-1 h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+                className="flex-1 h-9 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20"
               />
               <Tooltip label="Remove this banner">
                 <button
                   type="button"
                   onClick={() => handleRemove(i)}
                   aria-label="Remove banner"
-                  className="p-1.5 rounded text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer shrink-0"
+                  className="p-1.5 rounded text-text-faint hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer shrink-0"
                 >
                   <X className="size-4" />
                 </button>

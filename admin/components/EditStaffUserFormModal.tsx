@@ -62,7 +62,7 @@ export default function EditStaffUserFormModal({
       <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-          <p className="text-xs text-zinc-400 -mt-2">{user.email}</p>
+          <p className="text-xs text-text-faint -mt-2">{user.email}</p>
 
           <Select label="Role" value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
             {ROLE_OPTIONS.map((r) => (
@@ -82,7 +82,7 @@ export default function EditStaffUserFormModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-white dark:bg-zinc-900">
+        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>

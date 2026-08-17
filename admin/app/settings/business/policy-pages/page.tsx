@@ -78,8 +78,8 @@ export default function PolicyPagesSettingsPage() {
 
         <Card className="space-y-4">
           <div>
-            <h3 className="text-sm font-semibold">{POLICY_PAGE_LABELS[selected]}</h3>
-            <p className="text-xs text-zinc-400 mt-1">
+            <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">{POLICY_PAGE_LABELS[selected]}</h3>
+            <p className="text-xs text-text-faint mt-1">
               Publicly viewable on your storefront once saved, and linked from the footer&apos;s Useful Links column.
               Left blank, the footer simply won&apos;t link to it: no broken or empty page.
             </p>

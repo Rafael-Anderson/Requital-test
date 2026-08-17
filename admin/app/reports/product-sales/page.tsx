@@ -95,12 +95,12 @@ export default function ProductSaleReportPage() {
 
       <div className="flex items-center justify-end mb-3">
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search…"
-            className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>
@@ -167,7 +167,7 @@ export default function ProductSaleReportPage() {
                 <TD>{row.orderCount}</TD>
                 <TD>{row.totalQuantity}</TD>
                 <TD>{row.totalSalePrice.toFixed(2)} AED</TD>
-                <TD className="text-zinc-500">{row.deliveryFee.toFixed(2)}</TD>
+                <TD className="text-text-muted">{row.deliveryFee.toFixed(2)}</TD>
               </TR>
             ))
           )}
@@ -175,7 +175,7 @@ export default function ProductSaleReportPage() {
       </Table>
 
       {rows !== null && rows.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-zinc-500">
+        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

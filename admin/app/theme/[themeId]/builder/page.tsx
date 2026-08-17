@@ -40,7 +40,7 @@ export default function ThemeBuilderPage() {
     <div className="flex h-screen flex-col">
       <BuilderTopBar editor={editor} />
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-black/10 dark:border-white/10">
+        <div className="flex w-64 shrink-0 flex-col overflow-hidden border-r border-border dark:border-white/10">
           <ModeSwitcher mode={editor.editorMode} onChange={editor.setEditorMode} />
           <div className="flex-1 overflow-y-auto">
             {editor.editorMode === "sections" && <SectionTree editor={editor} />}
@@ -51,7 +51,7 @@ export default function ThemeBuilderPage() {
         <div className="min-w-0 flex-1">
           <PreviewFrame editor={editor} shop={shop} />
         </div>
-        <div className="w-80 shrink-0 overflow-y-auto border-l border-black/10 dark:border-white/10">
+        <div className="w-80 shrink-0 overflow-y-auto border-l border-border dark:border-white/10">
           <SettingsPanel editor={editor} />
         </div>
       </div>
