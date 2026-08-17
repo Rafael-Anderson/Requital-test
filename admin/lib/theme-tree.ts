@@ -46,26 +46,34 @@ export function insertNodeInTree(blocks: ThemeBlock[], parentId: string | null, 
   });
 }
 
+// Shared by every flat "reorder a sibling list by dnd-kit's returned id
+// order" call site in the admin theme builder — this exact
+// map-by-id/filter-unknown/reassign-sequential-order shape used to be
+// duplicated between this file's own reorderSiblingsInTree (below) and
+// useThemeEditor.ts's reorderSections (top-level sections aren't part of
+// the ThemeBlock tree, so they can't just call reorderSiblingsInTree
+// directly, but they need the exact same reordering rule). orderedIds must
+// be the full sibling id list in its new order (what @dnd-kit/sortable
+// hands back) — any id not present in `items` is dropped.
+export function reorderById<T extends { id: string; order: number }>(items: T[], orderedIds: string[]): T[] {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return orderedIds
+    .map((id) => byId.get(id))
+    .filter((item): item is T => item !== undefined)
+    .map((item, i) => ({ ...item, order: i }));
+}
+
 // parentId null reorders `blocks` itself (call this at the top level with
 // the exact array being reordered); a real id finds that block anywhere in
-// the tree and reorders its own `.blocks`. orderedIds must be the full
-// sibling id list in its new order (what @dnd-kit/sortable hands back) —
-// any id not present in `blocks`/the found block's children is dropped.
+// the tree and reorders its own `.blocks`.
 export function reorderSiblingsInTree(
   blocks: ThemeBlock[],
   parentId: string | null,
   orderedIds: string[],
 ): ThemeBlock[] {
-  function reorderList(list: ThemeBlock[]): ThemeBlock[] {
-    const byId = new Map(list.map((b) => [b.id, b]));
-    return orderedIds
-      .map((id) => byId.get(id))
-      .filter((b): b is ThemeBlock => b !== undefined)
-      .map((b, i) => ({ ...b, order: i }));
-  }
-  if (parentId === null) return reorderList(blocks);
+  if (parentId === null) return reorderById(blocks, orderedIds);
   return blocks.map((block) => {
-    if (block.id === parentId) return { ...block, blocks: reorderList(block.blocks ?? []) };
+    if (block.id === parentId) return { ...block, blocks: reorderById(block.blocks ?? [], orderedIds) };
     if (block.blocks) return { ...block, blocks: reorderSiblingsInTree(block.blocks, parentId, orderedIds) };
     return block;
   });

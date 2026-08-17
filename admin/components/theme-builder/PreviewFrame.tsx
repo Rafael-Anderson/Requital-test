@@ -125,8 +125,27 @@ export default function PreviewFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion } = editor;
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion, isDragging } = editor;
 
+  // Bug 2 root cause (confirmed empirically, not the "iframe navigation"
+  // premise it was originally reported as — see PR description): an iframe
+  // is a separate browsing context that owns pointer events physically
+  // over it, regardless of navigation, and @dnd-kit's PointerSensor never
+  // calls setPointerCapture to survive that (confirmed reading
+  // @dnd-kit/core's source — its move/end listeners are plain
+  // addEventListener calls on the original drag-handle element). A drag
+  // gesture whose pointer path crosses this iframe's rect — very possible
+  // given the layout below (a 256px-wide tree panel with this iframe
+  // immediately to its right) — silently loses every further pointermove
+  // AND pointerup for that gesture the instant the cursor enters it,
+  // leaving dnd-kit's sensor stuck mid-drag forever (no pointerup ever
+  // observed to end it), which is what breaks every later drag too.
+  // isDragging (true for the duration of any drag, in SectionTree.tsx or
+  // any TreeNode.tsx level) disables pointer-events on the iframe for
+  // exactly that window, which keeps the browser's hit-testing resolving
+  // to the parent document instead — confirmed empirically the pointer
+  // events (including the pointerup that was previously lost entirely)
+  // correctly reach the parent document once this is applied.
   const src = theme ? resolvePreviewUrl(shop, theme.id) : null;
   const previewOrigin = useMemo(() => {
     if (!src) return null;
@@ -268,7 +287,7 @@ export default function PreviewFrame({
             title="Storefront preview"
             src={src}
             onLoad={handleIframeLoad}
-            style={{ width: DEVICE_WIDTH[device], maxWidth: "100%" }}
+            style={{ width: DEVICE_WIDTH[device], maxWidth: "100%", pointerEvents: isDragging ? "none" : undefined }}
             className="h-full min-h-[600px] rounded-lg border border-black/10 bg-white shadow-sm dark:border-white/10"
           />
         ) : (
