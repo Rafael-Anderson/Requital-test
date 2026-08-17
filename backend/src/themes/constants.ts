@@ -225,9 +225,10 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
     settings: { sticky: false, transparentOnHero: false },
     blocks: [
       { id: 'hdr-logo', type: 'logo', visible: true, order: 0, settings: { zone: 'left' } },
-      { id: 'hdr-search', type: 'search_icon', visible: true, order: 1, settings: { zone: 'right' } },
-      { id: 'hdr-cart', type: 'cart_icon', visible: true, order: 2, settings: { zone: 'right' } },
-      { id: 'hdr-account', type: 'account_icon', visible: true, order: 3, settings: { zone: 'right' } },
+      { id: 'hdr-nav-menu', type: 'nav_menu', visible: true, order: 1, settings: {} },
+      { id: 'hdr-search', type: 'search_icon', visible: true, order: 2, settings: { zone: 'right' } },
+      { id: 'hdr-cart', type: 'cart_icon', visible: true, order: 3, settings: { zone: 'right' } },
+      { id: 'hdr-account', type: 'account_icon', visible: true, order: 4, settings: { zone: 'right' } },
     ],
   },
   footer: {

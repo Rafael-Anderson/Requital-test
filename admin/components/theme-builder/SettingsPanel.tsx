@@ -199,6 +199,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
       </div>
       <ElementSettingsPanel
         block={block}
+        container={container}
         onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)}
         onToggleVisibility={() => editor.toggleBlockVisibility(container, block.id)}
       />

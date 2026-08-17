@@ -233,8 +233,6 @@ export default function OrderDetailModal({
               )}
             </div>
 
-            <OrderStatusTimeline orderId={order.id} refreshKey={historyRefreshKey} />
-
             <div className="mb-4">
               <SegmentedToggle
                 value={tab}
@@ -525,6 +523,8 @@ export default function OrderDetailModal({
               </div>
             </div>
             )}
+
+            <OrderStatusTimeline orderId={order.id} refreshKey={historyRefreshKey} />
           </>
         )}
     </Modal>

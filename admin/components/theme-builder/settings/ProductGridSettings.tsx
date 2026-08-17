@@ -33,6 +33,12 @@ export default function ProductGridSettings({
 
   return (
     <div className="space-y-4">
+      <Input
+        label="Section title"
+        value={(settings.sectionTitle as string) ?? ""}
+        placeholder="Our Products"
+        onChange={(e) => onUpdate("sectionTitle", e.target.value)}
+      />
       <div>
         <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Show products from</span>
         <Combobox

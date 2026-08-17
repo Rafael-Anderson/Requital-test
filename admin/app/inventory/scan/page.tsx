@@ -281,7 +281,7 @@ export default function ScanToStockPage() {
       <BackButton href="/inventory" />
       <InventoryTabs />
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Scan to Stock</h1>
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Scan to Stock</h1>
       </div>
       <p className="text-sm text-text-muted -mt-2 mb-4">
         Photograph a supplier invoice or receipt. OCR pulls out candidate line items for you to review before
