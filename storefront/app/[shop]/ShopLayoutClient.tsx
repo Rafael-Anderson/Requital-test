@@ -35,6 +35,20 @@ function showMenuBar(shop: ReturnType<typeof useShop>["shop"], themeConfig: Retu
   return shop?.showCollectionMenu !== false;
 }
 
+// Lives on the nav_menu block's own settings (admin's NavElementSettings,
+// ElementSettingsPanel.tsx) rather than a new header-level settings field —
+// same reasoning as showMenuBar() above treating that block as the header's
+// one style/visibility control point. Undefined (no block yet, or a block
+// that predates this control) falls through to the existing bg-header
+// class/color-scheme default, same "don't force a value onto shops that
+// never touched this setting" pattern every other field on this block
+// follows (see resolveNavElementStyle's own typeof guards).
+function headerBackgroundColor(themeConfig: ReturnType<typeof useShop>["themeConfig"]): string | undefined {
+  const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
+  const color = navBlock?.settings.headerBackgroundColor;
+  return typeof color === "string" ? color : undefined;
+}
+
 function Header() {
   const { shopSlug, shop, themeConfig } = useShop();
   const { count } = useCart();
@@ -48,7 +62,10 @@ function Header() {
     // without this the header (which had no z-index of its own, hence no
     // context) could end up painted underneath it, hiding MenuBar's hover
     // dropdown (z-20, scoped to its own parent) behind that section.
-    <header className="relative z-30 border-b border-stroke bg-header text-header-fg">
+    <header
+      className="relative z-30 border-b border-stroke bg-header text-header-fg"
+      style={{ backgroundColor: headerBackgroundColor(themeConfig) }}
+    >
       <AnnouncementBar />
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />
       {showMenuBar(shop, themeConfig) && <MenuBar />}
