@@ -33,6 +33,7 @@ interface TreeNodeListProps {
   onRemove: (id: string) => void;
   onReorder: (parentBlockId: string | null, orderedIds: string[]) => void;
   onAddBlock: (parentBlockId: string | null, allowedTypes: string[]) => void;
+  onDragActiveChange: (active: boolean) => void;
 }
 
 function BlockRow({
@@ -127,6 +128,7 @@ export default function TreeNode(props: TreeNodeListProps) {
   const allowedTypes = allowedBlockTypesFor(props.containerKind, props.parentType);
 
   function handleDragEnd(event: DragEndEvent) {
+    props.onDragActiveChange(false);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const ids = ordered.map((b) => b.id);
@@ -141,7 +143,13 @@ export default function TreeNode(props: TreeNodeListProps) {
 
   return (
     <div className="space-y-0.5" style={{ paddingLeft: props.depth > 0 ? 8 : 0 }}>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={() => props.onDragActiveChange(true)}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => props.onDragActiveChange(false)}
+      >
         <SortableContext items={ordered.map((b) => b.id)} strategy={verticalListSortingStrategy}>
           {ordered.map((block) => (
             <BlockRow key={block.id} block={block} props={props} />

@@ -6,6 +6,7 @@ import { getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft 
 import {
   findNodeInTree,
   insertNodeInTree,
+  reorderById,
   removeNodeFromTree,
   reorderSiblingsInTree,
   updateNodeInTree,
@@ -178,6 +179,18 @@ export function useThemeEditor(themeId: number) {
   // Same idea as themeSettingsCategory, for Layout mode's own category list.
   const [layoutCategory, setLayoutCategory] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // True for the duration of any section/block drag (both SectionTree.tsx's
+  // own DndContext and every nested TreeNode.tsx one report through this
+  // shared flag) — PreviewFrame.tsx uses it to disable pointer-events on
+  // the iframe while dragging. Without that, a drag whose pointer path
+  // crosses into the iframe's rect loses every further pointermove/
+  // pointerup (confirmed empirically: an iframe is a separate browsing
+  // context that owns pointer events physically over it, and @dnd-kit's
+  // PointerSensor never calls setPointerCapture to survive that), leaving
+  // the sensor stuck mid-drag with no pointerup ever observed — not
+  // recoverable by the next drag attempt either, since dnd-kit's internal
+  // state was never cleanly ended.
+  const [isDragging, setIsDragging] = useState(false);
   const [device, setDevice] = useState<DevicePreview>("desktop");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -382,14 +395,7 @@ export function useThemeEditor(themeId: number) {
   // orderedIds is the full section id list in its new order (what
   // @dnd-kit/sortable's onDragEnd hands back after reordering the array).
   function reorderSections(orderedIds: string[]) {
-    updateConfig((prev) => {
-      const byId = new Map(prev.sections.map((s) => [s.id, s]));
-      const reordered = orderedIds
-        .map((id) => byId.get(id))
-        .filter((s): s is ThemeSection => s !== undefined)
-        .map((s, i) => ({ ...s, order: i }));
-      return { ...prev, sections: reordered };
-    });
+    updateConfig((prev) => ({ ...prev, sections: reorderById(prev.sections, orderedIds) }));
   }
 
   function updateSectionSetting(id: string, key: string, value: unknown) {
@@ -496,6 +502,8 @@ export function useThemeEditor(themeId: number) {
     selectedId,
     selectNode,
     selection,
+    isDragging,
+    setIsDragging,
     device,
     setDevice,
     dirty,

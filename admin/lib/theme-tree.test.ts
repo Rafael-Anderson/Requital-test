@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   findNodeInTree,
   insertNodeInTree,
+  reorderById,
   removeNodeFromTree,
   reorderSiblingsInTree,
   updateNodeInTree,
@@ -81,6 +82,64 @@ describe("insertNodeInTree", () => {
     const result = insertNodeInTree(tree(), "a", block("a1"));
     const a = result.find((n) => n.id === "a");
     expect(a?.blocks?.map((n) => n.id)).toEqual(["a1"]);
+  });
+});
+
+describe("reorderById", () => {
+  interface Section {
+    id: string;
+    order: number;
+  }
+  function section(id: string, order: number): Section {
+    return { id, order };
+  }
+  function sections(): Section[] {
+    return [section("a", 0), section("b", 1), section("c", 2)];
+  }
+
+  // Mirrors SectionTree.tsx's handleDragEnd -> useThemeEditor.ts's
+  // reorderSections call chain: dnd-kit hands back the full sibling id
+  // list in its new order, which is what this test asserts against
+  // directly (a pure function, not a DOM drag simulation) — the same
+  // shape TreeNode.tsx's block-level handleDragEnd feeds into
+  // reorderSiblingsInTree below, which is why both share this one helper.
+  it("reorders a flat list to match orderedIds and reassigns sequential order", () => {
+    const result = reorderById(sections(), ["c", "a", "b"]);
+    expect(result.map((s) => s.id)).toEqual(["c", "a", "b"]);
+    expect(result.map((s) => s.order)).toEqual([0, 1, 2]);
+  });
+
+  it("moving the first item to the second position swaps exactly those two, third stays put", () => {
+    // The literal shape of a single-position drag-and-drop (a -> after b).
+    const result = reorderById(sections(), ["b", "a", "c"]);
+    expect(result.map((s) => s.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("drops any id not present in the original list", () => {
+    const result = reorderById(sections(), ["c", "a", "b", "missing"]);
+    expect(result.map((s) => s.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("preserves every other field on each item, only order changes", () => {
+    interface Section2 extends Section {
+      visible: boolean;
+    }
+    const items: Section2[] = [
+      { id: "a", order: 0, visible: true },
+      { id: "b", order: 1, visible: false },
+    ];
+    const result = reorderById(items, ["b", "a"]);
+    expect(result).toEqual([
+      { id: "b", order: 0, visible: false },
+      { id: "a", order: 1, visible: true },
+    ]);
+  });
+
+  it("does not mutate the input array", () => {
+    const original = sections();
+    const snapshot = original.map((s) => ({ ...s }));
+    reorderById(original, ["c", "b", "a"]);
+    expect(original).toEqual(snapshot);
   });
 });
 

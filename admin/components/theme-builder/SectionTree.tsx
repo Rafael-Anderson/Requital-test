@@ -116,7 +116,7 @@ function SortableSectionRow({
 // ElementDragZone entirely — every block/sub-block level renders through
 // the one recursive TreeNode component instead.
 export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
-  const { config, selectedId, selectNode, toggleSectionVisibility, reorderSections, addSection, removeSection, toggleBlockVisibility, removeBlock, reorderBlocks, addBlock } = editor;
+  const { config, selectedId, selectNode, toggleSectionVisibility, reorderSections, addSection, removeSection, toggleBlockVisibility, removeBlock, reorderBlocks, addBlock, setIsDragging } = editor;
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [addBlockRequest, setAddBlockRequest] = useState<AddBlockRequest | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -168,6 +168,7 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
   const ordered = [...config.sections].sort((a, b) => a.order - b.order);
 
   function handleDragEnd(event: DragEndEvent) {
+    setIsDragging(false);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const ids = ordered.map((s) => s.id);
@@ -194,6 +195,7 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
         onRemove={(id) => removeBlock(container, id)}
         onReorder={(parentBlockId, orderedIds) => reorderBlocks(container, parentBlockId, orderedIds)}
         onAddBlock={(parentBlockId, types) => setAddBlockRequest({ container, parentBlockId, types })}
+        onDragActiveChange={setIsDragging}
       />
     );
   }
@@ -214,7 +216,13 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
 
       <div className="flex-1 space-y-1.5 overflow-y-auto">
         <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Template</p>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={() => setIsDragging(true)}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setIsDragging(false)}
+        >
           <SortableContext items={ordered.map((s) => s.id)} strategy={verticalListSortingStrategy}>
             {ordered.map((section) => (
               <div key={section.id} data-section-row={section.id}>
