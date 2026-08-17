@@ -12,7 +12,6 @@ import Card from "@/components/ui/Card";
 import StatCard from "@/components/ui/StatCard";
 import AffiliateFormModal from "@/components/AffiliateFormModal";
 import PageShell from "@/components/ui/PageShell";
-import BackButton from "@/components/ui/BackButton";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -65,9 +64,7 @@ export default function AffiliatePage() {
 
   return (
     <PageShell>
-      <BackButton href="/" />
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Affiliate</h1>
+      <div className="flex items-center justify-end mb-6 flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />

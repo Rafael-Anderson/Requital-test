@@ -22,7 +22,7 @@ export default function AffiliateLayout({ children }: { children: React.ReactNod
   return (
     <div className="page-transition">
       <BackButton href="/" />
-      <h1 className="text-2xl font-semibold mb-4">Affiliate</h1>
+      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Affiliate</h1>
       <AffiliateTabs />
       {children}
     </div>
