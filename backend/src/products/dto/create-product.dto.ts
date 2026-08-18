@@ -72,6 +72,31 @@ export class ProductFaqInput {
   order?: number;
 }
 
+// Product page "Additional information" accordion blocks (storefront-v2
+// Phase 3D) — admin-authored, ordered, individually hideable. `id` is
+// client-generated (crypto.randomUUID()-shaped string, same convention as
+// the theme builder's block ids) so the admin form can track a block
+// across edits before it's ever saved; the backend never validates or
+// dedupes it, it's opaque storage same as productoption's own ids aren't
+// re-derived server-side either.
+export class AdditionalInfoBlockInput {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  title: string;
+
+  @IsString()
+  @MaxLength(5000)
+  body: string;
+
+  @IsBoolean()
+  visible: boolean;
+}
+
 export class CreateProductDto {
   @IsString()
   @IsNotEmpty()
@@ -313,4 +338,11 @@ export class CreateProductDto {
   @IsString()
   @MaxLength(500)
   metaDescription?: string;
+
+  // Full-replace on update, same convention as attributes/faqs above.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AdditionalInfoBlockInput)
+  additionalInfo?: AdditionalInfoBlockInput[];
 }

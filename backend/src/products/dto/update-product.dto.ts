@@ -16,6 +16,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  AdditionalInfoBlockInput,
   ProductAttributeInput,
   ProductFaqInput,
   ProductImageInput,
@@ -240,4 +241,12 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(500)
   metaDescription?: string;
+
+  // If provided (even an empty array), replaces the full block list — same
+  // convention as attributes/faqs above.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AdditionalInfoBlockInput)
+  additionalInfo?: AdditionalInfoBlockInput[];
 }

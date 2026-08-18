@@ -155,7 +155,13 @@ export interface AnimationSettings {
   pageTransition: boolean;
   productCardTransition: boolean;
   addToCart: boolean;
-  cardHoverEffect: 'none' | 'lift' | 'scale' | 'zoom';
+  // 'zoom' scales the image (matches --theme-card-hover-transform in
+  // shop-context.tsx); 'rise' translates+shadows the card itself instead
+  // (--theme-card-hover-card-transform); 'swap' shows the product's second
+  // image on hover (no CSS transform at all — see
+  // use-product-card-image-index.ts). storefront-v2 Phase 2E renamed this
+  // from 'lift'/'scale' to 'rise'/'zoom' and added 'swap'.
+  cardHoverEffect: 'none' | 'zoom' | 'rise' | 'swap';
 }
 
 export interface BadgeSettings {
@@ -225,13 +231,39 @@ export interface PriceSettings {
 // Quick-add colors are two plain color settings, not a scheme reference —
 // verified against Horizon's real schema (quick_add_background/
 // quick_add_text are discrete `color` settings, not a color_scheme picker).
+//
+// The hover *effect itself* (zoom/rise/swap/none) is
+// animations.cardHoverEffect, not a field here — it already existed
+// (AnimationSettings, above) before storefront-v2, just under-specified
+// ('lift'/'scale' renamed to 'rise'/'zoom', 'swap' added) and not fully
+// wired storefront-side (see ProductCard.tsx). showSecondImageOnHover (dead
+// code — never actually consumed by any storefront component) is dropped
+// entirely rather than kept alongside the renamed cardHoverEffect, since
+// they described the same concept twice.
 export interface ProductCardSettings {
   quickAdd: boolean;
   mobileQuickAdd: boolean;
   quickAddBackground: string;
   quickAddText: string;
-  showSecondImageOnHover: boolean;
   showCarousel: boolean;
+  productNameFontSize: number;
+  productNameFontWeight: 'regular' | 'medium' | 'bold';
+  productNameColor: string;
+}
+
+// storefront-v2 Phase 2C/2D — settings for the standalone collection
+// (taxonomy node) detail page, /[shop]/collections/[slug]. Not part of the
+// section-based homepage system (that page isn't composed of theme
+// sections), so it gets its own small global category instead of living on
+// a per-instance section's settings the way the ticket originally
+// sketched it.
+export interface CollectionPageSettings {
+  textAboveProducts: string;
+  textBelowProducts: string;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  loadMoreStyle: 'infinite' | 'pagination';
 }
 
 export interface SearchSettings {
@@ -284,6 +316,7 @@ export interface GlobalThemeSettings {
   swatches: SwatchSettings;
   variantPickers: VariantPickerSettings;
   customCss: CustomCssSettings;
+  collectionPage: CollectionPageSettings;
 }
 
 export interface ThemeConfig {
