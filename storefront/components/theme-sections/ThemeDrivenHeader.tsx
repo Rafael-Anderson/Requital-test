@@ -16,6 +16,15 @@ import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
 
 const ZONES = ["left", "center", "right"] as const;
 
+// header_text's fixed 3-step size scale — matches the admin settings
+// panel's own Small/Medium/Large select (ElementSettingsPanel.tsx's
+// HEADER_TEXT_SIZES), not a free px value.
+const HEADER_TEXT_FONT_SIZE: Record<string, string> = {
+  small: "13px",
+  medium: "15px",
+  large: "18px",
+};
+
 // Matches admin/lib/useThemeEditor.ts's HEADER_CHROME_ID by hand — same
 // no-shared-package convention as every other cross-app constant. Only
 // used as the data-requital-section grouping key for the in-preview
@@ -149,6 +158,29 @@ export default function ThemeDrivenHeader({
         );
       case "image":
         return <ThemeImageBlock key={block.id} block={block} sectionId={HEADER_CHROME_ID} previewMode={previewMode} />;
+      // No zone control in the admin settings panel (see
+      // ElementSettingsPanel.tsx's HeaderTextElementSettings) — like Logo,
+      // an unset settings.zone falls into "left" via the filter below, so a
+      // Header Text block added after Logo in the tree naturally renders
+      // right next to it, inline, before the separate MenuBar row beneath
+      // this header.
+      case "header_text": {
+        const text = block.settings.text as string | undefined;
+        if (!text) return null;
+        return (
+          <span
+            key={block.id}
+            {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "header_text" })}
+            style={{
+              fontSize: HEADER_TEXT_FONT_SIZE[block.settings.fontSize as string] ?? HEADER_TEXT_FONT_SIZE.medium,
+              color: (block.settings.color as string) ?? "#1B1F1E",
+            }}
+            className="truncate"
+          >
+            {text}
+          </span>
+        );
+      }
       default:
         return null;
     }

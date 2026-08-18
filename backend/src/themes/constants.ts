@@ -36,6 +36,7 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   search_icon: 'Search',
   cart_icon: 'Cart',
   account_icon: 'Account',
+  header_text: 'Header Text',
   footer_column: 'Column',
   footer_social: 'Social Links',
   footer_copyright: 'Copyright',
@@ -66,8 +67,10 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   // usable standalone now too. See ImageElementSettings' widthPercent/
   // alignment fields (added alongside its pre-existing objectFit/width-px/
   // borderRadius, which stay image_text's own concern) and each section's
-  // own 'image' case in renderBlock/content-area rendering.
-  header: ['logo', 'nav_menu', 'search_icon', 'cart_icon', 'account_icon', 'image'],
+  // own 'image' case in renderBlock/content-area rendering. 'header_text'
+  // (fix/header-text-and-dnd) is a separate, unrelated addition — a plain
+  // text block for the header bar, next to the logo.
+  header: ['logo', 'nav_menu', 'search_icon', 'cart_icon', 'account_icon', 'header_text', 'image'],
   footer: ['footer_column', 'footer_social', 'footer_copyright', 'image'],
   announcement_bar: ['announcement'],
   hero: ['heading', 'subheading', 'cta', 'image'],

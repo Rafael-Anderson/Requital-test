@@ -32,6 +32,7 @@ const BUTTON_TYPES = new Set(["cta", "view_all_button", "email_form"]);
 const NAV_TYPES = new Set(["nav_menu"]);
 const PRICE_TYPES = new Set(["product_price"]);
 const ICON_TYPES = new Set(["search_icon", "cart_icon", "account_icon"]);
+const HEADER_TEXT_TYPES = new Set(["header_text"]);
 
 interface FamilyProps {
   block: ThemeBlock;
@@ -301,6 +302,37 @@ function PriceElementSettings({ block, onUpdate }: FamilyProps) {
   );
 }
 
+// header_text's own font-size vocabulary is a fixed 3-step scale, not the
+// free px slider every other TEXT_TYPES member gets — matches the ticket's
+// exact spec (Small/Medium/Large → 13/15/18px) rather than joining
+// TEXT_TYPES' much richer typography panel, which this block deliberately
+// doesn't need (it's a small header-bar aside, not a section heading).
+const HEADER_TEXT_SIZES = [
+  { value: "small", label: "Small", px: 13 },
+  { value: "medium", label: "Medium", px: 15 },
+  { value: "large", label: "Large", px: 18 },
+] as const;
+
+function HeaderTextElementSettings({ block, onUpdate }: FamilyProps) {
+  const s = block.settings;
+  return (
+    <div className="space-y-4">
+      <Input label="Text content" value={(s.text as string) ?? ""} onChange={(e) => onUpdate("text", e.target.value)} />
+      <Select label="Font size" value={(s.fontSize as string) ?? "medium"} onChange={(e) => onUpdate("fontSize", e.target.value)}>
+        {HEADER_TEXT_SIZES.map((size) => (
+          <option key={size.value} value={size.value}>
+            {size.label}
+          </option>
+        ))}
+      </Select>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Text color</span>
+        <ColorPicker value={(s.color as string) ?? "#1B1F1E"} onChange={(hex) => onUpdate("color", hex)} />
+      </div>
+    </div>
+  );
+}
+
 const ZONE_OPTIONS = ["left", "center", "right"] as const;
 
 // The minimum bar Part 5 asks for on a type without its own rich panel:
@@ -339,5 +371,6 @@ export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibili
   if (NAV_TYPES.has(block.type)) return <NavElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (PRICE_TYPES.has(block.type)) return <PriceElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (ICON_TYPES.has(block.type)) return <IconElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
+  if (HEADER_TEXT_TYPES.has(block.type)) return <HeaderTextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   return <BlockSettingsForm block={block} onUpdate={onUpdate} />;
 }

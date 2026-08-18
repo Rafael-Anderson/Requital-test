@@ -520,13 +520,22 @@ export function useThemeEditor(themeId: number) {
   }
 
   function addBlock(container: BlockContainerRef, parentBlockId: string | null, type: string) {
-    updateConfig((prev) => {
-      const blocks = getContainerBlocks(prev, container);
-      const siblings = parentBlockId ? findNodeInTree(blocks, parentBlockId)?.blocks ?? [] : blocks;
-      const node = newBlock(type, siblings.length);
-      setSelectedId(node.id);
-      return setContainerBlocks(prev, container, insertNodeInTree(blocks, parentBlockId, node));
-    });
+    // node (and its id) is created once, outside the updater — matching
+    // addSection's pattern above. Creating it *inside* updateConfig's
+    // functional updater (as this used to) generates a fresh id every time
+    // React invokes that updater, which Strict Mode's dev-mode double-
+    // invocation (for purity-checking) does twice per call — leaving
+    // selectedId pointing at a discarded id from the first pass rather than
+    // the block actually inserted into state, so a freshly-added block
+    // silently failed to auto-select. setSelectedId is a plain top-level
+    // call here too, never nested inside another setState's updater.
+    const currentBlocks = configRef.current ? getContainerBlocks(configRef.current, container) : [];
+    const siblings = parentBlockId ? findNodeInTree(currentBlocks, parentBlockId)?.blocks ?? [] : currentBlocks;
+    const node = newBlock(type, siblings.length);
+    updateConfig((prev) =>
+      setContainerBlocks(prev, container, insertNodeInTree(getContainerBlocks(prev, container), parentBlockId, node)),
+    );
+    setSelectedId(node.id);
   }
 
   function removeBlock(container: BlockContainerRef, blockId: string) {
