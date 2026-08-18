@@ -143,6 +143,21 @@ export function resolveImageElementStyle(settings: Record<string, unknown>): CSS
   return style;
 }
 
+// A standalone Image block dropped into Header/Footer/Hero/Rich Text's own
+// content area (storefront-v2 Phase 4B) — a responsive wrapper (max-width
+// as a %, not image_text's fixed px) plus alignment, distinct from
+// resolveImageElementStyle above (which stays image_text's own fixed-aspect
+// concern and is unaffected by this).
+export function resolveImageBlockWrapperStyle(settings: Record<string, unknown>): CSSProperties {
+  const widthPercent = typeof settings.widthPercent === "number" ? settings.widthPercent : 100;
+  const alignment = (settings.alignment as string) || "left";
+  return {
+    maxWidth: `${widthPercent}%`,
+    marginLeft: alignment === "left" ? 0 : "auto",
+    marginRight: alignment === "right" ? 0 : "auto",
+  };
+}
+
 export interface NavElementSettings {
   fontSize?: number;
   color?: string;
@@ -245,4 +260,18 @@ export function resolvePriceElementStyle(settings: Record<string, unknown>): CSS
   if (typeof s.fontSize === "number") style.fontSize = `${s.fontSize}px`;
   if (typeof s.color === "string") style.color = s.color;
   return style;
+}
+
+export const FONT_WEIGHT_VALUE: Record<string, number> = { regular: 400, normal: 400, medium: 500, bold: 700 };
+
+// globalSettings.productCards' product-name styling (storefront-v2 Phase
+// 5A) — the base style for every product card's name, both the homepage
+// Product Grid section and the standalone collection page (ProductCard.tsx,
+// which has no per-instance theme block of its own to carry an override).
+export function productCardNameStyle(productCards: { productNameFontSize: number; productNameFontWeight: string; productNameColor: string }): CSSProperties {
+  return {
+    fontSize: `${productCards.productNameFontSize}px`,
+    fontWeight: FONT_WEIGHT_VALUE[productCards.productNameFontWeight] ?? 400,
+    color: productCards.productNameColor || undefined,
+  };
 }

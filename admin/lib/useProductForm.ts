@@ -20,6 +20,7 @@ import {
   type Ingredient,
   type IngredientCategory,
   type Product,
+  type ProductAdditionalInfoBlock,
   type StockByOutlet,
   type WeightUnit,
 } from "@/lib/types";
@@ -104,6 +105,9 @@ export function useProductForm(initialProduct: Product | undefined) {
   );
   const [faqs, setFaqs] = useState<FaqDraft[]>(
     product?.faqs.map((f) => ({ question: f.question, answer: f.answer, order: f.order })) ?? [],
+  );
+  const [additionalInfo, setAdditionalInfo] = useState<ProductAdditionalInfoBlock[]>(
+    product?.additionalInfo ?? [],
   );
   const [stockRows, setStockRows] = useState<StockByOutlet[]>([]);
   const [stockValues, setStockValues] = useState<Record<number, string>>({});
@@ -241,6 +245,7 @@ export function useProductForm(initialProduct: Product | undefined) {
         faqs: faqs
           .filter((f) => f.question.trim() && f.answer.trim())
           .map((f, i) => ({ question: f.question.trim(), answer: f.answer.trim(), order: i })),
+        additionalInfo: additionalInfo.filter((b) => b.title.trim()),
         trackInventory,
         continueSellingOutOfStock,
         usesIngredients,
@@ -336,6 +341,7 @@ export function useProductForm(initialProduct: Product | undefined) {
     showFaqs, setShowFaqs,
     attributes, setAttributes,
     faqs, setFaqs,
+    additionalInfo, setAdditionalInfo,
     stockRows,
     stockValues, setStockValues,
     ingredientsList,

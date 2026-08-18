@@ -439,20 +439,44 @@ export class PublicService {
       [shop.id, collection.id],
     );
     const productIds = productRows.map((r) => r.id as number);
-    const products = await this.loadPublicProductsWithRelations(
-      productIds,
-      shop.id,
-      outletId,
-    );
+    const [products, salesCounts] = await Promise.all([
+      this.loadPublicProductsWithRelations(productIds, shop.id, outletId),
+      this.loadSalesCounts(productIds),
+    ]);
     return {
       id: collection.id,
       name: collection.name,
       slug: collection.slug,
       image: collection.image,
+      description: collection.description,
+      parentCollectionId: collection.parentCollectionId,
       products: productIds
         .map((id) => products.get(id))
-        .filter((p): p is NonNullable<typeof p> => !!p),
+        .filter((p): p is NonNullable<typeof p> => !!p)
+        .map((p) => ({ ...p, salesCount: salesCounts.get(p.id as number) ?? 0 })),
     };
+  }
+
+  // "Best selling" sort on the storefront collection page (storefront-v2
+  // Phase 2B) — units sold, excluding cancelled orders, same convention
+  // ReportsService's Product Sales Report already uses. Scoped to this
+  // collection's own product ids rather than added to every public product
+  // listing endpoint, since it's the only sort that needs it.
+  private async loadSalesCounts(productIds: number[]): Promise<Map<number, number>> {
+    const counts = new Map<number, number>();
+    if (productIds.length === 0) return counts;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT oi.productId AS productId, SUM(oi.quantity) AS sold
+       FROM orderitem oi
+       JOIN \`order\` o ON o.id = oi.orderId
+       WHERE oi.productId IN (${productIds.map(() => '?').join(', ')}) AND o.status != 'cancelled'
+       GROUP BY oi.productId`,
+      productIds,
+    );
+    for (const row of rows) {
+      counts.set(row.productId as number, Number(row.sold));
+    }
+    return counts;
   }
 
   // Storefront Home tab, 'templates' mode (see themesettings.homeTabMode) —

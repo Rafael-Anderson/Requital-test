@@ -1,6 +1,7 @@
 "use client";
 
 import Toggle from "@/components/ui/Toggle";
+import Select from "@/components/ui/Select";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import LegacyHeaderSettings from "../LegacyHeaderSettings";
@@ -30,6 +31,16 @@ export default function HeaderSettings({
           onChange={(v) => onUpdate("transparentOnHero", v)}
         />
       </div>
+
+      <Select
+        label="Menu animation"
+        value={(settings.menuAnimation as string) ?? "fade"}
+        onChange={(e) => onUpdate("menuAnimation", e.target.value)}
+      >
+        <option value="fade">Fade</option>
+        <option value="slide">Slide down</option>
+        <option value="none">None</option>
+      </Select>
 
       <hr className="border-black/10 dark:border-white/10" />
 

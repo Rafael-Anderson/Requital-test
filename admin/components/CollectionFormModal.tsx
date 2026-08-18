@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Textarea from "@/components/ui/Textarea";
 import Toggle from "@/components/ui/Toggle";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import Modal from "@/components/ui/Modal";
@@ -47,6 +48,7 @@ export default function CollectionFormModal({
   const [parentCollectionId, setParentCollectionId] = useState(
     collection?.parentCollectionId != null ? String(collection.parentCollectionId) : "",
   );
+  const [description, setDescription] = useState(collection?.description ?? "");
   const [displayOrder, setDisplayOrder] = useState(String(collection?.displayOrder ?? 0));
   const [isFeatured, setIsFeatured] = useState(collection?.isFeatured ?? false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -90,13 +92,14 @@ export default function CollectionFormModal({
           slug,
           displayOrder: order,
           isFeatured,
+          description,
           parentCollectionId: parentCollectionId === "" ? null : Number(parentCollectionId),
           ...(image !== undefined && { image }),
         };
         await updateCollection(collection.id, payload);
         toast(`"${name}" updated`);
       } else {
-        const payload: CollectionInput = { name, slug, displayOrder: order, isFeatured, image };
+        const payload: CollectionInput = { name, slug, displayOrder: order, isFeatured, description, image };
         if (parentCollectionId !== "") {
           payload.parentCollectionId = Number(parentCollectionId);
         }
@@ -141,6 +144,14 @@ export default function CollectionFormModal({
                 label: `${"- ".repeat(c.depth)}${c.name}`,
               })),
             ]}
+          />
+
+          <Textarea
+            label="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Shown on this collection's own storefront page"
+            rows={3}
           />
 
           <Input

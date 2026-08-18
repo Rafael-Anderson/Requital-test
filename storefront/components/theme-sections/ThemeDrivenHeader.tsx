@@ -10,6 +10,7 @@ import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth } from "@/lib/theme-element-style";
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
+import ThemeImageBlock from "./ThemeImageBlock";
 import type { Customer, Shop } from "@/lib/types";
 import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -155,6 +156,8 @@ export default function ThemeDrivenHeader({
             <User className="size-5" {...iconProps} style={resolveIconElementStyle(block.settings)} />
           </Link>
         );
+      case "image":
+        return <ThemeImageBlock key={block.id} block={block} sectionId={HEADER_CHROME_ID} previewMode={previewMode} />;
       // No zone control in the admin settings panel (see
       // ElementSettingsPanel.tsx's HeaderTextElementSettings) — like Logo,
       // an unset settings.zone falls into "left" via the filter below, so a

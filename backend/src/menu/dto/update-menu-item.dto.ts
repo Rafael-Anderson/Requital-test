@@ -11,7 +11,11 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MENU_ITEM_TYPES, type MenuItemType } from '../menu-constants';
-import { MenuItemCollectionInput } from './create-menu-item.dto';
+import {
+  MenuColumnInput,
+  MenuItemCollectionInput,
+  MenuItemStyleInput,
+} from './create-menu-item.dto';
 
 export class UpdateMenuItemDto {
   @IsOptional()
@@ -35,8 +39,19 @@ export class UpdateMenuItemDto {
   collections?: MenuItemCollectionInput[];
 
   @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MenuColumnInput)
+  columns?: MenuColumnInput[];
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
   displayOrder?: number;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MenuItemStyleInput)
+  style?: MenuItemStyleInput;
 }

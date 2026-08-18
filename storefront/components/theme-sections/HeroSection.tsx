@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolveButtonElementStyle, resolveButtonFillStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import ThemeImageBlock from "./ThemeImageBlock";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const HEIGHT_CLASS: Record<string, string> = {
@@ -96,6 +97,8 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
           </a>
         );
       }
+      case "image":
+        return <ThemeImageBlock key={block.id} block={block} sectionId={sectionId} previewMode={previewMode} />;
       default:
         return null;
     }

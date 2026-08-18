@@ -62,17 +62,25 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
 // inside their own parent block, not directly here — see
 // CHILD_BLOCK_TYPES below.
 export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
-  header: ['logo', 'nav_menu', 'search_icon', 'cart_icon', 'account_icon', 'header_text'],
-  footer: ['footer_column', 'footer_social', 'footer_copyright'],
+  // 'image' added to header/footer/hero/rich_text (storefront-v2 Phase
+  // 4B) — same block type image_text's own image half already used, just
+  // usable standalone now too. See ImageElementSettings' widthPercent/
+  // alignment fields (added alongside its pre-existing objectFit/width-px/
+  // borderRadius, which stay image_text's own concern) and each section's
+  // own 'image' case in renderBlock/content-area rendering. 'header_text'
+  // (fix/header-text-and-dnd) is a separate, unrelated addition — a plain
+  // text block for the header bar, next to the logo.
+  header: ['logo', 'nav_menu', 'search_icon', 'cart_icon', 'account_icon', 'header_text', 'image'],
+  footer: ['footer_column', 'footer_social', 'footer_copyright', 'image'],
   announcement_bar: ['announcement'],
-  hero: ['heading', 'subheading', 'cta'],
+  hero: ['heading', 'subheading', 'cta', 'image'],
   featured_collections: ['collection_header', 'product_card'],
   product_grid: ['product_card'],
   // 'heading' added alongside the testimonial rating/photo fields — mirrors
   // Featured Collections' collection_header pattern (an optional intro
   // heading), rather than repurposing a testimonial block for it.
   testimonials: ['heading', 'testimonial'],
-  rich_text: ['text'],
+  rich_text: ['text', 'image'],
   image_text: ['image', 'text'],
   newsletter: ['heading', 'text', 'email_form'],
 };
@@ -145,7 +153,7 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       pageTransition: false,
       productCardTransition: true,
       addToCart: true,
-      cardHoverEffect: 'lift',
+      cardHoverEffect: 'zoom',
     },
     badges: {
       position: 'top_right',
@@ -198,8 +206,10 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       mobileQuickAdd: false,
       quickAddBackground: '#ffffff',
       quickAddText: '#18181b',
-      showSecondImageOnHover: true,
       showCarousel: true,
+      productNameFontSize: 14,
+      productNameFontWeight: 'regular',
+      productNameColor: '#1B1F1E',
     },
     search: {
       productCornerRadius: 8,
@@ -221,6 +231,14 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       width: 'fit',
     },
     customCss: { css: '' },
+    collectionPage: {
+      textAboveProducts: '',
+      textBelowProducts: '',
+      fontFamily: '',
+      fontSize: 15,
+      textColor: '',
+      loadMoreStyle: 'infinite',
+    },
   },
   header: {
     settings: { sticky: false, transparentOnHero: false },

@@ -180,6 +180,16 @@ export interface ProductRow {
   slug: string;
   metaTitle: string | null;
   metaDescription: string | null;
+  additionalInfo: ProductAdditionalInfoBlock[] | null;
+}
+
+// Product page "Additional information" accordion blocks (storefront-v2
+// Phase 3D) — admin-authored, ordered, individually hideable.
+export interface ProductAdditionalInfoBlock {
+  id: string;
+  title: string;
+  body: string;
+  visible: boolean;
 }
 
 export interface NotifysubscriptionRow {
@@ -238,6 +248,7 @@ export interface CollectionRow {
   image: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
+  description: string | null;
   createdAt: Date;
 }
 
@@ -428,12 +439,41 @@ export interface MenuitemRow {
   type: string;
   collectionId: number | null;
   displayOrder: number;
+  style: MenuItemStyle | null;
   createdAt: Date;
+}
+
+// Per-nav-item button styling (storefront-v2 Phase 1B).
+export interface MenuItemStyle {
+  textColor?: string;
+  backgroundColor?: string;
+  borderRadius?: 'none' | 'slight' | 'pill';
+  fontWeight?: 'normal' | 'medium' | 'bold';
+  hoverBackgroundColor?: string;
 }
 
 export interface MenuitemcollectionRow {
   menuItemId: number;
   collectionId: number;
+  sortOrder: number;
+}
+
+export interface MenucolumnRow {
+  id: number;
+  menuItemId: number;
+  title: string;
+  sortOrder: number;
+}
+
+export interface MenucolumnlinkRow {
+  id: number;
+  menuColumnId: number;
+  label: string;
+  linkType: string;
+  collectionId: number | null;
+  productId: number | null;
+  customUrl: string | null;
+  featured: boolean;
   sortOrder: number;
 }
 

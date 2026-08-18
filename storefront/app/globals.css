@@ -197,6 +197,14 @@ body {
   transform: var(--theme-card-hover-transform, none);
 }
 
+/* 'rise' effect (storefront-v2 Phase 2E) targets the card wrapper itself,
+   not the image — a card moving up needs its own border/shadow to move
+   with it, which theme-product-image (the <img> alone) can't express. */
+.group:hover .theme-product-card {
+  transform: var(--theme-card-hover-card-transform, none);
+  box-shadow: var(--theme-card-hover-card-shadow, none);
+}
+
 /* New visual theme builder — per-section scroll-triggered entrance
    animations (Phase 5). Same pattern as marquee-track above: hand-written
    keyframes + explicit classes (NOT animate-* prefixed, same Tailwind v4
@@ -284,6 +292,68 @@ body {
   .theme-anim-slide-right {
     opacity: 1;
     transform: none;
+    animation: none;
+  }
+}
+
+/* Price range dual-slider (storefront-v2 Phase 2B, PriceRangeSlider.tsx) —
+   two overlapping native range inputs sharing one track; the track itself
+   ignores pointer events so only the actual thumb (re-enabled below) is
+   draggable, letting both handles coexist with no JS drag library. */
+.range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.range-thumb::-webkit-slider-runnable-track {
+  background: transparent;
+}
+.range-thumb::-moz-range-track {
+  background: transparent;
+}
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+/* Mega menu flyout entrance (storefront-v2 Phase 1C/1D) — Header settings'
+   "Menu animation" select. The panel is conditionally rendered (mounted
+   only while open), not toggled via a class, so the animation plays fresh
+   on every mount rather than needing a visible/hidden two-class split like
+   the scroll animations above. */
+@keyframes theme-mega-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes theme-mega-slide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.theme-mega-panel-fade {
+  animation: theme-mega-fade 0.15s ease-out;
+}
+.theme-mega-panel-slide {
+  animation: theme-mega-slide 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-mega-panel-fade,
+  .theme-mega-panel-slide {
     animation: none;
   }
 }

@@ -38,6 +38,7 @@ function product(id: number): Product {
     slug: `product-${id}`,
     name: `Product ${id}`,
     thumbnail: "https://example.com/p.jpg",
+    images: [],
     price: "10.00",
     hasVariants: false,
     isGiftCard: false,

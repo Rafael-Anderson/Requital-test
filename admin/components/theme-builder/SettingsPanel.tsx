@@ -1,6 +1,7 @@
 "use client";
 
-import type { ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { Search, X } from "lucide-react";
 import ElementSettingsPanel from "./ElementSettingsPanel";
 import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
@@ -20,6 +21,7 @@ import SearchSettings from "./theme-settings/SearchSettings";
 import SwatchesSettings from "./theme-settings/SwatchesSettings";
 import VariantPickersSettings from "./theme-settings/VariantPickersSettings";
 import CustomCssSettings from "./theme-settings/CustomCssSettings";
+import CollectionPageSettings from "./theme-settings/CollectionPageSettings";
 import HeaderSettings from "./settings/HeaderSettings";
 import FooterSettings from "./settings/FooterSettings";
 import HeroSettings from "./settings/HeroSettings";
@@ -94,6 +96,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
   Swatches: SwatchesSettings,
   "Variant pickers": VariantPickersSettings,
   "Custom CSS": CustomCssSettings,
+  "Collection page": CollectionPageSettings,
 };
 
 // Layout mode's 13 categories — a straight port of the old Theme
@@ -118,6 +121,99 @@ const LAYOUT_COMPONENTS: Record<(typeof THEME_LAYOUT_CATEGORY_LABELS)[number], C
   "Button fill": ButtonFillSetting,
 };
 
+// Purely client-side DOM filtering (storefront-v2 Phase 4A) — no data
+// changes, no per-field wiring across the ~30 differently-authored
+// settings components this panel dispatches to. Every one of them already
+// follows the same flat convention (a `space-y-4` root whose direct
+// children are each one field/divider/sub-group — confirmed by reading
+// ProductCardsSettings/CollectionPageSettings/AnimationsSettings/
+// HeaderSettings/etc.), so filtering by each direct child's own
+// textContent against the query is a real generalization, not a hack tied
+// to one form's markup. A divider (<hr>, no text of its own) always hides
+// while a query is active — a lone floating rule with nothing left under it
+// reads as more broken than briefly hidden. A header nested together with
+// its own fields in one wrapper div (e.g. Product Cards' "Media" group)
+// naturally stays visible whenever any of its children's label text
+// matches, since textContent concatenates the whole subtree — no separate
+// header/divider-matching logic needed for that shape.
+function useSettingsSearchFilter(containerRef: React.RefObject<HTMLDivElement | null>, query: string, contentKey: unknown) {
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    // Every settings component in this family renders its fields as the
+    // direct children of its own single root wrapper div (`space-y-4`),
+    // which is itself the one child of the ref'd container here — so the
+    // real field list to filter is one level down, not root.children
+    // itself (that's just [Component's root div]).
+    const fieldContainer = root.children.length === 1 ? root.children[0] : root;
+    const q = query.trim().toLowerCase();
+    for (const child of Array.from(fieldContainer.children)) {
+      const el = child as HTMLElement;
+      if (!q) {
+        el.style.display = "";
+        continue;
+      }
+      if (el.tagName === "HR") {
+        el.style.display = "none";
+        continue;
+      }
+      const text = (el.textContent ?? "").toLowerCase();
+      el.style.display = text.includes(q) ? "" : "none";
+    }
+    // contentKey (whichever category/section/block is currently rendered)
+    // forces a re-filter when the panel's content swaps out but the query
+    // string itself hasn't changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, contentKey]);
+}
+
+function SettingsSearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative mb-4">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search settings..."
+        className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-8 text-[13px] outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 transition-colors"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Clear search"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Wraps every SettingsPanel branch's body in one shared search bar +
+// filtered container, so the six early-return branches below don't each
+// need their own copy.
+function FilterableSettingsBody({ contentKey, heading, children }: { contentKey: unknown; heading: ReactNode; children: ReactNode }) {
+  const [query, setQuery] = useState("");
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useSettingsSearchFilter(bodyRef, query, contentKey);
+  // Reset the search whenever the merchant selects something new — a stale
+  // query silently hiding fields on a freshly-opened form would be
+  // confusing, not convenient.
+  useEffect(() => {
+    setQuery("");
+  }, [contentKey]);
+  return (
+    <div className="p-4">
+      {heading}
+      <SettingsSearchInput value={query} onChange={setQuery} />
+      <div ref={bodyRef}>{children}</div>
+    </div>
+  );
+}
+
 // Dispatches on editorMode first (sections / theme settings / layout), then
 // — in sections mode — on the selected tree node: Header/Footer chrome, a
 // section (shared controls + that type's own settings, content fields now
@@ -137,10 +233,9 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     }
     const Component = THEME_SETTINGS_COMPONENTS[category as (typeof THEME_SETTINGS_CATEGORY_LABELS)[number]];
     return (
-      <div className="p-4">
-        <h2 className="mb-4 text-sm font-semibold">{category}</h2>
+      <FilterableSettingsBody contentKey={`theme:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
         <Component editor={editor} />
-      </div>
+      </FilterableSettingsBody>
     );
   }
 
@@ -151,10 +246,9 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     }
     const Component = LAYOUT_COMPONENTS[category as (typeof THEME_LAYOUT_CATEGORY_LABELS)[number]];
     return (
-      <div className="p-4">
-        <h2 className="mb-4 text-sm font-semibold">{category}</h2>
+      <FilterableSettingsBody contentKey={`layout:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
         <Component editor={editor} />
-      </div>
+      </FilterableSettingsBody>
     );
   }
 
@@ -164,19 +258,17 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
 
   if (selection.kind === "header") {
     return (
-      <div className="p-4">
-        <h2 className="mb-4 text-sm font-semibold">Header</h2>
+      <FilterableSettingsBody contentKey="header" heading={<h2 className="mb-4 text-sm font-semibold">Header</h2>}>
         <HeaderSettings settings={config.header.settings} onUpdate={editor.updateHeaderSetting} />
-      </div>
+      </FilterableSettingsBody>
     );
   }
 
   if (selection.kind === "footer") {
     return (
-      <div className="p-4">
-        <h2 className="mb-4 text-sm font-semibold">Footer</h2>
+      <FilterableSettingsBody contentKey="footer" heading={<h2 className="mb-4 text-sm font-semibold">Footer</h2>}>
         <FooterSettings settings={config.footer.settings} onUpdate={editor.updateFooterSetting} />
-      </div>
+      </FilterableSettingsBody>
     );
   }
 
@@ -184,25 +276,28 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     const { section } = selection;
     const SettingsComponent = SECTION_SETTINGS_COMPONENTS[section.type];
     return (
-      <div className="p-4">
-        <h2 className="mb-4 text-sm font-semibold">{SECTION_TYPE_LABELS[section.type]}</h2>
+      <FilterableSettingsBody contentKey={`section:${section.id}`} heading={<h2 className="mb-4 text-sm font-semibold">{SECTION_TYPE_LABELS[section.type]}</h2>}>
         <SettingsComponent settings={section.settings} onUpdate={(key, value) => editor.updateSectionSetting(section.id, key, value)} />
-      </div>
+      </FilterableSettingsBody>
     );
   }
 
   const { block, container } = selection;
   return (
-    <div className="p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Block settings</h2>
-      </div>
+    <FilterableSettingsBody
+      contentKey={`block:${block.id}`}
+      heading={
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Block settings</h2>
+        </div>
+      }
+    >
       <ElementSettingsPanel
         block={block}
         container={container}
         onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)}
         onToggleVisibility={() => editor.toggleBlockVisibility(container, block.id)}
       />
-    </div>
+    </FilterableSettingsBody>
   );
 }

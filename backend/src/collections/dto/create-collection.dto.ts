@@ -46,4 +46,10 @@ export class CreateCollectionDto {
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;
+
+  // Rendered on the collection page's own banner (storefront-v2 Phase 2A).
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
 }

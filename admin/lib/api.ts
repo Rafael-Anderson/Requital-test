@@ -42,6 +42,8 @@ import type {
   IngredientCategory,
   MenuItem,
   MenuItemType,
+  MenuItemStyle,
+  MenuColumnLinkType,
   MonthlyReportFilters,
   Order,
   Outlet,
@@ -634,12 +636,30 @@ export function listMenuItems() {
   return apiFetch<MenuItem[]>("/menu-items");
 }
 
+export interface MenuColumnLinkInput {
+  label: string;
+  linkType: MenuColumnLinkType;
+  collectionId?: number;
+  productId?: number;
+  customUrl?: string;
+  featured?: boolean;
+  sortOrder: number;
+}
+
+export interface MenuColumnInput {
+  title: string;
+  sortOrder: number;
+  links: MenuColumnLinkInput[];
+}
+
 export interface MenuItemInput {
   label: string;
   type: MenuItemType;
   collectionId?: number;
   collections?: { collectionId: number; sortOrder: number }[];
+  columns?: MenuColumnInput[];
   displayOrder?: number;
+  style?: MenuItemStyle;
 }
 
 export function createMenuItem(data: MenuItemInput) {
@@ -1202,6 +1222,7 @@ export interface CollectionInput {
   displayOrder?: number;
   image?: string | null;
   isFeatured?: boolean;
+  description?: string;
 }
 
 export function uploadCollectionImage(file: File) {

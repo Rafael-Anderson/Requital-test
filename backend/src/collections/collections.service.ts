@@ -48,8 +48,8 @@ export class CollectionsService {
 
     try {
       const result = await this.db.execute(
-        `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           dto.name,
@@ -58,6 +58,7 @@ export class CollectionsService {
           dto.displayOrder ?? 0,
           dto.image ?? null,
           dto.isFeatured ?? false,
+          dto.description ?? null,
         ],
       );
       return this.findById(result.insertId);
@@ -85,6 +86,7 @@ export class CollectionsService {
         isFeatured: dto.isFeatured,
         parentCollectionId: dto.parentCollectionId,
         image: dto.image,
+        description: dto.description,
       });
       if (set) {
         await this.db.execute(

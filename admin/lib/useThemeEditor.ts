@@ -215,6 +215,26 @@ export function useThemeEditor(themeId: number) {
     dirtyRef.current = dirty;
   }, [dirty]);
 
+  // Undo/redo history (storefront-v2 Phase 4C) — a plain snapshot stack,
+  // capped at 20 entries, separate from configRef/dirtyRef above (those
+  // exist so autosave reads the *latest* value without re-subscribing;
+  // this exists so undo/redo can jump to an *earlier* one). historyStack
+  // holds the config as it existed *after* each updateConfig call (index 0
+  // is the freshly-loaded config, before any edits); historyIndex is
+  // "where we currently are" in that stack, moved by undo/redo without
+  // going through updateConfig itself (an undo is navigation, not a new
+  // edit — it must not push a fresh history entry on top of itself).
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  // Mirrors historyStackRef.current.length as real state — canRedo needs
+  // the stack's length to compute, and reading a ref's .current during
+  // render (rather than in an effect/handler) is a real bug, not just a
+  // lint nit: nothing re-renders this component when a ref changes on its
+  // own, so a render-time read can go stale.
+  const [historyLength, setHistoryLength] = useState(0);
+  const historyStackRef = useRef<ThemeConfig[]>([]);
+  const historyIndexRef = useRef(-1);
+  const MAX_HISTORY = 20;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -223,6 +243,10 @@ export function useThemeEditor(themeId: number) {
       setConfig(t.config);
       setDirty(false);
       setSelectedId(null);
+      historyStackRef.current = [t.config];
+      historyIndexRef.current = 0;
+      setHistoryIndex(0);
+      setHistoryLength(1);
     } catch {
       toast("Failed to load theme", "error");
     } finally {
@@ -292,9 +316,70 @@ export function useThemeEditor(themeId: number) {
   }, [themeId]);
 
   function updateConfig(updater: (prev: ThemeConfig) => ThemeConfig) {
-    setConfig((prev) => (prev ? updater(prev) : prev));
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next = updater(prev);
+      const truncated = historyStackRef.current.slice(0, historyIndexRef.current + 1);
+      truncated.push(next);
+      const capped = truncated.length > MAX_HISTORY ? truncated.slice(truncated.length - MAX_HISTORY) : truncated;
+      historyStackRef.current = capped;
+      historyIndexRef.current = capped.length - 1;
+      setHistoryIndex(historyIndexRef.current);
+      setHistoryLength(capped.length);
+      return next;
+    });
     setDirty(true);
   }
+
+  function undo() {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    setHistoryIndex(historyIndexRef.current);
+    setConfig(historyStackRef.current[historyIndexRef.current]);
+    setSelectedId(null);
+    setDirty(true);
+  }
+
+  function redo() {
+    if (historyIndexRef.current >= historyStackRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    setHistoryIndex(historyIndexRef.current);
+    setConfig(historyStackRef.current[historyIndexRef.current]);
+    setSelectedId(null);
+    setDirty(true);
+  }
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < historyLength - 1;
+
+  // Ctrl+Z / Cmd+Z undo, Ctrl+Shift+Z / Ctrl+Y / Cmd+Shift+Z redo. Skipped
+  // while focus is inside a text field/contenteditable — hijacking the
+  // browser's own native per-field undo mid-keystroke would look like
+  // random data loss to a merchant who was just trying to undo a typo, not
+  // navigate theme-config history.
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      return target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (isEditableTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && e.shiftKey) {
+        e.preventDefault();
+        redo();
+      } else if (key === "z") {
+        e.preventDefault();
+        undo();
+      } else if (key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   function selectNode(id: string | null) {
     setSelectedId(id);
@@ -538,6 +623,10 @@ export function useThemeEditor(themeId: number) {
     addBlock,
     removeBlock,
     reorderBlocks,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 }
 

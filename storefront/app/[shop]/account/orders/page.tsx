@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { getMyOrders } from "@/lib/api";
 import type { CustomerOrderSummary } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import { currencySymbol } from "@/lib/currency";
 
 export default function OrderHistoryPage() {
   const router = useRouter();
@@ -59,7 +60,7 @@ export default function OrderHistoryPage() {
               <div className="text-right">
                 <p className="text-sm capitalize">{order.status}</p>
                 <p className="font-medium">
-                  {order.total} {shop?.currency}
+                  {order.total} {currencySymbol(shop?.currency)}
                 </p>
               </div>
             </div>

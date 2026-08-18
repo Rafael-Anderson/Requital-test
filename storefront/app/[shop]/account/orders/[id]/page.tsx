@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { getMyInvoiceHtml, getMyOrder } from "@/lib/api";
 import type { CustomerOrderSummary } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import { currencySymbol } from "@/lib/currency";
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -111,7 +112,7 @@ export default function OrderDetailPage() {
                   {item.variantLabel && <p className="text-xs text-zinc-500">{item.variantLabel}</p>}
                 </div>
                 <span>
-                  {item.priceAtPurchase} {shop?.currency}
+                  {item.priceAtPurchase} {currencySymbol(shop?.currency)}
                 </span>
               </div>
             ))}
@@ -122,7 +123,7 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-zinc-500">
                 <span>Delivery fee</span>
                 <span>
-                  {order.deliveryFee} {shop?.currency}
+                  {order.deliveryFee} {currencySymbol(shop?.currency)}
                 </span>
               </div>
             )}
@@ -130,7 +131,7 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-green-600 dark:text-green-400">
                 <span>Discount</span>
                 <span>
-                  -{order.discountAmount} {shop?.currency}
+                  -{order.discountAmount} {currencySymbol(shop?.currency)}
                 </span>
               </div>
             )}
@@ -138,14 +139,14 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-zinc-500">
                 <span>Tax</span>
                 <span>
-                  {order.taxAmount} {shop?.currency}
+                  {order.taxAmount} {currencySymbol(shop?.currency)}
                 </span>
               </div>
             )}
             <div className="flex justify-between font-medium pt-1">
               <span>Total</span>
               <span>
-                {order.total} {shop?.currency}
+                {order.total} {currencySymbol(shop?.currency)}
               </span>
             </div>
           </div>

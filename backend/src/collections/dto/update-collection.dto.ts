@@ -50,4 +50,9 @@ export class UpdateCollectionDto {
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
 }

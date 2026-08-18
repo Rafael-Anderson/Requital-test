@@ -283,8 +283,9 @@ export class ProductsService {
             costPrice, status, trackInventory, continueSellingOutOfStock, chargeTax,
             isCheckoutAddon, showVariants, showAttributes, showFaqs, usesIngredients,
             vendor, productType, physicalProduct, weight, weightUnit, dimensions,
-            isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax,
+            additionalInfo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
@@ -319,6 +320,7 @@ export class ProductsService {
             dto.giftCardDenominations ? JSON.stringify(dto.giftCardDenominations) : null,
             dto.giftCardCustomAmountMin ?? null,
             dto.giftCardCustomAmountMax ?? null,
+            dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : null,
           ],
         );
         const newId = (result as { insertId: number }).insertId;
@@ -769,6 +771,7 @@ export class ProductsService {
             : undefined,
           giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
           giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
+          additionalInfo: dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : undefined,
         });
         if (set) {
           await conn.query(`UPDATE product SET ${set.setClause} WHERE id = ?`, [

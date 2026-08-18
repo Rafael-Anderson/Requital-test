@@ -46,6 +46,8 @@ function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
     setAttributes: vi.fn(),
     faqs: [],
     setFaqs: vi.fn(),
+    additionalInfo: [],
+    setAdditionalInfo: vi.fn(),
     fieldErrors: {},
     ...overrides,
   } as unknown as ProductFormState;

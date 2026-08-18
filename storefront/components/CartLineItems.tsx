@@ -2,6 +2,7 @@
 
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
+import { currencySymbol } from "@/lib/currency";
 
 // The actual line-item list + qty controls, shared verbatim between the
 // full-page cart (app/[shop]/cart/page.tsx) and the slide-out CartDrawer —
@@ -21,7 +22,7 @@ export default function CartLineItems() {
             <p className="font-medium truncate text-sm text-product-name">{item.name}</p>
             {item.variantLabel && <p className="text-xs text-zinc-500">{item.variantLabel}</p>}
             <p className="text-sm text-price-main">
-              {item.price} {shop?.currency}
+              {item.price} {currencySymbol(shop?.currency)}
             </p>
           </div>
           <div className="flex items-center border border-stroke rounded-lg shrink-0">

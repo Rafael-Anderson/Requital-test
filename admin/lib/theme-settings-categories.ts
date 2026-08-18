@@ -1,4 +1,7 @@
-// The 18 Theme Settings categories, in the confirmed spec order — the
+// The 18 Theme Settings categories (+ "Collection page", storefront-v2
+// Phase 2C/2D — governs the standalone collection detail page, which isn't
+// composed of theme sections so it needs its own global category), in the
+// confirmed spec order — the
 // single source of truth for both the left-column category list
 // (components/theme-builder/ThemeSettingsList.tsx) and the right panel's
 // label-to-form dispatch (components/theme-builder/SettingsPanel.tsx), so
@@ -22,4 +25,5 @@ export const THEME_SETTINGS_CATEGORY_LABELS = [
   "Swatches",
   "Variant pickers",
   "Custom CSS",
+  "Collection page",
 ] as const;
