@@ -167,6 +167,7 @@ export interface Collection {
   image: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
+  description: string | null;
 }
 
 // Collection (taxonomy node) detail page — /[shop]/collections/[slug].
@@ -175,6 +176,8 @@ export interface CollectionDetail {
   name: string;
   slug: string;
   image: string | null;
+  description: string | null;
+  parentCollectionId: number | null;
   products: Product[];
 }
 
@@ -205,8 +208,10 @@ export interface HomepageTemplateSection {
   products: Product[];
 }
 
-export const MENU_ITEM_TYPES = ["LINK", "DROPDOWN"] as const;
+export const MENU_ITEM_TYPES = ["LINK", "DROPDOWN", "MEGA"] as const;
 export type MenuItemType = (typeof MENU_ITEM_TYPES)[number];
+
+export type MenuColumnLinkType = "COLLECTION" | "PRODUCT" | "CUSTOM";
 
 export interface MenuItemCollectionRef {
   collectionId: number;
@@ -214,13 +219,41 @@ export interface MenuItemCollectionRef {
   collection: { id: number; name: string; slug: string } | null;
 }
 
+export interface MenuColumnLink {
+  id: number;
+  label: string;
+  linkType: MenuColumnLinkType;
+  featured: boolean;
+  sortOrder: number;
+  collection: { id: number; name: string; slug: string } | null;
+  product: { id: number; name: string; slug: string } | null;
+  customUrl: string | null;
+}
+
+export interface MenuColumn {
+  id: number;
+  title: string;
+  sortOrder: number;
+  links: MenuColumnLink[];
+}
+
+export interface MenuItemStyle {
+  textColor?: string;
+  backgroundColor?: string;
+  borderRadius?: "none" | "slight" | "pill";
+  fontWeight?: "normal" | "medium" | "bold";
+  hoverBackgroundColor?: string;
+}
+
 export interface MenuItem {
   id: number;
   label: string;
   type: MenuItemType;
+  style: MenuItemStyle | null;
   collectionId: number | null;
   collection: { id: number; name: string; slug: string } | null;
   collections: MenuItemCollectionRef[];
+  columns: MenuColumn[];
 }
 
 export interface ProductImage {
@@ -241,6 +274,18 @@ export interface ProductFaq {
   question: string;
   answer: string;
   order: number;
+}
+
+// Product page "Additional information" accordion blocks (storefront-v2
+// Phase 3D). Only visible: true blocks are ever meant to render — the
+// public API still returns hidden ones too (same "backend doesn't filter,
+// consumer decides" convention as everything else on this response), so
+// AdditionalInfoAccordion filters client-side.
+export interface ProductAdditionalInfoBlock {
+  id: string;
+  title: string;
+  body: string;
+  visible: boolean;
 }
 
 export interface ProductOptionValue {
@@ -280,6 +325,9 @@ export interface Product {
   name: string;
   description: string | null;
   shortSummary: string | null;
+  // Only present on collection-detail products (storefront-v2's "Best
+  // selling" sort) — never sent by any other product list endpoint.
+  salesCount?: number;
   longSummary: string | null;
   thumbnail: string;
   price: string;
@@ -291,6 +339,7 @@ export interface Product {
   images: ProductImage[];
   attributes: ProductAttribute[];
   faqs: ProductFaq[];
+  additionalInfo: ProductAdditionalInfoBlock[] | null;
   // Per-product opt-in gating whether the Attributes/FAQs sections below
   // render on the PDP at all — replaces the old shop-wide
   // productAttributesEnabled/productFaqsEnabled toggles. See ProductDetailClient.

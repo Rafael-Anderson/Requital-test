@@ -21,6 +21,7 @@ function collection(id: number): Collection {
     image: null,
     isFeatured: false,
     parentCollectionId: null,
+    description: null,
   };
 }
 

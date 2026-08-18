@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { listProducts } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
+import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
+import { currencySymbol } from "@/lib/currency";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -92,6 +94,101 @@ function QuickAddButton({
   );
 }
 
+// One product tile — its own component (not inline in the outer .map())
+// because useProductCardImageIndex is a hook and needs one instance per
+// card, not one shared across the whole grid.
+function GridProductCard({
+  product,
+  cardStyle,
+  shopBasePath,
+  showMedia,
+  showTitle,
+  showPrice,
+  showCurrencyCode,
+  shopCurrency,
+  titleBlock,
+  priceBlock,
+  previewMode,
+  sectionId,
+  cardHoverEffect,
+  showCarousel,
+  desktopQuickAdd,
+  mobileQuickAdd,
+  nameStyle,
+}: {
+  product: Product;
+  cardStyle: string;
+  shopBasePath: string;
+  showMedia: boolean;
+  showTitle: boolean;
+  showPrice: boolean;
+  showCurrencyCode: boolean;
+  shopCurrency: string | undefined;
+  titleBlock: ThemeBlock | undefined;
+  priceBlock: ThemeBlock | undefined;
+  previewMode: boolean;
+  sectionId: string;
+  cardHoverEffect: string | undefined;
+  showCarousel: boolean;
+  desktopQuickAdd: ReactNode;
+  mobileQuickAdd: ReactNode;
+  nameStyle: CSSProperties;
+}) {
+  const images = product.images.length > 0 ? product.images.map((i) => i.url) : [product.thumbnail];
+  const { activeIndex, handlers } = useProductCardImageIndex(images.length, {
+    cycle: showCarousel,
+    swapOnHover: cardHoverEffect === "swap",
+  });
+
+  return (
+    <Link
+      href={`${shopBasePath}/products/${product.slug}`}
+      className={`theme-product-card block group relative transition-all ${cardStyle}`}
+      style={{ transitionDuration: "var(--theme-card-hover-transition-duration, 300ms)" }}
+      {...handlers}
+    >
+      {showMedia && (
+        <div className="aspect-square overflow-hidden bg-black/5 relative" style={{ borderRadius: "var(--theme-radius, 8px)" }}>
+          {images.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={url}
+              src={url}
+              alt={product.name}
+              className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity duration-150"
+              style={{
+                opacity: i === activeIndex ? 1 : 0,
+                transitionDuration: i === activeIndex ? "150ms" : "0ms, var(--theme-card-hover-transition-duration, 300ms)",
+              }}
+            />
+          ))}
+          {desktopQuickAdd}
+        </div>
+      )}
+      {showTitle && (
+        <p
+          className="mt-3 line-clamp-2"
+          {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "product_title" }) : {})}
+          style={{ ...nameStyle, ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
+        >
+          {product.name}
+        </p>
+      )}
+      {showPrice && (
+        <p
+          className="mt-1 text-sm font-semibold"
+          {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
+          style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
+        >
+          {showCurrencyCode && shopCurrency ? `${shopCurrency} ` : ""}
+          {product.price}
+        </p>
+      )}
+      {mobileQuickAdd}
+    </Link>
+  );
+}
+
 // Renders via the product_card block's own sub-blocks (product_media/
 // product_title/product_price), each independently toggleable — the
 // biggest single rework in the storefront half of this rework, replacing
@@ -139,64 +236,54 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
       )}
       <div className={`grid ${columns} gap-4 sm:gap-6`}>
         {products.map((product) => (
-          <Link key={product.id} href={`${shopBasePath}/products/${product.slug}`} className={`block group relative ${cardStyle}`}>
-            {showMedia && (
-              <div className="aspect-square overflow-hidden bg-black/5" style={{ borderRadius: "var(--theme-radius, 8px)" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={product.thumbnail}
-                  alt={product.name}
-                  className="theme-product-image w-full h-full object-cover transition-transform"
-                  style={{ transitionDuration: "var(--theme-card-hover-transition-duration, 300ms)" }}
+          <GridProductCard
+            key={product.id}
+            product={product}
+            cardStyle={cardStyle}
+            shopBasePath={shopBasePath}
+            showMedia={showMedia}
+            showTitle={showTitle}
+            showPrice={showPrice}
+            showCurrencyCode={showCurrencyCode}
+            shopCurrency={currencySymbol(shop?.currency)}
+            titleBlock={titleBlock}
+            priceBlock={priceBlock}
+            previewMode={previewMode}
+            sectionId={sectionId}
+            cardHoverEffect={themeConfig?.globalSettings.animations.cardHoverEffect}
+            showCarousel={!!productCards?.showCarousel}
+            nameStyle={productCards ? productCardNameStyle(productCards) : {}}
+            desktopQuickAdd={
+              shopCartUsable && productCards.quickAdd ? (
+                <QuickAddButton
+                  product={product}
+                  outletId={outletId}
+                  background={productCards.quickAddBackground}
+                  color={productCards.quickAddText}
+                  fill={shop?.buttonFill}
+                  label={quickAddLabel}
+                  previewMode={previewMode}
+                  tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
+                  className="hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow"
                 />
-                {shopCartUsable && productCards.quickAdd && (
-                  <QuickAddButton
-                    product={product}
-                    outletId={outletId}
-                    background={productCards.quickAddBackground}
-                    color={productCards.quickAddText}
-                    fill={shop?.buttonFill}
-                    label={quickAddLabel}
-                    previewMode={previewMode}
-                    tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
-                    className="hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow"
-                  />
-                )}
-              </div>
-            )}
-            {showTitle && (
-              <p
-                className="mt-3 text-sm font-medium line-clamp-2"
-                {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "product_title" }) : {})}
-                style={titleBlock ? resolveTextElementStyle(titleBlock.settings) : undefined}
-              >
-                {product.name}
-              </p>
-            )}
-            {showPrice && (
-              <p
-                className="mt-1 text-sm font-semibold"
-                {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
-                style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
-              >
-                {showCurrencyCode && shop ? `${shop.currency} ` : ""}
-                {product.price}
-              </p>
-            )}
-            {shopCartUsable && productCards.mobileQuickAdd && (
-              <QuickAddButton
-                product={product}
-                outletId={outletId}
-                background={productCards.quickAddBackground}
-                color={productCards.quickAddText}
-                fill={shop?.buttonFill}
-                label={quickAddLabel}
-                previewMode={previewMode}
-                tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
-                className="sm:hidden mt-2 w-full h-8 text-xs font-medium rounded-full border border-stroke"
-              />
-            )}
-          </Link>
+              ) : null
+            }
+            mobileQuickAdd={
+              shopCartUsable && productCards.mobileQuickAdd ? (
+                <QuickAddButton
+                  product={product}
+                  outletId={outletId}
+                  background={productCards.quickAddBackground}
+                  color={productCards.quickAddText}
+                  fill={shop?.buttonFill}
+                  label={quickAddLabel}
+                  previewMode={previewMode}
+                  tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
+                  className="sm:hidden mt-2 w-full h-8 text-xs font-medium rounded-full border border-stroke"
+                />
+              ) : null
+            }
+          />
         ))}
       </div>
     </div>

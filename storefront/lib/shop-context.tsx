@@ -214,11 +214,19 @@ const PAGE_WIDTH_PX: Record<ThemeConfig["globalSettings"]["pageLayout"]["width"]
 
 const HEADING_KEYS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 
-const CARD_HOVER_TRANSFORM: Record<string, string> = {
-  none: "none",
-  lift: "translateY(-4px)",
-  scale: "scale(1.04)",
-  zoom: "scale(1.08)",
+// 'zoom' targets the card's own image (theme-product-image); 'rise'
+// targets the card wrapper itself (theme-product-card) since it moves the
+// whole card, not just its photo — two separate vars for two separate
+// elements. 'swap' has no CSS transform (handled via
+// use-product-card-image-index.ts swapping which <img> is rendered).
+const CARD_IMAGE_HOVER_TRANSFORM: Record<string, string> = {
+  zoom: "scale(1.04)",
+};
+const CARD_WRAPPER_HOVER_TRANSFORM: Record<string, string> = {
+  rise: "translateY(-4px)",
+};
+const CARD_WRAPPER_HOVER_SHADOW: Record<string, string> = {
+  rise: "0 8px 20px rgba(15,23,22,0.12)",
 };
 
 function applyHeadingPreset(root: CSSStyleDeclaration, key: string, preset: HeadingTextPreset) {
@@ -339,7 +347,10 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   // gap as --theme-radius; ProductGridSection previously always applied
   // `group-hover:scale-[1.04]` regardless of this field's value.
   if (g.animations?.cardHoverEffect) {
-    root.style.setProperty("--theme-card-hover-transform", CARD_HOVER_TRANSFORM[g.animations.cardHoverEffect] ?? "none");
+    const effect = g.animations.cardHoverEffect;
+    root.style.setProperty("--theme-card-hover-transform", CARD_IMAGE_HOVER_TRANSFORM[effect] ?? "none");
+    root.style.setProperty("--theme-card-hover-card-transform", CARD_WRAPPER_HOVER_TRANSFORM[effect] ?? "none");
+    root.style.setProperty("--theme-card-hover-card-shadow", CARD_WRAPPER_HOVER_SHADOW[effect] ?? "none");
   }
 
   // productCardTransition gates whether the hover transform above animates

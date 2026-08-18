@@ -9,6 +9,7 @@ import PromoCodeField from "@/components/PromoCodeField";
 import GiftCardCodeField from "@/components/GiftCardCodeField";
 import DeliveryAddressFields from "./DeliveryAddressFields";
 import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_OUTLINE_CLASS, PAYMENT_LABELS } from "./checkout-field-styles";
+import { currencySymbol } from "@/lib/currency";
 
 const STEPS = ["Contact", "Delivery", "Payment"] as const;
 
@@ -233,14 +234,14 @@ export default function CheckoutSteps(state: CheckoutFormState) {
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Subtotal</span>
                 <span>
-                  {subtotal.toFixed(2)} {shop?.currency}
+                  {subtotal.toFixed(2)} {currencySymbol(shop?.currency)}
                 </span>
               </div>
               {discountAmount !== null && discountAmount > 0 && (
                 <div className="flex items-center justify-between text-green-600 dark:text-green-400">
                   <span>Discount</span>
                   <span>
-                    -{discountAmount.toFixed(2)} {shop?.currency}
+                    -{discountAmount.toFixed(2)} {currencySymbol(shop?.currency)}
                   </span>
                 </div>
               )}
@@ -248,14 +249,14 @@ export default function CheckoutSteps(state: CheckoutFormState) {
                 <div className="flex items-center justify-between text-green-600 dark:text-green-400">
                   <span>Gift card</span>
                   <span>
-                    -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} {shop?.currency}
+                    -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} {currencySymbol(shop?.currency)}
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Total (before delivery/tax)</span>
                 <span className="font-medium">
-                  {total.toFixed(2)} {shop?.currency}
+                  {total.toFixed(2)} {currencySymbol(shop?.currency)}
                 </span>
               </div>
             </div>

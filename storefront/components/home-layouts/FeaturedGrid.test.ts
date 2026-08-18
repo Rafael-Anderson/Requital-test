@@ -11,6 +11,7 @@ function collection(overrides: Partial<Collection>): Collection {
     image: null,
     isFeatured: false,
     parentCollectionId: null,
+    description: null,
     ...overrides,
   };
 }

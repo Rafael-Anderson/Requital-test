@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { ShieldCheck, Truck, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
-import { getProductBySlug } from "@/lib/api";
+import { getProductBySlug, listProducts, listCollections } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { iconStyleProps } from "@/lib/icon-style";
 import { storeButtonClassName } from "@/lib/button-style";
@@ -13,8 +14,10 @@ import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
 import NotifyMeForm from "@/components/NotifyMeForm";
+import AdditionalInfoAccordion from "@/components/AdditionalInfoAccordion";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
-import type { Product, ProductVariant, Shop } from "@/lib/types";
+import { currencySymbol } from "@/lib/currency";
+import type { Collection, Product, ProductVariant, Shop } from "@/lib/types";
 
 // One selected value id per option, in option order (index i -> product.options[i]).
 type Selection = (number | null)[];
@@ -65,6 +68,10 @@ export default function ProductDetailClient() {
   // distinguishable while the product is loading).
   const [giftCardAmount, setGiftCardAmount] = useState<number | null>(null);
   const [customGiftCardAmount, setCustomGiftCardAmount] = useState("");
+  // Breadcrumb (3A) and "You might also want" (3C) — both need data this
+  // page's own product fetch doesn't return, so they're separate requests.
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [addons, setAddons] = useState<Product[]>([]);
 
   useEffect(() => {
     getProductBySlug(shopSlug, params.slug, defaultOutletId)
@@ -76,6 +83,16 @@ export default function ProductDetailClient() {
       })
       .catch(() => setProduct(null));
   }, [shopSlug, params.slug, defaultOutletId]);
+
+  useEffect(() => {
+    listCollections(shopSlug).then(setCollections).catch(() => setCollections([]));
+  }, [shopSlug]);
+
+  useEffect(() => {
+    listProducts(shopSlug, defaultOutletId, undefined, true)
+      .then(setAddons)
+      .catch(() => setAddons([]));
+  }, [shopSlug, defaultOutletId]);
 
   const selectedVariant = useMemo(
     () => (product && product.hasVariants ? findVariant(product, selection) : undefined),
@@ -144,11 +161,8 @@ export default function ProductDetailClient() {
       ? buildWhatsAppUrl(shop?.whatsappCountryCode ?? null, shop?.whatsappNumber ?? null, `Hi, I'm interested in ${product.name}`)
       : null;
 
-  function handleAddToCart() {
-    if (!product || defaultOutletId === undefined) return;
-    if (product.hasVariants && !selectedVariant) return;
-    if (product.isGiftCard && !giftCardAmountValid) return;
-    const item = {
+  function buildCartItem(product: Product) {
+    return {
       productId: product.id,
       variantId: selectedVariant?.id,
       variantLabel: selectedVariant?.label ?? undefined,
@@ -159,17 +173,38 @@ export default function ProductDetailClient() {
       isGiftCard: product.isGiftCard || undefined,
       note: note.trim() || undefined,
     };
+  }
+
+  function handleAddToCart() {
+    if (!product || defaultOutletId === undefined) return;
+    if (product.hasVariants && !selectedVariant) return;
+    if (product.isGiftCard && !giftCardAmountValid) return;
     if (cartMode === "buy_now") {
-      // Replaces whatever's already in the cart, not merges — "buy now" is a
-      // single-item purchase, not a continuation of prior browsing.
+      // Shop-wide "no persistent cart" mode — the only button this shop
+      // shows already means Buy Now, so Add to Cart's own click has to
+      // behave like one. Replaces whatever's already in the cart, not
+      // merges — a single-item purchase, not a continuation of browsing.
       clear();
-      addItem(item, quantity, defaultOutletId);
+      addItem(buildCartItem(product), quantity, defaultOutletId);
       router.push(`${shopBasePath}/checkout`);
       return;
     }
-    addItem(item, quantity, defaultOutletId);
+    addItem(buildCartItem(product), quantity, defaultOutletId);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
+  }
+
+  // Real "Buy Now" button (storefront-v2 Phase 3B) — only rendered
+  // alongside Add to Cart in normal cartMode; the shop-wide buy_now-only
+  // mode already gets this exact behavior from handleAddToCart above, and
+  // contact mode has no cart interaction at all.
+  function handleBuyNow() {
+    if (!product || defaultOutletId === undefined) return;
+    if (product.hasVariants && !selectedVariant) return;
+    if (product.isGiftCard && !giftCardAmountValid) return;
+    clear();
+    addItem(buildCartItem(product), quantity, defaultOutletId);
+    router.push(`${shopBasePath}/checkout`);
   }
 
   const addToCartLabel = added
@@ -187,7 +222,11 @@ export default function ProductDetailClient() {
   // branch to keep in sync, not two. contact_to_order mode: WhatsApp link, or
   // a disabled-looking static button if the shop has no whatsappNumber
   // configured yet (a merchant config gap, not a shopper-facing error to
-  // handle richly).
+  // handle richly). Normal cart mode renders two real buttons side by side —
+  // Add to Cart (secondary, the shop's own Add-to-Cart color) and Buy Now
+  // (primary, the shop's own Button color) — rather than one button whose
+  // behavior changes; both share the passed-in className for sizing, nested
+  // inside a flex-1 wrapper so they split the available width evenly.
   function primaryCtaElement(className: string) {
     if (cartMode === "contact") {
       if (contactWhatsAppUrl) {
@@ -206,6 +245,29 @@ export default function ProductDetailClient() {
         <span className={`inline-flex items-center justify-center opacity-50 cursor-not-allowed ${className} ${storeButtonClassName(shop, "add-to-cart")}`}>
           Contact us to order
         </span>
+      );
+    }
+    if (cartMode === "cart") {
+      const disabled = defaultOutletId === undefined || outOfStock || !giftCardAmountValid;
+      return (
+        <div className="flex-1 flex gap-2">
+          <button
+            type="button"
+            onClick={handleAddToCart}
+            disabled={disabled}
+            className={`${className} ${storeButtonClassName(shop, "add-to-cart")}`}
+          >
+            {addToCartLabel}
+          </button>
+          <button
+            type="button"
+            onClick={handleBuyNow}
+            disabled={disabled}
+            className={`${className} ${storeButtonClassName(shop, "button")}`}
+          >
+            Buy Now
+          </button>
+        </div>
       );
     }
     return (
@@ -236,11 +298,11 @@ export default function ProductDetailClient() {
 
           <div className="flex items-baseline gap-2 mt-2">
             <p className="text-xl font-semibold text-product-name">
-              {displayPrice} <span className="text-base font-normal text-price-main">{shop?.currency}</span>
+              {displayPrice} <span className="text-base font-normal text-price-main">{currencySymbol(shop?.currency)}</span>
             </p>
             {displayCompareAtPrice && (
               <p className="text-sm text-price-secondary line-through">
-                {displayCompareAtPrice} {shop?.currency}
+                {displayCompareAtPrice} {currencySymbol(shop?.currency)}
               </p>
             )}
           </div>
@@ -310,7 +372,7 @@ export default function ProductDetailClient() {
                             active ? "border-accent bg-accent/10 text-accent-text" : "border-stroke hover:border-black/30"
                           }`}
                         >
-                          {amount} {shop?.currency}
+                          {amount} {currencySymbol(shop?.currency)}
                         </button>
                       );
                     })}
@@ -320,7 +382,7 @@ export default function ProductDetailClient() {
               {product.giftCardCustomAmountMin && product.giftCardCustomAmountMax && (
                 <div>
                   <label className="text-sm font-medium block mb-1.5">
-                    Or enter a custom amount ({product.giftCardCustomAmountMin}–{product.giftCardCustomAmountMax} {shop?.currency})
+                    Or enter a custom amount ({product.giftCardCustomAmountMin}–{product.giftCardCustomAmountMax} {currencySymbol(shop?.currency)})
                   </label>
                   <input
                     type="number"
@@ -404,6 +466,54 @@ export default function ProductDetailClient() {
             <NotifyMeForm productId={product.id} variantId={selectedVariant?.id} />
           )}
 
+          {/* "You might also want" (storefront-v2 Phase 3C) — real
+              isCheckoutAddon products (the same flag the checkout add-on
+              popup already uses), never the product currently being
+              viewed even if it's flagged as its own add-on. */}
+          {addons.filter((a) => a.id !== product.id).length > 0 && (
+            <div className="mt-6 pt-6 border-t border-stroke">
+              <h2 className="text-base font-semibold text-product-name mb-3">You might also want:</h2>
+              <div className="space-y-2">
+                {addons
+                  .filter((a) => a.id !== product.id)
+                  .map((addon) => (
+                    <div key={addon.id} className="flex items-center gap-3 rounded-lg border border-stroke p-2">
+                      <Link href={`${shopBasePath}/products/${addon.slug}`} className="shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={addon.thumbnail} alt={addon.name} className="size-14 rounded-md object-cover bg-black/5" />
+                      </Link>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`${shopBasePath}/products/${addon.slug}`}
+                          className="text-sm font-medium text-product-name line-clamp-1 hover:underline"
+                        >
+                          {addon.name}
+                        </Link>
+                        <p className="text-xs text-price-main mt-0.5">
+                          {addon.price} {currencySymbol(shop?.currency)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          defaultOutletId !== undefined &&
+                          addItem(
+                            { productId: addon.id, name: addon.name, price: Number(addon.price), thumbnail: addon.thumbnail, maxStock: addon.stockQuantity },
+                            1,
+                            defaultOutletId,
+                          )
+                        }
+                        disabled={defaultOutletId === undefined}
+                        className={`shrink-0 h-8 px-3 text-xs font-medium rounded-full ${storeButtonClassName(shop, "add-to-cart")}`}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* Trust row — secure checkout is a factual claim about how
               checkout works, not shop-specific policy copy; the delivery
               estimate is real shop.estimatedDeliveryTime* data or omitted
@@ -447,6 +557,8 @@ export default function ProductDetailClient() {
             />
           )}
 
+          <AdditionalInfoAccordion blocks={product.additionalInfo} />
+
           {product.showAttributes && product.attributes.length > 0 && (
             <div className="mt-6 pt-6 border-t border-stroke">
               <h2 className="text-base font-semibold text-product-name mb-2">Details</h2>
@@ -477,8 +589,29 @@ export default function ProductDetailClient() {
         </div>
   );
 
+  // Breadcrumb (storefront-v2 Phase 3A) — product.collections only carries
+  // {id, name} (see lib/types.ts), so the slug needed to link it comes from
+  // this page's own separate collections fetch above.
+  const primaryCollectionRef = product.collections[0];
+  const primaryCollection = primaryCollectionRef ? collections.find((c) => c.id === primaryCollectionRef.id) : undefined;
+
   return (
     <StorefrontPageShell variant="wide">
+      <nav className="text-xs text-zinc-500 mb-4">
+        <Link href={shopBasePath || "/"} className="hover:underline">
+          Home
+        </Link>
+        {primaryCollection && (
+          <>
+            {" / "}
+            <Link href={`${shopBasePath}/collections/${primaryCollection.slug}`} className="hover:underline">
+              {primaryCollection.name}
+            </Link>
+          </>
+        )}
+        {" / "}
+        <span>{product.name}</span>
+      </nav>
       {pdpLayout === "gallery_top" ? (
         // Full-width gallery up top, details below — a genuinely different
         // component tree (single column, gallery unconstrained to half the
@@ -504,7 +637,7 @@ export default function ProductDetailClient() {
           <div className="min-w-0">
             <p className="text-xs text-zinc-500 truncate">{product.name}</p>
             <p className="font-semibold text-product-name">
-              {displayPrice} <span className="text-xs font-normal text-price-main">{shop?.currency}</span>
+              {displayPrice} <span className="text-xs font-normal text-price-main">{currencySymbol(shop?.currency)}</span>
             </p>
           </div>
           {primaryCtaElement("flex-1 h-11 font-semibold text-sm")}

@@ -118,7 +118,7 @@ export interface AnimationSettings {
   pageTransition: boolean;
   productCardTransition: boolean;
   addToCart: boolean;
-  cardHoverEffect: "none" | "lift" | "scale" | "zoom";
+  cardHoverEffect: "none" | "zoom" | "rise" | "swap";
 }
 
 export interface BadgeSettings {
@@ -190,8 +190,19 @@ export interface ProductCardSettings {
   mobileQuickAdd: boolean;
   quickAddBackground: string;
   quickAddText: string;
-  showSecondImageOnHover: boolean;
   showCarousel: boolean;
+  productNameFontSize: number;
+  productNameFontWeight: "regular" | "medium" | "bold";
+  productNameColor: string;
+}
+
+export interface CollectionPageSettings {
+  textAboveProducts: string;
+  textBelowProducts: string;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  loadMoreStyle: "infinite" | "pagination";
 }
 
 export interface SearchSettings {
@@ -240,6 +251,7 @@ export interface GlobalThemeSettings {
   swatches: SwatchSettings;
   variantPickers: VariantPickerSettings;
   customCss: CustomCssSettings;
+  collectionPage: CollectionPageSettings;
 }
 
 export interface ThemeConfig {

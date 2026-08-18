@@ -5,6 +5,7 @@ import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
+import ThemeImageBlock from "./ThemeImageBlock";
 import type { Shop } from "@/lib/types";
 import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -90,6 +91,9 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
   const columns = blocks.filter((b) => b.type === "footer_column");
   const socialBlock = blocks.find((b) => b.type === "footer_social");
   const copyrightBlock = blocks.find((b) => b.type === "footer_copyright");
+  // Image blocks (storefront-v2 Phase 4B) — inline alongside columns/social
+  // in the footer's own top content row, in their normal block order.
+  const imageBlocks = blocks.filter((b) => b.type === "image");
 
   const copyrightText =
     copyrightBlock && typeof copyrightBlock.settings.text === "string" && copyrightBlock.settings.text
@@ -104,12 +108,15 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
   return (
     <footer style={style} className="py-10">
       <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
-        {(columns.length > 0 || socialBlock) && (
+        {(columns.length > 0 || socialBlock || imageBlocks.length > 0) && (
           <div className="flex flex-wrap justify-between gap-8 pb-8 mb-6 border-b border-white/10">
             {columns.map((block) => (
               <FooterColumn key={block.id} block={block} sectionId={FOOTER_CHROME_ID} previewMode={previewMode} />
             ))}
             {socialBlock && <FooterSocial shop={shop} />}
+            {imageBlocks.map((block) => (
+              <ThemeImageBlock key={block.id} block={block} sectionId={FOOTER_CHROME_ID} previewMode={previewMode} />
+            ))}
           </div>
         )}
         <p
