@@ -1269,6 +1269,7 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   search_icon: "Search",
   cart_icon: "Cart",
   account_icon: "Account",
+  header_text: "Header Text",
   footer_column: "Column",
   footer_social: "Social Links",
   footer_copyright: "Copyright",
@@ -1290,7 +1291,7 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
 };
 
 export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
-  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon"],
+  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon", "header_text"],
   footer: ["footer_column", "footer_social", "footer_copyright"],
   announcement_bar: ["announcement"],
   hero: ["heading", "subheading", "cta"],
