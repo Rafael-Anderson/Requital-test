@@ -23,10 +23,12 @@ export default function RichTextBlockEditor({
   blockId,
   value,
   onChange,
+  label = "Text",
 }: {
   blockId: string;
   value: string;
   onChange: (html: string) => void;
+  label?: string;
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,7 @@ export default function RichTextBlockEditor({
 
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Text</label>
+      <label className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">{label}</label>
       <div
         ref={editorRef}
         contentEditable

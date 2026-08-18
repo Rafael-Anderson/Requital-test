@@ -70,6 +70,7 @@ const existingProduct: Product = {
   images: [{ url: "/uploads/products/rose.jpg", order: 0 }] as Product["images"],
   attributes: [],
   faqs: [],
+  additionalInfo: null,
   hasVariants: false,
   options: [],
   variants: [],

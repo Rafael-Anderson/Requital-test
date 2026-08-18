@@ -8,6 +8,7 @@ import CollectionCheckboxTree from "@/components/CollectionCheckboxTree";
 import VariantsSection from "@/components/VariantsSection";
 import AttributesSection from "@/components/AttributesSection";
 import FaqsSection from "@/components/FaqsSection";
+import AdditionalInfoSection from "@/components/AdditionalInfoSection";
 import Tooltip from "@/components/ui/Tooltip";
 import { PRODUCT_STATUS_LABELS } from "@/lib/types";
 import { PRODUCT_STATUSES, type ProductFormState } from "@/lib/useProductForm";
@@ -164,6 +165,11 @@ export default function ProductFormStepOrganization({
           options={PRODUCT_STATUSES.map((s) => ({ value: s, label: PRODUCT_STATUS_LABELS[s] }))}
         />
       </Card>
+
+      {/* Not gated by hideFeatureSections/productEditorMode — unlike
+          Variants/Attributes/FAQs, this has no separate advanced-mode
+          anchor elsewhere, so it always renders exactly once here. */}
+      <AdditionalInfoSection blocks={form.additionalInfo} onChange={form.setAdditionalInfo} />
     </>
   );
 }

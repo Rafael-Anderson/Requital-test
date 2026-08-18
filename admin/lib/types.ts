@@ -314,6 +314,7 @@ export interface Collection {
   image: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
+  description: string | null;
 }
 
 export interface CollectionNode extends Collection {
@@ -406,6 +407,16 @@ export interface ProductFaq {
   question: string;
   answer: string;
   order: number;
+}
+
+// Product page "Additional information" accordion blocks (storefront-v2
+// Phase 3D) — admin-authored, ordered, individually hideable. id is
+// client-generated (crypto.randomUUID()), opaque to the backend.
+export interface ProductAdditionalInfoBlock {
+  id: string;
+  title: string;
+  body: string;
+  visible: boolean;
 }
 
 export interface ProductOptionValue {
@@ -531,6 +542,9 @@ export interface ProductInput {
   // set on update when provided (same convention as images/collectionIds);
   // omitted leaves it untouched. See ProductIngredientLink.
   ingredients?: { ingredientId: number; quantityPerUnit: number }[];
+  // Product page "Additional information" accordion blocks. Replaces the
+  // full set when provided, same convention as attributes/faqs above.
+  additionalInfo?: { id: string; title: string; body: string; visible: boolean }[];
 }
 
 export interface UpdateVariantInput {
@@ -600,6 +614,7 @@ export interface Product {
   images: ProductImage[];
   attributes: ProductAttribute[];
   faqs: ProductFaq[];
+  additionalInfo: ProductAdditionalInfoBlock[] | null;
   hasVariants: boolean;
   options: ProductOption[];
   variants: ProductVariant[];
@@ -1127,7 +1142,7 @@ export interface AnimationSettings {
   pageTransition: boolean;
   productCardTransition: boolean;
   addToCart: boolean;
-  cardHoverEffect: "none" | "lift" | "scale" | "zoom";
+  cardHoverEffect: "none" | "zoom" | "rise" | "swap";
 }
 
 export interface BadgeSettings {
@@ -1199,8 +1214,19 @@ export interface ProductCardSettings {
   mobileQuickAdd: boolean;
   quickAddBackground: string;
   quickAddText: string;
-  showSecondImageOnHover: boolean;
   showCarousel: boolean;
+  productNameFontSize: number;
+  productNameFontWeight: "regular" | "medium" | "bold";
+  productNameColor: string;
+}
+
+export interface CollectionPageSettings {
+  textAboveProducts: string;
+  textBelowProducts: string;
+  fontFamily: string;
+  fontSize: number;
+  textColor: string;
+  loadMoreStyle: "infinite" | "pagination";
 }
 
 export interface SearchSettings {
@@ -1249,6 +1275,7 @@ export interface GlobalThemeSettings {
   swatches: SwatchSettings;
   variantPickers: VariantPickerSettings;
   customCss: CustomCssSettings;
+  collectionPage: CollectionPageSettings;
 }
 
 export interface ThemeConfig {
@@ -1290,14 +1317,14 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
 };
 
 export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
-  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon"],
-  footer: ["footer_column", "footer_social", "footer_copyright"],
+  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon", "image"],
+  footer: ["footer_column", "footer_social", "footer_copyright", "image"],
   announcement_bar: ["announcement"],
-  hero: ["heading", "subheading", "cta"],
+  hero: ["heading", "subheading", "cta", "image"],
   featured_collections: ["collection_header", "product_card"],
   product_grid: ["product_card"],
   testimonials: ["heading", "testimonial"],
-  rich_text: ["text"],
+  rich_text: ["text", "image"],
   image_text: ["image", "text"],
   newsletter: ["heading", "text", "email_form"],
 };
@@ -2117,8 +2144,11 @@ export interface Template {
 
 // --- Menu (Phase C) — the storefront top bar's merchant-configured nav. ---
 
-export const MENU_ITEM_TYPES = ["LINK", "DROPDOWN"] as const;
+export const MENU_ITEM_TYPES = ["LINK", "DROPDOWN", "MEGA"] as const;
 export type MenuItemType = (typeof MENU_ITEM_TYPES)[number];
+
+export const MENU_COLUMN_LINK_TYPES = ["COLLECTION", "PRODUCT", "CUSTOM"] as const;
+export type MenuColumnLinkType = (typeof MENU_COLUMN_LINK_TYPES)[number];
 
 export interface MenuItemCollectionRef {
   collectionId: number;
@@ -2126,16 +2156,47 @@ export interface MenuItemCollectionRef {
   collection: { id: number; name: string; slug: string } | null;
 }
 
+export interface MenuColumnLink {
+  id: number;
+  label: string;
+  linkType: MenuColumnLinkType;
+  featured: boolean;
+  sortOrder: number;
+  collection: { id: number; name: string; slug: string } | null;
+  product: { id: number; name: string; slug: string } | null;
+  customUrl: string | null;
+}
+
+export interface MenuColumn {
+  id: number;
+  title: string;
+  sortOrder: number;
+  links: MenuColumnLink[];
+}
+
+// Per-nav-item button styling — applies to every type (LINK/DROPDOWN/MEGA),
+// it styles the top-level nav trigger itself, not the flyout content.
+export interface MenuItemStyle {
+  textColor?: string;
+  backgroundColor?: string;
+  borderRadius?: "none" | "slight" | "pill";
+  fontWeight?: "normal" | "medium" | "bold";
+  hoverBackgroundColor?: string;
+}
+
 export interface MenuItem {
   id: number;
   label: string;
   type: MenuItemType;
   displayOrder: number;
+  style: MenuItemStyle | null;
   // LINK only.
   collectionId: number | null;
   collection: { id: number; name: string; slug: string } | null;
   // DROPDOWN only.
   collections: MenuItemCollectionRef[];
+  // MEGA only.
+  columns: MenuColumn[];
 }
 
 export interface AbandonedCart {

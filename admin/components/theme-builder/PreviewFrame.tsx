@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { STOREFRONT_URL, storefrontUrlFor, getAccessToken } from "@/lib/api";
+import SelectionActionBar from "./SelectionActionBar";
 import type { Shop } from "@/lib/types";
 import {
   HEADER_CHROME_ID,
@@ -290,7 +291,12 @@ export default function PreviewFrame({
             style={{ width: DEVICE_WIDTH[device], maxWidth: "100%", pointerEvents: isDragging ? "none" : undefined }}
             className="h-full min-h-[600px] rounded-lg border border-black/10 bg-white shadow-sm dark:border-white/10"
           />
-        ) : (
+        ) : null}
+        {/* Additive-only (storefront-v2 Phase 4C) — see SelectionActionBar's
+            own comment for why this doesn't touch the iframe's own
+            click-to-select/drag code (owned by fix/theme-builder-dnd-select). */}
+        <SelectionActionBar editor={editor} iframeRef={iframeRef} previewOrigin={previewOrigin} />
+        {!src && (
           <div className="flex h-full min-h-[600px] w-full max-w-2xl flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-black/15 bg-white text-center dark:border-white/15 dark:bg-zinc-900">
             <p className="text-sm font-medium">Preview unavailable</p>
             <p className="max-w-sm text-xs text-zinc-500">

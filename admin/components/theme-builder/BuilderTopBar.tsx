@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Redo2, Undo2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Tooltip from "@/components/ui/Tooltip";
 import { updateThemeDraft } from "@/lib/api";
 import type { ThemeEditorState, DevicePreview } from "@/lib/useThemeEditor";
 
 export default function BuilderTopBar({ editor }: { editor: ThemeEditorState }) {
-  const { theme, device, setDevice, dirty, saving, publishing, publish, discard } = editor;
+  const { theme, device, setDevice, dirty, saving, publishing, publish, discard, undo, redo, canUndo, canRedo } = editor;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
@@ -63,6 +64,30 @@ export default function BuilderTopBar({ editor }: { editor: ThemeEditorState }) 
       />
 
       <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 mr-1">
+          <Tooltip label="Undo (Ctrl+Z)">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={!canUndo}
+              aria-label="Undo"
+              className="flex items-center justify-center size-8 rounded-lg text-text-muted hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            >
+              <Undo2 className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Redo (Ctrl+Shift+Z)">
+            <button
+              type="button"
+              onClick={redo}
+              disabled={!canRedo}
+              aria-label="Redo"
+              className="flex items-center justify-center size-8 rounded-lg text-text-muted hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            >
+              <Redo2 className="size-4" />
+            </button>
+          </Tooltip>
+        </div>
         <Button variant="secondary" size="sm" onClick={() => void discard()} disabled={!dirty}>
           Discard
         </Button>

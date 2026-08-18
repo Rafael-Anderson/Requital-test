@@ -175,6 +175,27 @@ function ImageElementSettings({ block, onUpdate }: FamilyProps) {
       <Slider label="Width" min={20} max={800} value={(s.width as number) ?? 160} onChange={(v) => onUpdate("width", v)} suffix="px" />
       <Slider label="Border radius" min={0} max={64} value={(s.borderRadius as number) ?? 0} onChange={(v) => onUpdate("borderRadius", v)} suffix="px" />
       <Input label="Link URL" placeholder="https://…" value={(s.linkUrl as string) ?? ""} onChange={(e) => onUpdate("linkUrl", e.target.value)} />
+      {/* widthPercent/alignment (storefront-v2 Phase 4B) — only meaningful
+          for a standalone Image block dropped into Header/Footer/Hero/Rich
+          Text's own content area (see each section's own 'image' render
+          case); image_text's own image half keeps using width(px)/
+          objectFit above unchanged, since it always fills a fixed-aspect
+          container instead. */}
+      <Select
+        label="Display width (%)"
+        value={String((s.widthPercent as number) ?? 100)}
+        onChange={(e) => onUpdate("widthPercent", Number(e.target.value))}
+      >
+        <option value="25">25%</option>
+        <option value="50">50%</option>
+        <option value="75">75%</option>
+        <option value="100">100%</option>
+      </Select>
+      <Select label="Alignment" value={(s.alignment as string) ?? "left"} onChange={(e) => onUpdate("alignment", e.target.value)}>
+        <option value="left">Left</option>
+        <option value="center">Center</option>
+        <option value="right">Right</option>
+      </Select>
     </div>
   );
 }

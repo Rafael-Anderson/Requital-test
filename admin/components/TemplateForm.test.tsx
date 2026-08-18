@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const collections: Collection[] = [
-  { id: 1, name: "Flowers", slug: "flowers", displayOrder: 0, image: null, isFeatured: false, parentCollectionId: null },
+  { id: 1, name: "Flowers", slug: "flowers", displayOrder: 0, image: null, isFeatured: false, parentCollectionId: null, description: null },
 ];
 const products: Product[] = [
   { id: 1, name: "Rose Bouquet" } as Product,
