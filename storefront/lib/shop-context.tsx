@@ -377,9 +377,50 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   const [error, setError] = useState<string | null>(null);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
 
-  const preview = searchParams.get("preview") === "true";
-  const previewThemeId = searchParams.get("themeId");
-  const previewToken = searchParams.get("previewToken") ?? undefined;
+  const urlPreview = searchParams.get("preview") === "true";
+  const urlThemeId = searchParams.get("themeId");
+  const urlToken = searchParams.get("previewToken") ?? undefined;
+
+  // Bug 3 root cause: every internal <Link> in this app (MenuBar, product/
+  // collection cards, search results, ...) is a plain shop-relative path
+  // with no query string — none of them carry ?preview=true&themeId=...
+  // forward. The admin builder's iframe only ever sets those params on its
+  // OWN initial src (PreviewFrame.tsx); the instant a merchant clicks any
+  // in-preview link to a collection/product page, that next page's own
+  // useSearchParams() sees no preview params at all, previewMode flips to
+  // false, and every preview-gated behavior (data-requital-editable
+  // attributes, PreviewInteraction's double-click select, the
+  // theme-config-update postMessage listener above) turns off for the rest
+  // of the session — permanently, since nothing ever re-adds the params.
+  // Fixed at the root rather than threading a query string through every
+  // Link call site: once a real preview session is observed in the URL,
+  // it's persisted to sessionStorage (scoped per shop, same convention as
+  // cart.tsx/CookieConsentBanner's own scoped keys) and used as a fallback
+  // whenever a later same-tab navigation's URL has no preview params of its
+  // own. The URL always wins when it does carry real params (a fresh
+  // ?preview=true visit, or the page-switcher below setting a new src).
+  const sessionKey = `requital_preview_session:${shopSlug}`;
+  const [restoredPreview, setRestoredPreview] = useState<{ themeId: string; token: string | undefined } | null>(null);
+
+  useEffect(() => {
+    if (urlPreview && urlThemeId) {
+      sessionStorage.setItem(sessionKey, JSON.stringify({ themeId: urlThemeId, token: urlToken ?? null }));
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem(sessionKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { themeId: string; token: string | null };
+        setRestoredPreview({ themeId: parsed.themeId, token: parsed.token ?? undefined });
+      }
+    } catch {
+      // malformed/inaccessible sessionStorage - just stay out of preview mode
+    }
+  }, [sessionKey, urlPreview, urlThemeId, urlToken]);
+
+  const preview = urlPreview || restoredPreview !== null;
+  const previewThemeId = urlPreview ? urlThemeId : (restoredPreview?.themeId ?? null);
+  const previewToken = urlPreview ? urlToken : restoredPreview?.token;
 
   useEffect(() => {
     // Runs on every page under this shop, not just checkout — a ?ref=<code>

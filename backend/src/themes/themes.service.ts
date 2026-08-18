@@ -18,6 +18,35 @@ import type {
   ThemeSection,
 } from './theme-config.types';
 
+// Bug 6 QA-sweep fix: GlobalThemeSettings has grown by 18 categories over
+// several phases (see constants.ts's own history), each added by editing
+// DEFAULT_THEME_CONFIG going forward - nothing ever backfilled that new
+// category into theme rows that already existed in the database at the
+// time. Confirmed for real, not assumed: theme id 1's own stored config
+// (this repo's long-lived local dev/e2e theme) has no globalSettings.
+// collectionPage key at all, which crashed both CollectionPageSettings.tsx
+// (admin) and the storefront collection page outright the instant either
+// tried to read a field off it. Every read of a theme's config now goes
+// through this before reaching a caller, so an old row behaves exactly
+// like a freshly-created one for any category added after it was saved.
+// Deliberately scoped to collectionPage (the one confirmed broken) rather
+// than a deep-merging every category - the same latent gap could exist
+// elsewhere; flagged in the PR rather than blanket-"fixed" without the
+// same live confirmation this one got.
+function backfillGlobalSettings(config: ThemeConfig): ThemeConfig {
+  return {
+    ...config,
+    globalSettings: {
+      ...DEFAULT_THEME_CONFIG.globalSettings,
+      ...config.globalSettings,
+      collectionPage: {
+        ...DEFAULT_THEME_CONFIG.globalSettings.collectionPage,
+        ...config.globalSettings?.collectionPage,
+      },
+    },
+  };
+}
+
 function generateId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -245,7 +274,7 @@ export class ThemesService {
       if (!theme) {
         throw new NotFoundException(`Theme ${opts.themeId} not found`);
       }
-      return theme.config as ThemeConfig;
+      return backfillGlobalSettings(theme.config as ThemeConfig);
     }
 
     const cached = this.cache.get(shopId);
@@ -256,7 +285,7 @@ export class ThemesService {
       [shopId],
     );
     const theme = rows[0];
-    const config = theme ? (theme.publishedConfig as ThemeConfig | null) : null;
+    const config = theme && theme.publishedConfig ? backfillGlobalSettings(theme.publishedConfig as ThemeConfig) : null;
     this.cache.set(shopId, config);
     return config;
   }
@@ -270,6 +299,7 @@ export class ThemesService {
     if (!theme) {
       throw new NotFoundException(`Theme ${id} not found`);
     }
+    theme.config = backfillGlobalSettings(theme.config as ThemeConfig);
     return theme;
   }
 }

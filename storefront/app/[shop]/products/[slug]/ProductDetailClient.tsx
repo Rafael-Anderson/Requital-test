@@ -16,7 +16,7 @@ import RelatedProducts from "@/components/RelatedProducts";
 import NotifyMeForm from "@/components/NotifyMeForm";
 import AdditionalInfoAccordion from "@/components/AdditionalInfoAccordion";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import type { Collection, Product, ProductVariant, Shop } from "@/lib/types";
 
 // One selected value id per option, in option order (index i -> product.options[i]).
@@ -52,7 +52,7 @@ function formatDeliveryEstimate(shop: Shop): string | null {
 export default function ProductDetailClient() {
   const params = useParams<{ shop: string; slug: string }>();
   const router = useRouter();
-  const { shopSlug, shopBasePath, shop, outlets } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets, previewToken } = useShop();
   const { addItem, clear } = useCart();
   const defaultOutletId = outlets[0]?.id;
 
@@ -74,7 +74,7 @@ export default function ProductDetailClient() {
   const [addons, setAddons] = useState<Product[]>([]);
 
   useEffect(() => {
-    getProductBySlug(shopSlug, params.slug, defaultOutletId)
+    getProductBySlug(shopSlug, params.slug, defaultOutletId, previewToken)
       .then((p) => {
         setProduct(p);
         setSelection(p.variants[0] ? variantOptionValueIds(p.variants[0]).slice(0, p.options.length) : []);
@@ -82,11 +82,11 @@ export default function ProductDetailClient() {
         setCustomGiftCardAmount("");
       })
       .catch(() => setProduct(null));
-  }, [shopSlug, params.slug, defaultOutletId]);
+  }, [shopSlug, params.slug, defaultOutletId, previewToken]);
 
   useEffect(() => {
-    listCollections(shopSlug).then(setCollections).catch(() => setCollections([]));
-  }, [shopSlug]);
+    listCollections(shopSlug, previewToken).then(setCollections).catch(() => setCollections([]));
+  }, [shopSlug, previewToken]);
 
   useEffect(() => {
     listProducts(shopSlug, defaultOutletId, undefined, true)
@@ -298,11 +298,11 @@ export default function ProductDetailClient() {
 
           <div className="flex items-baseline gap-2 mt-2">
             <p className="text-xl font-semibold text-product-name">
-              {displayPrice} <span className="text-base font-normal text-price-main">{currencySymbol(shop?.currency)}</span>
+              {displayPrice} <span className="text-base font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
             </p>
             {displayCompareAtPrice && (
               <p className="text-sm text-price-secondary line-through">
-                {displayCompareAtPrice} {currencySymbol(shop?.currency)}
+                {displayCompareAtPrice} <CurrencySymbol code={shop?.currency} />
               </p>
             )}
           </div>
@@ -372,7 +372,7 @@ export default function ProductDetailClient() {
                             active ? "border-accent bg-accent/10 text-accent-text" : "border-stroke hover:border-black/30"
                           }`}
                         >
-                          {amount} {currencySymbol(shop?.currency)}
+                          {amount} <CurrencySymbol code={shop?.currency} />
                         </button>
                       );
                     })}
@@ -382,7 +382,7 @@ export default function ProductDetailClient() {
               {product.giftCardCustomAmountMin && product.giftCardCustomAmountMax && (
                 <div>
                   <label className="text-sm font-medium block mb-1.5">
-                    Or enter a custom amount ({product.giftCardCustomAmountMin}–{product.giftCardCustomAmountMax} {currencySymbol(shop?.currency)})
+                    Or enter a custom amount ({product.giftCardCustomAmountMin}–{product.giftCardCustomAmountMax} <CurrencySymbol code={shop?.currency} />)
                   </label>
                   <input
                     type="number"
@@ -490,7 +490,7 @@ export default function ProductDetailClient() {
                           {addon.name}
                         </Link>
                         <p className="text-xs text-price-main mt-0.5">
-                          {addon.price} {currencySymbol(shop?.currency)}
+                          {addon.price} <CurrencySymbol code={shop?.currency} />
                         </p>
                       </div>
                       <button
@@ -637,7 +637,7 @@ export default function ProductDetailClient() {
           <div className="min-w-0">
             <p className="text-xs text-zinc-500 truncate">{product.name}</p>
             <p className="font-semibold text-product-name">
-              {displayPrice} <span className="text-xs font-normal text-price-main">{currencySymbol(shop?.currency)}</span>
+              {displayPrice} <span className="text-xs font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
             </p>
           </div>
           {primaryCtaElement("flex-1 h-11 font-semibold text-sm")}

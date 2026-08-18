@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import { listProducts } from "@/lib/api";
 import { storeButtonClassName } from "@/lib/button-style";
 import type { Product } from "@/lib/types";
@@ -102,7 +102,7 @@ export default function AddonPrompt({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{product.name}</p>
                 <p className="text-sm text-zinc-500">
-                  {product.price} {currencySymbol(shop?.currency)}
+                  {product.price} <CurrencySymbol code={shop?.currency} />
                 </p>
               </div>
             </label>

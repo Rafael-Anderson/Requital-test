@@ -109,8 +109,16 @@ export function listCollections(shopSlug: string, previewToken?: string) {
 }
 
 // Collection (taxonomy node) detail page — /[shop]/collections/[slug].
-export async function getCollectionBySlug(shopSlug: string, slug: string, outletId?: number) {
-  const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
+// Bug 3 QA-sweep fix: this hit the backend's getCollectionBySlug, which
+// used to have no preview bypass at all (unlike its sibling
+// listCollections just above) - an unpublished shop's own collection pages
+// always 404'd in the theme builder's preview, previewToken or not. Fixed
+// on both sides; see public.service.ts's own comment on that method.
+export async function getCollectionBySlug(shopSlug: string, slug: string, outletId?: number, previewToken?: string) {
+  const params = new URLSearchParams();
+  if (outletId !== undefined) params.set("outletId", String(outletId));
+  if (previewToken) params.set("previewToken", previewToken);
+  const qs = params.size > 0 ? `?${params.toString()}` : "";
   const collection = await get<CollectionDetail>(`/public/${shopSlug}/collections/${slug}${qs}`);
   return { ...collection, products: collection.products.map(resolveProductImage) };
 }
@@ -209,8 +217,13 @@ export async function getProduct(shopSlug: string, id: number, outletId?: number
   return resolveProductImage(product);
 }
 
-export async function getProductBySlug(shopSlug: string, slug: string, outletId?: number) {
-  const qs = outletId !== undefined ? `?outletId=${outletId}` : "";
+// Bug 3 QA-sweep fix: same missing preview-bypass gap as getCollectionBySlug
+// above, on the product detail read.
+export async function getProductBySlug(shopSlug: string, slug: string, outletId?: number, previewToken?: string) {
+  const params = new URLSearchParams();
+  if (outletId !== undefined) params.set("outletId", String(outletId));
+  if (previewToken) params.set("previewToken", previewToken);
+  const qs = params.size > 0 ? `?${params.toString()}` : "";
   const product = await get<Product>(`/public/${shopSlug}/products/slug/${slug}${qs}`);
   return resolveProductImage(product);
 }

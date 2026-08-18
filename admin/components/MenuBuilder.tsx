@@ -171,7 +171,7 @@ function MegaColumnEditor({
         <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
           <GripVertical className="size-4" />
         </span>
-        <Input label="Column title" value={column.title} onChange={(e) => onTitleChange(e.target.value)} className="flex-1" />
+        <Input label="Column title" value={column.title} onChange={(e) => onTitleChange(e.target.value)} wrapperClassName="flex-1" />
         <Tooltip label="Remove column" align="end">
           <button
             type="button"

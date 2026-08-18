@@ -238,6 +238,7 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       fontSize: 15,
       textColor: '',
       loadMoreStyle: 'infinite',
+      columns: 3,
     },
   },
   header: {

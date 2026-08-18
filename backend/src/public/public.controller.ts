@@ -49,11 +49,13 @@ export class PublicController {
     @Param('shopSlug') shopSlug: string,
     @Param('slug') slug: string,
     @Query('outletId') outletId?: string,
+    @Query('previewToken') previewToken?: string,
   ) {
     return this.publicService.getCollectionBySlug(
       shopSlug,
       slug,
       outletId ? Number(outletId) : undefined,
+      previewToken,
     );
   }
 
@@ -177,11 +179,13 @@ export class PublicController {
     @Param('shopSlug') shopSlug: string,
     @Param('slug') slug: string,
     @Query('outletId') outletId?: string,
+    @Query('previewToken') previewToken?: string,
   ) {
     return this.publicService.getProductBySlug(
       shopSlug,
       slug,
       outletId ? Number(outletId) : undefined,
+      previewToken,
     );
   }
 

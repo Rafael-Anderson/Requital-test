@@ -6,8 +6,9 @@ import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
 import ThemeImageBlock from "./ThemeImageBlock";
+import { backgroundStyle } from "./SectionWrapper";
 import type { Shop } from "@/lib/types";
-import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
+import type { HeaderFooterConfig, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Matches admin/lib/useThemeEditor.ts's FOOTER_CHROME_ID by hand — same
 // convention as ThemeDrivenHeader.tsx's own HEADER_CHROME_ID copy.
@@ -100,10 +101,15 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
       ? copyrightBlock.settings.text
       : `© ${new Date().getFullYear()} ${shop.displayName ?? shop.name}. All Rights Reserved`;
 
-  const background = config.settings.background as Record<string, unknown> | undefined;
-  const style: CSSProperties = { color: "var(--color-footer-fg)" };
-  style.background =
-    background?.type === "solid" && typeof background.color === "string" ? background.color : "var(--color-footer-bg)";
+  // Bug 9 fix: was solid-only, same gap as ThemeDrivenHeader.tsx's own -
+  // see backgroundStyle's comment. Default var stays for gradient/image's
+  // absence (backgroundStyle returns {} when unset), a real solid/gradient/
+  // image override merges on top of it.
+  const style: CSSProperties = {
+    color: "var(--color-footer-fg)",
+    background: "var(--color-footer-bg)",
+    ...backgroundStyle(config.settings.background as SectionSettings["background"]),
+  };
 
   return (
     <footer style={style} className="py-10">

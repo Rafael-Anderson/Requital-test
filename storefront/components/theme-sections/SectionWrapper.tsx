@@ -7,7 +7,20 @@ import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
 import { resolveScheme } from "@/lib/theme-color-scheme";
 import type { SectionSettings } from "@/lib/theme-config-types";
 
-function backgroundStyle(bg: SectionSettings["background"]): CSSProperties {
+// Bug 9 fix: Header/Footer (ThemeDrivenHeader.tsx/ThemeDrivenFooter.tsx)
+// used to have their own bespoke, solid-only copy of this logic - a
+// "gradient" or "image" background type (both real, selectable options in
+// the same admin BackgroundControls used for every section) silently did
+// nothing for Header/Footer specifically, leaving them fully transparent.
+// Combined with the header's own `sticky` option, that meant whatever
+// scrolled underneath (most commonly the Hero section directly below,
+// itself often carrying a real background image) showed straight through
+// the header, which is what actually produced the reported "header text
+// overlapping a background image" symptom - not a z-index/spacing bug, a
+// missing two-thirds of this function's own cases. Exported so both of
+// those components reuse the exact same resolution every other section's
+// background already goes through, instead of drifting out of sync again.
+export function backgroundStyle(bg: SectionSettings["background"]): CSSProperties {
   if (!bg || typeof bg !== "object") return {};
   const type = bg.type as string | undefined;
   if (type === "solid" && typeof bg.color === "string") {

@@ -16,16 +16,27 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   // Only for fields where the label alone doesn't convey what the setting
   // does — not every field needs one, see Tooltip.tsx's own call sites.
   tooltip?: string;
+  // Bug 4 fix: a real, distinct need from `className` — sizes/positions
+  // this whole field within a parent flex row (e.g. MenuBuilder.tsx's
+  // "Column title" row wants `flex-1`) without touching the `<input>`'s
+  // own visual styling. Originally attempted by repurposing `className`
+  // itself for this, which broke 4 real call sites (login/forgot-password/
+  // reset-password/accept-invite's own AUTH_INPUT_CLASS/ERROR_INPUT_CLASS
+  // pattern, caught by app/login/page.test.tsx) that rely on `className`
+  // landing on the `<input>` element for its border/error-state styling —
+  // `className` stays exactly where every existing caller already expects
+  // it; this is additive, not a repurposing.
+  wrapperClassName?: string;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, error, tooltip, className = "", id, ...props },
+  { label, error, tooltip, className = "", wrapperClassName = "", id, ...props },
   ref,
 ) {
   const autoId = useId();
   const inputId = id ?? autoId;
   return (
-    <div>
+    <div className={`min-w-0 ${wrapperClassName}`}>
       <div className="mb-1.5 flex items-center gap-1">
         <label htmlFor={inputId} className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">
           {label}

@@ -6,7 +6,7 @@ import { Search } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl, searchProducts } from "@/lib/api";
 import { iconStyleProps } from "@/lib/icon-style";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import type { SearchResultItem } from "@/lib/types";
 
 const DEBOUNCE_MS = 300;
@@ -139,7 +139,7 @@ export default function SearchBar({
                   <div className="min-w-0">
                     <p className="text-sm truncate">{r.name}</p>
                     <p className="text-xs text-zinc-500">
-                      {r.price} {currencySymbol(shop?.currency)}
+                      {r.price} <CurrencySymbol code={shop?.currency} />
                     </p>
                   </div>
                 </Link>
