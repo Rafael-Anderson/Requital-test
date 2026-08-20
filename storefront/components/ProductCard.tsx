@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { stripHtmlToText } from "@/lib/sanitize-html";
 import { productCardNameStyle } from "@/lib/theme-element-style";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import type { Product } from "@/lib/types";
 
@@ -44,7 +44,7 @@ export default function ProductCard({ product, orientation }: { product: Product
           <p className="font-medium truncate text-product-name" style={nameStyle}>{product.name}</p>
           {product.shortSummary && <p className="text-sm text-zinc-500 truncate">{product.shortSummary}</p>}
           <p className="text-sm font-semibold mt-1 text-product-name">
-            {product.price} <span className="font-normal text-price-main">{currencySymbol(shop?.currency)}</span>
+            {product.price} <span className="font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
           </p>
           {outOfStock && <p className="text-xs text-red-600 mt-0.5">Out of stock</p>}
         </div>
@@ -76,7 +76,7 @@ export default function ProductCard({ product, orientation }: { product: Product
           mobile no longer gets silently chopped mid-word (see design audit). */}
       <p className="mt-3 text-[15px] leading-snug line-clamp-2 text-product-name" style={nameStyle}>{product.name}</p>
       <p className="text-sm font-semibold mt-1 text-product-name">
-        {product.price} <span className="font-normal text-price-main">{currencySymbol(shop?.currency)}</span>
+        {product.price} <span className="font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
       </p>
       {excerpt && <p className="mt-1 text-xs leading-snug line-clamp-2 text-price-main">{excerpt}</p>}
     </Link>

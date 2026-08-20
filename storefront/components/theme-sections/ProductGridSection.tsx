@@ -8,7 +8,7 @@ import { listProducts } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -123,6 +123,9 @@ function GridProductCard({
   showTitle: boolean;
   showPrice: boolean;
   showCurrencyCode: boolean;
+  // Bug 7 fix: holds the raw currency CODE (e.g. "AED") now, not a
+  // pre-computed text symbol - rendered via <CurrencySymbol /> below so
+  // AED gets the real glyph instead of being stuck as plain text.
   shopCurrency: string | undefined;
   titleBlock: ThemeBlock | undefined;
   priceBlock: ThemeBlock | undefined;
@@ -180,7 +183,13 @@ function GridProductCard({
           {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
           style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
         >
-          {showCurrencyCode && shopCurrency ? `${shopCurrency} ` : ""}
+          {showCurrencyCode && shopCurrency ? (
+            <>
+              <CurrencySymbol code={shopCurrency} />{" "}
+            </>
+          ) : (
+            ""
+          )}
           {product.price}
         </p>
       )}
@@ -245,7 +254,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             showTitle={showTitle}
             showPrice={showPrice}
             showCurrencyCode={showCurrencyCode}
-            shopCurrency={currencySymbol(shop?.currency)}
+            shopCurrency={shop?.currency}
             titleBlock={titleBlock}
             priceBlock={priceBlock}
             previewMode={previewMode}

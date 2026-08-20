@@ -11,19 +11,48 @@ import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWid
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
 import ThemeImageBlock from "./ThemeImageBlock";
+import { backgroundStyle } from "./SectionWrapper";
 import type { Customer, Shop } from "@/lib/types";
-import type { HeaderFooterConfig, ThemeBlock } from "@/lib/theme-config-types";
+import type { HeaderFooterConfig, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const ZONES = ["left", "center", "right"] as const;
 
-// header_text's fixed 3-step size scale — matches the admin settings
-// panel's own Small/Medium/Large select (ElementSettingsPanel.tsx's
-// HEADER_TEXT_SIZES), not a free px value.
-const HEADER_TEXT_FONT_SIZE: Record<string, string> = {
+// Bug 5 fix: header_text's font size is now a real numeric px value (see
+// admin's HeaderTextElementSettings) - this legacy 3-step table is kept
+// only as a fallback for a block saved before that change, whose
+// settings.fontSize is still one of these strings rather than a number.
+const HEADER_TEXT_LEGACY_FONT_SIZE: Record<string, string> = {
   small: "13px",
   medium: "15px",
   large: "18px",
 };
+
+const HEADER_TEXT_FONT_FAMILY: Record<string, string> = {
+  serif: "Georgia, 'Times New Roman', serif",
+  monospace: "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
+};
+
+// Bug 5's "position relative to logo" control — a targeted tiebreak on top
+// of normal block order (the tree's own drag-reorder, per zone) rather than
+// a second, competing ordering concept: only nudges a header_text block
+// that both shares a zone with the logo AND has explicitly set this field,
+// placing it immediately before/after wherever the logo already sits.
+// Every other block's order is untouched.
+function applyLogoRelativePosition(zoneBlocks: ThemeBlock[]): ThemeBlock[] {
+  if (!zoneBlocks.some((b) => b.type === "logo")) return zoneBlocks;
+  let result = zoneBlocks;
+  for (const block of zoneBlocks) {
+    if (block.type !== "header_text") continue;
+    const pos = block.settings.positionRelativeToLogo as string | undefined;
+    if (pos !== "before" && pos !== "after") continue;
+    const without = result.filter((b) => b.id !== block.id);
+    const logoIndex = without.findIndex((b) => b.type === "logo");
+    if (logoIndex === -1) continue;
+    const insertAt = pos === "before" ? logoIndex : logoIndex + 1;
+    result = [...without.slice(0, insertAt), block, ...without.slice(insertAt)];
+  }
+  return result;
+}
 
 // Matches admin/lib/useThemeEditor.ts's HEADER_CHROME_ID by hand — same
 // no-shared-package convention as every other cross-app constant. Only
@@ -58,12 +87,10 @@ export default function ThemeDrivenHeader({
   const { shopBasePath, previewMode, themeConfig } = useShop();
   const { openDrawer } = useCartDrawer();
   const sticky = !!config.settings.sticky;
-  const background = config.settings.background as Record<string, unknown> | undefined;
 
-  const style: CSSProperties = {};
-  if (background?.type === "solid" && typeof background.color === "string") {
-    style.background = background.color;
-  }
+  // Bug 9 fix: was solid-only (see backgroundStyle's own comment) - now
+  // resolves gradient/image the same as every section does.
+  const style: CSSProperties = backgroundStyle(config.settings.background as SectionSettings["background"]);
 
   const blocks = [...config.blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
   // Two independent, already-real settings layered together: shop.iconStyle
@@ -158,21 +185,27 @@ export default function ThemeDrivenHeader({
         );
       case "image":
         return <ThemeImageBlock key={block.id} block={block} sectionId={HEADER_CHROME_ID} previewMode={previewMode} />;
-      // No zone control in the admin settings panel (see
-      // ElementSettingsPanel.tsx's HeaderTextElementSettings) — like Logo,
-      // an unset settings.zone falls into "left" via the filter below, so a
-      // Header Text block added after Logo in the tree naturally renders
-      // right next to it, inline, before the separate MenuBar row beneath
-      // this header.
+      // Bug 5 fix: zone is now a real admin-editable control
+      // (HeaderTextElementSettings' "Alignment" select) — an unset
+      // settings.zone still falls into "left" via the filter below, so an
+      // existing block from before that change keeps its current position.
       case "header_text": {
         const text = block.settings.text as string | undefined;
         if (!text) return null;
+        const fontSizeSetting = block.settings.fontSize;
+        const fontSize =
+          typeof fontSizeSetting === "number"
+            ? `${fontSizeSetting}px`
+            : (HEADER_TEXT_LEGACY_FONT_SIZE[fontSizeSetting as string] ?? HEADER_TEXT_LEGACY_FONT_SIZE.medium);
+        const fontFamily = HEADER_TEXT_FONT_FAMILY[block.settings.fontFamily as string];
         return (
           <span
             key={block.id}
             {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "header_text" })}
             style={{
-              fontSize: HEADER_TEXT_FONT_SIZE[block.settings.fontSize as string] ?? HEADER_TEXT_FONT_SIZE.medium,
+              fontSize,
+              fontWeight: (block.settings.fontWeight as string) ?? "400",
+              ...(fontFamily ? { fontFamily } : {}),
               color: (block.settings.color as string) ?? "#1B1F1E",
             }}
             className="truncate"
@@ -194,9 +227,9 @@ export default function ThemeDrivenHeader({
             key={zone}
             className={`flex items-center gap-1 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
           >
-            {blocks
-              .filter((b) => (b.settings.zone as string | undefined) === zone || (zone === "left" && !b.settings.zone))
-              .map((b) => renderBlock(b))}
+            {applyLogoRelativePosition(
+              blocks.filter((b) => (b.settings.zone as string | undefined) === zone || (zone === "left" && !b.settings.zone)),
+            ).map((b) => renderBlock(b))}
           </div>
         ))}
       </div>

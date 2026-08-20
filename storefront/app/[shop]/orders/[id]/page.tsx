@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import type { OrderResult } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 
 // Full detail here still depends on reaching this page straight from
 // checkout (sessionStorage handoff) — a refresh or a shared link shows a
@@ -63,7 +63,7 @@ function OrderConfirmationContent() {
             <div className="flex justify-between">
               <span className="text-zinc-500">Delivery fee</span>
               <span>
-                {order.deliveryFee} {currencySymbol(shop?.currency)}
+                {order.deliveryFee} <CurrencySymbol code={shop?.currency} />
               </span>
             </div>
           )}
@@ -71,7 +71,7 @@ function OrderConfirmationContent() {
             <div className="flex justify-between text-green-600">
               <span>Discount{order.discountCode ? ` (${order.discountCode})` : ""}</span>
               <span>
-                -{order.discountAmount} {currencySymbol(shop?.currency)}
+                -{order.discountAmount} <CurrencySymbol code={shop?.currency} />
               </span>
             </div>
           )}
@@ -79,14 +79,14 @@ function OrderConfirmationContent() {
             <div className="flex justify-between">
               <span className="text-zinc-500">Tax</span>
               <span>
-                {order.taxAmount} {currencySymbol(shop?.currency)}
+                {order.taxAmount} <CurrencySymbol code={shop?.currency} />
               </span>
             </div>
           )}
           <div className="flex justify-between font-medium pt-1 border-t border-black/10">
             <span>Total</span>
             <span>
-              {order.total} {currencySymbol(shop?.currency)}
+              {order.total} <CurrencySymbol code={shop?.currency} />
             </span>
           </div>
         </div>

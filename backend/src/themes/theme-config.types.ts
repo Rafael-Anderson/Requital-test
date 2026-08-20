@@ -264,6 +264,11 @@ export interface CollectionPageSettings {
   fontSize: number;
   textColor: string;
   loadMoreStyle: 'infinite' | 'pagination';
+  // Bug 6 fix: was a customer-facing 2/3/4-column icon selector on the live
+  // storefront collection page - a merchant-only layout choice mistakenly
+  // exposed to shoppers. Now a fixed default the merchant sets here; the
+  // storefront no longer offers any way to change it.
+  columns: 2 | 3 | 4;
 }
 
 export interface SearchSettings {

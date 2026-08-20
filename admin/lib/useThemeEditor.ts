@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
+import { API_URL, getAccessToken, getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
 import {
   findNodeInTree,
   insertNodeInTree,
@@ -192,6 +192,15 @@ export function useThemeEditor(themeId: number) {
   // state was never cleanly ended.
   const [isDragging, setIsDragging] = useState(false);
   const [device, setDevice] = useState<DevicePreview>("desktop");
+  // Bug 3 fix: which storefront page the preview iframe's src points at —
+  // "" for the homepage, or a real "/collections/:slug" / "/products/:slug"
+  // path (see PageSwitcher in PreviewFrame.tsx). Driving this via a real
+  // src change (an actual navigation, exactly the same as a merchant
+  // clicking a link inside the preview) is what makes shop-context.tsx's
+  // sessionStorage-backed preview-mode fix apply here too — no special
+  // casing needed between "the page switcher navigated" and "an in-preview
+  // link navigated".
+  const [previewPath, setPreviewPath] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -313,6 +322,48 @@ export function useThemeEditor(themeId: number) {
     // themeId only — configRef/dirtyRef are refs, reading them at cleanup
     // time (not render time) is exactly what they're for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeId]);
+
+  // Bug 1 root cause (found by tracing, not guessed — see PR description
+  // for the console-log/reload repro): a drag reorder (or any other edit)
+  // was NEVER actually being lost mid-session — @dnd-kit's own state was
+  // correct, updateConfig ran, the tree re-rendered in the new order and
+  // stayed there. The loss only showed up on an actual page reload/tab
+  // close taken before the 30s autosave interval elapsed, because the
+  // "save on panel close" effect above only runs its cleanup for a real
+  // React unmount (an in-app navigation) — a hard browser reload/close
+  // tears down the JS context before React ever gets to run that cleanup,
+  // so the fire-and-forget updateThemeDraft() call there never even starts.
+  // beforeunload/pagehide are the two events that DO reliably fire before
+  // that teardown; fetch's `keepalive` flag (unlike a plain fetch, which
+  // Chrome cancels once the document starts unloading) is what lets the
+  // request actually complete after the handler returns — sendBeacon can't
+  // be used instead since it has no way to carry the Authorization header
+  // this endpoint requires.
+  // ponytail: keepalive requests are capped at ~64KiB by Chromium; a theme
+  // config with an unusually large block tree/custom CSS could exceed that
+  // and silently fail to save on hard-reload (the 30s interval/explicit
+  // Publish still cover it). Revisit if that's ever reported for real.
+  useEffect(() => {
+    function flushOnUnload() {
+      if (!dirtyRef.current || !configRef.current) return;
+      const token = getAccessToken();
+      fetch(`${API_URL}/themes/${themeId}`, {
+        method: "PATCH",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ config: configRef.current }),
+      }).catch(() => {});
+    }
+    window.addEventListener("beforeunload", flushOnUnload);
+    window.addEventListener("pagehide", flushOnUnload);
+    return () => {
+      window.removeEventListener("beforeunload", flushOnUnload);
+      window.removeEventListener("pagehide", flushOnUnload);
+    };
   }, [themeId]);
 
   function updateConfig(updater: (prev: ThemeConfig) => ThemeConfig) {
@@ -600,6 +651,8 @@ export function useThemeEditor(themeId: number) {
     setIsDragging,
     device,
     setDevice,
+    previewPath,
+    setPreviewPath,
     dirty,
     saving,
     publishing,

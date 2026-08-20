@@ -87,6 +87,23 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
           onChange={(v) => update({ loadMoreStyle: v as CollectionPageSettingsType["loadMoreStyle"] })}
         />
       </div>
+
+      {/* Bug 6 fix: "Products per row" used to be a live customer-facing
+          2/3/4-column icon selector on the storefront collection page - a
+          merchant layout decision that had no business being shopper-
+          editable. Now set once here; every shopper sees this fixed value. */}
+      <div>
+        <span className="mb-1.5 block text-sm font-medium">Products per row</span>
+        <SegmentedToggle
+          value={String(settings.columns)}
+          options={[
+            { value: "2", label: "2" },
+            { value: "3", label: "3" },
+            { value: "4", label: "4" },
+          ]}
+          onChange={(v) => update({ columns: Number(v) as CollectionPageSettingsType["columns"] })}
+        />
+      </div>
     </div>
   );
 }

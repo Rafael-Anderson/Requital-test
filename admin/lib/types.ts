@@ -1227,6 +1227,9 @@ export interface CollectionPageSettings {
   fontSize: number;
   textColor: string;
   loadMoreStyle: "infinite" | "pagination";
+  // Bug 6 fix: merchant-only "products per row" default, replacing what
+  // used to be a customer-facing column selector on the live storefront.
+  columns: 2 | 3 | 4;
 }
 
 export interface SearchSettings {

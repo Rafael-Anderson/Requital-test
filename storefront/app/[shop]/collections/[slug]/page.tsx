@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { LayoutGrid, Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { getCollectionBySlug, listCollections, resolveImageUrl } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import type { CollectionDetail, Collection, Product } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
 import PriceRangeSlider from "@/components/PriceRangeSlider";
@@ -65,7 +65,7 @@ function sortProducts(products: Product[], sort: SortOption): Product[] {
 export default function CollectionPage() {
   const params = useParams<{ shop: string; slug: string }>();
   const router = useRouter();
-  const { shopSlug, shopBasePath, shop, outlets, themeConfig, loading: shopLoading, error: shopError } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, loading: shopLoading, error: shopError } = useShop();
   const [collection, setCollection] = useState<CollectionDetail | null>(null);
   const [allCollections, setAllCollections] = useState<Collection[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -75,19 +75,29 @@ export default function CollectionPage() {
   useEffect(() => {
     if (shopLoading) return;
     setCollection(null);
-    getCollectionBySlug(shopSlug, params.slug, defaultOutletId)
+    getCollectionBySlug(shopSlug, params.slug, defaultOutletId, previewToken)
       .then(setCollection)
       .catch((err) => setError(err instanceof Error ? err.message : "Collection not found"));
-  }, [shopSlug, params.slug, defaultOutletId, shopLoading]);
+  }, [shopSlug, params.slug, defaultOutletId, shopLoading, previewToken]);
 
   useEffect(() => {
-    listCollections(shopSlug).then(setAllCollections).catch(() => setAllCollections([]));
-  }, [shopSlug]);
+    listCollections(shopSlug, previewToken).then(setAllCollections).catch(() => setAllCollections([]));
+  }, [shopSlug, previewToken]);
 
   // --- filter/sort/search bar state (storefront-v2 Phase 2B) ---
   const [sort, setSort] = useState<SortOption>("newest");
   const [search, setSearch] = useState("");
-  const [columns, setColumns] = useState<2 | 3 | 4>(3);
+  // Bug 6 fix: this was shopper-editable (a 2/3/4 column icon selector in
+  // the filter bar) - a merchant layout choice, not a customer preference.
+  // Now a fixed read from the merchant's own Theme Settings > Collection
+  // page > "Products per row" (see CollectionPageSettings.tsx), with no
+  // storefront control left to change it. Optional-chained past
+  // collectionPage itself, not just themeConfig - a published config saved
+  // before this field existed has themeConfig.globalSettings but no
+  // .collectionPage.columns on it, which crashed the page outright before
+  // this was guarded (confirmed live against this shop's own unpublished
+  // theme, not assumed).
+  const columns = themeConfig?.globalSettings.collectionPage?.columns ?? 3;
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -247,7 +257,7 @@ export default function CollectionPage() {
             {priceBounds[0] < priceBounds[1] && (
               <div>
                 <span className="block text-xs text-zinc-500 mb-1">Price</span>
-                <PriceRangeSlider min={priceBounds[0]} max={priceBounds[1]} value={activeRange} onChange={setPriceRange} currency={currencySymbol(shop?.currency)} />
+                <PriceRangeSlider min={priceBounds[0]} max={priceBounds[1]} value={activeRange} onChange={setPriceRange} currency={<CurrencySymbol code={shop?.currency} />} />
               </div>
             )}
           </div>
@@ -266,27 +276,12 @@ export default function CollectionPage() {
                 />
               </div>
             </label>
-            {!listOrientation && (
-              <div className="flex items-center gap-1">
-                {([2, 3, 4] as const).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setColumns(n)}
-                    aria-label={`${n} columns`}
-                    aria-pressed={columns === n}
-                    className={`flex items-center justify-center size-9 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
-                      columns === n ? "border-accent bg-accent/10 text-accent-text" : "border-stroke text-zinc-500 hover:border-black/30"
-                    }`}
-                  >
-                    <LayoutGrid className="size-4" />
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
+        {/* Bug 6 fix: the result-count label already existed here and is
+            exactly what the ticket asked to show in place of the removed
+            column selector - kept as-is, nothing new needed. */}
         <p className="text-sm text-zinc-500 mb-4">
           {filtered.length} product{filtered.length === 1 ? "" : "s"}
         </p>

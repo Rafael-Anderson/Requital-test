@@ -6,7 +6,7 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { storeButtonClassName } from "@/lib/button-style";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 import { iconStyleProps } from "@/lib/icon-style";
 import CartLineItems from "@/components/CartLineItems";
 
@@ -56,7 +56,7 @@ export default function CartDrawer() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-500">Subtotal</span>
                 <span className="font-medium">
-                  {subtotal.toFixed(2)} {currencySymbol(shop?.currency)}
+                  {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
               <Link

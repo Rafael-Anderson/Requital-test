@@ -168,35 +168,54 @@ function ImageElementSettings({ block, onUpdate }: FamilyProps) {
         label={uploading ? "Uploading..." : "Image"}
       />
       <Input label="Alt text" value={(s.alt as string) ?? ""} onChange={(e) => onUpdate("alt", e.target.value)} />
-      <Select label="Object fit" value={(s.objectFit as string) ?? "cover"} onChange={(e) => onUpdate("objectFit", e.target.value)}>
-        <option value="cover">Cover</option>
-        <option value="contain">Contain</option>
-        <option value="fill">Fill</option>
-      </Select>
-      <Slider label="Width" min={20} max={800} value={(s.width as number) ?? 160} onChange={(v) => onUpdate("width", v)} suffix="px" />
-      <Slider label="Border radius" min={0} max={64} value={(s.borderRadius as number) ?? 0} onChange={(v) => onUpdate("borderRadius", v)} suffix="px" />
+      {/* Bug 2 fix: these three (width-px/objectFit/borderRadius, via
+          resolveImageElementStyle) only have any rendering effect for the
+          Logo block — ThemeDrivenHeader.tsx applies them to the logo <img>
+          directly. A standalone Image block (Header/Footer/Hero/Rich Text's
+          own 'image' block type) is rendered by ThemeImageBlock.tsx, which
+          never reads block.settings.width/objectFit/borderRadius at all —
+          only widthPercent/alignment below. Showing all five controls
+          together for both block types (as this used to) meant a merchant
+          editing a standalone Image block saw a "Width" slider that did
+          nothing, which is exactly what Bug 2 reported as "can't resize" —
+          widthPercent below always worked, it just wasn't the control being
+          used. Split by block.type so only the controls that actually do
+          something for this specific block appear. */}
+      {block.type === "logo" && (
+        <>
+          <Select label="Object fit" value={(s.objectFit as string) ?? "cover"} onChange={(e) => onUpdate("objectFit", e.target.value)}>
+            <option value="cover">Cover</option>
+            <option value="contain">Contain</option>
+            <option value="fill">Fill</option>
+          </Select>
+          <Slider label="Width" min={20} max={800} value={(s.width as number) ?? 160} onChange={(v) => onUpdate("width", v)} suffix="px" />
+          <Slider label="Border radius" min={0} max={64} value={(s.borderRadius as number) ?? 0} onChange={(v) => onUpdate("borderRadius", v)} suffix="px" />
+        </>
+      )}
       <Input label="Link URL" placeholder="https://…" value={(s.linkUrl as string) ?? ""} onChange={(e) => onUpdate("linkUrl", e.target.value)} />
-      {/* widthPercent/alignment (storefront-v2 Phase 4B) — only meaningful
-          for a standalone Image block dropped into Header/Footer/Hero/Rich
-          Text's own content area (see each section's own 'image' render
-          case); image_text's own image half keeps using width(px)/
-          objectFit above unchanged, since it always fills a fixed-aspect
-          container instead. */}
-      <Select
-        label="Display width (%)"
-        value={String((s.widthPercent as number) ?? 100)}
-        onChange={(e) => onUpdate("widthPercent", Number(e.target.value))}
-      >
-        <option value="25">25%</option>
-        <option value="50">50%</option>
-        <option value="75">75%</option>
-        <option value="100">100%</option>
-      </Select>
-      <Select label="Alignment" value={(s.alignment as string) ?? "left"} onChange={(e) => onUpdate("alignment", e.target.value)}>
-        <option value="left">Left</option>
-        <option value="center">Center</option>
-        <option value="right">Right</option>
-      </Select>
+      {/* widthPercent/alignment (storefront-v2 Phase 4B) — the standalone
+          Image block's own resize/position controls, read by
+          ThemeImageBlock.tsx via resolveImageBlockWrapperStyle. Not shown
+          for Logo, which has no wrapper of its own to align/cap. */}
+      {block.type === "image" && (
+        <>
+          <Select
+            label="Display width (%)"
+            value={String((s.widthPercent as number) ?? 100)}
+            onChange={(e) => onUpdate("widthPercent", Number(e.target.value))}
+          >
+            <option value="25">25%</option>
+            <option value="50">50%</option>
+            <option value="75">75%</option>
+            <option value="100">100%</option>
+          </Select>
+          <Select label="Alignment" value={(s.alignment as string) ?? "left"} onChange={(e) => onUpdate("alignment", e.target.value)}>
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </Select>
+        </>
+      )}
     </div>
   );
 }
@@ -307,21 +326,38 @@ function PriceElementSettings({ block, onUpdate }: FamilyProps) {
 // exact spec (Small/Medium/Large → 13/15/18px) rather than joining
 // TEXT_TYPES' much richer typography panel, which this block deliberately
 // doesn't need (it's a small header-bar aside, not a section heading).
-const HEADER_TEXT_SIZES = [
-  { value: "small", label: "Small", px: 13 },
-  { value: "medium", label: "Medium", px: 15 },
-  { value: "large", label: "Large", px: 18 },
+// Bug 5 fix: this used to be a fixed 3-preset Select mapping to a hardcoded
+// px table (13/15/18, see storefront ThemeDrivenHeader.tsx's now-legacy
+// HEADER_TEXT_FONT_SIZE) - replaced with a real numeric px Slider, matching
+// every other font-size control in this file (e.g. ProductCardsSettings'
+// productNameFontSize). Storefront still honors an old string preset for
+// any pre-existing block that saved one, so this isn't a breaking change
+// for shops that already have a header_text block.
+const HEADER_TEXT_FONT_FAMILIES = [
+  { value: "", label: "System default" },
+  { value: "serif", label: "Serif" },
+  { value: "monospace", label: "Monospace" },
 ] as const;
 
 function HeaderTextElementSettings({ block, onUpdate }: FamilyProps) {
   const s = block.settings;
+  const legacyPreset: Record<string, number> = { small: 13, medium: 15, large: 18 };
+  const fontSizePx = typeof s.fontSize === "number" ? s.fontSize : (legacyPreset[s.fontSize as string] ?? 15);
   return (
     <div className="space-y-4">
       <Input label="Text content" value={(s.text as string) ?? ""} onChange={(e) => onUpdate("text", e.target.value)} />
-      <Select label="Font size" value={(s.fontSize as string) ?? "medium"} onChange={(e) => onUpdate("fontSize", e.target.value)}>
-        {HEADER_TEXT_SIZES.map((size) => (
-          <option key={size.value} value={size.value}>
-            {size.label}
+      <Slider label="Font size" min={10} max={48} value={fontSizePx} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
+      <Select label="Font weight" value={(s.fontWeight as string) ?? "400"} onChange={(e) => onUpdate("fontWeight", e.target.value)}>
+        {FONT_WEIGHTS.map((w) => (
+          <option key={w.value} value={w.value}>
+            {w.label}
+          </option>
+        ))}
+      </Select>
+      <Select label="Font family" value={(s.fontFamily as string) ?? ""} onChange={(e) => onUpdate("fontFamily", e.target.value)}>
+        {HEADER_TEXT_FONT_FAMILIES.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
           </option>
         ))}
       </Select>
@@ -329,6 +365,23 @@ function HeaderTextElementSettings({ block, onUpdate }: FamilyProps) {
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Text color</span>
         <ColorPicker value={(s.color as string) ?? "#1B1F1E"} onChange={(hex) => onUpdate("color", hex)} />
       </div>
+      {/* zone reuses the same left/center/right header-row concept every
+          other header block's position already comes from - not a new
+          idea, just the first control letting a merchant set it for
+          header_text specifically (see ThemeDrivenHeader.tsx's ZONES). */}
+      <Select label="Alignment" value={(s.zone as string) ?? "left"} onChange={(e) => onUpdate("zone", e.target.value)}>
+        <option value="left">Left</option>
+        <option value="center">Center</option>
+        <option value="right">Right</option>
+      </Select>
+      <Select
+        label="Position relative to logo"
+        value={(s.positionRelativeToLogo as string) ?? "after"}
+        onChange={(e) => onUpdate("positionRelativeToLogo", e.target.value)}
+      >
+        <option value="before">Before logo</option>
+        <option value="after">After logo</option>
+      </Select>
     </div>
   );
 }

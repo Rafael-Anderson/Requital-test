@@ -416,13 +416,23 @@ export class PublicService {
   // Reuses the same loadPublicProductsWithRelations shape listProducts
   // already returns, filtered the same way listProducts' collectionId
   // param already is.
+  // Bug 3 QA-sweep fix: this used the no-bypass assertPublished, unlike its
+  // sibling listCollections just above (assertPublishedOrPreview) — an
+  // unpublished shop's own staff previewing the theme builder's Collection
+  // page template always 404'd here, even with a valid previewToken. Same
+  // fix applied to getProductBySlug below (the Product page template hit
+  // the identical wall) — every OTHER assertPublished call site in this
+  // file is left untouched, several deliberately (see e.g. checkout's own
+  // comment a few hundred lines up); this is scoped to exactly the two
+  // page-detail reads the builder's page switcher needs.
   async getCollectionBySlug(
     shopSlug: string,
     slug: string,
     outletId?: number,
+    previewToken?: string,
   ) {
     const shop = await this.resolveShop(shopSlug);
-    this.assertPublished(shop);
+    await this.assertPublishedOrPreview(shop, previewToken);
     const collections = await this.db.query<(CollectionRow & RowDataPacket)[]>(
       `SELECT * FROM collection WHERE shopId = ? AND slug = ? LIMIT 1`,
       [shop.id, slug],
@@ -638,9 +648,14 @@ export class PublicService {
   // a sibling to getProduct (by id) rather than replacing it, since the
   // storefront's old id-based route still needs to resolve a product (to
   // find its slug and redirect) without breaking existing shared links.
-  async getProductBySlug(shopSlug: string, slug: string, outletId?: number) {
+  async getProductBySlug(
+    shopSlug: string,
+    slug: string,
+    outletId?: number,
+    previewToken?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
-    this.assertPublished(shop);
+    await this.assertPublishedOrPreview(shop, previewToken);
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM product WHERE slug = ? AND shopId = ? AND status = 'Available' LIMIT 1`,
       [slug, shop.id],

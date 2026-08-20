@@ -9,7 +9,7 @@ import { lookupOrder, getMyOrder } from "@/lib/api";
 import type { OrderLookupResult } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import { AUTH_CARD_CLASS, AUTH_HEADING_CLASS, FIELD_CLASS, BUTTON_PRIMARY_CLASS } from "@/lib/form-styles";
-import { currencySymbol } from "@/lib/currency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 
 function TrackOrderContent() {
   const { shopSlug, shopBasePath, shop } = useShop();
@@ -172,7 +172,7 @@ function TrackOrderContent() {
             <div className="flex justify-between font-medium pt-1">
               <span>Total</span>
               <span>
-                {order.total} {currencySymbol(order.currency)}
+                {order.total} <CurrencySymbol code={order.currency} />
               </span>
             </div>
           </div>

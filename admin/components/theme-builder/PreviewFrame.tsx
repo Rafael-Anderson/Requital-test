@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { STOREFRONT_URL, storefrontUrlFor, getAccessToken } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { STOREFRONT_URL, storefrontUrlFor, getAccessToken, listCollections, listProducts } from "@/lib/api";
 import SelectionActionBar from "./SelectionActionBar";
 import type { Shop } from "@/lib/types";
 import {
@@ -76,7 +76,12 @@ function isLocalHost(hostname: string): boolean {
 // every one of those storefront fetches already catches its own failure —
 // an accepted edge case, not worth wiring a live token-refresh mechanism
 // into the iframe for.
-function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
+// path is a real storefront route past the shop segment (e.g.
+// "/collections/some-slug"), or "" for the homepage — see PageSwitcher
+// below. Appended before the query string exactly like a real in-preview
+// link click would produce, so this goes through the same URL shape
+// shop-context.tsx's sessionStorage preview-persistence fix already covers.
+function resolvePreviewUrl(shop: Shop, themeId: number, path: string): string | null {
   const previewToken = getAccessToken();
   const tokenParam = previewToken ? `&previewToken=${encodeURIComponent(previewToken)}` : "";
 
@@ -89,7 +94,7 @@ function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
   })();
 
   if (storefrontHostname && isLocalHost(storefrontHostname)) {
-    return `${STOREFRONT_URL}/${shop.subdomain}?preview=true&themeId=${themeId}${tokenParam}`;
+    return `${STOREFRONT_URL}/${shop.subdomain}${path}?preview=true&themeId=${themeId}${tokenParam}`;
   }
 
   try {
@@ -99,10 +104,60 @@ function resolvePreviewUrl(shop: Shop, themeId: number): string | null {
     // domain env var), treat it as unresolvable rather than loading a dead
     // iframe silently.
     if (isLocalHost(new URL(base).hostname)) return null;
-    return `${base}?preview=true&themeId=${themeId}${tokenParam}`;
+    return `${base}${path}?preview=true&themeId=${themeId}${tokenParam}`;
   } catch {
     return null;
   }
+}
+
+// Bug 3's explicit ask: a real toolbar control to jump the preview to a
+// different page template directly (setting the iframe's src, same as
+// clicking a real link would), instead of the merchant's only option being
+// an in-preview link click. Home/Collection/Product are the three route
+// shapes theme sections actually render into (see theme-config.types.ts) —
+// Cart/Checkout aren't section-driven pages this builder edits, so they're
+// intentionally left out of this switcher rather than padded in for
+// completeness. Picks the shop's first real collection/product as "the"
+// page to preview — a full per-item picker is more than a page switcher
+// needs; a merchant with zero collections/products yet just doesn't get
+// those two options (rather than linking to a slug that 404s).
+function PageSwitcher({
+  previewPath,
+  setPreviewPath,
+}: {
+  previewPath: string;
+  setPreviewPath: (path: string) => void;
+}) {
+  const [collectionSlug, setCollectionSlug] = useState<string | null>(null);
+  const [productSlug, setProductSlug] = useState<string | null>(null);
+
+  useEffect(() => {
+    listCollections()
+      .then((cs) => setCollectionSlug(cs[0]?.slug ?? null))
+      .catch(() => setCollectionSlug(null));
+    listProducts()
+      .then((ps) => setProductSlug(ps[0]?.slug ?? null))
+      .catch(() => setProductSlug(null));
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 border-b border-black/10 bg-white px-4 py-2 dark:border-white/10 dark:bg-zinc-900">
+      <span className="text-xs font-medium text-zinc-500">Preview page</span>
+      <select
+        value={previewPath}
+        onChange={(e) => setPreviewPath(e.target.value)}
+        className="h-8 rounded-lg border border-black/10 bg-surface px-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+      >
+        <option value="">Home</option>
+        <option value={`/collections/${collectionSlug}`} disabled={!collectionSlug}>
+          Collection page{collectionSlug ? "" : " (no collections yet)"}
+        </option>
+        <option value={`/products/${productSlug}`} disabled={!productSlug}>
+          Product page{productSlug ? "" : " (no products yet)"}
+        </option>
+      </select>
+    </div>
+  );
 }
 
 // Live preview: every config edit is posted to the iframe (debounced, so a
@@ -126,7 +181,7 @@ export default function PreviewFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion, isDragging } = editor;
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion, isDragging, previewPath, setPreviewPath } = editor;
 
   // Bug 2 root cause (confirmed empirically, not the "iframe navigation"
   // premise it was originally reported as — see PR description): an iframe
@@ -147,7 +202,7 @@ export default function PreviewFrame({
   // to the parent document instead — confirmed empirically the pointer
   // events (including the pointerup that was previously lost entirely)
   // correctly reach the parent document once this is applied.
-  const src = theme ? resolvePreviewUrl(shop, theme.id) : null;
+  const src = theme ? resolvePreviewUrl(shop, theme.id, previewPath) : null;
   const previewOrigin = useMemo(() => {
     if (!src) return null;
     try {
@@ -280,6 +335,7 @@ export default function PreviewFrame({
 
   return (
     <div className="flex h-full flex-col bg-zinc-100 dark:bg-zinc-950">
+      <PageSwitcher previewPath={previewPath} setPreviewPath={setPreviewPath} />
       <div className="flex flex-1 items-start justify-center overflow-auto p-4">
         {src ? (
           <iframe

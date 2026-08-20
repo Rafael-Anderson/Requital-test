@@ -203,6 +203,7 @@ export interface CollectionPageSettings {
   fontSize: number;
   textColor: string;
   loadMoreStyle: "infinite" | "pagination";
+  columns: 2 | 3 | 4;
 }
 
 export interface SearchSettings {

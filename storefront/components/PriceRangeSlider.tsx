@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 // Two draggable handles over one track (storefront-v2 Phase 2B) — the CSS
 // double-handle trick (two overlapping native <input type="range">, see
 // globals.css's .range-thumb rules for how the track ignores pointer events
@@ -15,7 +17,9 @@ export default function PriceRangeSlider({
   max: number;
   value: [number, number];
   onChange: (value: [number, number]) => void;
-  currency?: string;
+  // Bug 7 fix: widened from string to ReactNode so callers can pass the
+  // real <CurrencySymbol /> glyph instead of being stuck with plain text.
+  currency?: ReactNode;
 }) {
   const [lo, hi] = value;
   const span = max - min || 1;
