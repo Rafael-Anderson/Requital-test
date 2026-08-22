@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import { useEffect, useRef, type ComponentType, type ReactNode } from "react";
 import ElementSettingsPanel from "./ElementSettingsPanel";
 import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
@@ -167,36 +166,22 @@ function useSettingsSearchFilter(containerRef: React.RefObject<HTMLDivElement | 
   }, [query, contentKey]);
 }
 
-function SettingsSearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="relative mb-4">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search settings..."
-        className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-8 text-[13px] outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 transition-colors"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          aria-label="Clear search"
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
-        >
-          <X className="size-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// Wraps every SettingsPanel branch's body in one shared search bar +
-// filtered container, so the six early-return branches below don't each
-// need their own copy.
-function FilterableSettingsBody({ contentKey, heading, children }: { contentKey: unknown; heading: ReactNode; children: ReactNode }) {
-  const [query, setQuery] = useState("");
+// Wraps every SettingsPanel branch's body in one shared filtered container —
+// the search input itself lives in PreviewFrame.tsx's toolbar now, next to
+// the Preview page selector; editor.settingsSearchQuery is the shared state
+// connecting that input to this filter.
+function FilterableSettingsBody({
+  editor,
+  contentKey,
+  heading,
+  children,
+}: {
+  editor: ThemeEditorState;
+  contentKey: unknown;
+  heading: ReactNode;
+  children: ReactNode;
+}) {
+  const { settingsSearchQuery: query, setSettingsSearchQuery: setQuery } = editor;
   const bodyRef = useRef<HTMLDivElement>(null);
   useSettingsSearchFilter(bodyRef, query, contentKey);
   // Reset the search whenever the merchant selects something new — a stale
@@ -204,11 +189,13 @@ function FilterableSettingsBody({ contentKey, heading, children }: { contentKey:
   // confusing, not convenient.
   useEffect(() => {
     setQuery("");
+    // Resets on contentKey change only — setQuery is a stable setState
+    // setter and doesn't need to be in the deps array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentKey]);
   return (
     <div className="p-4">
       {heading}
-      <SettingsSearchInput value={query} onChange={setQuery} />
       <div ref={bodyRef}>{children}</div>
     </div>
   );
@@ -233,7 +220,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     }
     const Component = THEME_SETTINGS_COMPONENTS[category as (typeof THEME_SETTINGS_CATEGORY_LABELS)[number]];
     return (
-      <FilterableSettingsBody contentKey={`theme:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey={`theme:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
         <Component editor={editor} />
       </FilterableSettingsBody>
     );
@@ -246,7 +233,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     }
     const Component = LAYOUT_COMPONENTS[category as (typeof THEME_LAYOUT_CATEGORY_LABELS)[number]];
     return (
-      <FilterableSettingsBody contentKey={`layout:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey={`layout:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
         <Component editor={editor} />
       </FilterableSettingsBody>
     );
@@ -258,7 +245,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
 
   if (selection.kind === "header") {
     return (
-      <FilterableSettingsBody contentKey="header" heading={<h2 className="mb-4 text-sm font-semibold">Header</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey="header" heading={<h2 className="mb-4 text-sm font-semibold">Header</h2>}>
         <HeaderSettings settings={config.header.settings} onUpdate={editor.updateHeaderSetting} />
       </FilterableSettingsBody>
     );
@@ -266,7 +253,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
 
   if (selection.kind === "footer") {
     return (
-      <FilterableSettingsBody contentKey="footer" heading={<h2 className="mb-4 text-sm font-semibold">Footer</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey="footer" heading={<h2 className="mb-4 text-sm font-semibold">Footer</h2>}>
         <FooterSettings settings={config.footer.settings} onUpdate={editor.updateFooterSetting} />
       </FilterableSettingsBody>
     );
@@ -276,7 +263,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     const { section } = selection;
     const SettingsComponent = SECTION_SETTINGS_COMPONENTS[section.type];
     return (
-      <FilterableSettingsBody contentKey={`section:${section.id}`} heading={<h2 className="mb-4 text-sm font-semibold">{SECTION_TYPE_LABELS[section.type]}</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey={`section:${section.id}`} heading={<h2 className="mb-4 text-sm font-semibold">{SECTION_TYPE_LABELS[section.type]}</h2>}>
         <SettingsComponent settings={section.settings} onUpdate={(key, value) => editor.updateSectionSetting(section.id, key, value)} />
       </FilterableSettingsBody>
     );
@@ -285,6 +272,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   const { block, container } = selection;
   return (
     <FilterableSettingsBody
+      editor={editor}
       contentKey={`block:${block.id}`}
       heading={
         <div className="mb-4 flex items-center justify-between">

@@ -33,14 +33,17 @@ export class DeliveryZonesService {
   ) {
     await this.assertOutletBelongsToShop(ctx, outletId);
     const result = await this.db.execute(
-      `INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive, lat, lng, radiusKm)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         outletId,
         dto.name,
         dto.fee,
         dto.minOrderAmount ?? 0,
         dto.isActive ?? true,
+        dto.lat ?? null,
+        dto.lng ?? null,
+        dto.radiusKm ?? null,
       ],
     );
     return this.findZoneById(result.insertId);
@@ -59,6 +62,9 @@ export class DeliveryZonesService {
       fee: dto.fee,
       minOrderAmount: dto.minOrderAmount,
       isActive: dto.isActive,
+      lat: dto.lat,
+      lng: dto.lng,
+      radiusKm: dto.radiusKm,
     });
     if (set) {
       await this.db.execute(

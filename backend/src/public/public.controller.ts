@@ -265,6 +265,14 @@ export class PublicController {
     return this.publicService.validateDiscount(shopSlug, dto);
   }
 
+  // Read-only, no code/customer input — plain default throttling is fine,
+  // unlike the enumeration-sensitive discounts/validate above.
+  @Public()
+  @Get('discounts/auto')
+  listActiveAutoDiscounts(@Param('shopSlug') shopSlug: string) {
+    return this.publicService.listActiveAutoDiscounts(shopSlug);
+  }
+
   // No account/password exists on this path to lock out, but unthrottled
   // order creation is still a real abuse surface (scripted fake-order spam,
   // stock/discount-claim exhaustion) — 20/min/IP is generous for a genuine

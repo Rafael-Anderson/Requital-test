@@ -11,6 +11,7 @@ import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { iconStyleProps } from "@/lib/icon-style";
 import { storeButtonClassName } from "@/lib/button-style";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
+import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
 import NotifyMeForm from "@/components/NotifyMeForm";
@@ -52,7 +53,7 @@ function formatDeliveryEstimate(shop: Shop): string | null {
 export default function ProductDetailClient() {
   const params = useParams<{ shop: string; slug: string }>();
   const router = useRouter();
-  const { shopSlug, shopBasePath, shop, outlets, previewToken } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets, previewToken, autoDiscounts = [] } = useShop();
   const { addItem, clear } = useCart();
   const defaultOutletId = outlets[0]?.id;
 
@@ -133,6 +134,12 @@ export default function ProductDetailClient() {
 
   const displayPrice = product.isGiftCard ? (giftCardAmount ?? 0) : (selectedVariant?.price ?? product.price);
   const displayCompareAtPrice = product.isGiftCard ? null : (selectedVariant?.compareAtPrice ?? null);
+  // A live auto-apply discount (see lib/auto-discounts.ts) takes priority
+  // over the merchant-set compareAtPrice below when both exist, rather than
+  // trying to stack two struck-through prices on one line.
+  const autoDiscounted = product.isGiftCard
+    ? null
+    : computeAutoDiscountedPrice({ id: product.id, price: String(displayPrice), collections: product.collections }, autoDiscounts);
   // A gift card isn't physical inventory — no stock concept applies (see
   // schema.prisma's comment on product.isGiftCard). null here means "don't
   // show a stock line," same as any other untracked product.
@@ -297,13 +304,26 @@ export default function ProductDetailClient() {
           <h1 className="text-2xl sm:text-[28px] font-semibold tracking-tight text-product-name">{product.name}</h1>
 
           <div className="flex items-baseline gap-2 mt-2">
-            <p className="text-xl font-semibold text-product-name">
-              {displayPrice} <span className="text-base font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
-            </p>
-            {displayCompareAtPrice && (
-              <p className="text-sm text-price-secondary line-through">
-                {displayCompareAtPrice} <CurrencySymbol code={shop?.currency} />
-              </p>
+            {autoDiscounted ? (
+              <>
+                <p className="text-sm text-price-secondary line-through">
+                  {autoDiscounted.originalPrice} <CurrencySymbol code={shop?.currency} />
+                </p>
+                <p className="text-xl font-semibold text-red-600 dark:text-red-400">
+                  {autoDiscounted.discountedPrice} <span className="text-base font-normal"><CurrencySymbol code={shop?.currency} /></span>
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-semibold text-product-name">
+                  {displayPrice} <span className="text-base font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
+                </p>
+                {displayCompareAtPrice && (
+                  <p className="text-sm text-price-secondary line-through">
+                    {displayCompareAtPrice} <CurrencySymbol code={shop?.currency} />
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -637,7 +657,15 @@ export default function ProductDetailClient() {
           <div className="min-w-0">
             <p className="text-xs text-zinc-500 truncate">{product.name}</p>
             <p className="font-semibold text-product-name">
-              {displayPrice} <span className="text-xs font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
+              {autoDiscounted ? (
+                <span className="text-red-600 dark:text-red-400">
+                  {autoDiscounted.discountedPrice} <span className="text-xs font-normal"><CurrencySymbol code={shop?.currency} /></span>
+                </span>
+              ) : (
+                <>
+                  {displayPrice} <span className="text-xs font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
+                </>
+              )}
             </p>
           </div>
           {primaryCtaElement("flex-1 h-11 font-semibold text-sm")}

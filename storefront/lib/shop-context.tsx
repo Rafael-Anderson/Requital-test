@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { getShop, getThemeConfig, listOutlets } from "./api";
+import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
 import { getReadableTextColor } from "./color-contrast";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
 import { parseJsonField } from "./notification-text";
@@ -10,7 +10,7 @@ import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
 import { resolveLetterSpacing, resolveLineHeight } from "./theme-typography";
-import type { Outlet, Shop } from "./types";
+import type { AutoDiscount, Outlet, Shop } from "./types";
 import type { HeadingTextPreset, ThemeConfig } from "./theme-config-types";
 
 interface ShopContextValue {
@@ -50,6 +50,13 @@ interface ShopContextValue {
   // shop's own staff can preview it before ever going live; see that
   // method's own comment for why a bare ?preview=true flag isn't enough.
   previewToken: string | undefined;
+  // Every live auto-apply discount for this shop, fetched once per session —
+  // ProductCard/PDP compute their own struck-through price from this list
+  // via lib/auto-discounts.ts, with zero customer action needed. Empty
+  // array (not null) before the fetch resolves, same as `outlets`, since a
+  // "no auto discounts yet" shop and "still loading" shop render identically
+  // (no strikethrough) either way.
+  autoDiscounts: AutoDiscount[];
 }
 
 const ShopContext = createContext<ShopContextValue | null>(null);
@@ -170,6 +177,10 @@ const LEGACY_THEME_SHOP_FIELDS = [
   "footerLayout",
   "headerDensity",
   "footerDensity",
+  "collectionsGridColumns",
+  "collectionsGridGap",
+  "collectionsGridShowTitle",
+  "collectionsGridImageAspectRatio",
 ] as const satisfies readonly (keyof Shop)[];
 
 function mergeLegacyThemeIntoShop(shop: Shop, legacyTheme: Record<string, unknown>): Shop {
@@ -373,6 +384,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   const shopBasePath = pathname === `/${shopSlug}` || pathname.startsWith(`/${shopSlug}/`) ? `/${shopSlug}` : "";
   const [shop, setShop] = useState<Shop | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [autoDiscounts, setAutoDiscounts] = useState<AutoDiscount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
@@ -461,6 +473,15 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
       .catch(() => setThemeConfig(null));
   }, [shopSlug, preview, previewThemeId]);
 
+  // Separate fetch from getShop/listOutlets above, same reasoning as
+  // themeConfig's own separate effect — a failure here shouldn't surface as
+  // a whole-shop error page, just no struck-through pricing anywhere.
+  useEffect(() => {
+    listActiveAutoDiscounts(shopSlug)
+      .then(setAutoDiscounts)
+      .catch(() => setAutoDiscounts([]));
+  }, [shopSlug]);
+
   // Live preview sync — only registered in preview mode, never for a real
   // shopper visit. Validates event.origin against the known admin
   // origin(s) before accepting a config update; an untrusted origin (or a
@@ -491,7 +512,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
 
   return (
     <ShopContext.Provider
-      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview, previewToken }}
+      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview, previewToken, autoDiscounts }}
     >
       {children}
     </ShopContext.Provider>

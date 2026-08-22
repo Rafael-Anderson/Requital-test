@@ -593,6 +593,9 @@ export interface DeliveryzoneRow {
   fee: string;
   minOrderAmount: string;
   isActive: boolean;
+  lat: string | null;
+  lng: string | null;
+  radiusKm: string | null;
   createdAt: Date;
 }
 
@@ -726,6 +729,10 @@ export interface ThemesettingsRow {
   footerLayout: string;
   headerDensity: string;
   footerDensity: string;
+  collectionsGridColumns: number;
+  collectionsGridGap: string;
+  collectionsGridShowTitle: boolean;
+  collectionsGridImageAspectRatio: string;
   updatedAt: Date;
 }
 
@@ -776,7 +783,8 @@ export interface AuthtokenRow {
 export interface DiscountRow {
   id: number;
   shopId: number;
-  code: string;
+  code: string | null;
+  discountType: string;
   type: string;
   value: string | null;
   minPurchaseAmount: string | null;
