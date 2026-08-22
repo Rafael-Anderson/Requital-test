@@ -111,7 +111,7 @@ export default function GiftCardCodeField({
             }
           }}
           placeholder="Gift card code"
-          className="flex-1 h-9 rounded-lg border border-stroke bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent transition-colors"
+          className="flex-1 h-9 rounded-lg border border-stroke bg-background px-3 text-sm outline-none focus:border-accent transition-colors"
         />
         <button
           type="button"

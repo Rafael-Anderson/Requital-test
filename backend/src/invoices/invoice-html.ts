@@ -32,6 +32,7 @@ export interface InvoiceHtmlData {
       variantLabel: string | null;
       quantity: number;
       priceAtPurchase: string | number;
+      autoDiscountAmount: string | number | null;
     }[];
   };
 }
@@ -53,11 +54,16 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   const showMoney = data.type !== 'PACKING_SLIP';
   const itemRows = data.order.orderitem
     .map((item) => {
-      const name = escapeHtml(
-        item.variantLabel
-          ? `${item.productName} — ${item.variantLabel}`
-          : item.productName,
-      );
+      const baseName = item.variantLabel
+        ? `${item.productName} — ${item.variantLabel}`
+        : item.productName;
+      const hasAutoDiscount =
+        item.autoDiscountAmount !== null && Number(item.autoDiscountAmount) > 0;
+      const name =
+        escapeHtml(baseName) +
+        (hasAutoDiscount
+          ? `<br><span class="muted">Auto discount: -${money(item.autoDiscountAmount!, data.currency)} per item</span>`
+          : '');
       const priceCell = showMoney
         ? `<td class="num">${money(item.priceAtPurchase, data.currency)}</td><td class="num">${money(Number(item.priceAtPurchase) * item.quantity, data.currency)}</td>`
         : '';

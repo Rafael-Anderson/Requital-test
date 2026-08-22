@@ -174,7 +174,12 @@ export default function ProductDetailClient() {
       variantId: selectedVariant?.id,
       variantLabel: selectedVariant?.label ?? undefined,
       name: product.name,
-      price: Number(displayPrice),
+      // Display-consistency only: the server independently recomputes and
+      // enforces the auto-discounted price at order-creation time (see
+      // ProductsService.resolveOrderItems), never trusting this client
+      // value — this just keeps the cart/checkout total matching what the
+      // PDP already showed instead of silently reverting to full price.
+      price: autoDiscounted?.discountedPrice ?? Number(displayPrice),
       thumbnail: galleryImages[0] ?? product.thumbnail,
       maxStock: displayStock,
       isGiftCard: product.isGiftCard || undefined,
@@ -496,7 +501,10 @@ export default function ProductDetailClient() {
               <div className="space-y-2">
                 {addons
                   .filter((a) => a.id !== product.id)
-                  .map((addon) => (
+                  .map((addon) => {
+                    const addonDiscounted = computeAutoDiscountedPrice(addon, autoDiscounts);
+                    const addonPrice = addonDiscounted?.discountedPrice ?? Number(addon.price);
+                    return (
                     <div key={addon.id} className="flex items-center gap-3 rounded-lg border border-stroke p-2">
                       <Link href={`${shopBasePath}/products/${addon.slug}`} className="shrink-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -510,7 +518,7 @@ export default function ProductDetailClient() {
                           {addon.name}
                         </Link>
                         <p className="text-xs text-price-main mt-0.5">
-                          {addon.price} <CurrencySymbol code={shop?.currency} />
+                          {addonPrice} <CurrencySymbol code={shop?.currency} />
                         </p>
                       </div>
                       <button
@@ -518,7 +526,7 @@ export default function ProductDetailClient() {
                         onClick={() =>
                           defaultOutletId !== undefined &&
                           addItem(
-                            { productId: addon.id, name: addon.name, price: Number(addon.price), thumbnail: addon.thumbnail, maxStock: addon.stockQuantity },
+                            { productId: addon.id, name: addon.name, price: addonPrice, thumbnail: addon.thumbnail, maxStock: addon.stockQuantity },
                             1,
                             defaultOutletId,
                           )
@@ -529,7 +537,8 @@ export default function ProductDetailClient() {
                         Add
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           )}
