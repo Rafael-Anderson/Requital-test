@@ -7,6 +7,7 @@ import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { StorageModule } from '../storage/storage.module';
+import { DiscountsModule } from '../discounts/discounts.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { StorageModule } from '../storage/storage.module';
     NotifySubscriptionsModule,
     JobsModule,
     StorageModule,
+    DiscountsModule,
   ],
   controllers: [ProductsController],
   providers: [ProductsService, LowStockDigestService],

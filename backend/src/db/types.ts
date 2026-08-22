@@ -90,6 +90,7 @@ export interface OrderitemRow {
   variantLabel: string | null;
   quantity: number;
   priceAtPurchase: string;
+  autoDiscountAmount: string | null;
   note: string | null;
 }
 

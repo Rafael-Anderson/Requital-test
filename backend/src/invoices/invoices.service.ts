@@ -31,6 +31,7 @@ interface OrderForInvoice {
     variantLabel: string | null;
     quantity: number;
     priceAtPurchase: string;
+    autoDiscountAmount: string | null;
   }[];
 }
 
@@ -195,7 +196,7 @@ export class InvoicesService {
     const order = orderRows[0];
     if (!order) return null;
     const items = await this.db.query<RowDataPacket[]>(
-      `SELECT productName, variantLabel, quantity, priceAtPurchase FROM orderitem WHERE orderId = ?`,
+      `SELECT productName, variantLabel, quantity, priceAtPurchase, autoDiscountAmount FROM orderitem WHERE orderId = ?`,
       [orderId],
     );
     return {
@@ -220,6 +221,7 @@ export class InvoicesService {
         variantLabel: i.variantLabel as string | null,
         quantity: i.quantity as number,
         priceAtPurchase: i.priceAtPurchase as string,
+        autoDiscountAmount: i.autoDiscountAmount as string | null,
       })),
     };
   }
