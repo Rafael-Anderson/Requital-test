@@ -93,6 +93,12 @@ export interface Shop {
   footerLayout: FooterLayout;
   headerDensity: Density;
   footerDensity: Density;
+  // Home tab "collections" mode's own grid settings — always a real value,
+  // same rule as homepageLayout above.
+  collectionsGridColumns: CollectionsGridColumns;
+  collectionsGridGap: CollectionsGridGap;
+  collectionsGridShowTitle: boolean;
+  collectionsGridImageAspectRatio: CollectionsGridAspectRatio;
   // Whether the shop's active card processor (Nomod/Stripe — see admin
   // Settings > Payment Gateways) is actually enabled, not just whether
   // card_online is offered as a payment method type at all
@@ -156,6 +162,17 @@ export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
 
 export const DENSITY_OPTIONS = ["compact", "regular", "spacious"] as const;
 export type Density = (typeof DENSITY_OPTIONS)[number];
+
+// Home tab "collections" mode's own grid settings — see
+// components/CollectionShowcase.tsx.
+export const COLLECTIONS_GRID_COLUMNS = [2, 3, 4] as const;
+export type CollectionsGridColumns = (typeof COLLECTIONS_GRID_COLUMNS)[number];
+
+export const COLLECTIONS_GRID_GAPS = ["sm", "md", "lg"] as const;
+export type CollectionsGridGap = (typeof COLLECTIONS_GRID_GAPS)[number];
+
+export const COLLECTIONS_GRID_ASPECT_RATIOS = ["square", "portrait", "landscape"] as const;
+export type CollectionsGridAspectRatio = (typeof COLLECTIONS_GRID_ASPECT_RATIOS)[number];
 
 export type DayHours = Record<string, { open: string; close: string; closed: boolean }>;
 
@@ -535,6 +552,18 @@ export interface ValidateDiscountResult {
   type?: "PERCENTAGE" | "FIXED_AMOUNT" | "FREE_SHIPPING";
   discountAmount?: number;
   freeShipping?: boolean;
+}
+
+// A live auto-apply discount (no code) — mirrors backend
+// DiscountsService.PublicAutoDiscount by hand. See lib/auto-discounts.ts for
+// how a product's own struck-through price gets computed from this list.
+export interface AutoDiscount {
+  id: number;
+  type: "PERCENTAGE" | "FIXED_AMOUNT" | "FREE_SHIPPING";
+  value: string;
+  appliesTo: "ALL_PRODUCTS" | "SPECIFIC_PRODUCTS" | "SPECIFIC_COLLECTIONS";
+  productIds: number[];
+  collectionIds: number[];
 }
 
 // Mirrors backend GiftCardsService.validateCode's return shape by hand.

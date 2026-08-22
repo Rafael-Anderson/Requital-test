@@ -992,6 +992,12 @@ export interface ThemeSettings {
   footerLayout: FooterLayout;
   headerDensity: Density;
   footerDensity: Density;
+  // Home tab "collections" mode's own grid settings — always a real value,
+  // same rule as homepageLayout above.
+  collectionsGridColumns: number;
+  collectionsGridGap: string;
+  collectionsGridShowTitle: boolean;
+  collectionsGridImageAspectRatio: string;
   // Null only for a shop that's never saved any theme field yet (no row
   // exists) — used for the Theme library page's "last saved" timestamp.
   updatedAt: string | null;
@@ -1575,6 +1581,9 @@ export interface DeliveryZone {
   fee: string;
   minOrderAmount: string;
   isActive: boolean;
+  lat: string | null;
+  lng: string | null;
+  radiusKm: string | null;
   createdAt: string;
 }
 
@@ -1879,9 +1888,15 @@ export const DISCOUNT_APPLIES_TO_LABELS: Record<DiscountAppliesTo, string> = {
   SPECIFIC_COLLECTIONS: "Specific collections",
 };
 
+// Whether the discount requires the customer to type a code, or applies
+// automatically to every matching cart with no code entry.
+export const DISCOUNT_KINDS = ["code", "auto"] as const;
+export type DiscountKind = (typeof DISCOUNT_KINDS)[number];
+
 export interface Discount {
   id: number;
-  code: string;
+  code: string | null;
+  discountType: DiscountKind;
   type: DiscountType;
   value: string | null;
   minPurchaseAmount: string | null;
@@ -1899,7 +1914,8 @@ export interface Discount {
 }
 
 export interface DiscountInput {
-  code: string;
+  code?: string;
+  discountType?: DiscountKind;
   type: DiscountType;
   value?: number;
   minPurchaseAmount?: number;

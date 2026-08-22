@@ -14,19 +14,25 @@ import {
   Matches,
   Min,
 } from 'class-validator';
-import { DISCOUNT_APPLIES_TO, DISCOUNT_TYPES } from '../discount-constants';
-import type { DiscountAppliesTo, DiscountType } from '../discount-constants';
+import { DISCOUNT_APPLIES_TO, DISCOUNT_KINDS, DISCOUNT_TYPES } from '../discount-constants';
+import type { DiscountAppliesTo, DiscountKind, DiscountType } from '../discount-constants';
 
 export class CreateDiscountDto {
-  // Same shape as affiliate codes (CreateAffiliateCodeDto) — uppercased and
-  // compared as such in the service; this pattern just constrains what a
-  // merchant can type in the first place.
+  // Required for discountType 'code', must be absent for 'auto' — enforced
+  // in DiscountsService (cross-field), same convention as value/type below.
+  // Same shape as affiliate codes (CreateAffiliateCodeDto) when present —
+  // uppercased and compared as such in the service.
+  @IsOptional()
   @IsString()
   @Matches(/^[A-Za-z0-9_-]{3,32}$/, {
     message:
       'code must be 3-32 characters: letters, numbers, hyphens, or underscores',
   })
-  code: string;
+  code?: string;
+
+  @IsOptional()
+  @IsIn(DISCOUNT_KINDS)
+  discountType?: DiscountKind;
 
   @IsIn(DISCOUNT_TYPES)
   type: DiscountType;

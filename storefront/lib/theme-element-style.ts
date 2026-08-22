@@ -179,6 +179,20 @@ export function resolveNavElementStyle(settings: Record<string, unknown>): CSSPr
   return style;
 }
 
+// Menu bar background (MenuBar.tsx's <nav>) is its own theme.config key,
+// independent from the header's own background above it — falls back to
+// the header's own color only when the header background is a plain solid
+// (a gradient/image header has no single "color" to hand down, so the menu
+// bar stays transparent there, same as before this key existed).
+export function resolveMenuBarBackground(
+  headerSettings: Record<string, unknown> | undefined,
+): string | undefined {
+  const menuBarBackground = headerSettings?.menuBarBackground;
+  if (typeof menuBarBackground === "string" && menuBarBackground) return menuBarBackground;
+  const headerBackground = headerSettings?.background as { type?: string; color?: string } | undefined;
+  return headerBackground?.type === "solid" ? headerBackground.color : undefined;
+}
+
 // lucide-react's own default strokeWidth is 2 — "default" maps to that
 // exact value so a shop that never touches Theme Settings > Icons renders
 // pixel-identical to before this was wired up. A numeric SVG prop, not a

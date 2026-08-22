@@ -24,14 +24,16 @@ const PROD_ADMIN_ORIGIN = "https://admin.requital.io";
 // oversight — the other directives are still real restrictions.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  // MapPickerLeaflet.tsx (checkout/account address entry) loads tiles
-  // directly from CARTO's CDN in the browser — without this, the map
-  // picker renders a grid of broken-image icons instead of a map.
-  `img-src 'self' data: ${API_ORIGIN} https://*.basemaps.cartocdn.com`,
-  `connect-src 'self' ${API_ORIGIN}`,
-  "font-src 'self' data:",
+  // https://maps.googleapis.com loads the Maps JS API script itself
+  // (MapPicker.tsx, checkout/account address entry) — Google's own
+  // documented CSP recipe for embedding the JS API.
+  "script-src 'self' 'unsafe-inline' https://maps.googleapis.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  // Map tiles/marker icons come from Google's domains; Roboto is the font
+  // Google Maps' own UI (Autocomplete dropdown, etc.) requests.
+  `img-src 'self' data: ${API_ORIGIN} https://maps.googleapis.com https://maps.gstatic.com`,
+  `connect-src 'self' ${API_ORIGIN} https://maps.googleapis.com`,
+  "font-src 'self' data: https://fonts.gstatic.com",
   "object-src 'none'",
   // 'self' covers this app embedding its own pages; the two admin origins
   // are what actually make the theme builder's preview iframe renderable —

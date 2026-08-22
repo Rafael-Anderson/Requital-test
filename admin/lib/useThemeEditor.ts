@@ -96,6 +96,24 @@ function defaultBlocksForType(type: ThemeSectionType): ThemeBlock[] {
   }
 }
 
+// Home tab "Templates" mode's quick-start presets (theme builder Home tab
+// rework) — a one-click starting point for a merchant moving from the
+// legacy Home tab onto the Sections builder, not a rendering mode of its
+// own. Each preset is just an ordered list of section types; the actual
+// section content comes from the same defaultSettingsForType/
+// defaultBlocksForType every "+ Add section" click already uses.
+export interface HomepagePreset {
+  key: string;
+  label: string;
+  sectionTypes: ThemeSectionType[];
+}
+
+export const HOMEPAGE_PRESETS: HomepagePreset[] = [
+  { key: "default", label: "Default", sectionTypes: ["hero", "product_grid", "newsletter"] },
+  { key: "minimal", label: "Minimal", sectionTypes: ["hero", "featured_collections"] },
+  { key: "featured", label: "Featured", sectionTypes: ["announcement_bar", "hero", "product_grid"] },
+];
+
 // Which block container a block-mutating action targets — a section's own
 // type travels with it since the "+ Add block" catalog (BLOCK_TYPES) is
 // keyed by section type, not just "this is a section".
@@ -201,6 +219,12 @@ export function useThemeEditor(themeId: number) {
   // casing needed between "the page switcher navigated" and "an in-preview
   // link navigated".
   const [previewPath, setPreviewPath] = useState("");
+  // Settings-panel search query — lives here rather than local state inside
+  // SettingsPanel.tsx because the input itself renders in PreviewFrame.tsx's
+  // toolbar (next to the Preview page selector) while the filtering it
+  // drives happens in SettingsPanel.tsx, two siblings under this same
+  // shared editor object.
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -366,19 +390,27 @@ export function useThemeEditor(themeId: number) {
     };
   }, [themeId]);
 
+  // Reads/writes configRef.current directly (rather than the usual
+  // setState(prev => ...) functional form) so the ref is guaranteed
+  // up to date the instant this returns — the section/block reorder
+  // actions below call save() right after updateConfig and need
+  // configRef.current (which save() reads) to already reflect the
+  // reorder, not whatever it'll become after the next render's
+  // ref-sync effect runs.
   function updateConfig(updater: (prev: ThemeConfig) => ThemeConfig) {
-    setConfig((prev) => {
-      if (!prev) return prev;
-      const next = updater(prev);
-      const truncated = historyStackRef.current.slice(0, historyIndexRef.current + 1);
-      truncated.push(next);
-      const capped = truncated.length > MAX_HISTORY ? truncated.slice(truncated.length - MAX_HISTORY) : truncated;
-      historyStackRef.current = capped;
-      historyIndexRef.current = capped.length - 1;
-      setHistoryIndex(historyIndexRef.current);
-      setHistoryLength(capped.length);
-      return next;
-    });
+    const prev = configRef.current;
+    if (!prev) return;
+    const next = updater(prev);
+    configRef.current = next;
+    dirtyRef.current = true;
+    setConfig(next);
+    const truncated = historyStackRef.current.slice(0, historyIndexRef.current + 1);
+    truncated.push(next);
+    const capped = truncated.length > MAX_HISTORY ? truncated.slice(truncated.length - MAX_HISTORY) : truncated;
+    historyStackRef.current = capped;
+    historyIndexRef.current = capped.length - 1;
+    setHistoryIndex(historyIndexRef.current);
+    setHistoryLength(capped.length);
     setDirty(true);
   }
 
@@ -513,6 +545,26 @@ export function useThemeEditor(themeId: number) {
     setSelectedId(newSection.id);
   }
 
+  // Replaces the whole sections list with a preset's arrangement — a
+  // deliberate, occasional action (not a per-keystroke edit), same
+  // immediate-persist reasoning as reorderSections/reorderBlocks below.
+  function applyHomepagePreset(presetKey: string) {
+    const preset = HOMEPAGE_PRESETS.find((p) => p.key === presetKey);
+    if (!preset) return;
+    const newSections: ThemeSection[] = preset.sectionTypes.map((type, order) => ({
+      id: generateId("sec"),
+      type,
+      visible: true,
+      order,
+      settings: defaultSettingsForType(type),
+      blocks: defaultBlocksForType(type),
+    }));
+    updateConfig((prev) => ({ ...prev, sections: newSections }));
+    setSelectedId(null);
+    void save();
+    toast(`"${preset.label}" applied — check the Sections tab`, "success");
+  }
+
   function removeSection(id: string) {
     updateConfig((prev) => ({
       ...prev,
@@ -530,8 +582,13 @@ export function useThemeEditor(themeId: number) {
 
   // orderedIds is the full section id list in its new order (what
   // @dnd-kit/sortable's onDragEnd hands back after reordering the array).
+  // Persists immediately (not just marked dirty for the 30s autosave/
+  // beforeunload flush) — a reorder is a discrete, deliberate action a
+  // merchant expects to stick right away, not something that should still
+  // be sitting unsaved if they close the tab a few seconds later.
   function reorderSections(orderedIds: string[]) {
     updateConfig((prev) => ({ ...prev, sections: reorderById(prev.sections, orderedIds) }));
+    void save();
   }
 
   function updateSectionSetting(id: string, key: string, value: unknown) {
@@ -596,6 +653,10 @@ export function useThemeEditor(themeId: number) {
     if (selectedId === blockId) setSelectedId(null);
   }
 
+  // Same immediate-persist reasoning as reorderSections above — this is
+  // also the landing spot for the in-preview drag (PreviewFrame.tsx's
+  // "element-moved" postMessage handler calls this too), so both drag
+  // surfaces get the same drop-time save through this one function.
   function reorderBlocks(container: BlockContainerRef, parentBlockId: string | null, orderedIds: string[]) {
     updateConfig((prev) =>
       setContainerBlocks(
@@ -604,6 +665,7 @@ export function useThemeEditor(themeId: number) {
         reorderSiblingsInTree(getContainerBlocks(prev, container), parentBlockId, orderedIds),
       ),
     );
+    void save();
   }
 
   async function publish() {
@@ -653,6 +715,8 @@ export function useThemeEditor(themeId: number) {
     setDevice,
     previewPath,
     setPreviewPath,
+    settingsSearchQuery,
+    setSettingsSearchQuery,
     dirty,
     saving,
     publishing,
@@ -667,6 +731,7 @@ export function useThemeEditor(themeId: number) {
     updateHeaderSetting,
     updateFooterSetting,
     addSection,
+    applyHomepagePreset,
     removeSection,
     toggleSectionVisibility,
     reorderSections,

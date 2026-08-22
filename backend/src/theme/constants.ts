@@ -277,3 +277,16 @@ export type Density = (typeof DENSITY_OPTIONS)[number];
 // (grouped product carousels) or a flat grid of top-level Collections.
 export const HOME_TAB_MODES = ['templates', 'collections'] as const;
 export type HomeTabMode = (typeof HOME_TAB_MODES)[number];
+
+// Home tab "collections" mode's own grid display settings (columns/gap/
+// title visibility/image aspect ratio) — only meaningful when homeTabMode
+// is 'collections'; the storefront's CollectionShowcase.tsx reads these
+// instead of the fixed layout it used to hardcode.
+export const COLLECTIONS_GRID_COLUMNS = [2, 3, 4] as const;
+export type CollectionsGridColumns = (typeof COLLECTIONS_GRID_COLUMNS)[number];
+
+export const COLLECTIONS_GRID_GAPS = ['sm', 'md', 'lg'] as const;
+export type CollectionsGridGap = (typeof COLLECTIONS_GRID_GAPS)[number];
+
+export const COLLECTIONS_GRID_ASPECT_RATIOS = ['square', 'portrait', 'landscape'] as const;
+export type CollectionsGridAspectRatio = (typeof COLLECTIONS_GRID_ASPECT_RATIOS)[number];

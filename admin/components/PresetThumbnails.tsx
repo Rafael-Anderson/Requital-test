@@ -1,5 +1,6 @@
 import { ShoppingCart, Menu } from "lucide-react";
 import type { HomepageLayout, TopBarLayout, PdpLayout, CartLayout, CheckoutLayout, IconStyle, ButtonRadius, ButtonFill, FooterLayout, Density } from "@/lib/types";
+import type { HomepagePreset } from "@/lib/useThemeEditor";
 
 // Small static illustrations (not live-rendered previews, per the task
 // brief — same rule as the original homepage-layout thumbnails) sketching
@@ -8,6 +9,49 @@ import type { HomepageLayout, TopBarLayout, PdpLayout, CartLayout, CheckoutLayou
 const BOX = "rounded bg-accent/20";
 const BAR = "rounded bg-black/10 dark:bg-white/10";
 const FRAME = "w-full h-24 rounded-md bg-zinc-100 dark:bg-zinc-800 p-2 flex flex-col gap-1.5";
+
+// Home tab "Templates" mode presets (HOMEPAGE_PRESETS in useThemeEditor.ts)
+// — one block per section the preset would add, in order, so the shape
+// here doubles as a legend for what "Default"/"Minimal"/"Featured" mean.
+export function HomepagePresetThumbnail({ preset }: { preset: HomepagePreset["key"] }) {
+  if (preset === "minimal") {
+    return (
+      <div className={FRAME}>
+        <div className={`h-10 ${BOX}`} />
+        <div className="flex gap-1 flex-1">
+          {[0, 1].map((i) => (
+            <div key={i} className="flex-1 rounded bg-accent/30" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (preset === "featured") {
+    return (
+      <div className={FRAME}>
+        <div className={`h-2 ${BAR}`} />
+        <div className={`h-8 ${BOX}`} />
+        <div className="flex gap-1 flex-1">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex-1 rounded bg-accent/30" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  // default
+  return (
+    <div className={FRAME}>
+      <div className={`h-9 ${BOX}`} />
+      <div className="flex gap-1 flex-1">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex-1 rounded bg-accent/30" />
+        ))}
+      </div>
+      <div className={`h-3 ${BAR}`} />
+    </div>
+  );
+}
 
 export function HomepageLayoutThumbnail({ layout }: { layout: HomepageLayout }) {
   if (layout === "slideshow") {

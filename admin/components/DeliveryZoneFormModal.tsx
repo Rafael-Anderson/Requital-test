@@ -8,6 +8,7 @@ import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import DeliveryZoneMap, { UAE_CENTER } from "@/components/DeliveryZoneMap";
 
 export default function DeliveryZoneFormModal({
   outletId,
@@ -24,6 +25,12 @@ export default function DeliveryZoneFormModal({
   const [fee, setFee] = useState(zone?.fee ?? "0");
   const [minOrderAmount, setMinOrderAmount] = useState(zone?.minOrderAmount ?? "0");
   const [isActive, setIsActive] = useState(zone?.isActive ?? true);
+  const [center, setCenter] = useState(
+    zone?.lat !== null && zone?.lat !== undefined && zone?.lng !== null && zone?.lng !== undefined
+      ? { lat: Number(zone.lat), lng: Number(zone.lng) }
+      : UAE_CENTER,
+  );
+  const [radiusKm, setRadiusKm] = useState(zone?.radiusKm !== null && zone?.radiusKm !== undefined ? Number(zone.radiusKm) : 5);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -37,6 +44,9 @@ export default function DeliveryZoneFormModal({
         fee: Number(fee) || 0,
         minOrderAmount: Number(minOrderAmount) || 0,
         isActive,
+        lat: center.lat,
+        lng: center.lng,
+        radiusKm,
       };
       if (zone) {
         await updateDeliveryZone(outletId, zone.id, payload);
@@ -55,7 +65,7 @@ export default function DeliveryZoneFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={zone ? `Edit "${zone.name}"` : "New zone"}>
+    <Modal onClose={onClose} size="md" title={zone ? `Edit "${zone.name}"` : "New zone"}>
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
@@ -85,6 +95,34 @@ export default function DeliveryZoneFormModal({
           <div className="flex items-center gap-2">
             <Toggle checked={isActive} onChange={setIsActive} />
             <span className="text-sm">Active</span>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">
+              Delivery area (optional)
+            </p>
+            <DeliveryZoneMap
+              center={center}
+              radiusKm={radiusKm}
+              onChange={setCenter}
+            />
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="zone-radius" className="text-sm font-medium">
+                  Radius
+                </label>
+                <span className="text-sm text-text-faint">{radiusKm} km</span>
+              </div>
+              <input
+                id="zone-radius"
+                type="range"
+                min={1}
+                max={100}
+                step={1}
+                value={radiusKm}
+                onChange={(e) => setRadiusKm(Number(e.target.value))}
+                className="w-full accent-accent"
+              />
+            </div>
           </div>
         </div>
 

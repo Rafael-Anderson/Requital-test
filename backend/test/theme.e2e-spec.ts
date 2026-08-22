@@ -32,6 +32,10 @@ interface ThemeBody {
   pdpLayout: string;
   cartLayout: string;
   checkoutLayout: string;
+  collectionsGridColumns: number;
+  collectionsGridGap: string;
+  collectionsGridShowTitle: boolean;
+  collectionsGridImageAspectRatio: string;
   updatedAt: string | null;
 }
 interface PublicShopBody {
@@ -55,6 +59,10 @@ interface PublicShopBody {
   pdpLayout: string;
   cartLayout: string;
   checkoutLayout: string;
+  collectionsGridColumns: number;
+  collectionsGridGap: string;
+  collectionsGridShowTitle: boolean;
+  collectionsGridImageAspectRatio: string;
 }
 
 function body<T>(res: Response): T {
@@ -476,6 +484,79 @@ describe('Theme (e2e)', () => {
       expect(publicShop.pdpLayout).toBe('gallery_left');
       expect(publicShop.buttonRadius).toBe('rounded');
       expect(publicShop.buttonFill).toBe('solid');
+    });
+  });
+
+  describe('PATCH /theme — Home tab collections-grid settings', () => {
+    it('saves and reads back real values for every collections-grid field', async () => {
+      const shop = await setupShop('theme-collections-grid');
+      await request(app.getHttpServer())
+        .patch('/theme')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({
+          collectionsGridColumns: 4,
+          collectionsGridGap: 'lg',
+          collectionsGridShowTitle: false,
+          collectionsGridImageAspectRatio: 'square',
+        })
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<ThemeBody>(res)).toMatchObject({
+        collectionsGridColumns: 4,
+        collectionsGridGap: 'lg',
+        collectionsGridShowTitle: false,
+        collectionsGridImageAspectRatio: 'square',
+      });
+    });
+
+    it('defaults to columns=3, gap=md, showTitle=true, aspectRatio=portrait for an unconfigured shop', async () => {
+      const shop = await setupShop('theme-collections-grid-default');
+      const res = await request(app.getHttpServer())
+        .get('/theme')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<ThemeBody>(res)).toMatchObject({
+        collectionsGridColumns: 3,
+        collectionsGridGap: 'md',
+        collectionsGridShowTitle: true,
+        collectionsGridImageAspectRatio: 'portrait',
+      });
+    });
+
+    it.each([
+      ['collectionsGridColumns', 5],
+      ['collectionsGridGap', 'huge'],
+      ['collectionsGridImageAspectRatio', 'circle'],
+    ])('rejects an invalid %s value', async (field, value) => {
+      const shop = await setupShop(`theme-cg-bad-${field.toLowerCase()}`);
+      await request(app.getHttpServer())
+        .patch('/theme')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ [field]: value })
+        .expect(400);
+    });
+
+    it('the saved settings are reflected on the public storefront payload', async () => {
+      const shop = await setupShop('theme-cg-public');
+      await request(app.getHttpServer())
+        .patch('/theme')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ collectionsGridColumns: 2, collectionsGridShowTitle: false })
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
+      const publicShop = body<PublicShopBody>(res);
+      expect(publicShop.collectionsGridColumns).toBe(2);
+      expect(publicShop.collectionsGridShowTitle).toBe(false);
+      // Untouched fields keep their pre-this-task default.
+      expect(publicShop.collectionsGridGap).toBe('md');
+      expect(publicShop.collectionsGridImageAspectRatio).toBe('portrait');
     });
   });
 

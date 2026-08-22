@@ -371,6 +371,12 @@ export class PublicService {
       footerLayout: theme?.footerLayout ?? 'columns',
       headerDensity: theme?.headerDensity ?? 'regular',
       footerDensity: theme?.footerDensity ?? 'regular',
+      // Home tab "collections" mode's own grid settings — see
+      // theme/constants.ts's own comment.
+      collectionsGridColumns: theme?.collectionsGridColumns ?? 3,
+      collectionsGridGap: theme?.collectionsGridGap ?? 'md',
+      collectionsGridShowTitle: theme?.collectionsGridShowTitle ?? true,
+      collectionsGridImageAspectRatio: theme?.collectionsGridImageAspectRatio ?? 'portrait',
       metaTitle: seo?.metaTitle ?? null,
       metaDescription: seo?.metaDescription ?? null,
       // Falls back to Theme's banner, then its logo, then the general
@@ -1174,6 +1180,15 @@ export class PublicService {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     return this.discountsService.validate(shop.id, dto);
+  }
+
+  // Every live auto-apply discount for this shop, for the storefront to
+  // compute struck-through pricing on product cards/PDP with no code entry
+  // and no cart-total round trip. See DiscountsService.listActiveAutoDiscounts.
+  async listActiveAutoDiscounts(shopSlug: string) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    return this.discountsService.listActiveAutoDiscounts(shop.id);
   }
 
   async createOrder(shopSlug: string, dto: CreatePublicOrderDto) {

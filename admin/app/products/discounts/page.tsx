@@ -52,10 +52,15 @@ export default function DiscountsPage() {
     refresh();
   }, [refresh]);
 
+  function discountLabel(discount: Discount): string {
+    return discount.code ?? "Auto discount";
+  }
+
   async function handleToggleActive(discount: Discount) {
+    const label = discountLabel(discount);
     try {
       await updateDiscount(discount.id, { active: !discount.active });
-      toast(discount.active ? `"${discount.code}" deactivated` : `"${discount.code}" activated`);
+      toast(discount.active ? `"${label}" deactivated` : `"${label}" activated`);
       refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update discount", "error");
@@ -63,9 +68,10 @@ export default function DiscountsPage() {
   }
 
   function handleDelete(discount: Discount) {
+    const label = discountLabel(discount);
     deleteWithUndo({
       id: discount.id,
-      label: `"${discount.code}"`,
+      label: `"${label}"`,
       onRemoveLocally: () => setDiscounts((prev) => (prev ? prev.filter((d) => d.id !== discount.id) : prev)),
       onRestoreLocally: refresh,
       commit: () => deleteDiscount(discount.id),
@@ -115,7 +121,20 @@ export default function DiscountsPage() {
           ) : (
             discounts.map((d) => (
               <TR key={d.id}>
-                <TD className="font-medium">{d.code}</TD>
+                <TD className="font-medium">
+                  <div className="flex items-center gap-2">
+                    <span>{discountLabel(d)}</span>
+                    <span
+                      className={`text-xs rounded px-1.5 py-0.5 border ${
+                        d.discountType === "auto"
+                          ? "border-accent/30 text-accent-text dark:text-accent bg-accent/5"
+                          : "border-black/10 dark:border-white/15 text-text-muted"
+                      }`}
+                    >
+                      {d.discountType === "auto" ? "Auto" : "Code"}
+                    </span>
+                  </div>
+                </TD>
                 <TD>{DISCOUNT_TYPE_LABELS[d.type]}</TD>
                 <TD className="text-text-muted">
                   {d.type === "FREE_SHIPPING" ? "-" : d.type === "PERCENTAGE" ? `${d.value}%` : d.value}
@@ -138,22 +157,22 @@ export default function DiscountsPage() {
                   </button>
                 </TD>
                 <TD>
-                  <Tooltip label={`Edit ${d.code}`}>
+                  <Tooltip label={`Edit ${discountLabel(d)}`}>
                     <button
                       onClick={() => setEditing(d)}
                       className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      aria-label={`Edit ${d.code}`}
+                      aria-label={`Edit ${discountLabel(d)}`}
                     >
                       <Pencil className="size-4" />
                     </button>
                   </Tooltip>
                 </TD>
                 <TD>
-                  <Tooltip label={`Delete ${d.code}. This cannot be undone.`} align="end">
+                  <Tooltip label={`Delete ${discountLabel(d)}. This cannot be undone.`} align="end">
                     <button
                       onClick={() => handleDelete(d)}
                       className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                      aria-label={`Delete ${d.code}`}
+                      aria-label={`Delete ${discountLabel(d)}`}
                     >
                       <Trash2 className="size-4" />
                     </button>

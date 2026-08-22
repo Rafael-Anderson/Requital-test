@@ -14,8 +14,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
+// A stable function reference, not a fresh vi.fn() per call — useThemeEditor's
+// `load` is a useCallback keyed on this value (see its own "Layout mode"
+// comment for why); an unstable mock here made `load`'s identity change on
+// every render, re-firing its effect and racing any awaited assertion with
+// a fresh, un-reordered fixture fetch that silently clobbered state.
+const toastMock = vi.fn();
 vi.mock("@/components/ui/Toast", () => ({
-  useToast: () => vi.fn(),
+  useToast: () => toastMock,
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -73,6 +79,7 @@ beforeEach(() => {
   publishTheme.mockReset();
   getTheme.mockReset();
   updateTheme.mockReset();
+  toastMock.mockReset();
   getThemeBuilder.mockResolvedValue(fixtureTheme(fixtureConfig()));
   // Exercised by the unmount-time "save on close" cleanup effect even when
   // a test never calls save() itself — needs a real resolved Promise, not
@@ -140,6 +147,74 @@ describe("useThemeEditor — updateBlockSetting propagation", () => {
         sectionType: "hero",
       });
     }
+  });
+});
+
+describe("useThemeEditor — Home tab 'Templates' preset", () => {
+  it("applyHomepagePreset replaces the whole sections list with the preset's arrangement, in order", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.applyHomepagePreset("minimal");
+    });
+
+    expect(result.current.config!.sections.map((s) => s.type)).toEqual(["hero", "featured_collections"]);
+    expect(result.current.config!.sections.map((s) => s.order)).toEqual([0, 1]);
+  });
+
+  it("saves immediately, same as a reorder, rather than waiting for autosave", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.applyHomepagePreset("default");
+    });
+
+    await waitFor(() => expect(updateThemeDraft).toHaveBeenCalledTimes(1));
+  });
+
+  it("ignores an unknown preset key rather than clearing the existing sections", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+    const before = result.current.config!.sections;
+
+    act(() => {
+      result.current.applyHomepagePreset("not-a-real-preset");
+    });
+
+    expect(result.current.config!.sections).toBe(before);
+  });
+});
+
+describe("useThemeEditor — drag-and-drop reorder persists immediately on drop", () => {
+  it("reorderSections saves right away instead of waiting for autosave/beforeunload", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.reorderSections(["sec-hero"]);
+    });
+
+    await waitFor(() => expect(updateThemeDraft).toHaveBeenCalledTimes(1));
+    expect(updateThemeDraft).toHaveBeenCalledWith(1, { config: result.current.config });
+  });
+
+  it("reorderBlocks (both the sidebar tree and the in-preview drag route through this) saves right away", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.reorderBlocks(
+        { kind: "section", sectionId: "sec-hero", sectionType: "hero" },
+        null,
+        ["blk-subheading", "blk-heading"],
+      );
+    });
+
+    await waitFor(() => expect(updateThemeDraft).toHaveBeenCalledTimes(1));
+    const section = result.current.config!.sections.find((s) => s.id === "sec-hero")!;
+    expect(section.blocks.map((b) => b.id)).toEqual(["blk-subheading", "blk-heading"]);
   });
 });
 

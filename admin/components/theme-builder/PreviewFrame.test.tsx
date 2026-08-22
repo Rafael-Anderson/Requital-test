@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import PreviewFrame from "./PreviewFrame";
 import { HEADER_CHROME_ID, type ThemeEditorState } from "@/lib/useThemeEditor";
 import type { Shop, Theme, ThemeConfig, ThemeSectionType } from "@/lib/types";
@@ -28,6 +28,8 @@ function fixtureEditor(overrides: Partial<ThemeEditorState> = {}): ThemeEditorSt
     selectNode: vi.fn(),
     reorderBlocks: vi.fn(),
     publishVersion: 0,
+    settingsSearchQuery: "",
+    setSettingsSearchQuery: vi.fn(),
     ...overrides,
   } as ThemeEditorState;
 }
@@ -117,5 +119,26 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     // a tick to run before checking it never fired.
     await new Promise((r) => setTimeout(r, 50));
     expect(editor.selectNode).not.toHaveBeenCalled();
+  });
+});
+
+describe("PreviewFrame — settings search box (moved into the toolbar, next to Preview page)", () => {
+  it("renders the search input in the same toolbar row as the Preview page selector", () => {
+    const editor = fixtureEditor();
+    const { getByPlaceholderText, getByText } = render(<PreviewFrame editor={editor} shop={shop} />);
+
+    const toolbarRow = getByText("Preview page").closest("div");
+    const input = getByPlaceholderText("Search settings...");
+    expect(toolbarRow).toContainElement(input);
+  });
+
+  it("typing in the search box updates editor.settingsSearchQuery", async () => {
+    const editor = fixtureEditor();
+    const { getByPlaceholderText } = render(<PreviewFrame editor={editor} shop={shop} />);
+
+    const input = getByPlaceholderText("Search settings...");
+    fireEvent.change(input, { target: { value: "colo" } });
+
+    await waitFor(() => expect(editor.setSettingsSearchQuery).toHaveBeenCalledWith("colo"));
   });
 });

@@ -46,6 +46,7 @@ export default function DiscountFormModal({
   onSaved: () => void;
 }) {
   const toast = useToast();
+  const [requiresCode, setRequiresCode] = useState(discount ? discount.discountType !== "auto" : true);
   const [code, setCode] = useState(discount?.code ?? "");
   const [type, setType] = useState<DiscountType>(discount?.type ?? "PERCENTAGE");
   const [value, setValue] = useState(discount?.value ?? "");
@@ -66,17 +67,35 @@ export default function DiscountFormModal({
     return Array.from(e.target.selectedOptions).map((o) => Number(o.value));
   }
 
+  // An auto-apply discount can't be scoped to ALL_PRODUCTS — it needs a
+  // concrete product/collection set to know when to kick in with no code
+  // entered. Switching the toggle off nudges appliesTo to a valid choice
+  // instead of leaving it on an option this mode doesn't allow.
+  function handleRequiresCodeChange(next: boolean) {
+    setRequiresCode(next);
+    if (!next && appliesTo === "ALL_PRODUCTS") setAppliesTo("SPECIFIC_PRODUCTS");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!code.trim()) return;
+    if (requiresCode && !code.trim()) return;
     if (type !== "FREE_SHIPPING" && !value) {
       toast("Value is required for this discount type", "error");
+      return;
+    }
+    if (!requiresCode && appliesTo === "SPECIFIC_PRODUCTS" && productIds.size === 0) {
+      toast("Pick at least one product for this auto discount", "error");
+      return;
+    }
+    if (!requiresCode && appliesTo === "SPECIFIC_COLLECTIONS" && collectionIds.size === 0) {
+      toast("Pick at least one collection for this auto discount", "error");
       return;
     }
     setSaving(true);
     try {
       const payload = {
-        code: code.trim(),
+        code: requiresCode ? code.trim() : undefined,
+        discountType: requiresCode ? ("code" as const) : ("auto" as const),
         type,
         value: type === "FREE_SHIPPING" ? undefined : Number(value),
         minPurchaseAmount: minPurchaseAmount ? Number(minPurchaseAmount) : undefined,
@@ -89,12 +108,13 @@ export default function DiscountFormModal({
         endsAt: endsAt || undefined,
         active,
       };
+      const label = requiresCode ? code.trim() : "Auto discount";
       if (discount) {
         await updateDiscount(discount.id, payload);
-        toast(`"${code}" updated`);
+        toast(`"${label}" updated`);
       } else {
         await createDiscount(payload);
-        toast(`"${code}" created`);
+        toast(`"${label}" created`);
       }
       onSaved();
       onClose();
@@ -106,18 +126,30 @@ export default function DiscountFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={discount ? `Edit "${discount.code}"` : "New discount"}>
+    <Modal onClose={onClose} size="sm" title={discount ? `Edit "${discount.code ?? "Auto discount"}"` : "New discount"}>
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
-          <div className="flex items-end gap-2">
-            <div className="flex-1">
-              <Input label="Code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required />
-            </div>
-            <Button type="button" variant="secondary" onClick={() => setCode(randomCode())} title="Generate random code">
-              <Shuffle className="size-4" />
-            </Button>
+          <div className="flex items-center gap-2">
+            <Toggle checked={requiresCode} onChange={handleRequiresCodeChange} />
+            <span className="text-sm">Requires code</span>
           </div>
+
+          {requiresCode ? (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Input label="Code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required />
+              </div>
+              <Button type="button" variant="secondary" onClick={() => setCode(randomCode())} title="Generate random code">
+                <Shuffle className="size-4" />
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-text-faint">
+              Applies automatically to every matching cart, no code needed. Pick the products or collections it
+              applies to below.
+            </p>
+          )}
 
           <Select label="Type" value={type} onChange={(e) => setType(e.target.value as DiscountType)}>
             {DISCOUNT_TYPES.map((t) => (
@@ -153,11 +185,15 @@ export default function DiscountFormModal({
             value={appliesTo}
             onChange={(e) => setAppliesTo(e.target.value as DiscountAppliesTo)}
           >
-            {DISCOUNT_APPLIES_TO.map((a) => (
-              <option key={a} value={a}>
-                {DISCOUNT_APPLIES_TO_LABELS[a]}
-              </option>
-            ))}
+            {DISCOUNT_APPLIES_TO
+              // An auto discount always needs a concrete product/collection
+              // target to know when to apply itself with no code entered.
+              .filter((a) => requiresCode || a !== "ALL_PRODUCTS")
+              .map((a) => (
+                <option key={a} value={a}>
+                  {DISCOUNT_APPLIES_TO_LABELS[a]}
+                </option>
+              ))}
           </Select>
 
           {appliesTo === "SPECIFIC_PRODUCTS" && (

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveNavElementStyle, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
+import { resolveNavElementStyle, resolveMenuBarBackground, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
 
@@ -150,7 +150,11 @@ export default function MenuBar() {
   if (items.length === 0) return <CollectionNav />;
 
   const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
-  const navStyle = navBlock ? resolveNavElementStyle(navBlock.settings) : {};
+  const menuBarBackground = resolveMenuBarBackground(themeConfig?.header.settings);
+  const navStyle = {
+    ...(navBlock ? resolveNavElementStyle(navBlock.settings) : {}),
+    ...(menuBarBackground ? { background: menuBarBackground } : {}),
+  };
   const showOnMobile = navBlock?.settings.showOnMobile !== false;
   const menuAnimation = (themeConfig?.header.settings.menuAnimation as "fade" | "slide" | "none" | undefined) ?? "fade";
   const linkClass = "theme-nav-link px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors";

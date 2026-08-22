@@ -39,6 +39,10 @@ const THEME_FIELD_DEFAULTS: Record<string, QueryParam> = {
   footerLayout: 'columns',
   headerDensity: 'regular',
   footerDensity: 'regular',
+  collectionsGridColumns: 3,
+  collectionsGridGap: 'md',
+  collectionsGridShowTitle: true,
+  collectionsGridImageAspectRatio: 'portrait',
 };
 // All three still go through JSON.stringify() here even though all three
 // are now real JSON columns (notificationText since
