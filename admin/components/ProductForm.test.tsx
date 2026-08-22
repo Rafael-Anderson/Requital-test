@@ -51,6 +51,8 @@ const existingProduct: Product = {
   usesIngredients: false,
   chargeTax: true,
   isCheckoutAddon: false,
+  isGiftCard: false,
+  giftCardDenominations: [],
   showVariants: false,
   showAttributes: false,
   showFaqs: false,
@@ -122,6 +124,57 @@ describe("ProductForm wizard", () => {
     await waitFor(() => expect(screen.getByText("Create product")).toBeInTheDocument());
     expect(screen.getByText("New Product")).toBeInTheDocument();
     expect(screen.getByText("AED 50")).toBeInTheDocument();
+  });
+
+  it("toggling 'This is a gift card' hides Price/SKU and reveals a denomination editor", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await user.type(screen.getByLabelText("Title"), "Gift Card Product");
+    await user.click(screen.getByText("Next"));
+    await waitFor(() => expect(screen.getByText("Price (AED)")).toBeInTheDocument());
+
+    // The gift-card Toggle is the first switch rendered on this step —
+    // clicking its adjacent label text doesn't fire onChange (same as the
+    // pre-existing chargeTax/isCheckoutAddon rows, which use the same
+    // unwrapped <div> + <Toggle> + <span> shape, not a clickable <label>).
+    await user.click(screen.getAllByRole("switch")[0]);
+    expect(screen.queryByLabelText("Price (AED)")).not.toBeInTheDocument();
+    expect(screen.getByText("Denominations (AED)")).toBeInTheDocument();
+
+    const draftInput = screen.getByPlaceholderText("e.g. 100");
+    await user.type(draftInput, "100");
+    await user.click(screen.getByText("Add"));
+    expect(screen.getByText("100")).toBeInTheDocument();
+
+    await user.type(draftInput, "250");
+    await user.click(screen.getByText("Add"));
+    expect(screen.getByText("250")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Remove 100"));
+    expect(screen.queryByText("100")).not.toBeInTheDocument();
+    expect(screen.getByText("250")).toBeInTheDocument();
+
+    // SKU also disappears — it lives in the (now-hidden) Inventory card.
+    expect(screen.queryByLabelText("SKU")).not.toBeInTheDocument();
+  });
+
+  it("blocks submit with no denominations and bounces back to the Pricing step", async () => {
+    // Uses the existing-product fixture (already has a name/image/collection)
+    // to isolate the denominations validation from the unrelated
+    // image-required check a brand-new product would also fail.
+    const user = userEvent.setup();
+    renderForm(existingProduct);
+    await user.click(screen.getByText("Pricing & Inventory"));
+    await waitFor(() => expect(screen.getByText("Price (AED)")).toBeInTheDocument());
+    await user.click(screen.getAllByRole("switch")[0]);
+    await waitFor(() => expect(screen.getByText("Denominations (AED)")).toBeInTheDocument());
+
+    await user.click(screen.getByText("Organization"));
+    await waitFor(() => expect(screen.getByText("Save changes")).toBeInTheDocument());
+    await user.click(screen.getByText("Save changes"));
+
+    await waitFor(() => expect(screen.getByText("Denominations (AED)")).toBeInTheDocument());
+    expect(screen.getByText("Add at least one denomination")).toBeInTheDocument();
   });
 
   it("opens on Step 1 with every stepper circle already completed when editing", async () => {

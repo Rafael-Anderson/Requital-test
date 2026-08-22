@@ -399,6 +399,11 @@ function InventoryPageContent() {
                     <div className="flex items-center gap-3">
                       <Thumbnail src={p.thumbnail} size="size-10" />
                       <span className="text-sm font-semibold text-text-primary dark:text-zinc-100">{p.name}</span>
+                      {p.isGiftCard && (
+                        <span className="inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold bg-neutral-chip-bg text-neutral-chip-text dark:bg-zinc-800 dark:text-zinc-400">
+                          Gift card
+                        </span>
+                      )}
                     </div>
                   </TD>
                   <TD className="text-[13.5px]">{p.price} AED</TD>
