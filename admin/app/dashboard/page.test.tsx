@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import DashboardPage from "./page";
-import { getDashboardSummary, getDailyRevenue, getTopProducts } from "@/lib/api";
+import { getDashboardSummary, getDailyRevenue, getTopProducts, getShop } from "@/lib/api";
 import type { DashboardSummary, TopProduct } from "@/lib/types";
 
 vi.mock("@/lib/api", () => ({
   getDashboardSummary: vi.fn(),
   getDailyRevenue: vi.fn(),
   getTopProducts: vi.fn(),
+  getShop: vi.fn(),
   resolveImageUrl: (path: string | null | undefined) => path || null,
 }));
 
@@ -38,13 +39,21 @@ function renderPage() {
   return render(<DashboardPage />);
 }
 
-// Dashboard used to split into a trimmed "simple" layout vs. this full one
-// depending on shop.productEditorMode — that split was removed (Dashboard
-// isn't a page that should differ between modes), so this now always
-// renders the full stat/chart/breakdown layout regardless of shop mode, and
-// no longer fetches shop data at all to decide.
+// Bug 6b QA-sweep fix (2026-08-22): CLAUDE.md documents a simple-mode
+// SimpleDashboard as already shipped, but the component never existed and
+// this page never branched on shop.productEditorMode at all (confirmed by
+// grep during the audit) — every shop, simple or advanced, always saw the
+// full 8-widget dashboard below. This describe block previously carried a
+// comment claiming the split had been deliberately removed; that claim
+// contradicts CLAUDE.md's own current documentation and was never dated or
+// attributed, so it's treated here as stale rather than authoritative — the
+// split is reinstated, matching the approved fix. These two tests now
+// explicitly mock an "advanced"-mode shop, since that's what they're
+// actually asserting (the full layout) — see SimpleDashboard.test.tsx for
+// the simple-mode counterpart.
 describe("DashboardPage", () => {
   it("shows the full stat/chart/breakdown layout", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
     vi.mocked(getDashboardSummary).mockResolvedValue(summary);
     vi.mocked(getDailyRevenue).mockResolvedValue([{ date: "2026-08-04", revenue: 500 }]);
     vi.mocked(getTopProducts).mockResolvedValue(topProducts);
@@ -57,6 +66,7 @@ describe("DashboardPage", () => {
   });
 
   it("fetches summary, daily revenue, and top products on mount", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
     vi.mocked(getDashboardSummary).mockResolvedValue(summary);
     vi.mocked(getDailyRevenue).mockResolvedValue([{ date: "2026-08-04", revenue: 500 }]);
     vi.mocked(getTopProducts).mockResolvedValue(topProducts);

@@ -13,7 +13,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import Tooltip from "./Tooltip";
 
 interface ColorPickerProps {
-  value: string;
+  // Widened from `string` — see normalizeHex's own comment on why a
+  // genuinely undefined value can still reach this component at runtime.
+  value: string | undefined | null;
   onChange: (hex: string) => void;
   swatchSize?: "sm" | "md";
   className?: string;
@@ -30,7 +32,16 @@ function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
-function normalizeHex(hex: string): string | null {
+function normalizeHex(hex: string | undefined | null): string | null {
+  // A theme.config category added after a given theme row was last saved
+  // can still be missing this field entirely at read time, despite the
+  // backend's own backfill pass (see themes.service.ts's deepMergeDefaults)
+  // — every category's own default is applied there, but a value this
+  // component is handed could still be undefined for as long as an old,
+  // un-migrated theme row exists. Guard here, the one place every call site
+  // (useState init, the derived safeHex, commitHexDraft) already funnels
+  // through, rather than requiring every caller to remember its own ?? "".
+  if (!hex) return null;
   const trimmed = hex.trim();
   const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
   const expanded =
@@ -246,7 +257,7 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
               style={{ background: safeHex }}
             />
             <input
-              value={hexDraft}
+              value={hexDraft ?? ""}
               onChange={(e) => setHexDraft(e.target.value)}
               onBlur={commitHexDraft}
               onKeyDown={(e) => {
