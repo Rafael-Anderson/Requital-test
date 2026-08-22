@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Power } from "lucide-react";
 import { createGiftCard, listGiftCards, updateGiftCard } from "@/lib/api";
 import type { GiftCard } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
@@ -11,6 +12,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
+import Tooltip from "@/components/ui/Tooltip";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 
@@ -134,12 +136,15 @@ export default function GiftCardsPage() {
                 <TD className="text-text-muted">{c.purchasedByCustomer?.name ?? "-"}</TD>
                 <TD>
                   {(c.status === "active" || c.status === "disabled") && (
-                    <button
-                      onClick={() => toggleDisabled(c)}
-                      className="text-xs text-text-muted hover:text-accent-text dark:hover:text-accent cursor-pointer"
-                    >
-                      {c.status === "disabled" ? "Enable" : "Disable"}
-                    </button>
+                    <Tooltip label={c.status === "disabled" ? `Enable ${c.code}` : `Disable ${c.code}`}>
+                      <button
+                        onClick={() => toggleDisabled(c)}
+                        aria-label={c.status === "disabled" ? `Enable ${c.code}` : `Disable ${c.code}`}
+                        className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                      >
+                        <Power className="size-4" />
+                      </button>
+                    </Tooltip>
                   )}
                 </TD>
               </TR>

@@ -4,8 +4,24 @@
 // only wraps what we can call directly.
 let loaderPromise: Promise<typeof google> | null = null;
 
-export function loadGoogleMaps(): Promise<typeof google> {
+// A billing/auth error (e.g. BillingNotEnabledMapError, confirmed hit live
+// during the QA audit) surfaces after the script has already loaded
+// successfully — the API renders its own error dialog into the map div and
+// calls `window.gm_authFailure` if defined. Confirmed against Google's own
+// current Maps JS API docs (developers.google.com/maps/documentation/
+// javascript/events, "if the following global function is defined it will
+// be called when the authentication fails") — a real, still-supported
+// mechanism, not inferred; @types/google.maps just has no declaration for
+// it. `onAuthFailure` is re-registered on every call, not just the one that
+// injects the script, so a MapPicker mounting after the script is already
+// cached still gets its own failure callback wired up. Last-registered
+// caller wins if more than one map is mounted at once — acceptable here
+// since this app never shows two maps simultaneously.
+export function loadGoogleMaps(onAuthFailure?: () => void): Promise<typeof google> {
   if (typeof window === "undefined") return Promise.reject(new Error("Google Maps can only load in the browser"));
+  if (onAuthFailure) {
+    (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = onAuthFailure;
+  }
   if (window.google?.maps) return Promise.resolve(window.google);
   if (loaderPromise) return loaderPromise;
 

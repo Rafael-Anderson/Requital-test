@@ -30,7 +30,9 @@ export default function MapPicker({ latitude, longitude, onPick, className = "" 
   // Init map + marker + autocomplete once, client-side only.
   useEffect(() => {
     let cancelled = false;
-    loadGoogleMaps()
+    loadGoogleMaps(() => {
+      if (!cancelled) setFailed(true);
+    })
       .then((g) => {
         if (cancelled || !mapDivRef.current) return;
         const position = latitude !== null && longitude !== null ? { lat: latitude, lng: longitude } : DEFAULT_CENTER;
@@ -104,8 +106,8 @@ export default function MapPicker({ latitude, longitude, onPick, className = "" 
         className="flex h-9 w-full rounded-lg border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20 mb-2"
       />
       {failed ? (
-        <div className="w-full h-64 rounded-lg border border-border dark:border-white/15 flex items-center justify-center text-sm text-text-faint">
-          Failed to load Google Maps
+        <div className="w-full h-64 rounded-lg border border-border dark:border-white/15 flex items-center justify-center text-sm text-text-faint text-center px-6">
+          Map unavailable. Verify the address above, or try again shortly.
         </div>
       ) : (
         <div

@@ -220,7 +220,12 @@ export default function PaymentGatewaysPage() {
           </p>
         </div>
         <div className="space-y-2">
-          {CARD_PROCESSOR_PROVIDERS.map((provider) => {
+          {/* telr/paytabs (2026-08-22) are display-only "Coming soon" rows —
+              real UAE gateways with backend stub plumbing but no admin UI
+              at all until now — never real, submittable card-processor
+              options, so this list is loosely typed rather than widening
+              CARD_PROCESSOR_PROVIDERS/PaymentGatewayProvider itself. */}
+          {([...CARD_PROCESSOR_PROVIDERS, "telr", "paytabs"] as string[]).map((provider) => {
             const comingSoon = COMING_SOON_PAYMENT_PROVIDERS.includes(provider);
             return (
               <label
@@ -241,7 +246,9 @@ export default function PaymentGatewaysPage() {
                   className="accent-black dark:accent-white shrink-0"
                   checked={cardProcessor === provider}
                   disabled={comingSoon}
-                  onChange={() => setCardProcessor(provider)}
+                  onChange={() => {
+                    if (!comingSoon) setCardProcessor(provider as PaymentGatewayProvider);
+                  }}
                 />
                 <span className="font-medium">{PAYMENT_PROVIDER_LABELS[provider]}</span>
                 {comingSoon ? (
