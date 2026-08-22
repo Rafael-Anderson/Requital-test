@@ -500,6 +500,12 @@ export interface ProductInput {
   barcode?: string;
   chargeTax?: boolean;
   isCheckoutAddon?: boolean;
+  // Not the same concept as the standalone GiftCard entity (a purchased,
+  // redeemable code — see lib/api.ts's listGiftCards/createGiftCard). This
+  // is the catalog-level config for *selling* a gift-card product; buying
+  // one issues real GiftCard rows, one per unit, at order time.
+  isGiftCard?: boolean;
+  giftCardDenominations?: number[];
   // Per-product opt-in for the Variants/Attributes/FAQs sections — see Product.
   showVariants?: boolean;
   showAttributes?: boolean;
@@ -584,6 +590,8 @@ export interface Product {
   usesIngredients: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
+  isGiftCard: boolean;
+  giftCardDenominations: number[];
   // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
   // product form (ProductForm.tsx) — replaces the old shop-wide
   // productVariantsEnabled/productAttributesEnabled/productFaqsEnabled toggles.

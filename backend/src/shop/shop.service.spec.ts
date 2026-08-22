@@ -34,6 +34,8 @@ function baseShop(overrides: Record<string, unknown> = {}) {
     }),
     deliveryHours: null,
     pickupHours: null,
+    defaultDeliveryFee: '0.000000000000000000000000000000',
+    taxRate: '0.000000000000000000000000000000',
     ...overrides,
   };
 }

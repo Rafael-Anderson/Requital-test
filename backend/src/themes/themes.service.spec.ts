@@ -1,4 +1,4 @@
-import { cloneConfigWithFreshIds } from './themes.service';
+import { backfillGlobalSettings, cloneConfigWithFreshIds } from './themes.service';
 import { DEFAULT_THEME_CONFIG } from './constants';
 import type { ThemeConfig } from './theme-config.types';
 
@@ -94,5 +94,68 @@ describe('cloneConfigWithFreshIds', () => {
     const originalJson = JSON.stringify(DEFAULT_THEME_CONFIG);
     cloneConfigWithFreshIds(DEFAULT_THEME_CONFIG);
     expect(JSON.stringify(DEFAULT_THEME_CONFIG)).toBe(originalJson);
+  });
+});
+
+// Regression coverage for the QA-audit ColorPicker crash: a theme row
+// created before a field was added to GlobalThemeSettings must still
+// backfill to that field's default on every read, at any nesting depth —
+// not just for collectionPage (the one category the original, narrower fix
+// special-cased) but for any category, since the same class of gap was
+// separately confirmed for productCards.
+describe('backfillGlobalSettings', () => {
+  it('backfills a whole missing category (the originally-confirmed collectionPage crash)', () => {
+    const stale = JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig;
+    delete (stale.globalSettings as Partial<ThemeConfig['globalSettings']>).collectionPage;
+
+    const result = backfillGlobalSettings(stale);
+
+    expect(result.globalSettings.collectionPage).toEqual(
+      DEFAULT_THEME_CONFIG.globalSettings.collectionPage,
+    );
+  });
+
+  it('backfills one missing field on an otherwise-present category, not just a whole missing category (the ColorPicker crash: productCards existed but was missing its 3 newer color fields)', () => {
+    const stale = JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig;
+    const staleProductCards = stale.globalSettings.productCards as Record<string, unknown>;
+    delete staleProductCards.quickAddBackground;
+    delete staleProductCards.quickAddText;
+    delete staleProductCards.productNameColor;
+    // A field the stale row DID have should survive untouched, not be
+    // silently overwritten by the default.
+    staleProductCards.quickAdd = false;
+
+    const result = backfillGlobalSettings(stale);
+
+    expect(result.globalSettings.productCards.quickAddBackground).toBe(
+      DEFAULT_THEME_CONFIG.globalSettings.productCards.quickAddBackground,
+    );
+    expect(result.globalSettings.productCards.quickAddText).toBe(
+      DEFAULT_THEME_CONFIG.globalSettings.productCards.quickAddText,
+    );
+    expect(result.globalSettings.productCards.productNameColor).toBe(
+      DEFAULT_THEME_CONFIG.globalSettings.productCards.productNameColor,
+    );
+    expect(result.globalSettings.productCards.quickAdd).toBe(false);
+  });
+
+  it('replaces colorSchemes wholesale rather than merging array elements', () => {
+    const stale = JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig;
+    const customScheme = { ...stale.globalSettings.colorSchemes[0], id: 'scheme-custom' };
+    stale.globalSettings.colorSchemes = [customScheme];
+
+    const result = backfillGlobalSettings(stale);
+
+    expect(result.globalSettings.colorSchemes).toEqual([customScheme]);
+    expect(result.globalSettings.colorSchemes).not.toEqual(
+      DEFAULT_THEME_CONFIG.globalSettings.colorSchemes,
+    );
+  });
+
+  it('is a no-op for an already-complete config', () => {
+    const result = backfillGlobalSettings(
+      JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig,
+    );
+    expect(result.globalSettings).toEqual(DEFAULT_THEME_CONFIG.globalSettings);
   });
 });

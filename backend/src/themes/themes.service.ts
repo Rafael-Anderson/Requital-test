@@ -18,32 +18,57 @@ import type {
   ThemeSection,
 } from './theme-config.types';
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Generic deep-merge of `override` onto `defaults`, recursing into plain
+// objects at any depth so a missing field is backfilled from its default
+// regardless of how deeply nested it is. Arrays and any other non-plain-
+// object value are treated as leaves and replaced wholesale by the
+// override's own value when present, never merged element-by-element —
+// deep-merging an array (colorSchemes) would silently combine an old
+// theme's own scheme list with the defaults' one instead of just using it.
+function deepMergeDefaults<T>(defaults: T, override: T | undefined): T {
+  if (!isPlainObject(defaults) || !isPlainObject(override)) {
+    return override !== undefined ? override : defaults;
+  }
+  const merged: Record<string, unknown> = { ...defaults };
+  for (const key of Object.keys(override)) {
+    merged[key] = deepMergeDefaults(
+      (defaults as Record<string, unknown>)[key],
+      (override as Record<string, unknown>)[key],
+    );
+  }
+  return merged as T;
+}
+
 // Bug 6 QA-sweep fix: GlobalThemeSettings has grown by 18 categories over
 // several phases (see constants.ts's own history), each added by editing
 // DEFAULT_THEME_CONFIG going forward - nothing ever backfilled that new
-// category into theme rows that already existed in the database at the
-// time. Confirmed for real, not assumed: theme id 1's own stored config
-// (this repo's long-lived local dev/e2e theme) has no globalSettings.
-// collectionPage key at all, which crashed both CollectionPageSettings.tsx
-// (admin) and the storefront collection page outright the instant either
-// tried to read a field off it. Every read of a theme's config now goes
-// through this before reaching a caller, so an old row behaves exactly
-// like a freshly-created one for any category added after it was saved.
-// Deliberately scoped to collectionPage (the one confirmed broken) rather
-// than a deep-merging every category - the same latent gap could exist
-// elsewhere; flagged in the PR rather than blanket-"fixed" without the
-// same live confirmation this one got.
-function backfillGlobalSettings(config: ThemeConfig): ThemeConfig {
+// category (or a new field inside an existing category) into theme rows
+// that already existed in the database at the time. Confirmed for real,
+// not assumed, twice: theme id 1's own stored config (this repo's long-
+// lived local dev/e2e theme) had no globalSettings.collectionPage key at
+// all (crashed CollectionPageSettings.tsx and the storefront collection
+// page outright), and separately had a productCards object missing its
+// three newer color fields (crashed ColorPicker.tsx's normalizeHex on an
+// undefined value — see that component's own comment). The first fix here
+// only special-cased collectionPage, deliberately, since deep-merging every
+// category untested risked masking a shape it didn't actually handle
+// correctly; the second crash confirmed the same latent gap really did
+// exist elsewhere, so this is now a generic recursive merge (deepMergeDefaults
+// above) applied across the whole globalSettings object instead of one
+// hand-enumerated category — any future field addition backfills for free.
+// Every read of a theme's config goes through this before reaching a
+// caller, so an old row behaves exactly like a freshly-created one.
+export function backfillGlobalSettings(config: ThemeConfig): ThemeConfig {
   return {
     ...config,
-    globalSettings: {
-      ...DEFAULT_THEME_CONFIG.globalSettings,
-      ...config.globalSettings,
-      collectionPage: {
-        ...DEFAULT_THEME_CONFIG.globalSettings.collectionPage,
-        ...config.globalSettings?.collectionPage,
-      },
-    },
+    globalSettings: deepMergeDefaults(
+      DEFAULT_THEME_CONFIG.globalSettings,
+      config.globalSettings,
+    ),
   };
 }
 

@@ -117,6 +117,12 @@ export default function SimpleOrderDetailModal({
           <div className="text-sm text-text-muted">
             <div className="font-medium text-zinc-800 dark:text-zinc-200">{order.customerName}</div>
             <div>{order.customerPhone}</div>
+            {order.deliveryDate && (
+              <div className="mt-1 font-medium text-zinc-700 dark:text-zinc-300">
+                Due {new Date(order.deliveryDate).toLocaleDateString()}
+                {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}
+              </div>
+            )}
             <div className="mt-1">Placed {relativeTime(order.createdAt)}</div>
           </div>
 
