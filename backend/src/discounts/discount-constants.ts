@@ -12,6 +12,15 @@ export const DISCOUNT_APPLIES_TO = [
 ] as const;
 export type DiscountAppliesTo = (typeof DISCOUNT_APPLIES_TO)[number];
 
+// Whether a discount requires the customer to type a code ('code', the
+// original and still-default behavior) or applies automatically to every
+// matching cart with no customer action ('auto') — orthogonal to `type`
+// (PERCENTAGE/FIXED_AMOUNT/FREE_SHIPPING, the amount math) and `appliesTo`
+// (which products/collections it's scoped to, reused as-is for 'auto'
+// rather than a separate single product_id/collection_id column).
+export const DISCOUNT_KINDS = ['code', 'auto'] as const;
+export type DiscountKind = (typeof DISCOUNT_KINDS)[number];
+
 // Specific, not just true/false — the storefront/draft-order UI shows the
 // customer why a code didn't apply, not a generic "invalid code".
 export const DISCOUNT_REJECTION_REASONS = [

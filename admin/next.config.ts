@@ -39,14 +39,16 @@ const STOREFRONT_ORIGIN = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://loca
 const isDev = process.env.NODE_ENV !== "production";
 const CSP = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  // MapPickerLeaflet.tsx (outlet address entry) loads tiles directly from
-  // CARTO's CDN in the browser — without this, the map picker renders a
-  // grid of broken-image icons instead of a map.
-  `img-src 'self' data: ${API_ORIGIN} https://*.basemaps.cartocdn.com`,
-  `connect-src 'self' ${API_ORIGIN}`,
-  "font-src 'self' data:",
+  // https://maps.googleapis.com loads the Maps JS API script itself
+  // (MapPicker.tsx, outlet address entry) — Google's own documented CSP
+  // recipe for embedding the JS API.
+  `script-src 'self' 'unsafe-inline' https://maps.googleapis.com${isDev ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  // Map tiles/marker icons come from Google's domains; Roboto is the font
+  // Google Maps' own UI (Autocomplete dropdown, etc.) requests.
+  `img-src 'self' data: ${API_ORIGIN} https://maps.googleapis.com https://maps.gstatic.com`,
+  `connect-src 'self' ${API_ORIGIN} https://maps.googleapis.com`,
+  "font-src 'self' data: https://fonts.gstatic.com",
   "object-src 'none'",
   `frame-src 'self' ${STOREFRONT_ORIGIN} https:`,
   "frame-ancestors 'self'",

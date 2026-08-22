@@ -1,5 +1,6 @@
 import type {
   AbandonedCartItemInput,
+  AutoDiscount,
   BioLink,
   BioPageConfig,
   Collection,
@@ -245,17 +246,6 @@ export function listDeliveryZones(shopSlug: string, outletId: number) {
   return get<DeliveryZone[]>(`/public/${shopSlug}/outlets/${outletId}/delivery-zones`);
 }
 
-export function geocode(shopSlug: string, query: string) {
-  return get<{ latitude: number; longitude: number; displayName: string }>(
-    `/public/${shopSlug}/geocode?q=${encodeURIComponent(query)}`,
-  );
-}
-
-// MapPicker's pin-drag flow — lat/lng -> address.
-export function reverseGeocode(shopSlug: string, latitude: number, longitude: number) {
-  return get<{ displayName: string }>(`/public/${shopSlug}/reverse-geocode?lat=${latitude}&lon=${longitude}`);
-}
-
 export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
   return post<CreateOrderResponse>(`/public/${shopSlug}/orders`, payload);
 }
@@ -265,6 +255,13 @@ export function validateDiscount(
   data: { code: string; cartSubtotal: number; productIds?: number[]; collectionIds?: number[] },
 ) {
   return post<ValidateDiscountResult>(`/public/${shopSlug}/discounts/validate`, data);
+}
+
+// Every live auto-apply discount for this shop — no code, no cart-total
+// round trip. See lib/auto-discounts.ts for how product cards/PDP turn this
+// into a struck-through price.
+export function listActiveAutoDiscounts(shopSlug: string) {
+  return get<AutoDiscount[]>(`/public/${shopSlug}/discounts/auto`);
 }
 
 export function validateGiftCard(shopSlug: string, code: string) {

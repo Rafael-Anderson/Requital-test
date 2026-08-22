@@ -178,7 +178,7 @@ function notifyUnauthorized() {
 
 // Carries the HTTP status alongside the message so callers can distinguish
 // e.g. a 404 "not found" from a genuine failure without string-matching
-// error text — see geocodeAddress for the motivating case.
+// error text.
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -494,6 +494,9 @@ export interface DeliveryZoneInput {
   fee: number;
   minOrderAmount?: number;
   isActive?: boolean;
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
 }
 
 export function listDeliveryZones(outletId: number) {
@@ -518,36 +521,6 @@ export function deleteDeliveryZone(outletId: number, zoneId: number) {
   return apiFetch<{ id: number; deleted: boolean }>(`/outlets/${outletId}/delivery-zones/${zoneId}`, {
     method: "DELETE",
   });
-}
-
-export async function geocodeAddress(
-  query: string,
-): Promise<{ latitude: number; longitude: number; displayName: string } | null> {
-  try {
-    return await apiFetch<{ latitude: number; longitude: number; displayName: string }>(
-      `/outlets/geocode?q=${encodeURIComponent(query)}`,
-    );
-  } catch (err) {
-    // 404 = no matching location, a normal outcome for this search — not a
-    // failure. Anything else (network, 5xx, rate-limit) still propagates.
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
-  }
-}
-
-// MapPicker's pin-drag flow — lat/lng -> address. Same 404-is-not-a-failure
-// handling as geocodeAddress above (a point with no resolvable address is a
-// normal outcome, not an error).
-export async function reverseGeocodeAddress(latitude: number, longitude: number): Promise<string | null> {
-  try {
-    const result = await apiFetch<{ displayName: string }>(
-      `/outlets/reverse-geocode?lat=${latitude}&lon=${longitude}`,
-    );
-    return result.displayName;
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
-  }
 }
 
 export function getShop() {

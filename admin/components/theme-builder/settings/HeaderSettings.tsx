@@ -2,6 +2,7 @@
 
 import Toggle from "@/components/ui/Toggle";
 import Select from "@/components/ui/Select";
+import ColorPicker from "@/components/ui/ColorPicker";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import LegacyHeaderSettings from "../LegacyHeaderSettings";
@@ -52,6 +53,21 @@ export default function HeaderSettings({
         value={settings.background as BackgroundValue}
         onChange={(v) => onUpdate("background", v)}
       />
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Menu bar background</span>
+          <ColorPicker
+            value={(settings.menuBarBackground as string) ?? "#ffffff"}
+            onChange={(hex) => onUpdate("menuBarBackground", hex)}
+          />
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          The navigation row beneath the header. Falls back to the header background above if not set.
+        </p>
+      </div>
 
       <LegacyHeaderSettings />
     </div>

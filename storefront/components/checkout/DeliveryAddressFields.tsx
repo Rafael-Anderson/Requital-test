@@ -10,7 +10,6 @@ import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_OUTLINE_CLASS } from "./checkout-fi
 // so the map integration exists in exactly one place.
 export default function DeliveryAddressFields({ state }: { state: CheckoutFormState }) {
   const {
-    shopSlug,
     customerAddress,
     setCustomerAddress,
     emirate,
@@ -61,7 +60,6 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
         {coords && <span className="text-xs text-zinc-500 self-center">Location captured</span>}
       </div>
       <MapPicker
-        shopSlug={shopSlug}
         latitude={coords?.latitude ?? null}
         longitude={coords?.longitude ?? null}
         onPick={(picked, address) => {

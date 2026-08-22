@@ -17,6 +17,8 @@ import { UpdateDiscountDto } from './dto/update-discount.dto';
 import { ValidateDiscountDto } from './dto/validate-discount.dto';
 import {
   DISCOUNT_REJECTION_MESSAGES,
+  DiscountAppliesTo,
+  DiscountKind,
   DiscountRejectionReason,
   DiscountType,
 } from './discount-constants';
@@ -29,6 +31,15 @@ export interface ProductSummary {
 export interface CollectionSummary {
   id: number;
   name: string;
+}
+
+export interface PublicAutoDiscount {
+  id: number;
+  type: DiscountType;
+  value: string;
+  appliesTo: DiscountAppliesTo;
+  productIds: number[];
+  collectionIds: number[];
 }
 
 interface AssembledDiscount extends DiscountRow {
@@ -72,21 +83,25 @@ export class DiscountsService {
 
   async create(ctx: TenantContext, dto: CreateDiscountDto) {
     this.assertFieldsMatchType(dto);
+    const discountType = dto.discountType ?? 'code';
+    const appliesTo = dto.appliesTo ?? 'ALL_PRODUCTS';
+    this.assertDiscountKindFields({ discountType, code: dto.code, appliesTo });
     await this.assertEligibilityTargetsBelongToShop(ctx, dto);
 
     let insertId: number;
     try {
       insertId = await this.db.transaction(async (conn) => {
         const [result] = await conn.query(
-          `INSERT INTO discount (shopId, code, type, value, minPurchaseAmount, appliesTo, usageLimit, usageLimitPerCustomer, startsAt, endsAt, active, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO discount (shopId, code, discountType, type, value, minPurchaseAmount, appliesTo, usageLimit, usageLimitPerCustomer, startsAt, endsAt, active, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
-            this.normalizeCode(dto.code),
+            dto.code ? this.normalizeCode(dto.code) : null,
+            discountType,
             dto.type,
             dto.type === 'FREE_SHIPPING' ? null : (dto.value ?? null),
             dto.minPurchaseAmount ?? null,
-            dto.appliesTo ?? 'ALL_PRODUCTS',
+            appliesTo,
             dto.usageLimit ?? null,
             dto.usageLimitPerCustomer ?? null,
             dto.startsAt ? new Date(dto.startsAt) : null,
@@ -131,6 +146,20 @@ export class DiscountsService {
         value: dto.value ?? (current.value ? Number(current.value) : undefined),
       });
     }
+    const effectiveDiscountType = dto.discountType ?? (current.discountType as DiscountKind);
+    const effectiveAppliesTo = dto.appliesTo ?? (current.appliesTo as DiscountAppliesTo);
+    // Switching to 'auto' always clears code, even if this request didn't
+    // itself touch the code field — an auto-apply discount can't be left
+    // holding a stale code from when it required one.
+    const effectiveCode =
+      dto.discountType === 'auto' ? undefined : dto.code !== undefined ? dto.code : (current.code ?? undefined);
+    if (dto.discountType || dto.code !== undefined || dto.appliesTo) {
+      this.assertDiscountKindFields({
+        discountType: effectiveDiscountType,
+        code: effectiveCode,
+        appliesTo: effectiveAppliesTo,
+      });
+    }
     if (dto.productIds || dto.collectionIds) {
       await this.assertEligibilityTargetsBelongToShop(ctx, dto);
     }
@@ -158,7 +187,13 @@ export class DiscountsService {
           }
         }
         const set = buildSetClause({
-          code: dto.code ? this.normalizeCode(dto.code) : undefined,
+          code:
+            dto.discountType === 'auto'
+              ? null
+              : dto.code
+                ? this.normalizeCode(dto.code)
+                : undefined,
+          discountType: dto.discountType,
           type: dto.type,
           value: effectiveType === 'FREE_SHIPPING' ? null : dto.value,
           minPurchaseAmount: dto.minPurchaseAmount,
@@ -299,7 +334,7 @@ export class DiscountsService {
     return {
       valid: true,
       discountId: discount.id,
-      code: discount.code,
+      code: discount.code ?? undefined,
       type: discount.type as DiscountType,
       discountAmount: this.computeAmount(discount, input.cartSubtotal),
       freeShipping: discount.type === 'FREE_SHIPPING',
@@ -340,6 +375,34 @@ export class DiscountsService {
     );
   }
 
+  // Public — every currently-live 'auto' discount for a shop, in the shape
+  // the storefront needs to compute a struck-through price on a product
+  // card/PDP with zero customer action (no code, no cart-total round trip).
+  // Public-safe fields only: no usageLimit/timesUsed/id-of-redemptions, etc.
+  async listActiveAutoDiscounts(shopId: number): Promise<PublicAutoDiscount[]> {
+    const now = new Date();
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM discount
+       WHERE shopId = ? AND discountType = 'auto' AND active = 1
+         AND (startsAt IS NULL OR startsAt <= ?)
+         AND (endsAt IS NULL OR endsAt >= ?)`,
+      [shopId, now, now],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const discounts = await this.loadDiscountsWithRelations(ids);
+    return ids.map((id) => {
+      const d = discounts.get(id)!;
+      return {
+        id: d.id,
+        type: d.type as DiscountType,
+        value: trimDecimal(d.value) ?? '0',
+        appliesTo: d.appliesTo as DiscountAppliesTo,
+        productIds: d.products.map((p) => p.id),
+        collectionIds: d.collections.map((c) => c.id),
+      };
+    });
+  }
+
   private reject(reason: DiscountRejectionReason): EvaluateResult {
     return {
       valid: false,
@@ -364,6 +427,31 @@ export class DiscountsService {
 
   private normalizeCode(code: string): string {
     return code.trim().toUpperCase();
+  }
+
+  private assertDiscountKindFields(fields: {
+    discountType: DiscountKind;
+    code?: string;
+    appliesTo: DiscountAppliesTo;
+  }) {
+    if (fields.discountType === 'code') {
+      if (!fields.code) {
+        throw new BadRequestException(
+          'code is required for a code-based discount',
+        );
+      }
+    } else {
+      if (fields.code) {
+        throw new BadRequestException(
+          'code must not be set for an auto-apply discount',
+        );
+      }
+      if (fields.appliesTo === 'ALL_PRODUCTS') {
+        throw new BadRequestException(
+          'An auto-apply discount must be scoped to specific products or collections',
+        );
+      }
+    }
   }
 
   private assertFieldsMatchType(dto: { type: DiscountType; value?: number }) {

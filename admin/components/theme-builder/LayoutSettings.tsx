@@ -3,9 +3,11 @@
 import type { ReactNode } from "react";
 import PresetPicker from "@/components/PresetPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Toggle from "@/components/ui/Toggle";
 import MenuBuilder from "@/components/MenuBuilder";
 import {
   HomepageLayoutThumbnail,
+  HomepagePresetThumbnail,
   TopBarLayoutThumbnail,
   PdpLayoutThumbnail,
   CartLayoutThumbnail,
@@ -29,7 +31,7 @@ import {
   BUTTON_RADIUS_OPTIONS,
   BUTTON_FILL_OPTIONS,
 } from "@/lib/types";
-import type { ThemeEditorState } from "@/lib/useThemeEditor";
+import { HOMEPAGE_PRESETS, type ThemeEditorState } from "@/lib/useThemeEditor";
 
 // Layout mode's 13 category components — a straight port of the old Theme
 // Customizer's Advanced tab (app/theme/edit/advanced/page.tsx), each now
@@ -75,13 +77,85 @@ function DeadOnceSectionsPublished({ editor, children }: { editor: LayoutSetting
   );
 }
 
+// SegmentedToggle is string-valued only — columns are converted to/from a
+// number at the call site below rather than widening a shared component's
+// generic constraint for one caller.
+const COLLECTIONS_GRID_COLUMN_OPTIONS = [
+  { value: "2", label: "2" },
+  { value: "3", label: "3" },
+  { value: "4", label: "4" },
+];
+const COLLECTIONS_GRID_GAP_OPTIONS = [
+  { value: "sm", label: "Small" },
+  { value: "md", label: "Medium" },
+  { value: "lg", label: "Large" },
+];
+const COLLECTIONS_GRID_ASPECT_RATIO_OPTIONS = [
+  { value: "square", label: "Square" },
+  { value: "portrait", label: "Portrait" },
+  { value: "landscape", label: "Landscape" },
+];
+
 export function HomeTabSetting({ editor }: LayoutSettingProps) {
-  const { legacyTheme, updateLegacyTheme } = editor;
+  const { legacyTheme, updateLegacyTheme, applyHomepagePreset } = editor;
   if (!legacyTheme) return null;
   return (
-    <DeadOnceSectionsPublished editor={editor}>
-      <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />
-    </DeadOnceSectionsPublished>
+    <div className="space-y-4">
+      <DeadOnceSectionsPublished editor={editor}>
+        <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />
+      </DeadOnceSectionsPublished>
+
+      {legacyTheme.homeTabMode === "templates" ? (
+        <div>
+          <p className="mb-2 text-xs text-zinc-500">
+            Start from a preset section arrangement — edit it further in the Sections tab afterward.
+          </p>
+          <PresetPicker
+            singleColumn
+            options={HOMEPAGE_PRESETS.map((p) => ({ key: p.key, label: p.label }))}
+            value=""
+            onChange={(key) => applyHomepagePreset(key)}
+            renderThumbnail={(key) => <HomepagePresetThumbnail preset={key as (typeof HOMEPAGE_PRESETS)[number]["key"]} />}
+          />
+        </div>
+      ) : (
+        <DeadOnceSectionsPublished editor={editor}>
+          <div className="space-y-4">
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-500">Columns</span>
+              <SegmentedToggle
+                value={String(legacyTheme.collectionsGridColumns)}
+                options={COLLECTIONS_GRID_COLUMN_OPTIONS}
+                onChange={(v) => void updateLegacyTheme({ collectionsGridColumns: Number(v) })}
+              />
+            </div>
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-500">Gap</span>
+              <SegmentedToggle
+                value={legacyTheme.collectionsGridGap}
+                options={COLLECTIONS_GRID_GAP_OPTIONS}
+                onChange={(v) => void updateLegacyTheme({ collectionsGridGap: v })}
+              />
+            </div>
+            <div>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-500">Image aspect ratio</span>
+              <SegmentedToggle
+                value={legacyTheme.collectionsGridImageAspectRatio}
+                options={COLLECTIONS_GRID_ASPECT_RATIO_OPTIONS}
+                onChange={(v) => void updateLegacyTheme({ collectionsGridImageAspectRatio: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Show collection title</span>
+              <Toggle
+                checked={legacyTheme.collectionsGridShowTitle}
+                onChange={(v) => void updateLegacyTheme({ collectionsGridShowTitle: v })}
+              />
+            </div>
+          </div>
+        </DeadOnceSectionsPublished>
+      )}
+    </div>
   );
 }
 

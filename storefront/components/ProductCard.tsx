@@ -4,9 +4,33 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { stripHtmlToText } from "@/lib/sanitize-html";
 import { productCardNameStyle } from "@/lib/theme-element-style";
+import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import type { Product } from "@/lib/types";
+
+// Struck-through original + discounted price, shared by the grid and list
+// card layouts below — an active auto discount needs zero customer action
+// to show up here (see lib/auto-discounts.ts).
+function PriceDisplay({ product, currency, discounted }: { product: Product; currency: string | undefined; discounted: ReturnType<typeof computeAutoDiscountedPrice> }) {
+  if (!discounted) {
+    return (
+      <>
+        {product.price} <span className="font-normal text-price-main"><CurrencySymbol code={currency} /></span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="line-through text-price-main font-normal mr-1.5">
+        {discounted.originalPrice} <CurrencySymbol code={currency} />
+      </span>
+      <span className="text-red-600 dark:text-red-400">
+        {discounted.discountedPrice} <span className="font-normal"><CurrencySymbol code={currency} /></span>
+      </span>
+    </>
+  );
+}
 
 // shortSummary is the field meant for exactly this (a one-liner, plain
 // text) — description is rich-text HTML meant for the PDP body, only used
@@ -20,7 +44,8 @@ function cardExcerpt(product: Product): string | null {
 }
 
 export default function ProductCard({ product, orientation }: { product: Product; orientation: "grid" | "list" }) {
-  const { shop, shopBasePath, themeConfig } = useShop();
+  const { shop, shopBasePath, themeConfig, autoDiscounts = [] } = useShop();
+  const discounted = computeAutoDiscountedPrice(product, autoDiscounts);
   const outOfStock = product.stockQuantity !== null && product.stockQuantity <= 0;
   const excerpt = cardExcerpt(product);
   const productCards = themeConfig?.globalSettings.productCards;
@@ -44,7 +69,7 @@ export default function ProductCard({ product, orientation }: { product: Product
           <p className="font-medium truncate text-product-name" style={nameStyle}>{product.name}</p>
           {product.shortSummary && <p className="text-sm text-zinc-500 truncate">{product.shortSummary}</p>}
           <p className="text-sm font-semibold mt-1 text-product-name">
-            {product.price} <span className="font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
+            <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} />
           </p>
           {outOfStock && <p className="text-xs text-red-600 mt-0.5">Out of stock</p>}
         </div>
@@ -76,7 +101,7 @@ export default function ProductCard({ product, orientation }: { product: Product
           mobile no longer gets silently chopped mid-word (see design audit). */}
       <p className="mt-3 text-[15px] leading-snug line-clamp-2 text-product-name" style={nameStyle}>{product.name}</p>
       <p className="text-sm font-semibold mt-1 text-product-name">
-        {product.price} <span className="font-normal text-price-main"><CurrencySymbol code={shop?.currency} /></span>
+        <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} />
       </p>
       {excerpt && <p className="mt-1 text-xs leading-snug line-clamp-2 text-price-main">{excerpt}</p>}
     </Link>

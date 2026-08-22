@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import { STOREFRONT_URL, storefrontUrlFor, getAccessToken, listCollections, listProducts } from "@/lib/api";
 import SelectionActionBar from "./SelectionActionBar";
 import type { Shop } from "@/lib/types";
@@ -121,12 +122,46 @@ function resolvePreviewUrl(shop: Shop, themeId: number, path: string): string | 
 // page to preview — a full per-item picker is more than a page switcher
 // needs; a merchant with zero collections/products yet just doesn't get
 // those two options (rather than linking to a slug that 404s).
+// Moved here from SettingsPanel.tsx's left/right detail column (storefront-v2
+// UX pass) so it sits next to the Preview page selector in one toolbar row
+// instead of floating at the top of the settings sidebar — the query itself
+// still lives in useThemeEditor.ts (settingsSearchQuery) since the actual
+// filtering happens over in SettingsPanel.tsx, a sibling panel.
+function SettingsSearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative ml-auto w-56">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search settings..."
+        className="h-8 w-full rounded-lg border border-black/10 bg-surface pl-8 pr-8 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 dark:border-white/15 dark:bg-zinc-900"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Clear search"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
+        >
+          <X className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PageSwitcher({
   previewPath,
   setPreviewPath,
+  searchQuery,
+  setSearchQuery,
 }: {
   previewPath: string;
   setPreviewPath: (path: string) => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
 }) {
   const [collectionSlug, setCollectionSlug] = useState<string | null>(null);
   const [productSlug, setProductSlug] = useState<string | null>(null);
@@ -156,6 +191,7 @@ function PageSwitcher({
           Product page{productSlug ? "" : " (no products yet)"}
         </option>
       </select>
+      <SettingsSearchBox value={searchQuery} onChange={setSearchQuery} />
     </div>
   );
 }
@@ -181,7 +217,18 @@ export default function PreviewFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion, isDragging, previewPath, setPreviewPath } = editor;
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion, isDragging, previewPath, setPreviewPath, settingsSearchQuery, setSettingsSearchQuery } = editor;
+  // The reverse-channel listener below reads this instead of closing over
+  // `config` directly, so that effect doesn't need `config` in its
+  // dependency array — without this, the listener would tear down and
+  // re-register on every single edit (config changes on every keystroke,
+  // not just a reorder), which is unnecessary churn on exactly the
+  // mechanism a "does the listener survive/reattach correctly" bug report
+  // would suspect first.
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
 
   // Bug 2 root cause (confirmed empirically, not the "iframe navigation"
   // premise it was originally reported as — see PR description): an iframe
@@ -260,8 +307,7 @@ export default function PreviewFrame({
   // already resolves its full section/container context on its own, so
   // there's nothing extra to store.
   useEffect(() => {
-    if (!previewOrigin || !config) return;
-    const currentConfig = config;
+    if (!previewOrigin) return;
     function handleMessage(event: MessageEvent) {
       if (event.origin !== previewOrigin) return;
       const data = event.data;
@@ -298,14 +344,14 @@ export default function PreviewFrame({
               : {
                   kind: "section",
                   sectionId: data.sectionId,
-                  sectionType: currentConfig.sections.find((s) => s.id === data.sectionId)?.type ?? "hero",
+                  sectionType: configRef.current?.sections.find((s) => s.id === data.sectionId)?.type ?? "hero",
                 };
         reorderBlocks(container, null, data.orderedIds as string[]);
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [previewOrigin, config, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks]);
+  }, [previewOrigin, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks]);
 
   // The iframe's own `load` event only fires for a genuine new-document
   // load — the initial src load, or a real full navigation/reload inside
@@ -335,7 +381,12 @@ export default function PreviewFrame({
 
   return (
     <div className="flex h-full flex-col bg-zinc-100 dark:bg-zinc-950">
-      <PageSwitcher previewPath={previewPath} setPreviewPath={setPreviewPath} />
+      <PageSwitcher
+        previewPath={previewPath}
+        setPreviewPath={setPreviewPath}
+        searchQuery={settingsSearchQuery}
+        setSearchQuery={setSettingsSearchQuery}
+      />
       <div className="flex flex-1 items-start justify-center overflow-auto p-4">
         {src ? (
           <iframe

@@ -4,6 +4,7 @@ import {
   resolveButtonElementStyle,
   resolveImageElementStyle,
   resolveNavElementStyle,
+  resolveMenuBarBackground,
   resolvePriceElementStyle,
   resolveIconStrokeWidth,
   resolveIconElementStyle,
@@ -102,6 +103,31 @@ describe("resolveNavElementStyle", () => {
     expect(style.fontSize).toBe("16px");
     expect(style.color).toBe("#3f3f46");
     expect(style.fontWeight).toBe("600");
+  });
+});
+
+describe("resolveMenuBarBackground", () => {
+  it("returns undefined when neither menuBarBackground nor a solid header background is set", () => {
+    expect(resolveMenuBarBackground(undefined)).toBeUndefined();
+    expect(resolveMenuBarBackground({})).toBeUndefined();
+  });
+
+  it("uses the explicit menuBarBackground key when set, independent of the header's own background", () => {
+    const result = resolveMenuBarBackground({
+      menuBarBackground: "#123456",
+      background: { type: "solid", color: "#ffffff" },
+    });
+    expect(result).toBe("#123456");
+  });
+
+  it("falls back to the header's own color when the header background is a plain solid", () => {
+    const result = resolveMenuBarBackground({ background: { type: "solid", color: "#abcdef" } });
+    expect(result).toBe("#abcdef");
+  });
+
+  it("does not fall back to a gradient or image header background — no single color to hand down", () => {
+    expect(resolveMenuBarBackground({ background: { type: "gradient", gradientFrom: "#000", gradientTo: "#fff" } })).toBeUndefined();
+    expect(resolveMenuBarBackground({ background: { type: "image", imageUrl: "/uploads/x.png" } })).toBeUndefined();
   });
 });
 

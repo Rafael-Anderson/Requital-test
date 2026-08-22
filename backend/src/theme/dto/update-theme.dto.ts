@@ -16,6 +16,9 @@ import {
   BUTTON_RADII,
   CART_LAYOUTS,
   CHECKOUT_LAYOUTS,
+  COLLECTIONS_GRID_ASPECT_RATIOS,
+  COLLECTIONS_GRID_COLUMNS,
+  COLLECTIONS_GRID_GAPS,
   DENSITY_OPTIONS,
   FONT_CHOICES,
   FOOTER_LAYOUTS,
@@ -30,6 +33,9 @@ import type {
   ButtonRadius,
   CartLayout,
   CheckoutLayout,
+  CollectionsGridAspectRatio,
+  CollectionsGridColumns,
+  CollectionsGridGap,
   Density,
   FontChoice,
   FooterLayout,
@@ -201,4 +207,22 @@ export class UpdateThemeDto {
   @IsOptional()
   @IsIn(DENSITY_OPTIONS)
   footerDensity?: Density;
+
+  // Home tab "collections" mode's own grid settings — see constants.ts's
+  // own comment on why these are separate from homeTabMode itself.
+  @IsOptional()
+  @IsIn(COLLECTIONS_GRID_COLUMNS)
+  collectionsGridColumns?: CollectionsGridColumns;
+
+  @IsOptional()
+  @IsIn(COLLECTIONS_GRID_GAPS)
+  collectionsGridGap?: CollectionsGridGap;
+
+  @IsOptional()
+  @IsBoolean()
+  collectionsGridShowTitle?: boolean;
+
+  @IsOptional()
+  @IsIn(COLLECTIONS_GRID_ASPECT_RATIOS)
+  collectionsGridImageAspectRatio?: CollectionsGridAspectRatio;
 }
