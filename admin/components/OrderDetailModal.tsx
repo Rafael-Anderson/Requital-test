@@ -12,6 +12,7 @@ import {
   updateOrderStatus,
 } from "@/lib/api";
 import { getNextAction, type ExternalDelivery, type Order } from "@/lib/types";
+import { waLink } from "@/lib/validators";
 import { relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
@@ -426,7 +427,16 @@ export default function OrderDetailModal({
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-text-muted mt-1">{order.customerPhone}</p>
+                  <p className="text-sm text-text-muted mt-1">
+                    <a
+                      href={waLink(order.customerPhone)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-accent-text dark:hover:text-accent hover:underline"
+                    >
+                      {order.customerPhone}
+                    </a>
+                  </p>
                   {order.customerEmail && (
                     <p className="text-sm text-text-muted">{order.customerEmail}</p>
                   )}

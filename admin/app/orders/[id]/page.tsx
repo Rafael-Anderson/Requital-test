@@ -10,6 +10,7 @@ import {
   updateOrderStatus,
 } from "@/lib/api";
 import { getValidNextStatuses, type Order, type OrderStatus } from "@/lib/types";
+import { waLink } from "@/lib/validators";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
@@ -109,7 +110,16 @@ export default function OrderDetailPage() {
       <Card className="mb-4">
         <h2 className="font-medium mb-2">Customer</h2>
         <p>{order.customerName}</p>
-        <p className="text-sm text-text-muted">{order.customerPhone}</p>
+        <p className="text-sm text-text-muted">
+          <a
+            href={waLink(order.customerPhone)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-accent-text dark:hover:text-accent hover:underline"
+          >
+            {order.customerPhone}
+          </a>
+        </p>
         {order.customerEmail && (
           <p className="text-sm text-text-muted">{order.customerEmail}</p>
         )}

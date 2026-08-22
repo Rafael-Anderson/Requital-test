@@ -1675,7 +1675,16 @@ export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ["nomod", "str
 // isn't a real, submittable card-processor option and shouldn't need
 // PROVIDER_CREDENTIAL_FIELDS/PAYMENT_PROVIDER_LABELS entries just to render
 // a disabled row.
-export const COMING_SOON_PAYMENT_PROVIDERS: string[] = ["nomod"];
+// telr/paytabs added 2026-08-22 — two of the most common UAE payment
+// gateways, with real backend stub providers and platform-level env
+// fallback credentials already documented in CLAUDE.md, but previously
+// completely invisible in this admin UI (not even a "coming soon" row) —
+// a real competitive gap for a UAE-market product. Deliberately NOT added
+// to PAYMENT_GATEWAY_PROVIDERS/CARD_PROCESSOR_PROVIDERS/
+// PROVIDER_CREDENTIAL_FIELDS — they're display-only, never a real
+// selectable/submittable option, so nothing that maps over those needs new
+// entries for them.
+export const COMING_SOON_PAYMENT_PROVIDERS: string[] = ["nomod", "telr", "paytabs"];
 
 export interface CredentialFieldDef {
   key: string;
@@ -1715,6 +1724,8 @@ export const PAYMENT_PROVIDER_LABELS: Record<string, string> = {
   tabby: "Tabby",
   tamara: "Tamara",
   cod: "Cash on Delivery",
+  telr: "Telr",
+  paytabs: "PayTabs",
 };
 
 // Response shape for both GET /payment-settings and PATCH /payment-settings/:provider.

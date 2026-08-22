@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { cancelOrder, getOrder, updateOrderStatus } from "@/lib/api";
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
+import { waLink } from "@/lib/validators";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import Skeleton from "@/components/ui/Skeleton";
@@ -116,7 +117,16 @@ export default function SimpleOrderDetailModal({
         <div className="space-y-4">
           <div className="text-sm text-text-muted">
             <div className="font-medium text-zinc-800 dark:text-zinc-200">{order.customerName}</div>
-            <div>{order.customerPhone}</div>
+            <div>
+              <a
+                href={waLink(order.customerPhone)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-accent-text dark:hover:text-accent hover:underline"
+              >
+                {order.customerPhone}
+              </a>
+            </div>
             {order.deliveryDate && (
               <div className="mt-1 font-medium text-zinc-700 dark:text-zinc-300">
                 Due {new Date(order.deliveryDate).toLocaleDateString()}

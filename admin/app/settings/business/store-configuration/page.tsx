@@ -206,9 +206,6 @@ export default function StoreConfigurationPage() {
                       ]}
                     />
                   </Field>
-                  <p className="text-xs text-text-faint mt-1.5">
-                    Saved as a preference only. No storefront exists yet to apply it to.
-                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -271,21 +268,28 @@ export default function StoreConfigurationPage() {
 
             <Card>
               <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Engagement</h3>
-              <div className="space-y-2">
-                <Checkbox
-                  label="WhatsApp floating button enabled"
-                  checked={whatsappFloatingButtonEnabled}
-                  onChange={(e) => setWhatsappFloatingButtonEnabled(e.target.checked)}
-                />
-                <Checkbox
-                  label="Birthday discount enabled"
-                  checked={birthdayDiscountEnabled}
-                  onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
-                />
+              <div className="space-y-3">
+                <div>
+                  <Checkbox
+                    label="WhatsApp floating button enabled"
+                    checked={whatsappFloatingButtonEnabled}
+                    onChange={(e) => setWhatsappFloatingButtonEnabled(e.target.checked)}
+                  />
+                  <p className="text-xs text-text-faint mt-1">
+                    Controls the floating chat button on your storefront.
+                  </p>
+                </div>
+                <div>
+                  <Checkbox
+                    label="Birthday discount enabled"
+                    checked={birthdayDiscountEnabled}
+                    onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
+                  />
+                  <p className="text-xs text-text-faint mt-1">
+                    Saved as a preference only. Not yet active. No discount engine is connected to it yet.
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-text-faint mt-3">
-                UI toggles only. No WhatsApp integration or discount engine is connected yet.
-              </p>
             </Card>
 
             <Card>
