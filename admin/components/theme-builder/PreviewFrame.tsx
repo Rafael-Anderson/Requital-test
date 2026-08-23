@@ -12,6 +12,7 @@ import {
   type ThemeEditorState,
   type DevicePreview,
 } from "@/lib/useThemeEditor";
+import type { ThemeConfig } from "@/lib/types";
 
 const DEVICE_WIDTH: Record<DevicePreview, string> = {
   desktop: "100%",
@@ -279,10 +280,36 @@ export default function PreviewFrame({
     iframeReadyRef.current = false;
   }, [src]);
 
+  // Structural changes (a reorder, today — add/remove-block would be a
+  // natural extension of the same call site) skip the debounce entirely.
+  // The debounce exists to coalesce a rapid burst of VALUE edits (dragging
+  // a color picker, typing in a text field) into one postMessage instead of
+  // one per keystroke — a reorder is a single discrete drop, there's
+  // nothing to coalesce, and debouncing it means the merchant sees no
+  // visual change for up to POST_DEBOUNCE_MS after releasing the drag,
+  // which reads as "the drop did nothing" (confirmed live: the section
+  // sits frozen through that whole window before silently snapping into
+  // place). postConfigImmediate posts right away and flags the upcoming
+  // debounced effect run to skip its own post — the effect still fires
+  // (config changing is what it's watching, and it can't distinguish "why"
+  // from its own dependency array), but this makes it a no-op rather than
+  // a redundant, harmless-but-wasteful repost of the same config.
+  const suppressNextDebouncedPostRef = useRef(false);
+  function postConfigImmediate(cfg: ThemeConfig) {
+    if (!previewOrigin || !iframeReadyRef.current) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    suppressNextDebouncedPostRef.current = true;
+    iframeRef.current?.contentWindow?.postMessage({ type: "theme-config-update", config: cfg }, previewOrigin);
+  }
+
   useEffect(() => {
     if (!config || !previewOrigin) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      if (suppressNextDebouncedPostRef.current) {
+        suppressNextDebouncedPostRef.current = false;
+        return;
+      }
       if (!iframeReadyRef.current) return;
       iframeRef.current?.contentWindow?.postMessage(
         { type: "theme-config-update", config },
@@ -382,7 +409,8 @@ export default function PreviewFrame({
           const insertAt = data.before ? targetIndex : targetIndex + 1;
           const reordered = [...withoutDragged];
           reordered.splice(insertAt, 0, dragged);
-          reorderSections(reordered.map((s) => s.id));
+          const updated = reorderSections(reordered.map((s) => s.id));
+          if (updated) postConfigImmediate(updated);
         }
         return;
       }
@@ -402,7 +430,8 @@ export default function PreviewFrame({
                   sectionId: data.sectionId,
                   sectionType: configRef.current?.sections.find((s) => s.id === data.sectionId)?.type ?? "hero",
                 };
-        reorderBlocks(container, null, data.orderedIds as string[]);
+        const updated = reorderBlocks(container, null, data.orderedIds as string[]);
+        if (updated) postConfigImmediate(updated);
       }
     }
     window.addEventListener("message", handleMessage);

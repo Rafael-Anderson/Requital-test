@@ -586,9 +586,18 @@ export function useThemeEditor(themeId: number) {
   // beforeunload flush) — a reorder is a discrete, deliberate action a
   // merchant expects to stick right away, not something that should still
   // be sitting unsaved if they close the tab a few seconds later.
-  function reorderSections(orderedIds: string[]) {
+  //
+  // Returns the updated config synchronously (updateConfig already writes
+  // configRef.current before returning, per that function's own comment) so
+  // a caller driving the in-preview section drag (PreviewFrame.tsx's
+  // message handler) can post it straight to the iframe the instant the
+  // drop lands, instead of waiting on the debounced theme-config-update
+  // effect — a reorder is a single discrete commit, not a value the
+  // merchant is still actively adjusting, so there's nothing to debounce.
+  function reorderSections(orderedIds: string[]): ThemeConfig | null {
     updateConfig((prev) => ({ ...prev, sections: reorderById(prev.sections, orderedIds) }));
     void save();
+    return configRef.current;
   }
 
   function updateSectionSetting(id: string, key: string, value: unknown) {
@@ -656,8 +665,10 @@ export function useThemeEditor(themeId: number) {
   // Same immediate-persist reasoning as reorderSections above — this is
   // also the landing spot for the in-preview drag (PreviewFrame.tsx's
   // "element-moved" postMessage handler calls this too), so both drag
-  // surfaces get the same drop-time save through this one function.
-  function reorderBlocks(container: BlockContainerRef, parentBlockId: string | null, orderedIds: string[]) {
+  // surfaces get the same drop-time save through this one function. Also
+  // returns the updated config synchronously for the same reason
+  // reorderSections does — see that function's own comment.
+  function reorderBlocks(container: BlockContainerRef, parentBlockId: string | null, orderedIds: string[]): ThemeConfig | null {
     updateConfig((prev) =>
       setContainerBlocks(
         prev,
@@ -666,6 +677,7 @@ export function useThemeEditor(themeId: number) {
       ),
     );
     void save();
+    return configRef.current;
   }
 
   async function publish() {
