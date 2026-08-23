@@ -92,6 +92,16 @@ export function normalizePhone(raw: string): string {
   return `+${digits}`;
 }
 
+// wa.me wants bare digits (no leading +), unlike the E.164 shape
+// normalizePhone already returns — strip it rather than duplicating the
+// normalization logic. A phone that doesn't normalize cleanly (raw returned
+// unchanged, per normalizePhone's own fallback above) still produces a
+// best-effort link rather than throwing, since a merchant clicking through
+// on a slightly malformed saved number is a better outcome than a crash.
+export function waLink(phone: string): string {
+  return `https://wa.me/${normalizePhone(phone).replace(/^\+/, "")}`;
+}
+
 // Mirrors backend/src/common/normalize.ts's normalizeWebsiteUrl by hand.
 export function normalizeWebsiteUrl(raw: string): string {
   const trimmed = raw.trim();

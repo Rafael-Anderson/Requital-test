@@ -500,6 +500,12 @@ export interface ProductInput {
   barcode?: string;
   chargeTax?: boolean;
   isCheckoutAddon?: boolean;
+  // Not the same concept as the standalone GiftCard entity (a purchased,
+  // redeemable code — see lib/api.ts's listGiftCards/createGiftCard). This
+  // is the catalog-level config for *selling* a gift-card product; buying
+  // one issues real GiftCard rows, one per unit, at order time.
+  isGiftCard?: boolean;
+  giftCardDenominations?: number[];
   // Per-product opt-in for the Variants/Attributes/FAQs sections — see Product.
   showVariants?: boolean;
   showAttributes?: boolean;
@@ -584,6 +590,8 @@ export interface Product {
   usesIngredients: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
+  isGiftCard: boolean;
+  giftCardDenominations: number[];
   // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
   // product form (ProductForm.tsx) — replaces the old shop-wide
   // productVariantsEnabled/productAttributesEnabled/productFaqsEnabled toggles.
@@ -1655,6 +1663,29 @@ export type PaymentGatewayProvider = (typeof PAYMENT_GATEWAY_PROVIDERS)[number];
 // drives which UI section a provider's card renders in.
 export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ["nomod", "stripe"];
 
+// Providers with real backend stub plumbing (PaymentProviderRegistry entry,
+// platform-level env fallback credentials) but no real checkout-session API
+// call implemented yet — createCheckoutSession unconditionally throws. Never
+// let a merchant select one without knowing that, since it means every real
+// checkout fails at runtime with zero warning in settings. Rendered
+// disabled/"Coming soon" in the Payment Providers card-processor list
+// (admin/app/settings/business/payments/page.tsx) rather than hidden
+// entirely, so a merchant can see it's planned. Loosely typed (not
+// PaymentGatewayProvider[]) since a display-only entry like "telr"/"paytabs"
+// isn't a real, submittable card-processor option and shouldn't need
+// PROVIDER_CREDENTIAL_FIELDS/PAYMENT_PROVIDER_LABELS entries just to render
+// a disabled row.
+// telr/paytabs added 2026-08-22 — two of the most common UAE payment
+// gateways, with real backend stub providers and platform-level env
+// fallback credentials already documented in CLAUDE.md, but previously
+// completely invisible in this admin UI (not even a "coming soon" row) —
+// a real competitive gap for a UAE-market product. Deliberately NOT added
+// to PAYMENT_GATEWAY_PROVIDERS/CARD_PROCESSOR_PROVIDERS/
+// PROVIDER_CREDENTIAL_FIELDS — they're display-only, never a real
+// selectable/submittable option, so nothing that maps over those needs new
+// entries for them.
+export const COMING_SOON_PAYMENT_PROVIDERS: string[] = ["nomod", "telr", "paytabs"];
+
 export interface CredentialFieldDef {
   key: string;
   label: string;
@@ -1693,6 +1724,8 @@ export const PAYMENT_PROVIDER_LABELS: Record<string, string> = {
   tabby: "Tabby",
   tamara: "Tamara",
   cod: "Cash on Delivery",
+  telr: "Telr",
+  paytabs: "PayTabs",
 };
 
 // Response shape for both GET /payment-settings and PATCH /payment-settings/:provider.

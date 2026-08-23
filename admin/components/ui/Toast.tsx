@@ -50,7 +50,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={showToast}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {/* bottom-20, not bottom-4 — the product wizard's own sticky footer
+          (ProductForm.tsx) sits flush at bottom-0 with its own z-index, and
+          a toast at bottom-4 physically covered its primary action button
+          for the toast's whole lifetime (a real, confirmed bug, not a
+          z-order issue: z-50 already renders above the footer's z-10, the
+          toast just needed vertical clearance, not a higher stack). Bumped
+          globally rather than conditionally, since every page's toast
+          moving up 64px is a small, harmless visual change and a
+          page-aware offset would need new plumbing for one call site. */}
+      <div className="fixed bottom-20 right-4 z-50 flex flex-col gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}

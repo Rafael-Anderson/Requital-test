@@ -572,6 +572,88 @@ describe('Discounts (e2e)', () => {
         .expect(400);
       expect(messageContains(badRes, 'not valid')).toBe(true);
     });
+
+    it('an active auto-apply discount is actually charged server-side, not just displayed — regression for the QA-audit bait-and-switch bug', async () => {
+      const { adminToken, outletId, collectionId, productId, slug } =
+        await setupShop('order-auto');
+      // No code, scoped to the one product created by setupShop — "applies
+      // automatically to every matching cart, no code needed."
+      const auto = await createDiscount(adminToken, {
+        code: undefined,
+        discountType: 'auto',
+        type: 'PERCENTAGE',
+        value: 20,
+        appliesTo: 'SPECIFIC_PRODUCTS',
+        productIds: [productId],
+      });
+      expect(auto.code).toBeFalsy();
+
+      // Even a client that (incorrectly) sends the full undiscounted price
+      // must not be trusted — resolveOrderItems always recomputes server-
+      // side, the same guarantee that already holds for the plain catalog
+      // price and for gift-card denominations.
+      const res = await request(app.getHttpServer())
+        .post(`/public/${slug}/orders`)
+        .send(
+          orderPayload(outletId, {
+            items: [{ productId, quantity: 1 }],
+          }),
+        )
+        .expect(201);
+      const order = body<{ order: { id: number } }>(res).order;
+
+      const itemRows = await db.query<
+        (RowDataPacket & {
+          priceAtPurchase: string;
+          autoDiscountAmount: string | null;
+        })[]
+      >(
+        `SELECT priceAtPurchase, autoDiscountAmount FROM orderitem WHERE orderId = ?`,
+        [order.id],
+      );
+      // 100 - 20% = 80 charged, with the 20 discount amount separately
+      // recorded for invoice/report parity with order-level discountAmount.
+      expect(Number(itemRows[0].priceAtPurchase)).toBe(80);
+      expect(Number(itemRows[0].autoDiscountAmount)).toBe(20);
+
+      // A product with no matching auto-discount is unaffected.
+      const otherProduct = await request(app.getHttpServer())
+        .post('/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Unrelated Item',
+          price: 50,
+          thumbnail: 'https://example.com/u.jpg',
+          sku: `UNREL-${runId}`,
+          collectionIds: [collectionId],
+        })
+        .expect(201);
+      // The auto discount is scoped to SPECIFIC_PRODUCTS: [productId] only,
+      // so a second, unrelated product (even in the same collection) must
+      // not be discounted.
+      const otherRes = await request(app.getHttpServer())
+        .post(`/public/${slug}/orders`)
+        .send(
+          orderPayload(outletId, {
+            items: [
+              { productId: body<IdRow>(otherProduct).id, quantity: 1 },
+            ],
+          }),
+        )
+        .expect(201);
+      const otherOrder = body<{ order: { id: number } }>(otherRes).order;
+      const otherItemRows = await db.query<
+        (RowDataPacket & {
+          priceAtPurchase: string;
+          autoDiscountAmount: string | null;
+        })[]
+      >(
+        `SELECT priceAtPurchase, autoDiscountAmount FROM orderitem WHERE orderId = ?`,
+        [otherOrder.id],
+      );
+      expect(Number(otherItemRows[0].priceAtPurchase)).toBe(50);
+      expect(otherItemRows[0].autoDiscountAmount).toBeNull();
+    });
   });
 
   describe('race condition — usageLimit enforced under concurrency', () => {

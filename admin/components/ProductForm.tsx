@@ -165,7 +165,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
               <ProductFormStepOrganization form={form} hideFeatureSections />
             </div>
 
-            <div className="sticky bottom-0 py-4 bg-[var(--background)] flex justify-between gap-2">
+            <div className="sticky bottom-0 z-10 py-4 bg-[var(--background)] flex justify-between gap-2">
               <Button type="button" variant="secondary" onClick={handleCancel}>
                 Cancel
               </Button>
@@ -222,7 +222,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
           {currentStep === 2 && <ProductFormStepOrganization form={form} />}
         </div>
 
-        <div className="sticky bottom-0 py-4 bg-[var(--background)] flex justify-between gap-2">
+        <div className="sticky bottom-0 z-10 py-4 bg-[var(--background)] flex justify-between gap-2">
           <div className="flex gap-2">
             {currentStep > 0 && (
               <Button type="button" variant="secondary" onClick={handleBack}>

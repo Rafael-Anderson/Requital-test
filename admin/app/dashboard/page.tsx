@@ -5,6 +5,8 @@ import { Wallet, Star, ClipboardList, Banknote, Users } from "lucide-react";
 import { getDashboardSummary, getDailyRevenue, getTopProducts } from "@/lib/api";
 import type { DashboardSummary, DailyRevenuePoint, TopProduct } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
+import { useShopMode } from "@/lib/useShopMode";
+import SimpleDashboard from "@/components/SimpleDashboard";
 import DateRangePicker, { defaultDateRange, type DateRange } from "@/components/ui/DateRangePicker";
 import StatCard from "@/components/ui/StatCard";
 import SalesOverviewChart from "@/components/SalesOverviewChart";
@@ -32,8 +34,14 @@ export default function DashboardPage() {
   const [topProducts, setTopProducts] = useState<TopProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { selectedOutletId } = useOutletFilter();
+  const mode = useShopMode();
+  const isSimple = mode === "simple";
 
   useEffect(() => {
+    // Simple mode renders SimpleDashboard instead (its own, separate fetch,
+    // pinned to today) — skip this page's own 30-day-range fetch entirely
+    // rather than firing it in the background just to discard the result.
+    if (isSimple) return;
     setSummary(null);
     setDaily(null);
     setTopProducts(null);
@@ -49,7 +57,7 @@ export default function DashboardPage() {
         setTopProducts(p);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
-  }, [range, selectedOutletId]);
+  }, [range, selectedOutletId, isSimple]);
 
   const maxStage = useMemo(() => {
     if (!summary) return 1;
@@ -57,6 +65,16 @@ export default function DashboardPage() {
   }, [summary]);
 
   if (error) return <p className="text-red-600">{error}</p>;
+
+  if (isSimple) {
+    return (
+      <PageShell>
+        <BranchBar left={<BackButton href="/" />} />
+        <h1 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Sales dashboard</h1>
+        <SimpleDashboard />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell>

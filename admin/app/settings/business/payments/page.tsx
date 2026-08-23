@@ -6,6 +6,7 @@ import { API_URL, getPaymentSettings, updatePaymentProvider } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
   CARD_PROCESSOR_PROVIDERS,
+  COMING_SOON_PAYMENT_PROVIDERS,
   PAYMENT_PROVIDER_LABELS,
   PROVIDER_CREDENTIAL_FIELDS,
   type PaymentGatewayProvider,
@@ -219,28 +220,47 @@ export default function PaymentGatewaysPage() {
           </p>
         </div>
         <div className="space-y-2">
-          {CARD_PROCESSOR_PROVIDERS.map((provider) => (
-            <label
-              key={provider}
-              className={`flex items-center gap-3 rounded-lg border p-3 text-sm cursor-pointer transition-colors ${
-                cardProcessor === provider
-                  ? "border-black/40 dark:border-white/40 bg-black/[0.02] dark:bg-white/[0.03]"
-                  : "border-border dark:border-white/15 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-              }`}
-            >
-              <input
-                type="radio"
-                name="cardProcessor"
-                className="accent-black dark:accent-white shrink-0"
-                checked={cardProcessor === provider}
-                onChange={() => setCardProcessor(provider)}
-              />
-              <span className="font-medium">{PAYMENT_PROVIDER_LABELS[provider]}</span>
-              {rowFor(provider)?.enabled && (
-                <span className="ml-auto text-xs text-green-600 dark:text-green-400 font-medium">Active</span>
-              )}
-            </label>
-          ))}
+          {/* telr/paytabs (2026-08-22) are display-only "Coming soon" rows —
+              real UAE gateways with backend stub plumbing but no admin UI
+              at all until now — never real, submittable card-processor
+              options, so this list is loosely typed rather than widening
+              CARD_PROCESSOR_PROVIDERS/PaymentGatewayProvider itself. */}
+          {([...CARD_PROCESSOR_PROVIDERS, "telr", "paytabs"] as string[]).map((provider) => {
+            const comingSoon = COMING_SOON_PAYMENT_PROVIDERS.includes(provider);
+            return (
+              <label
+                key={provider}
+                className={`flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors ${
+                  comingSoon
+                    ? "border-border dark:border-white/15 text-text-faint cursor-not-allowed"
+                    : `cursor-pointer ${
+                        cardProcessor === provider
+                          ? "border-black/40 dark:border-white/40 bg-black/[0.02] dark:bg-white/[0.03]"
+                          : "border-border dark:border-white/15 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                      }`
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="cardProcessor"
+                  className="accent-black dark:accent-white shrink-0"
+                  checked={cardProcessor === provider}
+                  disabled={comingSoon}
+                  onChange={() => {
+                    if (!comingSoon) setCardProcessor(provider as PaymentGatewayProvider);
+                  }}
+                />
+                <span className="font-medium">{PAYMENT_PROVIDER_LABELS[provider]}</span>
+                {comingSoon ? (
+                  <span className="ml-auto text-xs">Coming soon</span>
+                ) : (
+                  rowFor(provider)?.enabled && (
+                    <span className="ml-auto text-xs text-green-600 dark:text-green-400 font-medium">Active</span>
+                  )
+                )}
+              </label>
+            );
+          })}
         </div>
         <CredentialFields
           provider={cardProcessor}

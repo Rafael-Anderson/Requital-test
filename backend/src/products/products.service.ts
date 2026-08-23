@@ -29,6 +29,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
+import { DiscountsService } from '../discounts/discounts.service';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { ProductIngredientInput } from './dto/product-ingredient-input.dto';
 import {
@@ -188,6 +189,7 @@ export class ProductsService {
     private readonly auditLogService: AuditLogService,
     private readonly branchRolesService: BranchRolesService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
+    private readonly discountsService: DiscountsService,
   ) {}
 
   async findAll(ctx: TenantContext, requestedOutletId?: number) {
@@ -3352,6 +3354,28 @@ export class ProductsService {
     );
     const productsById = new Map(products.map((p) => [p.id as number, p]));
 
+    // Auto-apply discounts ("applies automatically to every matching cart,
+    // no code needed") must be resolved server-side, never trusted from a
+    // client-computed display price — this is the actual source of truth
+    // storefront/lib/auto-discounts.ts's computeAutoDiscountedPrice mirrors
+    // for display only. One shop-wide fetch (not per item) + one collection
+    // lookup, reused by DiscountsService.findBestAutoDiscountAmount below.
+    const autoDiscounts =
+      await this.discountsService.listActiveAutoDiscounts(shopId);
+    const collectionRows = autoDiscounts.length
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT productId, collectionId FROM productcollection WHERE productId IN (${productIds.map(() => '?').join(', ')})`,
+          productIds,
+        )
+      : [];
+    const collectionIdsByProduct = new Map<number, number[]>();
+    for (const row of collectionRows) {
+      const pid = row.productId as number;
+      const list = collectionIdsByProduct.get(pid) ?? [];
+      list.push(row.collectionId as number);
+      collectionIdsByProduct.set(pid, list);
+    }
+
     const variantIds = [
       ...new Set(
         items.filter((i) => i.variantId !== undefined).map((i) => i.variantId!),
@@ -3402,6 +3426,7 @@ export class ProductsService {
       // within the custom-amount min/max) — never an arbitrary customer-
       // supplied price the way a bare priceOverride would be.
       let price: string;
+      let autoDiscountAmount: string | null = null;
       if (product.isGiftCard) {
         if (item.giftCardAmount === undefined) {
           throw new BadRequestException(
@@ -3414,15 +3439,30 @@ export class ProductsService {
         throw new BadRequestException(
           `${product.name as string} is not a gift card product`,
         );
-      } else {
+      } else if (item.priceOverride !== undefined) {
         // Admin-only override (draft orders / manual phone-order price
         // adjustments) — see CreateOrderDto.items.priceOverride. Never
         // exposed on the public/storefront item DTO, so a storefront
-        // customer can never set their own price this way.
-        price =
-          item.priceOverride !== undefined
-            ? String(item.priceOverride)
-            : ((variant?.price as string | undefined) ?? (product.price as string));
+        // customer can never set their own price this way. An explicit
+        // override always wins over an auto-discount, same as it already
+        // wins over the plain catalog price.
+        price = String(item.priceOverride);
+      } else {
+        const basePrice =
+          (variant?.price as string | undefined) ?? (product.price as string);
+        const discountAmount = autoDiscounts.length
+          ? this.discountsService.findBestAutoDiscountAmount(autoDiscounts, {
+              productId: item.productId,
+              price: Number(basePrice),
+              collectionIds: collectionIdsByProduct.get(item.productId) ?? [],
+            })
+          : 0;
+        if (discountAmount > 0) {
+          autoDiscountAmount = String(discountAmount);
+          price = String(Number(basePrice) - discountAmount);
+        } else {
+          price = basePrice;
+        }
       }
 
       return {
@@ -3430,6 +3470,7 @@ export class ProductsService {
         variant,
         quantity: item.quantity,
         price,
+        autoDiscountAmount,
         variantLabel: variant
           ? buildVariantLabel([
               variant.optionValue1Value as string | undefined,

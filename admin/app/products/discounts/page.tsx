@@ -150,7 +150,7 @@ export default function DiscountsPage() {
                     className={`text-xs rounded px-2 py-1 border transition-colors cursor-pointer ${
                       d.active
                         ? "border-green-400 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950"
-                        : "border-red-300 text-red-600 dark:border-red-800 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
+                        : "border-border dark:border-white/15 text-text-muted hover:bg-black/5 dark:hover:bg-white/5"
                     }`}
                   >
                     {d.active ? "Active" : "Inactive"}
