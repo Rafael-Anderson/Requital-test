@@ -162,7 +162,7 @@ export default function OrdersPage() {
                         </div>
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
                         <div className="text-sm font-bold text-text-primary dark:text-zinc-50">{order.total} AED</div>
-                        {!isSimple && order.deliveryDate && (
+                        {order.deliveryDate && (
                           <div className="text-xs text-text-muted mt-1">
                             {new Date(order.deliveryDate).toLocaleDateString()}
                             {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}

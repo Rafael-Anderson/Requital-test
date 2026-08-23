@@ -7,6 +7,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
 import { isDuplicateKeyError } from '../database/mysql-errors';
+import { trimOrderRow } from '../database/decimal.util';
 import type { CustomerRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
@@ -180,10 +181,15 @@ export class CustomersService {
       list.push(item);
       itemsByOrder.set(item.orderId as number, list);
     }
-    const orders = orderRows.map((o) => ({
-      ...o,
-      orderitem: itemsByOrder.get(o.id as number) ?? [],
-    })) as ({ status: string; total: string; createdAt: Date } & RowDataPacket & {
+    const orders = orderRows.map((o) =>
+      trimOrderRow({
+        ...o,
+        orderitem: (itemsByOrder.get(o.id as number) ?? []) as {
+          priceAtPurchase?: unknown;
+          autoDiscountAmount?: unknown;
+        }[],
+      }),
+    ) as ({ status: string; total: string; createdAt: Date } & RowDataPacket & {
       orderitem: RowDataPacket[];
     })[];
 

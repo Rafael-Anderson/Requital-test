@@ -75,13 +75,17 @@ describe("OrdersPage — simple/advanced mode", () => {
     expect(screen.getByText("Order History")).toBeInTheDocument();
   });
 
-  it("simple mode: omits delivery date and 'Ordered ago' from the card", async () => {
+  it("simple mode: still shows the delivery date (a same-day-delivery merchant needs it), but omits 'Ordered ago'", async () => {
+    // Bug 6a QA-sweep fix: the delivery-date line used to be gated behind
+    // !isSimple too, meaning a simple-mode merchant had no way to see when
+    // an order was due anywhere in the Orders UI. Only "Ordered X ago"
+    // stays hidden in simple mode.
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
     vi.mocked(listOrders).mockResolvedValue({ data: [order], total: 1 } as never);
     renderPage();
 
     await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
-    expect(screen.queryByText(/10am-12pm/)).not.toBeInTheDocument();
+    expect(screen.getByText(/10am-12pm/)).toBeInTheDocument();
     expect(screen.queryByText(/Ordered/)).not.toBeInTheDocument();
   });
 

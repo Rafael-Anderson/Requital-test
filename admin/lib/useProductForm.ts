@@ -41,6 +41,7 @@ export const FIELD_STEP: Record<string, number> = {
   image: 0,
   sku: 1,
   price: 1,
+  giftCardDenominations: 1,
   recipe: 1,
   collections: 2,
 };
@@ -69,6 +70,11 @@ export function useProductForm(initialProduct: Product | undefined) {
   const [costPrice, setCostPrice] = useState("");
   const [chargeTax, setChargeTax] = useState(product?.chargeTax ?? true);
   const [isCheckoutAddon, setIsCheckoutAddon] = useState(product?.isCheckoutAddon ?? false);
+  const [isGiftCard, setIsGiftCard] = useState(product?.isGiftCard ?? false);
+  const [giftCardDenominations, setGiftCardDenominations] = useState<number[]>(
+    product?.giftCardDenominations ?? [],
+  );
+  const [denominationDraft, setDenominationDraft] = useState("");
 
   const [trackInventory, setTrackInventory] = useState(product?.trackInventory ?? false);
   const [continueSellingOutOfStock, setContinueSellingOutOfStock] = useState(
@@ -178,6 +184,17 @@ export function useProductForm(initialProduct: Product | undefined) {
     setTags((t) => t.filter((x) => x !== tag));
   }
 
+  function addDenomination() {
+    const value = Number(denominationDraft);
+    if (!Number.isFinite(value) || value <= 0 || giftCardDenominations.includes(value)) return;
+    setGiftCardDenominations((d) => [...d, value].sort((a, b) => a - b));
+    setDenominationDraft("");
+  }
+
+  function removeDenomination(value: number) {
+    setGiftCardDenominations((d) => d.filter((x) => x !== value));
+  }
+
   // Gate for the wizard's Step 1 "Next" button — only Title is required to
   // advance. The full set of required fields (name/sku/price/image/collection)
   // is still enforced at final submit time, unchanged from the old form.
@@ -202,8 +219,14 @@ export function useProductForm(initialProduct: Product | undefined) {
   function validateAll(): Record<string, string> {
     const nextFieldErrors: Record<string, string> = {};
     if (!name.trim()) nextFieldErrors.name = "Name is required";
-    if (!sku.trim()) nextFieldErrors.sku = "SKU is required";
-    if (!price) nextFieldErrors.price = "Price is required";
+    if (isGiftCard) {
+      if (giftCardDenominations.length === 0) {
+        nextFieldErrors.giftCardDenominations = "Add at least one denomination";
+      }
+    } else {
+      if (!sku.trim()) nextFieldErrors.sku = "SKU is required";
+      if (!price) nextFieldErrors.price = "Price is required";
+    }
     if (images.length === 0) nextFieldErrors.image = "At least one image is required";
     if (collectionIds.size === 0) nextFieldErrors.collections = "Select at least one collection";
     if (usesIngredients && recipeRows.filter((r) => Number(r.quantityPerUnit) > 0).length === 0) {
@@ -224,16 +247,27 @@ export function useProductForm(initialProduct: Product | undefined) {
     setSaving(true);
     try {
       const sortedImages = [...images].sort((a, b) => a.order - b.order);
+      // The backend's price/sku columns are still required (@IsPositive/
+      // @IsNotEmpty) even for a gift card, per its own "product's own price
+      // is a placeholder — the real amount is whichever denomination the
+      // shopper picked" comment (ProductsService.resolveOrderItems). The
+      // Price/SKU fields are hidden from this form for a gift card, so
+      // auto-fill something valid rather than surfacing fields the merchant
+      // never sees a reason to fill in.
+      const giftCardPricePlaceholder = giftCardDenominations[0] ?? 1;
+      const giftCardSkuPlaceholder = `GIFTCARD-${Date.now()}`;
       const payload = {
         name,
-        sku,
+        sku: isGiftCard ? sku || giftCardSkuPlaceholder : sku,
         barcode: barcode || undefined,
         description: description || undefined,
-        price: Number(price),
+        price: isGiftCard ? giftCardPricePlaceholder : Number(price),
         compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
         costPrice: costPrice ? Number(costPrice) : undefined,
         chargeTax,
         isCheckoutAddon,
+        isGiftCard,
+        giftCardDenominations: isGiftCard ? giftCardDenominations : undefined,
         showVariants,
         showAttributes,
         showFaqs,
@@ -318,6 +352,9 @@ export function useProductForm(initialProduct: Product | undefined) {
     costPrice, setCostPrice,
     chargeTax, setChargeTax,
     isCheckoutAddon, setIsCheckoutAddon,
+    isGiftCard, setIsGiftCard,
+    giftCardDenominations, setGiftCardDenominations,
+    denominationDraft, setDenominationDraft, addDenomination, removeDenomination,
     trackInventory, setTrackInventory,
     continueSellingOutOfStock, setContinueSellingOutOfStock,
     usesIngredients, setUsesIngredients,

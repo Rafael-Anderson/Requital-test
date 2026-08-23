@@ -7,6 +7,7 @@ import {
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
 import { isDuplicateKeyError } from '../database/mysql-errors';
+import { trimDecimal } from '../database/decimal.util';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { ShopRow } from '../db/types';
 import { UpdateShopDto } from './dto/update-shop.dto';
@@ -32,7 +33,16 @@ export class ShopService {
   async findOne(ctx: TenantContext) {
     const shop = await this.findById(ctx.shopId);
     if (!shop) throw new NotFoundException(`Shop ${ctx.shopId} not found`);
-    return shop;
+    // The admin-facing GET/PATCH /shop response never trimmed these two
+    // DECIMAL(65,30) fields, unlike the storefront-facing equivalent
+    // (public.service.ts already does `trimDecimal(shop.defaultDeliveryFee)`
+    // correctly) — confirmed live via the QA audit, "0.000000000000000..."
+    // rendered raw into Store Configuration's Default Delivery Fee input.
+    return {
+      ...shop,
+      defaultDeliveryFee: trimDecimal(shop.defaultDeliveryFee),
+      taxRate: trimDecimal(shop.taxRate),
+    };
   }
 
   // Same proxy the migration backfill used for existing shops (see
