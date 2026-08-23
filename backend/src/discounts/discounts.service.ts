@@ -403,6 +403,35 @@ export class DiscountsService {
     });
   }
 
+  // Public — mirrors storefront's computeAutoDiscountedPrice (lib/auto-
+  // discounts.ts) on the server, since order pricing must never trust a
+  // client-computed display value. See ProductsService.resolveOrderItems,
+  // the only caller: given the shop's already-fetched active auto-discounts
+  // (one query per resolveOrderItems call, not per item) and one item's
+  // price/scope, returns the best (largest) matching discount amount, or 0
+  // if none apply. Reuses computeAmount for the actual percent/fixed math
+  // so both call sites can never drift apart.
+  findBestAutoDiscountAmount(
+    autoDiscounts: PublicAutoDiscount[],
+    item: { productId: number; price: number; collectionIds: number[] },
+  ): number {
+    const collectionIds = new Set(item.collectionIds);
+    let bestAmount = 0;
+    for (const discount of autoDiscounts) {
+      if (discount.type === 'FREE_SHIPPING') continue; // no effect on price
+      const applies =
+        discount.appliesTo === 'SPECIFIC_PRODUCTS'
+          ? discount.productIds.includes(item.productId)
+          : discount.appliesTo === 'SPECIFIC_COLLECTIONS'
+            ? discount.collectionIds.some((id) => collectionIds.has(id))
+            : false; // ALL_PRODUCTS is never a valid scope for an auto discount (backend-enforced at create/update time)
+      if (!applies) continue;
+      const amount = this.computeAmount(discount, item.price);
+      if (amount > bestAmount) bestAmount = amount;
+    }
+    return bestAmount;
+  }
+
   private reject(reason: DiscountRejectionReason): EvaluateResult {
     return {
       valid: false,

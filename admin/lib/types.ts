@@ -1655,6 +1655,20 @@ export type PaymentGatewayProvider = (typeof PAYMENT_GATEWAY_PROVIDERS)[number];
 // drives which UI section a provider's card renders in.
 export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ["nomod", "stripe"];
 
+// Providers with real backend stub plumbing (PaymentProviderRegistry entry,
+// platform-level env fallback credentials) but no real checkout-session API
+// call implemented yet — createCheckoutSession unconditionally throws. Never
+// let a merchant select one without knowing that, since it means every real
+// checkout fails at runtime with zero warning in settings. Rendered
+// disabled/"Coming soon" in the Payment Providers card-processor list
+// (admin/app/settings/business/payments/page.tsx) rather than hidden
+// entirely, so a merchant can see it's planned. Loosely typed (not
+// PaymentGatewayProvider[]) since a display-only entry like "telr"/"paytabs"
+// isn't a real, submittable card-processor option and shouldn't need
+// PROVIDER_CREDENTIAL_FIELDS/PAYMENT_PROVIDER_LABELS entries just to render
+// a disabled row.
+export const COMING_SOON_PAYMENT_PROVIDERS: string[] = ["nomod"];
+
 export interface CredentialFieldDef {
   key: string;
   label: string;

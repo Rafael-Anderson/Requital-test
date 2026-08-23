@@ -5,9 +5,9 @@
 export const FIELD_CLASS =
   "w-full h-10 rounded-lg border-none bg-[color-mix(in_srgb,var(--color-accent)_6%,var(--background))] px-3 text-sm outline-none transition-shadow focus:ring-[3px] focus:ring-accent/25";
 export const TEXTAREA_CLASS =
-  "w-full rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
+  "w-full rounded-lg border-none bg-[color-mix(in_srgb,var(--color-accent)_6%,var(--background))] px-3 py-2 text-sm outline-none transition-shadow focus:ring-[3px] focus:ring-accent/25";
 export const BUTTON_OUTLINE_CLASS =
-  "border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200";
+  "border border-stroke bg-background text-foreground";
 export const BUTTON_PRIMARY_CLASS =
   "h-10 px-4 rounded-lg bg-button text-button-foreground font-medium hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer";
 // The "card" a single-action auth-style form sits in — sign in, register,

@@ -1241,7 +1241,10 @@ export class PublicService {
 
     let subtotal = 0;
     const itemsData = resolvedItems.map(
-      ({ product, variant, quantity, price, variantLabel }, idx) => {
+      (
+        { product, variant, quantity, price, autoDiscountAmount, variantLabel },
+        idx,
+      ) => {
         subtotal += Number(price) * quantity;
         return {
           productId: product.id as number,
@@ -1250,6 +1253,7 @@ export class PublicService {
           variantLabel: variantLabel ?? null,
           quantity,
           priceAtPurchase: price,
+          autoDiscountAmount,
           note: dto.items[idx].note || null,
         };
       },
@@ -1430,9 +1434,9 @@ export class PublicService {
       const newOrderId = (result as { insertId: number }).insertId;
 
       if (itemsData.length > 0) {
-        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, note)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, note)
            VALUES ${placeholders}`,
           itemsData.flatMap((d) => [
             newOrderId,
@@ -1442,6 +1446,7 @@ export class PublicService {
             d.variantLabel,
             d.quantity,
             d.priceAtPurchase,
+            d.autoDiscountAmount,
             d.note,
           ]),
         );
@@ -1530,6 +1535,7 @@ export class PublicService {
       orderitem: itemRows.map((i) => ({
         ...i,
         priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
+        autoDiscountAmount: trimDecimal(i.autoDiscountAmount as string | null),
       })),
     };
 
