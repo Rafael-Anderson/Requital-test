@@ -23,6 +23,7 @@ export default function DeliveryZoneMap({
   const circleRef = useRef<google.maps.Circle | null>(null);
   const onChangeRef = useRef(onChange);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -33,7 +34,9 @@ export default function DeliveryZoneMap({
   // imperatively by the effects below instead of re-creating the map.
   useEffect(() => {
     let cancelled = false;
-    loadGoogleMaps().then((g) => {
+    loadGoogleMaps(() => {
+      if (!cancelled) setFailed(true);
+    }).then((g) => {
       if (cancelled || !mapDivRef.current) return;
       const isDefault = center.lat === UAE_CENTER.lat && center.lng === UAE_CENTER.lng;
       const map = new g.maps.Map(mapDivRef.current, {
@@ -74,6 +77,8 @@ export default function DeliveryZoneMap({
       markerRef.current = marker;
       circleRef.current = circle;
       setReady(true);
+    }).catch(() => {
+      if (!cancelled) setFailed(true);
     });
     return () => {
       cancelled = true;
@@ -94,10 +99,16 @@ export default function DeliveryZoneMap({
 
   return (
     <div>
-      <div
-        ref={mapDivRef}
-        className={`w-full h-64 rounded-lg overflow-hidden border border-border dark:border-white/15 ${ready ? "" : "animate-pulse bg-zinc-100 dark:bg-zinc-800"}`}
-      />
+      {failed ? (
+        <div className="w-full h-64 rounded-lg border border-border dark:border-white/15 flex items-center justify-center text-sm text-text-faint text-center px-6">
+          Map unavailable. You can still set the radius above; try again shortly for the map preview.
+        </div>
+      ) : (
+        <div
+          ref={mapDivRef}
+          className={`w-full h-64 rounded-lg overflow-hidden border border-border dark:border-white/15 ${ready ? "" : "animate-pulse bg-zinc-100 dark:bg-zinc-800"}`}
+        />
+      )}
       <p className="text-xs text-text-faint mt-1.5">Click the map or drag the pin to set the delivery area center.</p>
     </div>
   );

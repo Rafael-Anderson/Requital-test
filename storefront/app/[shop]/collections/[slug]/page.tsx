@@ -95,15 +95,15 @@ function SortDropdown({ value, onChange }: { value: SortOption; onChange: (v: So
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex h-9 items-center gap-2 rounded-lg border border-stroke ${FILTER_FIELD_BG} px-2 text-sm text-foreground cursor-pointer`}
+        className={`flex h-11 w-[180px] items-center justify-between gap-2 rounded-lg border border-stroke ${FILTER_FIELD_BG} px-3 text-sm text-foreground cursor-pointer`}
       >
-        <span>{selected.label}</span>
-        <ChevronDown className="size-3.5 text-zinc-400" />
+        <span className="truncate">{selected.label}</span>
+        <ChevronDown className="size-4 shrink-0 text-zinc-400" />
       </button>
       {open && (
         <div
           role="listbox"
-          className={`dropdown-in absolute left-0 top-full z-20 mt-1 w-44 rounded-lg border border-stroke ${FILTER_FIELD_BG} py-1 shadow-lg shadow-black/10`}
+          className={`dropdown-in absolute left-0 top-full z-20 mt-1 w-[220px] rounded-lg border border-stroke ${FILTER_FIELD_BG} py-1 shadow-lg shadow-black/10`}
         >
           {SORT_OPTIONS.map((opt) => (
             <button
@@ -314,53 +314,53 @@ export default function CollectionPage() {
           />
         )}
 
-        {/* Filter/sort/search bar (2B) */}
+        {/* Filter/sort/search bar (2B). One row, not two ml-auto-split
+            groups — that split left a large dead gap on any viewport wider
+            than the two groups' combined natural width. Search is the
+            dominant control (flex-1) and absorbs whatever space the fixed-
+            width controls don't use, rather than sitting at a cramped fixed
+            width pinned to the far right. */}
         <div className="flex flex-wrap items-end gap-4 mb-6 pb-4 border-b border-stroke">
-          <div className="flex flex-wrap items-end gap-3">
-            {siblings.length > 0 && (
-              <label className="text-sm">
-                <span className="block text-xs text-zinc-500 mb-1">Category</span>
-                <select
-                  value={collection.slug}
-                  onChange={(e) => router.push(`${shopBasePath}/collections/${e.target.value}`)}
-                  className={`h-9 rounded-lg border border-stroke ${FILTER_FIELD_BG} px-2 text-sm text-foreground`}
-                >
-                  <option value={collection.slug}>{collection.name}</option>
-                  {siblings.map((s) => (
-                    <option key={s.id} value={s.slug}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div>
-              <span className="block text-xs text-zinc-500 mb-1">Sort by</span>
-              <SortDropdown value={sort} onChange={setSort} />
-            </div>
-            {priceBounds[0] < priceBounds[1] && (
-              <div>
-                <span className="block text-xs text-zinc-500 mb-1">Price</span>
-                <PriceRangeSlider min={priceBounds[0]} max={priceBounds[1]} value={activeRange} onChange={setPriceRange} currency={<CurrencySymbol code={shop?.currency} />} />
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-end gap-3 ml-auto">
+          {siblings.length > 0 && (
             <label className="text-sm">
-              <span className="block text-xs text-zinc-500 mb-1">Search</span>
-              <div className="relative">
-                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search this collection"
-                  className={`h-9 w-44 rounded-lg border border-stroke ${FILTER_FIELD_BG} pl-8 pr-2 text-sm text-foreground`}
-                />
-              </div>
+              <span className="block text-xs text-zinc-500 mb-1">Category</span>
+              <select
+                value={collection.slug}
+                onChange={(e) => router.push(`${shopBasePath}/collections/${e.target.value}`)}
+                className={`h-11 rounded-lg border border-stroke ${FILTER_FIELD_BG} px-3 text-sm text-foreground`}
+              >
+                <option value={collection.slug}>{collection.name}</option>
+                {siblings.map((s) => (
+                  <option key={s.id} value={s.slug}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
             </label>
+          )}
+          <div>
+            <span className="block text-xs text-zinc-500 mb-1">Sort by</span>
+            <SortDropdown value={sort} onChange={setSort} />
           </div>
+          {priceBounds[0] < priceBounds[1] && (
+            <div>
+              <span className="block text-xs text-zinc-500 mb-1">Price</span>
+              <PriceRangeSlider min={priceBounds[0]} max={priceBounds[1]} value={activeRange} onChange={setPriceRange} currency={<CurrencySymbol code={shop?.currency} />} />
+            </div>
+          )}
+          <label className="flex-1 min-w-[240px] text-sm">
+            <span className="block text-xs text-zinc-500 mb-1">Search</span>
+            <div className="relative">
+              <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search this collection"
+                className={`h-11 w-full rounded-lg border border-stroke ${FILTER_FIELD_BG} pl-10 pr-3 text-sm text-foreground`}
+              />
+            </div>
+          </label>
         </div>
 
         {/* Bug 6 fix: the result-count label already existed here and is

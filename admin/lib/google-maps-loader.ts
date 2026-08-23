@@ -6,19 +6,45 @@ let loaderPromise: Promise<typeof google> | null = null;
 
 // A billing/auth error (e.g. BillingNotEnabledMapError, confirmed hit live
 // during the QA audit) surfaces after the script has already loaded
-// successfully — the API renders its own error dialog into the map div and
-// calls `window.gm_authFailure` if defined. Confirmed against Google's own
-// current Maps JS API docs (developers.google.com/maps/documentation/
-// javascript/events, "if the following global function is defined it will
-// be called when the authentication fails") — a real, still-supported
-// mechanism, not inferred; @types/google.maps just has no declaration for
-// it. `onAuthFailure` is re-registered on every call, not just the one that
+// successfully. Google's docs say the API "renders its own error dialog
+// into the map div and calls `window.gm_authFailure` if defined" for
+// authentication failures (InvalidKeyMapError, RefererNotAllowedMapError,
+// etc.) — confirmed real and still-supported (developers.google.com/maps/
+// documentation/javascript/events), just undeclared in @types/google.maps.
+// **But confirmed live (2026-08-24) that gm_authFailure does NOT fire for
+// BillingNotEnabledMapError specifically** — the Map object still gets
+// created, `.gm-style` renders, and `google.maps.event`'s 'idle' still
+// fires normally (Google paints a watermarked/degraded map rather than
+// hard-failing), so neither gm_authFailure nor an 'idle'-based timeout ever
+// catches it. What DOES reliably fire, verified by inspecting the actual
+// console.error call args in a real browser: a single-argument
+// `console.error("Google Maps JavaScript API error: <ErrorCode>\n<url>")`
+// from the Maps JS bundle itself, for every error class including this one.
+// Patched once here (idempotent) so every current and future error type
+// routes through the same `gm_authFailure` callback every consumer already
+// wires up, instead of requiring each new error class to be special-cased.
+let consoleErrorPatched = false;
+function patchConsoleErrorForMapsFailures() {
+  if (consoleErrorPatched) return;
+  consoleErrorPatched = true;
+  const originalError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    const first = args[0];
+    if (typeof first === "string" && first.startsWith("Google Maps JavaScript API error")) {
+      (window as unknown as { gm_authFailure?: () => void }).gm_authFailure?.();
+    }
+    originalError(...args);
+  };
+}
+
+// `onAuthFailure` is re-registered on every call, not just the one that
 // injects the script, so a MapPicker mounting after the script is already
 // cached still gets its own failure callback wired up. Last-registered
 // caller wins if more than one map is mounted at once — acceptable here
 // since this app never shows two maps simultaneously.
 export function loadGoogleMaps(onAuthFailure?: () => void): Promise<typeof google> {
   if (typeof window === "undefined") return Promise.reject(new Error("Google Maps can only load in the browser"));
+  patchConsoleErrorForMapsFailures();
   if (onAuthFailure) {
     (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = onAuthFailure;
   }
@@ -38,3 +64,4 @@ export function loadGoogleMaps(onAuthFailure?: () => void): Promise<typeof googl
   });
   return loaderPromise;
 }
+

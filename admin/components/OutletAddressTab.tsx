@@ -17,8 +17,6 @@ export default function OutletAddressTab({
   outlet: Outlet;
   onSaved: () => void;
 }) {
-  const [emirate, setEmirate] = useState(outlet.emirate ?? "");
-  const [area, setArea] = useState(outlet.area ?? "");
   const [latitude, setLatitude] = useState(outlet.latitude !== null ? String(outlet.latitude) : "");
   const [longitude, setLongitude] = useState(outlet.longitude !== null ? String(outlet.longitude) : "");
   const [saving, setSaving] = useState(false);
@@ -28,8 +26,6 @@ export default function OutletAddressTab({
     setSaving(true);
     try {
       await updateOutlet(outlet.id, {
-        emirate: emirate || undefined,
-        area: area || undefined,
         latitude: latitude ? Number(latitude) : undefined,
         longitude: longitude ? Number(longitude) : undefined,
       });
@@ -44,13 +40,6 @@ export default function OutletAddressTab({
 
   return (
     <div className="space-y-4">
-      <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Input label="Emirate" value={emirate} onChange={(e) => setEmirate(e.target.value)} />
-          <Input label="Area" value={area} onChange={(e) => setArea(e.target.value)} />
-        </div>
-      </Card>
-
       <Card>
         <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">Coordinates</p>
         <MapPicker
