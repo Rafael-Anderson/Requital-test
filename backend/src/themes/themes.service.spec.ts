@@ -117,7 +117,7 @@ describe('backfillGlobalSettings', () => {
 
   it('backfills one missing field on an otherwise-present category, not just a whole missing category (the ColorPicker crash: productCards existed but was missing its 3 newer color fields)', () => {
     const stale = JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig;
-    const staleProductCards = stale.globalSettings.productCards as Record<string, unknown>;
+    const staleProductCards = stale.globalSettings.productCards as unknown as Record<string, unknown>;
     delete staleProductCards.quickAddBackground;
     delete staleProductCards.quickAddText;
     delete staleProductCards.productNameColor;
