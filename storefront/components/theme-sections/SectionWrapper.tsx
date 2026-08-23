@@ -150,8 +150,15 @@ export default function SectionWrapper({
   }
 
   function handleHandlePointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
-    const section = sectionRef.current;
-    if (!section || !e.isPrimary) return;
+    const found = sectionRef.current;
+    if (!found || !e.isPrimary) return;
+    // Explicitly typed (not just narrowed) so the closures below — onMove/
+    // endDrag/onUp/onCancel, declared as hoisted function declarations, not
+    // arrow functions — see a real HTMLElement rather than
+    // HTMLElement | null; TS's control-flow narrowing above doesn't persist
+    // into those closures on its own. Same pattern PreviewInteraction.tsx's
+    // own nested-block drag already uses for the identical reason.
+    const section: HTMLElement = found;
     e.preventDefault();
     e.stopPropagation();
     const handle = e.currentTarget;
@@ -188,9 +195,19 @@ export default function SectionWrapper({
         if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
         started = true;
         setDragging(true);
+        section.style.willChange = "transform";
         postToAdmin({ type: "element-drag-start", kind: "section", sectionId });
       }
       ev.preventDefault();
+      // Live visual feedback — the section itself tracks the cursor for the
+      // whole gesture, same as PreviewInteraction.tsx's nested-block drag
+      // already does. Without this the section sits frozen in its original
+      // spot for the entire drag AND for the round-trip back from the
+      // parent (postConfigImmediate below closes most of that gap, but a
+      // merchant needs to see the drag itself working, not just the drop
+      // landing) — confirmed live: with no transform at all, a real drop
+      // reads as "did nothing" even though the reorder commits correctly.
+      section.style.transform = `translate(${dx}px, ${dy}px)`;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => updateDropTarget(ev.clientY));
     }
@@ -201,6 +218,8 @@ export default function SectionWrapper({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      section.style.transform = "";
+      section.style.willChange = "";
       setDragging(false);
       setDropIndicator(null);
       pointerIdRef.current = null;
@@ -240,7 +259,7 @@ export default function SectionWrapper({
   return (
     <section
       ref={sectionRef}
-      className={`${visibilityClass} ${previewMode ? "group relative cursor-pointer" : ""} ${dragging ? "opacity-60" : ""}`}
+      className={`${visibilityClass} ${previewMode ? "group relative cursor-pointer" : ""} ${dragging ? "opacity-60 outline outline-2 outline-offset-[-2px] outline-[#2563eb]" : ""}`}
       onClick={previewMode ? handleClick : undefined}
       style={{
         paddingTop: spacing.top !== undefined ? `${spacing.top}px` : undefined,
