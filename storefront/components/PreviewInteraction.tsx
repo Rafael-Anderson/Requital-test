@@ -225,8 +225,20 @@ export default function PreviewInteraction() {
       });
     }
 
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    // Capture phase, not bubble: the logo/cart_icon/account_icon header
+    // blocks (ThemeDrivenHeader.tsx) are simultaneously tagged
+    // data-requital-editable AND wrapped in a real next/link <Link> (see
+    // that file's own comments). Link's onClick is a bubble-phase handler
+    // bound directly on the anchor, so it always ran BEFORE a bubble-phase
+    // document listener got a chance to preventDefault() — and Link checks
+    // e.defaultPrevented before navigating (node_modules/next/dist/client/
+    // link.js), so by the time this handler's preventDefault() ran, Link
+    // had already fired router.push() and silently taken the iframe
+    // somewhere else instead of selecting the block. A capture-phase
+    // listener runs before the event ever reaches the target/bubbles to
+    // Link's handler, so preventDefault() here actually lands in time.
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
   }, [selected]);
 
   // Drag-and-drop — only wired for the currently selected element, and
