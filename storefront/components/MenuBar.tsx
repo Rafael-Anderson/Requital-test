@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
@@ -41,39 +41,62 @@ function useNavItemStyle(style: MenuItemStyle | null | undefined) {
   return { cssStyle, handlers };
 }
 
-// storefront-v2 Phase 1D — the full-width mega menu flyout for a MEGA item.
-// Rendered via a portal to document.body (not a plain absolute/fixed
-// descendant of the nav row) because the nav row itself is
-// `overflow-x-auto` for its horizontal item-scrolling behavior, which would
-// otherwise clip a panel meant to extend below and beyond it. Position is
-// computed from the nav row's own bounding rect, not the trigger's, so the
-// panel is genuinely full-viewport-width regardless of which item opened it.
+// storefront-v2 Phase 1D — the mega menu flyout for a MEGA item, sized to
+// its own columns (not full-viewport-width). Still rendered via a portal to
+// document.body, not a plain absolute descendant of the nav row: the nav
+// row is `overflow-x-auto` for its horizontal item-scrolling behavior,
+// which would clip a panel that opens below/beyond it (see the CSS
+// overflow spec's "one axis auto forces the other to auto too" rule — a
+// plain descendant here would get vertically clipped as well). Position is
+// `fixed`, computed from the triggering item's own bounding rect (left)
+// and the nav row's bottom (top) — `left` is clamped in the effect below
+// so the panel never overflows the right edge of the viewport.
 function MegaMenuPanel({
   item,
   top,
+  left,
   animation,
   onMouseEnter,
   onMouseLeave,
 }: {
   item: MenuItem;
   top: number;
+  left: number;
   animation: "fade" | "slide" | "none";
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
   const { shopBasePath } = useShop();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [adjustedLeft, setAdjustedLeft] = useState(left);
+
+  // Right-boundary check: the panel's natural left (the trigger's own left
+  // edge) can push a wide multi-column panel off the right side of the
+  // viewport, especially near the end of the nav row or on a narrow
+  // viewport. Runs before paint (useLayoutEffect) so there's no visible
+  // jump from the unclamped to the clamped position.
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const margin = 16;
+    const width = el.getBoundingClientRect().width;
+    const overflowRight = left + width + margin - window.innerWidth;
+    setAdjustedLeft(overflowRight > 0 ? Math.max(margin, left - overflowRight) : left);
+  }, [left, item.id]);
+
   const animationClass =
     animation === "none" ? "" : animation === "slide" ? "theme-mega-panel-slide" : "theme-mega-panel-fade";
   return createPortal(
     <div
+      ref={panelRef}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={{ top, borderColor: "#E4E7E7", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
-      className={`fixed inset-x-0 z-40 bg-white border-t ${animationClass} max-h-[70vh] overflow-y-auto`}
+      style={{ top, left: adjustedLeft, borderColor: "#E4E7E7", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
+      className={`fixed z-40 w-fit max-w-[calc(100vw-2rem)] rounded-lg border bg-white ${animationClass} max-h-[70vh] overflow-y-auto`}
     >
-      <div className="mx-auto max-w-7xl px-6 py-6 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+      <div className="flex flex-wrap gap-8 px-6 py-6">
         {item.columns.map((column) => (
-          <div key={column.id}>
+          <div key={column.id} className="w-48 shrink-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">{column.title}</p>
             <ul className="space-y-1.5">
               {column.links.map((link) => {
@@ -108,7 +131,7 @@ function MegaMenuPanel({
 // The storefront top bar's merchant-configured "Menu" (Phase C) — direct
 // Collection links, Dropdowns (hover/focus panel listing several
 // Collections), and Mega menus (storefront-v2 — named columns of links,
-// full-width flyout). Falls back to the pre-existing CollectionNav pill
+// a flyout sized to its own content). Falls back to the pre-existing CollectionNav pill
 // list unchanged when the shop hasn't configured any menu items yet
 // (backward-compatible default, matching every other opt-in theme feature's
 // convention in this app — no merchant is forced to configure anything).
@@ -117,13 +140,15 @@ function MegaMenuPanel({
 // the nav is a single always-visible horizontally-scrollable row at every
 // viewport width (see TopBar.tsx: no mobile menu toggle). So "mobile"
 // mega-menu here means: the same flyout, tap-to-open instead of hover-only,
-// with its columns stacked (grid-cols-1) instead of side-by-side, rather
-// than a genuine accordion-in-a-drawer that has nothing to live inside.
+// with its columns wrapping (flex-wrap) onto their own lines once they no
+// longer fit the viewport width, rather than a genuine accordion-in-a-drawer
+// that has nothing to live inside.
 export default function MenuBar() {
   const { shopSlug, shopBasePath, previewToken, previewMode, themeConfig } = useShop();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [openMegaId, setOpenMegaId] = useState<number | null>(null);
   const [megaTop, setMegaTop] = useState(0);
+  const [megaLeft, setMegaLeft] = useState(0);
   const navRef = useRef<HTMLElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,9 +158,14 @@ export default function MenuBar() {
       .catch(() => setItems([]));
   }, [shopSlug, previewToken]);
 
-  function openMega(id: number) {
+  // left is the triggering item's own left edge, not the nav row's — the
+  // panel opens flush with the item that triggered it (clamped against the
+  // right edge of the viewport by MegaMenuPanel itself), not stretched to
+  // the page edge.
+  function openMega(id: number, triggerEl: HTMLElement) {
     if (closeTimer.current) clearTimeout(closeTimer.current);
     if (navRef.current) setMegaTop(navRef.current.getBoundingClientRect().bottom);
+    setMegaLeft(triggerEl.getBoundingClientRect().left);
     setOpenMegaId(id);
   }
   function scheduleClose() {
@@ -179,13 +209,13 @@ export default function MenuBar() {
             linkClass={linkClass}
             shopBasePath={shopBasePath}
             isMegaOpen={openMegaId === item.id}
-            onMegaEnter={() => openMega(item.id)}
+            onMegaEnter={(el) => openMega(item.id, el)}
             onMegaLeave={scheduleClose}
           />
         ))}
       </div>
       {openItem && (
-        <MegaMenuPanel item={openItem} top={megaTop} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
+        <MegaMenuPanel item={openItem} top={megaTop} left={megaLeft} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
       )}
     </nav>
   );
@@ -203,7 +233,7 @@ function MenuBarItem({
   linkClass: string;
   shopBasePath: string;
   isMegaOpen: boolean;
-  onMegaEnter: () => void;
+  onMegaEnter: (triggerEl: HTMLElement) => void;
   onMegaLeave: () => void;
 }) {
   const { cssStyle, handlers } = useNavItemStyle(item.style);
@@ -222,9 +252,9 @@ function MenuBarItem({
         type="button"
         aria-haspopup="true"
         aria-expanded={isMegaOpen}
-        onMouseEnter={onMegaEnter}
+        onMouseEnter={(e) => onMegaEnter(e.currentTarget)}
         onMouseLeave={onMegaLeave}
-        onClick={() => (isMegaOpen ? onMegaLeave() : onMegaEnter())}
+        onClick={(e) => (isMegaOpen ? onMegaLeave() : onMegaEnter(e.currentTarget))}
         className={`${linkClass} cursor-pointer shrink-0`}
         style={cssStyle}
         {...handlers}
