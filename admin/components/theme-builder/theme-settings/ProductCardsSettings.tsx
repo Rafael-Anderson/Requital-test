@@ -52,6 +52,13 @@ export default function ProductCardsSettings({ editor }: { editor: ThemeEditorSt
 
       <hr className="border-black/10 dark:border-white/10" />
 
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Show product descriptions</span>
+        <Toggle checked={productCards.showProductDescriptions} onChange={(v) => update({ showProductDescriptions: v })} />
+      </div>
+
+      <hr className="border-black/10 dark:border-white/10" />
+
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">Product name</p>
         <div className="space-y-3">

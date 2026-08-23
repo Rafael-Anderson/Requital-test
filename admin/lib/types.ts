@@ -1232,6 +1232,7 @@ export interface ProductCardSettings {
   productNameFontSize: number;
   productNameFontWeight: "regular" | "medium" | "bold";
   productNameColor: string;
+  showProductDescriptions: boolean;
 }
 
 export interface CollectionPageSettings {
@@ -1243,7 +1244,9 @@ export interface CollectionPageSettings {
   loadMoreStyle: "infinite" | "pagination";
   // Bug 6 fix: merchant-only "products per row" default, replacing what
   // used to be a customer-facing column selector on the live storefront.
-  columns: 2 | 3 | 4;
+  columns: 2 | 3 | 4 | 5 | 6;
+  // Undefined = automatic (desktopColumns <= 2 ? 1 : 2).
+  mobileColumns?: 1 | 2;
 }
 
 export interface SearchSettings {

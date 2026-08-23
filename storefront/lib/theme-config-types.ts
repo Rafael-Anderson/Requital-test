@@ -194,6 +194,7 @@ export interface ProductCardSettings {
   productNameFontSize: number;
   productNameFontWeight: "regular" | "medium" | "bold";
   productNameColor: string;
+  showProductDescriptions: boolean;
 }
 
 export interface CollectionPageSettings {
@@ -203,7 +204,9 @@ export interface CollectionPageSettings {
   fontSize: number;
   textColor: string;
   loadMoreStyle: "infinite" | "pagination";
-  columns: 2 | 3 | 4;
+  columns: 2 | 3 | 4 | 5 | 6;
+  // Undefined = automatic (desktopColumns <= 2 ? 1 : 2).
+  mobileColumns?: 1 | 2;
 }
 
 export interface SearchSettings {

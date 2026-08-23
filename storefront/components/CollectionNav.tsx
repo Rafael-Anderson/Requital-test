@@ -46,14 +46,6 @@ export default function CollectionNav() {
           <ChevronLeft className="size-4" />
         </button>
         <div ref={scrollRef} className="flex items-center gap-1 overflow-x-auto py-2 text-sm scroll-smooth">
-          <Link
-            href={shopBasePath || "/"}
-            className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
-              !activeSlug ? "bg-accent text-accent-foreground" : "text-zinc-600 hover:bg-mouse-over/10"
-            }`}
-          >
-            Home
-          </Link>
           {collections.map((c) => (
             <Link
               key={c.id}

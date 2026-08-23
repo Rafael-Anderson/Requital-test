@@ -103,7 +103,9 @@ export default function ProductCard({ product, orientation }: { product: Product
       <p className="text-sm font-semibold mt-1 text-product-name">
         <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} />
       </p>
-      {excerpt && <p className="mt-1 text-xs leading-snug line-clamp-2 text-price-main">{excerpt}</p>}
+      {productCards?.showProductDescriptions && excerpt && (
+        <p className="mt-1 text-xs leading-snug line-clamp-2 text-price-main">{excerpt}</p>
+      )}
     </Link>
   );
 }

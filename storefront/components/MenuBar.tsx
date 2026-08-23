@@ -199,9 +199,6 @@ export default function MenuBar() {
       {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
     >
       <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto">
-        <Link href={shopBasePath || "/"} className={linkClass}>
-          Home
-        </Link>
         {items.map((item) => (
           <MenuBarItem
             key={item.id}

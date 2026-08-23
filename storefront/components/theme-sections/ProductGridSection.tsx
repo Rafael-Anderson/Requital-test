@@ -12,11 +12,25 @@ import CurrencySymbol from "@/components/CurrencySymbol";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
-const COLUMNS_CLASS: Record<number, string> = {
+// Split into a mobile piece (overridable via settings.mobileColumns, see
+// mobileColumnsFor()) and a tablet/desktop piece - Tailwind classes must be
+// literal strings for the JIT scanner, not template-interpolated.
+const MOBILE_COLS_CLASS: Record<1 | 2, string> = {
+  1: "grid-cols-1",
   2: "grid-cols-2",
-  3: "grid-cols-2 sm:grid-cols-3",
-  4: "grid-cols-2 sm:grid-cols-4",
 };
+const DESKTOP_COLS_CLASS: Record<number, string> = {
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "sm:grid-cols-4",
+  5: "sm:grid-cols-5",
+  6: "sm:grid-cols-6",
+};
+
+function mobileColumnsFor(desktopColumns: number, explicit: unknown): 1 | 2 {
+  if (explicit === 1 || explicit === 2) return explicit;
+  return desktopColumns <= 2 ? 1 : 2;
+}
 
 const CARD_STYLE_CLASS: Record<string, string> = {
   minimal: "",
@@ -219,7 +233,9 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
       .catch(() => setProducts([]));
   }, [shopSlug, outletId, collectionId, productLimit, previewToken]);
 
-  const columns = COLUMNS_CLASS[(settings.columns as number) ?? 3] ?? COLUMNS_CLASS[3];
+  const desktopColumns = (settings.columns as number) ?? 3;
+  const mobileColumns = mobileColumnsFor(desktopColumns, settings.mobileColumns);
+  const columns = `${MOBILE_COLS_CLASS[mobileColumns]} ${DESKTOP_COLS_CLASS[desktopColumns] ?? DESKTOP_COLS_CLASS[3]}`;
   const cardStyle = CARD_STYLE_CLASS[(settings.cardStyle as string) ?? "minimal"] ?? "";
 
   const cardBlock = blocks.find((b) => b.type === "product_card" && b.visible);

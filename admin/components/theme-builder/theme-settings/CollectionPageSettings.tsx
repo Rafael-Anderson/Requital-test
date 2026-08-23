@@ -100,8 +100,25 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
             { value: "2", label: "2" },
             { value: "3", label: "3" },
             { value: "4", label: "4" },
+            { value: "5", label: "5" },
+            { value: "6", label: "6" },
           ]}
           onChange={(v) => update({ columns: Number(v) as CollectionPageSettingsType["columns"] })}
+        />
+      </div>
+
+      {/* Undefined = automatic (desktopColumns <= 2 ? 1 : 2) - see
+          storefront's collections/[slug]/page.tsx mobileColumnsFor(). */}
+      <div>
+        <span className="mb-1.5 block text-sm font-medium">Mobile columns</span>
+        <SegmentedToggle
+          value={settings.mobileColumns ? String(settings.mobileColumns) : "auto"}
+          options={[
+            { value: "auto", label: "Auto" },
+            { value: "1", label: "1" },
+            { value: "2", label: "2" },
+          ]}
+          onChange={(v) => update({ mobileColumns: v === "auto" ? undefined : (Number(v) as 1 | 2) })}
         />
       </div>
     </div>

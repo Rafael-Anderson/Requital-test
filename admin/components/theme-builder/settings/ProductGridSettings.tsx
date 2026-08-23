@@ -71,6 +71,17 @@ export default function ProductGridSettings({
         <option value="2">2</option>
         <option value="3">3</option>
         <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+      </Select>
+      <Select
+        label="Mobile columns"
+        value={settings.mobileColumns ? String(settings.mobileColumns) : "auto"}
+        onChange={(e) => onUpdate("mobileColumns", e.target.value === "auto" ? undefined : Number(e.target.value))}
+      >
+        <option value="auto">Auto</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
       </Select>
       <Select
         label="Card style"
