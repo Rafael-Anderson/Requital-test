@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ComponentType, type ReactNode } from "react";
+import EmptyState from "@/components/ui/EmptyState";
 import ElementSettingsPanel from "./ElementSettingsPanel";
 import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
@@ -216,7 +217,11 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   if (editor.editorMode === "theme_settings") {
     const category = editor.themeSettingsCategory;
     if (!category) {
-      return <p className="p-4 text-sm text-zinc-500">Select a category on the left to edit it.</p>;
+      return (
+        <div className="flex h-full items-center justify-center">
+          <EmptyState title="No category selected" description="Select a category on the left to edit it." />
+        </div>
+      );
     }
     const Component = THEME_SETTINGS_COMPONENTS[category as (typeof THEME_SETTINGS_CATEGORY_LABELS)[number]];
     return (
@@ -229,7 +234,11 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   if (editor.editorMode === "layout") {
     const category = editor.layoutCategory;
     if (!category) {
-      return <p className="p-4 text-sm text-zinc-500">Select a category on the left to edit it.</p>;
+      return (
+        <div className="flex h-full items-center justify-center">
+          <EmptyState title="No category selected" description="Select a category on the left to edit it." />
+        </div>
+      );
     }
     const Component = LAYOUT_COMPONENTS[category as (typeof THEME_LAYOUT_CATEGORY_LABELS)[number]];
     return (
@@ -240,7 +249,11 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   }
 
   if (!selection) {
-    return <p className="p-4 text-sm text-zinc-500">Select a section or block on the left to edit it.</p>;
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState title="No selection" description="Select a section or block on the left to edit it." />
+      </div>
+    );
   }
 
   if (selection.kind === "header") {

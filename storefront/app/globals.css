@@ -357,3 +357,21 @@ body {
     animation: none;
   }
 }
+
+/* Generic dropdown/select popover entrance (collection page's Sort by,
+   any future custom-rendered dropdown) — fade + slight downward slide,
+   distinct from theme-mega-panel-* above since those are tied to the mega
+   menu's own merchant-configurable "Menu animation" setting, not a
+   general-purpose utility. */
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dropdown-in {
+  animation: dropdown-in 0.14s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-in {
+    animation: none;
+  }
+}

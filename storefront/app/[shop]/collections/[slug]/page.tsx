@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search as SearchIcon } from "lucide-react";
+import { Check, ChevronDown, Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { getCollectionBySlug, listCollections, resolveImageUrl } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
@@ -26,13 +26,106 @@ const SORT_OPTIONS = [
 ] as const;
 type SortOption = (typeof SORT_OPTIONS)[number]["value"];
 
-const GRID_COLS: Record<2 | 3 | 4, string> = {
-  2: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-2",
-  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+// Split into a mobile piece and a tablet/desktop piece (Tailwind classes
+// must be literal strings for the JIT scanner, not built via template
+// interpolation) - see mobileColumnsFor() for the base-breakpoint rule.
+const DESKTOP_COLS_CLASS: Record<2 | 3 | 4 | 5 | 6, string> = {
+  2: "sm:grid-cols-2 lg:grid-cols-2",
+  3: "sm:grid-cols-2 lg:grid-cols-3",
+  4: "sm:grid-cols-2 lg:grid-cols-4",
+  5: "sm:grid-cols-2 lg:grid-cols-5",
+  6: "sm:grid-cols-2 lg:grid-cols-6",
+};
+const MOBILE_COLS_CLASS: Record<1 | 2, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
 };
 
+// Bug fix: this used to hardcode grid-cols-1 as the base breakpoint
+// regardless of the merchant's desktop column setting - a merchant's own
+// explicit mobileColumns wins when set; otherwise 4/3-column desktop grids
+// get 2 mobile columns and 2/1-column grids get 1, matching how the same
+// setting already behaves on real ecommerce themes.
+function mobileColumnsFor(desktopColumns: 2 | 3 | 4 | 5 | 6, explicit: 1 | 2 | undefined): 1 | 2 {
+  if (explicit) return explicit;
+  return desktopColumns <= 2 ? 1 : 2;
+}
+
 const PAGE_SIZE = 12;
+
+// Static merchant-driven background, not Tailwind's OS-driven dark: variant
+// — same fix already applied to lib/form-styles.ts's FIELD_CLASS/checkout's
+// own field styles. A prefers-color-scheme:dark visitor used to get a
+// near-black dark:bg-zinc-900 box on an otherwise light, merchant-themed
+// page (this page never opts into the dark: system elsewhere), reading as a
+// broken black input.
+const FILTER_FIELD_BG = "bg-[color-mix(in_srgb,var(--color-accent)_6%,var(--background))]";
+
+// Native <select> can't offer hover/selected states on its own option list
+// or an open animation (that's OS chrome, not CSS-controllable) — B10's ask
+// (themed background/border/text, hover+selected states, open animation)
+// structurally requires a hand-rolled dropdown, same shape as admin's
+// Combobox.tsx (trigger + absolute popover), themed with this app's CSS
+// vars instead of admin's fixed palette.
+function SortDropdown({ value, onChange }: { value: SortOption; onChange: (v: SortOption) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = SORT_OPTIONS.find((o) => o.value === value)!;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`flex h-9 items-center gap-2 rounded-lg border border-stroke ${FILTER_FIELD_BG} px-2 text-sm text-foreground cursor-pointer`}
+      >
+        <span>{selected.label}</span>
+        <ChevronDown className="size-3.5 text-zinc-400" />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className={`dropdown-in absolute left-0 top-full z-20 mt-1 w-44 rounded-lg border border-stroke ${FILTER_FIELD_BG} py-1 shadow-lg shadow-black/10`}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="option"
+              aria-selected={opt.value === value}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
+            >
+              <span>{opt.label}</span>
+              {opt.value === value && <Check className="size-3.5 shrink-0 text-accent" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function sortProducts(products: Product[], sort: SortOption): Product[] {
   const arr = [...products];
@@ -98,6 +191,7 @@ export default function CollectionPage() {
   // this was guarded (confirmed live against this shop's own unpublished
   // theme, not assumed).
   const columns = themeConfig?.globalSettings.collectionPage?.columns ?? 3;
+  const mobileColumns = mobileColumnsFor(columns, themeConfig?.globalSettings.collectionPage?.mobileColumns);
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -229,7 +323,7 @@ export default function CollectionPage() {
                 <select
                   value={collection.slug}
                   onChange={(e) => router.push(`${shopBasePath}/collections/${e.target.value}`)}
-                  className="h-9 rounded-lg border border-stroke bg-white dark:bg-zinc-900 px-2 text-sm"
+                  className={`h-9 rounded-lg border border-stroke ${FILTER_FIELD_BG} px-2 text-sm text-foreground`}
                 >
                   <option value={collection.slug}>{collection.name}</option>
                   {siblings.map((s) => (
@@ -240,20 +334,10 @@ export default function CollectionPage() {
                 </select>
               </label>
             )}
-            <label className="text-sm">
+            <div>
               <span className="block text-xs text-zinc-500 mb-1">Sort by</span>
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortOption)}
-                className="h-9 rounded-lg border border-stroke bg-white dark:bg-zinc-900 px-2 text-sm"
-              >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <SortDropdown value={sort} onChange={setSort} />
+            </div>
             {priceBounds[0] < priceBounds[1] && (
               <div>
                 <span className="block text-xs text-zinc-500 mb-1">Price</span>
@@ -272,7 +356,7 @@ export default function CollectionPage() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search this collection"
-                  className="h-9 w-44 rounded-lg border border-stroke bg-white dark:bg-zinc-900 pl-8 pr-2 text-sm"
+                  className={`h-9 w-44 rounded-lg border border-stroke ${FILTER_FIELD_BG} pl-8 pr-2 text-sm text-foreground`}
                 />
               </div>
             </label>
@@ -295,7 +379,7 @@ export default function CollectionPage() {
             ))}
           </div>
         ) : (
-          <div className={`grid ${GRID_COLS[columns]} gap-6`}>
+          <div className={`grid ${MOBILE_COLS_CLASS[mobileColumns]} ${DESKTOP_COLS_CLASS[columns]} gap-6`}>
             {visibleProducts.map((p) => (
               <ProductCard key={p.id} product={p} orientation="grid" />
             ))}

@@ -19,7 +19,7 @@ export default function SegmentedToggle<T extends string>({
     // wrap to a second line instead of pushing content past the card's
     // right edge; the tighter button padding buys a bit more headroom
     // before that wrap is ever needed.
-    <div className="flex flex-wrap rounded-lg border border-black/15 dark:border-white/15 p-0.5 gap-0.5">
+    <div className="flex w-fit flex-wrap rounded-lg border border-black/15 dark:border-white/15 p-0.5 gap-0.5">
       {options.map((opt) => (
         <button
           key={opt.value}

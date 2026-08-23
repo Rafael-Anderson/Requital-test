@@ -40,7 +40,7 @@ export default function DropdownMenu({
       {open && (
         <div
           role="menu"
-          className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full mt-2 w-52 rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 py-1.5 z-50`}
+          className={`popover-in absolute ${align === "right" ? "right-0" : "left-0"} top-full mt-2 w-52 rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 py-1.5 z-50`}
         >
           {children(() => setOpen(false))}
         </div>

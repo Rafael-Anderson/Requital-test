@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { STOREFRONT_URL, storefrontUrlFor, getAccessToken, listCollections, listProducts } from "@/lib/api";
 import SelectionActionBar from "./SelectionActionBar";
-import type { Shop } from "@/lib/types";
+import type { Shop, Collection, Product } from "@/lib/types";
 import {
   HEADER_CHROME_ID,
   FOOTER_CHROME_ID,
@@ -164,16 +164,20 @@ function PageSwitcher({
   searchQuery: string;
   setSearchQuery: (q: string) => void;
 }) {
-  const [collectionSlug, setCollectionSlug] = useState<string | null>(null);
-  const [productSlug, setProductSlug] = useState<string | null>(null);
+  // Bug 4's ask: show the actual collection/product being previewed by
+  // name, with a picker when more than one exists - fetch the full lists
+  // rather than just the first item of each, and group them under real
+  // <optgroup>s. A native <select> already renders grouped options and
+  // shows the matched option's own label as the closed-state text for
+  // free, so there's no need for a hand-rolled dropdown here the way B10's
+  // storefront Sort-by needed one (that one needed custom hover/animation
+  // styling a native popup can't offer; this one just needs real names).
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
-    listCollections()
-      .then((cs) => setCollectionSlug(cs[0]?.slug ?? null))
-      .catch(() => setCollectionSlug(null));
-    listProducts()
-      .then((ps) => setProductSlug(ps[0]?.slug ?? null))
-      .catch(() => setProductSlug(null));
+    listCollections().then(setCollections).catch(() => setCollections([]));
+    listProducts().then(setProducts).catch(() => setProducts([]));
   }, []);
 
   return (
@@ -182,15 +186,27 @@ function PageSwitcher({
       <select
         value={previewPath}
         onChange={(e) => setPreviewPath(e.target.value)}
-        className="h-8 rounded-lg border border-black/10 bg-surface px-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+        className="h-8 max-w-56 rounded-lg border border-black/10 bg-surface px-2 text-sm dark:border-white/15 dark:bg-zinc-900"
       >
         <option value="">Home</option>
-        <option value={`/collections/${collectionSlug}`} disabled={!collectionSlug}>
-          Collection page{collectionSlug ? "" : " (no collections yet)"}
-        </option>
-        <option value={`/products/${productSlug}`} disabled={!productSlug}>
-          Product page{productSlug ? "" : " (no products yet)"}
-        </option>
+        {collections.length > 0 && (
+          <optgroup label="Collections">
+            {collections.map((c) => (
+              <option key={c.id} value={`/collections/${c.slug}`}>
+                {c.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {products.length > 0 && (
+          <optgroup label="Products">
+            {products.map((p) => (
+              <option key={p.id} value={`/products/${p.slug}`}>
+                {p.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
       <SettingsSearchBox value={searchQuery} onChange={setSearchQuery} />
     </div>

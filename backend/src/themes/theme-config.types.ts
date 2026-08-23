@@ -249,6 +249,9 @@ export interface ProductCardSettings {
   productNameFontSize: number;
   productNameFontWeight: 'regular' | 'medium' | 'bold';
   productNameColor: string;
+  // Default off - matches the cleaner-look default the grid already shipped
+  // with (a short excerpt under every card), a merchant opts in explicitly.
+  showProductDescriptions: boolean;
 }
 
 // storefront-v2 Phase 2C/2D — settings for the standalone collection
@@ -268,7 +271,11 @@ export interface CollectionPageSettings {
   // storefront collection page - a merchant-only layout choice mistakenly
   // exposed to shoppers. Now a fixed default the merchant sets here; the
   // storefront no longer offers any way to change it.
-  columns: 2 | 3 | 4;
+  columns: 2 | 3 | 4 | 5 | 6;
+  // Undefined/null = automatic (desktopColumns <= 2 ? 1 : 2) - the grid
+  // used to hardcode a single mobile column regardless of this setting;
+  // this lets a merchant override that mapping explicitly.
+  mobileColumns?: 1 | 2;
 }
 
 export interface SearchSettings {
