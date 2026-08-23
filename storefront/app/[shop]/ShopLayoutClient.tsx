@@ -15,6 +15,7 @@ import Footer from "@/components/Footer";
 import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
+import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
 
 // Whether the MenuBar row shows: a themed shop's own nav_menu header block
@@ -145,7 +146,12 @@ function Body({ children }: { children: React.ReactNode }) {
       <Footer />
       <WhatsAppFloatingButton />
       <CookieConsentBanner />
-      {previewMode && <PreviewInteraction />}
+      {previewMode && (
+        <>
+          <PreviewImageDragGuard />
+          <PreviewInteraction />
+        </>
+      )}
     </>
   );
 }
