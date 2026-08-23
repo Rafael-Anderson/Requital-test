@@ -217,7 +217,7 @@ export default function PreviewFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, publishVersion, isDragging, previewPath, setPreviewPath, settingsSearchQuery, setSettingsSearchQuery } = editor;
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections, publishVersion, isDragging, previewPath, setPreviewPath, settingsSearchQuery, setSettingsSearchQuery } = editor;
   // The reverse-channel listener below reads this instead of closing over
   // `config` directly, so that effect doesn't need `config` in its
   // dependency array — without this, the listener would tear down and
@@ -259,10 +259,31 @@ export default function PreviewFrame({
     }
   }, [src]);
 
+  // Guards the two debounced postMessage calls below (and the reverse-
+  // channel listener's own reliance on previewOrigin) against a real race:
+  // a `src` change starts a genuine cross-document navigation, but
+  // `iframeRef.current.contentWindow` still points at the outgoing
+  // document (often still `about:blank`, same-origin as this admin page)
+  // until the new document actually finishes loading. A debounced post
+  // firing in that window targets `previewOrigin` (the NEW document's
+  // origin) against a `contentWindow` that isn't there yet, which throws
+  // "target origin ... does not match the recipient window's origin"
+  // synchronously — confirmed live via puppeteer during the DnD
+  // investigation this guard came out of. Harmless in that the next
+  // `onLoad` resync (handleIframeLoad below) always recovers it, but it's
+  // an uncaught throw and a noisy console error in the meantime. Reset to
+  // false on every src change (navigation just started, not loaded yet),
+  // set true once handleIframeLoad's `load` event actually fires.
+  const iframeReadyRef = useRef(false);
+  useEffect(() => {
+    iframeReadyRef.current = false;
+  }, [src]);
+
   useEffect(() => {
     if (!config || !previewOrigin) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      if (!iframeReadyRef.current) return;
       iframeRef.current?.contentWindow?.postMessage(
         { type: "theme-config-update", config },
         previewOrigin,
@@ -288,6 +309,7 @@ export default function PreviewFrame({
     if (!legacyTheme || !previewOrigin) return;
     if (legacyDebounceRef.current) clearTimeout(legacyDebounceRef.current);
     legacyDebounceRef.current = setTimeout(() => {
+      if (!iframeReadyRef.current) return;
       iframeRef.current?.contentWindow?.postMessage(
         { type: "legacy-theme-update", legacyTheme },
         previewOrigin,
@@ -330,6 +352,40 @@ export default function PreviewFrame({
         selectNode(null);
         return;
       }
+      // Top-level section drag (SectionWrapper.tsx, preview-mode only) —
+      // reuses the same element-moved message type the block-drag system
+      // below already sends, discriminated by `kind: "section"` rather than
+      // routed through a second listener, per this feature's own scope (no
+      // changes to PreviewInteraction.tsx's block-drag grouping, which has
+      // no concept of "the top-level list of sections" to teach it).
+      // Deliberately self-contained-in-iframe like the block system (one
+      // committed message per drop, not a live coordinate stream) — the
+      // iframe only knows its own visible siblings, so it reports intent
+      // (move `sectionId` before/after `targetSectionId`) rather than a
+      // full ordered id list; the full list (including any hidden
+      // sections a visible-only view can't see) is assembled here from
+      // configRef, then handed to reorderSections — the exact same
+      // immediate-save path SectionTree.tsx's own sidebar drag already
+      // uses, so both paths produce the same saved order.
+      if (
+        data.type === "element-moved" &&
+        data.kind === "section" &&
+        typeof data.sectionId === "string" &&
+        typeof data.targetSectionId === "string" &&
+        typeof data.before === "boolean"
+      ) {
+        const all = [...(configRef.current?.sections ?? [])].sort((a, b) => a.order - b.order);
+        const dragged = all.find((s) => s.id === data.sectionId);
+        const withoutDragged = all.filter((s) => s.id !== data.sectionId);
+        const targetIndex = withoutDragged.findIndex((s) => s.id === data.targetSectionId);
+        if (dragged && targetIndex !== -1) {
+          const insertAt = data.before ? targetIndex : targetIndex + 1;
+          const reordered = [...withoutDragged];
+          reordered.splice(insertAt, 0, dragged);
+          reorderSections(reordered.map((s) => s.id));
+        }
+        return;
+      }
       if (
         data.type === "element-moved" &&
         typeof data.sectionId === "string" &&
@@ -351,7 +407,7 @@ export default function PreviewFrame({
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [previewOrigin, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks]);
+  }, [previewOrigin, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections]);
 
   // The iframe's own `load` event only fires for a genuine new-document
   // load — the initial src load, or a real full navigation/reload inside
@@ -368,6 +424,7 @@ export default function PreviewFrame({
   // current values immediately (no debounce — this is a one-shot resync,
   // not a rapid-edit stream) on every load closes that gap.
   function handleIframeLoad() {
+    iframeReadyRef.current = true;
     if (!previewOrigin) return;
     if (config) {
       iframeRef.current?.contentWindow?.postMessage({ type: "theme-config-update", config }, previewOrigin);
