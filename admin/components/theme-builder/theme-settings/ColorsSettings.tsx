@@ -52,8 +52,19 @@ export default function ColorsSettings({ editor }: { editor: ThemeEditorState })
       </div>
 
       {selected && (
-        <div className="space-y-3 rounded-lg border border-black/10 p-3 dark:border-white/10">
-          <div className="flex items-end gap-2">
+        <>
+          {/* Each field below is its own direct child of this component's
+              root, not nested inside a shared wrapper — SettingsPanel.tsx's
+              useSettingsSearchFilter only inspects one level of children, so
+              a shared wrapper around all 5 color fields (the original
+              layout) made the whole group show/hide as one unit instead of
+              filtering per-field, e.g. searching "Text" also kept
+              "Button"/"Background" visible since the wrapper's own combined
+              textContent matched. A thin top border on this first row (+
+              matching bottom spacing) stands in for the removed bordered
+              card, since the filter also can't see into a wrapping div used
+              purely for visual grouping. */}
+          <div className="flex items-end gap-2 pt-3 border-t border-black/10 dark:border-white/10">
             <Input
               label="Name"
               value={selected.name}
@@ -81,7 +92,7 @@ export default function ColorsSettings({ editor }: { editor: ThemeEditorState })
               />
             </div>
           ))}
-        </div>
+        </>
       )}
 
       <LegacyColorsSettings />
