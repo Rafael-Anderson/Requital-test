@@ -697,14 +697,39 @@ describe('Reports (e2e)', () => {
       expect(row.status).toBe('delivered');
     });
 
-    it('is admin-only for both logging and the report; branch users get 403', async () => {
+    // Logging (POST) stays admin-only, unchanged. The report (GET) was
+    // deliberately widened to branch/order_manager (see
+    // ReportsController's method-level @Roles override, Orders >
+    // External Delivery tab) — this also proves the accompanying
+    // outlet-scoping fix (ReportsService.listExternalDeliveries now runs
+    // its outletId through resolveOutletFilter): a branch user pinned to
+    // outletA must never see outletB's delivery, even though
+    // buildOrderWhere itself has no such auto-scoping built in.
+    it('logging stays admin-only (403 for branch); the report is readable by branch but stays scoped to their own outlet', async () => {
       const shop = await setupShop('extdelivery-perm');
-      const order = await request(app.getHttpServer())
+      const orderA = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send(orderPayload(shop.outletAId, shop.productId, 1))
         .expect(201);
-      const orderId = body<IdRow>(order).id;
+      const orderAId = body<IdRow>(orderA).id;
+      const orderB = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletBId, shop.productId, 1))
+        .expect(201);
+      const orderBId = body<IdRow>(orderB).id;
+
+      await request(app.getHttpServer())
+        .post(`/orders/${orderAId}/external-delivery`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ carrier: 'Careem A', price: 15, destination: 'Downtown Dubai' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/orders/${orderBId}/external-delivery`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ carrier: 'Careem B', price: 25, destination: 'Marina' })
+        .expect(201);
 
       await request(app.getHttpServer())
         .post('/auth/branch-users')
@@ -725,15 +750,26 @@ describe('Reports (e2e)', () => {
         .expect(201);
       const branchToken = body<AuthResponse>(login).accessToken;
 
+      // Logging is still admin-only.
       await request(app.getHttpServer())
-        .post(`/orders/${orderId}/external-delivery`)
+        .post(`/orders/${orderAId}/external-delivery`)
         .set('Authorization', `Bearer ${branchToken}`)
         .send({ carrier: 'Careem', price: 15, destination: 'Downtown Dubai' })
         .expect(403);
-      await request(app.getHttpServer())
+
+      // The report itself is now readable...
+      const report = await request(app.getHttpServer())
         .get('/reports/external-delivery')
         .set('Authorization', `Bearer ${branchToken}`)
-        .expect(403);
+        .expect(200);
+      const carriers = body<ExternalDeliveryListBody>(report).data.map(
+        (r) => r.carrier,
+      );
+      // ...but scoped to the branch's own outlet — the sibling outlet's
+      // delivery must never leak in, even though the branch user never
+      // supplied an outletId filter of their own.
+      expect(carriers).toContain('Careem A');
+      expect(carriers).not.toContain('Careem B');
     });
 
     it("a shop cannot log an external delivery on another shop's order, and never sees it in its own report", async () => {

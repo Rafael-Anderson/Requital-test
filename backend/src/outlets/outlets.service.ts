@@ -10,6 +10,7 @@ import { buildSetClause } from '../database/update.util';
 import type { OutletRow } from '../db/types';
 import { CreateOutletDto } from './dto/create-outlet.dto';
 import { UpdateOutletDto } from './dto/update-outlet.dto';
+import { UpdateOutletStatusDto } from './dto/update-outlet-status.dto';
 import { computeIsOpen } from './outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import type { TenantContext } from '../common/tenant-context';
@@ -166,6 +167,45 @@ export class OutletsService {
       pickupEnabled: dto.pickupEnabled,
       deliveryEnabled: dto.deliveryEnabled,
       deliveryRadiusKm: dto.deliveryRadiusKm,
+    });
+    if (set) {
+      await this.db.execute(`UPDATE outlet SET ${set.setClause} WHERE id = ?`, [
+        ...set.params,
+        id,
+      ]);
+    }
+    const rows = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ?`,
+      [id],
+    );
+    return rows[0];
+  }
+
+  // Branch Status tab's write path — deliberately narrower than update()
+  // above: only the two accepting-orders toggles, reachable by
+  // branch/order_manager (not just admin), never touching the rest of the
+  // outlet record. A branch user may only flip their OWN outlet — checked
+  // explicitly here (id !== ctx.outletId), not via a spread that could
+  // silently be overwritten last, per the documented outlets.service.ts
+  // gotcha (see CLAUDE.md's "Tenant isolation" section). An admin/
+  // order_manager isn't outlet-pinned, so the shop-boundary check in
+  // assertBelongsToShop is sufficient for them.
+  async updateStatus(ctx: TenantContext, id: number, dto: UpdateOutletStatusDto) {
+    const current = await this.assertBelongsToShop(ctx, id);
+    if (ctx.role === 'branch' && id !== ctx.outletId) {
+      throw new NotFoundException(`Outlet ${id} not found`);
+    }
+
+    this.validateDelivery(
+      dto.deliveryEnabled ?? current.deliveryEnabled,
+      current.deliveryRadiusKm,
+      current.latitude,
+      current.longitude,
+    );
+
+    const set = buildSetClause({
+      pickupEnabled: dto.pickupEnabled,
+      deliveryEnabled: dto.deliveryEnabled,
     });
     if (set) {
       await this.db.execute(`UPDATE outlet SET ${set.setClause} WHERE id = ?`, [

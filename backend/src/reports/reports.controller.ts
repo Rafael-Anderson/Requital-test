@@ -61,6 +61,14 @@ export class ReportsController {
     return this.reportsService.listProductSales(ctx, query);
   }
 
+  // Method-level @Roles overrides the controller's own admin+viewer gate
+  // for this one route — surfaced on the Orders > External Delivery tab,
+  // which every role that can view Orders should reach (see
+  // OrdersController's own class comment), not just admin/viewer. Doesn't
+  // widen access to any other Reports route. See
+  // ReportsService.listExternalDeliveries for the accompanying
+  // branch-outlet-scoping fix this widening required.
+  @Roles('admin', 'branch', 'order_manager', 'viewer')
   @Get('external-delivery')
   listExternalDeliveries(
     @CurrentUser() ctx: TenantContext,

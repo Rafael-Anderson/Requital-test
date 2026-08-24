@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
+import { resolveOutletFilter } from '../common/outlet-scope';
 import { ReportsFilterQueryDto } from './dto/reports-filter-query.dto';
 import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
 import { ListProductSalesQueryDto } from './dto/list-product-sales-query.dto';
@@ -209,9 +210,17 @@ export class ReportsService {
     const searchAsId =
       search && /^\d+$/.test(search) ? Number(search) : undefined;
 
+    // buildOrderWhere only filters by outletId when the caller explicitly
+    // requests one — it never auto-scopes a branch user to their own
+    // outlet the way outlet-scoped modules (orders, dashboard, stock) do.
+    // Every other Reports route is admin/viewer-only (never 'branch'), so
+    // this was never a gap until this route opened up to branch/
+    // order_manager — resolveOutletFilter is the same forcing rule every
+    // other outlet-scoped read already goes through, applied here so a
+    // branch user can't omit outletId and see every outlet's deliveries.
     const { sql: orderWhereSql, params: orderWhereParams } = this.buildOrderWhere(
       ctx,
-      query,
+      { ...query, outletId: resolveOutletFilter(ctx, query.outletId) },
       'o',
     );
     let sql = orderWhereSql;
