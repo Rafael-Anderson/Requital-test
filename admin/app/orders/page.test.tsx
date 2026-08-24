@@ -23,6 +23,16 @@ vi.mock("@/lib/outlet-context", () => ({
 
 vi.mock("@/components/OutletSwitcher", () => ({ default: () => null }));
 
+// The page's ?orderId= deep-link support (NewOrderBanner's "View order"
+// action) needs useSearchParams(), which throws outside a real Next router
+// context — mocked here the same way every other reason to touch this page
+// stays test-friendly, rather than pulling in Next's router test harness
+// for one hook.
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/orders",
+}));
+
 vi.mock("@/components/OrderDetailModal", () => ({
   default: ({ orderId }: { orderId: number | null }) =>
     orderId === null ? null : <div>ADVANCED-MODAL-{orderId}</div>,
