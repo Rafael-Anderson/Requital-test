@@ -1,15 +1,14 @@
 "use client";
 
-import { Info, MapPin, Truck, Map, Package, QrCode } from "lucide-react";
+import { Info, MapPin, Truck, Package, QrCode } from "lucide-react";
 import Toggle from "@/components/ui/Toggle";
 
-export type OutletEditTab = "basic" | "address" | "delivery" | "deliveryArea" | "pickup" | "qr";
+export type OutletEditTab = "basic" | "address" | "delivery" | "pickup" | "qr";
 
 const TABS: { id: OutletEditTab; label: string; sublabel: string; icon: typeof Info }[] = [
   { id: "basic", label: "Basic Information", sublabel: "Name, contact & hours", icon: Info },
   { id: "address", label: "Address", sublabel: "Location & coordinates", icon: MapPin },
-  { id: "delivery", label: "Delivery", sublabel: "Radius & availability", icon: Truck },
-  { id: "deliveryArea", label: "Delivery Area", sublabel: "Zones & coverage", icon: Map },
+  { id: "delivery", label: "Delivery", sublabel: "Availability & zones", icon: Truck },
   { id: "pickup", label: "Pickup", sublabel: "In-store template", icon: Package },
   { id: "qr", label: "QR", sublabel: "Storefront QR code", icon: QrCode },
 ];

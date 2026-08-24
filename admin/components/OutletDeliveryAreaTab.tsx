@@ -46,12 +46,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">Delivery Zones</h3>
-          <p className="text-xs text-text-faint mt-0.5">
-            Flat-fee named areas, additive to the radius set on the Delivery tab.
-          </p>
-        </div>
+        <h3 className="text-sm font-semibold">Delivery Zones</h3>
         <Button variant="primary" onClick={() => setEditingZone("new")}>
           <Plus className="size-4 inline -mt-0.5 mr-1" />
           New Zone

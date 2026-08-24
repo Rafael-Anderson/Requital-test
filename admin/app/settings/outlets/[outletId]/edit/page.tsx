@@ -10,7 +10,6 @@ import OutletEditSidebar, { type OutletEditTab } from "@/components/OutletEditSi
 import OutletBasicInfoTab from "@/components/OutletBasicInfoTab";
 import OutletAddressTab from "@/components/OutletAddressTab";
 import OutletDeliveryTab from "@/components/OutletDeliveryTab";
-import OutletDeliveryAreaTab from "@/components/OutletDeliveryAreaTab";
 import OutletPickupTab from "@/components/OutletPickupTab";
 import OutletQrTab from "@/components/OutletQrTab";
 import PageShell from "@/components/ui/PageShell";
@@ -72,7 +71,6 @@ export default function EditOutletPage() {
               {activeTab === "basic" && <OutletBasicInfoTab outlet={outlet} onSaved={refresh} />}
               {activeTab === "address" && <OutletAddressTab outlet={outlet} onSaved={refresh} />}
               {activeTab === "delivery" && <OutletDeliveryTab outlet={outlet} onSaved={refresh} />}
-              {activeTab === "deliveryArea" && <OutletDeliveryAreaTab outletId={outlet.id} />}
               {activeTab === "pickup" && <OutletPickupTab outlet={outlet} onSaved={refresh} />}
               {activeTab === "qr" && <OutletQrTab outlet={outlet} />}
             </div>

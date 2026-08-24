@@ -11,6 +11,11 @@ vi.mock("@/lib/api", () => ({
   getShop: vi.fn(),
   updateOutlet: vi.fn(),
   updateShop: vi.fn(),
+  // OutletDeliveryTab now embeds OutletDeliveryAreaTab (the merged
+  // Delivery/Delivery Area tabs) directly, which fetches this on mount.
+  listDeliveryZones: vi.fn().mockResolvedValue([]),
+  deleteDeliveryZone: vi.fn(),
+  updateDeliveryZone: vi.fn(),
 }));
 import { getShop } from "@/lib/api";
 
