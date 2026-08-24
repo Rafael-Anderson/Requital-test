@@ -284,14 +284,27 @@ export default function PreviewInteraction() {
       // every current and future taggable component to remember it. See
       // the file-level comment on why pointer-events:auto alone isn't
       // sufficient for this.
+      //
+      // stopPropagation is load-bearing, not defensive: every section is
+      // wrapped by SectionWrapper.tsx, which has its own bubble-phase
+      // onClick that posts theme-section-selected for the WHOLE section on
+      // any click inside it. Without stopping propagation here, a click on
+      // a tagged block (this branch) still bubbles up to that handler right
+      // after selecting the block, and the admin's PreviewFrame.tsx
+      // processes that second message by overwriting the just-made block
+      // selection with the section — which is why SelectionActionBar.tsx's
+      // Settings/Delete bar (gated on editor.selection.kind === "block")
+      // and the block's own text-editing panel never appeared: every block
+      // click was silently promoted to a section click one tick later.
       // eslint-disable-next-line no-console
-      console.log("[PREVIEW-DIAG] click: editable element found, calling preventDefault", {
+      console.log("[PREVIEW-DIAG] click: editable element found, calling preventDefault+stopPropagation", {
         id: el.dataset.requitalId,
         sectionId: el.dataset.requitalSection,
         elementType: el.dataset.requitalType,
         reorderable: el.dataset.requitalReorderable,
       });
       e.preventDefault();
+      e.stopPropagation();
       const id = el.dataset.requitalId;
       const sectionId = el.dataset.requitalSection;
       const elementType = el.dataset.requitalType;
