@@ -333,6 +333,15 @@ export default function PreviewFrame({
     }
   }, [src]);
 
+  // [PREVIEW-DIAG] Fires whenever the Preview page dropdown (or anything
+  // else touching previewPath/theme.id) changes the iframe's target URL —
+  // logs the full resolved URL including query params, so we can confirm
+  // or rule out "the dropdown drops preview=true/themeId/previewToken."
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG:admin] preview src changed", { previewPath, src, previewOrigin });
+  }, [previewPath, src, previewOrigin]);
+
   // Guards the two debounced postMessage calls below (and the reverse-
   // channel listener's own reliance on previewOrigin) against a real race:
   // a `src` change starts a genuine cross-document navigation, but
@@ -430,25 +439,52 @@ export default function PreviewFrame({
   // there's nothing extra to store.
   useEffect(() => {
     if (!previewOrigin) return;
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG:admin] registering window message listener", { previewOrigin });
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== previewOrigin) return;
+      const originMatch = event.origin === previewOrigin;
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG:admin] message received", {
+        originReceived: event.origin,
+        originExpected: previewOrigin,
+        originMatch,
+      });
+      if (!originMatch) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] message REJECTED: origin mismatch", { originReceived: event.origin, originExpected: previewOrigin });
+        return;
+      }
       const data = event.data;
-      if (!data || typeof data !== "object") return;
+      if (!data || typeof data !== "object") {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] message REJECTED: data is not an object", { data });
+        return;
+      }
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG:admin] message data", { type: data.type, data });
 
       if (data.type === "theme-section-selected" && typeof data.sectionId === "string") {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] handled: theme-section-selected", { sectionId: data.sectionId });
         selectNode(data.sectionId);
         return;
       }
       if (data.type === "element-selected" && typeof data.elementId === "string") {
         if (data.elementId === PRODUCT_CARDS_SENTINEL_ID) {
+          // eslint-disable-next-line no-console
+          console.log("[PREVIEW-DIAG:admin] handled: element-selected (product cards sentinel)");
           setEditorMode("theme_settings");
           setThemeSettingsCategory("Product cards");
           return;
         }
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] handled: element-selected", { elementId: data.elementId });
         selectNode(data.elementId);
         return;
       }
       if (data.type === "element-deselected") {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] handled: element-deselected");
         selectNode(null);
         return;
       }
@@ -474,6 +510,8 @@ export default function PreviewFrame({
         typeof data.targetSectionId === "string" &&
         typeof data.before === "boolean"
       ) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] handled: element-moved (section)", { sectionId: data.sectionId, targetSectionId: data.targetSectionId, before: data.before });
         const all = [...(configRef.current?.sections ?? [])].sort((a, b) => a.order - b.order);
         const dragged = all.find((s) => s.id === data.sectionId);
         const withoutDragged = all.filter((s) => s.id !== data.sectionId);
@@ -484,6 +522,9 @@ export default function PreviewFrame({
           reordered.splice(insertAt, 0, dragged);
           const updated = reorderSections(reordered.map((s) => s.id));
           if (updated) postConfigImmediate(updated);
+        } else {
+          // eslint-disable-next-line no-console
+          console.log("[PREVIEW-DIAG:admin] element-moved (section): dragged or target not found in configRef", { draggedFound: !!dragged, targetIndex });
         }
         return;
       }
@@ -493,6 +534,8 @@ export default function PreviewFrame({
         Array.isArray(data.orderedIds) &&
         data.orderedIds.every((id: unknown) => typeof id === "string")
       ) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG:admin] handled: element-moved (block)", { sectionId: data.sectionId, orderedIds: data.orderedIds });
         const container: BlockContainerRef =
           data.sectionId === HEADER_CHROME_ID
             ? { kind: "header" }
@@ -505,10 +548,17 @@ export default function PreviewFrame({
                 };
         const updated = reorderBlocks(container, null, data.orderedIds as string[]);
         if (updated) postConfigImmediate(updated);
+        return;
       }
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG:admin] message REJECTED: no handler matched this type/shape", { type: data.type, data });
     }
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    return () => {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG:admin] unregistering window message listener", { previewOrigin });
+      window.removeEventListener("message", handleMessage);
+    };
   }, [previewOrigin, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections]);
 
   // The iframe's own `load` event only fires for a genuine new-document
@@ -526,6 +576,13 @@ export default function PreviewFrame({
   // current values immediately (no debounce — this is a one-shot resync,
   // not a rapid-edit stream) on every load closes that gap.
   function handleIframeLoad() {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG:admin] iframe onLoad fired", {
+      newSrc: iframeRef.current?.src,
+      previewOrigin,
+      hasConfig: !!config,
+      hasLegacyTheme: !!legacyTheme,
+    });
     iframeReadyRef.current = true;
     if (!previewOrigin) return;
     if (config) {
