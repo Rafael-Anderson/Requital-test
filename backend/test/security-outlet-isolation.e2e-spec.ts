@@ -510,6 +510,56 @@ describe('Outlet & shop isolation (e2e)', () => {
     });
   });
 
+  // New write surface (Orders > Branch Status tab, see UpdateOutletStatusDto's
+  // own comment) — reachable by branch/order_manager, unlike the rest of
+  // outlets.controller.ts's mutations. assertBelongsToShop alone isn't
+  // enough for this one (it's the same helper the admin-only endpoints use,
+  // which never needed a branch-outlet-pin check) — these prove the extra
+  // `ctx.role === 'branch' && id !== ctx.outletId` guard added alongside it
+  // actually holds.
+  describe('PATCH /outlets/:id/status (Branch Status tab)', () => {
+    it('the outletA1 branch account can toggle its own outlet', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/outlets/${outletA1Id}/status`)
+        .set('Authorization', `Bearer ${shopABranchToken}`)
+        .send({ pickupEnabled: false })
+        .expect(200);
+      expect(body<{ pickupEnabled: boolean }>(res).pickupEnabled).toBe(false);
+
+      // Restore, so later tests in this file aren't affected by this toggle.
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletA1Id}/status`)
+        .set('Authorization', `Bearer ${shopABranchToken}`)
+        .send({ pickupEnabled: true })
+        .expect(200);
+    });
+
+    it("the outletA1 branch account gets 404 toggling outletA2, and A2's row is untouched", async () => {
+      const beforeRows = await db.query<RowDataPacket[]>(
+        `SELECT pickupEnabled FROM outlet WHERE id = ?`,
+        [outletA2Id],
+      );
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletA2Id}/status`)
+        .set('Authorization', `Bearer ${shopABranchToken}`)
+        .send({ pickupEnabled: false })
+        .expect(404);
+      const afterRows = await db.query<RowDataPacket[]>(
+        `SELECT pickupEnabled FROM outlet WHERE id = ?`,
+        [outletA2Id],
+      );
+      expect(afterRows[0].pickupEnabled).toBe(beforeRows[0].pickupEnabled);
+    });
+
+    it("Shop A admin cannot toggle Shop B's outlet by id", async () => {
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletB1Id}/status`)
+        .set('Authorization', `Bearer ${shopAAdminToken}`)
+        .send({ pickupEnabled: false })
+        .expect(404);
+    });
+  });
+
   describe("The same branch account's unspoofed requests still work correctly", () => {
     it("GET /orders (no outletId) returns A1's order", async () => {
       const res = await request(app.getHttpServer())

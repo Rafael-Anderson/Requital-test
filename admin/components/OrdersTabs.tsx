@@ -12,6 +12,12 @@ const ALL_TABS: (TabItem & { roles: UserRole[] | null })[] = [
   // never appears for a role that would just 403 clicking it.
   { href: "/orders/draft-orders", label: "Draft Orders", roles: ["admin", "order_manager"] },
   { href: "/orders/abandoned-carts", label: "Abandoned Carts", roles: ["admin"] },
+  // Both reachable by every role that can view Orders — no roles
+  // restriction, same as Live Orders/Order History above. Mirrors the
+  // backend's own @Roles on PATCH /outlets/:id/status and the
+  // method-level override on GET /reports/external-delivery.
+  { href: "/orders/branch-status", label: "Branch Status", roles: null },
+  { href: "/orders/external-delivery", label: "External Delivery", roles: null },
 ];
 
 export default function OrdersTabs() {

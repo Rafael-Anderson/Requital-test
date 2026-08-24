@@ -489,6 +489,16 @@ export function deleteOutlet(id: number) {
   return apiFetch<{ id: number; deleted: boolean }>(`/outlets/${id}`, { method: "DELETE" });
 }
 
+// Narrower than updateOutlet — backs the Orders > Branch Status tab, which
+// only needs to flip the two accepting-orders toggles and is reachable by
+// branch/order_manager, not just admin (see PATCH /outlets/:id/status).
+export function updateOutletStatus(
+  id: number,
+  data: Partial<{ pickupEnabled: boolean; deliveryEnabled: boolean }>,
+) {
+  return apiFetch<Outlet>(`/outlets/${id}/status`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
 export interface DeliveryZoneInput {
   name: string;
   fee: number;
