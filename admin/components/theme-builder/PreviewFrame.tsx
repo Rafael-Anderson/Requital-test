@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Search, X, ChevronDown, Check } from "lucide-react";
 import { STOREFRONT_URL, storefrontUrlFor, getAccessToken, listCollections, listProducts } from "@/lib/api";
 import SelectionActionBar from "./SelectionActionBar";
+import DropdownMenu from "@/components/ui/DropdownMenu";
 import type { Shop, Collection, Product } from "@/lib/types";
 import {
   HEADER_CHROME_ID,
@@ -166,12 +167,15 @@ function PageSwitcher({
 }) {
   // Bug 4's ask: show the actual collection/product being previewed by
   // name, with a picker when more than one exists - fetch the full lists
-  // rather than just the first item of each, and group them under real
-  // <optgroup>s. A native <select> already renders grouped options and
-  // shows the matched option's own label as the closed-state text for
-  // free, so there's no need for a hand-rolled dropdown here the way B10's
-  // storefront Sort-by needed one (that one needed custom hover/animation
-  // styling a native popup can't offer; this one just needs real names).
+  // rather than just the first item of each, grouped under "Collections"/
+  // "Products" headers. Originally a native <select>+<optgroup> (grouping
+  // and the matched option's own label as closed-state text come free from
+  // the platform) - rebuilt as a real DropdownMenu because a native
+  // popup's option list can't be given a minimum width, per-row padding,
+  // muted/smaller group headers, indentation, or an open animation, all of
+  // which are OS chrome the platform doesn't expose to CSS. B10's
+  // storefront Sort-by needed the same kind of hand-rolled dropdown for
+  // the identical reason.
   const [collections, setCollections] = useState<Collection[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
@@ -180,34 +184,87 @@ function PageSwitcher({
     listProducts().then(setProducts).catch(() => setProducts([]));
   }, []);
 
+  const currentLabel =
+    previewPath === ""
+      ? "Home"
+      : (collections.find((c) => `/collections/${c.slug}` === previewPath)?.name ??
+        products.find((p) => `/products/${p.slug}` === previewPath)?.name ??
+        "Home");
+
+  function Option({ value, label, onSelect }: { value: string; label: string; onSelect: () => void }) {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+      >
+        <span className="truncate">{label}</span>
+        {previewPath === value && <Check className="size-3.5 shrink-0 text-accent" />}
+      </button>
+    );
+  }
+
+  function GroupHeader({ children }: { children: ReactNode }) {
+    return (
+      <p className="mt-3 mb-1 px-3 text-[11px] font-medium uppercase tracking-wide text-zinc-400 first:mt-0">
+        {children}
+      </p>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 border-b border-black/10 bg-white px-4 py-2 dark:border-white/10 dark:bg-zinc-900">
       <span className="text-xs font-medium text-zinc-500">Preview page</span>
-      <select
-        value={previewPath}
-        onChange={(e) => setPreviewPath(e.target.value)}
-        className="h-8 max-w-56 rounded-lg border border-black/10 bg-surface px-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+      <DropdownMenu
+        align="left"
+        panelClassName="min-w-[240px] max-h-96 overflow-y-auto"
+        trigger={({ toggle }) => (
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex h-8 items-center gap-2 rounded-lg border border-black/10 bg-surface px-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+          >
+            <span className="max-w-40 truncate">{currentLabel}</span>
+            <ChevronDown className="size-3.5 shrink-0 text-zinc-400" />
+          </button>
+        )}
       >
-        <option value="">Home</option>
-        {collections.length > 0 && (
-          <optgroup label="Collections">
-            {collections.map((c) => (
-              <option key={c.id} value={`/collections/${c.slug}`}>
-                {c.name}
-              </option>
-            ))}
-          </optgroup>
+        {(close) => (
+          <>
+            <Option value="" label="Home" onSelect={() => { setPreviewPath(""); close(); }} />
+            {collections.length > 0 && (
+              <>
+                <GroupHeader>Collections</GroupHeader>
+                <div className="pl-2">
+                  {collections.map((c) => (
+                    <Option
+                      key={c.id}
+                      value={`/collections/${c.slug}`}
+                      label={c.name}
+                      onSelect={() => { setPreviewPath(`/collections/${c.slug}`); close(); }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            {products.length > 0 && (
+              <>
+                <GroupHeader>Products</GroupHeader>
+                <div className="pl-2">
+                  {products.map((p) => (
+                    <Option
+                      key={p.id}
+                      value={`/products/${p.slug}`}
+                      label={p.name}
+                      onSelect={() => { setPreviewPath(`/products/${p.slug}`); close(); }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
         )}
-        {products.length > 0 && (
-          <optgroup label="Products">
-            {products.map((p) => (
-              <option key={p.id} value={`/products/${p.slug}`}>
-                {p.name}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
+      </DropdownMenu>
       <SettingsSearchBox value={searchQuery} onChange={setSearchQuery} />
     </div>
   );
