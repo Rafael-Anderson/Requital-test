@@ -77,6 +77,13 @@ export interface Order {
   orderType: string | null;
   status: OrderStatus;
   paymentStatus: "unpaid" | "paid" | "refunded";
+  paymentMethod: string | null;
+  // Null until POST /orders/:id/collect-cash marks a COD order's cash as
+  // collected. cashCollectedByName is only populated when cashCollectedAt
+  // is set (joined server-side, see OrdersService.loadOrdersWithRelations).
+  cashCollectedAt: string | null;
+  cashCollectedBy: number | null;
+  cashCollectedByName: string | null;
   // Null only for orders created before this field existed — falls back to
   // deriving it from total - subtotal for display in that case.
   deliveryFee: string | null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cancelOrder, getOrder, updateOrderStatus } from "@/lib/api";
+import { cancelOrder, collectCash, getOrder, updateOrderStatus } from "@/lib/api";
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 import { waLink } from "@/lib/validators";
@@ -30,6 +30,7 @@ export default function SimpleOrderDetailModal({
 }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [collectingCash, setCollectingCash] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -43,10 +44,26 @@ export default function SimpleOrderDetailModal({
 
   if (orderId === null) return null;
 
+  async function handleCollectCash() {
+    if (!order) return;
+    setCollectingCash(true);
+    try {
+      await collectCash(order.id);
+      toast("Cash collected");
+      onChanged?.();
+      setOrder(await getOrder(order.id));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to mark cash collected", "error");
+    } finally {
+      setCollectingCash(false);
+    }
+  }
+
   async function handleAdvance() {
     if (!order) return;
     const action = getNextAction(order.status);
     if (!action) return;
+    if (action.next === "delivered" && order.paymentMethod === "cash_on_delivery" && !order.cashCollectedAt) return;
     try {
       await updateOrderStatus(order.id, action.next);
       toast(`Order #${order.id} moved to ${action.next.replace(/_/g, " ")}`);
@@ -72,6 +89,9 @@ export default function SimpleOrderDetailModal({
 
   const nextAction = order ? getNextAction(order.status) : null;
   const canCancel = order && order.status !== "delivered" && order.status !== "cancelled";
+  const isCod = order?.paymentMethod === "cash_on_delivery";
+  const cashUncollected = isCod && !order?.cashCollectedAt;
+  const advanceBlockedByCash = nextAction?.next === "delivered" && cashUncollected;
 
   return (
     <Modal
@@ -90,18 +110,21 @@ export default function SimpleOrderDetailModal({
       footer={
         order && (nextAction || canCancel)
           ? () => (
-              <>
+              <div className="flex items-center gap-3 flex-wrap justify-end">
+                {advanceBlockedByCash && (
+                  <p className="text-xs text-text-faint">Mark cash collected before completing this order.</p>
+                )}
                 {canCancel && (
                   <Button variant="danger" onClick={handleCancel}>
                     Cancel order
                   </Button>
                 )}
                 {nextAction && (
-                  <Button variant="primary" onClick={handleAdvance}>
+                  <Button variant="primary" onClick={handleAdvance} disabled={advanceBlockedByCash}>
                     {nextAction.label}
                   </Button>
                 )}
-              </>
+              </div>
             )
           : undefined
       }
@@ -135,6 +158,27 @@ export default function SimpleOrderDetailModal({
             )}
             <div className="mt-1">Placed {relativeTime(order.createdAt)}</div>
           </div>
+
+          {isCod && (
+            <div className="flex items-center justify-between text-sm border border-gray-200 rounded-lg p-3 dark:border-white/10">
+              <span className="text-text-muted">Cash on delivery</span>
+              {order.cashCollectedAt ? (
+                <span className="text-green-700 dark:text-green-400 font-medium text-xs">
+                  Collected ✓ {new Date(order.cashCollectedAt).toLocaleString()}
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleCollectCash}
+                  disabled={collectingCash}
+                  loading={collectingCash}
+                >
+                  Mark cash collected
+                </Button>
+              )}
+            </div>
+          )}
 
           <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
             <h3 className="font-medium mb-3">Order items</h3>

@@ -789,6 +789,10 @@ export function cancelOrder(id: number) {
   return apiFetch<Order>(`/orders/${id}/cancel`, { method: "POST" });
 }
 
+export function collectCash(id: number) {
+  return apiFetch<Order>(`/orders/${id}/collect-cash`, { method: "POST" });
+}
+
 export function updateOrderDeliveryFee(id: number, deliveryFee: number) {
   return apiFetch<Order>(`/orders/${id}/delivery-fee`, {
     method: "PATCH",

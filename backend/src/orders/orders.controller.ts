@@ -112,6 +112,15 @@ export class OrdersController {
     return this.ordersService.cancel(ctx, id);
   }
 
+  @Roles('admin', 'branch', 'order_manager')
+  @Post(':id/collect-cash')
+  collectCash(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.ordersService.collectCash(ctx, id);
+  }
+
   // Staff-only — 'viewer' can still read notes (they come back as part of
   // GET :id, which viewer already has access to), just can't add one.
   @Roles('admin', 'branch', 'order_manager')

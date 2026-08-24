@@ -36,6 +36,8 @@ export interface OrderRow {
   paymentLinkExpiresAt: Date | null;
   trackingToken: string | null;
   ingredientsConsumedAt: Date | null;
+  cashCollectedAt: Date | null;
+  cashCollectedBy: number | null;
 }
 
 export interface OrdernoteRow {

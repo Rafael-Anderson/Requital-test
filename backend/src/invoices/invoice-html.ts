@@ -27,6 +27,8 @@ export interface InvoiceHtmlData {
     deliveryFee: string | number | null;
     discountAmount: string | number | null;
     discountCode: string | null;
+    paymentMethod: string | null;
+    paymentStatus: string;
     orderitem: {
       productName: string;
       variantLabel: string | null;
@@ -52,6 +54,8 @@ function money(amount: string | number, currency: string): string {
 export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   const title = data.type === 'PACKING_SLIP' ? 'Packing Slip' : 'Invoice';
   const showMoney = data.type !== 'PACKING_SLIP';
+  const isCod = data.order.paymentMethod === 'cash_on_delivery';
+  const isPaid = data.order.paymentStatus === 'paid';
   const itemRows = data.order.orderitem
     .map((item) => {
       const baseName = item.variantLabel
@@ -70,6 +74,20 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
       return `<tr><td>${name}</td><td class="num">${item.quantity}</td>${priceCell}</tr>`;
     })
     .join('');
+
+  // Cash-on-delivery amount due, rendered independently of showMoney —
+  // a packing slip hides subtotal/per-item pricing from warehouse/rider
+  // staff on purpose (see showMoney above), but the rider still needs to
+  // know how much cash to collect, so this is a separate element rather
+  // than a reason to flip showMoney itself. Non-COD orders render neither
+  // block, on either document type.
+  const codBlock = !isCod
+    ? ''
+    : data.type === 'PACKING_SLIP'
+      ? isPaid
+        ? `<div class="cash-block cash-block-paid">PAID &mdash; no collection required</div>`
+        : `<div class="cash-block cash-block-due">CASH TO COLLECT: ${money(data.total, data.currency)}</div>`
+      : `<div class="cash-due-box"><span class="cash-due-label">Cash Due</span><span class="cash-due-amount">${money(data.total, data.currency)}</span></div>`;
 
   const totalsRows = showMoney
     ? `
@@ -104,7 +122,13 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   .totals .label { color: #71717a; }
   .grand-total td { font-weight: 700; font-size: 16px; border-top: 2px solid #18181b; padding-top: 8px; }
   .notes { margin-top: 24px; font-size: 13px; color: #52525b; white-space: pre-wrap; }
-  @media print { body { padding: 0; } }
+  .cash-due-box { width: 280px; margin-left: auto; margin-top: 12px; padding: 12px 16px; border: 2px solid #18181b; border-radius: 6px; display: flex; justify-content: space-between; align-items: baseline; }
+  .cash-due-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; }
+  .cash-due-amount { font-size: 20px; font-weight: 700; }
+  .cash-block { margin-top: 16px; padding: 20px; border-radius: 8px; text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 0.02em; }
+  .cash-block-due { background: #18181b; color: #ffffff; }
+  .cash-block-paid { background: #ecfdf5; color: #047857; border: 2px solid #047857; }
+  @media print { body { padding: 0; } .cash-block-due { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
@@ -155,6 +179,8 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   </table>
 
   ${showMoney ? `<table class="totals">${totalsRows}</table>` : ''}
+
+  ${codBlock}
 
   ${data.notes ? `<p class="notes">${escapeHtml(data.notes)}</p>` : ''}
 </body>
