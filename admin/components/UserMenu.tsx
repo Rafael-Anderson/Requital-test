@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { Check, KeyRound, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme";
+import { useMuteOrderSound } from "@/lib/notification-sound";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Toggle from "@/components/ui/Toggle";
 import ChangePasswordModal from "./ChangePasswordModal";
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
   const { isDark, setTheme } = useTheme();
+  const { muted, setMuted } = useMuteOrderSound();
   const [open, setOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -79,6 +82,11 @@ export default function UserMenu() {
                 { value: "dark", label: "🌙 Dark" },
               ]}
             />
+          </div>
+
+          <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border dark:border-white/10">
+            <span className="text-sm">🔔 New order sound</span>
+            <Toggle checked={!muted} onChange={(checked) => setMuted(!checked)} />
           </div>
 
           <button

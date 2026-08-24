@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { cancelOrder, listOrders, updateOrderStatus } from "@/lib/api";
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
@@ -39,6 +40,17 @@ interface Column {
 }
 
 export default function OrdersPage() {
+  return (
+    <Suspense fallback={null}>
+      <OrdersPageContent />
+    </Suspense>
+  );
+}
+
+// useSearchParams() (for the ?orderId= deep link) requires a Suspense
+// boundary in Next 16 — same wrapper shape as app/products/page.tsx's own
+// InventoryPage/InventoryPageContent split.
+function OrdersPageContent() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
@@ -46,6 +58,15 @@ export default function OrdersPage() {
   const { selectedOutletId } = useOutletFilter();
   const mode = useShopMode();
   const isSimple = mode === "simple";
+  const searchParams = useSearchParams();
+
+  // Deep-link from NewOrderBanner's "View order" action
+  // (/orders?orderId=123) — opens the detail modal for that order directly
+  // instead of just landing on the list.
+  useEffect(() => {
+    const orderId = searchParams.get("orderId");
+    if (orderId) setSelectedOrderId(Number(orderId));
+  }, [searchParams]);
 
   const refresh = useCallback(async () => {
     try {
