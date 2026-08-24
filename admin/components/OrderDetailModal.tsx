@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import {
   cancelOrder,
+  collectCash,
   createExternalDelivery,
   getOrder,
   getShop,
@@ -58,6 +59,7 @@ export default function OrderDetailModal({
   const [priceInput, setPriceInput] = useState("");
   const [destination, setDestination] = useState("");
   const [savingDelivery, setSavingDelivery] = useState(false);
+  const [collectingCash, setCollectingCash] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [tab, setTab] = useState<"details" | "invoice">("details");
@@ -97,6 +99,7 @@ export default function OrderDetailModal({
     if (!order) return;
     const action = getNextAction(order.status);
     if (!action) return;
+    if (action.next === "delivered" && order.paymentMethod === "cash_on_delivery" && !order.cashCollectedAt) return;
     try {
       await updateOrderStatus(order.id, action.next);
       toast(`Order #${order.id} moved to ${action.next.replace(/_/g, " ")}`);
@@ -135,6 +138,20 @@ export default function OrderDetailModal({
       toast(err instanceof Error ? err.message : "Failed to update delivery fee", "error");
     } finally {
       setSavingFee(false);
+    }
+  }
+
+  async function handleCollectCash() {
+    if (!order) return;
+    setCollectingCash(true);
+    try {
+      await collectCash(order.id);
+      toast("Cash collected");
+      refetch();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to mark cash collected", "error");
+    } finally {
+      setCollectingCash(false);
     }
   }
 
@@ -179,6 +196,11 @@ export default function OrderDetailModal({
   // Same fulfillment cutoff as cancellation — matches the backend guard.
   const canEditFee = order && order.status !== "delivered" && order.status !== "cancelled";
   const latestTxn = order?.paymenttransaction?.[0];
+  const isCod = order?.paymentMethod === "cash_on_delivery";
+  const cashUncollected = isCod && !order?.cashCollectedAt;
+  // Mirrors the backend's own pre-check in OrdersService.updateStatus —
+  // this is UX-only, the server enforces the same gate independently.
+  const advanceBlockedByCash = nextAction?.next === "delivered" && cashUncollected;
 
   return (
     <>
@@ -198,18 +220,21 @@ export default function OrderDetailModal({
       footer={
         order && (nextAction || canCancel)
           ? () => (
-              <>
+              <div className="flex items-center gap-3 flex-wrap justify-end">
+                {advanceBlockedByCash && (
+                  <p className="text-xs text-text-faint">Mark cash collected before completing this order.</p>
+                )}
                 {canCancel && (
                   <Button variant="danger" onClick={handleCancel}>
                     Cancel order
                   </Button>
                 )}
                 {nextAction && (
-                  <Button variant="primary" onClick={handleAdvance}>
+                  <Button variant="primary" onClick={handleAdvance} disabled={advanceBlockedByCash}>
                     {nextAction.label}
                   </Button>
                 )}
-              </>
+              </div>
             )
           : undefined
       }
@@ -400,6 +425,11 @@ export default function OrderDetailModal({
                       <span className="text-text-muted">Payment</span>
                       <div className="text-right">
                         <StatusBadge status={order.paymentStatus} />
+                        {order.paymentMethod && (
+                          <div className="text-xs text-text-muted mt-1 capitalize">
+                            {order.paymentMethod.replace(/_/g, " ")}
+                          </div>
+                        )}
                         {latestTxn && (
                           <div className="text-xs text-text-muted mt-1 capitalize">
                             via {latestTxn.gateway}
@@ -407,6 +437,29 @@ export default function OrderDetailModal({
                         )}
                       </div>
                     </div>
+                    {isCod && (
+                      <div className="flex justify-between items-center text-sm pt-1 border-t border-gray-200 dark:border-white/10">
+                        <span className="text-text-muted">Cash collected</span>
+                        {order.cashCollectedAt ? (
+                          <span className="text-right text-xs">
+                            <span className="text-green-700 dark:text-green-400 font-medium">Collected ✓</span>
+                            <br />
+                            {new Date(order.cashCollectedAt).toLocaleString()}
+                            {order.cashCollectedByName ? ` · ${order.cashCollectedByName}` : ""}
+                          </span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCollectCash}
+                            disabled={collectingCash}
+                            loading={collectingCash}
+                          >
+                            Mark cash collected
+                          </Button>
+                        )}
+                      </div>
+                    )}
                     {order.channel && (
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Channel</span>

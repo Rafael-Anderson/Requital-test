@@ -343,6 +343,16 @@ describe('Affiliate (e2e)', () => {
       const orderRes = await placeOrder(shop.slug, shop, code.code).expect(201);
       const orderId = body<{ order: { id: number } }>(orderRes).order.id;
 
+      // placeOrder always uses cash_on_delivery — the completion gate
+      // (OrdersService.updateStatus) refuses 'delivered' until cash is
+      // marked collected, so every 'delivered' transition in this suite
+      // needs this first. See order-cash-collected.e2e-spec.ts for the
+      // gate's own dedicated coverage.
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/collect-cash`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(201);
+
       for (const status of [
         'confirmed',
         'preparing',
@@ -408,6 +418,13 @@ describe('Affiliate (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ status: 'blocked' })
         .expect(200);
+
+      // See the same comment on the 'approved' test above — placeOrder is
+      // always cash_on_delivery, so 'delivered' needs this first.
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/collect-cash`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(201);
 
       for (const status of [
         'confirmed',
@@ -585,6 +602,12 @@ describe('Affiliate (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({ status: 'out_for_delivery' })
         .expect(200);
+      // placeOrder is always cash_on_delivery — see the comment on the
+      // 'approved' test above.
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/collect-cash`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(201);
       await request(app.getHttpServer())
         .patch(`/orders/${orderId}/status`)
         .set('Authorization', `Bearer ${shop.adminToken}`)

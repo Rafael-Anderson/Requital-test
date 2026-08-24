@@ -21,6 +21,8 @@ interface OrderForInvoice {
   deliveryFee: string | null;
   discountAmount: string | null;
   discountCode: string | null;
+  paymentMethod: string | null;
+  paymentStatus: string;
   shopName: string;
   shopDisplayName: string | null;
   shopAddress: string | null;
@@ -211,6 +213,8 @@ export class InvoicesService {
       deliveryFee: order.deliveryFee as string | null,
       discountAmount: order.discountAmount as string | null,
       discountCode: order.discountCode as string | null,
+      paymentMethod: order.paymentMethod as string | null,
+      paymentStatus: order.paymentStatus as string,
       shopName: order.shopName as string,
       shopDisplayName: order.shopDisplayName as string | null,
       shopAddress: order.shopAddress as string | null,

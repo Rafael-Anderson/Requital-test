@@ -46,6 +46,7 @@ interface AssembledOrderItem extends OrderitemRow {
 interface AssembledOrder extends OrderRow {
   orderitem: AssembledOrderItem[];
   paymenttransaction: RowDataPacket[];
+  cashCollectedByName: string | null;
 }
 
 export interface AssembledOrderNote {
@@ -503,6 +504,33 @@ export class OrdersService {
     return this.toResponse(orders.get(id)!);
   }
 
+  // Marks a cash-on-delivery order's cash as collected — the completion
+  // gate in updateStatus below refuses to move the order to 'delivered'
+  // until this has been called. Idempotent (a double-click just returns the
+  // already-collected state) and a plain UPDATE, not CAS — this isn't a
+  // field competing writers race over, unlike order.status.
+  async collectCash(ctx: TenantContext, id: number) {
+    const order = await this.findOne(ctx, id);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
+    if (order.paymentMethod !== 'cash_on_delivery') {
+      throw new BadRequestException(
+        'Cash collection only applies to cash-on-delivery orders',
+      );
+    }
+    if (order.cashCollectedAt === null) {
+      await this.db.execute(
+        `UPDATE \`order\` SET cashCollectedAt = NOW(3), cashCollectedBy = ? WHERE id = ? AND shopId = ?`,
+        [ctx.userId, id, ctx.shopId],
+      );
+    }
+    const orders = await this.loadOrdersWithRelations([id]);
+    return this.toResponse(orders.get(id)!);
+  }
+
   async updateStatus(
     ctx: TenantContext,
     id: number,
@@ -520,6 +548,18 @@ export class OrdersService {
     if (!isValidStatusTransition(order.status as OrderStatus, dto.status)) {
       throw new BadRequestException(
         `Cannot move order from '${order.status}' to '${dto.status}'`,
+      );
+    }
+    // Plain pre-check, not folded into the CAS WHERE clause below — the CAS
+    // failure path throws a generic "refresh and retry" ConflictException,
+    // which would be a misleading message for "you forgot to collect cash."
+    if (
+      dto.status === 'delivered' &&
+      order.paymentMethod === 'cash_on_delivery' &&
+      order.cashCollectedAt === null
+    ) {
+      throw new BadRequestException(
+        'Mark cash as collected before moving this order to delivered',
       );
     }
 
@@ -1163,8 +1203,12 @@ export class OrdersService {
     if (ids.length === 0) return result;
     const idList = ids.map(() => '?').join(', ');
     const [orders, items, payments] = await Promise.all([
-      this.db.query<(OrderRow & RowDataPacket)[]>(
-        `SELECT * FROM \`order\` WHERE id IN (${idList})`,
+      this.db.query<
+        (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
+      >(
+        `SELECT o.*, u.name AS cashCollectedByName
+         FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
+         WHERE o.id IN (${idList})`,
         ids,
       ),
       this.db.query<(OrderitemRow & RowDataPacket)[]>(
@@ -1199,8 +1243,12 @@ export class OrdersService {
   ): Promise<AssembledOrderDetail> {
     const [orderRows, items, payments, externalDeliveryRows, noteRows, surveyRows] =
       await Promise.all([
-        this.db.query<(OrderRow & RowDataPacket)[]>(
-          `SELECT * FROM \`order\` WHERE id = ?`,
+        this.db.query<
+          (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
+        >(
+          `SELECT o.*, u.name AS cashCollectedByName
+           FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
+           WHERE o.id = ?`,
           [id],
         ),
         this.db.query<RowDataPacket[]>(

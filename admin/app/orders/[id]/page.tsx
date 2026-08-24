@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   cancelOrder,
+  collectCash,
   generatePaymentLink,
   getOrder,
   updateOrderStatus,
@@ -37,6 +38,7 @@ export default function OrderDetailPage() {
     null,
   );
   const [editingItems, setEditingItems] = useState(false);
+  const [collectingCash, setCollectingCash] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -71,6 +73,19 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function handleCollectCash() {
+    setCollectingCash(true);
+    try {
+      await collectCash(orderId);
+      toast("Cash collected");
+      refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to mark cash collected", "error");
+    } finally {
+      setCollectingCash(false);
+    }
+  }
+
   async function handleGenerateLink() {
     try {
       const result = await generatePaymentLink(orderId);
@@ -94,6 +109,11 @@ export default function OrderDetailPage() {
   }
 
   const canCancel = order.status !== "delivered" && order.status !== "cancelled";
+  const isCod = order.paymentMethod === "cash_on_delivery";
+  const cashUncollected = isCod && !order.cashCollectedAt;
+  const availableStatuses = getValidNextStatuses(order.status).filter(
+    (s) => !(s === "delivered" && cashUncollected),
+  );
 
   return (
     <PageShell variant="form">
@@ -184,7 +204,7 @@ export default function OrderDetailPage() {
             onChange={(e) => e.target.value && handleStatusChange(e.target.value as OrderStatus)}
           >
             <option value="">Select status…</option>
-            {getValidNextStatuses(order.status).map((s) => (
+            {availableStatuses.map((s) => (
               <option key={s} value={s}>
                 {s.replace(/_/g, " ")}
               </option>
@@ -196,6 +216,32 @@ export default function OrderDetailPage() {
             </Button>
           )}
         </div>
+        {cashUncollected && (
+          <p className="text-xs text-text-faint mb-3">
+            Mark cash collected before this order can be moved to delivered.
+          </p>
+        )}
+
+        {isCod && (
+          <div className="flex items-center gap-2 mb-3">
+            {order.cashCollectedAt ? (
+              <p className="text-sm text-green-700 dark:text-green-400 font-medium">
+                Cash collected ✓ {new Date(order.cashCollectedAt).toLocaleString()}
+                {order.cashCollectedByName ? ` · ${order.cashCollectedByName}` : ""}
+              </p>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleCollectCash}
+                disabled={collectingCash}
+                loading={collectingCash}
+              >
+                Mark cash collected
+              </Button>
+            )}
+          </div>
+        )}
 
         <div>
           <Button

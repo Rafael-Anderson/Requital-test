@@ -456,6 +456,97 @@ describe('Invoices & packing slips (e2e)', () => {
     });
   });
 
+  // Feature: COD amount rendering (see invoice-html.ts's codBlock) — the
+  // "Cash Due"/"CASH TO COLLECT" block is independent of showMoney, so this
+  // exercises it against the real /pdf route rather than unit-testing
+  // renderInvoiceHtml in isolation.
+  describe('cash-on-delivery amount rendering', () => {
+    it('COD order: invoice shows a Cash Due box, packing slip shows CASH TO COLLECT; non-COD order shows neither', async () => {
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop('inv-cod');
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ deliveryEnabled: true, deliveryRadiusKm: 5, latitude: 25.2048, longitude: 55.2708 })
+        .expect(200);
+
+      const codOrder = body<OrderCreateResponse>(
+        await createOrder(shopSlug, outletId, productId, {
+          orderType: 'delivery',
+          paymentMethod: 'cash_on_delivery',
+          latitude: 25.2048,
+          longitude: 55.2708,
+        }),
+      ).order;
+      // Default overrides (cash_on_pickup) — a real non-COD order.
+      const nonCodOrder = body<OrderCreateResponse>(
+        await createOrder(shopSlug, outletId, productId),
+      ).order;
+
+      async function generateAndFetch(orderId: number, type: 'INVOICE' | 'PACKING_SLIP') {
+        const invoice = body<InvoiceRow>(
+          await request(app.getHttpServer())
+            .post('/invoices')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ orderId, type })
+            .expect(201),
+        );
+        const res = await request(app.getHttpServer())
+          .get(`/invoices/${invoice.id}/pdf`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200);
+        return res.text;
+      }
+
+      const codInvoiceHtml = await generateAndFetch(codOrder.id, 'INVOICE');
+      const codSlipHtml = await generateAndFetch(codOrder.id, 'PACKING_SLIP');
+      const nonCodInvoiceHtml = await generateAndFetch(nonCodOrder.id, 'INVOICE');
+      const nonCodSlipHtml = await generateAndFetch(nonCodOrder.id, 'PACKING_SLIP');
+
+      expect(codInvoiceHtml).toContain('Cash Due');
+      expect(codSlipHtml).toContain('CASH TO COLLECT');
+      expect(nonCodInvoiceHtml).not.toContain('Cash Due');
+      expect(nonCodSlipHtml).not.toContain('CASH TO COLLECT');
+      expect(nonCodSlipHtml).not.toContain('PAID');
+    });
+
+    it('a COD packing slip shows PAID instead of an amount once paymentStatus is paid', async () => {
+      const { shopSlug, adminToken, outletId, productId } =
+        await setupShop('inv-cod-paid');
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ deliveryEnabled: true, deliveryRadiusKm: 5, latitude: 25.2048, longitude: 55.2708 })
+        .expect(200);
+      const order = body<OrderCreateResponse>(
+        await createOrder(shopSlug, outletId, productId, {
+          orderType: 'delivery',
+          paymentMethod: 'cash_on_delivery',
+          latitude: 25.2048,
+          longitude: 55.2708,
+        }),
+      ).order;
+
+      await db.execute(`UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`, [
+        order.id,
+      ]);
+
+      const slip = body<InvoiceRow>(
+        await request(app.getHttpServer())
+          .post('/invoices')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ orderId: order.id, type: 'PACKING_SLIP' })
+          .expect(201),
+      );
+      const res = await request(app.getHttpServer())
+        .get(`/invoices/${slip.id}/pdf`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(res.text).toContain('PAID');
+      expect(res.text).not.toContain('CASH TO COLLECT');
+    });
+  });
+
   describe('storefront customer download', () => {
     async function registerCustomer(shopSlug: string, phone: string) {
       const res = await request(app.getHttpServer())
