@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { listAbandonedCarts } from "@/lib/api";
 import type { AbandonedCart } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
+import BranchBar from "@/components/BranchBar";
 import EmptyState from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -30,9 +31,9 @@ export default function AbandonedCartsPage() {
 
   return (
     <PageShell>
-      <BackButton href="/orders" />
-      <OrdersTabs />
+      <BranchBar left={<BackButton href="/orders" />} />
       <h1 className="text-2xl font-semibold mb-1">Abandoned Carts</h1>
+      <OrdersTabs />
       <p className="text-sm text-text-muted mb-4">
         Shoppers who started checkout but didn&apos;t complete an order. Turn on recovery emails in Settings &gt;
         Business Information.

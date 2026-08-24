@@ -10,6 +10,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
 
@@ -39,8 +40,7 @@ export default function DraftOrdersPage() {
 
   return (
     <PageShell>
-      <BackButton href="/orders" />
-      <OrdersTabs />
+      <BranchBar left={<BackButton href="/orders" />} />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Draft Orders</h1>
         <Link href="/orders/draft-orders/new">
@@ -50,6 +50,7 @@ export default function DraftOrdersPage() {
           </Button>
         </Link>
       </div>
+      <OrdersTabs />
 
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
 

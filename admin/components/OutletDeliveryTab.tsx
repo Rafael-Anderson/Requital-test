@@ -12,6 +12,7 @@ import Card from "@/components/ui/Card";
 import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
+import OutletDeliveryAreaTab from "@/components/OutletDeliveryAreaTab";
 import { useToast } from "@/components/ui/Toast";
 
 const TIME_SLOT_PRESETS = [
@@ -31,9 +32,6 @@ export default function OutletDeliveryTab({
   onSaved: () => void;
 }) {
   const [deliveryEnabled, setDeliveryEnabled] = useState(outlet.deliveryEnabled);
-  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState(
-    outlet.deliveryRadiusKm !== null ? String(outlet.deliveryRadiusKm) : "",
-  );
   const [savingAvailability, setSavingAvailability] = useState(false);
 
   const [shop, setShop] = useState<Shop | null>(null);
@@ -72,16 +70,9 @@ export default function OutletDeliveryTab({
   }, []);
 
   async function handleSaveAvailability() {
-    if (deliveryEnabled && (!deliveryRadiusKm || outlet.latitude === null || outlet.longitude === null)) {
-      toast("Delivery requires a radius and coordinates set on the Address tab", "error");
-      return;
-    }
     setSavingAvailability(true);
     try {
-      await updateOutlet(outlet.id, {
-        deliveryEnabled,
-        deliveryRadiusKm: deliveryEnabled && deliveryRadiusKm ? Number(deliveryRadiusKm) : undefined,
-      });
+      await updateOutlet(outlet.id, { deliveryEnabled });
       toast("Delivery availability saved");
       onSaved();
     } catch (err) {
@@ -123,30 +114,14 @@ export default function OutletDeliveryTab({
             <Toggle checked={deliveryEnabled} onChange={setDeliveryEnabled} />
             <span className="text-sm">Delivery available</span>
           </div>
-          {deliveryEnabled && (
-            <div className="pl-6 space-y-1.5">
-              <Input
-                label="Delivery radius (km)"
-                type="number"
-                min="0"
-                step="0.1"
-                value={deliveryRadiusKm}
-                onChange={(e) => setDeliveryRadiusKm(e.target.value)}
-                required
-              />
-              {(outlet.latitude === null || outlet.longitude === null) && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  This outlet has no coordinates yet. Set them on the Address tab before saving.
-                </p>
-              )}
-            </div>
-          )}
           <Button variant="primary" onClick={handleSaveAvailability} disabled={savingAvailability}>
             <Check className="size-4 inline -mt-0.5 mr-1" />
             Save changes
           </Button>
         </div>
       </Card>
+
+      <OutletDeliveryAreaTab outletId={outlet.id} />
 
       {!shop ? (
         <p className="text-sm text-text-muted">Loading delivery settings…</p>
