@@ -434,6 +434,27 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   const previewThemeId = urlPreview ? urlThemeId : (restoredPreview?.themeId ?? null);
   const previewToken = urlPreview ? urlToken : restoredPreview?.token;
 
+  // [PREVIEW-DIAG] Logs the exact URL/query params this page saw, and
+  // which preview-detection path (real URL params vs sessionStorage
+  // fallback) resolved `preview` to true/false — this is the single most
+  // direct way to confirm or rule out "the dropdown navigated to a URL
+  // that dropped the preview query params."
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] shop-context preview detection", {
+      pathname,
+      href: typeof window !== "undefined" ? window.location.href : null,
+      search: typeof window !== "undefined" ? window.location.search : null,
+      urlPreview,
+      urlThemeId,
+      urlTokenPresent: !!urlToken,
+      restoredPreview,
+      resolvedPreview: preview,
+      resolvedPreviewThemeId: previewThemeId,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, urlPreview, urlThemeId, urlToken, restoredPreview]);
+
   useEffect(() => {
     // Runs on every page under this shop, not just checkout — a ?ref=<code>
     // can land on any page (product link, homepage) and must survive

@@ -38,9 +38,21 @@ function findEditable(target: EventTarget | null): HTMLElement | null {
 }
 
 function postToAdmin(payload: Record<string, unknown>) {
-  if (!document.referrer) return;
+  // eslint-disable-next-line no-console
+  console.log("[PREVIEW-DIAG] postToAdmin called", { type: payload.type, payload, referrer: document.referrer });
+  if (!document.referrer) {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] postToAdmin BLOCKED: document.referrer is empty");
+    return;
+  }
   const referrerOrigin = new URL(document.referrer).origin;
-  if (!isTrustedAdminOrigin(referrerOrigin)) return;
+  if (!isTrustedAdminOrigin(referrerOrigin)) {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] postToAdmin BLOCKED: referrer origin not trusted", { referrerOrigin });
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log("[PREVIEW-DIAG] postToAdmin SENT", { type: payload.type, targetOrigin: referrerOrigin });
   window.parent.postMessage(payload, referrerOrigin);
 }
 
@@ -124,6 +136,49 @@ export default function PreviewInteraction() {
   const dragOrderRef = useRef<string[]>([]);
   const dragOverStateRef = useRef<{ targetId: string; before: boolean } | null>(null);
 
+  // [PREVIEW-DIAG] mount/unmount lifecycle — this component only renders
+  // when useShop().previewMode is true (see ShopLayoutClient.tsx's Body),
+  // so its own mount is itself evidence preview mode was detected on this
+  // page load. Logs the full URL so a page switch that drops the preview
+  // query params is visible directly, without cross-referencing shop-context.
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] PreviewInteraction MOUNTED", {
+      href: window.location.href,
+      pathname: window.location.pathname,
+      search: window.location.search,
+      referrer: document.referrer,
+    });
+    return () => {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] PreviewInteraction UNMOUNTED", { href: window.location.href });
+    };
+  }, []);
+
+  // [PREVIEW-DIAG] document-wide pointerdown, diagnostic-only — does not
+  // replace or interact with the per-element drag listeners below. Logs
+  // every pointerdown anywhere in the iframe so we can see whether a click
+  // that "does nothing" is even reaching this document at all, and whether
+  // it resolves to a tagged/selectable element.
+  useEffect(() => {
+    function diagPointerDown(e: PointerEvent) {
+      const targetEl = e.target instanceof Element ? e.target : null;
+      const editable = findEditable(e.target);
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] pointerdown (document, diagnostic)", {
+        tag: targetEl?.tagName,
+        dataAttrs: targetEl ? { ...(targetEl as HTMLElement).dataset } : null,
+        resolvedToSelectable: !!editable,
+        selectableId: editable?.dataset.requitalId ?? null,
+        reorderable: editable?.dataset.requitalReorderable ?? null,
+      });
+    }
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] attaching diagnostic pointerdown listener", { target: "document", phase: "capture" });
+    document.addEventListener("pointerdown", diagPointerDown, true);
+    return () => document.removeEventListener("pointerdown", diagPointerDown, true);
+  }, []);
+
   // Reset a stale selection after navigating to a different page — the
   // previously-selected element (e.g. a Hero heading) doesn't exist on the
   // new page's DOM at all, so there's nothing to keep it selected against.
@@ -137,6 +192,12 @@ export default function PreviewInteraction() {
   // step needed) — so the only real navigation-shaped bug here is exactly
   // this stale reference, not lost listeners.
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] navigation detected (pathname effect fired)", {
+      pathname,
+      href: window.location.href,
+      search: window.location.search,
+    });
     setSelected(null);
     postToAdmin({ type: "element-deselected" });
     // Deliberately excludes `selected`/postToAdmin from deps — this must
@@ -170,7 +231,15 @@ export default function PreviewInteraction() {
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
+      const targetEl = e.target instanceof Element ? e.target : null;
       const el = findEditable(e.target);
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] click (capture phase)", {
+        tag: targetEl?.tagName,
+        dataAttrs: targetEl ? { ...(targetEl as HTMLElement).dataset } : null,
+        defaultPreventedBeforeUs: e.defaultPrevented,
+        resolvedToSelectable: !!el,
+      });
       if (!el) {
         // Click landed outside any tagged element. A real click on a real
         // button/[role=button] never gets here (pointer-events:none, see
@@ -188,12 +257,20 @@ export default function PreviewInteraction() {
           try {
             const url = new URL(anchor.href, document.baseURI);
             if (url.origin !== window.location.origin) {
+              // eslint-disable-next-line no-console
+              console.log("[PREVIEW-DIAG] click: cross-origin anchor blocked", { href: anchor.href });
               e.preventDefault();
+            } else {
+              // eslint-disable-next-line no-console
+              console.log("[PREVIEW-DIAG] click: same-origin anchor left alone (Link/native nav)", { href: anchor.href });
             }
           } catch {
             // Malformed/non-navigating href (mailto:, tel:, javascript:) —
             // none of those leave the preview, nothing to block.
           }
+        } else {
+          // eslint-disable-next-line no-console
+          console.log("[PREVIEW-DIAG] click: no editable element and no anchor under target");
         }
         if (selected) {
           setSelected(null);
@@ -207,13 +284,30 @@ export default function PreviewInteraction() {
       // every current and future taggable component to remember it. See
       // the file-level comment on why pointer-events:auto alone isn't
       // sufficient for this.
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] click: editable element found, calling preventDefault", {
+        id: el.dataset.requitalId,
+        sectionId: el.dataset.requitalSection,
+        elementType: el.dataset.requitalType,
+        reorderable: el.dataset.requitalReorderable,
+      });
       e.preventDefault();
       const id = el.dataset.requitalId;
       const sectionId = el.dataset.requitalSection;
       const elementType = el.dataset.requitalType;
-      if (!id || !sectionId || !elementType) return;
-      if (selected?.id === id) return; // already selected, nothing to do
+      if (!id || !sectionId || !elementType) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG] click: missing required data attribute, bailing", { id, sectionId, elementType });
+        return;
+      }
+      if (selected?.id === id) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG] click: element already selected, no-op", { id });
+        return; // already selected, nothing to do
+      }
       const reorderable = el.dataset.requitalReorderable === "true";
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] click: setting selected + posting element-selected", { id, sectionId, elementType, reorderable });
       setSelected({ id, sectionId, elementType, reorderable });
       const elRect = el.getBoundingClientRect();
       postToAdmin({
@@ -237,8 +331,14 @@ export default function PreviewInteraction() {
     // somewhere else instead of selecting the block. A capture-phase
     // listener runs before the event ever reaches the target/bubbles to
     // Link's handler, so preventDefault() here actually lands in time.
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] attaching click listener", { target: "document", phase: "capture", selectedId: selected?.id ?? null });
     document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
+    return () => {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] removing click listener", { selectedId: selected?.id ?? null });
+      document.removeEventListener("click", handleClick, true);
+    };
   }, [selected]);
 
   // Drag-and-drop — only wired for the currently selected element, and
@@ -259,10 +359,22 @@ export default function PreviewInteraction() {
   // once the cursor leaves its bounds, so the drag doesn't drop out
   // mid-gesture the way plain hover-based listeners would.
   useEffect(() => {
-    if (!selected?.reorderable) return;
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] drag-effect run", { selectedId: selected?.id ?? null, reorderable: selected?.reorderable ?? null });
+    if (!selected?.reorderable) {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] drag-effect: nothing selected or not reorderable, no drag listeners attached");
+      return;
+    }
     const current = selected;
     const found = document.querySelector<HTMLElement>(`[data-requital-id="${CSS.escape(current.id)}"]`);
-    if (!found) return;
+    if (!found) {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] drag-effect: selected element not found in DOM, no drag listeners attached", { id: current.id });
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log("[PREVIEW-DIAG] drag-effect: attaching pointer listeners to element", { id: current.id, sectionId: current.sectionId });
     const el: HTMLElement = found;
 
     // A small movement threshold before treating this as a drag (rather
@@ -318,8 +430,18 @@ export default function PreviewInteraction() {
     }
 
     function handlePointerDown(e: PointerEvent) {
-      if (e.target !== el && !el.contains(e.target as Node)) return;
-      if (!e.isPrimary) return;
+      if (e.target !== el && !el.contains(e.target as Node)) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG] drag: pointerdown on element but target not el/descendant, ignoring");
+        return;
+      }
+      if (!e.isPrimary) {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG] drag: pointerdown not primary pointer, ignoring");
+        return;
+      }
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] drag: pointerdown on draggable element, capturing pointer", { id: current.id, pointerId: e.pointerId });
       pointerId = e.pointerId;
       startX = e.clientX;
       startY = e.clientY;
@@ -340,6 +462,8 @@ export default function PreviewInteraction() {
       const dy = e.clientY - startY;
       if (!dragging) {
         if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG] drag: threshold crossed, beginning drag", { id: current.id, dx, dy });
         beginDrag();
         postToAdmin({ type: "element-drag-start", sectionId: current.sectionId, elementId: current.id });
       }
@@ -367,13 +491,23 @@ export default function PreviewInteraction() {
           const targetIndex = order.indexOf(state.targetId);
           const insertAt = state.before ? targetIndex : targetIndex + 1;
           order.splice(insertAt, 0, draggedId);
+          // eslint-disable-next-line no-console
+          console.log("[PREVIEW-DIAG] drag: pointerup, dropped on target, posting element-moved", { draggedId, state, order });
           postToAdmin({ type: "element-moved", sectionId: current.sectionId, elementId: draggedId, orderedIds: order });
+        } else {
+          // eslint-disable-next-line no-console
+          console.log("[PREVIEW-DIAG] drag: pointerup but no valid drop target (dropped on self or nowhere)", { state, draggedId });
         }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log("[PREVIEW-DIAG] drag: pointerup without ever crossing drag threshold (treated as a click)");
       }
       endDrag();
     }
 
     function handlePointerCancel() {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] drag: pointercancel fired", { id: current.id, wasDragging: dragging });
       if (pointerId !== null) el.releasePointerCapture(pointerId);
       endDrag();
     }
@@ -383,6 +517,8 @@ export default function PreviewInteraction() {
     el.addEventListener("pointerup", handlePointerUp);
     el.addEventListener("pointercancel", handlePointerCancel);
     return () => {
+      // eslint-disable-next-line no-console
+      console.log("[PREVIEW-DIAG] drag-effect: cleanup, removing pointer listeners", { id: current.id, wasDragging: dragging });
       el.removeEventListener("pointerdown", handlePointerDown);
       el.removeEventListener("pointermove", handlePointerMove);
       el.removeEventListener("pointerup", handlePointerUp);
