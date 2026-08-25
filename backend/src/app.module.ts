@@ -50,6 +50,7 @@ import { StorefrontSearchModule } from './storefront-search/storefront-search.mo
 import { JobsModule } from './jobs/jobs.module';
 import { StorageModule } from './storage/storage.module';
 import { DomainsModule } from './domains/domains.module';
+import { DeliveryProvidersModule } from './delivery-providers/delivery-providers.module';
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { DomainsModule } from './domains/domains.module';
     JobsModule,
     StorageModule,
     DomainsModule,
+    DeliveryProvidersModule,
   ],
   controllers: [AppController],
   providers: [

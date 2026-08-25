@@ -70,6 +70,8 @@ import type {
   ScanPreviewResult,
   ScanSettings,
   SeoSettings,
+  SliderSettings,
+  SliderQuote,
   WhatsAppSettings,
   PaginatedAuditLog,
   PaginatedStockMovements,
@@ -1462,8 +1464,9 @@ export function listExternalDeliveryReport(
   return apiFetch<PaginatedExternalDeliveries>(`/reports/external-delivery?${query.toString()}`);
 }
 
-// Manual courier-handoff log — no real courier API integration exists (see
-// backend externaldelivery model comment). Admin-only server-side.
+// Manual courier-handoff log — for a courier with no real API integration
+// (see the Slider functions below for the one that has one). Admin-only
+// server-side.
 export function createExternalDelivery(
   orderId: number,
   data: { carrier: string; vehicleType?: string; price: number; destination: string },
@@ -1482,6 +1485,49 @@ export function updateExternalDelivery(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+// --- Slider delivery — real courier API integration, see backend
+// delivery-providers/. Settings are admin-only; quote/dispatch/cancel are
+// reachable by the same roles as every other order-mutation route
+// (admin/branch/order_manager). ---
+
+export function getSliderSettings() {
+  return apiFetch<SliderSettings>("/slider-settings");
+}
+
+export function updateSliderSettings(data: {
+  apiKey?: string;
+  accountId: string;
+  webhookToken?: string;
+  environment: "sandbox" | "production";
+}) {
+  return apiFetch<SliderSettings>("/slider-settings", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function clearSliderSettings() {
+  return apiFetch<SliderSettings>("/slider-settings", { method: "DELETE" });
+}
+
+export function getSliderQuote(orderId: number) {
+  return apiFetch<SliderQuote>(`/orders/${orderId}/slider-delivery/quote`, { method: "POST" });
+}
+
+export function dispatchSliderDelivery(
+  orderId: number,
+  data: { vehicleType: "bike" | "car" | "any"; scheduleAt?: string; driverTip?: number },
+) {
+  return apiFetch<Order>(`/orders/${orderId}/slider-delivery`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function cancelSliderDelivery(orderId: number) {
+  return apiFetch<Order>(`/orders/${orderId}/slider-delivery`, { method: "DELETE" });
 }
 
 // --- Affiliate — admin-only server-side, see backend AffiliateController. ---

@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/settings/business/online-presence", label: "Online Presence" },
   { href: "/settings/business/seo", label: "SEO" },
   { href: "/settings/business/payments", label: "Payment Gateways" },
+  { href: "/settings/business/delivery-providers", label: "Delivery Providers" },
   { href: "/settings/business/policy-pages", label: "Policy Pages" },
 ];
 

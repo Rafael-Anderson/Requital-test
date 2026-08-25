@@ -70,6 +70,14 @@ export interface ExternaldeliveryRow {
   destination: string;
   status: string;
   createdAt: Date;
+  provider: string;
+  sliderOrderNumber: number | null;
+  trackingUrl: string | null;
+  driverName: string | null;
+  driverPhone: string | null;
+  driverLat: string | null;
+  driverLng: string | null;
+  estimatedDeliveryMinutes: number | null;
 }
 
 export interface SurveyresponseRow {
@@ -315,6 +323,7 @@ export interface ShopRow {
   lowStockDigestLastSentAt: Date | null;
   autoDeductIngredientStock: boolean;
   whatsappCredentials: string | null;
+  sliderCredentials: string | null;
   trn: string | null;
   websiteUrl: string | null;
   customDomain: string | null;

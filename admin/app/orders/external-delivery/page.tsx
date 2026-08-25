@@ -111,6 +111,7 @@ export default function ExternalDeliveryOrdersTabPage() {
             <TH>Order Ref</TH>
             <TH>Customer</TH>
             <TH>Courier/Provider</TH>
+            <TH>Driver</TH>
             <TH>Status</TH>
             <TH>Dispatched At</TH>
             <TH>Price</TH>
@@ -119,19 +120,19 @@ export default function ExternalDeliveryOrdersTabPage() {
         <TBody>
           {rows === null ? (
             <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={8} cols={6} />
+              <td colSpan={7}>
+                <TableSkeleton rows={8} cols={7} />
               </td>
             </tr>
           ) : rows.length === 0 && !error ? (
             <tr>
-              <td colSpan={6}>
+              <td colSpan={7}>
                 <EmptyState
                   title={search ? "No matching deliveries" : "No external deliveries yet"}
                   description={
                     search
                       ? "Try a different search term."
-                      : "Log a courier handoff from an order's detail view. It'll show up here."
+                      : "Log a courier handoff, or send one to Slider, from an order's detail view. It'll show up here."
                   }
                 />
               </td>
@@ -148,7 +149,21 @@ export default function ExternalDeliveryOrdersTabPage() {
                   <span>{row.customerName}</span>
                   <div className="text-xs text-text-muted">{row.customerPhone}</div>
                 </TD>
-                <TD>{row.carrier}</TD>
+                <TD>
+                  <span>{row.carrier}</span>
+                  {row.trackingUrl && (
+                    <a
+                      href={row.trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="block text-xs text-accent-text dark:text-accent hover:underline"
+                    >
+                      Track
+                    </a>
+                  )}
+                </TD>
+                <TD className="text-text-muted">{row.driverName ?? "—"}</TD>
                 <TD>
                   <StatusBadge status={row.status} />
                 </TD>

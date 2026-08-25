@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { getValidNextStatuses, type Order, type OrderStatus } from "@/lib/types";
 import { waLink } from "@/lib/validators";
+import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
@@ -22,15 +23,19 @@ import PageShell from "@/components/ui/PageShell";
 import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
+import SliderDeliveryPanel from "@/components/SliderDeliveryPanel";
 
 // Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
 // staff start physically preparing the order.
 const EDITABLE_ITEM_STATUSES = ["pending", "confirmed"];
+// Mirrors OrderDetailModal's own allow-list for the Slider action.
+const SLIDER_ROLES = ["admin", "branch", "order_manager"];
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = Number(params.id);
   const toast = useToast();
+  const { user } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +164,15 @@ export default function OrderDetailPage() {
           {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}
         </p>
       </Card>
+
+      {user &&
+        SLIDER_ROLES.includes(user.role) &&
+        (!order.externaldelivery || order.externaldelivery.provider === "slider") && (
+          <Card className="mb-4">
+            <h2 className="font-medium mb-3">External Delivery</h2>
+            <SliderDeliveryPanel order={order} onChanged={refresh} />
+          </Card>
+        )}
 
       <Card className="mb-4">
         <div className="flex items-center justify-between mb-2">

@@ -27,12 +27,18 @@ import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import OrderStatusTimeline from "@/components/OrderStatusTimeline";
 import OrderInvoiceTab from "@/components/OrderInvoiceTab";
+import SliderDeliveryPanel from "@/components/SliderDeliveryPanel";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 import Modal from "@/components/ui/Modal";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Tooltip from "@/components/ui/Tooltip";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
+// Mirrors the backend's own @Roles on the Slider dispatch/cancel routes —
+// same allow-list as every other order-mutation action, unlike manual
+// courier logging below (deliberately admin-only, see its own controller
+// comment).
+const SLIDER_ROLES = ["admin", "branch", "order_manager"];
 // Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
 // staff start physically preparing the order.
 const EDITABLE_ITEM_STATUSES = ["pending", "confirmed"];
@@ -512,7 +518,9 @@ export default function OrderDetailModal({
 
                 <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-2">External delivery</h3>
-                  {order.externaldelivery ? (
+                  {order.externaldelivery?.provider === "slider" ? (
+                    <SliderDeliveryPanel order={order} onChanged={refetch} />
+                  ) : order.externaldelivery ? (
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Carrier</span>
@@ -547,40 +555,57 @@ export default function OrderDetailModal({
                         )}
                       </div>
                     </div>
-                  ) : user?.role === "admin" ? (
-                    loggingDelivery ? (
-                      <div className="space-y-2.5">
-                        <Input label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} />
-                        <Input
-                          label="Vehicle type (optional)"
-                          value={vehicleType}
-                          onChange={(e) => setVehicleType(e.target.value)}
-                        />
-                        <Input
-                          label="Price paid to carrier"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={priceInput}
-                          onChange={(e) => setPriceInput(e.target.value)}
-                        />
-                        <Input label="Destination" value={destination} onChange={(e) => setDestination(e.target.value)} />
-                        <div className="flex justify-end gap-2 pt-1">
-                          <Button variant="secondary" size="sm" onClick={() => setLoggingDelivery(false)}>
-                            Cancel
-                          </Button>
-                          <Button variant="primary" size="sm" onClick={handleLogDelivery} disabled={savingDelivery} loading={savingDelivery}>
-                            {savingDelivery ? "Saving…" : "Save"}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button variant="secondary" size="sm" onClick={() => setLoggingDelivery(true)}>
-                        Log external delivery
-                      </Button>
-                    )
                   ) : (
-                    <p className="text-sm text-text-faint">Not sent via an external courier.</p>
+                    <div className="space-y-3">
+                      {user && SLIDER_ROLES.includes(user.role) && (
+                        <SliderDeliveryPanel order={order} onChanged={refetch} />
+                      )}
+                      {user?.role === "admin" &&
+                        (loggingDelivery ? (
+                          <div className="space-y-2.5">
+                            <Input label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} />
+                            <Input
+                              label="Vehicle type (optional)"
+                              value={vehicleType}
+                              onChange={(e) => setVehicleType(e.target.value)}
+                            />
+                            <Input
+                              label="Price paid to carrier"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={priceInput}
+                              onChange={(e) => setPriceInput(e.target.value)}
+                            />
+                            <Input
+                              label="Destination"
+                              value={destination}
+                              onChange={(e) => setDestination(e.target.value)}
+                            />
+                            <div className="flex justify-end gap-2 pt-1">
+                              <Button variant="secondary" size="sm" onClick={() => setLoggingDelivery(false)}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleLogDelivery}
+                                disabled={savingDelivery}
+                                loading={savingDelivery}
+                              >
+                                {savingDelivery ? "Saving…" : "Save"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Button variant="secondary" size="sm" onClick={() => setLoggingDelivery(true)}>
+                            Log external delivery manually
+                          </Button>
+                        ))}
+                      {!user || !SLIDER_ROLES.includes(user.role) ? (
+                        <p className="text-sm text-text-faint">Not sent via an external courier.</p>
+                      ) : null}
+                    </div>
                   )}
                 </section>
               </div>
