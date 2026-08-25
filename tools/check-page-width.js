@@ -36,6 +36,10 @@ const ALLOWLIST = [
   // PageShell/merchant chrome to route through either (see CLAUDE.md's
   // "Platform admin" section).
   "admin/app/platform/login/page.tsx",
+  // Reached only when an impersonation session's token expires — by design,
+  // no merchant session exists at this point either, same reasoning as the
+  // platform login page above.
+  "admin/app/impersonation-ended/page.tsx",
   // Deliberately phone-width regardless of viewport — a "link in bio" page
   // is meant to look like a stacked mobile card even on desktop, the same
   // convention every bio-link tool uses. Not a page-content-width bug.

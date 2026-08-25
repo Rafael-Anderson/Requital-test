@@ -2,21 +2,32 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Ban, Eye, LogIn, RotateCcw } from "lucide-react";
 import {
   listPlatformShops,
+  suspendShop,
+  unsuspendShop,
   type PlatformShopListItem,
   type ShopStatus,
 } from "@/lib/platform-api";
+import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
 
 const STATUS_STYLES: Record<ShopStatus, string> = {
   active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   suspended: "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
+// Icon-button treatment mirrors the merchant admin's own row-action
+// convention (Table.tsx's doc comment) — translated to this app's dark
+// palette rather than the merchant light one.
+const ICON_BUTTON =
+  "rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400";
+
 export default function PlatformShopsPage() {
   const [shops, setShops] = useState<PlatformShopListItem[] | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | ShopStatus>("");
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   const refresh = useCallback(() => {
     listPlatformShops({ q: q || undefined, status: status || undefined }).then(setShops);
@@ -26,6 +37,27 @@ export default function PlatformShopsPage() {
     const t = setTimeout(refresh, 250);
     return () => clearTimeout(t);
   }, [refresh]);
+
+  async function toggleSuspend(shop: PlatformShopListItem) {
+    if (shop.status === "active" && !confirmSuspend()) return;
+    setBusyId(shop.id);
+    try {
+      if (shop.status === "active") await suspendShop(shop.id);
+      else await unsuspendShop(shop.id);
+      refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function impersonate(shop: PlatformShopListItem) {
+    setBusyId(shop.id);
+    try {
+      await startImpersonation(shop.id);
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -60,6 +92,7 @@ export default function PlatformShopsPage() {
               <th className="p-3">Created</th>
               <th className="p-3">Orders</th>
               <th className="p-3">Last activity</th>
+              <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -81,7 +114,7 @@ export default function PlatformShopsPage() {
                   <span
                     className={`inline-block rounded-full border px-2 py-0.5 text-xs font-semibold ${STATUS_STYLES[shop.status]}`}
                   >
-                    {shop.status}
+                    {shop.status === "active" ? "Active" : "Suspended"}
                   </span>
                 </td>
                 <td className="p-3 text-slate-300">{shop.published ? "Yes" : "No"}</td>
@@ -91,6 +124,39 @@ export default function PlatformShopsPage() {
                 <td className="p-3 text-slate-300">{shop.orderCount}</td>
                 <td className="p-3 text-slate-400">
                   {new Date(shop.lastActivityAt).toLocaleDateString()}
+                </td>
+                <td className="p-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <Link
+                      href={`/platform/shops/${shop.id}`}
+                      className={ICON_BUTTON}
+                      aria-label={`View ${shop.name}`}
+                    >
+                      <Eye className="size-4" />
+                    </Link>
+                    <button
+                      onClick={() => impersonate(shop)}
+                      disabled={busyId === shop.id}
+                      className={ICON_BUTTON}
+                      aria-label={`Log in as ${shop.name}`}
+                      title="Log in as this shop"
+                    >
+                      <LogIn className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => toggleSuspend(shop)}
+                      disabled={busyId === shop.id}
+                      className={ICON_BUTTON}
+                      aria-label={shop.status === "active" ? `Suspend ${shop.name}` : `Unsuspend ${shop.name}`}
+                      title={shop.status === "active" ? "Suspend shop" : "Unsuspend shop"}
+                    >
+                      {shop.status === "active" ? (
+                        <Ban className="size-4" />
+                      ) : (
+                        <RotateCcw className="size-4" />
+                      )}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
