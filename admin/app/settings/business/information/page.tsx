@@ -1,19 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Check } from "lucide-react";
-import {
-  clearWhatsAppCredentials,
-  getPublishReadiness,
-  getShop,
-  getWhatsAppSettings,
-  resolveImageUrl,
-  setWhatsAppCredentials,
-  storefrontUrlFor,
-  updateShop,
-  uploadShopLogo,
-} from "@/lib/api";
-import { WHATSAPP_CREDENTIAL_FIELDS, type PublishReadiness, type Shop, type TrademarkFormat, type WhatsAppSettings } from "@/lib/types";
+import { getPublishReadiness, getShop, resolveImageUrl, storefrontUrlFor, updateShop, uploadShopLogo } from "@/lib/api";
+import type { PublishReadiness, Shop, TrademarkFormat } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -26,106 +17,6 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-
-// Self-contained, same reasoning as PublishCard below — this saves via its
-// own dedicated endpoint (/whatsapp-settings), not the page's bundled
-// Save changes button, and shouldn't share its credential-input state with
-// the rest of the form's lifecycle.
-function WhatsAppCredentialsCard() {
-  const toast = useToast();
-  const [settings, setSettings] = useState<WhatsAppSettings | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    getWhatsAppSettings()
-      .then(setSettings)
-      .catch(() => setSettings({ hasCredentials: false, maskedCredentials: null }));
-  }, []);
-
-  async function handleSave() {
-    const phoneNumberId = values.phoneNumberId?.trim();
-    const accessToken = values.accessToken?.trim();
-    if (!phoneNumberId || !accessToken) {
-      toast("Both fields are required to save", "error");
-      return;
-    }
-    setSaving(true);
-    try {
-      const updated = await setWhatsAppCredentials({ phoneNumberId, accessToken });
-      setSettings(updated);
-      setValues({});
-      toast("WhatsApp Cloud API credentials saved");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save WhatsApp credentials", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleClear() {
-    if (!confirm("Remove the saved WhatsApp Cloud API credentials? Customer WhatsApp notifications will stop sending until reconfigured.")) {
-      return;
-    }
-    setSaving(true);
-    try {
-      const updated = await clearWhatsAppCredentials();
-      setSettings(updated);
-      toast("WhatsApp credentials removed");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to remove WhatsApp credentials", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!settings) return null;
-
-  return (
-    <Card className="space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold">WhatsApp Business API</h3>
-        <p className="text-xs text-text-faint mt-1">
-          Meta WhatsApp Cloud API credentials, used to send customer order notifications when
-          &quot;Notify Customers via WhatsApp&quot; is on above. Business verification and number setup happen in
-          Meta&apos;s own Business Manager, then paste the resulting values here.
-          {!settings.hasCredentials && " Without these, notifications fall back to a console log only (dev/testing)."}
-        </p>
-      </div>
-      <div className="space-y-3">
-        {WHATSAPP_CREDENTIAL_FIELDS.map((field) => (
-          <div key={field.key}>
-            <Input
-              label={field.label}
-              type="password"
-              autoComplete="off"
-              value={values[field.key] ?? ""}
-              onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-            />
-            {settings.maskedCredentials?.[field.key] && (
-              <p className="mt-1 text-xs text-text-faint">
-                Currently saved: {settings.maskedCredentials[field.key]}. Re-enter both fields to change either one.
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-text-faint">Saves on its own, separate from the page's Save changes button below.</p>
-        <div className="flex gap-2 shrink-0">
-          {settings.hasCredentials && (
-            <Button variant="secondary" onClick={handleClear} disabled={saving}>
-              Remove
-            </Button>
-          )}
-          <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
-            {saving ? "Saving…" : "Save WhatsApp credentials"}
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 // Saves immediately on toggle (same pattern as the Payment Gateways page's
 // Cash on Delivery switch) — this is a "go live" action, not a field
@@ -215,12 +106,6 @@ function PublishCard({ shop, onChange }: { shop: Shop; onChange: (published: boo
   );
 }
 
-// UAE-focused dial codes — this is a UAE-market product, not a general
-// international directory. Extend the list if that scope changes.
-const WHATSAPP_COUNTRY_CODES = [
-  "+971", "+966", "+965", "+974", "+973", "+968", "+91", "+92", "+1", "+44",
-];
-
 // No timezone library in the project — a fixed list covering the shop's
 // operating region plus a few common ones, same tradeoff as the dial codes.
 const TIMEZONES = [
@@ -249,8 +134,6 @@ export default function BusinessInformationPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [email, setEmail] = useState("");
-  const [whatsappCountryCode, setWhatsappCountryCode] = useState("+971");
-  const [whatsappNumber, setWhatsappNumber] = useState("");
   const [description, setDescription] = useState("");
   const [country, setCountry] = useState("");
   // Whether country was already set the moment this page loaded — the
@@ -260,7 +143,6 @@ export default function BusinessInformationPage() {
   const [address, setAddress] = useState("");
   const [timezone, setTimezone] = useState("Asia/Dubai");
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
-  const [notifyCustomersWhatsapp, setNotifyCustomersWhatsapp] = useState(false);
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [notifyAbandonedCart, setNotifyAbandonedCart] = useState(false);
   const [abandonedCartWindowMinutes, setAbandonedCartWindowMinutes] = useState(60);
@@ -280,15 +162,12 @@ export default function BusinessInformationPage() {
       setLogoUrl(s.logoUrl);
       setLogoPreview(resolveImageUrl(s.logoUrl));
       setEmail(s.email ?? "");
-      setWhatsappCountryCode(s.whatsappCountryCode ?? "+971");
-      setWhatsappNumber(s.whatsappNumber ?? "");
       setDescription(s.description ?? "");
       setCountry(s.country ?? "");
       setCountryLocked(!!s.country);
       setAddress(s.address ?? "");
       setTimezone(s.timezone);
       setNotifyWhatsapp(s.notifyWhatsapp);
-      setNotifyCustomersWhatsapp(s.notifyCustomersWhatsapp);
       setNotifyEmail(s.notifyEmail);
       setNotifyAbandonedCart(s.notifyAbandonedCart);
       setAbandonedCartWindowMinutes(s.abandonedCartWindowMinutes);
@@ -325,14 +204,11 @@ export default function BusinessInformationPage() {
         trademarkFormat,
         logoUrl: nextLogoUrl,
         email: email.trim() || undefined,
-        whatsappCountryCode,
-        whatsappNumber,
         description,
         country,
         address,
         timezone,
         notifyWhatsapp,
-        notifyCustomersWhatsapp,
         notifyEmail,
         notifyAbandonedCart,
         abandonedCartWindowMinutes,
@@ -403,30 +279,6 @@ export default function BusinessInformationPage() {
 
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
 
-          <div>
-            <label className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 block mb-1.5">
-              WhatsApp Number
-            </label>
-            <div className="flex gap-2">
-              <select
-                value={whatsappCountryCode}
-                onChange={(e) => setWhatsappCountryCode(e.target.value)}
-                className="h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-              >
-                {WHATSAPP_COUNTRY_CODES.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={whatsappNumber}
-                onChange={(e) => setWhatsappNumber(e.target.value)}
-                className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-              />
-            </div>
-          </div>
-
           <div className="sm:col-span-2 lg:col-span-3">
             <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
@@ -486,20 +338,19 @@ export default function BusinessInformationPage() {
           Notification Settings
         </p>
         <p className="text-xs text-text-faint mb-3">
-          &quot;Notify Customers via WhatsApp&quot; and &quot;Allow Email Notifications&quot; send real order-confirmation
-          and delivery/pickup updates to customers. &quot;Allow WhatsApp Notifications&quot; only saves a preference;
-          it doesn&apos;t control customer messaging.
+          &quot;Allow Email Notifications&quot; sends real order-confirmation and delivery/pickup updates to
+          customers. &quot;Allow WhatsApp Notifications&quot; only saves a preference; it doesn&apos;t control
+          customer messaging — see{" "}
+          <Link href="/integrations/messaging" className="text-accent-text dark:text-accent hover:underline">
+            Integrations &gt; Messaging
+          </Link>{" "}
+          for the real WhatsApp number, credentials, and customer-notification toggle.
         </p>
         <div className="space-y-2">
           <Checkbox
             label="Allow WhatsApp Notifications"
             checked={notifyWhatsapp}
             onChange={(e) => setNotifyWhatsapp(e.target.checked)}
-          />
-          <Checkbox
-            label="Notify Customers via WhatsApp"
-            checked={notifyCustomersWhatsapp}
-            onChange={(e) => setNotifyCustomersWhatsapp(e.target.checked)}
           />
           <Checkbox
             label="Allow Email Notifications"
@@ -571,8 +422,6 @@ export default function BusinessInformationPage() {
           ]}
         />
       </Card>
-
-      <WhatsAppCredentialsCard />
 
       <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
         <Check className="size-4 inline -mt-0.5 mr-1" />

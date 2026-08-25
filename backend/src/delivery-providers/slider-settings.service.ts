@@ -1,142 +1,134 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
-import { decrypt, encrypt } from '../common/crypto';
 import type { TenantContext } from '../common/tenant-context';
-import type { SetSliderCredentialsDto } from './dto/set-slider-credentials.dto';
+import { createLogger } from '../common/logging/logger';
 import {
   SLIDER_BASE_URLS,
   type SliderEnvironment,
 } from './slider/slider.constants';
 import type { DeliveryProviderCredentials } from './slider/slider-delivery.interface';
 
-interface StoredSliderCredentials {
-  apiKey: string;
-  accountId: string;
-  webhookToken?: string;
-  environment: SliderEnvironment;
-}
+const logger = createLogger('SliderSettingsService');
+
+export type SliderStatus = 'connected' | 'awaiting_setup' | 'not_enabled';
 
 export interface SliderSettingsResponse {
-  hasCredentials: boolean;
+  enabled: boolean;
   accountId: string | null;
-  environment: SliderEnvironment | null;
-  hasWebhookToken: boolean;
-  // Never the real value — see maskValue.
-  maskedApiKey: string | null;
+  status: SliderStatus;
 }
 
-function maskValue(value: string): string {
-  if (value.length <= 4) return '•'.repeat(Math.max(value.length, 4));
-  return `••••${value.slice(-4)}`;
-}
-
-// Single shop-level encrypted slot (shop.sliderCredentials), same shape as
-// WhatsAppSettingsService — one pluggable courier integration, not a
-// per-provider table (see delivery-providers.module.ts / the interface's
-// own ponytail note for why there's no registry yet).
+// Slider is a platform partnership, not a bring-your-own-keys integration
+// like Payments/WhatsApp — Requital holds ONE API key for every merchant
+// (SLIDER_API_KEY/SLIDER_ENVIRONMENT/SLIDER_WEBHOOK_TOKEN, env vars, never
+// touched by this service), and each shop is a customer account under that
+// partner, identified by sliderAccountId. Nothing here encrypts or decrypts
+// anything — sliderAccountId isn't a secret (it's an identifier, not a
+// credential), so it's a plain column, not an encrypted blob like
+// shop.whatsappCredentials. See CLAUDE.md for the full model and the
+// PR #72 correction this replaces.
 @Injectable()
 export class SliderSettingsService {
   constructor(private readonly db: DatabaseService) {}
 
+  // Merchant-facing read — used by both the Integrations > Delivery card
+  // (status indicator) and SliderDeliveryPanel (to decide whether to offer
+  // dispatch at all, rather than letting a request fail at call time).
   async find(ctx: TenantContext): Promise<SliderSettingsResponse> {
-    const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT sliderCredentials FROM shop WHERE id = ?`,
-      [ctx.shopId],
-    );
-    if (rows.length === 0) {
-      throw new NotFoundException(`Shop ${ctx.shopId} not found`);
-    }
-    return this.toResponse(rows[0].sliderCredentials as string | null);
+    const row = await this.findRow(ctx.shopId);
+    return this.toResponse(row);
   }
 
-  async setCredentials(
+  // Merchant-facing write — the only thing a shop admin can change. Setting
+  // sliderAccountId is platform-admin only (see setAccountId below).
+  async setEnabled(
     ctx: TenantContext,
-    dto: SetSliderCredentialsDto,
+    enabled: boolean,
   ): Promise<SliderSettingsResponse> {
-    const existing = await this.readStored(ctx.shopId);
-    const apiKey = dto.apiKey ?? existing?.apiKey;
-    if (!apiKey) {
-      throw new BadRequestException(
-        'apiKey is required the first time Slider credentials are saved',
-      );
+    await this.db.execute(`UPDATE shop SET sliderEnabled = ? WHERE id = ?`, [
+      enabled,
+      ctx.shopId,
+    ]);
+    return this.find(ctx);
+  }
+
+  // Platform-admin only (see platform-admin/platform-admin.controller.ts) —
+  // a merchant has no Slider dashboard access to get this value themselves.
+  async setAccountId(
+    shopId: number,
+    accountId: string,
+  ): Promise<SliderSettingsResponse> {
+    const result = await this.db.execute(
+      `UPDATE shop SET sliderAccountId = ? WHERE id = ?`,
+      [accountId, shopId],
+    );
+    if (result.affectedRows === 0) {
+      throw new NotFoundException(`Shop ${shopId} not found`);
     }
-    const encrypted = encrypt(
-      JSON.stringify({
-        apiKey,
-        accountId: dto.accountId,
-        webhookToken: dto.webhookToken ?? existing?.webhookToken,
-        environment: dto.environment,
-      } satisfies StoredSliderCredentials),
-    );
-    await this.db.execute(
-      `UPDATE shop SET sliderCredentials = ? WHERE id = ?`,
-      [encrypted, ctx.shopId],
-    );
-    return this.find(ctx);
+    const row = await this.findRow(shopId);
+    return this.toResponse(row);
   }
 
-  async clearCredentials(ctx: TenantContext): Promise<SliderSettingsResponse> {
-    await this.db.execute(
-      `UPDATE shop SET sliderCredentials = NULL WHERE id = ?`,
-      [ctx.shopId],
-    );
-    return this.find(ctx);
-  }
-
-  // Decrypted + shaped for a real provider call (baseUrl resolved from
-  // environment). Null means "not configured" — callers throw
-  // DeliveryProviderNotConfiguredException, there's no platform-level
-  // fallback for this integration (unlike Payments/WhatsApp, Slider has no
-  // env-var default — every shop brings its own sandbox/production keys).
+  // Resolved for a real provider call — null means "don't offer Slider for
+  // this shop right now," covering all three ways that can be true: the
+  // shop hasn't enabled it, Slider hasn't finished setting up their account
+  // id yet (see the "awaiting setup" status), or (a platform misconfiguration,
+  // logged as a warning rather than thrown — this is Requital's own fault,
+  // not something a merchant-facing 400 should describe) the platform env
+  // vars themselves aren't set.
   async resolveCredentials(
     shopId: number,
   ): Promise<DeliveryProviderCredentials | null> {
-    const decoded = await this.readStored(shopId);
-    if (!decoded) return null;
+    const row = await this.findRow(shopId);
+    if (!row || !row.sliderEnabled || !row.sliderAccountId) return null;
+
+    const apiKey = process.env.SLIDER_API_KEY;
+    const environment = process.env.SLIDER_ENVIRONMENT as
+      SliderEnvironment | undefined;
+    if (!apiKey || !environment || !(environment in SLIDER_BASE_URLS)) {
+      logger.warn(
+        'Slider platform credentials are not configured (SLIDER_API_KEY/SLIDER_ENVIRONMENT env vars)',
+      );
+      return null;
+    }
     return {
-      apiKey: decoded.apiKey,
-      accountId: decoded.accountId,
-      baseUrl: SLIDER_BASE_URLS[decoded.environment],
+      apiKey,
+      accountId: row.sliderAccountId,
+      baseUrl: SLIDER_BASE_URLS[environment],
     };
   }
 
-  // For the webhook receiver's optional token check — same underlying read
-  // as resolveCredentials, just narrowed to the one field a webhook needs.
-  async resolveWebhookToken(shopId: number): Promise<string | null> {
-    const decoded = await this.readStored(shopId);
-    return decoded?.webhookToken ?? null;
-  }
-
-  private async readStored(
-    shopId: number,
-  ): Promise<StoredSliderCredentials | null> {
+  private async findRow(shopId: number): Promise<{
+    sliderEnabled: boolean;
+    sliderAccountId: string | null;
+  } | null> {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT sliderCredentials FROM shop WHERE id = ?`,
+      `SELECT sliderEnabled, sliderAccountId FROM shop WHERE id = ?`,
       [shopId],
     );
-    const stored = rows[0]?.sliderCredentials as string | null | undefined;
-    if (!stored) return null;
-    return JSON.parse(decrypt(stored)) as StoredSliderCredentials;
+    if (rows.length === 0) return null;
+    return {
+      sliderEnabled: !!rows[0].sliderEnabled,
+      sliderAccountId: rows[0].sliderAccountId as string | null,
+    };
   }
 
-  private toResponse(encrypted: string | null): SliderSettingsResponse {
-    if (!encrypted) {
-      return {
-        hasCredentials: false,
-        accountId: null,
-        environment: null,
-        hasWebhookToken: false,
-        maskedApiKey: null,
-      };
+  private toResponse(
+    row: { sliderEnabled: boolean; sliderAccountId: string | null } | null,
+  ): SliderSettingsResponse {
+    if (!row) {
+      throw new NotFoundException('Shop not found');
     }
-    const decoded = JSON.parse(decrypt(encrypted)) as StoredSliderCredentials;
+    const status: SliderStatus = !row.sliderEnabled
+      ? 'not_enabled'
+      : row.sliderAccountId
+        ? 'connected'
+        : 'awaiting_setup';
     return {
-      hasCredentials: true,
-      accountId: decoded.accountId,
-      environment: decoded.environment,
-      hasWebhookToken: !!decoded.webhookToken,
-      maskedApiKey: maskValue(decoded.apiKey),
+      enabled: row.sliderEnabled,
+      accountId: row.sliderAccountId,
+      status,
     };
   }
 }

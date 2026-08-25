@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { cancelSliderDelivery, dispatchSliderDelivery, getSliderQuote } from "@/lib/api";
-import type { Order, SliderQuote, SliderVehicleType } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { cancelSliderDelivery, dispatchSliderDelivery, getSliderQuote, getSliderSettings } from "@/lib/api";
+import type { Order, SliderQuote, SliderSettings, SliderVehicleType } from "@/lib/types";
 import { waLink } from "@/lib/validators";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
@@ -35,8 +35,24 @@ export default function SliderDeliveryPanel({
   const [vehicleType, setVehicleType] = useState<SliderVehicleType>("any");
   const [dispatching, setDispatching] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [sliderStatus, setSliderStatus] = useState<SliderSettings["status"] | null>(null);
 
   const delivery = order.externaldelivery;
+  const alreadyDispatchedViaSlider = delivery?.provider === "slider";
+
+  // Only relevant for the "offer to dispatch" path below — an order already
+  // dispatched via Slider always shows its real status regardless of the
+  // shop's current toggle (a merchant can disable Slider after dispatching
+  // an in-flight delivery; that delivery still needs to be trackable/
+  // cancellable). Skipped entirely once already dispatched, so this never
+  // fires an extra fetch for the common case of viewing a Slider order.
+  useEffect(() => {
+    if (alreadyDispatchedViaSlider) return;
+    getSliderSettings()
+      .then((s) => setSliderStatus(s.status))
+      .catch(() => setSliderStatus("not_enabled"));
+  }, [alreadyDispatchedViaSlider]);
+
   // Manual courier logging already owns this order's one delivery slot —
   // Slider dispatch isn't offered on top of it (the backend's own
   // one-record-per-order unique constraint would reject it anyway).
@@ -127,6 +143,18 @@ export default function SliderDeliveryPanel({
           </div>
         )}
       </div>
+    );
+  }
+
+  // Loading (null) or the shop never turned Slider on — render nothing
+  // rather than flashing a "Send to Slider" button that would just 400.
+  if (sliderStatus === null || sliderStatus === "not_enabled") return null;
+
+  if (sliderStatus === "awaiting_setup") {
+    return (
+      <p className="text-xs text-text-faint">
+        Your Slider account is being set up. Delivery dispatch will be available once complete.
+      </p>
     );
   }
 

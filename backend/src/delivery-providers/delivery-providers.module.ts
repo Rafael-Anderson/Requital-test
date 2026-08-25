@@ -4,6 +4,7 @@ import { OutletsModule } from '../outlets/outlets.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { ExternalDeliveriesModule } from '../external-deliveries/external-deliveries.module';
 import { JobsModule } from '../jobs/jobs.module';
+import { WebhookLogModule } from '../webhook-log/webhook-log.module';
 import { SliderDeliveryProvider } from './slider/slider-delivery.provider';
 import { SliderSettingsService } from './slider-settings.service';
 import { SliderSettingsController } from './slider-settings.controller';
@@ -12,12 +13,13 @@ import { SliderDeliveryController } from './slider-delivery.controller';
 import { SliderWebhookController } from './slider-webhook.controller';
 import { SliderWebhookJobHandler } from './slider-webhook.handler';
 
-// Sandbox-only for this PR (see slider/slider.constants.ts's SLIDER_BASE_URLS —
-// 'production' is defined but nothing lets a shop actually select it yet;
-// SetSliderCredentialsDto's @IsIn accepts both keys of that same const, so
-// wiring production up later is a settings-page change, not a backend one).
-// No provider registry (unlike PaymentProviderRegistry) — one courier
-// integration exists, see slider-delivery.interface.ts's own note.
+// Platform-level Slider credentials (SLIDER_API_KEY/SLIDER_ENVIRONMENT/
+// SLIDER_WEBHOOK_TOKEN) live in env vars, resolved directly by
+// SliderSettingsService/SliderWebhookJobHandler — not passed through this
+// module in any way. Sandbox-only in practice today: nothing currently sets
+// SLIDER_ENVIRONMENT=production anywhere real. No provider registry (unlike
+// PaymentProviderRegistry) — one courier integration exists, see
+// slider-delivery.interface.ts's own note.
 @Module({
   imports: [
     OrdersModule,
@@ -25,6 +27,7 @@ import { SliderWebhookJobHandler } from './slider-webhook.handler';
     BranchRolesModule,
     ExternalDeliveriesModule,
     JobsModule,
+    WebhookLogModule,
   ],
   controllers: [
     SliderSettingsController,
@@ -37,5 +40,8 @@ import { SliderWebhookJobHandler } from './slider-webhook.handler';
     SliderDeliveryService,
     SliderWebhookJobHandler,
   ],
+  // SliderSettingsService is needed by PlatformAdminModule (to set a shop's
+  // sliderAccountId) — everything else here stays private to this module.
+  exports: [SliderSettingsService],
 })
 export class DeliveryProvidersModule {}

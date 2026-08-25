@@ -51,6 +51,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { StorageModule } from './storage/storage.module';
 import { DomainsModule } from './domains/domains.module';
 import { DeliveryProvidersModule } from './delivery-providers/delivery-providers.module';
+import { WebhookLogModule } from './webhook-log/webhook-log.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 
 @Module({
   imports: [
@@ -119,6 +121,8 @@ import { DeliveryProvidersModule } from './delivery-providers/delivery-providers
     StorageModule,
     DomainsModule,
     DeliveryProvidersModule,
+    WebhookLogModule,
+    PlatformAdminModule,
   ],
   controllers: [AppController],
   providers: [

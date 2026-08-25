@@ -15,6 +15,7 @@ import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { OrdersService } from '../orders/orders.service';
+import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { createLogger } from '../common/logging/logger';
 
 const logger = createLogger('PaymentsService');
@@ -31,6 +32,7 @@ export class PaymentsService {
     private readonly affiliateService: AffiliateService,
     private readonly branchRolesService: BranchRolesService,
     private readonly ordersService: OrdersService,
+    private readonly webhookLogService: WebhookLogService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -103,7 +105,9 @@ export class PaymentsService {
       throw new GoneException('Payment link has expired');
     }
 
-    const provider = this.providerRegistry.get(order.shopPaymentGateway as string);
+    const provider = this.providerRegistry.get(
+      order.shopPaymentGateway as string,
+    );
     const credentials = await this.paymentSettingsService.resolveCredentials(
       order.shopRowId as number,
       order.shopPaymentGateway as string,
@@ -147,6 +151,12 @@ export class PaymentsService {
         gateway,
       );
       if (!credentials) {
+        await this.webhookLogService.log(
+          shopId,
+          gateway,
+          'unconfigured',
+          'rejected',
+        );
         throw new BadRequestException(
           `Shop ${shopId} has no ${gateway} credentials configured`,
         );
@@ -163,6 +173,12 @@ export class PaymentsService {
           ? JSON.stringify(credentials)
           : credentials.webhookSecret;
       if (!webhookSecret) {
+        await this.webhookLogService.log(
+          shopId,
+          gateway,
+          'unconfigured',
+          'rejected',
+        );
         throw new BadRequestException(
           `Shop ${shopId} has no ${gateway} webhook secret configured`,
         );
@@ -195,6 +211,7 @@ export class PaymentsService {
         `webhook for order ${order.id as number} received on the wrong shop's webhook URL — ignoring`,
         { orderId: order.id, orderShopId: order.shopId, webhookShopId: shopId },
       );
+      await this.webhookLogService.log(shopId, gateway, 'mismatch', 'rejected');
       return { received: true };
     }
 
@@ -220,9 +237,10 @@ export class PaymentsService {
           ],
         );
         if (result.status === 'paid') {
-          await conn.query(`UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`, [
-            order.id,
-          ]);
+          await conn.query(
+            `UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`,
+            [order.id],
+          );
         }
       });
     } catch (error) {
@@ -236,10 +254,22 @@ export class PaymentsService {
       // surfacing a 500 that would make the gateway retry a delivery that
       // already succeeded elsewhere.
       if (isDuplicateKeyError(error) || isLockConflict(error)) {
+        await this.webhookLogService.log(
+          order.shopId as number,
+          gateway,
+          result.status,
+          'duplicate',
+        );
         return { received: true };
       }
       throw error;
     }
+    await this.webhookLogService.log(
+      order.shopId as number,
+      gateway,
+      result.status,
+      'success',
+    );
 
     if (result.status === 'paid') {
       await this.affiliateService.syncOrderStatus(order.id as number, {

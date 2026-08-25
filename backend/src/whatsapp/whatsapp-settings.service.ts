@@ -1,8 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import { decrypt, encrypt } from '../common/crypto';
 import type { TenantContext } from '../common/tenant-context';
+import { normalizePhoneToE164 } from '../common/phone';
+import { MetaWhatsAppProvider } from './providers/meta-whatsapp.provider';
 import { WHATSAPP_CREDENTIAL_FIELDS } from './whatsapp-credential-fields';
 import type { SetWhatsAppCredentialsDto } from './dto/set-whatsapp-credentials.dto';
 
@@ -23,7 +29,10 @@ function maskValue(value: string): string {
 // among several).
 @Injectable()
 export class WhatsAppSettingsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly metaWhatsAppProvider: MetaWhatsAppProvider,
+  ) {}
 
   async find(ctx: TenantContext): Promise<WhatsAppSettingsResponse> {
     const rows = await this.db.query<RowDataPacket[]>(
@@ -46,20 +55,48 @@ export class WhatsAppSettingsService {
         accessToken: dto.accessToken,
       }),
     );
-    await this.db.execute(`UPDATE shop SET whatsappCredentials = ? WHERE id = ?`, [
-      encrypted,
-      ctx.shopId,
-    ]);
+    await this.db.execute(
+      `UPDATE shop SET whatsappCredentials = ? WHERE id = ?`,
+      [encrypted, ctx.shopId],
+    );
     return this.find(ctx);
   }
 
   async clearCredentials(
     ctx: TenantContext,
   ): Promise<WhatsAppSettingsResponse> {
-    await this.db.execute(`UPDATE shop SET whatsappCredentials = NULL WHERE id = ?`, [
-      ctx.shopId,
-    ]);
+    await this.db.execute(
+      `UPDATE shop SET whatsappCredentials = NULL WHERE id = ?`,
+      [ctx.shopId],
+    );
     return this.find(ctx);
+  }
+
+  // Lets a merchant verify their own saved credentials actually work,
+  // without waiting for a real order — sends through the same
+  // MetaWhatsAppProvider OrderNotificationsService uses, against this
+  // shop's own resolved credentials (never the platform fallback; there
+  // isn't one for WhatsApp Business API — see resolveCredentials below).
+  async sendTestMessage(
+    ctx: TenantContext,
+    phoneNumber: string,
+  ): Promise<{ sent: true }> {
+    const credentials = await this.resolveCredentials(ctx.shopId);
+    if (!credentials) {
+      throw new BadRequestException(
+        'Save your WhatsApp Business API credentials before sending a test message',
+      );
+    }
+    const to = normalizePhoneToE164(phoneNumber);
+    if (!to) {
+      throw new BadRequestException('Enter a valid phone number');
+    }
+    await this.metaWhatsAppProvider.sendMessage({
+      to,
+      body: 'This is a test message from your Requital store — WhatsApp Business API is connected correctly.',
+      credentials,
+    });
+    return { sent: true };
   }
 
   // Decrypted server-side only, to hand a real provider call what it needs
@@ -73,9 +110,7 @@ export class WhatsAppSettingsService {
       [shopId],
     );
     const whatsappCredentials = rows[0]?.whatsappCredentials as
-      | string
-      | null
-      | undefined;
+      string | null | undefined;
     if (!whatsappCredentials) return null;
     return JSON.parse(decrypt(whatsappCredentials)) as Record<string, string>;
   }
