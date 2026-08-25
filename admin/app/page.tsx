@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History } from "lucide-react";
+import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History, Plug } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getShop } from "@/lib/api";
 import PageShell from "@/components/ui/PageShell";
@@ -43,7 +43,14 @@ const ALL_SECTIONS: SectionDef[] = [
   { href: "/customers", label: "Customers", icon: Users, description: "Profiles, orders & history", group: "Growth", adminOnly: true },
   { href: "/reports", label: "Reports", icon: BarChart3, description: "Exportable business insights", group: "Growth", adminOnly: true },
   { href: "/activity-log", label: "Activity Log", icon: History, description: "Every change, who & when", group: "System", adminOnly: true },
-  { href: "/settings", label: "Settings", icon: Settings, description: "Business, payments & users", group: "System", adminOnly: true },
+  { href: "/settings", label: "Settings", icon: Settings, description: "Business info & users", group: "System", adminOnly: true },
+  // Delivery/payment/messaging provider config + read-only webhook
+  // diagnostics — separated from Settings since it's credential-heavy and
+  // staff with plain Orders access must never see it, same adminOnly gate
+  // as Settings but its own top-level tile (not a Settings sub-tab) since
+  // it's a peer concern, not a business-info detail. See
+  // app/integrations/layout.tsx.
+  { href: "/integrations", label: "Integrations", icon: Plug, description: "Delivery, payments & messaging", group: "System", adminOnly: true },
 ];
 
 const GROUP_ORDER = ["Storefront", "Growth", "System"] as const;

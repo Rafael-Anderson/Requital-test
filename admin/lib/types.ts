@@ -1707,7 +1707,7 @@ export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ["nomod", "str
 // let a merchant select one without knowing that, since it means every real
 // checkout fails at runtime with zero warning in settings. Rendered
 // disabled/"Coming soon" in the Payment Providers card-processor list
-// (admin/app/settings/business/payments/page.tsx) rather than hidden
+// (admin/app/integrations/payments/page.tsx) rather than hidden
 // entirely, so a merchant can see it's planned. Loosely typed (not
 // PaymentGatewayProvider[]) since a display-only entry like "telr"/"paytabs"
 // isn't a real, submittable card-processor option and shouldn't need
@@ -1795,12 +1795,29 @@ export interface WhatsAppSettings {
 export const SLIDER_VEHICLE_TYPES = ["bike", "car", "any"] as const;
 export type SliderVehicleType = (typeof SLIDER_VEHICLE_TYPES)[number];
 
+// Slider is a platform partnership, not bring-your-own-keys — Requital
+// holds the one API key (env vars, never touched by this frontend); a shop
+// only ever sees whether it's enabled and its own Slider account status.
+// See backend SliderSettingsService's own doc comment for the corrected
+// credential model (fixed 2026-08-26 from a wrong first version that stored
+// a per-shop encrypted key).
+export type SliderStatus = "connected" | "awaiting_setup" | "not_enabled";
+
 export interface SliderSettings {
-  hasCredentials: boolean;
+  enabled: boolean;
   accountId: string | null;
-  environment: "sandbox" | "production" | null;
-  hasWebhookToken: boolean;
-  maskedApiKey: string | null;
+  status: SliderStatus;
+}
+
+// --- Webhook diagnostics — mirrors backend/src/webhook-log/. Read-only,
+// no URL/token exposed here (those are platform-level, see CLAUDE.md). ---
+export interface WebhookEvent {
+  id: number;
+  shopId: number;
+  source: string;
+  eventType: string;
+  result: "success" | "duplicate" | "rejected" | "failed";
+  createdAt: string;
 }
 
 export interface SliderQuoteVehicle {

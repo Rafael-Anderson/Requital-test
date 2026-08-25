@@ -72,6 +72,7 @@ import type {
   SeoSettings,
   SliderSettings,
   SliderQuote,
+  WebhookEvent,
   WhatsAppSettings,
   PaginatedAuditLog,
   PaginatedStockMovements,
@@ -715,6 +716,15 @@ export function setWhatsAppCredentials(data: { phoneNumberId: string; accessToke
 
 export function clearWhatsAppCredentials() {
   return apiFetch<WhatsAppSettings>("/whatsapp-settings", { method: "DELETE" });
+}
+
+// Sends a real WhatsApp message via this shop's own configured credentials,
+// so a merchant can verify them without waiting for a real order.
+export function sendWhatsAppTestMessage(phoneNumber: string) {
+  return apiFetch<{ sent: boolean }>("/whatsapp-settings/test", {
+    method: "POST",
+    body: JSON.stringify({ phoneNumber }),
+  });
 }
 
 export interface ListOrdersParams {
@@ -1496,20 +1506,14 @@ export function getSliderSettings() {
   return apiFetch<SliderSettings>("/slider-settings");
 }
 
-export function updateSliderSettings(data: {
-  apiKey?: string;
-  accountId: string;
-  webhookToken?: string;
-  environment: "sandbox" | "production";
-}) {
+// The only thing a merchant can change — Slider's account id is set by a
+// platform admin (they have no access to Slider's own dashboard), see
+// CLAUDE.md.
+export function setSliderEnabled(enabled: boolean) {
   return apiFetch<SliderSettings>("/slider-settings", {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: JSON.stringify({ enabled }),
   });
-}
-
-export function clearSliderSettings() {
-  return apiFetch<SliderSettings>("/slider-settings", { method: "DELETE" });
 }
 
 export function getSliderQuote(orderId: number) {
@@ -1528,6 +1532,11 @@ export function dispatchSliderDelivery(
 
 export function cancelSliderDelivery(orderId: number) {
   return apiFetch<Order>(`/orders/${orderId}/slider-delivery`, { method: "DELETE" });
+}
+
+// Integrations > Webhooks — read-only diagnostics, last 20 for this shop.
+export function getWebhookLog() {
+  return apiFetch<WebhookEvent[]>("/webhook-log");
 }
 
 // --- Affiliate — admin-only server-side, see backend AffiliateController. ---

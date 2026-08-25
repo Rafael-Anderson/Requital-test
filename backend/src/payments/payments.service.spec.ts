@@ -10,6 +10,7 @@ import type {
 } from './payment-provider.interface';
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
 import type { OrdersService } from '../orders/orders.service';
+import type { WebhookLogService } from '../webhook-log/webhook-log.service';
 
 // None of these tests exercise generateLink() (the only method that
 // actually calls into branch-roles), so a bare mock is enough to satisfy
@@ -20,6 +21,12 @@ const mockBranchRolesService = {} as BranchRolesService;
 // tabby/tamara-payment.provider.spec.ts instead), so a bare mock is enough
 // here too.
 const mockOrdersService = {} as OrdersService;
+// Every test here exercises handleWebhook, which now logs an outcome via
+// WebhookLogService.log on every path — a bare resolved stub is enough
+// since none of these tests assert on the log itself.
+const mockWebhookLogService = {
+  log: jest.fn().mockResolvedValue(undefined),
+} as unknown as WebhookLogService;
 // The BNPL advanceOrderStatus tests below all use a 'paid' WebhookResult
 // status (same as every other "paid" test above), which always drives
 // AffiliateService.syncOrderStatus too — a working stub avoids that
@@ -58,7 +65,7 @@ function createMockDb(opts: {
         }
         return Promise.resolve([{ insertId: 1 }, []]);
       }
-      if (sql.includes("UPDATE `order` SET paymentStatus")) {
+      if (sql.includes('UPDATE `order` SET paymentStatus')) {
         orderUpdateCalls.push(params ?? []);
         return Promise.resolve([{ affectedRows: 1 }, []]);
       }
@@ -108,6 +115,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       {} as AffiliateService,
       mockBranchRolesService,
       mockOrdersService,
+      mockWebhookLogService,
     );
 
     const result = await service.handleWebhook(
@@ -142,6 +150,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       affiliateService,
       mockBranchRolesService,
       mockOrdersService,
+      mockWebhookLogService,
     );
 
     const result = await service.handleWebhook(
@@ -179,6 +188,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       {} as AffiliateService,
       mockBranchRolesService,
       mockOrdersService,
+      mockWebhookLogService,
     );
 
     await expect(
@@ -205,6 +215,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       {} as AffiliateService,
       mockBranchRolesService,
       mockOrdersService,
+      mockWebhookLogService,
     );
 
     const result = await service.handleWebhook(
@@ -226,6 +237,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       {} as AffiliateService,
       mockBranchRolesService,
       mockOrdersService,
+      mockWebhookLogService,
     );
 
     await expect(
@@ -267,6 +279,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockAffiliateServicePaid,
       mockBranchRolesService,
       ordersService,
+      mockWebhookLogService,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -308,6 +321,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       {} as AffiliateService,
       mockBranchRolesService,
       ordersService,
+      mockWebhookLogService,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -348,6 +362,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockAffiliateServicePaid,
       mockBranchRolesService,
       ordersService,
+      mockWebhookLogService,
     );
 
     const result = await service.handleWebhook(
@@ -390,6 +405,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockAffiliateServicePaid,
       mockBranchRolesService,
       ordersService,
+      mockWebhookLogService,
     );
 
     await expect(

@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// No QR Code Setup entry at all (explicitly out of scope).
+// No QR Code Setup entry at all (explicitly out of scope). Payment Gateways
+// and Delivery Providers both moved to the top-level Integrations app (see
+// admin/app/integrations/) — their old routes still resolve (to a small
+// "moved" pointer, see MovedToIntegrations.tsx) but are no longer listed as
+// normal settings tabs here.
 const ITEMS = [
   { href: "/settings/business/information", label: "Business Information" },
   { href: "/settings/business/store-configuration", label: "Store Configuration" },
   { href: "/settings/business/online-presence", label: "Online Presence" },
   { href: "/settings/business/seo", label: "SEO" },
-  { href: "/settings/business/payments", label: "Payment Gateways" },
-  { href: "/settings/business/delivery-providers", label: "Delivery Providers" },
   { href: "/settings/business/policy-pages", label: "Policy Pages" },
 ];
 

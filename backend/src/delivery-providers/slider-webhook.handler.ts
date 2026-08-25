@@ -3,7 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { OrdersService } from '../orders/orders.service';
 import { ExternalDeliveriesService } from '../external-deliveries/external-deliveries.service';
-import { SliderSettingsService } from './slider-settings.service';
+import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { mapSliderStatus } from './slider/slider-status-map';
 import { createLogger } from '../common/logging/logger';
 import type { TenantContext } from '../common/tenant-context';
@@ -35,7 +35,7 @@ export class SliderWebhookJobHandler implements OnModuleInit {
     private readonly db: DatabaseService,
     private readonly ordersService: OrdersService,
     private readonly externalDeliveriesService: ExternalDeliveriesService,
-    private readonly sliderSettingsService: SliderSettingsService,
+    private readonly webhookLogService: WebhookLogService,
     private readonly jobsWorkerService: JobsWorkerService,
   ) {}
 
@@ -47,20 +47,25 @@ export class SliderWebhookJobHandler implements OnModuleInit {
   }
 
   async handle(payload: ProcessSliderWebhookJobPayload): Promise<void> {
-    const expectedToken = await this.sliderSettingsService.resolveWebhookToken(
-      payload.shopId,
-    );
-    // No token configured on the shop's side = auth is optional for this
-    // shop, per the API's own "optional auth" contract — proceed
-    // unauthenticated. A configured token that doesn't match is a silent
-    // drop, not a thrown error: throwing here would make JobsWorkerService
-    // retry with backoff and eventually dead-letter a webhook that will
-    // never become valid on retry.
+    // One platform-wide token (SLIDER_WEBHOOK_TOKEN env var), not a
+    // per-shop one — matches the corrected credential model (Requital is
+    // the Slider partner, not each merchant). Unset = auth is optional per
+    // the API's own contract, proceed unauthenticated. A configured token
+    // that doesn't match is a silent drop, not a thrown error: throwing
+    // here would make JobsWorkerService retry with backoff and eventually
+    // dead-letter a webhook that will never become valid on retry.
+    const expectedToken = process.env.SLIDER_WEBHOOK_TOKEN;
     if (expectedToken && payload.providedToken !== expectedToken) {
       logger.warn('Slider webhook token mismatch, dropping', {
         shopId: payload.shopId,
         orderId: payload.orderId,
       });
+      await this.webhookLogService.log(
+        payload.shopId,
+        'slider',
+        payload.status,
+        'rejected',
+      );
       return;
     }
 
@@ -79,6 +84,12 @@ export class SliderWebhookJobHandler implements OnModuleInit {
           payload.estimatedDeliveryTime,
         ),
       },
+    );
+    await this.webhookLogService.log(
+      payload.shopId,
+      'slider',
+      status,
+      'success',
     );
 
     if (status === 'delivered') {

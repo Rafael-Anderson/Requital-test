@@ -61,6 +61,15 @@ export interface AuditlogRow {
   createdAt: Date;
 }
 
+export interface WebhookeventRow {
+  id: number;
+  shopId: number;
+  source: string;
+  eventType: string;
+  result: string;
+  createdAt: Date;
+}
+
 export interface ExternaldeliveryRow {
   id: number;
   orderId: number;
@@ -323,7 +332,8 @@ export interface ShopRow {
   lowStockDigestLastSentAt: Date | null;
   autoDeductIngredientStock: boolean;
   whatsappCredentials: string | null;
-  sliderCredentials: string | null;
+  sliderAccountId: string | null;
+  sliderEnabled: boolean;
   trn: string | null;
   websiteUrl: string | null;
   customDomain: string | null;

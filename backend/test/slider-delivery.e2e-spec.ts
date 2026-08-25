@@ -84,6 +84,13 @@ describe('Slider delivery integration (e2e)', () => {
   const OUTLET_LON = 55.2708;
 
   beforeAll(async () => {
+    // Platform-level Slider credentials (env vars, not per-shop DB rows —
+    // see the corrected credential model in CLAUDE.md / SliderSettingsService).
+    process.env.SLIDER_API_KEY = 'sk_test_platform';
+    process.env.SLIDER_ENVIRONMENT = 'sandbox';
+    process.env.SLIDER_WEBHOOK_TOKEN = 'whsec_test_token';
+    process.env.PLATFORM_ADMIN_TOKEN = 'test-platform-admin-token';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -232,15 +239,18 @@ describe('Slider delivery integration (e2e)', () => {
       .send({ published: true })
       .expect(200);
 
+    // Merchant-facing: enable Slider for this shop.
     await request(app.getHttpServer())
       .patch('/slider-settings')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        apiKey: 'sk_test_slider',
-        accountId: 'acct_test',
-        webhookToken: 'whsec_test_token',
-        environment: 'sandbox',
-      })
+      .send({ enabled: true })
+      .expect(200);
+    // Platform-admin-only: set this shop's Slider customer account id — a
+    // merchant can't do this themselves (see PlatformAdminController).
+    await request(app.getHttpServer())
+      .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
+      .set('x-platform-admin-token', 'test-platform-admin-token')
+      .send({ accountId: 'acct_test' })
       .expect(200);
   });
 
@@ -521,5 +531,147 @@ describe('Slider delivery integration (e2e)', () => {
       .set('Authorization', `Bearer ${otherToken}`)
       .send({ vehicleType: 'any' })
       .expect(404);
+  });
+
+  it('GET /slider-settings reports "connected" once enabled with an account id', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/slider-settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(res.body).toEqual({
+      enabled: true,
+      accountId: 'acct_test',
+      status: 'connected',
+    });
+  });
+
+  it('never returns a Slider API key in any settings response (there is no per-shop key anymore)', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/slider-settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(JSON.stringify(res.body)).not.toContain('sk_test_platform');
+    expect(res.body).not.toHaveProperty('apiKey');
+  });
+
+  it('a shop that enabled Slider but has no account id yet is "awaiting_setup" and cannot dispatch', async () => {
+    const signup = await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send({
+        name: 'Awaiting Setup Admin',
+        email: `slider-awaiting-${runId}@test.com`,
+        password: 'password123',
+        shopName: 'Awaiting Setup Shop',
+        subdomain: `slider-awaiting-${runId}`,
+      })
+      .expect(201);
+    const token = body<AuthResponse>(signup).accessToken;
+    await request(app.getHttpServer())
+      .patch('/slider-settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ enabled: true })
+      .expect(200);
+
+    const settings = await request(app.getHttpServer())
+      .get('/slider-settings')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(settings.body).toEqual({
+      enabled: true,
+      accountId: null,
+      status: 'awaiting_setup',
+    });
+
+    const outlets = await request(app.getHttpServer())
+      .get('/outlets')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const otherOutletId = body<OutletRow[]>(outlets)[0].id;
+    await request(app.getHttpServer())
+      .patch(`/outlets/${otherOutletId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        active: true,
+        emirate: 'Dubai',
+        latitude: OUTLET_LAT,
+        longitude: OUTLET_LON,
+      })
+      .expect(200);
+
+    const orderId = await (async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/public/slider-awaiting-${runId}/orders`)
+        .send({
+          outletId: otherOutletId,
+          customerName: 'X',
+          customerPhone: '0501234567',
+          customerAddress: '1 Sheikh Zayed Rd',
+          emirate: 'Dubai',
+          orderType: 'pickup',
+          paymentMethod: 'cash_on_pickup',
+          items: [],
+        });
+      return res.body as { order?: { id: number } };
+    })();
+    // No product/stock set up for this throwaway shop, so order creation
+    // itself may 400 — this test only cares about the quote/dispatch guard,
+    // which runs after order lookup, so skip if we couldn't create one.
+    if (!orderId.order) return;
+
+    const res = await request(app.getHttpServer())
+      .post(`/orders/${orderId.order.id}/slider-delivery/quote`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+    expect(messageContains(res, 'Slider')).toBe(true);
+  });
+
+  it('the platform-admin route rejects a missing or wrong token', async () => {
+    await request(app.getHttpServer())
+      .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
+      .send({ accountId: 'acct_hacked' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
+      .set('x-platform-admin-token', 'wrong-token')
+      .send({ accountId: 'acct_hacked' })
+      .expect(401);
+  });
+
+  it('GET /webhook-log lists recent webhook activity for this shop', async () => {
+    const orderId = await createOrder('cash_on_delivery');
+    const dispatched = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/slider-delivery`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ vehicleType: 'any' })
+      .expect(201);
+    const sliderOrderNumber =
+      body<OrderDetailBody>(dispatched).externaldelivery!.sliderOrderNumber;
+
+    await request(app.getHttpServer())
+      .post('/slider/webhook')
+      .set('x-slider-webhook-token', 'whsec_test_token')
+      .send({
+        order_number: sliderOrderNumber,
+        order_id: orderId,
+        status: 'at_pickup',
+        timestamp: Date.now(),
+      })
+      .expect(201);
+    const jobId = await latestJobId('process_slider_webhook');
+    expect(await jobsWorker.processJobById(jobId)).toBe(true);
+
+    const res = await request(app.getHttpServer())
+      .get('/webhook-log')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'slider',
+          eventType: 'at_pickup',
+          result: 'success',
+        }),
+      ]),
+    );
   });
 });

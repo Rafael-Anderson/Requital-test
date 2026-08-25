@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Check } from "lucide-react";
 import { getShop, updateShop } from "@/lib/api";
 import type { BusinessHours, ProductDisplayOrientation, Shop, ShopLanguage } from "@/lib/types";
@@ -55,7 +56,6 @@ export default function StoreConfigurationPage() {
   const [asapDeliveryEnabled, setAsapDeliveryEnabled] = useState(false);
   const [deliveryCalendarEnabled, setDeliveryCalendarEnabled] = useState(false);
   const [businessHours, setBusinessHours] = useState<BusinessHours>(defaultBusinessHours());
-  const [whatsappFloatingButtonEnabled, setWhatsappFloatingButtonEnabled] = useState(false);
   const [birthdayDiscountEnabled, setBirthdayDiscountEnabled] = useState(false);
   const [customerSurveyEnabled, setCustomerSurveyEnabled] = useState(false);
   const [dynamicThemeBuilderEnabled, setDynamicThemeBuilderEnabled] = useState(false);
@@ -81,7 +81,6 @@ export default function StoreConfigurationPage() {
       setAsapDeliveryEnabled(s.asapDeliveryEnabled);
       setDeliveryCalendarEnabled(s.deliveryCalendarEnabled);
       setBusinessHours(mergeBusinessHours(s.businessHours));
-      setWhatsappFloatingButtonEnabled(s.whatsappFloatingButtonEnabled);
       setBirthdayDiscountEnabled(s.birthdayDiscountEnabled);
       setCustomerSurveyEnabled(s.customerSurveyEnabled);
       setDynamicThemeBuilderEnabled(s.dynamicThemeBuilderEnabled);
@@ -108,7 +107,6 @@ export default function StoreConfigurationPage() {
         asapDeliveryEnabled,
         deliveryCalendarEnabled,
         businessHours: JSON.stringify(businessHours),
-        whatsappFloatingButtonEnabled,
         birthdayDiscountEnabled,
         customerSurveyEnabled,
         dynamicThemeBuilderEnabled,
@@ -269,16 +267,13 @@ export default function StoreConfigurationPage() {
             <Card>
               <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Engagement</h3>
               <div className="space-y-3">
-                <div>
-                  <Checkbox
-                    label="WhatsApp floating button enabled"
-                    checked={whatsappFloatingButtonEnabled}
-                    onChange={(e) => setWhatsappFloatingButtonEnabled(e.target.checked)}
-                  />
-                  <p className="text-xs text-text-faint mt-1">
-                    Controls the floating chat button on your storefront.
-                  </p>
-                </div>
+                <p className="text-xs text-text-faint">
+                  The WhatsApp floating button moved to{" "}
+                  <Link href="/integrations/messaging" className="text-accent-text dark:text-accent hover:underline">
+                    Integrations &gt; Messaging
+                  </Link>
+                  , alongside your WhatsApp number and notification settings.
+                </p>
                 <div>
                   <Checkbox
                     label="Birthday discount enabled"
@@ -313,7 +308,11 @@ export default function StoreConfigurationPage() {
                     </Field>
                     {cartDisabledMode === "contact_to_order" && !shop.whatsappNumber && (
                       <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">
-                        Set a WhatsApp number in Business Information for the &quot;Contact to order&quot; button to work.
+                        Set a WhatsApp number in{" "}
+                        <Link href="/integrations/messaging" className="underline">
+                          Integrations &gt; Messaging
+                        </Link>{" "}
+                        for the &quot;Contact to order&quot; button to work.
                       </p>
                     )}
                   </div>

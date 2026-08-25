@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post } from '@nestjs/common';
 import { WhatsAppSettingsService } from './whatsapp-settings.service';
 import { SetWhatsAppCredentialsDto } from './dto/set-whatsapp-credentials.dto';
+import { SendWhatsAppTestMessageDto } from './dto/send-whatsapp-test-message.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -32,5 +33,13 @@ export class WhatsAppSettingsController {
   @Delete()
   clear(@CurrentUser() ctx: TenantContext) {
     return this.whatsAppSettingsService.clearCredentials(ctx);
+  }
+
+  @Post('test')
+  sendTestMessage(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: SendWhatsAppTestMessageDto,
+  ) {
+    return this.whatsAppSettingsService.sendTestMessage(ctx, dto.phoneNumber);
   }
 }
