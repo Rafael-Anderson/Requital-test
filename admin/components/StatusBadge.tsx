@@ -47,6 +47,17 @@ const STATUS_CATEGORY: Record<string, ChipCategory> = {
   failed: "danger",
   refunded: "neutral",
   closed: "neutral",
+  // Slider's own in-progress statuses — same "accent" treatment as the
+  // manual-logging picked_up above, one more step of the same courier
+  // handoff. return_trip_started is deliberately "danger", not "accent" —
+  // per the Slider integration spec this is a failure-ish state that needs
+  // merchant attention, same as cancelled/failed above.
+  searching_rider: "accent",
+  rider_assigned: "accent",
+  heading_to_pickup: "accent",
+  at_pickup: "accent",
+  in_transit: "accent",
+  return_trip_started: "danger",
 };
 
 export default function StatusBadge({ status }: { status: string }) {

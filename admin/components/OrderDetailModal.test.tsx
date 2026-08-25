@@ -62,6 +62,14 @@ function fakeOrder(): Order {
       destination: "123 Street",
       status: "pending",
       createdAt: new Date().toISOString(),
+      provider: "manual",
+      sliderOrderNumber: null,
+      trackingUrl: null,
+      driverName: null,
+      driverPhone: null,
+      driverLat: null,
+      driverLng: null,
+      estimatedDeliveryMinutes: null,
     },
   } as Order;
 }

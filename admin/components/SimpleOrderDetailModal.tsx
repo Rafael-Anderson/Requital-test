@@ -5,12 +5,18 @@ import { cancelOrder, collectCash, getOrder, updateOrderStatus } from "@/lib/api
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 import { waLink } from "@/lib/validators";
+import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import Skeleton from "@/components/ui/Skeleton";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
+import SliderDeliveryPanel from "@/components/SliderDeliveryPanel";
+
+// Mirrors OrderDetailModal's own allow-list for the Slider action — see
+// that file's SLIDER_ROLES comment.
+const SLIDER_ROLES = ["admin", "branch", "order_manager"];
 
 // Simple-mode counterpart to OrderDetailModal.tsx: status + basic info +
 // items + Mark Fulfilled/Cancel only, none of the advanced sections (Status
@@ -28,6 +34,7 @@ export default function SimpleOrderDetailModal({
   onClose: () => void;
   onChanged?: () => void;
 }) {
+  const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [collectingCash, setCollectingCash] = useState(false);
@@ -177,6 +184,19 @@ export default function SimpleOrderDetailModal({
                   Mark cash collected
                 </Button>
               )}
+            </div>
+          )}
+
+          {user && SLIDER_ROLES.includes(user.role) && (!order.externaldelivery || order.externaldelivery.provider === "slider") && (
+            <div className="border border-gray-200 rounded-lg p-3 dark:border-white/10">
+              <SliderDeliveryPanel
+                order={order}
+                onChanged={() => {
+                  onChanged?.();
+                  getOrder(order.id).then(setOrder);
+                }}
+                compact
+              />
             </div>
           )}
 

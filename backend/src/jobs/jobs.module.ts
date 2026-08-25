@@ -7,6 +7,6 @@ import { SchedulerService } from './scheduler.service';
 @Module({
   controllers: [JobsController],
   providers: [JobsService, JobsWorkerService, SchedulerService],
-  exports: [JobsService, SchedulerService],
+  exports: [JobsService, SchedulerService, JobsWorkerService],
 })
 export class JobsModule {}

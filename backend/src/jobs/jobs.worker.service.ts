@@ -21,22 +21,35 @@ const MAX_JOBS_PER_TICK = 10;
 // Each handler is only ever invoked with the payload shape matching its own
 // job.type (processJob below looks the handler up by that same type), so
 // the per-branch cast here is safe despite JobPayload being a union.
-const HANDLERS: Record<JobType, (payload: JobPayload) => Promise<void>> = {
-  send_email: (payload) => handleSendEmailJob(payload as SendEmailJobPayload),
-  send_merchant_whatsapp_alert: (payload) =>
-    handleSendMerchantWhatsAppAlertJob(
-      payload as SendMerchantWhatsAppAlertJobPayload,
-    ),
-};
-
-// Polls the `job` table on an interval and executes whatever's due — see
-// JobsService.claimNextJob for the SKIP LOCKED claim that makes this safe
-// across multiple app instances. @Interval, not @Cron, since this needs to
-// run every few seconds rather than at a calendar-aligned time; both come
-// from the same already-registered ScheduleModule (see app.module.ts).
+//
+// An instance field (not the module-level const this used to be) so a
+// feature module can register a handler that needs real DI (a DB-touching
+// service, not just a standalone function) without JobsModule importing
+// that feature module back — see SliderWebhookJobHandler.onModuleInit for
+// the one registrant that needs this today. Avoids a circular module
+// dependency (JobsModule -> DeliveryProvidersModule -> JobsModule) that a
+// static HANDLERS map listing every job type up front would otherwise
+// force.
 @Injectable()
 export class JobsWorkerService {
+  private readonly handlers: Partial<
+    Record<JobType, (payload: JobPayload) => Promise<void>>
+  > = {
+    send_email: (payload) => handleSendEmailJob(payload as SendEmailJobPayload),
+    send_merchant_whatsapp_alert: (payload) =>
+      handleSendMerchantWhatsAppAlertJob(
+        payload as SendMerchantWhatsAppAlertJobPayload,
+      ),
+  };
+
   constructor(private readonly jobsService: JobsService) {}
+
+  registerHandler(
+    type: JobType,
+    handler: (payload: JobPayload) => Promise<void>,
+  ): void {
+    this.handlers[type] = handler;
+  }
 
   // Every e2e spec bootstraps the real AppModule (see CLAUDE.md), so a live
   // 5s-interval poller would otherwise run inside every one of those specs'
@@ -85,7 +98,7 @@ export class JobsWorkerService {
   }
 
   private async processJob(job: JobRecord): Promise<void> {
-    const handler = HANDLERS[job.type as JobType];
+    const handler = this.handlers[job.type as JobType];
     if (!handler) {
       await this.jobsService.failJob(
         job.id,

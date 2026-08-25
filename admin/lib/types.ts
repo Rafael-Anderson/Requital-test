@@ -228,6 +228,22 @@ export interface MonthlyReportFilters {
   channel?: string;
 }
 
+// Manual carrier logging's own 4 statuses, plus Slider's 9 (some names
+// overlap, e.g. 'picked_up'/'delivered' — reused, not duplicated). Mirrors
+// backend EXTERNAL_DELIVERY_STATUSES exactly.
+export type ExternalDeliveryStatus =
+  | "pending"
+  | "picked_up"
+  | "delivered"
+  | "failed"
+  | "searching_rider"
+  | "rider_assigned"
+  | "heading_to_pickup"
+  | "at_pickup"
+  | "in_transit"
+  | "return_trip_started"
+  | "cancelled";
+
 export interface ExternalDeliveryRow {
   id: number;
   orderId: number;
@@ -238,8 +254,12 @@ export interface ExternalDeliveryRow {
   vehicleType: string | null;
   price: string;
   destination: string;
-  status: "pending" | "picked_up" | "delivered" | "failed";
+  status: ExternalDeliveryStatus;
   createdAt: string;
+  provider: "manual" | "slider";
+  trackingUrl: string | null;
+  driverName: string | null;
+  driverPhone: string | null;
 }
 
 export interface PaginatedExternalDeliveries {
@@ -256,8 +276,16 @@ export interface ExternalDelivery {
   vehicleType: string | null;
   price: string;
   destination: string;
-  status: "pending" | "picked_up" | "delivered" | "failed";
+  status: ExternalDeliveryStatus;
   createdAt: string;
+  provider: "manual" | "slider";
+  sliderOrderNumber: number | null;
+  trackingUrl: string | null;
+  driverName: string | null;
+  driverPhone: string | null;
+  driverLat: string | null;
+  driverLng: string | null;
+  estimatedDeliveryMinutes: number | null;
 }
 
 export interface ProductSalesRow {
@@ -1760,6 +1788,32 @@ export const WHATSAPP_CREDENTIAL_FIELDS: CredentialFieldDef[] = [
 export interface WhatsAppSettings {
   hasCredentials: boolean;
   maskedCredentials: Record<string, string> | null;
+}
+
+// --- Slider delivery — mirrors backend/src/delivery-providers/. ---
+
+export const SLIDER_VEHICLE_TYPES = ["bike", "car", "any"] as const;
+export type SliderVehicleType = (typeof SLIDER_VEHICLE_TYPES)[number];
+
+export interface SliderSettings {
+  hasCredentials: boolean;
+  accountId: string | null;
+  environment: "sandbox" | "production" | null;
+  hasWebhookToken: boolean;
+  maskedApiKey: string | null;
+}
+
+export interface SliderQuoteVehicle {
+  vehicleType: string;
+  deliveryFee: number;
+  isAvailable: boolean;
+  unavailableReason: string | null;
+}
+
+export interface SliderQuote {
+  distanceKm: number;
+  durationMinutes: number;
+  vehicles: SliderQuoteVehicle[];
 }
 
 // --- Affiliate (referral marketing) — mirrors backend/src/affiliate/constants.ts by hand. ---
