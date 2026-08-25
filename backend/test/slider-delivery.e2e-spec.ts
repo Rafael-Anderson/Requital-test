@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 import type { RowDataPacket } from 'mysql2/promise';
+import * as bcrypt from 'bcryptjs';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -77,6 +78,7 @@ describe('Slider delivery integration (e2e)', () => {
 
   let shopId: number;
   let adminToken: string;
+  let platformToken: string;
   let outletId: number;
   let productId: number;
 
@@ -89,7 +91,8 @@ describe('Slider delivery integration (e2e)', () => {
     process.env.SLIDER_API_KEY = 'sk_test_platform';
     process.env.SLIDER_ENVIRONMENT = 'sandbox';
     process.env.SLIDER_WEBHOOK_TOKEN = 'whsec_test_token';
-    process.env.PLATFORM_ADMIN_TOKEN = 'test-platform-admin-token';
+    // PLATFORM_JWT_SECRET comes from .env — see platform-admin.e2e-spec.ts's
+    // own comment for why setting it here would be too late.
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -246,10 +249,30 @@ describe('Slider delivery integration (e2e)', () => {
       .send({ enabled: true })
       .expect(200);
     // Platform-admin-only: set this shop's Slider customer account id — a
-    // merchant can't do this themselves (see PlatformAdminController).
+    // merchant can't do this themselves (see PlatformAdminController). No
+    // signup route exists for this tier (see PlatformAuthModule) — seed the
+    // row directly, the same way scripts/seed-platform-admin.ts would.
+    const platformPasswordHash = await bcrypt.hash('platform-password-123', 10);
+    await db.execute(
+      `INSERT INTO platformadmin (email, passwordHash, name) VALUES (?, ?, ?)`,
+      [
+        `platform-admin-${runId}@test.com`,
+        platformPasswordHash,
+        'Platform Test Admin',
+      ],
+    );
+    const platformLogin = await request(app.getHttpServer())
+      .post('/platform-auth/login')
+      .send({
+        email: `platform-admin-${runId}@test.com`,
+        password: 'platform-password-123',
+      })
+      .expect(201);
+    platformToken = body<AuthResponse>(platformLogin).accessToken;
+
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
-      .set('x-platform-admin-token', 'test-platform-admin-token')
+      .set('Authorization', `Bearer ${platformToken}`)
       .send({ accountId: 'acct_test' })
       .expect(200);
   });
@@ -625,16 +648,22 @@ describe('Slider delivery integration (e2e)', () => {
     expect(messageContains(res, 'Slider')).toBe(true);
   });
 
-  it('the platform-admin route rejects a missing or wrong token', async () => {
+  it('the platform-admin route 404s (not 401/403) on a missing or wrong token — see platform-admin.e2e-spec.ts for the full access-model coverage', async () => {
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
       .send({ accountId: 'acct_hacked' })
-      .expect(401);
+      .expect(404);
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
-      .set('x-platform-admin-token', 'wrong-token')
+      .set('Authorization', 'Bearer wrong-token')
       .send({ accountId: 'acct_hacked' })
-      .expect(401);
+      .expect(404);
+    // A real merchant token must not work here either — separate JWT scope.
+    await request(app.getHttpServer())
+      .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ accountId: 'acct_hacked' })
+      .expect(404);
   });
 
   it('GET /webhook-log lists recent webhook activity for this shop', async () => {

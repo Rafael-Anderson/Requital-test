@@ -52,6 +52,7 @@ import { StorageModule } from './storage/storage.module';
 import { DomainsModule } from './domains/domains.module';
 import { DeliveryProvidersModule } from './delivery-providers/delivery-providers.module';
 import { WebhookLogModule } from './webhook-log/webhook-log.module';
+import { PlatformAuthModule } from './platform-auth/platform-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 
 @Module({
@@ -122,6 +123,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
     DomainsModule,
     DeliveryProvidersModule,
     WebhookLogModule,
+    PlatformAuthModule,
     PlatformAdminModule,
   ],
   controllers: [AppController],

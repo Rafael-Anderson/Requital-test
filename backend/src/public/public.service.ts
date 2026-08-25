@@ -354,7 +354,7 @@ export class PublicService {
       // per-key defaults client-side (see shop-context.tsx's applyTheme),
       // same precedent as brandColor/secondaryColor/fontFamily above rather
       // than resolving defaults server-side like ogImage's fallback chain.
-      colors: (theme?.colors as Record<string, string> | null) ?? null,
+      colors: theme?.colors ?? null,
       homepageLayout: theme?.homepageLayout ?? 'classic',
       // Phase C — see theme/constants.ts. Same "always a real value,
       // defaults to current behavior" rule as homepageLayout.
@@ -376,7 +376,8 @@ export class PublicService {
       collectionsGridColumns: theme?.collectionsGridColumns ?? 3,
       collectionsGridGap: theme?.collectionsGridGap ?? 'md',
       collectionsGridShowTitle: theme?.collectionsGridShowTitle ?? true,
-      collectionsGridImageAspectRatio: theme?.collectionsGridImageAspectRatio ?? 'portrait',
+      collectionsGridImageAspectRatio:
+        theme?.collectionsGridImageAspectRatio ?? 'portrait',
       metaTitle: seo?.metaTitle ?? null,
       metaDescription: seo?.metaDescription ?? null,
       // Falls back to Theme's banner, then its logo, then the general
@@ -469,7 +470,10 @@ export class PublicService {
       products: productIds
         .map((id) => products.get(id))
         .filter((p): p is NonNullable<typeof p> => !!p)
-        .map((p) => ({ ...p, salesCount: salesCounts.get(p.id as number) ?? 0 })),
+        .map((p) => ({
+          ...p,
+          salesCount: salesCounts.get(p.id as number) ?? 0,
+        })),
     };
   }
 
@@ -478,7 +482,9 @@ export class PublicService {
   // ReportsService's Product Sales Report already uses. Scoped to this
   // collection's own product ids rather than added to every public product
   // listing endpoint, since it's the only sort that needs it.
-  private async loadSalesCounts(productIds: number[]): Promise<Map<number, number>> {
+  private async loadSalesCounts(
+    productIds: number[],
+  ): Promise<Map<number, number>> {
     const counts = new Map<number, number>();
     if (productIds.length === 0) return counts;
     const rows = await this.db.query<RowDataPacket[]>(
@@ -571,10 +577,7 @@ export class PublicService {
   async getTemplate(shopSlug: string, slug: string, outletId?: number) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    const resolved = await this.templatesService.getPublicBySlug(
-      shop.id,
-      slug,
-    );
+    const resolved = await this.templatesService.getPublicBySlug(shop.id, slug);
     if (!resolved) {
       throw new NotFoundException(`Template '${slug}' not found`);
     }
@@ -707,8 +710,7 @@ export class PublicService {
         [productId],
       );
       const collectionId = collectionRows[0]?.collectionId as
-        | number
-        | undefined;
+        number | undefined;
       if (collectionId !== undefined) {
         const rows = await this.db.query<RowDataPacket[]>(
           `SELECT p.id FROM product p
@@ -981,7 +983,8 @@ export class PublicService {
         // this API — the storefront's generateMetadata included — gets an
         // already-sensible title/description without duplicating the logic.
         metaTitle: p.metaTitle ?? p.name,
-        metaDescription: p.metaDescription ?? truncateDescription(p.description),
+        metaDescription:
+          p.metaDescription ?? truncateDescription(p.description),
       });
     }
     return result;
@@ -1111,7 +1114,7 @@ export class PublicService {
       })),
       deliveryFee: trimDecimal(order.deliveryFee as string | null),
       taxAmount: trimDecimal(order.taxAmount as string | null),
-      total: trimDecimal(order.total as string) as string,
+      total: trimDecimal(order.total as string),
       currency: shop.currency as string,
       createdAt: order.createdAt,
       estimatedTime,
@@ -1262,9 +1265,7 @@ export class PublicService {
     let deliveryFee =
       dto.orderType === 'pickup'
         ? 0
-        : Number(
-            await this.resolveDeliveryFee(shop, outlet, dto, subtotal),
-          );
+        : Number(await this.resolveDeliveryFee(shop, outlet, dto, subtotal));
 
     // Resolved before the transaction (doesn't need order.id) — an
     // invalid/expired/exhausted code throws here rather than silently
@@ -1434,7 +1435,9 @@ export class PublicService {
       const newOrderId = (result as { insertId: number }).insertId;
 
       if (itemsData.length > 0) {
-        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = itemsData
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .join(', ');
         await conn.query(
           `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, note)
            VALUES ${placeholders}`,
@@ -1453,7 +1456,12 @@ export class PublicService {
       }
 
       if (discount) {
-        await this.discountsService.redeem(conn, discount, newOrderId, customer.id);
+        await this.discountsService.redeem(
+          conn,
+          discount,
+          newOrderId,
+          customer.id,
+        );
       }
 
       if (giftCard && giftCardAmountApplied > 0) {
@@ -1531,7 +1539,7 @@ export class PublicService {
       taxAmount: trimDecimal(orderRows[0].taxAmount as string),
       discountAmount: trimDecimal(orderRows[0].discountAmount as string),
       giftCardAmount: trimDecimal(orderRows[0].giftCardAmount as string),
-      total: trimDecimal(orderRows[0].total as string) as string,
+      total: trimDecimal(orderRows[0].total as string),
       orderitem: itemRows.map((i) => ({
         ...i,
         priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
@@ -1584,7 +1592,7 @@ export class PublicService {
         gatewayName,
       );
       const session = await provider.createCheckoutSession({
-        orderId: order.id as number,
+        orderId: order.id,
         amount: remainderTotal,
         currency: shop.currency,
         successUrl: `${STOREFRONT_URL}/${shopSlug}/orders/${order.id}?paid=1`,
@@ -1796,6 +1804,14 @@ export class PublicService {
     );
     const shop = rows[0];
     if (!shop) {
+      throw new NotFoundException(`Shop '${shopSlug}' not found`);
+    }
+    // A suspended shop's storefront goes fully offline — stricter than
+    // assertPublished below (which two callers deliberately opt out of for
+    // "coming soon"/order-tracking UX). resolveShop is the one real choke
+    // point every public content-serving call routes through, so the check
+    // belongs here, not in assertPublished, to actually cover all of them.
+    if (shop.suspendedAt) {
       throw new NotFoundException(`Shop '${shopSlug}' not found`);
     }
     return shop;

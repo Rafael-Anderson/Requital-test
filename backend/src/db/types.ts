@@ -70,6 +70,26 @@ export interface WebhookeventRow {
   createdAt: Date;
 }
 
+export interface PlatformadminRow {
+  id: number;
+  email: string;
+  passwordHash: string;
+  name: string;
+  failedLoginAttempts: number;
+  lastFailedLoginAt: Date | null;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+}
+
+export interface PlatformauditlogentryRow {
+  id: number;
+  platformAdminId: number;
+  action: string;
+  shopId: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
 export interface ExternaldeliveryRow {
   id: number;
   orderId: number;
@@ -334,6 +354,7 @@ export interface ShopRow {
   whatsappCredentials: string | null;
   sliderAccountId: string | null;
   sliderEnabled: boolean;
+  suspendedAt: Date | null;
   trn: string | null;
   websiteUrl: string | null;
   customDomain: string | null;

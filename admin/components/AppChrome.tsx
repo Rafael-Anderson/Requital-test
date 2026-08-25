@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import EmailVerificationBanner from "@/components/EmailVerificationBanner";
+import ImpersonationBanner from "@/components/ImpersonationBanner";
 import NewOrderBanner from "@/components/NewOrderBanner";
 import CommandPalette from "@/components/CommandPalette";
 
@@ -22,13 +23,18 @@ const FULL_BLEED_PATTERN = /^\/theme\/[^/]+\/builder(\/|$)/;
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isFullBleed = FULL_BLEED_PATTERN.test(pathname);
+  // /platform/* renders its own completely separate chrome (see
+  // app/platform/layout.tsx) — the merchant TopBar/banners/CommandPalette
+  // must never appear there, same reasoning as the full-bleed bypass above.
+  const isPlatformPath = pathname.startsWith("/platform");
 
-  if (isFullBleed) {
+  if (isFullBleed || isPlatformPath) {
     return <>{children}</>;
   }
 
   return (
     <>
+      <ImpersonationBanner />
       <TopBar />
       <EmailVerificationBanner />
       <NewOrderBanner />

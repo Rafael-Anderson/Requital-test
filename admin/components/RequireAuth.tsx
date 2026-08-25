@@ -26,15 +26,22 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  // /platform/* is a completely separate access tier with its own
+  // RequirePlatformAuth guard (mounted in app/platform/layout.tsx) — this
+  // merchant guard must never redirect a platform-admin visitor to /login
+  // just because no merchant session exists. Same pathname-conditional
+  // bypass shape AppChrome.tsx already uses for its own full-bleed routes.
+  const isPlatformPath = pathname.startsWith("/platform");
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
   const isGuestOnlyPath = GUEST_ONLY_PATHS.includes(pathname);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || isPlatformPath) return;
     if (!user && !isPublicPath) router.replace("/login");
     if (user && isGuestOnlyPath) router.replace("/");
-  }, [loading, user, isPublicPath, isGuestOnlyPath, router]);
+  }, [loading, user, isPublicPath, isGuestOnlyPath, isPlatformPath, router]);
 
+  if (isPlatformPath) return <>{children}</>;
   if (loading) return null;
   if (!user && !isPublicPath) return null;
   if (user && isGuestOnlyPath) return null;
