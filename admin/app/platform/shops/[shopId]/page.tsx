@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   getPlatformShop,
-  impersonateShop,
   setShopSliderAccountId,
   sliderTestDispatch,
   suspendShop,
@@ -13,7 +12,7 @@ import {
   type PlatformShopDetail,
   type SliderQuoteVehicle,
 } from "@/lib/platform-api";
-import { setTokens as setMerchantTokens } from "@/lib/api";
+import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
 
 const SLIDER_STATUS_STYLES: Record<string, string> = {
   connected: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -55,6 +54,9 @@ export default function PlatformShopDetailPage() {
   if (!shop) return <div className="text-slate-400">Loading...</div>;
 
   async function toggleSuspend() {
+    // Unsuspend needs no confirmation (reversing a block is low-stakes);
+    // suspend does, and confirmSuspend() states plainly what it does.
+    if (shop!.status === "active" && !confirmSuspend()) return;
     setBusy(true);
     try {
       const updated = shop!.status === "active" ? await suspendShop(shopId) : await unsuspendShop(shopId);
@@ -67,11 +69,7 @@ export default function PlatformShopDetailPage() {
   async function impersonate() {
     setBusy(true);
     try {
-      const session = await impersonateShop(shopId);
-      // Merchant tokens only — see ImpersonationBanner's own comment on why
-      // this can't collide with the platform session's own storage key.
-      setMerchantTokens({ accessToken: session.accessToken, refreshToken: session.refreshToken ?? "" });
-      window.open("/", "_blank");
+      await startImpersonation(shopId);
     } finally {
       setBusy(false);
     }
@@ -119,10 +117,28 @@ export default function PlatformShopDetailPage() {
                 : "border-red-500/30 bg-red-500/15 text-red-400"
             }`}
           >
-            {shop.status}
+            {shop.status === "active" ? "Active" : "Suspended"}
           </span>
         </div>
       </div>
+
+      {shop.status === "suspended" && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-red-500/40 bg-red-500/10 px-5 py-4">
+          <div>
+            <p className="font-bold text-red-300">This shop is suspended.</p>
+            <p className="text-sm text-red-200/80">
+              Merchant login is blocked and the storefront is offline. This is reversible.
+            </p>
+          </div>
+          <button
+            onClick={toggleSuspend}
+            disabled={busy}
+            className="shrink-0 rounded-md bg-red-500 px-4 py-2 text-sm font-bold text-black hover:bg-red-400 disabled:opacity-40"
+          >
+            Unsuspend shop
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Section title="Overview">
@@ -155,25 +171,38 @@ export default function PlatformShopDetailPage() {
         </Section>
 
         <Section title="Actions">
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={toggleSuspend}
-              disabled={busy}
-              className="rounded-md border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-40"
-            >
-              {shop.status === "active" ? "Suspend shop" : "Unsuspend shop"}
-            </button>
-            <button
-              onClick={impersonate}
-              disabled={busy || !shop.owner}
-              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-40"
-            >
-              Impersonate shop admin
-            </button>
-            <p className="text-xs text-slate-500">
-              Impersonation opens a new tab as this shop&apos;s admin, expires in 1 hour, and is
-              audit-logged immediately.
-            </p>
+          <div className="flex flex-col gap-4">
+            <div>
+              <button
+                onClick={impersonate}
+                disabled={busy || !shop.owner}
+                className="w-full rounded-md bg-amber-500 px-4 py-2 text-sm font-bold text-black hover:bg-amber-400 disabled:opacity-40"
+              >
+                Log in as this shop
+              </button>
+              <p className="mt-1.5 text-xs text-slate-500">
+                Opens the merchant admin as this shop&apos;s owner. Your session is logged and
+                expires in 1 hour.
+              </p>
+            </div>
+            <div>
+              <button
+                onClick={toggleSuspend}
+                disabled={busy}
+                className={`w-full rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-40 ${
+                  shop.status === "active"
+                    ? "border border-red-500/40 text-red-400 hover:bg-red-500/10"
+                    : "border border-slate-700 text-slate-100 hover:bg-slate-800"
+                }`}
+              >
+                {shop.status === "active" ? "Suspend shop" : "Unsuspend shop"}
+              </button>
+              <p className="mt-1.5 text-xs text-slate-500">
+                {shop.status === "active"
+                  ? "Blocks merchant login and takes the storefront offline. Reversible."
+                  : "Restores merchant login and brings the storefront back online."}
+              </p>
+            </div>
           </div>
         </Section>
 

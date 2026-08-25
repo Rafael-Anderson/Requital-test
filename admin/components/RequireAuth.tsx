@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { forgetImpersonatingShop, getRememberedImpersonatingShopId } from "@/lib/impersonation";
 
 // Routes reachable without a session — everything else redirects to /login.
 // This is a UX convenience only: every real protection is enforced
@@ -20,6 +21,9 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/verify-email",
   "/accept-invite",
+  // No session exists by the time this renders (that's the whole point) —
+  // see lib/impersonation.ts.
+  "/impersonation-ended",
 ];
 
 export default function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -37,7 +41,21 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (loading || isPlatformPath) return;
-    if (!user && !isPublicPath) router.replace("/login");
+    if (!user && !isPublicPath) {
+      // A dead impersonation token (1h expiry, non-refreshable — see
+      // AuthService.issueImpersonationTokenForShop) reaches here the same
+      // way any other 401 does: apiFetch clears tokens and AuthProvider's
+      // onUnauthorized flips `user` to null. Route that case to a real
+      // explanation instead of dumping the platform admin at a merchant
+      // login screen they have no password for.
+      const impersonatedShopId = getRememberedImpersonatingShopId();
+      if (impersonatedShopId) {
+        forgetImpersonatingShop();
+        router.replace(`/impersonation-ended?shopId=${impersonatedShopId}`);
+        return;
+      }
+      router.replace("/login");
+    }
     if (user && isGuestOnlyPath) router.replace("/");
   }, [loading, user, isPublicPath, isGuestOnlyPath, isPlatformPath, router]);
 

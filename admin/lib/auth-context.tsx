@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as api from "./api";
 import type { AuthUser } from "./types";
+import { forgetImpersonatingShop, rememberImpersonatingShop } from "./impersonation";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -65,6 +66,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     return api.onUnauthorized(() => setUser(null));
   }, []);
+
+  // Backstop for RequireAuth's impersonation-expiry handling (see
+  // lib/impersonation.ts): by the time a dead token is discovered, `user`
+  // is already null, so nothing on it is left to read. Re-derives the flag
+  // from the live session on every mount/refresh (not just the moment
+  // startImpersonation set it) so a page reload mid-impersonation doesn't
+  // lose it, and clears it once a real (non-impersonating) session is the
+  // one actually active.
+  useEffect(() => {
+    if (!user) return;
+    if (user.impersonating) rememberImpersonatingShop(user.shopId);
+    else forgetImpersonatingShop();
+  }, [user]);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
