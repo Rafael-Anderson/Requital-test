@@ -35,6 +35,10 @@ const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
 const ACCESS_TOKEN_LIFETIME_SECONDS = 15 * 60;
 const REFRESH_TOKEN_LIFETIME_DAYS = 30;
+// See issueImpersonationTokenForShop's own comment for why this is shorter
+// and non-refreshable, unlike a normal merchant session.
+const IMPERSONATION_TOKEN_LIFETIME = '1h';
+const IMPERSONATION_TOKEN_LIFETIME_SECONDS = 60 * 60;
 const RESET_TOKEN_LIFETIME_MINUTES = 30;
 const VERIFICATION_TOKEN_LIFETIME_HOURS = 24;
 const INVITE_TOKEN_LIFETIME_DAYS = 7;
@@ -58,7 +62,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 type UserWithRelations = UserRow & {
   outlet?: { id: number; name: string } | null;
-  shop?: { name: string };
+  shop?: { name: string; suspendedAt: Date | null };
 };
 
 @Injectable()
@@ -118,7 +122,14 @@ export class AuthService {
         const [userResult] = await conn.query(
           `INSERT INTO user (shopId, name, email, phone, passwordHash, role)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [shopId, dto.name, dto.email, dto.phone ?? null, passwordHash, 'admin'],
+          [
+            shopId,
+            dto.name,
+            dto.email,
+            dto.phone ?? null,
+            passwordHash,
+            'admin',
+          ],
         );
         return (userResult as { insertId: number }).insertId;
       });
@@ -166,6 +177,14 @@ export class AuthService {
         );
       }
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // Checked only after a correct password, deliberately — this is the
+    // real "shop offline" enforcement point for merchant login (see
+    // AuthGuard's matching per-request check for an already-issued token,
+    // and PublicService.resolveShop for the storefront half).
+    if (user.shop?.suspendedAt) {
+      throw new ForbiddenException('This shop has been suspended');
     }
 
     if (user.failedLoginAttempts > 0) {
@@ -270,7 +289,14 @@ export class AuthService {
 
   async me(ctx: TenantContext) {
     const user = await this.findByIdOrThrow(ctx.userId);
-    return this.toUserResponse(user);
+    return {
+      ...this.toUserResponse(user),
+      // Drives the impersonation banner in the merchant admin UI — see
+      // AppChrome/ImpersonationBanner. Absent (not merely false) on a
+      // normal session so a stale/older frontend build simply never
+      // notices the field, no behavior change.
+      impersonating: ctx.impersonatedByPlatformAdminId !== undefined,
+    };
   }
 
   async createBranchUser(ctx: TenantContext, dto: CreateBranchUserDto) {
@@ -691,13 +717,47 @@ export class AuthService {
         user.id,
         familyId ?? randomUUID(),
         hashToken(rawRefreshToken),
-        new Date(Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+        new Date(
+          Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
+        ),
       ],
     );
     return {
       accessToken,
       accessTokenExpiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
       refreshToken: rawRefreshToken,
+      user: this.toUserResponse(user),
+    };
+  }
+
+  // Mints a token for a platform admin to act as a shop's own admin user —
+  // called from PlatformAdminService.impersonate, which writes the audit
+  // log entry immediately after this returns (before responding to the
+  // platform admin), not deferred to whenever the session later "ends" —
+  // the record must exist even if the process dies mid-session. Two
+  // deliberate departures from a normal login token: capped at a short,
+  // fixed lifetime (not the usual 15min-access/30-day-refresh pair) and no
+  // refreshtoken row at all, so this session cannot be silently extended
+  // past IMPERSONATION_TOKEN_LIFETIME by the normal refresh flow — it must
+  // expire on its own like a real login never would.
+  async issueImpersonationTokenForShop(
+    shopId: number,
+    platformAdminId: number,
+  ) {
+    const user = await this.findFirstAdminForShop(shopId);
+    if (!user) {
+      throw new NotFoundException(
+        `Shop ${shopId} has no admin user to impersonate`,
+      );
+    }
+    const accessToken = await this.jwtService.signAsync(
+      { sub: user.id, typ: 'staff', imp: platformAdminId },
+      { expiresIn: IMPERSONATION_TOKEN_LIFETIME },
+    );
+    return {
+      accessToken,
+      accessTokenExpiresIn: IMPERSONATION_TOKEN_LIFETIME_SECONDS,
+      refreshToken: null,
       user: this.toUserResponse(user),
     };
   }
@@ -737,7 +797,9 @@ export class AuthService {
         user.id,
         'email_verification',
         hashToken(raw),
-        new Date(Date.now() + VERIFICATION_TOKEN_LIFETIME_HOURS * 60 * 60 * 1000),
+        new Date(
+          Date.now() + VERIFICATION_TOKEN_LIFETIME_HOURS * 60 * 60 * 1000,
+        ),
       ],
     );
     const link = `${ADMIN_URL}/verify-email?token=${raw}`;
@@ -858,13 +920,17 @@ export class AuthService {
   // include); outlet only present when the row actually has one.
   private rowToUser(r: RowDataPacket): UserWithRelations {
     const user = { ...r } as unknown as UserWithRelations;
-    user.shop = { name: r.shopName as string };
+    user.shop = {
+      name: r.shopName as string,
+      suspendedAt: r.shopSuspendedAt as Date | null,
+    };
     user.outlet =
       r.outletJoinId != null
         ? { id: r.outletJoinId as number, name: r.outletName as string }
         : null;
     const loose = user as unknown as Record<string, unknown>;
     delete loose.shopName;
+    delete loose.shopSuspendedAt;
     delete loose.outletJoinId;
     delete loose.outletName;
     return user;
@@ -872,7 +938,7 @@ export class AuthService {
 
   private async findById(id: number): Promise<UserWithRelations | null> {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT u.*, o.id AS outletJoinId, o.name AS outletName, s.name AS shopName
+      `SELECT u.*, o.id AS outletJoinId, o.name AS outletName, s.name AS shopName, s.suspendedAt AS shopSuspendedAt
        FROM user u
        LEFT JOIN outlet o ON o.id = u.outletId
        JOIN shop s ON s.id = u.shopId
@@ -888,9 +954,27 @@ export class AuthService {
     return user;
   }
 
+  // Also used to find the shop's own admin to impersonate — see
+  // issueImpersonationTokenForShop below.
+  private async findFirstAdminForShop(
+    shopId: number,
+  ): Promise<UserWithRelations | null> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT u.*, o.id AS outletJoinId, o.name AS outletName, s.name AS shopName, s.suspendedAt AS shopSuspendedAt
+       FROM user u
+       LEFT JOIN outlet o ON o.id = u.outletId
+       JOIN shop s ON s.id = u.shopId
+       WHERE u.shopId = ? AND u.role = 'admin'
+       ORDER BY u.id ASC
+       LIMIT 1`,
+      [shopId],
+    );
+    return rows[0] ? this.rowToUser(rows[0]) : null;
+  }
+
   private async findByEmail(email: string): Promise<UserWithRelations | null> {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT u.*, o.id AS outletJoinId, o.name AS outletName, s.name AS shopName
+      `SELECT u.*, o.id AS outletJoinId, o.name AS outletName, s.name AS shopName, s.suspendedAt AS shopSuspendedAt
        FROM user u
        LEFT JOIN outlet o ON o.id = u.outletId
        JOIN shop s ON s.id = u.shopId

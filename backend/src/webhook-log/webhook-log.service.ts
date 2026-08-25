@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
-import { DatabaseService } from '../database/database.service';
+import { DatabaseService, type QueryParam } from '../database/database.service';
 import { createLogger } from '../common/logging/logger';
 import type { WebhookeventRow } from '../db/types';
 
@@ -45,6 +45,46 @@ export class WebhookLogService {
     return this.db.query<(WebhookeventRow & RowDataPacket)[]>(
       `SELECT * FROM webhookevent WHERE shopId = ? ORDER BY createdAt DESC LIMIT ?`,
       [shopId, limit],
+    );
+  }
+
+  // Platform-wide read for the platform admin app's Webhook Activity tab —
+  // every filter is optional, unlike listRecent's mandatory shopId.
+  async listAll(filters: {
+    shopId?: number;
+    source?: string;
+    result?: WebhookLogResult;
+    from?: Date;
+    to?: Date;
+    limit?: number;
+  }): Promise<WebhookeventRow[]> {
+    const conditions: string[] = [];
+    const params: QueryParam[] = [];
+    if (filters.shopId !== undefined) {
+      conditions.push('shopId = ?');
+      params.push(filters.shopId);
+    }
+    if (filters.source) {
+      conditions.push('source = ?');
+      params.push(filters.source);
+    }
+    if (filters.result) {
+      conditions.push('result = ?');
+      params.push(filters.result);
+    }
+    if (filters.from) {
+      conditions.push('createdAt >= ?');
+      params.push(filters.from);
+    }
+    if (filters.to) {
+      conditions.push('createdAt <= ?');
+      params.push(filters.to);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(filters.limit ?? 100);
+    return this.db.query<(WebhookeventRow & RowDataPacket)[]>(
+      `SELECT * FROM webhookevent ${where} ORDER BY createdAt DESC LIMIT ?`,
+      params,
     );
   }
 }

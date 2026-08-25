@@ -32,6 +32,10 @@ const ALLOWLIST = [
   "admin/app/reset-password/page.tsx",
   "admin/app/accept-invite/page.tsx",
   "admin/app/verify-email/page.tsx",
+  // Platform-admin's own pre-auth login — a separate access tier with no
+  // PageShell/merchant chrome to route through either (see CLAUDE.md's
+  // "Platform admin" section).
+  "admin/app/platform/login/page.tsx",
   // Deliberately phone-width regardless of viewport — a "link in bio" page
   // is meant to look like a stacked mobile card even on desktop, the same
   // convention every bio-link tool uses. Not a page-content-width bug.

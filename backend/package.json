@@ -22,7 +22,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:migrate": "ts-node -r tsconfig-paths/register scripts/migrate.ts",
-    "db:seed": "ts-node -r tsconfig-paths/register scripts/seed.ts"
+    "db:seed": "ts-node -r tsconfig-paths/register scripts/seed.ts",
+    "db:seed-platform-admin": "ts-node -r tsconfig-paths/register scripts/seed-platform-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1104.0",

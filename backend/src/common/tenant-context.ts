@@ -18,4 +18,9 @@ export interface TenantContext {
   shopId: number;
   role: UserRole;
   outletId: number | null; // always null for admin, always set for branch
+  // Set only on a token AuthService.issueImpersonationTokenForShop issued
+  // (read off the JWT's own `imp` claim by AuthGuard, not re-derived from
+  // the DB) — the platform admin id currently impersonating this session.
+  // Undefined for every normal merchant session.
+  impersonatedByPlatformAdminId?: number;
 }

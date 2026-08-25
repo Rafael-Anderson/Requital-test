@@ -40,8 +40,10 @@ import { SliderWebhookJobHandler } from './slider-webhook.handler';
     SliderDeliveryService,
     SliderWebhookJobHandler,
   ],
-  // SliderSettingsService is needed by PlatformAdminModule (to set a shop's
-  // sliderAccountId) — everything else here stays private to this module.
-  exports: [SliderSettingsService],
+  // SliderSettingsService and SliderDeliveryProvider are needed by
+  // PlatformAdminModule (setting a shop's sliderAccountId, and the "Test
+  // dispatch" action's direct getQuote call) — everything else here stays
+  // private to this module.
+  exports: [SliderSettingsService, SliderDeliveryProvider],
 })
 export class DeliveryProvidersModule {}

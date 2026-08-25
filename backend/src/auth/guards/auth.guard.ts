@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -15,6 +16,12 @@ import type { TenantContext, UserRole } from '../../common/tenant-context';
 interface JwtPayload {
   sub: number;
   typ?: 'staff';
+  // Set only on an impersonation token — see
+  // AuthService.issueImpersonationTokenForShop. Not trusted for anything
+  // beyond surfacing "you are impersonating" back to the client; every
+  // real access-control decision still runs off the re-fetched user row
+  // below, same as every other claim this guard reads.
+  imp?: number;
 }
 
 @Injectable()
@@ -62,12 +69,21 @@ export class AuthGuard implements CanActivate {
     // next request rather than lingering for the rest of the token's 7-day
     // lifetime.
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id, shopId, role, outletId FROM user WHERE id = ?`,
+      `SELECT u.id, u.shopId, u.role, u.outletId, s.suspendedAt
+       FROM user u JOIN shop s ON s.id = u.shopId
+       WHERE u.id = ?`,
       [payload.sub],
     );
     const user = rows[0];
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
+    }
+    // Re-checked every request, not just at login — a shop suspended by a
+    // platform admin mid-session must be locked out on its very next
+    // request, matching this guard's existing re-read-every-request
+    // philosophy for role/outlet changes. See PlatformAdminService.suspend.
+    if (user.suspendedAt) {
+      throw new ForbiddenException('This shop has been suspended');
     }
 
     const tenantContext: TenantContext = {
@@ -75,6 +91,9 @@ export class AuthGuard implements CanActivate {
       shopId: user.shopId,
       role: user.role as UserRole,
       outletId: user.outletId,
+      ...(payload.imp !== undefined
+        ? { impersonatedByPlatformAdminId: payload.imp }
+        : {}),
     };
     (request as Request & { user: TenantContext }).user = tenantContext;
     return true;

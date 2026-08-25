@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -91,6 +95,35 @@ export class SliderSettingsService {
         'Slider platform credentials are not configured (SLIDER_API_KEY/SLIDER_ENVIRONMENT env vars)',
       );
       return null;
+    }
+    return {
+      apiKey,
+      accountId: row.sliderAccountId,
+      baseUrl: SLIDER_BASE_URLS[environment],
+    };
+  }
+
+  // Platform-admin "Test dispatch" — deliberately independent of
+  // sliderEnabled (unlike resolveCredentials above): this is how a platform
+  // admin verifies a freshly-set accountId actually works *before* a
+  // merchant has flipped their own toggle on, so it must not require that
+  // toggle to already be true.
+  async buildTestCredentials(
+    shopId: number,
+  ): Promise<DeliveryProviderCredentials> {
+    const row = await this.findRow(shopId);
+    if (!row?.sliderAccountId) {
+      throw new BadRequestException(
+        'This shop has no Slider account id set yet',
+      );
+    }
+    const apiKey = process.env.SLIDER_API_KEY;
+    const environment = process.env.SLIDER_ENVIRONMENT as
+      SliderEnvironment | undefined;
+    if (!apiKey || !environment || !(environment in SLIDER_BASE_URLS)) {
+      throw new BadRequestException(
+        'Slider platform credentials are not configured (SLIDER_API_KEY/SLIDER_ENVIRONMENT)',
+      );
     }
     return {
       apiKey,

@@ -774,6 +774,10 @@ export interface AuthUser {
   // Only populated by GET /auth/users (the outlet management page's user list).
   outlet?: { id: number; name: string } | null;
   shopName?: string;
+  // Set only on a token a platform admin minted via "Impersonate" (see
+  // PlatformAdminService.impersonate) — drives ImpersonationBanner. Absent
+  // (not merely false) on every normal merchant session.
+  impersonating?: boolean;
 }
 
 // Fixed vocabulary — mirrors backend/src/common/permissions.ts exactly.
