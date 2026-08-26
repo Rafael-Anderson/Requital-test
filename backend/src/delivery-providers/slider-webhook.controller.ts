@@ -1,10 +1,17 @@
-import { Body, Controller, Headers, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Headers,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { JobsService } from '../jobs/jobs.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { createLogger } from '../common/logging/logger';
 import { SLIDER_WEBHOOK_TOKEN_HEADER } from './slider/slider.constants';
+import { verifySliderWebhookToken } from './slider-webhook-auth';
 
 const logger = createLogger('SliderWebhookController');
 
@@ -24,9 +31,17 @@ interface SliderWebhookPayload {
 }
 
 // @Public — Slider calls this directly, no staff session involved. Auth is
-// the shop's own optional webhook token (checked inside the queued job, see
-// SliderWebhookJobHandler — not here, per "return 2xx immediately... do not
-// do DB work before responding" below).
+// the platform-wide webhook token, checked here, first, before any DB work
+// or enqueue happens — previously this check lived inside the queued job
+// handler, which meant a forged/unauthenticated request still wrote a row
+// into the job table before ever being rejected (unbounded queue growth
+// from an unauthenticated caller), and an unconfigured SLIDER_WEBHOOK_TOKEN
+// meant "auth optional, process it anyway" rather than rejecting everything.
+// Fixed: fail closed on a missing/wrong/unconfigured token, reject before
+// any query runs. Legitimate requests still get the fast "queue it, do the
+// real work off the request path" treatment — the token comparison itself
+// is a few microseconds, it doesn't reintroduce the slow-response problem
+// this design was built to avoid.
 @Public()
 @Controller('slider')
 export class SliderWebhookController {
@@ -40,6 +55,11 @@ export class SliderWebhookController {
     @Body() body: SliderWebhookPayload,
     @Headers(SLIDER_WEBHOOK_TOKEN_HEADER) token: string | undefined,
   ) {
+    if (!verifySliderWebhookToken(token, process.env.SLIDER_WEBHOOK_TOKEN)) {
+      logger.warn('Slider webhook rejected: missing or invalid token');
+      throw new UnauthorizedException('Invalid webhook token');
+    }
+
     const orderId = Number(body.order_id);
     const sliderOrderNumber = Number(body.order_number);
     if (!orderId || !sliderOrderNumber || !body.status) {
@@ -73,7 +93,6 @@ export class SliderWebhookController {
         trackingLink: body.tracking_link ?? null,
         estimatedDeliveryTime: body.estimated_delivery_time ?? null,
         driverInfo: body.driver_info ?? null,
-        providedToken: token ?? null,
       },
       `slider-webhook-${orderId}-${sliderOrderNumber}-${body.status}-${body.timestamp ?? Date.now()}`,
     );

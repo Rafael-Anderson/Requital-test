@@ -322,6 +322,16 @@ describe('Slider delivery integration (e2e)', () => {
     return rows[0].id as number;
   }
 
+  // Used to prove a rejected-before-enqueue webhook genuinely never wrote a
+  // job row, rather than writing one that later gets ignored.
+  async function jobCount(type: string): Promise<number> {
+    const rows = await db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM job WHERE shopId = ? AND type = ?`,
+      [shopId, type],
+    );
+    return Number(rows[0].c);
+  }
+
   it('quotes distance/duration/vehicles for an order', async () => {
     distanceKm = 5;
     const orderId = await createOrder('cash_on_delivery');
@@ -415,11 +425,107 @@ describe('Slider delivery integration (e2e)', () => {
     );
   });
 
-  it('the webhook is a 2xx even for an unknown order (no crash, no leak)', async () => {
+  it('a correctly-authenticated webhook for an unknown order is still a 2xx (no crash, no leak)', async () => {
+    await request(app.getHttpServer())
+      .post('/slider/webhook')
+      .set('x-slider-webhook-token', 'whsec_test_token')
+      .send({ order_number: 999999, order_id: 999999999, status: 'in_transit' })
+      .expect(201);
+  });
+
+  it('a webhook with no token at all is rejected with 401 before any DB work', async () => {
+    const beforeCount = await jobCount('process_slider_webhook');
     await request(app.getHttpServer())
       .post('/slider/webhook')
       .send({ order_number: 999999, order_id: 999999999, status: 'in_transit' })
+      .expect(401);
+    // No job written — the whole point of moving the check ahead of the
+    // enqueue. A real order id makes this a meaningful assertion (the old
+    // code would have looked it up and enqueued before ever checking auth).
+    expect(await jobCount('process_slider_webhook')).toBe(beforeCount);
+  });
+
+  it('a webhook with a wrong token is rejected with 401 before any DB work, not silently dropped after enqueue', async () => {
+    const orderId = await createOrder('cash_on_delivery');
+    const dispatched = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/slider-delivery`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ vehicleType: 'any' })
       .expect(201);
+    const sliderOrderNumber =
+      body<OrderDetailBody>(dispatched).externaldelivery!.sliderOrderNumber;
+    const beforeCount = await jobCount('process_slider_webhook');
+
+    await request(app.getHttpServer())
+      .post('/slider/webhook')
+      .set('x-slider-webhook-token', 'wrong-token')
+      .send({
+        order_number: sliderOrderNumber,
+        order_id: orderId,
+        status: 'in_transit',
+        timestamp: Date.now(),
+      })
+      .expect(401);
+
+    expect(await jobCount('process_slider_webhook')).toBe(beforeCount);
+    const fetched = await request(app.getHttpServer())
+      .get(`/orders/${orderId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    // Still 'searching_rider' (the status set at dispatch) — the wrong-token
+    // webhook never touched the row, and never even reached the DB.
+    expect(body<OrderDetailBody>(fetched).externaldelivery?.status).toBe(
+      'searching_rider',
+    );
+  });
+
+  it('SLIDER_WEBHOOK_TOKEN unset means every request is rejected — fail closed, not open', async () => {
+    const orderId = await createOrder('cash_on_delivery');
+    const dispatched = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/slider-delivery`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ vehicleType: 'any' })
+      .expect(201);
+    const sliderOrderNumber =
+      body<OrderDetailBody>(dispatched).externaldelivery!.sliderOrderNumber;
+    const beforeCount = await jobCount('process_slider_webhook');
+
+    const original = process.env.SLIDER_WEBHOOK_TOKEN;
+    delete process.env.SLIDER_WEBHOOK_TOKEN;
+    try {
+      // Even the "correct" token from every other test in this file is
+      // rejected once nothing is configured to compare it against — an
+      // unconfigured secret must never be treated as "anything goes."
+      await request(app.getHttpServer())
+        .post('/slider/webhook')
+        .set('x-slider-webhook-token', 'whsec_test_token')
+        .send({
+          order_number: sliderOrderNumber,
+          order_id: orderId,
+          status: 'delivered',
+          timestamp: Date.now(),
+        })
+        .expect(401);
+      await request(app.getHttpServer())
+        .post('/slider/webhook')
+        .send({
+          order_number: sliderOrderNumber,
+          order_id: orderId,
+          status: 'delivered',
+          timestamp: Date.now(),
+        })
+        .expect(401);
+    } finally {
+      process.env.SLIDER_WEBHOOK_TOKEN = original;
+    }
+
+    expect(await jobCount('process_slider_webhook')).toBe(beforeCount);
+    // And definitely never ran the COD collect-cash cascade.
+    const fetched = await request(app.getHttpServer())
+      .get(`/orders/${orderId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(body<OrderDetailBody>(fetched).cashCollectedAt).toBeNull();
   });
 
   it('a valid webhook token updates status and driver info via the job queue', async () => {
@@ -462,41 +568,6 @@ describe('Slider delivery integration (e2e)', () => {
     expect(delivery.driverName).toBe('Ali Driver');
     expect(delivery.driverPhone).toBe('+971500000009');
     expect(delivery.trackingUrl).toBe('https://track.slider-app.com/updated');
-  });
-
-  it('an invalid webhook token is silently dropped — no status update', async () => {
-    const orderId = await createOrder('cash_on_delivery');
-    const dispatched = await request(app.getHttpServer())
-      .post(`/orders/${orderId}/slider-delivery`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ vehicleType: 'any' })
-      .expect(201);
-    const sliderOrderNumber =
-      body<OrderDetailBody>(dispatched).externaldelivery!.sliderOrderNumber;
-
-    await request(app.getHttpServer())
-      .post('/slider/webhook')
-      .set('x-slider-webhook-token', 'wrong-token')
-      .send({
-        order_number: sliderOrderNumber,
-        order_id: orderId,
-        status: 'in_transit',
-        timestamp: Date.now(),
-      })
-      .expect(201);
-
-    const jobId = await latestJobId('process_slider_webhook');
-    expect(await jobsWorker.processJobById(jobId)).toBe(true);
-
-    const fetched = await request(app.getHttpServer())
-      .get(`/orders/${orderId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .expect(200);
-    // Still 'searching_rider' (the status set at dispatch) — the wrong-token
-    // webhook never touched the row.
-    expect(body<OrderDetailBody>(fetched).externaldelivery?.status).toBe(
-      'searching_rider',
-    );
   });
 
   it("a 'delivered' webhook on a cash_on_delivery order auto-marks cash collected", async () => {

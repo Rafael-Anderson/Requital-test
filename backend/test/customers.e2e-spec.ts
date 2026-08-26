@@ -454,4 +454,60 @@ describe('Customers (e2e)', () => {
         .expect(200);
     });
   });
+
+  describe('security: no admin-facing customer response ever contains the password hash', () => {
+    // Regression test for a real bug: findOne/update used to spread the raw
+    // `customer` DB row (`{ ...customer, ... }`) straight into the response,
+    // which includes passwordHash/failedLoginAttempts/lastFailedLoginAt —
+    // customer-auth internals with no business reaching an admin's screen,
+    // let alone the client's JSON. A customer created only via an
+    // admin-entered/storefront-guest order never sets a password, so the
+    // regression only shows up for a customer that actually registered a
+    // storefront account — set one up here rather than relying on a
+    // coincidentally-null field to mask the bug.
+    it('a self-registered (password-having) customer never leaks passwordHash via list/detail/update', async () => {
+      const shop = await setupShop('pwleak');
+      const phone = '0505551234';
+
+      const register = await request(app.getHttpServer())
+        .post(`/public/${shop.slug}/auth/register`)
+        .send({
+          name: 'Registered Customer',
+          phone,
+          email: `pwleak-${runId}@test.com`,
+          password: 'correct-horse-battery-staple',
+        })
+        .expect(201);
+      const customerId = body<{ customer: IdRow }>(register).customer.id;
+
+      const list = await request(app.getHttpServer())
+        .get('/customers')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      const listRow = body<CustomerListBody>(list).data.find(
+        (c) => c.id === customerId,
+      );
+      expect(listRow).toBeDefined();
+      expect(JSON.stringify(listRow)).not.toMatch(/passwordHash|password/i);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/customers/${customerId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(detail.body).not.toHaveProperty('passwordHash');
+      expect(detail.body).not.toHaveProperty('failedLoginAttempts');
+      expect(detail.body).not.toHaveProperty('lastFailedLoginAt');
+      expect(JSON.stringify(detail.body)).not.toMatch(/passwordHash/i);
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/customers/${customerId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ name: 'Registered Customer Renamed' })
+        .expect(200);
+      expect(updated.body).not.toHaveProperty('passwordHash');
+      expect(updated.body).not.toHaveProperty('failedLoginAttempts');
+      expect(updated.body).not.toHaveProperty('lastFailedLoginAt');
+      expect(JSON.stringify(updated.body)).not.toMatch(/passwordHash/i);
+    });
+  });
 });

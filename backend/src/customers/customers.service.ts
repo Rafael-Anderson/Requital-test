@@ -12,6 +12,7 @@ import type { CustomerRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { toSafeCustomer } from './customer-response.util';
 
 interface CustomerListRow {
   id: number;
@@ -201,7 +202,7 @@ export class CustomersService {
     const orderDates = completedOrders.map((o) => o.createdAt.getTime());
 
     return {
-      ...customer,
+      ...toSafeCustomer(customer),
       orderCount: completedOrders.length,
       lifetimeValue,
       firstOrderDate: orderDates.length
@@ -233,7 +234,7 @@ export class CustomersService {
         `SELECT * FROM customer WHERE id = ?`,
         [id],
       );
-      return rows[0];
+      return toSafeCustomer(rows[0]);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new ConflictException(

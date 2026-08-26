@@ -38,8 +38,19 @@ export class ShopService {
     // (public.service.ts already does `trimDecimal(shop.defaultDeliveryFee)`
     // correctly) — confirmed live via the QA audit, "0.000000000000000..."
     // rendered raw into Store Configuration's Default Delivery Fee input.
+    //
+    // whatsappCredentials (the AES-256-GCM ciphertext blob) is stripped
+    // before this reaches a response. WhatsAppSettingsService already has a
+    // dedicated masked endpoint (hasCredentials/maskedCredentials) for
+    // surfacing connection status; this general-purpose settings fetch has
+    // no business returning the encrypted value at all — security audit
+    // finding, see PR description. Destructured out (not deleted off a
+    // mutable copy) so `safeShop`'s type stays a plain, fully-inferred
+    // ShopRow subset rather than a hand-written Omit/delete pairing.
+    const { whatsappCredentials, ...safeShop } = shop;
+    void whatsappCredentials;
     return {
-      ...shop,
+      ...safeShop,
       defaultDeliveryFee: trimDecimal(shop.defaultDeliveryFee),
       taxRate: trimDecimal(shop.taxRate),
     };
