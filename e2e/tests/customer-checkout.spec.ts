@@ -38,12 +38,18 @@ test('customer browses, selects a variant, adds to cart, and checks out', async 
   // itself is async (see the exploration notes this spec was written from).
   await expect(page.getByRole('heading', { name: 'Checkout' })).toBeVisible({ timeout: 15_000 });
 
-  const pickupButton = page.getByRole('button', { name: 'Pickup' });
+  // exact: true — the fulfillment toggle's "Pickup" button would otherwise
+  // also match the payment method picker's "Cash on pickup"/"Card on
+  // pickup" cards (Playwright's default accessible-name matching is a
+  // substring match).
+  const pickupButton = page.getByRole('button', { name: 'Pickup', exact: true });
   if (await pickupButton.isVisible()) await pickupButton.click();
 
   await fieldByLabel(page, 'Name').fill(seed.customerName);
   await fieldByLabel(page, 'Phone').fill(seed.customerPhone);
-  await page.getByLabel('Cash on pickup').check();
+  // Payment method is now a button card (PaymentMethodPicker), not a native
+  // radio input behind a <label> — no getByLabel().check() equivalent.
+  await page.getByRole('button', { name: 'Cash on pickup' }).click();
 
   await page.getByRole('button', { name: 'Place order' }).click();
 
