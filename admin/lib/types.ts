@@ -89,6 +89,9 @@ export interface Order {
   deliveryFee: string | null;
   total: string;
   createdAt: string;
+  // Null for admin-created orders — only storefront checkout generates one,
+  // for the customer-facing order-tracking page (see PublicOrderLookupController).
+  trackingToken: string | null;
   paymentLinkToken: string | null;
   paymentLinkExpiresAt: string | null;
   orderitem: OrderItem[];

@@ -40,6 +40,15 @@ export default function SimpleOrderDetailModal({
   const [collectingCash, setCollectingCash] = useState(false);
   const toast = useToast();
 
+  async function copyTrackingRef(token: string) {
+    try {
+      await navigator.clipboard.writeText(token);
+      toast("Tracking ref copied");
+    } catch {
+      toast("Could not copy", "error");
+    }
+  }
+
   useEffect(() => {
     if (orderId === null) return;
     setOrder(null);
@@ -164,6 +173,18 @@ export default function SimpleOrderDetailModal({
               </div>
             )}
             <div className="mt-1">Placed {relativeTime(order.createdAt)}</div>
+            {order.trackingToken && (
+              <div className="mt-1 flex items-center gap-1.5">
+                <span>Tracking ref: </span>
+                <span className="font-mono text-xs">{order.trackingToken}</span>
+                <button
+                  onClick={() => copyTrackingRef(order.trackingToken!)}
+                  className="text-xs text-text-faint underline decoration-transparent hover:decoration-current"
+                >
+                  Copy
+                </button>
+              </div>
+            )}
           </div>
 
           {isCod && (

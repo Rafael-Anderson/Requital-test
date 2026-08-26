@@ -91,6 +91,15 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function copyTrackingRef(token: string) {
+    try {
+      await navigator.clipboard.writeText(token);
+      toast("Tracking ref copied");
+    } catch {
+      toast("Could not copy", "error");
+    }
+  }
+
   async function handleGenerateLink() {
     try {
       const result = await generatePaymentLink(orderId);
@@ -124,12 +133,26 @@ export default function OrderDetailPage() {
     <PageShell variant="form">
       <BackButton href="/orders" />
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Order #{order.id}</h1>
-        <div className="flex gap-2">
-          <StatusBadge status={order.status} />
-          <StatusBadge status={order.paymentStatus} />
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Order #{order.id}</h1>
+          <div className="flex gap-2">
+            <StatusBadge status={order.status} />
+            <StatusBadge status={order.paymentStatus} />
+          </div>
         </div>
+        {order.trackingToken && (
+          <div className="flex items-center gap-1.5 mt-1 text-xs text-text-muted">
+            <span>Tracking ref: </span>
+            <span className="font-mono">{order.trackingToken}</span>
+            <button
+              onClick={() => copyTrackingRef(order.trackingToken!)}
+              className="underline decoration-transparent hover:decoration-current"
+            >
+              Copy
+            </button>
+          </div>
+        )}
       </div>
 
       <Card className="mb-4">
