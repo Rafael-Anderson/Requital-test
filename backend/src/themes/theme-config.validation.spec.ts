@@ -95,5 +95,52 @@ describe('assertValidThemeConfig', () => {
         expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
       },
     );
+
+    // Security-audit finding: the reject-list above used to run against the
+    // raw string, so any of these got through — a real browser still
+    // decodes/executes every one of them. Each case is rejected only once
+    // the input is normalized (unicode-escape decoded / comments stripped)
+    // before the same pattern list runs.
+    describe('bypasses of the reject-list via CSS-level obfuscation', () => {
+      it.each([
+        // Numeric hex escape — \69 is U+0069 'i'.
+        '@\\69mport url(evil.css);',
+        // Literal-character escape — 'i' isn't a hex digit, so CSS treats
+        // \i as just an escaped literal 'i'. An even simpler bypass of a
+        // naive /@import/i check than the hex form.
+        '@\\import url(evil.css);',
+        // Escapes scattered across the whole keyword, not just the first
+        // character, to make sure decoding isn't accidentally anchored to
+        // one position.
+        '@\\69\\6d\\70ort url(evil.css);',
+      ])('rejects @import obfuscated via CSS escapes: %s', (css) => {
+        const config = baseConfig();
+        config.globalSettings.customCss = { css };
+        expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
+      });
+
+      it('a CSS comment inside otherwise-benign CSS is not itself treated as an obfuscation attempt', () => {
+        // Real browsers do NOT parse this as @import either — a comment
+        // ends an in-progress identifier token — but the point of this case
+        // is that stripping the comment must not glue two unrelated halves
+        // together into a false positive (or, symmetrically, leave a real
+        // comment-splitting attempt unnormalized into a false negative).
+        const config = baseConfig();
+        config.globalSettings.customCss = { css: '.a/*comment*/{color:red}' };
+        expect(() => assertValidThemeConfig(config)).not.toThrow();
+      });
+    });
+
+    it.each([
+      ['background: url(javascript:alert(1));', 'url(javascript:...)'],
+      ["background: url('javascript:alert(1)');", 'url(javascript:...) with quotes'],
+      ['width: expression(alert(1));', 'expression()'],
+      ['behavior: url(evil.htc);', 'behavior:'],
+      ['-moz-binding: url(evil.xml#xss);', '-moz-binding'],
+    ])('rejects the newly-added pattern: %s (%s)', (css) => {
+      const config = baseConfig();
+      config.globalSettings.customCss = { css };
+      expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
+    });
   });
 });

@@ -47,28 +47,13 @@ export class SliderWebhookJobHandler implements OnModuleInit {
   }
 
   async handle(payload: ProcessSliderWebhookJobPayload): Promise<void> {
-    // One platform-wide token (SLIDER_WEBHOOK_TOKEN env var), not a
-    // per-shop one — matches the corrected credential model (Requital is
-    // the Slider partner, not each merchant). Unset = auth is optional per
-    // the API's own contract, proceed unauthenticated. A configured token
-    // that doesn't match is a silent drop, not a thrown error: throwing
-    // here would make JobsWorkerService retry with backoff and eventually
-    // dead-letter a webhook that will never become valid on retry.
-    const expectedToken = process.env.SLIDER_WEBHOOK_TOKEN;
-    if (expectedToken && payload.providedToken !== expectedToken) {
-      logger.warn('Slider webhook token mismatch, dropping', {
-        shopId: payload.shopId,
-        orderId: payload.orderId,
-      });
-      await this.webhookLogService.log(
-        payload.shopId,
-        'slider',
-        payload.status,
-        'rejected',
-      );
-      return;
-    }
-
+    // Token verification happens in SliderWebhookController, before this
+    // job is ever enqueued — a job only exists here because the request
+    // that created it already passed that check. See
+    // slider-webhook-auth.ts's own comment for why this moved (a
+    // security-audit finding: the old "check inside the job" design let an
+    // unauthenticated request grow the job table before ever being
+    // rejected, and let an unconfigured token mean "proceed anyway").
     const status = mapSliderStatus(payload.status);
     const driver = payload.driverInfo;
     await this.externalDeliveriesService.updateSliderDeliveryByOrderNumber(

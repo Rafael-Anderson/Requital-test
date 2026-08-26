@@ -47,7 +47,6 @@ export interface ProcessSliderWebhookJobPayload {
     latitude?: number;
     longitude?: number;
   } | null;
-  providedToken: string | null;
 }
 
 export type JobPayload =

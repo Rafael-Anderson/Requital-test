@@ -14,10 +14,82 @@ const SECTION_TYPE_SET = new Set<string>(SECTION_TYPES);
 // cascade root in ways a scoped style injection shouldn't allow). <script
 // is an obvious defense-in-depth addition beyond what Shopify itself
 // documents, since this is injected via a raw <style> tag, not Shopify's
-// own asset pipeline. A substring/regex reject-list, not a full CSS parser
-// — matches the explicit "basic sanity check is enough" instruction.
+// own asset pipeline. expression()/behavior:/-moz-binding are the three
+// other classic CSS-as-script-execution vectors (old-IE CSS expressions,
+// old-IE HTC behavior attachment, old-Firefox XBL binding) — dead in every
+// current browser, kept as defense-in-depth the same way <script is, since
+// "no current browser executes this" was also true of most of the vectors
+// this class of bug is usually found through years later.
+//
+// Security-audit finding, not fixed by this list alone: matched against the
+// *normalized* string (see normalizeCssForValidation below), not the raw
+// input — CSS lets any character be escaped as `\` + 1-6 hex digits (or `\`
+// + one literal character), decoded by the browser's own tokenizer before
+// keyword matching. `@\69mport` (or even `@\import`, since `i` isn't a hex
+// digit) never matches `/@import/i` as a literal string, but a real browser
+// parses and executes it as `@import` — a real, demonstrated bypass of this
+// list when it was only ever applied to the raw string. A substring/regex
+// reject-list against normalized input, not a full CSS-grammar parser — see
+// this file's own note on that tradeoff below assertValidCustomCss.
 const CUSTOM_CSS_MAX_CHARS = 1500;
-const CUSTOM_CSS_REJECT_PATTERNS: RegExp[] = [/<script/i, /@import/i, /@charset/i, /@namespace/i];
+const CUSTOM_CSS_REJECT_PATTERNS: RegExp[] = [
+  /<script/i,
+  /@import/i,
+  /@charset/i,
+  /@namespace/i,
+  /url\s*\(\s*['"]?\s*javascript:/i,
+  /expression\s*\(/i,
+  /behavior\s*:/i,
+  /-moz-binding/i,
+];
+
+// CSS's "consume an escaped code point" algorithm (CSS Syntax Module Level
+// 3): a backslash followed by 1-6 hex digits (optionally then one
+// whitespace character, consumed as the escape's own terminator) decodes to
+// that Unicode code point; a backslash followed by anything else is that
+// one character literally. Applied before the reject-list runs so
+// `@\69mport`/`@\import` are seen as the `@import` they actually are.
+function decodeCssEscapes(css: string): string {
+  return css.replace(
+    /\\(?:([0-9a-fA-F]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/g,
+    (_match, hex: string | undefined, literal: string | undefined) => {
+      if (hex !== undefined) {
+        const codePoint = parseInt(hex, 16);
+        // A null byte, a surrogate half, or a value past the last real code
+        // point are all invalid per spec (the browser itself substitutes
+        // U+FFFD) — can't spell a blocked keyword either way, so treating
+        // them the same way here can't create a false negative.
+        if (
+          codePoint === 0 ||
+          (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+          codePoint > 0x10ffff
+        ) {
+          return '�';
+        }
+        return String.fromCodePoint(codePoint);
+      }
+      return literal ?? '';
+    },
+  );
+}
+
+// CSS comments are stripped by the tokenizer before anything is grouped
+// into a keyword/identifier — replaced with a space (never deleted outright)
+// so this step can't itself glue two halves of an otherwise-unrelated
+// substring into a blocked keyword that was never adjacent in the input.
+function stripCssComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+}
+
+// Order matters: escapes must decode before comments are stripped (an
+// escaped `/`+`*` pair shouldn't be treated as a real comment delimiter,
+// though CSS doesn't allow escaping across a comment boundary either way —
+// decoding first is the conservative order), and both must run before
+// whitespace is collapsed, since a decoded escape or a stripped comment can
+// itself introduce new runs of whitespace that need collapsing too.
+function normalizeCssForValidation(css: string): string {
+  return stripCssComments(decodeCssEscapes(css)).replace(/\s+/g, ' ');
+}
 
 function assertValidBlock(block: unknown, path: string, depth: number): void {
   if (depth > MAX_BLOCK_DEPTH) {
@@ -83,8 +155,12 @@ function assertValidCustomCss(customCss: unknown): void {
       `globalSettings.customCss.css exceeds the ${CUSTOM_CSS_MAX_CHARS} character limit`,
     );
   }
+  // Normalized, not the raw string — see normalizeCssForValidation's own
+  // comment for why (unicode-escape / comment-splitting bypasses of this
+  // exact list, found and fixed as a security-audit finding).
+  const normalized = normalizeCssForValidation(cc.css);
   for (const pattern of CUSTOM_CSS_REJECT_PATTERNS) {
-    if (pattern.test(cc.css)) {
+    if (pattern.test(normalized)) {
       throw new BadRequestException(
         `globalSettings.customCss.css contains a disallowed pattern: ${pattern.source}`,
       );
