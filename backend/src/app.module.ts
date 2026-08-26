@@ -1,8 +1,15 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import cookieParser from 'cookie-parser';
 import { RequestContextMiddleware } from './common/logging/request-context.middleware';
+import { platformCsrf } from './platform-auth/platform-auth.constants';
 import { AllExceptionsFilter } from './common/error-tracking/all-exceptions.filter';
 import { resolveErrorTrackingProvider } from './common/error-tracking/error-tracking.provider';
 import { HealthModule } from './health/health.module';
@@ -142,5 +149,25 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestContextMiddleware).forRoutes('*');
+    // Registered here, not via app.use(cookieParser()) in main.ts, for the
+    // same reason RequestContextMiddleware/AllExceptionsFilter are wired
+    // this way: main.ts's bootstrap() never runs under Jest (see CLAUDE.md),
+    // so a middleware only mounted there would leave req.cookies undefined
+    // in every e2e spec — which is exactly what happened here the first
+    // time (every cookie-authenticated request 404'd/500'd under Jest until
+    // this moved). Must run before the CSRF middleware below, which reads
+    // req.cookies itself.
+    consumer.apply(cookieParser()).forRoutes('*');
+    // Session-cookie migration (security audit finding #1) — platform admin
+    // is the first tier moved; staff/customer join this same wiring as
+    // their own phases land, each with their own TierCsrf instance (see
+    // common/csrf.ts). login is excluded: it's the request that creates the
+    // very session the CSRF cookie would otherwise be checked against, so
+    // there's nothing valid to check yet, and nothing an attacker gains by
+    // forging a login attempt with credentials they don't have.
+    consumer
+      .apply(platformCsrf.doubleCsrfProtection)
+      .exclude({ path: 'platform-auth/login', method: RequestMethod.POST })
+      .forRoutes('platform-auth', 'platform-admin');
   }
 }

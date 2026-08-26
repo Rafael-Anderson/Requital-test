@@ -59,6 +59,11 @@ const SPECS: EnvVarSpec[] = [
     hint: 'must be a non-empty string',
   },
   {
+    name: 'CSRF_SECRET',
+    required: true,
+    hint: 'must be a non-empty string — used to HMAC-sign the double-submit CSRF cookie (see common/csrf.ts)',
+  },
+  {
     name: 'PORT',
     required: false,
     validate: isNumeric,

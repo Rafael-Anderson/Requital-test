@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../../database/database.service';
+import { PLATFORM_ACCESS_COOKIE } from '../platform-auth.constants';
 
 export interface PlatformAdminContext {
   id: number;
@@ -70,9 +71,12 @@ export class PlatformAdminGuard implements CanActivate {
     return true;
   }
 
+  // Session-cookie migration (security audit finding #1) — reads the
+  // httpOnly cookie instead of an Authorization header. No bearer-header
+  // fallback: this is a clean cut-over (see CLAUDE.md's platform-admin
+  // section for the migration-path reasoning), not a transition window.
   private extractToken(request: Request): string | null {
-    const header = request.headers.authorization;
-    if (!header?.startsWith('Bearer ')) return null;
-    return header.slice('Bearer '.length).trim() || null;
+    const raw: unknown = request.cookies?.[PLATFORM_ACCESS_COOKIE];
+    return typeof raw === 'string' && raw ? raw : null;
   }
 }

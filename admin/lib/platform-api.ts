@@ -1,24 +1,34 @@
 // Platform-admin API client — deliberately separate from lib/api.ts's
-// merchant client. Own token storage key, own fetch wrapper, no refresh-
-// token dance (platform sessions are a single 12h token, see
-// PlatformAuthService). Never imports or touches the merchant
-// ACCESS_TOKEN_KEY/REFRESH_TOKEN_KEY — the two auth spaces must stay
+// merchant client. Own fetch wrapper, no refresh-token dance (platform
+// sessions are a single 12h token, see PlatformAuthService). Never imports
+// or touches merchant auth state — the two auth spaces must stay
 // structurally incapable of bleeding into each other on the frontend too,
-// matching the backend's separate JWT scope.
+// matching the backend's separate JWT scope and separate cookie name.
+//
+// Session-cookie migration (security audit finding #1): the access token
+// itself is an httpOnly cookie now, set by the backend on login and never
+// readable here — there is no client-side token to store, read, or clear.
+// `credentials: "include"` is what makes the browser send it automatically
+// on every request to API_URL; see main.ts's CORS `credentials: true` for
+// the other half of that.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
-const PLATFORM_TOKEN_KEY = "requital_platform_access_token";
 
-export function getPlatformToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(PLATFORM_TOKEN_KEY);
+// Mirrors backend/src/common/cookies.ts's tieredCookieName — no shared
+// package between admin/ and backend/ (same convention as every other
+// cross-app duplication in this codebase), so this one small piece of
+// naming logic is duplicated by hand rather than imported.
+const IS_PROD = process.env.NODE_ENV === "production";
+function tieredCookieName(base: string): string {
+  return IS_PROD ? `__Host-${base}` : base;
 }
+const PLATFORM_CSRF_COOKIE = tieredCookieName("req-platform-csrf");
 
-export function setPlatformToken(token: string) {
-  localStorage.setItem(PLATFORM_TOKEN_KEY, token);
-}
-
-export function clearPlatformToken() {
-  localStorage.removeItem(PLATFORM_TOKEN_KEY);
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
 export class PlatformApiError extends Error {
@@ -40,12 +50,18 @@ export function onPlatformUnauthorized(listener: () => void): () => void {
 }
 
 async function platformFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getPlatformToken();
+  const method = (init?.method ?? "GET").toUpperCase();
+  // The double-submit CSRF cookie is only echoed back for state-changing
+  // requests — a GET can't be forged into doing anything, and the cookie
+  // doesn't exist yet on the very first request of a session anyway.
+  const csrfToken =
+    method !== "GET" && method !== "HEAD" ? readCookie(PLATFORM_CSRF_COOKIE) : null;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
       ...init?.headers,
     },
   });
@@ -53,8 +69,10 @@ async function platformFetch<T>(path: string, init?: RequestInit): Promise<T> {
     // 404 here can mean either "route genuinely not found" or "not
     // authenticated" (PlatformAdminGuard collapses both — see CLAUDE.md).
     // Either way the session is unusable; treat it the same as a real 401.
+    // Nothing local to clear anymore — the httpOnly cookie can only be
+    // cleared server-side (see platformLogout) — just notify listeners so
+    // AuthProvider-equivalent state flips to logged-out.
     if (res.status === 401 || res.status === 404) {
-      clearPlatformToken();
       unauthorizedListeners.forEach((l) => l());
     }
     const errBody = await res.json().catch(() => null);
@@ -75,14 +93,22 @@ export interface PlatformAdmin {
 }
 
 export function platformLogin(email: string, password: string) {
-  return platformFetch<{ accessToken: string; admin: PlatformAdmin }>(
-    "/platform-auth/login",
-    { method: "POST", body: JSON.stringify({ email, password }) },
-  );
+  return platformFetch<{ admin: PlatformAdmin }>("/platform-auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export function platformMe() {
   return platformFetch<PlatformAdmin>("/platform-auth/me");
+}
+
+// httpOnly cookies can't be cleared by client JS — this is a real network
+// call now, not a synchronous local-storage removal.
+export function platformLogout() {
+  return platformFetch<{ success: boolean }>("/platform-auth/logout", {
+    method: "POST",
+  });
 }
 
 export type ShopStatus = "active" | "suspended";
