@@ -3,10 +3,14 @@
 import type { CheckoutFormState } from "@/lib/useCheckoutForm";
 import { EMIRATES } from "@/lib/types";
 import { storeButtonClassName } from "@/lib/button-style";
+import { isDateBlocked } from "@/lib/slots";
 import PromoCodeField from "@/components/PromoCodeField";
 import GiftCardCodeField from "@/components/GiftCardCodeField";
 import DeliveryAddressFields from "./DeliveryAddressFields";
-import { FIELD_CLASS, TEXTAREA_CLASS, PAYMENT_LABELS } from "./checkout-field-styles";
+import PaymentMethodPicker from "./PaymentMethodPicker";
+import DeliveryDateCalendar from "./DeliveryDateCalendar";
+import TimeSlotPicker from "./TimeSlotPicker";
+import { FIELD_CLASS, TEXTAREA_CLASS } from "./checkout-field-styles";
 import CurrencySymbol from "@/components/CurrencySymbol";
 
 // The original checkout layout — every field on one long scroll. Kept as
@@ -149,7 +153,12 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <label className="text-sm font-medium block mb-1">{orderType === "pickup" ? "Pickup date (optional)" : "Delivery date (optional)"}</label>
-          <input type="date" min={minDate} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className={FIELD_CLASS} />
+          <DeliveryDateCalendar
+            value={deliveryDate}
+            onChange={setDeliveryDate}
+            minDate={minDate}
+            isDateGrayedOut={(d) => isDateBlocked(d, new Date(`${minDate}T00:00:00`), shop?.allowSameDayOrders, shop?.allowNextDayOrders)}
+          />
           {dateBlocked && (
             <p className="text-xs text-red-600 mt-1">
               {dateIsToday ? "Same-day orders aren't available right now." : "Next-day orders aren't available right now."}
@@ -158,14 +167,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
         </div>
         <div>
           <label className="text-sm font-medium block mb-1">Time slot (optional)</label>
-          <select value={deliveryTimeSlot} onChange={(e) => setDeliveryTimeSlot(e.target.value)} className={FIELD_CLASS}>
-            <option value="">No preference</option>
-            {timeSlots.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          <TimeSlotPicker slots={timeSlots} value={deliveryTimeSlot} onChange={setDeliveryTimeSlot} />
         </div>
       </div>
 
@@ -176,14 +178,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
 
       <div>
         <p className="text-sm font-medium mb-2">Payment</p>
-        <div className="space-y-2">
-          {availablePaymentMethods.map((m) => (
-            <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="radio" name="paymentMethod" checked={paymentMethod === m} onChange={() => setPaymentMethod(m)} />
-              {PAYMENT_LABELS[m]}
-            </label>
-          ))}
-        </div>
+        <PaymentMethodPicker methods={availablePaymentMethods} value={paymentMethod} onChange={setPaymentMethod} />
       </div>
 
       <div>

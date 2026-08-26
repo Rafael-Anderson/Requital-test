@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { cancelOrder, listOrders, updateOrderStatus } from "@/lib/api";
+import { cancelOrder, collectCash, listOrders, updateOrderStatus } from "@/lib/api";
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 import { useOutletFilter } from "@/lib/outlet-context";
@@ -113,6 +113,16 @@ function OrdersPageContent() {
     }
   }
 
+  async function handleCollectCash(order: Order) {
+    try {
+      await collectCash(order.id);
+      toast(`Cash collected for order #${order.id}`);
+      refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to mark cash collected", "error");
+    }
+  }
+
   const columns: Column[] = orders
     ? [
         { key: "new", title: "New Orders", orders: orders.filter((o) => o.status === "pending") },
@@ -169,8 +179,8 @@ function OrdersPageContent() {
                   )}
                   {col.orders.map((order) => {
                     const nextAction = getNextAction(order.status);
-                    const showAdvance =
-                      nextAction && (order.status !== "confirmed" || isDueToday(order.deliveryDate));
+                    const showAdvance = !!nextAction;
+                    const isCod = order.paymentMethod === "cash_on_delivery";
                     return (
                       <div
                         key={order.id}
@@ -206,10 +216,23 @@ function OrdersPageContent() {
                           </div>
                         )}
 
-                        <div className="flex gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
+                        {isCod && order.cashCollectedAt && (
+                          <div className="mt-1.5">
+                            <span className="text-[11px] font-medium text-green-700 dark:text-green-400">
+                              Cash collected ✓
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
                           {showAdvance && (
                             <Button size="sm" variant="primary" className="flex-1" onClick={() => handleAdvance(order)}>
                               {nextAction!.label}
+                            </Button>
+                          )}
+                          {isCod && !order.cashCollectedAt && (
+                            <Button size="sm" variant="secondary" onClick={() => handleCollectCash(order)}>
+                              Mark cash collected
                             </Button>
                           )}
                           <Button size="sm" variant="danger" onClick={() => handleCancel(order)}>

@@ -186,6 +186,15 @@ export default function OrderDetailModal({
     }
   }
 
+  async function copyTrackingRef(token: string) {
+    try {
+      await navigator.clipboard.writeText(token);
+      toast("Tracking ref copied");
+    } catch {
+      toast("Could not copy", "error");
+    }
+  }
+
   async function handleUpdateDeliveryStatus(status: ExternalDelivery["status"]) {
     if (!order) return;
     try {
@@ -279,6 +288,7 @@ export default function OrderDetailModal({
             {tab === "invoice" ? (
               <OrderInvoiceTab orderId={order.id} />
             ) : (
+            <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2 space-y-4">
                 <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
@@ -472,6 +482,20 @@ export default function OrderDetailModal({
                         <span className="font-medium">{order.channel}</span>
                       </div>
                     )}
+                    {order.trackingToken && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-text-muted">Tracking ref</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs">{order.trackingToken}</span>
+                          <button
+                            onClick={() => copyTrackingRef(order.trackingToken!)}
+                            className="text-xs text-text-faint underline decoration-transparent hover:decoration-current"
+                          >
+                            Copy
+                          </button>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </section>
 
@@ -610,9 +634,10 @@ export default function OrderDetailModal({
                 </section>
               </div>
             </div>
-            )}
 
             <OrderStatusTimeline orderId={order.id} refreshKey={historyRefreshKey} />
+            </div>
+            )}
           </>
         )}
     </Modal>

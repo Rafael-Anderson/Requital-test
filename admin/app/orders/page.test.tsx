@@ -66,6 +66,7 @@ const order: Order = {
   deliveryFee: "10",
   total: "150.00",
   createdAt: new Date().toISOString(),
+  trackingToken: null,
   paymentLinkToken: null,
   paymentLinkExpiresAt: null,
   orderitem: [],

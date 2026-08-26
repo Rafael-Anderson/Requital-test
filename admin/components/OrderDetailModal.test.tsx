@@ -50,6 +50,7 @@ function fakeOrder(): Order {
     deliveryFee: "10",
     total: "60",
     createdAt: new Date().toISOString(),
+    trackingToken: null,
     paymentLinkToken: null,
     paymentLinkExpiresAt: null,
     orderitem: [],
