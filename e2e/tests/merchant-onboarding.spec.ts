@@ -77,21 +77,31 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   // A collection has to pre-exist for the product form's required
   // CollectionCheckboxTree — creating one is a separate concern from this
   // flow (collections UI isn't one of the 4 critical paths), so it's done
-  // directly against the API with the token the wizard just signed in
+  // directly against the API with the session the wizard just signed in
   // with, same as the outlet pickup-enable needed for Publish readiness.
-  const accessToken = await page.evaluate(() =>
-    localStorage.getItem('requital_admin_access_token'),
+  //
+  // Session-cookie migration (security audit finding #1) — there's no
+  // token in localStorage to read anymore; `page.request` (unlike the
+  // standalone `request` fixture) shares the same browser context as
+  // `page`, so it automatically carries the httpOnly session cookie the
+  // signup flow just set. The CSRF cookie is httpOnly too now (see backend
+  // CLAUDE.md's own note on why), so its value is read via Playwright's own
+  // privileged `context.cookies()` API — a real browser page's JS could
+  // never do this, but Playwright's automation layer isn't subject to that
+  // restriction, same as how it can read cookies for assertions elsewhere.
+  const csrfCookie = (await page.context().cookies()).find(
+    (c) => c.name === 'req-staff-csrf',
   );
-  expect(accessToken).toBeTruthy();
-  const authHeaders = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
+  expect(csrfCookie).toBeTruthy();
+  const csrfHeaders = { 'X-CSRF-Token': csrfCookie!.value, 'Content-Type': 'application/json' };
 
   // Publish readiness requires a verified admin email (the banner on the
   // freshly-created home page says as much) — the wizard itself has no
   // email-verification step, so this drives the same dev-link flow the
   // backend's own e2e suite uses (backend/test/helpers/verify-signup-email.ts)
   // via resend-verification rather than a real inbox.
-  const resendRes = await request.post(`${API_URL}/auth/resend-verification`, {
-    headers: authHeaders,
+  const resendRes = await page.request.post(`${API_URL}/auth/resend-verification`, {
+    headers: csrfHeaders,
   });
   const { devVerificationLink } = (await resendRes.json()) as { devVerificationLink?: string };
   if (devVerificationLink) {
@@ -102,16 +112,16 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
     });
   }
 
-  const collectionRes = await request.post(`${API_URL}/collections`, {
-    headers: authHeaders,
+  const collectionRes = await page.request.post(`${API_URL}/collections`, {
+    headers: csrfHeaders,
     data: { name: 'Flowers' },
   });
   const collection = (await collectionRes.json()) as { id: number };
 
-  const outletsRes = await request.get(`${API_URL}/outlets`, { headers: authHeaders });
+  const outletsRes = await page.request.get(`${API_URL}/outlets`);
   const outlets = (await outletsRes.json()) as { id: number }[];
-  await request.patch(`${API_URL}/outlets/${outlets[0].id}`, {
-    headers: authHeaders,
+  await page.request.patch(`${API_URL}/outlets/${outlets[0].id}`, {
+    headers: csrfHeaders,
     data: { pickupEnabled: true, active: true },
   });
 

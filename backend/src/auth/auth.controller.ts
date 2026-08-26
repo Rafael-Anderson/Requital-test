@@ -84,7 +84,24 @@ export class AuthController {
   ) {
     const session = await this.authService.signup(dto);
     setStaffSessionCookies(req, res, session);
-    return isTest ? session : { user: session.user };
+    // devVerificationLink is a sibling field on AuthService.signup's own
+    // return, not nested under `user` — dropped here entirely the first
+    // time this was written (isTest ? session : {user: session.user}
+    // silently discarded it in every non-Jest environment, including a
+    // real dev-mode backend), breaking e2e/seed.ts's own verify-email step
+    // for real, caught running the Playwright suite locally. Unrelated to
+    // the actual security boundary this isTest branch exists for (the raw
+    // tokens): devVerificationLink is itself already gated by AuthService's
+    // own isDev check (never present against a real production build), so
+    // preserving it here unconditionally doesn't reintroduce anything.
+    return isTest
+      ? session
+      : {
+          user: session.user,
+          ...(session.devVerificationLink
+            ? { devVerificationLink: session.devVerificationLink }
+            : {}),
+        };
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -123,10 +140,7 @@ export class AuthController {
 
   @Public()
   @Post('logout')
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken: unknown = req.cookies?.[STAFF_REFRESH_COOKIE];
     if (typeof refreshToken === 'string' && refreshToken) {
       await this.authService.logout({ refreshToken });
