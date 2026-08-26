@@ -94,6 +94,13 @@ async function bootstrap() {
         .catch(() => callback(null, false));
     },
     credentials: true,
+    // Custom response headers aren't readable by fetch() cross-origin by
+    // default — this is what lets every frontend actually read the
+    // X-CSRF-Token header login/signup/refresh/"me" set (see
+    // common/csrf.ts's own CSRF_RESPONSE_HEADER comment for why a response
+    // header, not a readable cookie or the response body, is the
+    // distribution channel).
+    exposedHeaders: ['X-CSRF-Token'],
   });
   // cookie-parser is registered in AppModule.configure() instead of here —
   // see that file's own comment for why (main.ts's bootstrap() never runs

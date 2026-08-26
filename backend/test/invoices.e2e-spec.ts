@@ -13,9 +13,6 @@ interface AdminAuthResponse {
   accessToken: string;
   devVerificationLink?: string;
 }
-interface CustomerAuthResponse {
-  accessToken: string;
-}
 interface IdRow {
   id: number;
 }
@@ -467,7 +464,12 @@ describe('Invoices & packing slips (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/outlets/${outletId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ deliveryEnabled: true, deliveryRadiusKm: 5, latitude: 25.2048, longitude: 55.2708 })
+        .send({
+          deliveryEnabled: true,
+          deliveryRadiusKm: 5,
+          latitude: 25.2048,
+          longitude: 55.2708,
+        })
         .expect(200);
 
       const codOrder = body<OrderCreateResponse>(
@@ -483,7 +485,10 @@ describe('Invoices & packing slips (e2e)', () => {
         await createOrder(shopSlug, outletId, productId),
       ).order;
 
-      async function generateAndFetch(orderId: number, type: 'INVOICE' | 'PACKING_SLIP') {
+      async function generateAndFetch(
+        orderId: number,
+        type: 'INVOICE' | 'PACKING_SLIP',
+      ) {
         const invoice = body<InvoiceRow>(
           await request(app.getHttpServer())
             .post('/invoices')
@@ -500,8 +505,14 @@ describe('Invoices & packing slips (e2e)', () => {
 
       const codInvoiceHtml = await generateAndFetch(codOrder.id, 'INVOICE');
       const codSlipHtml = await generateAndFetch(codOrder.id, 'PACKING_SLIP');
-      const nonCodInvoiceHtml = await generateAndFetch(nonCodOrder.id, 'INVOICE');
-      const nonCodSlipHtml = await generateAndFetch(nonCodOrder.id, 'PACKING_SLIP');
+      const nonCodInvoiceHtml = await generateAndFetch(
+        nonCodOrder.id,
+        'INVOICE',
+      );
+      const nonCodSlipHtml = await generateAndFetch(
+        nonCodOrder.id,
+        'PACKING_SLIP',
+      );
 
       expect(codInvoiceHtml).toContain('Cash Due');
       expect(codSlipHtml).toContain('CASH TO COLLECT');
@@ -516,7 +527,12 @@ describe('Invoices & packing slips (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/outlets/${outletId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ deliveryEnabled: true, deliveryRadiusKm: 5, latitude: 25.2048, longitude: 55.2708 })
+        .send({
+          deliveryEnabled: true,
+          deliveryRadiusKm: 5,
+          latitude: 25.2048,
+          longitude: 55.2708,
+        })
         .expect(200);
       const order = body<OrderCreateResponse>(
         await createOrder(shopSlug, outletId, productId, {
@@ -527,9 +543,10 @@ describe('Invoices & packing slips (e2e)', () => {
         }),
       ).order;
 
-      await db.execute(`UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`, [
-        order.id,
-      ]);
+      await db.execute(
+        `UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`,
+        [order.id],
+      );
 
       const slip = body<InvoiceRow>(
         await request(app.getHttpServer())
@@ -548,7 +565,14 @@ describe('Invoices & packing slips (e2e)', () => {
   });
 
   describe('storefront customer download', () => {
-    async function registerCustomer(shopSlug: string, phone: string) {
+    // Session-cookie migration (security audit finding #1), phase 3 — the
+    // customer session is a cookie now, not a bearer token; only the two
+    // customer-account GETs in this block ever need it (no state-changing
+    // customer calls here), so no CSRF header is required either.
+    async function registerCustomer(
+      shopSlug: string,
+      phone: string,
+    ): Promise<string> {
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/auth/register`)
         .send({
@@ -558,7 +582,11 @@ describe('Invoices & packing slips (e2e)', () => {
           password: 'password123',
         })
         .expect(201);
-      return body<CustomerAuthResponse>(res).accessToken;
+      const lines = res.get('Set-Cookie') ?? [];
+      return lines
+        .map((line) => line.split(';')[0])
+        .filter((pair) => pair.startsWith('req-customer-'))
+        .join('; ');
     }
 
     it('a logged-in customer can download the invoice for their own order once the merchant has generated one, and not before', async () => {
@@ -570,13 +598,13 @@ describe('Invoices & packing slips (e2e)', () => {
           customerPhone: phone,
         }),
       ).order;
-      const customerToken = await registerCustomer(shopSlug, phone);
+      const customerCookie = await registerCustomer(shopSlug, phone);
 
       // Not generated yet — the customer-facing endpoint never generates,
       // only downloads.
       await request(app.getHttpServer())
         .get(`/public/${shopSlug}/account/orders/${order.id}/invoice`)
-        .set('Authorization', `Bearer ${customerToken}`)
+        .set('Cookie', customerCookie)
         .expect(404);
 
       const invoice = body<InvoiceRow>(
@@ -589,7 +617,7 @@ describe('Invoices & packing slips (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get(`/public/${shopSlug}/account/orders/${order.id}/invoice`)
-        .set('Authorization', `Bearer ${customerToken}`)
+        .set('Cookie', customerCookie)
         .expect(200);
       expect(res.headers['content-type']).toContain('text/html');
       expect(res.text).toContain(invoice.invoiceNumber);
@@ -599,7 +627,7 @@ describe('Invoices & packing slips (e2e)', () => {
       // rule.
       const detail = await request(app.getHttpServer())
         .get(`/public/${shopSlug}/account/orders/${order.id}`)
-        .set('Authorization', `Bearer ${customerToken}`)
+        .set('Cookie', customerCookie)
         .expect(200);
       expect(body<{ hasInvoice: boolean }>(detail).hasInvoice).toBe(true);
     });
@@ -619,16 +647,16 @@ describe('Invoices & packing slips (e2e)', () => {
         .send({ orderId: orderA.id, type: 'INVOICE' })
         .expect(201);
 
-      const customerBToken = await registerCustomer(
+      const customerBCookie = await registerCustomer(
         shopB.shopSlug,
         '0503334444',
       );
       // Shop B's own customer-account route can't even resolve shop A's
-      // order id — CustomerAuthGuard ties the token to shop B via
+      // order id — CustomerAuthGuard ties the session to shop B via
       // :shopSlug, and the lookup is additionally scoped by shopId.
       const crossShopRes = await request(app.getHttpServer())
         .get(`/public/${shopB.shopSlug}/account/orders/${orderA.id}/invoice`)
-        .set('Authorization', `Bearer ${customerBToken}`)
+        .set('Cookie', customerBCookie)
         .expect(404);
       // No fragment of shop A's real invoice HTML leaks into the 404 body
       // — a real success response is a full HTML document containing the

@@ -13,23 +13,20 @@
 // the other half of that.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
-// Mirrors backend/src/common/cookies.ts's tieredCookieName — no shared
-// package between admin/ and backend/ (same convention as every other
-// cross-app duplication in this codebase), so this one small piece of
-// naming logic is duplicated by hand rather than imported.
-const IS_PROD = process.env.NODE_ENV === "production";
-function tieredCookieName(base: string): string {
-  return IS_PROD ? `__Host-${base}` : base;
-}
-const PLATFORM_CSRF_COOKIE = tieredCookieName("req-platform-csrf");
-
-function readCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${name}=`));
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
-}
+// CSRF token distribution — held in memory, never localStorage (that would
+// reintroduce the exact XSS-exposure problem this whole migration exists to
+// close). Originally read via `document.cookie` off a non-httpOnly CSRF
+// cookie; that only ever worked in local dev, where every app shares the
+// bare `localhost` hostname (cookies aren't port-scoped) — in any real
+// deployment admin.requital.io can never read a cookie set by
+// api.requital.io via document.cookie, cookies don't cross hostnames
+// regardless of the httpOnly attribute. The backend now instead echoes the
+// token on the X-CSRF-Token *response* header of every request that mints
+// or refreshes one (login, and platformMe() below) — see backend
+// common/csrf.ts's own CSRF_RESPONSE_HEADER comment. main.ts's CORS
+// `exposedHeaders` is what makes a custom response header readable by
+// fetch() at all cross-origin.
+let platformCsrfToken: string | null = null;
 
 export class PlatformApiError extends Error {
   constructor(
@@ -51,11 +48,11 @@ export function onPlatformUnauthorized(listener: () => void): () => void {
 
 async function platformFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
-  // The double-submit CSRF cookie is only echoed back for state-changing
-  // requests — a GET can't be forged into doing anything, and the cookie
-  // doesn't exist yet on the very first request of a session anyway.
+  // The double-submit CSRF header is only attached for state-changing
+  // requests — a GET can't be forged into doing anything, and there's no
+  // token yet on the very first request of a session anyway.
   const csrfToken =
-    method !== "GET" && method !== "HEAD" ? readCookie(PLATFORM_CSRF_COOKIE) : null;
+    method !== "GET" && method !== "HEAD" ? platformCsrfToken : null;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: "include",
@@ -65,6 +62,8 @@ async function platformFetch<T>(path: string, init?: RequestInit): Promise<T> {
       ...init?.headers,
     },
   });
+  const freshCsrfToken = res.headers.get("X-CSRF-Token");
+  if (freshCsrfToken) platformCsrfToken = freshCsrfToken;
   if (!res.ok) {
     // 404 here can mean either "route genuinely not found" or "not
     // authenticated" (PlatformAdminGuard collapses both — see CLAUDE.md).
@@ -169,9 +168,12 @@ export function unsuspendShop(shopId: number) {
   );
 }
 
+// Session-cookie migration (security audit finding #1), phase 2 — the
+// staff session cookies are set directly on this response now (see
+// PlatformAdminController.impersonate); there's no token left in the body
+// for the caller to do anything with beyond confirming success.
 export interface ImpersonationSession {
-  accessToken: string;
-  refreshToken: string | null;
+  success: boolean;
   accessTokenExpiresIn: number;
 }
 

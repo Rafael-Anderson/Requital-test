@@ -11,8 +11,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { CustomerAccountService } from './customer-account.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
@@ -21,6 +24,11 @@ import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { CurrentCustomer } from '../customer-auth/decorators/current-customer.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import type { CustomerContext } from '../customer-auth/customer-context';
+import {
+  CUSTOMER_ACCESS_COOKIE,
+  customerAccessPath,
+  customerCsrf,
+} from '../customer-auth/customer-auth.constants';
 
 // @Public() so the global staff AuthGuard skips this controller entirely —
 // CustomerAuthGuard (applied locally here, not globally) is the real gate,
@@ -34,8 +42,27 @@ export class CustomerAccountController {
     private readonly customerAccountService: CustomerAccountService,
   ) {}
 
+  // Also the storefront's bootstrap point for both "am I logged in" (see
+  // storefront lib/auth.tsx) and CSRF token distribution (see
+  // common/csrf.ts's own top comment) — a fresh page load/new tab has no
+  // in-memory CSRF value left over from login, so this hands one back via
+  // the response header every time, reusing the existing cookie's value
+  // rather than rotating it (a rotation here would silently invalidate the
+  // token any other already-open tab is still holding).
   @Get('profile')
-  getProfile(@CurrentCustomer() ctx: CustomerContext) {
+  getProfile(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Param('shopSlug') shopSlug: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const accessToken: unknown = req.cookies?.[CUSTOMER_ACCESS_COOKIE];
+    if (typeof accessToken === 'string' && accessToken) {
+      customerCsrf.issue(req, res, accessToken, {
+        cookiePath: customerAccessPath(shopSlug),
+        reuseExisting: true,
+      });
+    }
     return this.customerAccountService.getProfile(ctx);
   }
 

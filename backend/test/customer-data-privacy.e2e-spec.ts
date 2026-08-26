@@ -20,9 +20,7 @@ interface IdRow {
 interface OutletRow {
   id: number;
 }
-interface CustomerAuthResponse {
-  accessToken: string;
-  refreshToken: string;
+interface CustomerResponseBody {
   customer: { id: number; shopId: number };
 }
 interface OrderCreateResponse {
@@ -40,6 +38,43 @@ interface RequestDeletionResponse {
 
 function body<T>(res: Response): T {
   return res.body as T;
+}
+
+// Session-cookie migration (security audit finding #1), phase 3 — same
+// extractCookies/cookieHeader/sessionFromResponse pattern as
+// customer-auth.e2e-spec.ts (see that file's own comment for the full
+// reasoning, including why supertest's lack of Path-aware cookie matching
+// doesn't weaken the cross-shop-rejection tests below).
+function extractCookies(res: Response): Record<string, string> {
+  const lines = res.get('Set-Cookie') ?? [];
+  const cookies: Record<string, string> = {};
+  for (const line of lines) {
+    const pair = line.split(';')[0];
+    const idx = pair.indexOf('=');
+    cookies[pair.slice(0, idx)] = pair.slice(idx + 1);
+  }
+  return cookies;
+}
+
+function cookieHeader(cookies: Record<string, string>): string {
+  return Object.entries(cookies)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
+interface CustomerSession {
+  cookieHeaderStr: string;
+  csrfToken: string;
+  customer: CustomerResponseBody['customer'];
+}
+
+function sessionFromResponse(res: Response): CustomerSession {
+  const cookies = extractCookies(res);
+  return {
+    cookieHeaderStr: cookieHeader(cookies),
+    csrfToken: cookies['req-customer-csrf'],
+    customer: body<CustomerResponseBody>(res).customer,
+  };
 }
 
 // Two real shop signups per test (each a real verification-email network
@@ -187,13 +222,13 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       // uniqueness is [shopId, phone], not phone alone).
       await guestOrder(shopB.shopSlug, shopB.outletId, shopB.productId, phone);
 
-      const registered = body<CustomerAuthResponse>(
+      const registered = sessionFromResponse(
         await register(shopA.shopSlug, phone, email),
       );
 
       const exportRes = await request(app.getHttpServer())
         .get(`/public/${shopA.shopSlug}/account/export`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
         .expect(200);
       const data = body<ExportResponse>(exportRes);
 
@@ -208,22 +243,22 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       const shop = await setupShop('priv-export-rate');
       const phone = '0507770002';
       await guestOrder(shop.shopSlug, shop.outletId, shop.productId, phone);
-      const registered = body<CustomerAuthResponse>(
+      const registered = sessionFromResponse(
         await register(shop.shopSlug, phone, `priv-rate-${runId}@test.com`),
       );
 
       await request(app.getHttpServer())
         .get(`/public/${shop.shopSlug}/account/export`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
         .expect(200);
 
       await request(app.getHttpServer())
         .get(`/public/${shop.shopSlug}/account/export`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
         .expect(400);
     });
 
-    it('a merchant (staff) JWT cannot call the customer export endpoint', async () => {
+    it('a merchant (staff) session cannot call the customer export endpoint', async () => {
       const shop = await setupShop('priv-export-staff');
       await request(app.getHttpServer())
         .get(`/public/${shop.shopSlug}/account/export`)
@@ -235,13 +270,13 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       const shopA = await setupShop('priv-export-iso-a');
       const shopB = await setupShop('priv-export-iso-b');
       const phoneB = '0507770003';
-      const registeredB = body<CustomerAuthResponse>(
+      const registeredB = sessionFromResponse(
         await register(shopB.shopSlug, phoneB, `priv-iso-${runId}@test.com`),
       );
 
       await request(app.getHttpServer())
         .get(`/public/${shopA.shopSlug}/account/export`)
-        .set('Authorization', `Bearer ${registeredB.accessToken}`)
+        .set('Cookie', registeredB.cookieHeaderStr)
         .expect(401);
     });
   });
@@ -253,14 +288,15 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       const order = body<OrderCreateResponse>(
         await guestOrder(shop.shopSlug, shop.outletId, shop.productId, phone),
       ).order;
-      const registered = body<CustomerAuthResponse>(
+      const registered = sessionFromResponse(
         await register(shop.shopSlug, phone, `priv-delete-${runId}@test.com`),
       );
 
       const requested = body<RequestDeletionResponse>(
         await request(app.getHttpServer())
           .delete(`/public/${shop.shopSlug}/account/me`)
-          .set('Authorization', `Bearer ${registered.accessToken}`)
+          .set('Cookie', registered.cookieHeaderStr)
+          .set('X-CSRF-Token', registered.csrfToken)
           .expect(202),
       );
       expect(requested.alreadyDeleted).toBe(false);
@@ -268,7 +304,8 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
 
       await request(app.getHttpServer())
         .delete(`/public/${shop.shopSlug}/account/me/confirm?token=${token}`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
+        .set('X-CSRF-Token', registered.csrfToken)
         .expect(200);
 
       const customer = await getCustomerById(registered.customer.id);
@@ -293,60 +330,71 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       expect(stillExists).not.toBeUndefined();
       expect(stillExists.customerId).toBe(registered.customer.id);
 
-      // The old access token is dead immediately — CustomerAuthGuard
+      // The old session cookie is dead immediately — CustomerAuthGuard
       // rejects it now that passwordHash is null.
       await request(app.getHttpServer())
         .get(`/public/${shop.shopSlug}/account/profile`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
         .expect(401);
 
-      // The refresh token is revoked too — can't silently mint a new
-      // access token to keep using the account.
+      // The refresh cookie is revoked too — can't silently mint a new
+      // access token to keep using the account. A real browser would still
+      // send the (Path-broader) access cookie alongside the refresh cookie
+      // here too — Path=/public/{shopSlug} covers the narrower
+      // /public/{shopSlug}/auth/refresh sub-path — so the CSRF header is
+      // required the same way any other state-changing request with an
+      // access cookie present is; the request still 401s on the guard's own
+      // account-no-longer-usable check regardless of CSRF passing.
       await request(app.getHttpServer())
         .post(`/public/${shop.shopSlug}/auth/refresh`)
-        .send({ refreshToken: registered.refreshToken })
+        .set('Cookie', registered.cookieHeaderStr)
+        .set('X-CSRF-Token', registered.csrfToken)
         .expect(401);
     });
 
     it('a second confirm with the same token is rejected (already used)', async () => {
       const shop = await setupShop('priv-delete-reuse');
       const phone = '0507770011';
-      const registered = body<CustomerAuthResponse>(
+      const registered = sessionFromResponse(
         await register(shop.shopSlug, phone, `priv-reuse-${runId}@test.com`),
       );
       const requested = body<RequestDeletionResponse>(
         await request(app.getHttpServer())
           .delete(`/public/${shop.shopSlug}/account/me`)
-          .set('Authorization', `Bearer ${registered.accessToken}`)
+          .set('Cookie', registered.cookieHeaderStr)
+          .set('X-CSRF-Token', registered.csrfToken)
           .expect(202),
       );
       const token = requested.confirmationToken!;
 
       await request(app.getHttpServer())
         .delete(`/public/${shop.shopSlug}/account/me/confirm?token=${token}`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
+        .set('X-CSRF-Token', registered.csrfToken)
         .expect(200);
 
-      // The first confirm already killed this access token (passwordHash
+      // The first confirm already killed this session cookie (passwordHash
       // cleared) — a second attempt with it is rejected by the guard
       // itself, which is an even stronger form of "no-op" than a soft
       // app-level check.
       await request(app.getHttpServer())
         .delete(`/public/${shop.shopSlug}/account/me/confirm?token=${token}`)
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
+        .set('X-CSRF-Token', registered.csrfToken)
         .expect(401);
     });
 
     it('an expired confirmationToken is rejected', async () => {
       const shop = await setupShop('priv-delete-expired');
       const phone = '0507770012';
-      const registered = body<CustomerAuthResponse>(
+      const registered = sessionFromResponse(
         await register(shop.shopSlug, phone, `priv-expired-${runId}@test.com`),
       );
       const requested = body<RequestDeletionResponse>(
         await request(app.getHttpServer())
           .delete(`/public/${shop.shopSlug}/account/me`)
-          .set('Authorization', `Bearer ${registered.accessToken}`)
+          .set('Cookie', registered.cookieHeaderStr)
+          .set('X-CSRF-Token', registered.csrfToken)
           .expect(202),
       );
 
@@ -355,18 +403,23 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       // actually sleeping that long.
       await db.execute(
         `UPDATE customerauthtoken SET expiresAt = ? WHERE customerId = ? AND purpose = ?`,
-        [new Date(Date.now() - 60 * 1000), registered.customer.id, 'account_deletion'],
+        [
+          new Date(Date.now() - 60 * 1000),
+          registered.customer.id,
+          'account_deletion',
+        ],
       );
 
       await request(app.getHttpServer())
         .delete(
           `/public/${shop.shopSlug}/account/me/confirm?token=${requested.confirmationToken}`,
         )
-        .set('Authorization', `Bearer ${registered.accessToken}`)
+        .set('Cookie', registered.cookieHeaderStr)
+        .set('X-CSRF-Token', registered.csrfToken)
         .expect(400);
     });
 
-    it('a merchant (staff) JWT cannot call the customer deletion endpoints', async () => {
+    it('a merchant (staff) session cannot call the customer deletion endpoints', async () => {
       const shop = await setupShop('priv-delete-staff');
       await request(app.getHttpServer())
         .delete(`/public/${shop.shopSlug}/account/me`)
@@ -379,14 +432,14 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       const shopB = await setupShop('priv-delete-iso-b');
       const phoneA = '0507770013';
       const phoneB = '0507770014';
-      const registeredA = body<CustomerAuthResponse>(
+      const registeredA = sessionFromResponse(
         await register(
           shopA.shopSlug,
           phoneA,
           `priv-iso-del-a-${runId}@test.com`,
         ),
       );
-      const registeredB = body<CustomerAuthResponse>(
+      const registeredB = sessionFromResponse(
         await register(
           shopB.shopSlug,
           phoneB,
@@ -394,10 +447,11 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         ),
       );
 
-      // Shop B's token can't even reach shop A's account routes.
+      // Shop B's cookie can't even reach shop A's account routes.
       await request(app.getHttpServer())
         .delete(`/public/${shopA.shopSlug}/account/me`)
-        .set('Authorization', `Bearer ${registeredB.accessToken}`)
+        .set('Cookie', registeredB.cookieHeaderStr)
+        .set('X-CSRF-Token', registeredB.csrfToken)
         .expect(401);
 
       // Shop A's own account is untouched.

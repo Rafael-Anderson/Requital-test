@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { API_URL, getAccessToken, getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
+import { API_URL, getStaffCsrfToken, getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
 import {
   findNodeInTree,
   insertNodeInTree,
@@ -362,22 +362,27 @@ export function useThemeEditor(themeId: number) {
   // that teardown; fetch's `keepalive` flag (unlike a plain fetch, which
   // Chrome cancels once the document starts unloading) is what lets the
   // request actually complete after the handler returns — sendBeacon can't
-  // be used instead since it has no way to carry the Authorization header
-  // this endpoint requires.
+  // be used instead since it has no way to carry a JSON PATCH body or the
+  // CSRF header this endpoint requires.
   // ponytail: keepalive requests are capped at ~64KiB by Chromium; a theme
   // config with an unusually large block tree/custom CSS could exceed that
   // and silently fail to save on hard-reload (the 30s interval/explicit
   // Publish still cover it). Revisit if that's ever reported for real.
+  //
+  // Session-cookie migration (security audit finding #1), phase 2 — this
+  // actually simplifies: no more manual token read/Authorization header,
+  // just credentials: "include" (the cookie rides automatically) plus the
+  // same CSRF header every other state-changing call attaches.
   useEffect(() => {
     function flushOnUnload() {
       if (!dirtyRef.current || !configRef.current) return;
-      const token = getAccessToken();
       fetch(`${API_URL}/themes/${themeId}`, {
         method: "PATCH",
         keepalive: true,
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "X-CSRF-Token": getStaffCsrfToken() ?? "",
         },
         body: JSON.stringify({ config: configRef.current }),
       }).catch(() => {});

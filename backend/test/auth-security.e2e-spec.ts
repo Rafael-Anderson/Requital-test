@@ -40,6 +40,18 @@ function messageContains(res: Response, substring: string): boolean {
   return messages.some((m) => m.includes(substring));
 }
 
+// Session-cookie migration (security audit finding #1), phase 2 —
+// /auth/refresh and /auth/logout read the refresh token from its own
+// narrowly-scoped cookie (Path=/auth/refresh) now, not a body field — see
+// auth.controller.ts's own comment. The raw refreshToken value itself is
+// unchanged and still available in signup/login's response body under
+// NODE_ENV=test (see AuthController's isTest branch), so wrapping it as
+// `req-staff-rt=<value>` is enough for every test in this file that
+// manipulates the refresh cookie in isolation.
+function refreshCookie(refreshToken: string): string {
+  return `req-staff-rt=${refreshToken}`;
+}
+
 describe('Auth security: refresh rotation, password reset, email verification, permissions (e2e)', () => {
   let app: INestApplication<App>;
   let db: DatabaseService;
@@ -80,12 +92,16 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     return { email, ...body<SignupResponse>(res) };
   }
 
+  // Only 1 e2e spec file (this one) used the old body-supplied refresh
+  // token shape, so it's converted to the real cookie mechanism outright
+  // rather than special-cased in the guard the way the ~60-file
+  // bearer-header pattern was (see AuthGuard.extractToken's own comment).
   describe('refresh token rotation + reuse detection', () => {
     it('a fresh refresh token exchanges for a new pair, and the new access token works', async () => {
       const signup = await signupShop('refresh-basic');
       const refreshed = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(201);
       const pair = body<TokenPair>(refreshed);
       // Not asserting accessToken !== the original here: two JWTs signed
@@ -106,12 +122,12 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       const signup = await signupShop('refresh-reuse');
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(201);
 
       const reuse = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(401);
       expect(messageContains(reuse, 'reuse detected')).toBe(true);
     });
@@ -120,28 +136,28 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       const signup = await signupShop('refresh-family');
       const firstRefresh = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(201);
       const secondPair = body<TokenPair>(firstRefresh);
 
       // Replaying the original (now-rotated) token triggers reuse detection...
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(401);
 
       // ...which must have revoked secondPair.refreshToken too, even though
       // it was never itself reused — same family, same session.
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: secondPair.refreshToken })
+        .set('Cookie', refreshCookie(secondPair.refreshToken))
         .expect(401);
     });
 
     it('an unknown refresh token is rejected without a reuse-detection side effect', async () => {
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: 'not-a-real-token' })
+        .set('Cookie', refreshCookie('not-a-real-token'))
         .expect(401);
     });
   });
@@ -151,12 +167,12 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       const signup = await signupShop('logout');
       await request(app.getHttpServer())
         .post('/auth/logout')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(401);
     });
 
@@ -164,15 +180,73 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       const signup = await signupShop('logout-idempotent');
       await request(app.getHttpServer())
         .post('/auth/logout')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(201);
       await request(app.getHttpServer())
         .post('/auth/logout')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(201);
       await request(app.getHttpServer())
         .post('/auth/logout')
-        .send({ refreshToken: 'never-existed' })
+        .set('Cookie', refreshCookie('never-existed'))
+        .expect(201);
+    });
+  });
+
+  // The real fix behind the CSRF-cookie httpOnly change (see
+  // platform-admin.e2e-spec.ts's matching test for the full reasoning): a
+  // brand new tab — only the session cookie in its jar, no CSRF value left
+  // over from a login response — must still be able to obtain a working
+  // CSRF token via GET /auth/me's response header. This is the one real-
+  // cookie-flow test in this file (every other test here uses the
+  // NODE_ENV=test bearer-header shim, see AuthGuard.extractToken's own
+  // comment) since it's specifically testing cookie-driven CSRF bootstrap.
+  describe('CSRF token bootstrap via /auth/me', () => {
+    it('hands back a working CSRF token via the response header, for a session with no CSRF value yet', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/auth/signup')
+        .send({
+          name: 'Test Admin',
+          email: `csrf-bootstrap-${runId}@test.com`,
+          password: 'password123',
+          shopName: 'CSRF Bootstrap Shop',
+          subdomain: `csrf-bootstrap-${runId}`,
+        })
+        .expect(201);
+      const lines = login.get('Set-Cookie') ?? [];
+      const atCookie = lines.find((l) => l.startsWith('req-staff-at='))!;
+      const accessCookieOnly = atCookie.split(';')[0];
+
+      // change-password requires a verified email — unrelated to the thing
+      // this test actually checks, just a precondition to get there.
+      await request(app.getHttpServer())
+        .post('/auth/verify-email')
+        .send({
+          token: tokenFromDevLink(
+            body<SignupResponse>(login).devVerificationLink!,
+          ),
+        })
+        .expect(201);
+
+      const meRes = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Cookie', accessCookieOnly)
+        .expect(200);
+      const freshCsrfToken = meRes.get('X-CSRF-Token');
+      expect(freshCsrfToken).toBeTruthy();
+      // The /me call above minted a brand new CSRF cookie value (this
+      // request had none yet) — the follow-up request must carry THAT
+      // cookie, not the (nonexistent, in this case) one from signup.
+      const meCookieLines = meRes.get('Set-Cookie') ?? [];
+      const freshCsrfCookie = meCookieLines
+        .find((l) => l.startsWith('req-staff-csrf='))!
+        .split(';')[0];
+
+      await request(app.getHttpServer())
+        .post('/auth/change-password')
+        .set('Cookie', `${accessCookieOnly}; ${freshCsrfCookie}`)
+        .set('X-CSRF-Token', freshCsrfToken!)
+        .send({ currentPassword: 'password123', newPassword: 'newpassword456' })
         .expect(201);
     });
   });
@@ -246,7 +320,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
 
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(401);
     });
   });
@@ -305,7 +379,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
       // The refresh token issued at signup must have been revoked by the reset.
       await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: signup.refreshToken })
+        .set('Cookie', refreshCookie(signup.refreshToken))
         .expect(401);
     });
 

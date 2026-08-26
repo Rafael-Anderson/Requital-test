@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, X, ChevronDown, Check } from "lucide-react";
-import { STOREFRONT_URL, storefrontUrlFor, getAccessToken, listCollections, listProducts } from "@/lib/api";
+import { STOREFRONT_URL, storefrontUrlFor, getThemePreviewToken, listCollections, listProducts } from "@/lib/api";
 import SelectionActionBar from "./SelectionActionBar";
 import DropdownMenu from "@/components/ui/DropdownMenu";
 import type { Shop, Collection, Product } from "@/lib/types";
@@ -61,31 +61,41 @@ function isLocalHost(hostname: string): boolean {
 //    the bare apex domain, which just 301s to admin.requital.io) since this
 //    branch never uses STOREFRONT_URL for the URL itself, only to decide
 //    which branch to take.
-// previewToken (this staff member's own access token) lets the storefront's
-// outlets/menu/collections/products fetches pass PublicService's
-// assertPublishedOrPreview check for a shop that hasn't published yet — the
-// most common time to actually be in the builder. Without it those calls
-// 404 (shop.published === false), which used to surface as a full-page
-// "This store is unavailable" inside the iframe even after the frame-src/
-// frame-ancestors CSP fixes let the iframe load at all — see
-// PublicService.isAuthorizedPreview for the verification side. The token
-// is embedded once, at src-build time, and only refreshed by remounting
-// the iframe — a theme-id change, or a successful publish (see
-// publishVersion below); there's no more manual "Refresh preview" button
-// to fall back on (removed — a reliably auto-updating preview shouldn't
-// need one). A preview session left open past the access token's 15-minute
-// lifetime (AuthModule's DEFAULT_TOKEN_LIFETIME) without either of those
-// will see this content fall back to empty rather than erroring, since
-// every one of those storefront fetches already catches its own failure —
-// an accepted edge case, not worth wiring a live token-refresh mechanism
-// into the iframe for.
+// previewToken lets the storefront's outlets/menu/collections/products
+// fetches pass PublicService's assertPublishedOrPreview check for a shop
+// that hasn't published yet — the most common time to actually be in the
+// builder. Without it those calls 404 (shop.published === false), which
+// used to surface as a full-page "This store is unavailable" inside the
+// iframe even after the frame-src/frame-ancestors CSP fixes let the iframe
+// load at all — see PublicService.isAuthorizedPreview for the verification
+// side.
+//
+// Session-cookie migration (security audit finding #1), phase 2 — this
+// used to be the staff member's own real access token, read synchronously
+// out of localStorage. Now that it's an httpOnly cookie unreadable by JS,
+// the component below fetches a separate, narrow, short-lived
+// `theme_preview` token instead (see ThemesService.issuePreviewToken) and
+// passes it in here — the token is embedded once, at src-build time, and
+// only refreshed by remounting the iframe — a theme-id change, or a
+// successful publish (see publishVersion below); there's no more manual
+// "Refresh preview" button to fall back on (removed — a reliably
+// auto-updating preview shouldn't need one). A preview session left open
+// past the token's own 15-minute lifetime without either of those will see
+// this content fall back to empty rather than erroring, since every one of
+// those storefront fetches already catches its own failure — an accepted
+// edge case, not worth wiring a live token-refresh mechanism into the
+// iframe for.
 // path is a real storefront route past the shop segment (e.g.
 // "/collections/some-slug"), or "" for the homepage — see PageSwitcher
 // below. Appended before the query string exactly like a real in-preview
 // link click would produce, so this goes through the same URL shape
 // shop-context.tsx's sessionStorage preview-persistence fix already covers.
-function resolvePreviewUrl(shop: Shop, themeId: number, path: string): string | null {
-  const previewToken = getAccessToken();
+function resolvePreviewUrl(
+  shop: Shop,
+  themeId: number,
+  path: string,
+  previewToken: string | null,
+): string | null {
   const tokenParam = previewToken ? `&previewToken=${encodeURIComponent(previewToken)}` : "";
 
   const storefrontHostname = (() => {
@@ -304,6 +314,43 @@ export default function PreviewFrame({
     configRef.current = config;
   }, [config]);
 
+  // Session-cookie migration (security audit finding #1), phase 2 — fetches
+  // the short-lived theme_preview token resolvePreviewUrl needs (see that
+  // function's own comment). Re-fetched on the same triggers the iframe
+  // itself remounts on (theme-id change, a successful publish) — src stays
+  // null (iframe doesn't load yet) until this settles, one way or the
+  // other, so the preview never has to do a second navigation once a token
+  // shows up moments after the first render.
+  const [previewToken, setPreviewToken] = useState<string | null>(null);
+  const [previewTokenReady, setPreviewTokenReady] = useState(false);
+  useEffect(() => {
+    if (!theme) {
+      setPreviewToken(null);
+      setPreviewTokenReady(true);
+      return;
+    }
+    let cancelled = false;
+    setPreviewTokenReady(false);
+    getThemePreviewToken(theme.id)
+      .then((res) => {
+        if (!cancelled) setPreviewToken(res.previewToken);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewToken(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewTokenReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // theme?.id, not the whole theme object — theme's own reference
+    // changes on every save/autosave, and this must only re-fetch on a
+    // genuine theme switch or publish, same reasoning resolvePreviewUrl's
+    // old call site already applied via theme.id below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme?.id, publishVersion]);
+
   // Bug 2 root cause (confirmed empirically, not the "iframe navigation"
   // premise it was originally reported as — see PR description): an iframe
   // is a separate browsing context that owns pointer events physically
@@ -323,7 +370,10 @@ export default function PreviewFrame({
   // to the parent document instead — confirmed empirically the pointer
   // events (including the pointerup that was previously lost entirely)
   // correctly reach the parent document once this is applied.
-  const src = theme ? resolvePreviewUrl(shop, theme.id, previewPath) : null;
+  const src =
+    theme && previewTokenReady
+      ? resolvePreviewUrl(shop, theme.id, previewPath, previewToken)
+      : null;
   const previewOrigin = useMemo(() => {
     if (!src) return null;
     try {

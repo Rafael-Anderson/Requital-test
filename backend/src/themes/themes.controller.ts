@@ -33,6 +33,14 @@ export class ThemesController {
     return this.themesService.create(ctx, dto);
   }
 
+  @Post(':id/preview-token')
+  issuePreviewToken(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.themesService.issuePreviewToken(ctx, id);
+  }
+
   @Patch(':id')
   updateDraft(
     @CurrentUser() ctx: TenantContext,

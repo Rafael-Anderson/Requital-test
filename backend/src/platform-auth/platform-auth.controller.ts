@@ -62,10 +62,24 @@ export class PlatformAuthController {
   }
 
   // Lets the platform admin frontend hydrate/validate a stored session on
-  // mount, mirroring GET /auth/me's role for the merchant app.
+  // mount, mirroring GET /auth/me's role for the merchant app. Also the
+  // bootstrap point for CSRF token distribution (see common/csrf.ts's own
+  // top comment) — a fresh page load/new tab has no in-memory CSRF value
+  // left over from login, so this hands one back via the response header
+  // every time, reusing the existing cookie's value rather than rotating it
+  // (a rotation here would silently invalidate the token any other already-
+  // open tab is still holding).
   @UseGuards(PlatformAdminGuard)
   @Get('me')
-  me(@CurrentPlatformAdmin() admin: PlatformAdminContext) {
+  me(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const accessToken: unknown = req.cookies?.[PLATFORM_ACCESS_COOKIE];
+    if (typeof accessToken === 'string' && accessToken) {
+      platformCsrf.issue(req, res, accessToken, { reuseExisting: true });
+    }
     return admin;
   }
 

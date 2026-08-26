@@ -7,15 +7,18 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Req,
+  Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
 import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -24,6 +27,44 @@ import { Public } from './decorators/public.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
+import {
+  STAFF_ACCESS_COOKIE,
+  STAFF_REFRESH_COOKIE,
+  STAFF_REFRESH_PATH,
+  staffCsrf,
+} from './auth.constants';
+import { sessionCookieOptions } from '../common/cookies';
+
+// Session-cookie migration (security audit finding #1), phase 2 — every
+// token-issuing method below sets the two staff cookies and mints a CSRF
+// cookie instead of returning tokens in the JSON body, same shape as
+// PlatformAuthController's own login/logout (phase 1). The one deliberate
+// difference: in NODE_ENV=test, the raw tokens are ALSO still returned in
+// the body — see AuthGuard.extractToken's own comment for why: this keeps
+// ~60 existing e2e specs' `body<AuthResponse>(signup).accessToken`-style
+// setup helpers working unchanged, since the token itself doesn't change
+// shape, only its transport does. Never true outside Jest.
+const isTest = process.env.NODE_ENV === 'test';
+
+function setStaffSessionCookies(
+  req: Request,
+  res: Response,
+  session: { accessToken: string; refreshToken: string | null },
+) {
+  res.cookie(
+    STAFF_ACCESS_COOKIE,
+    session.accessToken,
+    sessionCookieOptions('/'),
+  );
+  if (session.refreshToken) {
+    res.cookie(
+      STAFF_REFRESH_COOKIE,
+      session.refreshToken,
+      sessionCookieOptions(STAFF_REFRESH_PATH),
+    );
+  }
+  staffCsrf.issue(req, res, session.accessToken);
+}
 
 @Controller('auth')
 export class AuthController {
@@ -36,31 +77,66 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Public()
   @Post('signup')
-  signup(@Body() dto: SignupDto) {
-    return this.authService.signup(dto);
+  async signup(
+    @Body() dto: SignupDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.authService.signup(dto);
+    setStaffSessionCookies(req, res, session);
+    return isTest ? session : { user: session.user };
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Public()
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.authService.login(dto);
+    setStaffSessionCookies(req, res, session);
+    return isTest ? session : { user: session.user };
   }
 
   // No access token exists to check yet when this is called (that's the
   // whole point — the old one just expired), so this has to be reachable
-  // without one. The refresh token itself is the credential here.
+  // without one. The refresh token itself is the credential here, read from
+  // its own narrowly-scoped cookie (Path=/auth/refresh) rather than a body
+  // field — nothing else in the app ever sends that cookie.
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Public()
   @Post('refresh')
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto);
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken: unknown = req.cookies?.[STAFF_REFRESH_COOKIE];
+    if (typeof refreshToken !== 'string' || !refreshToken) {
+      throw new UnauthorizedException('Missing refresh token');
+    }
+    const session = await this.authService.refresh({ refreshToken });
+    setStaffSessionCookies(req, res, session);
+    return isTest ? session : { user: session.user };
   }
 
   @Public()
   @Post('logout')
-  logout(@Body() dto: RefreshTokenDto) {
-    return this.authService.logout(dto);
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken: unknown = req.cookies?.[STAFF_REFRESH_COOKIE];
+    if (typeof refreshToken === 'string' && refreshToken) {
+      await this.authService.logout({ refreshToken });
+    }
+    res.clearCookie(STAFF_ACCESS_COOKIE, sessionCookieOptions('/'));
+    res.clearCookie(
+      STAFF_REFRESH_COOKIE,
+      sessionCookieOptions(STAFF_REFRESH_PATH),
+    );
+    return { success: true };
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -87,8 +163,14 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Public()
   @Post('accept-invite')
-  acceptInvite(@Body() dto: AcceptInviteDto) {
-    return this.authService.acceptInvite(dto);
+  async acceptInvite(
+    @Body() dto: AcceptInviteDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.authService.acceptInvite(dto);
+    setStaffSessionCookies(req, res, session);
+    return isTest ? session : { user: session.user };
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -97,8 +179,22 @@ export class AuthController {
     return this.authService.resendVerification(ctx);
   }
 
+  // Also the bootstrap point for CSRF token distribution (see
+  // common/csrf.ts's own top comment) — a fresh page load/new tab has no
+  // in-memory CSRF value left over from login, so this hands one back via
+  // the response header every time, reusing the existing cookie's value
+  // rather than rotating it (a rotation here would silently invalidate the
+  // token any other already-open tab is still holding).
   @Get('me')
-  me(@CurrentUser() ctx: TenantContext) {
+  async me(
+    @CurrentUser() ctx: TenantContext,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const accessToken: unknown = req.cookies?.[STAFF_ACCESS_COOKIE];
+    if (typeof accessToken === 'string' && accessToken) {
+      staffCsrf.issue(req, res, accessToken, { reuseExisting: true });
+    }
     return this.authService.me(ctx);
   }
 

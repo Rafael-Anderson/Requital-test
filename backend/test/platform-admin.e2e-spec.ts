@@ -261,6 +261,39 @@ describe('Platform admin (e2e)', () => {
         .set('X-CSRF-Token', platformCsrfToken)
         .expect(201);
     });
+
+    // The real fix behind the CSRF-cookie httpOnly change above: a brand
+    // new tab (only the session cookie in its jar, no CSRF value left over
+    // from a login response — the realistic "returning admin, fresh page
+    // load" case, not just a same-tab-continues-a-session one) must still
+    // be able to obtain a working CSRF token via GET /platform-auth/me's
+    // response header, with no document.cookie read involved anywhere.
+    it('GET /platform-auth/me hands back a working CSRF token via the response header, for a session with no CSRF value yet', async () => {
+      const accessCookieOnly = `req-platform-at=${platformCookie.match(/req-platform-at=([^;]+)/)![1]}`;
+      const meRes = await request(app.getHttpServer())
+        .get('/platform-auth/me')
+        .set('Cookie', accessCookieOnly)
+        .expect(200);
+      const freshCsrfToken = meRes.get('X-CSRF-Token');
+      expect(freshCsrfToken).toBeTruthy();
+      // The /me call above minted a brand new CSRF cookie value (this
+      // request had none yet) — the follow-up request must carry THAT
+      // cookie, not the stale one captured at login time, or the
+      // double-submit comparison mismatches against its own fresh header.
+      const freshCsrfCookie = extractCookies(meRes)['req-platform-csrf'];
+      const cookieWithFreshCsrf = `${accessCookieOnly}; req-platform-csrf=${freshCsrfCookie}`;
+
+      await request(app.getHttpServer())
+        .post(`/platform-admin/shops/${shopId}/suspend`)
+        .set('Cookie', cookieWithFreshCsrf)
+        .set('X-CSRF-Token', freshCsrfToken!)
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/platform-admin/shops/${shopId}/unsuspend`)
+        .set('Cookie', cookieWithFreshCsrf)
+        .set('X-CSRF-Token', freshCsrfToken!)
+        .expect(201);
+    });
   });
 
   describe('suspend / unsuspend', () => {
@@ -379,7 +412,7 @@ describe('Platform admin (e2e)', () => {
       );
     });
 
-    it('sets an httpOnly, SameSite=Strict access cookie and a non-httpOnly CSRF cookie, with no token in the body', async () => {
+    it('sets httpOnly, SameSite=Strict access and CSRF cookies, with no token in the body — the CSRF value itself rides the X-CSRF-Token response header instead', async () => {
       const res = await request(app.getHttpServer())
         .post('/platform-auth/login')
         .send({ email: platformEmail, password: platformPassword })
@@ -394,7 +427,16 @@ describe('Platform admin (e2e)', () => {
       expect(atCookie).toMatch(/HttpOnly/);
       expect(atCookie).toMatch(/SameSite=Strict/i);
       expect(csrfCookie).toBeDefined();
-      expect(csrfCookie).not.toMatch(/HttpOnly/);
+      // httpOnly here too, as of a fix found rolling out the staff/customer
+      // tiers (2026-08-27): a non-httpOnly CSRF cookie only ever worked in
+      // local dev, where every app shares the bare `localhost` hostname —
+      // in production, admin.requital.io can never read a cookie set by
+      // api.requital.io via document.cookie regardless of this attribute,
+      // cookies don't cross hostnames. See common/csrf.ts's own
+      // CSRF_RESPONSE_HEADER comment for the real distribution channel.
+      expect(csrfCookie).toMatch(/HttpOnly/);
+      expect(csrfCookie).toMatch(/SameSite=Strict/i);
+      expect(res.get('X-CSRF-Token')).toBeTruthy();
     });
   });
 

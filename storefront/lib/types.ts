@@ -599,10 +599,10 @@ export interface Customer {
   createdAt: string;
 }
 
+// Session-cookie migration (security audit finding #1), phase 3 — the
+// customer session is an httpOnly cookie now, set directly by the backend
+// response; there's no token left in the body for the frontend to hold.
 export interface CustomerAuthResult {
-  accessToken: string;
-  accessTokenExpiresIn: number;
-  refreshToken: string;
   customer: Customer;
 }
 

@@ -120,28 +120,27 @@ export class PublicService {
   // needs real proof of the former, not just a client-suppliable
   // ?preview=true flag, which would let anyone view any unpublished shop's
   // real catalog/pricing/outlet data by guessing its slug (exactly what
-  // assertPublished's own comment says must stay hidden). previewToken is
-  // the staff member's own existing JWT (already sitting in the admin app's
-  // localStorage — see admin's PreviewFrame.tsx), passed as a query param
-  // since an iframe's initial navigation can't carry a custom Authorization
-  // header; verified the same way AuthGuard verifies it for a real request.
+  // assertPublished's own comment says must stay hidden). previewToken is a
+  // separate, narrow, short-lived `typ: 'theme_preview'` token minted by
+  // ThemesService.issuePreviewToken — see that method's own comment for why
+  // this isn't just the staff member's real session token anymore (it
+  // became an httpOnly cookie in the session-cookie migration, unreadable
+  // by PreviewFrame.tsx). No DB lookup needed here: shopId rides directly
+  // in the token's own claims, verified at mint time against the staff
+  // member's real ctx.shopId, rather than re-derived from a `sub` user id.
   private async isAuthorizedPreview(
     shopId: number,
     previewToken?: string,
   ): Promise<boolean> {
     if (!previewToken) return false;
-    let payload: { sub: number; typ?: string };
+    let payload: { shopId?: number; typ?: string };
     try {
       payload = await this.jwtService.verifyAsync(previewToken);
     } catch {
       return false;
     }
-    if (payload.typ !== 'staff') return false;
-    const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT shopId FROM user WHERE id = ?`,
-      [payload.sub],
-    );
-    return rows[0]?.shopId === shopId;
+    if (payload.typ !== 'theme_preview') return false;
+    return payload.shopId === shopId;
   }
 
   private async assertPublishedOrPreview(
