@@ -51,6 +51,27 @@ function messageContains(res: Response, substring: string): boolean {
   return messages.some((m) => m.includes(substring));
 }
 
+// Session-cookie migration (security audit finding #1) — platform-auth
+// sessions are httpOnly cookies now, not bearer tokens. Same helpers as
+// platform-admin.e2e-spec.ts; this file only needs the platform session
+// once, to set the shop's sliderAccountId in beforeAll.
+function extractCookies(res: Response): Record<string, string> {
+  const lines = res.get('Set-Cookie') ?? [];
+  const cookies: Record<string, string> = {};
+  for (const line of lines) {
+    const pair = line.split(';')[0];
+    const idx = pair.indexOf('=');
+    cookies[pair.slice(0, idx)] = pair.slice(idx + 1);
+  }
+  return cookies;
+}
+
+function cookieHeader(cookies: Record<string, string>): string {
+  return Object.entries(cookies)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
 // Every Slider call this test exercises goes through global.fetch (the
 // provider uses the raw fetch API, no SDK — see slider-delivery.provider.ts)
 // — mocked here for both the outbound Nominatim geocode
@@ -78,7 +99,6 @@ describe('Slider delivery integration (e2e)', () => {
 
   let shopId: number;
   let adminToken: string;
-  let platformToken: string;
   let outletId: number;
   let productId: number;
 
@@ -268,11 +288,14 @@ describe('Slider delivery integration (e2e)', () => {
         password: 'platform-password-123',
       })
       .expect(201);
-    platformToken = body<AuthResponse>(platformLogin).accessToken;
+    const platformCookies = extractCookies(platformLogin);
+    const platformCookieHeader = cookieHeader(platformCookies);
+    const platformCsrfToken = platformCookies['req-platform-csrf'];
 
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
-      .set('Authorization', `Bearer ${platformToken}`)
+      .set('Cookie', platformCookieHeader)
+      .set('X-CSRF-Token', platformCsrfToken)
       .send({ accountId: 'acct_test' })
       .expect(200);
   });
@@ -719,22 +742,37 @@ describe('Slider delivery integration (e2e)', () => {
     expect(messageContains(res, 'Slider')).toBe(true);
   });
 
-  it('the platform-admin route 404s (not 401/403) on a missing or wrong token — see platform-admin.e2e-spec.ts for the full access-model coverage', async () => {
+  // Session-cookie migration (security audit finding #1): slider-account-id
+  // is a PATCH (state-changing), so the CSRF middleware (see AppModule.
+  // configure) now runs before PlatformAdminGuard ever does — a request
+  // with no valid session-cookie + CSRF-header pair is rejected at the CSRF
+  // layer (403) before the guard's own 404-on-every-failure logic gets a
+  // chance to run. This doesn't weaken the "don't reveal this surface
+  // exists" property: the CSRF check applies uniformly to the whole
+  // /platform-admin path prefix (real sub-route or not), and that prefix's
+  // existence is already public via /platform-auth/login. GET routes are
+  // unaffected (CSRF only guards state-changing methods) and still 404 on a
+  // missing/wrong token — see platform-admin.e2e-spec.ts's 'separate JWT
+  // scope' describe block for that coverage, and its own 'CSRF protection'
+  // block for this same 403-before-404 behavior on suspend/unsuspend.
+  it('a PATCH with no valid session+CSRF pair is rejected at the CSRF layer (403), not the guard (404) — old bearer-header attempts included', async () => {
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
       .send({ accountId: 'acct_hacked' })
-      .expect(404);
+      .expect(403);
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
       .set('Authorization', 'Bearer wrong-token')
       .send({ accountId: 'acct_hacked' })
-      .expect(404);
+      .expect(403);
     // A real merchant token must not work here either — separate JWT scope.
+    // Still no valid platform session cookie, so still 403 at the CSRF
+    // layer, same as the two cases above.
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ accountId: 'acct_hacked' })
-      .expect(404);
+      .expect(403);
   });
 
   it('GET /webhook-log lists recent webhook activity for this shop', async () => {

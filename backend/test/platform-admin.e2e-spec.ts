@@ -16,6 +16,9 @@ interface AuthResponse {
   accessTokenExpiresIn?: number;
   devVerificationLink?: string;
 }
+interface PlatformLoginResponse {
+  admin: { id: number; email: string; name: string };
+}
 interface PlatformShop {
   id: number;
   status: 'active' | 'suspended';
@@ -42,6 +45,30 @@ function body<T>(res: Response): T {
   return res.body as T;
 }
 
+// Session-cookie migration (security audit finding #1, phase 1): the
+// platform-auth session lives in an httpOnly cookie now, not a bearer
+// token in the JSON body — see PlatformAuthController/platform-auth.
+// constants.ts. supertest has no built-in cookie jar, so these two helpers
+// do by hand what a browser does automatically: pull the Set-Cookie values
+// off a login response and replay them as a single Cookie header on later
+// requests in the same "session".
+function extractCookies(res: Response): Record<string, string> {
+  const lines = res.get('Set-Cookie') ?? [];
+  const cookies: Record<string, string> = {};
+  for (const line of lines) {
+    const pair = line.split(';')[0];
+    const idx = pair.indexOf('=');
+    cookies[pair.slice(0, idx)] = pair.slice(idx + 1);
+  }
+  return cookies;
+}
+
+function cookieHeader(cookies: Record<string, string>): string {
+  return Object.entries(cookies)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
 // Covers the scope's three required checks: platform token cannot access
 // merchant routes and vice versa (separate JWT scope), impersonation writes
 // an audit entry, and no secret values appear in any platform-admin
@@ -53,11 +80,31 @@ describe('Platform admin (e2e)', () => {
   let db: DatabaseService;
   const runId = Date.now();
   const shopSlug = `platform-admin-test-${runId}`;
+  const platformEmail = `platform-admin-${runId}@test.com`;
+  const platformPassword = 'platform-password-123';
 
   let shopId: number;
   let adminToken: string;
-  let platformToken: string;
+  // Cookie header string + the CSRF token value, replayed on every
+  // platform-auth/platform-admin request the way a browser would replay
+  // its cookie jar automatically. GET requests only need the cookie; any
+  // state-changing request also needs the X-CSRF-Token header (see the
+  // 'CSRF protection' describe block below for what happens without it).
+  let platformCookie: string;
+  let platformCsrfToken: string;
   let platformAdminId: number;
+
+  async function platformLogin() {
+    const res = await request(app.getHttpServer())
+      .post('/platform-auth/login')
+      .send({ email: platformEmail, password: platformPassword })
+      .expect(201);
+    const cookies = extractCookies(res);
+    return {
+      cookieHeaderStr: cookieHeader(cookies),
+      csrfToken: cookies['req-platform-csrf'],
+    };
+  }
 
   beforeAll(async () => {
     // PLATFORM_JWT_SECRET must come from .env (loaded by the 'dotenv/config'
@@ -100,21 +147,16 @@ describe('Platform admin (e2e)', () => {
       .expect(200);
     shopId = body<{ shopId: number }>(me).shopId;
 
-    const passwordHash = await bcrypt.hash('platform-password-123', 10);
+    const passwordHash = await bcrypt.hash(platformPassword, 10);
     const insertResult = await db.execute(
       `INSERT INTO platformadmin (email, passwordHash, name) VALUES (?, ?, ?)`,
-      [`platform-admin-${runId}@test.com`, passwordHash, 'Platform Test Admin'],
+      [platformEmail, passwordHash, 'Platform Test Admin'],
     );
     platformAdminId = insertResult.insertId;
 
-    const platformLogin = await request(app.getHttpServer())
-      .post('/platform-auth/login')
-      .send({
-        email: `platform-admin-${runId}@test.com`,
-        password: 'platform-password-123',
-      })
-      .expect(201);
-    platformToken = body<AuthResponse>(platformLogin).accessToken;
+    const session = await platformLogin();
+    platformCookie = session.cookieHeaderStr;
+    platformCsrfToken = session.csrfToken;
   });
 
   afterAll(async () => {
@@ -122,10 +164,10 @@ describe('Platform admin (e2e)', () => {
   });
 
   describe('separate JWT scope', () => {
-    it('a platform token cannot access a merchant route', async () => {
+    it('a platform session cookie cannot access a merchant route', async () => {
       await request(app.getHttpServer())
         .get('/auth/me')
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
         .expect(401);
     });
 
@@ -150,7 +192,7 @@ describe('Platform admin (e2e)', () => {
     it('lists the seeded shop and reveals no secret values', async () => {
       const res = await request(app.getHttpServer())
         .get('/platform-admin/shops')
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
         .expect(200);
       const shops = body<PlatformShop[]>(res);
       expect(shops.some((s) => s.id === shopId)).toBe(true);
@@ -171,9 +213,11 @@ describe('Platform admin (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .get(`/platform-admin/shops/${shopId}`)
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
         .expect(200);
-      expect(body<PlatformShopDetail>(res).integrations.whatsappConfigured).toBe(true);
+      expect(
+        body<PlatformShopDetail>(res).integrations.whatsappConfigured,
+      ).toBe(true);
       expect(JSON.stringify(res.body)).not.toContain(
         'super-secret-token-value',
       );
@@ -181,11 +225,50 @@ describe('Platform admin (e2e)', () => {
     });
   });
 
+  describe('CSRF protection', () => {
+    // Double-submit cookie: a state-changing platform-admin request with a
+    // valid session cookie but no X-CSRF-Token header must be rejected —
+    // this is what stops a same-site-but-cross-origin page (a merchant's
+    // own self-signed-up *.requital.io shop) from riding a logged-in
+    // platform admin's cookies. Neither case here has a side effect: the
+    // CSRF middleware runs before the request ever reaches the controller.
+    it('rejects a state-changing request with a valid cookie but no CSRF header', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/platform-admin/shops/${shopId}/suspend`)
+        .set('Cookie', platformCookie)
+        .expect(403);
+      expect(body<{ message: string }>(res).message).toBe('invalid csrf token');
+    });
+
+    it('rejects a state-changing request with a wrong CSRF header value', async () => {
+      await request(app.getHttpServer())
+        .post(`/platform-admin/shops/${shopId}/suspend`)
+        .set('Cookie', platformCookie)
+        .set('X-CSRF-Token', 'not-the-real-token')
+        .expect(403);
+    });
+
+    it('accepts the request once the real CSRF header is echoed back', async () => {
+      await request(app.getHttpServer())
+        .post(`/platform-admin/shops/${shopId}/suspend`)
+        .set('Cookie', platformCookie)
+        .set('X-CSRF-Token', platformCsrfToken)
+        .expect(201);
+      // Undo, so the suspend/unsuspend describe block below starts clean.
+      await request(app.getHttpServer())
+        .post(`/platform-admin/shops/${shopId}/unsuspend`)
+        .set('Cookie', platformCookie)
+        .set('X-CSRF-Token', platformCsrfToken)
+        .expect(201);
+    });
+  });
+
   describe('suspend / unsuspend', () => {
     it('suspending a shop blocks merchant login and takes the storefront offline, reversibly', async () => {
       await request(app.getHttpServer())
         .post(`/platform-admin/shops/${shopId}/suspend`)
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
+        .set('X-CSRF-Token', platformCsrfToken)
         .expect(201);
 
       await request(app.getHttpServer())
@@ -207,7 +290,8 @@ describe('Platform admin (e2e)', () => {
 
       await request(app.getHttpServer())
         .post(`/platform-admin/shops/${shopId}/unsuspend`)
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
+        .set('X-CSRF-Token', platformCsrfToken)
         .expect(201);
 
       await request(app.getHttpServer())
@@ -224,7 +308,8 @@ describe('Platform admin (e2e)', () => {
     it('mints a short-lived, non-refreshable token and writes the audit entry before returning', async () => {
       const res = await request(app.getHttpServer())
         .post(`/platform-admin/shops/${shopId}/impersonate`)
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
+        .set('X-CSRF-Token', platformCsrfToken)
         .expect(201);
       const session = body<AuthResponse>(res);
       expect(session.refreshToken).toBeNull();
@@ -238,6 +323,10 @@ describe('Platform admin (e2e)', () => {
       );
       expect(rows.length).toBe(1);
 
+      // Impersonation mints a real merchant session — still bearer-token-
+      // shaped in the JSON body (staff auth isn't cookie-based until phase
+      // 2 of the cookie migration), unrelated to the platform session's own
+      // cookie/CSRF mechanism exercised above.
       const me = await request(app.getHttpServer())
         .get('/auth/me')
         .set('Authorization', `Bearer ${session.accessToken}`)
@@ -250,7 +339,7 @@ describe('Platform admin (e2e)', () => {
     it('also appears in GET /platform-admin/audit-log', async () => {
       const res = await request(app.getHttpServer())
         .get(`/platform-admin/audit-log?shopId=${shopId}`)
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
         .expect(200);
       const entries = body<AuditLogEntry[]>(res);
       expect(entries.some((e) => e.action === 'shop.impersonate')).toBe(true);
@@ -261,7 +350,7 @@ describe('Platform admin (e2e)', () => {
     it('reports configured/not-configured only, never a value', async () => {
       const res = await request(app.getHttpServer())
         .get('/platform-admin/settings')
-        .set('Authorization', `Bearer ${platformToken}`)
+        .set('Cookie', platformCookie)
         .expect(200);
       const settings = body<PlatformSettingsResponse>(res);
       expect(Array.isArray(settings.envVars)).toBe(true);
@@ -279,7 +368,7 @@ describe('Platform admin (e2e)', () => {
     it('rejects a wrong password without revealing whether the email exists', async () => {
       const res = await request(app.getHttpServer())
         .post('/platform-auth/login')
-        .send({ email: `platform-admin-${runId}@test.com`, password: 'wrong' })
+        .send({ email: platformEmail, password: 'wrong' })
         .expect(401);
       const res2 = await request(app.getHttpServer())
         .post('/platform-auth/login')
@@ -288,6 +377,49 @@ describe('Platform admin (e2e)', () => {
       expect(body<PlatformLoginErrorBody>(res).message).toEqual(
         body<PlatformLoginErrorBody>(res2).message,
       );
+    });
+
+    it('sets an httpOnly, SameSite=Strict access cookie and a non-httpOnly CSRF cookie, with no token in the body', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/platform-auth/login')
+        .send({ email: platformEmail, password: platformPassword })
+        .expect(201);
+      expect(body<PlatformLoginResponse>(res).admin.email).toBe(platformEmail);
+      expect(JSON.stringify(res.body)).not.toMatch(/eyJ/); // no raw JWT anywhere in the body
+
+      const lines = res.get('Set-Cookie') ?? [];
+      const atCookie = lines.find((l) => l.startsWith('req-platform-at='));
+      const csrfCookie = lines.find((l) => l.startsWith('req-platform-csrf='));
+      expect(atCookie).toBeDefined();
+      expect(atCookie).toMatch(/HttpOnly/);
+      expect(atCookie).toMatch(/SameSite=Strict/i);
+      expect(csrfCookie).toBeDefined();
+      expect(csrfCookie).not.toMatch(/HttpOnly/);
+    });
+  });
+
+  describe('logout', () => {
+    it('clears the access cookie via an expired Set-Cookie directive', async () => {
+      const session = await platformLogin();
+
+      const res = await request(app.getHttpServer())
+        .post('/platform-auth/logout')
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', session.csrfToken)
+        .expect(201);
+
+      const lines = res.get('Set-Cookie') ?? [];
+      const cleared = lines.find((l) => l.startsWith('req-platform-at='));
+      expect(cleared).toBeDefined();
+      expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+    });
+
+    it('is itself CSRF-protected', async () => {
+      const session = await platformLogin();
+      await request(app.getHttpServer())
+        .post('/platform-auth/logout')
+        .set('Cookie', session.cookieHeaderStr)
+        .expect(403);
     });
   });
 });

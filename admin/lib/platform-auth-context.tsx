@@ -8,7 +8,7 @@ interface PlatformAuthContextValue {
   admin: PlatformAdmin | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const PlatformAuthContext = createContext<PlatformAuthContextValue | null>(null);
@@ -20,15 +20,16 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
   const [admin, setAdmin] = useState<PlatformAdmin | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Session-cookie migration (security audit finding #1): no client-
+  // readable token to gate this on anymore — the httpOnly cookie rides
+  // automatically, and a logged-out call just 401s fast. Always calling
+  // /platform-auth/me on mount is simpler than maintaining a separate
+  // readable "might be logged in" flag purely to skip one cheap request.
   useEffect(() => {
-    if (!platformApi.getPlatformToken()) {
-      setLoading(false);
-      return;
-    }
     platformApi
       .platformMe()
       .then(setAdmin)
-      .catch(() => platformApi.clearPlatformToken())
+      .catch(() => setAdmin(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -38,13 +39,15 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await platformApi.platformLogin(email, password);
-    platformApi.setPlatformToken(result.accessToken);
     setAdmin(result.admin);
   }, []);
 
-  const logout = useCallback(() => {
-    platformApi.clearPlatformToken();
+  // Optimistic UI update, but the cookie itself only actually goes away
+  // once the server responds — httpOnly means client JS can't clear it
+  // directly, unlike the old localStorage-based logout.
+  const logout = useCallback(async () => {
     setAdmin(null);
+    await platformApi.platformLogout().catch(() => undefined);
   }, []);
 
   const value = useMemo(

@@ -12,6 +12,30 @@ import type { ErrorTrackingProvider } from './error-tracking.interface';
 
 const logger = createLogger('AllExceptionsFilter');
 
+// The `http-errors` package (used directly by a handful of Express
+// ecosystem middlewares this app now uses outside Nest's own request cycle
+// — csrf-csrf's doubleCsrfProtection throws a ForbiddenError this way when
+// a CSRF check fails) isn't a NestJS HttpException, but it has the same
+// real shape: a genuine, well-formed 4xx with a `status`/`statusCode`
+// number and a safe-to-return `.message`. Duck-typed rather than an
+// `instanceof http-errors.HttpError` check so this also covers any other
+// middleware throwing the same shape without adding a direct dependency on
+// a package this app never calls directly. Only 4xx is treated this way —
+// a >=500 "http-errors-shaped" object still fails closed into the generic
+// body below, same as a genuinely unknown error.
+function asClientHttpError(
+  exception: unknown,
+): { status: number; message: string } | null {
+  if (!(exception instanceof Error)) return null;
+  const status =
+    (exception as { status?: unknown; statusCode?: unknown }).status ??
+    (exception as { statusCode?: unknown }).statusCode;
+  if (typeof status !== 'number' || status < 400 || status >= 500) {
+    return null;
+  }
+  return { status, message: exception.message };
+}
+
 // Registered as an APP_FILTER provider (see app.module.ts) rather than via
 // app.useGlobalFilters() in main.ts — same reason AuthGuard/RolesGuard are
 // wired as APP_GUARD there instead of in main.ts: main.ts's bootstrap()
@@ -38,15 +62,23 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const logContext = getLogContext();
 
     const isHttpException = exception instanceof HttpException;
+    const clientHttpError = isHttpException
+      ? null
+      : asClientHttpError(exception);
     const status = isHttpException
       ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
+      : (clientHttpError?.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     const body = isHttpException
       ? exception.getResponse()
-      : {
-          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-          message: 'Internal server error',
-        };
+      : clientHttpError
+        ? {
+            statusCode: clientHttpError.status,
+            message: clientHttpError.message,
+          }
+        : {
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            message: 'Internal server error',
+          };
 
     // Express's own Request type doesn't strongly type `.route` (it's
     // attached dynamically by the router), so a manual cast is needed to
@@ -60,7 +92,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       method: request?.method,
     };
 
-    if (!isHttpException || status >= 500) {
+    if ((!isHttpException && !clientHttpError) || status >= 500) {
       logger.error(
         exception instanceof Error
           ? exception.message

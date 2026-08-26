@@ -1,11 +1,25 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
 import { PlatformAuthService } from './platform-auth.service';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 import { PlatformAdminGuard } from './guards/platform-admin.guard';
 import { CurrentPlatformAdmin } from './decorators/current-platform-admin.decorator';
 import type { PlatformAdminContext } from './guards/platform-admin.guard';
 import { Public } from '../auth/decorators/public.decorator';
+import {
+  PLATFORM_ACCESS_COOKIE,
+  platformCsrf,
+} from './platform-auth.constants';
+import { sessionCookieOptions } from '../common/cookies';
 
 // @Public() at class level opts every route here out of the GLOBAL merchant
 // AuthGuard (an APP_GUARD, so it otherwise runs in front of every
@@ -23,10 +37,28 @@ export class PlatformAuthController {
   // 5/min — this endpoint gates access to every shop on the platform, not
   // one shop. Paired with PlatformAuthService's own per-account progressive
   // lockout for the distributed-attacker case a per-IP limit alone misses.
+  //
+  // @Res({ passthrough: true }) — session-cookie migration (security audit
+  // finding #1): the access token is set as an httpOnly cookie, not
+  // returned in the JSON body at all. `platformCsrf.issue` mints the
+  // paired CSRF cookie for this brand-new session (excluded from CSRF
+  // *checking* itself — see AppModule.configure — since there's nothing to
+  // forge yet on a not-yet-authenticated login attempt).
   @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('login')
-  login(@Body() dto: PlatformLoginDto) {
-    return this.platformAuthService.login(dto);
+  async login(
+    @Body() dto: PlatformLoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.platformAuthService.login(dto);
+    res.cookie(
+      PLATFORM_ACCESS_COOKIE,
+      session.accessToken,
+      sessionCookieOptions('/'),
+    );
+    platformCsrf.issue(req, res, session.accessToken);
+    return { admin: session.admin };
   }
 
   // Lets the platform admin frontend hydrate/validate a stored session on
@@ -35,5 +67,17 @@ export class PlatformAuthController {
   @Get('me')
   me(@CurrentPlatformAdmin() admin: PlatformAdminContext) {
     return admin;
+  }
+
+  // Deliberately NOT behind PlatformAdminGuard — an expired (but still
+  // present) access-token cookie must still be clearable client-side, and
+  // the guard would 404 before this handler ever ran. httpOnly cookies
+  // can only be cleared server-side (this endpoint didn't need to exist
+  // before the cookie migration — the frontend could just drop its own
+  // localStorage key).
+  @Post('logout')
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie(PLATFORM_ACCESS_COOKIE, sessionCookieOptions('/'));
+    return { success: true };
   }
 }

@@ -58,10 +58,9 @@ async function bootstrap() {
     }),
   );
   // Merchant auth landed — tighten from the prior wide-open CORS to an
-  // explicit allowlist. Bearer tokens go in a header, not a cookie, so
-  // `credentials: true` isn't needed here. Storefront (:3002) calls the
-  // @Public() routes under /public/:shopSlug with no token at all — still
-  // needs to be in this allowlist for the browser to permit the request.
+  // explicit allowlist. Storefront (:3002) calls the @Public() routes under
+  // /public/:shopSlug with no token at all — still needs to be in this
+  // allowlist for the browser to permit the request.
   //
   // Every shop's storefront is now reachable at its own {subdomain}.
   // requital.io host, or at a merchant-connected custom domain (see
@@ -69,6 +68,14 @@ async function bootstrap() {
   // list, so ADMIN_ORIGINS (local dev + the fixed admin/api hosts) is
   // checked first as a fast path, then a *.requital.io regex, then a DB
   // lookup against shop.customDomain for anything else.
+  //
+  // `credentials: true` — added for the httpOnly-cookie session migration
+  // (security audit finding #1, platform admin is the first tier moved).
+  // Required for the browser to send/accept Set-Cookie on a cross-origin
+  // (but same-*site*) request; a wildcard `Access-Control-Allow-Origin`
+  // becomes invalid the moment credentials are involved, so this only works
+  // because `origin` was already a real per-request allowlist function, not
+  // `*`, before this line existed.
   const allowedOrigins = (
     process.env.ADMIN_ORIGINS ?? 'http://localhost:3001,http://localhost:3002'
   ).split(',');
@@ -86,7 +93,12 @@ async function bootstrap() {
         .then((allowed) => callback(null, allowed))
         .catch(() => callback(null, false));
     },
+    credentials: true,
   });
+  // cookie-parser is registered in AppModule.configure() instead of here —
+  // see that file's own comment for why (main.ts's bootstrap() never runs
+  // under Jest, so a middleware only mounted here would be invisible to
+  // every e2e spec).
   // Local-disk image uploads — only ever served from here when
   // STORAGE_PROVIDER=local (the default; see src/storage/). Left
   // unconditional rather than gated on the active provider: every file
