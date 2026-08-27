@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Select from "@/components/ui/Select";
 import Combobox from "@/components/ui/Combobox";
 import Input from "@/components/ui/Input";
+import Toggle from "@/components/ui/Toggle";
 import { listCollections } from "@/lib/api";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -49,6 +50,22 @@ export default function ProductGridSettings({
           searchPlaceholder="Search collections…"
         />
       </div>
+      {settings.collectionId != null && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Show &quot;View all&quot; button</span>
+            <Toggle checked={(settings.showViewAllButton as boolean) ?? true} onChange={(v) => onUpdate("showViewAllButton", v)} />
+          </div>
+          {settings.showViewAllButton !== false && (
+            <Input
+              label="View all button label"
+              value={(settings.viewAllLabel as string) ?? ""}
+              placeholder="View all"
+              onChange={(e) => onUpdate("viewAllLabel", e.target.value)}
+            />
+          )}
+        </>
+      )}
       <Input
         label="Number of products"
         type="number"

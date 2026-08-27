@@ -4,11 +4,16 @@ import ProductGridSection from "./ProductGridSection";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const listProducts = vi.fn();
+const listCollections = vi.fn();
 vi.mock("@/lib/api", () => ({
   listProducts: (...args: unknown[]) => listProducts(...args) as unknown,
+  listCollections: (...args: unknown[]) => listCollections(...args) as unknown,
   resolveImageUrl: (path: string | null) => path,
 }));
 
@@ -62,6 +67,7 @@ const cardBlock: ThemeBlock = {
 describe("ProductGridSection", () => {
   it("passes the section's collectionId through to listProducts and slices to productLimit", async () => {
     listProducts.mockResolvedValue(Array.from({ length: 10 }, (_, i) => product(i + 1)));
+    listCollections.mockResolvedValue([]);
     const settings = { collectionId: 42, productLimit: 3 } as unknown as SectionSettings;
 
     const { findAllByRole } = render(
@@ -84,5 +90,34 @@ describe("ProductGridSection", () => {
     const links = await findAllByRole("link");
     expect(links).toHaveLength(8);
     expect(listProducts).toHaveBeenCalledWith("test-shop", 7, undefined, undefined, undefined);
+    // No collectionId at all -> no listCollections call, since there's no
+    // "browse all products" page a View all link could ever point to.
+    expect(listCollections).not.toHaveBeenCalled();
+  });
+
+  it("renders a View all link to the collection's own page once collectionId resolves to a real collection", async () => {
+    listProducts.mockResolvedValue([product(1)]);
+    listCollections.mockResolvedValue([{ id: 42, slug: "premium", name: "Premium" }]);
+    const settings = { collectionId: 42, sectionTitle: "Premium Collection" } as unknown as SectionSettings;
+
+    const { findByRole } = render(
+      <ProductGridSection sectionId="sec-1" settings={settings} blocks={[cardBlock]} />,
+    );
+
+    const viewAllLink = await findByRole("link", { name: "View all" });
+    expect(viewAllLink).toHaveAttribute("href", "/collections/premium");
+  });
+
+  it("hides View all when explicitly turned off, even with a resolved collection", async () => {
+    listProducts.mockResolvedValue([product(1)]);
+    listCollections.mockResolvedValue([{ id: 42, slug: "premium", name: "Premium" }]);
+    const settings = { collectionId: 42, showViewAllButton: false } as unknown as SectionSettings;
+
+    const { findAllByRole, queryByRole } = render(
+      <ProductGridSection sectionId="sec-1" settings={settings} blocks={[cardBlock]} />,
+    );
+
+    await findAllByRole("link");
+    expect(queryByRole("link", { name: "View all" })).not.toBeInTheDocument();
   });
 });

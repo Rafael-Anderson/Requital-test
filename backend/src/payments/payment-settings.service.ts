@@ -204,6 +204,28 @@ export class PaymentSettingsService {
     return JSON.parse(decrypt(credentials)) as Record<string, string>;
   }
 
+  // Public-safe projection: a Tabby/Tamara "public key" is meant to be
+  // embedded client-side (their own installment-promo widget scripts need
+  // it directly) — unlike every other credential field this service
+  // resolves, which are server-side-only secrets. Used by
+  // PublicService.getShop's tabbyPublicKey/tamaraPublicKey fields, which the
+  // storefront PDP reads to decide whether to render each widget at all.
+  // Returns null unless the provider is BOTH enabled (matching the same
+  // isEnabled() checkout-availability check used everywhere else) AND has a
+  // real key (per-shop credential or the platform env var fallback) — a
+  // merchant who has explicitly turned Tabby/Tamara off for checkout
+  // shouldn't still advertise "4 payments of X" on the PDP.
+  async resolvePublicWidgetKey(
+    shopId: number,
+    provider: 'tabby' | 'tamara',
+  ): Promise<string | null> {
+    if (!(await this.isEnabled(shopId, provider))) return null;
+    const credentials = await this.resolveCredentials(shopId, provider);
+    const envVar = provider === 'tabby' ? 'TABBY_PUBLIC_KEY' : 'TAMARA_PUBLIC_KEY';
+    const key = credentials?.publicKey ?? process.env[envVar];
+    return key?.trim() ? key : null;
+  }
+
   // Whether `provider` (an online-payment provider, not cod) should be
   // treated as available for checkout right now — used by
   // PublicService.assertPaymentMethodAvailable/createOrder, mirroring

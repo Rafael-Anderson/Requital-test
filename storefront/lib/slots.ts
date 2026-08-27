@@ -13,7 +13,22 @@ function weekdayKey(date: Date): (typeof WEEKDAYS)[number] {
 // 9am-9pm window when no hours are configured yet (same "unset = open"
 // convention the backend uses), so a shop that hasn't filled in delivery/
 // pickup hours still gets a usable picker instead of an empty one.
-export function generateTimeSlots(date: Date, hours: DayHours | null, gapMinutes: number): string[] {
+//
+// `nowMinutes` is optional and only meaningful when `date` is today — pass
+// the current local wall-clock time as minutes-since-midnight (see
+// useCheckoutForm.ts's own call site) to drop any slot whose start has
+// already passed. Omitted entirely for a non-today date, since the cutoff
+// only ever applies to today. This is optimistic client-side UX only — the
+// backend independently regenerates and re-checks this same list at
+// order-submit time (backend/src/public/time-slots.ts, hand-mirroring this
+// function), since a page left open across the cutoff must still be
+// rejected server-side.
+export function generateTimeSlots(
+  date: Date,
+  hours: DayHours | null,
+  gapMinutes: number,
+  nowMinutes?: number,
+): string[] {
   const day = hours?.[weekdayKey(date)];
   if (day?.closed) return [];
 
@@ -25,7 +40,11 @@ export function generateTimeSlots(date: Date, hours: DayHours | null, gapMinutes
 
   const slots: string[] = [];
   while (cursor + step <= end) {
-    slots.push(`${formatMinutes(cursor)} - ${formatMinutes(cursor + step)}`);
+    // A slot starting exactly "now" is still selectable — only a slot whose
+    // start has strictly already passed is excluded.
+    if (nowMinutes === undefined || cursor >= nowMinutes) {
+      slots.push(`${formatMinutes(cursor)} - ${formatMinutes(cursor + step)}`);
+    }
     cursor += step;
   }
   return slots;

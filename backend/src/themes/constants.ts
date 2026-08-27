@@ -241,6 +241,15 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       loadMoreStyle: 'infinite',
       columns: 3,
     },
+    productPage: {
+      showStockIndicator: true,
+      showDeliveryIndicator: true,
+      showPickupIndicator: true,
+      inStockColor: '#15803d',
+      lowStockColor: '#d97706',
+      outOfStockColor: '#dc2626',
+      fulfillmentTextColor: '#71717a',
+    },
   },
   header: {
     settings: { sticky: false, transparentOnHero: false },

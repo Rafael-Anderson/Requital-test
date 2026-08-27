@@ -120,11 +120,33 @@ export function useCheckoutForm() {
   const dateForSlots = deliveryDate ? new Date(deliveryDate) : today;
   const relevantHours = orderType === "pickup" ? shop?.pickupHours ?? null : shop?.deliveryHours ?? null;
   const gapMinutes = orderType === "pickup" ? shop?.pickupTimeSlotGapMinutes ?? 30 : shop?.deliveryTimeSlotGapMinutes ?? 60;
-  const timeSlots = useMemo(
-    () => generateTimeSlots(dateForSlots, relevantHours, gapMinutes),
-    [dateForSlots.getTime(), relevantHours, gapMinutes],
-  );
   const dateIsToday = deliveryDate === minDate;
+
+  // Re-ticks every 60s so a slot that expires while the shopper lingers on
+  // this page disappears from the picker on its own, rather than only ever
+  // being caught at submit time (the server independently re-validates
+  // regardless — see backend PublicService.assertValidTimeSlot — this is
+  // just so the UI doesn't keep offering something already-stale).
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  // Only meaningful (passed through) when the target date is genuinely
+  // today — a future date's slots are never cutoff-filtered.
+  const nowMinutes = new Date(nowTick).getHours() * 60 + new Date(nowTick).getMinutes();
+  const timeSlots = useMemo(
+    () => generateTimeSlots(dateForSlots, relevantHours, gapMinutes, dateIsToday || !deliveryDate ? nowMinutes : undefined),
+    [dateForSlots.getTime(), relevantHours, gapMinutes, dateIsToday, deliveryDate, nowMinutes],
+  );
+  // Independent of whatever date is currently selected — drives the
+  // calendar's own "today" cell greying out once nothing's left, even if
+  // the shopper has already moved on to picking a later date.
+  const todayFullyBooked = useMemo(
+    () => generateTimeSlots(today, relevantHours, gapMinutes, nowMinutes).length === 0,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [relevantHours, gapMinutes, nowMinutes],
+  );
   const dateBlocked = isDateBlocked(deliveryDate, today, shop?.allowSameDayOrders, shop?.allowNextDayOrders);
 
   function useMyLocation() {
@@ -218,8 +240,17 @@ export function useCheckoutForm() {
     }
   }
 
+  // A time slot is required once (and only once) a delivery/pickup date has
+  // been picked — the date itself stays optional. See backend
+  // PublicService.assertValidTimeSlot for the authoritative, server-side
+  // version of this same requirement.
   const canSubmit =
-    !submitting && !!orderType && !!paymentMethod && !dateBlocked && (selectedOutlet ? selectedOutlet.isOpen : false);
+    !submitting &&
+    !!orderType &&
+    !!paymentMethod &&
+    !dateBlocked &&
+    (!deliveryDate || !!deliveryTimeSlot) &&
+    (selectedOutlet ? selectedOutlet.isOpen : false);
 
   return {
     shopSlug,
@@ -274,6 +305,7 @@ export function useCheckoutForm() {
     timeSlots,
     dateIsToday,
     dateBlocked,
+    todayFullyBooked,
     canSubmit,
   };
 }

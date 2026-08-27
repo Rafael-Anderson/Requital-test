@@ -9,6 +9,7 @@ import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import LegacyHeroSettings from "../LegacyHeroSettings";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
+import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
 const HEIGHTS = ["small", "medium", "large", "full"] as const;
 
@@ -18,9 +19,11 @@ const HEIGHTS = ["small", "medium", "large", "full"] as const;
 export default function HeroSettings({
   settings,
   onUpdate,
+  editor,
 }: {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
+  editor?: ThemeEditorState;
 }) {
   return (
     <div className="space-y-4">
@@ -64,7 +67,7 @@ export default function HeroSettings({
         onChange={(v) => onUpdate("visibility", v)}
       />
 
-      <LegacyHeroSettings />
+      {editor && <LegacyHeroSettings editor={editor} />}
     </div>
   );
 }

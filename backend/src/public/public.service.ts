@@ -10,6 +10,7 @@ import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
+import { generateValidTimeSlots } from './time-slots';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import { createLogger } from '../common/logging/logger';
 
@@ -239,6 +240,8 @@ export class PublicService {
       cardProcessorEnabled,
       banners,
       publishedPolicyPages,
+      tabbyPublicKey,
+      tamaraPublicKey,
     ] = await Promise.all([
       Promise.all(
         INDEPENDENT_ONLINE_PROVIDERS.map(async (p) => ({
@@ -257,6 +260,11 @@ export class PublicService {
         `SELECT type FROM policypage WHERE shopId = ?`,
         [shop.id],
       ),
+      // Public-safe (see resolvePublicWidgetKey's own comment) — drives the
+      // PDP's Tabby/Tamara installment-promo widgets, entirely separate from
+      // enabledPaymentProviders above (checkout method availability).
+      this.paymentSettingsService.resolvePublicWidgetKey(shop.id, 'tabby'),
+      this.paymentSettingsService.resolvePublicWidgetKey(shop.id, 'tamara'),
     ]);
     // Only the types a merchant has actually written content for — the
     // footer never links to a policy type with no content (see
@@ -326,6 +334,8 @@ export class PublicService {
       pickupPaymentCardOnPickup: shop.pickupPaymentCardOnPickup,
       cardProcessorEnabled,
       enabledPaymentProviders,
+      tabbyPublicKey,
+      tamaraPublicKey,
       brandColor: theme?.brandColor ?? null,
       secondaryColor: theme?.secondaryColor ?? null,
       bannerUrl: theme?.bannerUrl ?? null,
@@ -1222,6 +1232,7 @@ export class PublicService {
     this.assertFulfillmentOpen(shop, outlet, dto.orderType);
     if (dto.deliveryDate) {
       this.assertWithinAcceptanceWindow(shop, dto.deliveryDate);
+      this.assertValidTimeSlot(shop, dto.orderType, dto.deliveryDate, dto.deliveryTimeSlot);
     }
 
     const resolvedItems = await this.productsService.resolveOrderItems(
@@ -1793,6 +1804,56 @@ export class PublicService {
       throw new BadRequestException(
         'Next-day orders are not available right now',
       );
+    }
+  }
+
+  // Authoritative counterpart to the storefront's own client-side slot
+  // generation (lib/slots.ts) — a time slot is required once a delivery/
+  // pickup date is chosen, and the submitted value must be a real, still-
+  // available slot for that date, not just any string. Regenerating the
+  // valid-slot list server-side (via the hand-mirrored generateValidTimeSlots,
+  // see time-slots.ts's own comment) and checking membership covers format
+  // validity, business-hours compliance, and the same-day cutoff in one
+  // check — closing the "held the checkout page open past the cutoff, or
+  // skipped the client-side filtering entirely" bypass a client-only check
+  // can't.
+  private assertValidTimeSlot(
+    shop: {
+      timezone: string;
+      deliveryHours: unknown;
+      pickupHours: unknown;
+      deliveryTimeSlotGapMinutes: number;
+      pickupTimeSlotGapMinutes: number;
+    },
+    orderType: string,
+    deliveryDate: string,
+    deliveryTimeSlot: string | undefined,
+  ) {
+    if (!deliveryTimeSlot) {
+      throw new BadRequestException('A time slot is required');
+    }
+    const hours = (
+      orderType === 'pickup' ? shop.pickupHours : shop.deliveryHours
+    ) as Parameters<typeof generateValidTimeSlots>[1];
+    const gapMinutes =
+      orderType === 'pickup'
+        ? shop.pickupTimeSlotGapMinutes
+        : shop.deliveryTimeSlotGapMinutes;
+    const validSlots = generateValidTimeSlots(
+      // Bare "YYYY-MM-DD" parses as UTC midnight per the ISO 8601 date-only
+      // spec — the same construction assertWithinAcceptanceWindow already
+      // uses just above, kept identical here rather than appending a local
+      // "T00:00:00" (which would parse in the *server's* local timezone,
+      // not the shop's, and could disagree with the already-validated date
+      // key above).
+      new Date(deliveryDate),
+      hours,
+      gapMinutes,
+      shop.timezone,
+      new Date(),
+    );
+    if (!validSlots.includes(deliveryTimeSlot)) {
+      throw new BadRequestException('This time slot is no longer available');
     }
   }
 
