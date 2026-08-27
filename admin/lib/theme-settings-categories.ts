@@ -26,4 +26,5 @@ export const THEME_SETTINGS_CATEGORY_LABELS = [
   "Variant pickers",
   "Custom CSS",
   "Collection page",
+  "Product page",
 ] as const;

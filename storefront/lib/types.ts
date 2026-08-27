@@ -113,6 +113,14 @@ export interface Shop {
   // PaymentSettingsService.isEnabled. Each becomes its own selectable
   // payment method at checkout, available for both delivery and pickup.
   enabledPaymentProviders: string[];
+  // Null unless that provider is BOTH enabled for checkout AND has a real
+  // public key configured (per-shop or the platform's own env var fallback)
+  // — see backend PaymentSettingsService.resolvePublicWidgetKey. Drives
+  // whether the PDP renders that provider's installment-promo widget at
+  // all; entirely separate from enabledPaymentProviders above (checkout
+  // method availability).
+  tabbyPublicKey: string | null;
+  tamaraPublicKey: string | null;
 }
 
 // Curated list — kept in sync by hand with backend/src/theme/constants.ts

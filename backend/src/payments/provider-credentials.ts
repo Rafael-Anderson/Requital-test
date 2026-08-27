@@ -36,10 +36,13 @@ export interface CredentialFieldDef {
 //   per-shop instead of only from the platform env var.
 // - tabby/tamara: now real integrations (see providers/tabby-payment.provider.ts
 //   / tamara-payment.provider.ts) — publicKey/secretKey/webhookSecret and
-//   apiUrl/apiToken/notificationToken respectively, matching those
+//   publicKey/apiUrl/apiToken/notificationToken respectively, matching those
 //   providers' own env var fallbacks (TABBY_PUBLIC_KEY/TABBY_SECRET_KEY/
-//   TABBY_WEBHOOK_SECRET, TAMARA_API_URL/TAMARA_TOKEN/TAMARA_NOTIFICATION_TOKEN).
-//   Was a single-field placeholder from the earlier structural-stub task.
+//   TABBY_WEBHOOK_SECRET, TAMARA_PUBLIC_KEY/TAMARA_API_URL/TAMARA_TOKEN/
+//   TAMARA_NOTIFICATION_TOKEN). Was a single-field placeholder from the
+//   earlier structural-stub task. Tamara's publicKey is unused by the real
+//   checkout integration (see that field's own comment below) — it's solely
+//   for the PDP's client-side installment-promo widget.
 // - paypal: standard PayPal REST API OAuth2 client-credentials shape
 //   (clientId/clientSecret), plus webhookId — the Webhook ID PayPal issues
 //   per registered webhook, required by their remote
@@ -71,6 +74,12 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<
     { key: 'webhookSecret', label: 'Webhook Secret' },
   ],
   tamara: [
+    // publicKey has no bearing on the real checkout integration (that only
+    // ever needs apiToken, server-side) — it exists purely for
+    // PaymentSettingsService.resolvePublicWidgetKey, which feeds Tamara's
+    // client-side installment-promo widget on the PDP (a separate, optional
+    // feature from actual checkout — see that widget's own component).
+    { key: 'publicKey', label: 'Public Key' },
     { key: 'apiUrl', label: 'API URL' },
     { key: 'apiToken', label: 'API Token' },
     { key: 'notificationToken', label: 'Notification Token' },

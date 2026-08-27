@@ -306,7 +306,7 @@ function PriceElementSettings({ block, onUpdate }: FamilyProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Show currency code</span>
-        <Toggle checked={(s.showCurrencyCode as boolean) ?? false} onChange={(v) => onUpdate("showCurrencyCode", v)} />
+        <Toggle checked={(s.showCurrencyCode as boolean) ?? true} onChange={(v) => onUpdate("showCurrencyCode", v)} />
       </div>
       <Slider label="Font size" min={10} max={32} value={(s.fontSize as number) ?? 14} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
       <div className="flex items-center justify-between">

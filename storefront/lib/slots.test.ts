@@ -37,6 +37,34 @@ describe("generateTimeSlots", () => {
     const hours = { wed: { closed: false, open: "10:00", close: "11:15" } } as unknown as DayHours;
     expect(generateTimeSlots(wed, hours, 60)).toEqual(["10:00 AM - 11:00 AM"]);
   });
+
+  it("ignores nowMinutes entirely when omitted — the cutoff is opt-in per call site", () => {
+    const hours = { wed: { closed: false, open: "10:00", close: "12:00" } } as unknown as DayHours;
+    expect(generateTimeSlots(wed, hours, 60)).toEqual(["10:00 AM - 11:00 AM", "11:00 AM - 12:00 PM"]);
+  });
+
+  it("drops slots whose start has already passed relative to nowMinutes", () => {
+    const hours = { wed: { closed: false, open: "09:00", close: "21:00" } } as unknown as DayHours;
+    // 16:00 -> everything before 4:00 PM is gone.
+    expect(generateTimeSlots(wed, hours, 60, 16 * 60)).toEqual([
+      "4:00 PM - 5:00 PM",
+      "5:00 PM - 6:00 PM",
+      "6:00 PM - 7:00 PM",
+      "7:00 PM - 8:00 PM",
+      "8:00 PM - 9:00 PM",
+    ]);
+  });
+
+  it("keeps a slot that starts exactly at nowMinutes — only a strictly-passed start is excluded", () => {
+    const hours = { wed: { closed: false, open: "09:00", close: "21:00" } } as unknown as DayHours;
+    const slots = generateTimeSlots(wed, hours, 60, 16 * 60);
+    expect(slots).toContain("4:00 PM - 5:00 PM");
+  });
+
+  it("returns an empty list once every slot has already passed", () => {
+    const hours = { wed: { closed: false, open: "09:00", close: "21:00" } } as unknown as DayHours;
+    expect(generateTimeSlots(wed, hours, 60, 22 * 60)).toEqual([]);
+  });
 });
 
 describe("isDateBlocked", () => {

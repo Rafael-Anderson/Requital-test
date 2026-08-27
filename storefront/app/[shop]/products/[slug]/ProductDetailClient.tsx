@@ -18,6 +18,9 @@ import NotifyMeForm from "@/components/NotifyMeForm";
 import AdditionalInfoAccordion from "@/components/AdditionalInfoAccordion";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import TabbyPromoWidget from "@/components/TabbyPromoWidget";
+import TamaraWidget from "@/components/TamaraWidget";
+import { tabbyWidgetPublicKey, tamaraWidgetPublicKey } from "@/lib/bnpl-widgets";
 import type { Collection, Product, ProductVariant, Shop } from "@/lib/types";
 
 // One selected value id per option, in option order (index i -> product.options[i]).
@@ -53,7 +56,7 @@ function formatDeliveryEstimate(shop: Shop): string | null {
 export default function ProductDetailClient() {
   const params = useParams<{ shop: string; slug: string }>();
   const router = useRouter();
-  const { shopSlug, shopBasePath, shop, outlets, previewToken, autoDiscounts = [] } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets, previewToken, autoDiscounts = [], themeConfig } = useShop();
   const { addItem, clear } = useCart();
   const defaultOutletId = outlets[0]?.id;
 
@@ -153,6 +156,25 @@ export default function ProductDetailClient() {
   const deliveryAvailable = outlets.some((o) => o.deliveryEnabled);
   const pickupAvailable = outlets.some((o) => o.pickupEnabled);
   const deliveryEstimate = shop ? formatDeliveryEstimate(shop) : null;
+  const tabbyKey = tabbyWidgetPublicKey(product, shop);
+  const tamaraKey = tamaraWidgetPublicKey(product, shop);
+
+  // Theme builder > Theme settings > Product page — toggles/colors for the
+  // stock+fulfillment line below; falls back to the same values
+  // DEFAULT_THEME_CONFIG.globalSettings.productPage ships (see backend
+  // constants.ts) when a published theme predates this category, matching
+  // CollectionPageSettings' own "guard past the category itself, not just
+  // themeConfig" precedent.
+  const productPageSettings = themeConfig?.globalSettings.productPage;
+  const showStockIndicator = productPageSettings?.showStockIndicator ?? true;
+  const showDeliveryIndicator = productPageSettings?.showDeliveryIndicator ?? true;
+  const showPickupIndicator = productPageSettings?.showPickupIndicator ?? true;
+  const fulfillmentTextColor = productPageSettings?.fulfillmentTextColor || undefined;
+  const stockToneColor: Record<"ok" | "low" | "out", string> = {
+    ok: productPageSettings?.inStockColor || "#15803d",
+    low: productPageSettings?.lowStockColor || "#d97706",
+    out: productPageSettings?.outOfStockColor || "#dc2626",
+  };
 
   // "cart" (default): normal Add to Cart. "buy_now": Add to Cart becomes a
   // single-item Buy Now that skips straight to checkout. "contact": no cart
@@ -332,6 +354,25 @@ export default function ProductDetailClient() {
             )}
           </div>
 
+          {/* Tabby/Tamara installment-promo widgets — separate from actual
+              BNPL checkout, only need price/currency/a public key, so each
+              renders whenever that provider is enabled+configured
+              regardless of whether checkout itself is fully wired. No stock
+              concept for gift cards' widgets doesn't apply either. */}
+          {tabbyKey && (
+            <div className="mt-2">
+              {/* shop is necessarily non-null here — tabbyWidgetPublicKey
+                  only returns a real key when shop?.tabbyPublicKey does,
+                  which TS can't narrow across the function boundary. */}
+              <TabbyPromoWidget price={autoDiscounted ? autoDiscounted.discountedPrice : Number(displayPrice)} currency={shop!.currency} publicKey={tabbyKey} />
+            </div>
+          )}
+          {tamaraKey && (
+            <div className="mt-2">
+              <TamaraWidget price={autoDiscounted ? autoDiscounted.discountedPrice : Number(displayPrice)} publicKey={tamaraKey} />
+            </div>
+          )}
+
           {product.shortSummary && <p className="text-zinc-600 mt-3">{product.shortSummary}</p>}
 
           {product.hasVariants && (
@@ -434,18 +475,22 @@ export default function ProductDetailClient() {
               no physical fulfillment) — see the trust row below instead. */}
           {!product.isGiftCard && (
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-              {stock && (
-                <span
-                  className={`font-medium ${
-                    stock.tone === "out" ? "text-red-600" : stock.tone === "low" ? "text-amber-600" : "text-green-700 dark:text-green-500"
-                  }`}
-                >
-                  {stock.tone === "ok" ? "● " : ""}
+              {showStockIndicator && stock && (
+                <span className="font-medium" style={{ color: stockToneColor[stock.tone] }}>
+                  {"● "}
                   {stock.text}
                 </span>
               )}
-              {deliveryAvailable && <span className="text-zinc-500">Delivery available</span>}
-              {pickupAvailable && <span className="text-zinc-500">Pickup available</span>}
+              {showDeliveryIndicator && deliveryAvailable && (
+                <span className={fulfillmentTextColor ? undefined : "text-zinc-500"} style={fulfillmentTextColor ? { color: fulfillmentTextColor } : undefined}>
+                  Delivery available
+                </span>
+              )}
+              {showPickupIndicator && pickupAvailable && (
+                <span className={fulfillmentTextColor ? undefined : "text-zinc-500"} style={fulfillmentTextColor ? { color: fulfillmentTextColor } : undefined}>
+                  Pickup available
+                </span>
+              )}
             </div>
           )}
 

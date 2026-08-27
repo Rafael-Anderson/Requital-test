@@ -4,12 +4,12 @@ import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
-import { listProducts } from "@/lib/api";
+import { listProducts, listCollections } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import CurrencySymbol from "@/components/CurrencySymbol";
-import type { Product } from "@/lib/types";
+import type { Collection, Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Split into a mobile piece (overridable via settings.mobileColumns, see
@@ -221,17 +221,41 @@ function GridProductCard({
 export default function ProductGridSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
   const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, previewMode } = useShop();
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const outletId = outlets[0]?.id;
   const collectionId = typeof settings.collectionId === "number" ? settings.collectionId : undefined;
   const productLimit = typeof settings.productLimit === "number" && settings.productLimit > 0 ? settings.productLimit : DEFAULT_PRODUCT_LIMIT;
   const quickAddLabel = typeof settings.quickAddLabel === "string" && settings.quickAddLabel ? settings.quickAddLabel : "Add";
   const sectionTitle = typeof settings.sectionTitle === "string" ? settings.sectionTitle.trim() : "";
+  // Defaults to shown, same "on by default, opt out" reasoning as
+  // showCurrencyCode above — a merchant scoping a section to a collection
+  // gets a working "View all" link with no extra step. Only ever has a real
+  // target when collectionId is set (there's no "all products" browse page
+  // in this app — see FeaturedCollectionsSection.tsx's own comment), so it's
+  // gated on collectionSlug resolving below regardless of this setting.
+  const showViewAll = settings.showViewAllButton !== false;
+  const viewAllLabel = (typeof settings.viewAllLabel === "string" && settings.viewAllLabel.trim()) || "View all";
 
   useEffect(() => {
     listProducts(shopSlug, outletId, collectionId, undefined, previewToken)
       .then((res) => setProducts(res.slice(0, productLimit)))
       .catch(() => setProducts([]));
   }, [shopSlug, outletId, collectionId, productLimit, previewToken]);
+
+  // Only fetched when scoped to a real collection — the common "all
+  // products" case (collectionId unset) has no "View all" target at all, so
+  // it skips this network call entirely.
+  useEffect(() => {
+    if (collectionId === undefined) {
+      setCollections([]);
+      return;
+    }
+    listCollections(shopSlug, previewToken)
+      .then(setCollections)
+      .catch(() => setCollections([]));
+  }, [shopSlug, collectionId, previewToken]);
+
+  const collectionSlug = collectionId !== undefined ? collections.find((c) => c.id === collectionId)?.slug : undefined;
 
   const desktopColumns = (settings.columns as number) ?? 3;
   const mobileColumns = mobileColumnsFor(desktopColumns, settings.mobileColumns);
@@ -245,7 +269,13 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   const showMedia = subBlocks.length === 0 || subBlocks.some((b) => b.type === "product_media" && b.visible);
   const showTitle = subBlocks.length === 0 || !!titleBlock?.visible;
   const showPrice = subBlocks.length === 0 || !!priceBlock?.visible;
-  const showCurrencyCode = priceBlock?.settings.showCurrencyCode === true;
+  // Defaults to shown, not hidden — every other price display in this app
+  // (PDP, cart, checkout, the legacy ProductCard.tsx) always shows the
+  // currency symbol unconditionally; this toggle only exists so a merchant
+  // can deliberately opt OUT for a minimalist look, not so a bare number
+  // ships by default on a freshly-created section (the reported bug: cards
+  // showing "199" with no glyph at all).
+  const showCurrencyCode = priceBlock?.settings.showCurrencyCode !== false;
 
   const productCards = themeConfig?.globalSettings.productCards;
   const shopCartUsable = !!cardBlock && !!productCards;
@@ -254,10 +284,19 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
 
   return (
     <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
-      {sectionTitle && (
-        <h2 className="text-xl font-semibold mb-4" style={themeTextPresetStyle("h2")}>
-          {sectionTitle}
-        </h2>
+      {(sectionTitle || (showViewAll && collectionSlug)) && (
+        <div className="flex items-center justify-between mb-4">
+          {sectionTitle && (
+            <h2 className="text-xl font-semibold" style={themeTextPresetStyle("h2")}>
+              {sectionTitle}
+            </h2>
+          )}
+          {showViewAll && collectionSlug && (
+            <Link href={`${shopBasePath}/collections/${collectionSlug}`} className="text-sm font-medium text-accent hover:underline">
+              {viewAllLabel}
+            </Link>
+          )}
+        </div>
       )}
       <div className={`grid ${columns} gap-4 sm:gap-6`}>
         {products.map((product) => (

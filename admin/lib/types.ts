@@ -1291,6 +1291,18 @@ export interface CollectionPageSettings {
   mobileColumns?: 1 | 2;
 }
 
+// Governs the PDP's stock/delivery/pickup status line — see backend
+// theme-config.types.ts's matching interface for the full reasoning.
+export interface ProductPageSettings {
+  showStockIndicator: boolean;
+  showDeliveryIndicator: boolean;
+  showPickupIndicator: boolean;
+  inStockColor: string;
+  lowStockColor: string;
+  outOfStockColor: string;
+  fulfillmentTextColor: string;
+}
+
 export interface SearchSettings {
   emptyStateCollectionId?: number;
   productCornerRadius: number;
@@ -1338,6 +1350,7 @@ export interface GlobalThemeSettings {
   variantPickers: VariantPickerSettings;
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
+  productPage: ProductPageSettings;
 }
 
 export interface ThemeConfig {
@@ -1756,6 +1769,9 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, Credenti
     { key: "webhookSecret", label: "Webhook Secret" },
   ],
   tamara: [
+    // Not used by the real checkout integration (that only needs apiToken,
+    // server-side) — feeds the PDP's Tamara installment-promo widget only.
+    { key: "publicKey", label: "Public Key" },
     { key: "apiUrl", label: "API URL" },
     { key: "apiToken", label: "API Token" },
     { key: "notificationToken", label: "Notification Token" },

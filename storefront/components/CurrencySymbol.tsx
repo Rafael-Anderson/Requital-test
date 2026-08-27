@@ -16,13 +16,13 @@ import { currencySymbol } from "@/lib/currency";
 // session to trace against pixel-for-pixel. Treat this as a placeholder
 // that should be swapped for the real official SVG/icon export the first
 // chance there is to compare against it directly.
-function AedGlyph({ className }: { className?: string }) {
+function AedGlyph({ className, size = "0.75em" }: { className?: string; size?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
       className={className}
-      width="0.75em"
-      height="0.75em"
+      width={size}
+      height={size}
       style={{ display: "inline-block", verticalAlign: "-0.05em" }}
       fill="none"
       stroke="currentColor"
@@ -39,7 +39,11 @@ function AedGlyph({ className }: { className?: string }) {
   );
 }
 
-export default function CurrencySymbol({ code, className }: { code: string | null | undefined; className?: string }) {
-  if (code === "AED") return <AedGlyph className={className} />;
+// `size` defaults to 0.75em (unchanged everywhere that doesn't pass it) —
+// only checkout's price rows pass a larger value today (see
+// CheckoutSteps.tsx/CheckoutSinglePage.tsx), where the default read as too
+// small next to the surrounding digits at that ambient, unstyled font size.
+export default function CurrencySymbol({ code, className, size }: { code: string | null | undefined; className?: string; size?: string }) {
+  if (code === "AED") return <AedGlyph className={className} size={size} />;
   return <>{currencySymbol(code)}</>;
 }

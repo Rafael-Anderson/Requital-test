@@ -718,6 +718,116 @@ describe('Storefront public checkout (e2e)', () => {
     });
   });
 
+  describe('delivery/pickup time slot — required once a date is picked, and the cutoff is enforced server-side', () => {
+    it('rejects a deliveryDate with no deliveryTimeSlot at all', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            latitude: OUTLET_LAT,
+            longitude: OUTLET_LON,
+            deliveryDate: today,
+          }),
+        )
+        .expect(400);
+      expect(messageContains(res, 'time slot is required')).toBe(true);
+    });
+
+    it('rejects a garbage/unrecognized deliveryTimeSlot string', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            latitude: OUTLET_LAT,
+            longitude: OUTLET_LON,
+            deliveryDate: today,
+            deliveryTimeSlot: 'not a real slot',
+          }),
+        )
+        .expect(400);
+      expect(messageContains(res, 'no longer available')).toBe(true);
+    });
+
+    // The client is only ever an optimistic filter (see storefront
+    // lib/slots.ts) — a shopper who leaves the checkout page open past a
+    // slot's own start time, or a client that skips the filtering
+    // entirely, must still be rejected here, server-side.
+    it("rejects an already-passed same-day slot even though nothing on the client was bypassed to submit it — the server regenerates and re-checks membership itself", async () => {
+      // Delivery open the entire day, at the shop's default gap — the very
+      // first slot of the day ("12:00 AM - 1:00 AM") is guaranteed to have
+      // already started by the time this test runs, regardless of the real
+      // wall-clock time it's executed at.
+      const openAllDay = Object.fromEntries(
+        ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map((d) => [
+          d,
+          { open: '00:00', close: '23:59', closed: false },
+        ]),
+      );
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ deliveryHours: openAllDay, deliveryTimeSlotGapMinutes: 60 })
+        .expect(200);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            latitude: OUTLET_LAT,
+            longitude: OUTLET_LON,
+            deliveryDate: today,
+            deliveryTimeSlot: '12:00 AM - 1:00 AM',
+          }),
+        )
+        .expect(400);
+      expect(messageContains(res, 'no longer available')).toBe(true);
+    });
+
+    it('accepts a real, still-available slot on a future date — the cutoff only ever filters *today*', async () => {
+      // Same wide-open hours as above (left configured by the previous
+      // test). A few days out sidesteps this suite's separate
+      // same-day/next-day acceptance-window tests entirely (shop defaults
+      // to allowing both, untouched elsewhere in this file) — the point
+      // here is only that the cutoff filter itself never touches a
+      // non-today date, not re-testing the acceptance window.
+      const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            latitude: OUTLET_LAT,
+            longitude: OUTLET_LON,
+            deliveryDate: future,
+            deliveryTimeSlot: '12:00 PM - 1:00 PM',
+          }),
+        )
+        .expect(201);
+      const { order } = body<CreateOrderResponseBody>(res);
+      expect(order.orderType).toBe('delivery');
+
+      // Restore default hours for any later test in this suite.
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ deliveryHours: null })
+        .expect(200);
+    });
+  });
+
   describe('customerPhone validation', () => {
     it('accepts digits, spaces, hyphens, and an optional leading +', async () => {
       await request(app.getHttpServer())

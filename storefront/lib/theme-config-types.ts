@@ -209,6 +209,18 @@ export interface CollectionPageSettings {
   mobileColumns?: 1 | 2;
 }
 
+// Governs the PDP's stock/delivery/pickup status line — see backend
+// theme-config.types.ts's matching interface for the full reasoning.
+export interface ProductPageSettings {
+  showStockIndicator: boolean;
+  showDeliveryIndicator: boolean;
+  showPickupIndicator: boolean;
+  inStockColor: string;
+  lowStockColor: string;
+  outOfStockColor: string;
+  fulfillmentTextColor: string;
+}
+
 export interface SearchSettings {
   emptyStateCollectionId?: number;
   productCornerRadius: number;
@@ -256,6 +268,7 @@ export interface GlobalThemeSettings {
   variantPickers: VariantPickerSettings;
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
+  productPage: ProductPageSettings;
 }
 
 export interface ThemeConfig {

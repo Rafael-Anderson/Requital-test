@@ -83,6 +83,7 @@ export default function CheckoutSteps(state: CheckoutFormState) {
     timeSlots,
     dateIsToday,
     dateBlocked,
+    todayFullyBooked,
   } = state;
 
   const [step, setStep] = useState(0);
@@ -189,16 +190,24 @@ export default function CheckoutSteps(state: CheckoutFormState) {
                   value={deliveryDate}
                   onChange={setDeliveryDate}
                   minDate={minDate}
-                  isDateGrayedOut={(d) => isDateBlocked(d, new Date(`${minDate}T00:00:00`), shop?.allowSameDayOrders, shop?.allowNextDayOrders)}
+                  isDateGrayedOut={(d) =>
+                    isDateBlocked(d, new Date(`${minDate}T00:00:00`), shop?.allowSameDayOrders, shop?.allowNextDayOrders) ||
+                    (d === minDate && todayFullyBooked)
+                  }
                 />
-                {dateBlocked && (
+                {dateBlocked ? (
                   <p className="text-xs text-red-600 mt-1">{dateIsToday ? "Same-day orders aren't available right now." : "Next-day orders aren't available right now."}</p>
+                ) : (
+                  dateIsToday &&
+                  todayFullyBooked && <p className="text-xs text-red-600 mt-1">No time slots left today — pick another date.</p>
                 )}
               </div>
-              <div>
-                <label className="text-sm font-medium block mb-1">Time slot (optional)</label>
-                <TimeSlotPicker slots={timeSlots} value={deliveryTimeSlot} onChange={setDeliveryTimeSlot} />
-              </div>
+              {deliveryDate && (
+                <div>
+                  <label className="text-sm font-medium block mb-1">Time slot</label>
+                  <TimeSlotPicker slots={timeSlots} value={deliveryTimeSlot} onChange={setDeliveryTimeSlot} />
+                </div>
+              )}
             </div>
 
             <div>
@@ -229,14 +238,14 @@ export default function CheckoutSteps(state: CheckoutFormState) {
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Subtotal</span>
                 <span>
-                  {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+                  {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
                 </span>
               </div>
               {discountAmount !== null && discountAmount > 0 && (
                 <div className="flex items-center justify-between text-green-600 dark:text-green-400">
                   <span>Discount</span>
                   <span>
-                    -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+                    -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
                   </span>
                 </div>
               )}
@@ -244,14 +253,14 @@ export default function CheckoutSteps(state: CheckoutFormState) {
                 <div className="flex items-center justify-between text-green-600 dark:text-green-400">
                   <span>Gift card</span>
                   <span>
-                    -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} <CurrencySymbol code={shop?.currency} />
+                    -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Total (before delivery/tax)</span>
                 <span className="font-medium">
-                  {total.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+                  {total.toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
                 </span>
               </div>
             </div>

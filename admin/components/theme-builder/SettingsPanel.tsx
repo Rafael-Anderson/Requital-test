@@ -22,6 +22,7 @@ import SwatchesSettings from "./theme-settings/SwatchesSettings";
 import VariantPickersSettings from "./theme-settings/VariantPickersSettings";
 import CustomCssSettings from "./theme-settings/CustomCssSettings";
 import CollectionPageSettings from "./theme-settings/CollectionPageSettings";
+import ProductPageSettings from "./theme-settings/ProductPageSettings";
 import HeaderSettings from "./settings/HeaderSettings";
 import FooterSettings from "./settings/FooterSettings";
 import HeroSettings from "./settings/HeroSettings";
@@ -55,6 +56,11 @@ import type { ThemeEditorState } from "@/lib/useThemeEditor";
 type SectionSettingsProps = {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
+  // Optional, unused by 7 of the 8 section types — only HeroSettings reads
+  // it, to gate its "Classic homepage banner" legacy sub-section on whether
+  // Layout mode's Homepage layout setting can even reach it (see
+  // LegacyHeroSettings.tsx).
+  editor?: ThemeEditorState;
 };
 
 const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<SectionSettingsProps>> = {
@@ -97,6 +103,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
   "Variant pickers": VariantPickersSettings,
   "Custom CSS": CustomCssSettings,
   "Collection page": CollectionPageSettings,
+  "Product page": ProductPageSettings,
 };
 
 // Layout mode's 13 categories — a straight port of the old Theme
@@ -277,7 +284,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     const SettingsComponent = SECTION_SETTINGS_COMPONENTS[section.type];
     return (
       <FilterableSettingsBody editor={editor} contentKey={`section:${section.id}`} heading={<h2 className="mb-4 text-sm font-semibold">{SECTION_TYPE_LABELS[section.type]}</h2>}>
-        <SettingsComponent settings={section.settings} onUpdate={(key, value) => editor.updateSectionSetting(section.id, key, value)} />
+        <SettingsComponent settings={section.settings} onUpdate={(key, value) => editor.updateSectionSetting(section.id, key, value)} editor={editor} />
       </FilterableSettingsBody>
     );
   }

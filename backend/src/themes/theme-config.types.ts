@@ -278,6 +278,26 @@ export interface CollectionPageSettings {
   mobileColumns?: 1 | 2;
 }
 
+// Governs the PDP's stock/delivery/pickup status line
+// (storefront/app/[shop]/products/[slug]/ProductDetailClient.tsx) — same
+// reasoning as CollectionPageSettings just above: the product page isn't
+// composed of theme sections either, so this is its own small global
+// category rather than a per-section settings blob. The three show* toggles
+// only ever hide an indicator whose underlying condition was already false
+// on real data (out-of-stock/no delivery outlet/no pickup outlet) or already
+// true (in stock/delivery available/pickup available) - there is no
+// merchant-editable text for these, only whether the real, live value is
+// shown and what color it renders in.
+export interface ProductPageSettings {
+  showStockIndicator: boolean;
+  showDeliveryIndicator: boolean;
+  showPickupIndicator: boolean;
+  inStockColor: string;
+  lowStockColor: string;
+  outOfStockColor: string;
+  fulfillmentTextColor: string;
+}
+
 export interface SearchSettings {
   emptyStateCollectionId?: number;
   productCornerRadius: number;
@@ -329,6 +349,7 @@ export interface GlobalThemeSettings {
   variantPickers: VariantPickerSettings;
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
+  productPage: ProductPageSettings;
 }
 
 export interface ThemeConfig {
