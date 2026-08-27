@@ -29,38 +29,39 @@ interface AuthContextValue {
     productEditorMode?: "simple" | "advanced";
   }) => Promise<{ devVerificationLink?: string }>;
   acceptInvite: (data: { token: string; password: string }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  // Starts true so RequireAuth doesn't redirect to /login before the stored
-  // token (if any) has had a chance to be validated against /auth/me.
+  // Starts true so RequireAuth doesn't redirect to /login before the
+  // httpOnly session cookie (if any) has had a chance to be validated
+  // against /auth/me.
   const [loading, setLoading] = useState(true);
 
+  // Session-cookie migration (security audit finding #1), phase 2 — no
+  // client-readable token to gate this on anymore, so /auth/me is always
+  // called on mount; the cookie rides automatically and a logged-out call
+  // just 401s fast (same pattern as the platform tier's own bootstrap, see
+  // platform-auth-context.tsx).
   useEffect(() => {
-    if (!api.getAccessToken()) {
-      setLoading(false);
-      return;
-    }
     api
       .me()
-      // A dead access token still gets one silent-refresh attempt inside
+      // A dead access cookie still gets one silent-refresh attempt inside
       // api.me() itself (apiFetch's 401 handling) before this ever rejects —
-      // reaching .catch() here means the refresh token is gone/expired too.
+      // reaching .catch() here means the refresh cookie is gone/expired too.
       .then(setUser)
-      .catch(() => api.clearTokens())
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   // Any API call, anywhere in the app, that ends up fully logged out (both
-  // the access token and its refresh attempt rejected) reports it here —
-  // see api.onUnauthorized's own comment for why this can't just be
-  // api.clearTokens() alone. This is what makes a session invalidated
-  // mid-use (expired/revoked refresh token, or every token at once if
-  // JWT_SECRET ever rotates) redirect to /login immediately via
+  // the access cookie and its refresh attempt rejected) reports it here —
+  // see api.onUnauthorized's own comment. This is what makes a session
+  // invalidated mid-use (expired/revoked refresh cookie, or every session
+  // at once if JWT_SECRET ever rotates) redirect to /login immediately via
   // RequireAuth's existing logic, instead of leaving the merchant stuck on
   // a broken page until they happen to reload.
   useEffect(() => {
@@ -82,7 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
-    api.setTokens(result);
     setUser(result.user);
   }, []);
 
@@ -103,7 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       country?: string;
     }) => {
       const result = await api.signup(data);
-      api.setTokens(result);
       setUser(result.user);
       return result;
     },
@@ -112,15 +111,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const acceptInvite = useCallback(async (data: { token: string; password: string }) => {
     const result = await api.acceptInvite(data);
-    api.setTokens(result);
     setUser(result.user);
   }, []);
 
-  const logout = useCallback(() => {
-    // Fire-and-forget: tokens are cleared locally regardless of whether the
-    // server-side revocation round-trip succeeds.
-    void api.logout();
-    api.clearTokens();
+  // httpOnly cookies can only be cleared server-side — this is now an
+  // awaited network round-trip, not a synchronous local-storage removal
+  // (see api.logout's own comment).
+  const logout = useCallback(async () => {
+    await api.logout();
     setUser(null);
   }, []);
 

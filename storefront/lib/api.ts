@@ -331,64 +331,58 @@ export function submitSurvey(token: string, data: { rating: number; comment?: st
 
 // --- Customer accounts ---
 //
-// Same per-shop-namespaced localStorage convention as lib/cart.tsx and
-// lib/referral.ts (`requital_storefront_<thing>:${shopSlug}`) — a logged-in
-// session on Shop A's storefront must never leak into Shop B's, same
-// tenant-isolation guarantee those two already give the cart/referral code.
-export interface StoredCustomerAuth {
-  accessToken: string;
-  refreshToken: string;
-  customer: Customer;
-}
+// Session-cookie migration (security audit finding #1), phase 3 — the
+// customer session is an httpOnly cookie now, Path-scoped per shop by the
+// backend (see backend/src/customer-auth/customer-auth.constants.ts), not a
+// bearer token in localStorage. `getStoredAuth`/`setStoredAuth`/
+// StoredCustomerAuth are gone entirely — there is no client-side token to
+// store; per-shop isolation now comes from the cookie's own Path scoping
+// instead of a per-shop localStorage key.
+//
+// CSRF token distribution — held in memory only (never localStorage, same
+// reasoning as the token itself), one variable per loaded page — a real
+// browser page is always exactly one shop's storefront at a time, so there
+// is no cross-shop confusion risk the way the old per-shop localStorage key
+// had to guard against. Originally going to be read via `document.cookie`
+// off a non-httpOnly CSRF cookie; that would only ever have worked in local
+// dev, where every app shares the bare `localhost` hostname — in
+// production {shop}.requital.io can never read a cookie set by
+// api.requital.io via document.cookie, cookies don't cross hostnames. The
+// backend instead echoes the token on the X-CSRF-Token *response* header of
+// every request that mints or refreshes one (register/login/refresh, and
+// getMyProfile below) — see backend common/csrf.ts's own
+// CSRF_RESPONSE_HEADER comment, and admin/lib/api.ts's identical mechanism.
+let customerCsrfToken: string | null = null;
 
-function authStorageKey(shopSlug: string) {
-  return `requital_storefront_auth:${shopSlug}`;
-}
-
-export function getStoredAuth(shopSlug: string): StoredCustomerAuth | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(authStorageKey(shopSlug));
-    return raw ? (JSON.parse(raw) as StoredCustomerAuth) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setStoredAuth(shopSlug: string, auth: StoredCustomerAuth | null) {
-  if (typeof window === "undefined") return;
-  try {
-    if (auth) localStorage.setItem(authStorageKey(shopSlug), JSON.stringify(auth));
-    else localStorage.removeItem(authStorageKey(shopSlug));
-  } catch {
-    // corrupt/blocked storage — same guard as cart.tsx, nothing to do
-  }
-}
-
-// Authenticated fetch wrapper — mirrors admin/lib/api.ts's apiFetch (bearer
-// header injection + one silent refresh-and-retry on 401), scaled down to
-// this app's simpler get/post shape rather than a full copy. Reads the
-// token from localStorage directly (not React state) so plain functions
-// like getMyOrders below don't need a hook/context to call.
+// Authenticated fetch wrapper — mirrors admin/lib/api.ts's apiFetch
+// (credentialed fetch + CSRF header + one silent refresh-and-retry on 401),
+// scaled down to this app's simpler get/post shape rather than a full copy.
 async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
-  const stored = getStoredAuth(shopSlug);
+  const method = (init.method ?? "GET").toUpperCase();
+  const csrfToken = method !== "GET" && method !== "HEAD" ? customerCsrfToken : null;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(stored ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
       ...init.headers,
     },
   });
-  if (res.status === 401 && stored && !isRetry) {
+  const freshCsrfToken = res.headers.get("X-CSRF-Token");
+  if (freshCsrfToken) customerCsrfToken = freshCsrfToken;
+  if (res.status === 401 && !isRetry) {
     try {
-      const refreshed = await post<CustomerAuthResult>(`/public/${shopSlug}/auth/refresh`, {
-        refreshToken: stored.refreshToken,
+      const refreshRes = await fetch(`${API_URL}/public/${shopSlug}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": customerCsrfToken ?? "" },
       });
-      setStoredAuth(shopSlug, refreshed);
+      const refreshedCsrfToken = refreshRes.headers.get("X-CSRF-Token");
+      if (refreshedCsrfToken) customerCsrfToken = refreshedCsrfToken;
+      if (!refreshRes.ok) throw new Error("Refresh failed");
       return authedFetch<T>(shopSlug, path, init, true);
     } catch {
-      setStoredAuth(shopSlug, null);
       throw new Error("Your session has expired — please log in again");
     }
   }
@@ -403,27 +397,45 @@ async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit 
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+async function credentialedPost<T>(path: string, data: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  const freshCsrfToken = res.headers.get("X-CSRF-Token");
+  if (freshCsrfToken) customerCsrfToken = freshCsrfToken;
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(
+      Array.isArray(body?.message) ? body.message.join(", ") : (body?.message ?? `Request failed (${res.status})`),
+    );
+  }
+  return res.json() as Promise<T>;
+}
+
 export function registerCustomer(
   shopSlug: string,
   data: { name: string; phone: string; email?: string; password: string },
 ) {
-  return post<CustomerAuthResult>(`/public/${shopSlug}/auth/register`, data);
+  return credentialedPost<CustomerAuthResult>(`/public/${shopSlug}/auth/register`, data);
 }
 
 export function loginCustomer(shopSlug: string, data: { identifier: string; password: string }) {
-  return post<CustomerAuthResult>(`/public/${shopSlug}/auth/login`, data);
+  return credentialedPost<CustomerAuthResult>(`/public/${shopSlug}/auth/login`, data);
 }
 
-// Clears the local session either way, even if the server call fails (a
-// network hiccup shouldn't leave the storefront looking logged-in) — same
-// best-effort-server-call-but-always-clear-locally reasoning as the admin
-// app's own logout (see admin/lib/api.ts's logout).
+// httpOnly cookies can't be cleared by client JS — this is a real network
+// call now, not a synchronous local-storage removal. Best-effort: the
+// caller (lib/auth.tsx) clears local `customer` state regardless of whether
+// this round-trip succeeds, same as before.
 export async function logoutCustomer(shopSlug: string) {
-  const stored = getStoredAuth(shopSlug);
-  if (stored) {
-    await post(`/public/${shopSlug}/auth/logout`, { refreshToken: stored.refreshToken }).catch(() => undefined);
-  }
-  setStoredAuth(shopSlug, null);
+  await fetch(`${API_URL}/public/${shopSlug}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "X-CSRF-Token": customerCsrfToken ?? "" },
+  }).catch(() => undefined);
 }
 
 export function forgotCustomerPassword(shopSlug: string, email: string) {
@@ -491,22 +503,23 @@ export function confirmMyAccountDeletion(shopSlug: string, token: string) {
 
 // Text-returning twin of authedFetch above — the invoice endpoint responds
 // with text/html (a printable document), not JSON, so it can't go through
-// authedFetch's always-JSON-parse response handling. Same
-// bearer-header/401-refresh-retry contract otherwise.
+// authedFetch's always-JSON-parse response handling. Same cookie/401-
+// refresh-retry contract otherwise (GET-only, so no CSRF header needed on
+// the request itself).
 async function authedFetchText(shopSlug: string, path: string, isRetry = false): Promise<string> {
-  const stored = getStoredAuth(shopSlug);
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: stored ? { Authorization: `Bearer ${stored.accessToken}` } : {},
-  });
-  if (res.status === 401 && stored && !isRetry) {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (res.status === 401 && !isRetry) {
     try {
-      const refreshed = await post<CustomerAuthResult>(`/public/${shopSlug}/auth/refresh`, {
-        refreshToken: stored.refreshToken,
+      const refreshRes = await fetch(`${API_URL}/public/${shopSlug}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": customerCsrfToken ?? "" },
       });
-      setStoredAuth(shopSlug, refreshed);
+      const refreshedCsrfToken = refreshRes.headers.get("X-CSRF-Token");
+      if (refreshedCsrfToken) customerCsrfToken = refreshedCsrfToken;
+      if (!refreshRes.ok) throw new Error("Refresh failed");
       return authedFetchText(shopSlug, path, true);
     } catch {
-      setStoredAuth(shopSlug, null);
       throw new Error("Your session has expired — please log in again");
     }
   }

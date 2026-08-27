@@ -22,7 +22,6 @@ import { RESERVED_SUBDOMAINS } from '../shop/constants';
 import { LoginDto } from './dto/login.dto';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -224,7 +223,7 @@ export class AuthService {
   // valid for a second use. See the CAS comment below for why a second
   // presentation of the same token — genuine theft or two requests racing
   // the same token — is treated identically.
-  async refresh(dto: RefreshTokenDto) {
+  async refresh(dto: { refreshToken: string }) {
     const tokenHash = hashToken(dto.refreshToken);
     const storedRows = await this.db.query<RowDataPacket[]>(
       `SELECT * FROM refreshtoken WHERE tokenHash = ?`,
@@ -272,7 +271,7 @@ export class AuthService {
   // login = one family, refreshed many times) — not just that one token.
   // Idempotent and never reveals whether the token was valid, unknown, or
   // already revoked: logout always reports success.
-  async logout(dto: RefreshTokenDto) {
+  async logout(dto: { refreshToken: string }) {
     const storedRows = await this.db.query<RowDataPacket[]>(
       `SELECT familyId FROM refreshtoken WHERE tokenHash = ?`,
       [hashToken(dto.refreshToken)],

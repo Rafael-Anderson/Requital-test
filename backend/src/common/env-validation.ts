@@ -54,6 +54,11 @@ const SPECS: EnvVarSpec[] = [
     hint: 'must be a non-empty string',
   },
   {
+    name: 'CUSTOMER_JWT_SECRET',
+    required: true,
+    hint: 'must be a non-empty string — genuinely separate from JWT_SECRET (staff/order tokens), see CustomerAuthModule',
+  },
+  {
     name: 'CREDENTIAL_ENCRYPTION_KEY',
     required: true,
     hint: 'must be a non-empty string',

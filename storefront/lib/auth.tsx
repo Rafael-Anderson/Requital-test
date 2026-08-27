@@ -1,14 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import {
-  getStoredAuth,
-  loginCustomer,
-  logoutCustomer,
-  registerCustomer,
-  setStoredAuth,
-  getMyProfile,
-} from "./api";
+import { loginCustomer, logoutCustomer, registerCustomer, getMyProfile } from "./api";
 import type { Customer } from "./types";
 
 interface AuthContextValue {
@@ -17,9 +10,9 @@ interface AuthContextValue {
   login: (identifier: string, password: string) => Promise<void>;
   register: (data: { name: string; phone: string; email?: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
-  // Re-fetches the profile and updates both React state and the persisted
-  // session — called after a profile edit so the header/account pages
-  // reflect it immediately without a full page reload.
+  // Re-fetches the profile and updates React state — called after a
+  // profile edit so the header/account pages reflect it immediately
+  // without a full page reload.
   refreshProfile: () => Promise<void>;
 }
 
@@ -29,19 +22,37 @@ export function AuthProvider({ shopSlug, children }: { shopSlug: string; childre
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Loads whatever session (if any) is already persisted for this shop —
-  // same mount-time hydration pattern as CartProvider, and same per-shopSlug
-  // scoping so switching shops in the same tab can never show one shop's
-  // login state on another's storefront.
+  // Session-cookie migration (security audit finding #1), phase 3 — no
+  // client-readable token to gate this on anymore, so this always calls
+  // GET /account/profile on mount to check for a live session; the cookie
+  // rides automatically and a logged-out call just fails fast. This is a
+  // real behavior improvement over the old localStorage-cached-profile
+  // bootstrap, not just a mechanical swap: the old version trusted a
+  // possibly-stale cached `customer` object with zero server revalidation
+  // on every page load — this closes that gap for free. Same per-shopSlug
+  // scoping as before (the effect re-runs on shopSlug change), though
+  // isolation between shops now comes from the cookie's own Path scoping
+  // rather than a per-shop localStorage key.
   useEffect(() => {
-    setCustomer(getStoredAuth(shopSlug)?.customer ?? null);
-    setLoading(false);
+    let cancelled = false;
+    getMyProfile(shopSlug)
+      .then((profile) => {
+        if (!cancelled) setCustomer(profile);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomer(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [shopSlug]);
 
   const login = useCallback(
     async (identifier: string, password: string) => {
       const result = await loginCustomer(shopSlug, { identifier, password });
-      setStoredAuth(shopSlug, result);
       setCustomer(result.customer);
     },
     [shopSlug],
@@ -50,12 +61,14 @@ export function AuthProvider({ shopSlug, children }: { shopSlug: string; childre
   const register = useCallback(
     async (data: { name: string; phone: string; email?: string; password: string }) => {
       const result = await registerCustomer(shopSlug, data);
-      setStoredAuth(shopSlug, result);
       setCustomer(result.customer);
     },
     [shopSlug],
   );
 
+  // httpOnly cookies can only be cleared server-side — logoutCustomer is
+  // now an awaited network round-trip, not a synchronous local-storage
+  // removal.
   const logout = useCallback(async () => {
     await logoutCustomer(shopSlug);
     setCustomer(null);
@@ -64,8 +77,6 @@ export function AuthProvider({ shopSlug, children }: { shopSlug: string; childre
   const refreshProfile = useCallback(async () => {
     const profile = await getMyProfile(shopSlug);
     setCustomer(profile);
-    const stored = getStoredAuth(shopSlug);
-    if (stored) setStoredAuth(shopSlug, { ...stored, customer: profile });
   }, [shopSlug]);
 
   return (

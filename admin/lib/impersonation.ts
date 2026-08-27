@@ -1,5 +1,4 @@
 import { impersonateShop } from "./platform-api";
-import { setTokens as setMerchantTokens } from "./api";
 
 // Tracks "the merchant session currently in this tab is an impersonation of
 // shop X" across the moment the session dies out from under RequireAuth
@@ -28,17 +27,21 @@ export function getRememberedImpersonatingShopId(): string | null {
 // same-tab (not window.open) — window.open after an `await` is silently
 // popup-blocked by most browsers (only a *synchronous* click-handler call
 // is exempt), which was the actual bug behind "impersonation does nothing."
+//
+// Session-cookie migration (security audit finding #1), phase 2 — the
+// impersonate call is same-origin (this admin app's own API host,
+// regardless of which frontend page triggered it) and already sent with
+// credentials: "include" (see platform-api.ts's platformFetch), so the
+// staff session cookies it sets land in the browser automatically the
+// moment this response arrives — no separate token handoff into local
+// storage needed anymore.
 export async function startImpersonation(shopId: number): Promise<boolean> {
   const confirmed = window.confirm(
     "Log in as this shop's admin?\n\n" +
       "This opens the merchant admin as this shop's owner. Your session is logged and expires in 1 hour.",
   );
   if (!confirmed) return false;
-  const session = await impersonateShop(shopId);
-  setMerchantTokens({
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken ?? "",
-  });
+  await impersonateShop(shopId);
   rememberImpersonatingShop(shopId);
   window.location.href = "/";
   return true;

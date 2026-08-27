@@ -10,6 +10,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import cookieParser from 'cookie-parser';
 import { RequestContextMiddleware } from './common/logging/request-context.middleware';
 import { platformCsrf } from './platform-auth/platform-auth.constants';
+import { staffCsrf } from './auth/auth.constants';
+import { customerCsrf } from './customer-auth/customer-auth.constants';
 import { AllExceptionsFilter } from './common/error-tracking/all-exceptions.filter';
 import { resolveErrorTrackingProvider } from './common/error-tracking/error-tracking.provider';
 import { HealthModule } from './health/health.module';
@@ -169,5 +171,16 @@ export class AppModule implements NestModule {
       .apply(platformCsrf.doubleCsrfProtection)
       .exclude({ path: 'platform-auth/login', method: RequestMethod.POST })
       .forRoutes('platform-auth', 'platform-admin');
+    // Phase 2/3 — staff and customer sit behind their own session cookie on
+    // essentially every controller in the app (not a closed prefix like
+    // platform admin above), so both are applied globally rather than
+    // scoped with forRoutes/exclude. Each middleware is a no-op unless this
+    // tier's own access cookie is actually present on the request — see
+    // createTierCsrf's skipIfNoAccessCookie comment for why that's still a
+    // real, uncompromised guarantee. No explicit login/signup exclusion is
+    // needed here either, for the same reason: neither cookie exists yet on
+    // a pre-login request, so the skip already covers it.
+    consumer.apply(staffCsrf.doubleCsrfProtection).forRoutes('*');
+    consumer.apply(customerCsrf.doubleCsrfProtection).forRoutes('*');
   }
 }

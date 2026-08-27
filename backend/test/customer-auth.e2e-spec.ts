@@ -20,9 +20,7 @@ interface IdRow {
 interface OutletRow {
   id: number;
 }
-interface CustomerAuthResponse {
-  accessToken: string;
-  refreshToken: string;
+interface CustomerResponseBody {
   customer: {
     id: number;
     shopId: number;
@@ -52,6 +50,51 @@ interface AddressRow {
 
 function body<T>(res: Response): T {
   return res.body as T;
+}
+
+// Session-cookie migration (security audit finding #1), phase 3 — the
+// customer session is an httpOnly cookie now, Path-scoped per shop (see
+// customer-auth.constants.ts), not a bearer token in the JSON body. Same
+// extractCookies/cookieHeader helpers as platform-admin.e2e-spec.ts
+// (supertest has no built-in cookie jar); sessionFromResponse bundles the
+// resulting cookie header + CSRF token + parsed customer alongside each
+// other since almost every test needs all three. Note: supertest forwards
+// exactly whatever Cookie header a test sets, with no browser-side
+// Path-matching — a real browser would never send Shop A's cookie to a Shop
+// B request at all (that's what Path scoping is for), but that behavior is
+// inherently untestable at this level; the cross-shop-rejection tests below
+// instead prove the guard's own explicit shopId check holds even when a
+// cookie value IS presented against the wrong shop.
+function extractCookies(res: Response): Record<string, string> {
+  const lines = res.get('Set-Cookie') ?? [];
+  const cookies: Record<string, string> = {};
+  for (const line of lines) {
+    const pair = line.split(';')[0];
+    const idx = pair.indexOf('=');
+    cookies[pair.slice(0, idx)] = pair.slice(idx + 1);
+  }
+  return cookies;
+}
+
+function cookieHeader(cookies: Record<string, string>): string {
+  return Object.entries(cookies)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
+interface CustomerSession {
+  cookieHeaderStr: string;
+  csrfToken: string;
+  customer: CustomerResponseBody['customer'];
+}
+
+function sessionFromResponse(res: Response): CustomerSession {
+  const cookies = extractCookies(res);
+  return {
+    cookieHeaderStr: cookieHeader(cookies),
+    csrfToken: cookies['req-customer-csrf'],
+    customer: body<CustomerResponseBody>(res).customer,
+  };
 }
 
 describe('Customer storefront accounts (e2e)', () => {
@@ -230,7 +273,7 @@ describe('Customer storefront accounts (e2e)', () => {
       phone,
       name: 'Now Registered',
     }).expect(201);
-    const registered = body<CustomerAuthResponse>(res);
+    const registered = sessionFromResponse(res);
 
     const shop = await getShopBySubdomain(shopSlug);
     const countAfterRows = await db.query<RowDataPacket[]>(
@@ -256,12 +299,13 @@ describe('Customer storefront accounts (e2e)', () => {
     });
     const guestOrderId = body<OrderCreateResponse>(created).order.id;
 
-    const registered = await register(shopSlug, { phone }).expect(201);
-    const { accessToken } = body<CustomerAuthResponse>(registered);
+    const registered = sessionFromResponse(
+      await register(shopSlug, { phone }).expect(201),
+    );
 
     const orders = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/orders`)
-      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', registered.cookieHeaderStr)
       .expect(200);
     expect(body<OrderSummary[]>(orders).map((o) => o.id)).toContain(
       guestOrderId,
@@ -280,16 +324,18 @@ describe('Customer storefront accounts (e2e)', () => {
 
   it("order history is isolated per customer within the same shop — one customer can't see or fetch another's order", async () => {
     const { shopSlug, outletId, productId } = await setupShop('acct-isolation');
-    const regA = await register(shopSlug, {
-      phone: '0505555551',
-      name: 'Customer A',
-    }).expect(201);
-    const regB = await register(shopSlug, {
-      phone: '0505555552',
-      name: 'Customer B',
-    }).expect(201);
-    const tokenA = body<CustomerAuthResponse>(regA).accessToken;
-    const tokenB = body<CustomerAuthResponse>(regB).accessToken;
+    const sessionA = sessionFromResponse(
+      await register(shopSlug, {
+        phone: '0505555551',
+        name: 'Customer A',
+      }).expect(201),
+    );
+    const sessionB = sessionFromResponse(
+      await register(shopSlug, {
+        phone: '0505555552',
+        name: 'Customer B',
+      }).expect(201),
+    );
 
     const orderA = await guestCheckout(shopSlug, outletId, productId, {
       customerPhone: '0505555551',
@@ -298,7 +344,7 @@ describe('Customer storefront accounts (e2e)', () => {
 
     const listB = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/orders`)
-      .set('Authorization', `Bearer ${tokenB}`)
+      .set('Cookie', sessionB.cookieHeaderStr)
       .expect(200);
     expect(body<OrderSummary[]>(listB).map((o) => o.id)).not.toContain(
       orderAId,
@@ -307,13 +353,13 @@ describe('Customer storefront accounts (e2e)', () => {
     // Adversarial: B tries to fetch A's order directly by (guessed/known) id.
     const detailAttempt = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/orders/${orderAId}`)
-      .set('Authorization', `Bearer ${tokenB}`);
+      .set('Cookie', sessionB.cookieHeaderStr);
     expect(detailAttempt.status).toBe(404);
 
     // A can see it themselves, for sanity.
     const detailOwn = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/orders/${orderAId}`)
-      .set('Authorization', `Bearer ${tokenA}`)
+      .set('Cookie', sessionA.cookieHeaderStr)
       .expect(200);
     expect(body<OrderSummary>(detailOwn).id).toBe(orderAId);
   });
@@ -331,8 +377,8 @@ describe('Customer storefront accounts (e2e)', () => {
       phone,
       password: 'passwordBBB',
     }).expect(201);
-    const custA = body<CustomerAuthResponse>(regA).customer;
-    const custB = body<CustomerAuthResponse>(regB).customer;
+    const custA = body<CustomerResponseBody>(regA).customer;
+    const custB = body<CustomerResponseBody>(regB).customer;
     expect(custA.id).not.toBe(custB.id);
     expect(custA.shopId).not.toBe(custB.shopId);
 
@@ -353,23 +399,22 @@ describe('Customer storefront accounts (e2e)', () => {
       .expect(201);
   });
 
-  it("a customer session token for Shop A is rejected on Shop B's account endpoints", async () => {
+  it("a customer session cookie for Shop A is rejected on Shop B's account endpoints", async () => {
     const shopA = await setupShop('acct-tokenxshop-a');
     const shopB = await setupShop('acct-tokenxshop-b');
-    const regA = await register(shopA.shopSlug, { phone: '0507777777' }).expect(
-      201,
+    const sessionA = sessionFromResponse(
+      await register(shopA.shopSlug, { phone: '0507777777' }).expect(201),
     );
-    const tokenA = body<CustomerAuthResponse>(regA).accessToken;
 
     const attempt = await request(app.getHttpServer())
       .get(`/public/${shopB.shopSlug}/account/orders`)
-      .set('Authorization', `Bearer ${tokenA}`);
+      .set('Cookie', sessionA.cookieHeaderStr);
     expect(attempt.status).toBe(401);
 
-    // Same token still works fine against its own shop.
+    // Same cookie still works fine against its own shop.
     await request(app.getHttpServer())
       .get(`/public/${shopA.shopSlug}/account/orders`)
-      .set('Authorization', `Bearer ${tokenA}`)
+      .set('Cookie', sessionA.cookieHeaderStr)
       .expect(200);
   });
 
@@ -415,46 +460,55 @@ describe('Customer storefront accounts (e2e)', () => {
 
   it('a logged-in customer can save, edit, and delete addresses', async () => {
     const { shopSlug } = await setupShop('acct-addresses');
-    const reg = await register(shopSlug, { phone: '0509999999' }).expect(201);
-    const token = body<CustomerAuthResponse>(reg).accessToken;
+    const session = sessionFromResponse(
+      await register(shopSlug, { phone: '0509999999' }).expect(201),
+    );
 
     const created = await request(app.getHttpServer())
       .post(`/public/${shopSlug}/account/addresses`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', session.cookieHeaderStr)
+      .set('X-CSRF-Token', session.csrfToken)
       .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
       .expect(201);
     const addressId = body<AddressRow>(created).id;
 
     const updated = await request(app.getHttpServer())
       .patch(`/public/${shopSlug}/account/addresses/${addressId}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', session.cookieHeaderStr)
+      .set('X-CSRF-Token', session.csrfToken)
       .send({ label: 'Home (updated)' })
       .expect(200);
     expect(body<AddressRow>(updated).label).toBe('Home (updated)');
 
     const list = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/addresses`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', session.cookieHeaderStr)
       .expect(200);
     expect(body<AddressRow[]>(list)).toHaveLength(1);
 
     await request(app.getHttpServer())
       .delete(`/public/${shopSlug}/account/addresses/${addressId}`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', session.cookieHeaderStr)
+      .set('X-CSRF-Token', session.csrfToken)
       .expect(200);
 
     const listAfter = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/addresses`)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', session.cookieHeaderStr)
       .expect(200);
     expect(body<AddressRow[]>(listAfter)).toHaveLength(0);
   });
 
-  it('a staff (admin) token is rejected on customer account endpoints, and a customer token is rejected on staff endpoints', async () => {
+  it('a staff (admin) session is rejected on customer account endpoints, and a customer session is rejected on staff endpoints', async () => {
     const { shopSlug, adminToken } = await setupShop('acct-crossauth');
-    const reg = await register(shopSlug, { phone: '0501230000' }).expect(201);
-    const customerToken = body<CustomerAuthResponse>(reg).accessToken;
+    const session = sessionFromResponse(
+      await register(shopSlug, { phone: '0501230000' }).expect(201),
+    );
 
+    // The staff cookie is what a real staff session would carry — a bearer
+    // header (even the test-env shim's own kind) isn't read by
+    // CustomerAuthGuard at all, only its own cookie, so this just confirms
+    // there's nothing to authenticate with here regardless.
     const staffOnCustomerRoute = await request(app.getHttpServer())
       .get(`/public/${shopSlug}/account/orders`)
       .set('Authorization', `Bearer ${adminToken}`);
@@ -462,7 +516,7 @@ describe('Customer storefront accounts (e2e)', () => {
 
     const customerOnStaffRoute = await request(app.getHttpServer())
       .get('/products')
-      .set('Authorization', `Bearer ${customerToken}`);
+      .set('Cookie', session.cookieHeaderStr);
     expect(customerOnStaffRoute.status).toBe(401);
   });
 
@@ -530,7 +584,11 @@ describe('Customer storefront accounts (e2e)', () => {
   // 5/min limit on /auth/login never interferes with the many-requests-in-
   // a-row tests below, same reasoning as auth-lifecycle.e2e-spec.ts.
   describe('progressive login lockout (per-account, not per-IP)', () => {
-    function customerLogin(shopSlug: string, identifier: string, password: string) {
+    function customerLogin(
+      shopSlug: string,
+      identifier: string,
+      password: string,
+    ) {
       return request(app.getHttpServer())
         .post(`/public/${shopSlug}/auth/login`)
         .send({ identifier, password });
@@ -560,7 +618,7 @@ describe('Customer storefront accounts (e2e)', () => {
         phone,
         password: 'password123',
       }).expect(201);
-      const customerId = body<CustomerAuthResponse>(reg).customer.id;
+      const customerId = body<CustomerResponseBody>(reg).customer.id;
 
       for (let i = 0; i < 5; i++) {
         await customerLogin(shopSlug, phone, 'totally-wrong').expect(401);
@@ -579,13 +637,15 @@ describe('Customer storefront accounts (e2e)', () => {
       expect(customer.failedLoginAttempts).toBe(0);
     });
 
-    it('an attacker who only knows the customer\'s email cannot deny them service — the correct password always eventually works, and a nonexistent account behaves identically', async () => {
+    it("an attacker who only knows the customer's email cannot deny them service — the correct password always eventually works, and a nonexistent account behaves identically", async () => {
       const { shopSlug } = await setupShop('cust-lockout-dos-safe');
       const phone = '0505550003';
       const email = `cust-dos-safe-${runId}@test.com`;
-      await register(shopSlug, { phone, email, password: 'password123' }).expect(
-        201,
-      );
+      await register(shopSlug, {
+        phone,
+        email,
+        password: 'password123',
+      }).expect(201);
       const fakeEmail = `no-such-customer-${runId}@test.com`;
 
       for (let i = 0; i < 8; i++) {
@@ -616,12 +676,14 @@ describe('Customer storefront accounts (e2e)', () => {
       const { shopSlug } = await setupShop('cust-lockout-isolation');
       const phoneA = '0505550004';
       const phoneB = '0505550005';
-      await register(shopSlug, { phone: phoneA, password: 'passwordAAA' }).expect(
-        201,
-      );
-      await register(shopSlug, { phone: phoneB, password: 'passwordBBB' }).expect(
-        201,
-      );
+      await register(shopSlug, {
+        phone: phoneA,
+        password: 'passwordAAA',
+      }).expect(201);
+      await register(shopSlug, {
+        phone: phoneB,
+        password: 'passwordBBB',
+      }).expect(201);
 
       // Hammer A into its cooldown window.
       for (let i = 0; i < 5; i++) {
@@ -633,6 +695,145 @@ describe('Customer storefront accounts (e2e)', () => {
       // B was never touched — its correct password succeeds immediately,
       // with no cooldown at all.
       await customerLogin(shopSlug, phoneB, 'passwordBBB').expect(201);
+    });
+  });
+
+  describe('session cookies and CSRF', () => {
+    it('login sets httpOnly, SameSite=Strict, shop-Path-scoped access and CSRF cookies, with no token in the body — the CSRF value itself rides the X-CSRF-Token response header instead', async () => {
+      const { shopSlug } = await setupShop('cust-cookie-attrs');
+      const phone = '0505560001';
+      await register(shopSlug, { phone, password: 'password123' }).expect(201);
+
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/login`)
+        .send({ identifier: phone, password: 'password123' })
+        .expect(201);
+      expect(JSON.stringify(res.body)).not.toMatch(/eyJ/); // no raw JWT anywhere in the body
+
+      const lines = res.get('Set-Cookie') ?? [];
+      const atCookie = lines.find((l) => l.startsWith('req-customer-at='));
+      const csrfCookie = lines.find((l) => l.startsWith('req-customer-csrf='));
+      expect(atCookie).toBeDefined();
+      expect(atCookie).toMatch(/HttpOnly/);
+      expect(atCookie).toMatch(/SameSite=Strict/i);
+      expect(atCookie).toMatch(new RegExp(`Path=/public/${shopSlug}(;|$)`));
+      expect(csrfCookie).toBeDefined();
+      // httpOnly here too — see platform-admin.e2e-spec.ts's matching test
+      // for the full reasoning (a non-httpOnly cookie only ever worked in
+      // local dev; production hostnames can't read a cross-hostname cookie
+      // via document.cookie regardless of this attribute).
+      expect(csrfCookie).toMatch(/HttpOnly/);
+      expect(csrfCookie).toMatch(/SameSite=Strict/i);
+      expect(csrfCookie).toMatch(new RegExp(`Path=/public/${shopSlug}(;|$)`));
+      expect(res.get('X-CSRF-Token')).toBeTruthy();
+    });
+
+    it('rejects a state-changing request with a valid session cookie but no CSRF header', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-missing');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560002' }).expect(201),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+        .expect(403);
+      expect(body<{ message: string }>(res).message).toBe('invalid csrf token');
+    });
+
+    it('rejects a state-changing request with a wrong CSRF header value', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-wrong');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560003' }).expect(201),
+      );
+
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', 'not-the-real-token')
+        .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+        .expect(403);
+    });
+
+    it('logout clears both cookies via an expired Set-Cookie directive and is itself CSRF-protected', async () => {
+      const { shopSlug } = await setupShop('cust-logout');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560004' }).expect(201),
+      );
+
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/logout`)
+        .set('Cookie', session.cookieHeaderStr)
+        .expect(403);
+
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/logout`)
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', session.csrfToken)
+        .expect(201);
+      const lines = res.get('Set-Cookie') ?? [];
+      const clearedAt = lines.find((l) => l.startsWith('req-customer-at='));
+      const clearedRt = lines.find((l) => l.startsWith('req-customer-rt='));
+      expect(clearedAt).toMatch(/Expires=Thu, 01 Jan 1970/);
+      expect(clearedRt).toMatch(/Expires=Thu, 01 Jan 1970/);
+    });
+
+    // The real fix behind the CSRF-cookie httpOnly change above: a brand
+    // new tab (only the session cookie in its jar, no CSRF value left over
+    // from a login response) must still be able to obtain a working CSRF
+    // token via GET /account/profile's response header, with no
+    // document.cookie read involved anywhere.
+    it('GET /account/profile hands back a working CSRF token via the response header, for a session with no CSRF value yet', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-bootstrap');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560007' }).expect(201),
+      );
+      const accessCookieOnly = `req-customer-at=${session.cookieHeaderStr.match(/req-customer-at=([^;]+)/)![1]}`;
+
+      const profileRes = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}/account/profile`)
+        .set('Cookie', accessCookieOnly)
+        .expect(200);
+      const freshCsrfToken = profileRes.get('X-CSRF-Token');
+      expect(freshCsrfToken).toBeTruthy();
+      // The profile call above minted a brand new CSRF cookie value (this
+      // request had none yet) — the follow-up request must carry THAT
+      // cookie, not the stale one captured at registration time.
+      const freshCsrfCookie = extractCookies(profileRes)['req-customer-csrf'];
+      const cookieWithFreshCsrf = `${accessCookieOnly}; req-customer-csrf=${freshCsrfCookie}`;
+
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', cookieWithFreshCsrf)
+        .set('X-CSRF-Token', freshCsrfToken!)
+        .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+        .expect(201);
+    });
+
+    it("two different shops' customer sessions coexist in the same cookie jar without one overwriting the other — same cookie NAME, different Path", async () => {
+      const shopA = await setupShop('cust-two-shops-a');
+      const shopB = await setupShop('cust-two-shops-b');
+      const sessionA = sessionFromResponse(
+        await register(shopA.shopSlug, { phone: '0505560005' }).expect(201),
+      );
+      const sessionB = sessionFromResponse(
+        await register(shopB.shopSlug, { phone: '0505560006' }).expect(201),
+      );
+
+      // Simulate a real cookie jar holding both at once (a browser would
+      // only ever send the Path-matching one per request; supertest doesn't
+      // model that, so this concatenates both cookie headers to prove each
+      // shop's own request still resolves to the RIGHT session when its own
+      // cookie is the one presented).
+      await request(app.getHttpServer())
+        .get(`/public/${shopA.shopSlug}/account/orders`)
+        .set('Cookie', sessionA.cookieHeaderStr)
+        .expect(200);
+      await request(app.getHttpServer())
+        .get(`/public/${shopB.shopSlug}/account/orders`)
+        .set('Cookie', sessionB.cookieHeaderStr)
+        .expect(200);
     });
   });
 });

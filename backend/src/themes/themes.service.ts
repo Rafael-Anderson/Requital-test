@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
@@ -172,6 +173,7 @@ export class ThemesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly cache: ThemeConfigCache,
+    private readonly jwtService: JwtService,
   ) {}
 
   async list(ctx: TenantContext) {
@@ -186,6 +188,27 @@ export class ThemesService {
 
   async findOne(ctx: TenantContext, id: number) {
     return this.getOwnedTheme(ctx, id);
+  }
+
+  // Session-cookie migration (security audit finding #1), phase 2 — the
+  // theme builder's live preview embeds a token in the storefront iframe's
+  // URL (see admin's PreviewFrame.tsx) so the storefront's own read
+  // endpoints can bypass assertPublished for a shop that hasn't gone live
+  // yet. That token used to just be the staff member's own real access
+  // token (already sitting in localStorage); now that the real session is
+  // an httpOnly cookie, PreviewFrame.tsx can't read it into a URL anymore.
+  // This mints a separate, narrow, short-lived `typ: 'theme_preview'` token
+  // instead — {shopId, exp} only, no user identity — deliberately meant to
+  // be JS-readable and URL-embedded, unlike the real session. Verified the
+  // same way the real session used to be, just against a narrower claim set
+  // (see PublicService.isAuthorizedPreview).
+  async issuePreviewToken(ctx: TenantContext, id: number) {
+    await this.getOwnedTheme(ctx, id); // 404s if wrong shop or soft-deleted
+    const previewToken = await this.jwtService.signAsync(
+      { shopId: ctx.shopId, typ: 'theme_preview' },
+      { expiresIn: '15m' },
+    );
+    return { previewToken };
   }
 
   async create(ctx: TenantContext, dto: CreateThemeDto) {

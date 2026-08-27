@@ -17,12 +17,16 @@ export default function ImpersonationBanner() {
   const { user } = useAuth();
   if (!user?.impersonating) return null;
 
-  function exit() {
-    // Merchant tokens only — the platform admin's own /platform session
-    // token lives under a completely separate localStorage key and is
-    // untouched here, so this always lands back in a live platform session.
+  // Session-cookie migration (security audit finding #1), phase 2 — the
+  // merchant session cookie can only be cleared server-side now (see
+  // api.logout's own comment), so this awaits the round-trip before
+  // navigating away instead of clearing synchronously. The platform admin's
+  // own /platform session lives under a completely separate cookie
+  // (untouched by this call) and localStorage key, so this always lands
+  // back in a live platform session either way.
+  async function exit() {
     forgetImpersonatingShop();
-    api.clearTokens();
+    await api.logout();
     window.location.href = `/platform/shops/${user!.shopId}`;
   }
 

@@ -11,6 +11,7 @@ import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../../database/database.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { STAFF_ACCESS_COOKIE } from '../auth.constants';
 import type { TenantContext, UserRole } from '../../common/tenant-context';
 
 interface JwtPayload {
@@ -42,7 +43,7 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const token = this.extractToken(request);
     if (!token) {
-      throw new UnauthorizedException('Missing bearer token');
+      throw new UnauthorizedException('Missing session cookie');
     }
 
     let payload: JwtPayload;
@@ -51,9 +52,10 @@ export class AuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
-    // Same JWT secret as CustomerAuthModule's storefront tokens — without
-    // this check, a customer token whose numeric `sub` happens to match a
-    // real staff user.id would authenticate as that staff member. See
+    // Customer tokens are signed with a genuinely separate secret now
+    // (CUSTOMER_JWT_SECRET, see CustomerAuthModule) and fail verifyAsync
+    // above outright, so this check is defense in depth rather than the
+    // only thing keeping the two token spaces apart — kept anyway per
     // CustomerAuthGuard's matching `typ: 'customer'` check on the other
     // side. Tokens issued before this check existed lack `typ` entirely and
     // are rejected too; any such session self-heals on its very next
@@ -99,9 +101,29 @@ export class AuthGuard implements CanActivate {
     return true;
   }
 
+  // Session-cookie migration (security audit finding #1), phase 2. No
+  // bearer-header fallback in production or dev — a clean cut-over, same
+  // reasoning as PlatformAdminGuard's own (phase 1). The one exception is
+  // narrowly scoped to NODE_ENV=test: rewriting every one of this app's ~60
+  // existing e2e specs (each with its own local setupShop-style helper) to
+  // a hand-built cookie jar was judged not worth the risk of a mechanical
+  // edit at that scale for a testing-only concern — the guard's downstream
+  // role/tenant-context logic is byte-for-byte identical regardless of
+  // which branch extracted the token, so those specs' actual business-logic
+  // coverage is unaffected either way. Real cookie+CSRF behavior is proven
+  // separately by auth-cookies.e2e-spec.ts. This mirrors an already-
+  // established pattern in this codebase (ThrottlerModule's own
+  // `skipIf: () => process.env.NODE_ENV === 'test'` in app.module.ts) —
+  // inert outside Jest, never a live code path in production or dev.
   private extractToken(request: Request): string | null {
-    const header = request.headers.authorization;
-    if (!header?.startsWith('Bearer ')) return null;
-    return header.slice('Bearer '.length).trim() || null;
+    const cookieToken: unknown = request.cookies?.[STAFF_ACCESS_COOKIE];
+    if (typeof cookieToken === 'string' && cookieToken) return cookieToken;
+    if (process.env.NODE_ENV === 'test') {
+      const header = request.headers.authorization;
+      if (header?.startsWith('Bearer ')) {
+        return header.slice('Bearer '.length).trim() || null;
+      }
+    }
+    return null;
   }
 }

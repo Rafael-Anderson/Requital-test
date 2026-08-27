@@ -121,9 +121,6 @@ export function storefrontUrlFor(shop: {
   }
   return `https://${shop.subdomain}.${STOREFRONT_ROOT_DOMAIN}`;
 }
-const ACCESS_TOKEN_KEY = "requital_admin_access_token";
-const REFRESH_TOKEN_KEY = "requital_admin_refresh_token";
-
 // Uploaded images are stored as paths relative to the backend
 // (/uploads/products/..., /uploads/collections/...), but the admin app runs
 // on its own origin/port — a bare relative <img src> resolves against the
@@ -134,40 +131,40 @@ export function resolveImageUrl(path: string | null | undefined): string | null 
   return path.startsWith("/") ? `${API_URL}${path}` : path;
 }
 
-// localStorage isn't available during SSR/build — every call site here runs
-// client-side only (this admin app has no server-rendered authenticated
-// pages), but guard anyway since Next may still evaluate modules on the server.
-export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(ACCESS_TOKEN_KEY);
+// Session-cookie migration (security audit finding #1), phase 2 — the
+// staff access/refresh tokens are httpOnly cookies now, set by the backend
+// on login/signup/refresh and never readable here. `credentials: "include"`
+// (in apiFetch below) is what makes the browser send/accept them
+// automatically; there is no client-side token left to get/set/clear.
+//
+// CSRF token distribution — held in memory, never localStorage (that would
+// reintroduce the exact XSS-exposure problem this whole migration exists to
+// close). Originally read via `document.cookie` off a non-httpOnly CSRF
+// cookie; that only ever worked in local dev, where every app shares the
+// bare `localhost` hostname (cookies aren't port-scoped) — in any real
+// deployment admin.requital.io can never read a cookie set by
+// api.requital.io via document.cookie, cookies don't cross hostnames
+// regardless of the httpOnly attribute. The backend now instead echoes the
+// token on the X-CSRF-Token *response* header of every request that mints
+// or refreshes one (login/signup/refresh/accept-invite, and me() below) —
+// see backend common/csrf.ts's own CSRF_RESPONSE_HEADER comment, and
+// lib/platform-api.ts's identical mechanism for the platform tier.
+let staffCsrfToken: string | null = null;
+
+// Exported for the one call site that can't go through apiFetch itself —
+// useThemeEditor.ts's beforeunload/pagehide flush, a raw fetch(keepalive)
+// call that still needs the CSRF header attached by hand.
+export function getStaffCsrfToken(): string | null {
+  return staffCsrfToken;
 }
 
-function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
-}
-
-export function setTokens(tokens: { accessToken: string; refreshToken: string }) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-}
-
-export function clearTokens() {
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-}
-
-// clearTokens() above only touches localStorage — it doesn't tell
-// AuthProvider's `user` state that the session just died. Without this,
-// RequireAuth's own (already-correct) `if (!user) redirect to /login` logic
-// never fires when a 401 happens mid-session (refresh token expired,
-// revoked, or a JWT_SECRET rotation invalidated every outstanding token at
-// once): `user` stays stale-truthy in React state, so the merchant is left
-// staring at whatever partial/broken page they were on instead of being
-// bounced to /login, until they manually navigate somewhere that happens to
-// re-run AuthProvider's mount check. AuthProvider subscribes to this so a
-// 401-triggered clearTokens() call also flips `user` to null immediately,
-// letting RequireAuth's existing redirect do its job without a page reload.
+// clearTokens() used to be what told AuthProvider's `user` state the
+// session just died on a 401 (both the access token and its refresh
+// attempt rejected). There's no local token to clear anymore, but the same
+// signal is still needed — RequireAuth's `if (!user) redirect to /login`
+// logic still depends on `user` flipping to null immediately, not staying
+// stale-truthy until a manual reload happens to re-run AuthProvider's mount
+// check. AuthProvider subscribes to this directly now.
 let unauthorizedListeners: Array<() => void> = [];
 export function onUnauthorized(listener: () => void): () => void {
   unauthorizedListeners.push(listener);
@@ -192,34 +189,32 @@ export class ApiError extends Error {
   }
 }
 
-interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
-}
-
 // The access token is short-lived (15min) by design — this is the shared
 // in-flight refresh so N requests that all 401 around the same moment
 // trigger exactly one POST /auth/refresh (and one rotation), not N racing
 // attempts to redeem the same refresh token, which would trip the backend's
-// reuse-detection and log the whole session out over a false alarm.
-let refreshPromise: Promise<TokenPair> | null = null;
+// reuse-detection and log the whole session out over a false alarm. No
+// tokens to return anymore — cookies are set directly by the response, so
+// this just resolves once that's done.
+let refreshPromise: Promise<void> | null = null;
 
-async function refreshAccessToken(): Promise<TokenPair> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    throw new ApiError("No refresh token", 401);
-  }
+async function refreshAccessToken(): Promise<void> {
   if (!refreshPromise) {
+    // The (still-present, if not yet expired) access cookie is what makes
+    // this a CSRF-checked request server-side (see backend's
+    // skipIfNoAccessCookie) even though the access token itself may be
+    // dead — same double-submit header every other non-GET call attaches.
     refreshPromise = fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      credentials: "include",
+      headers: {
+        "X-CSRF-Token": staffCsrfToken ?? "",
+      },
     })
-      .then(async (res) => {
+      .then((res) => {
+        const freshCsrfToken = res.headers.get("X-CSRF-Token");
+        if (freshCsrfToken) staffCsrfToken = freshCsrfToken;
         if (!res.ok) throw new ApiError("Refresh failed", res.status);
-        const data = (await res.json()) as TokenPair;
-        setTokens(data);
-        return data;
       })
       .finally(() => {
         refreshPromise = null;
@@ -232,31 +227,33 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
   // FormData sets its own multipart boundary in the Content-Type header —
   // forcing application/json here would break the upload endpoint.
   const isFormData = init?.body instanceof FormData;
-  const token = getAccessToken();
+  const method = (init?.method ?? "GET").toUpperCase();
+  const csrfToken = method !== "GET" && method !== "HEAD" ? staffCsrfToken : null;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
       ...init?.headers,
     },
   });
+  const freshCsrfToken = res.headers.get("X-CSRF-Token");
+  if (freshCsrfToken) staffCsrfToken = freshCsrfToken;
   if (!res.ok) {
     // A 401 on anything other than the refresh call itself means the access
     // token expired mid-session (expected — it only lives 15min) — try a
     // silent refresh and retry this request exactly once before giving up.
-    // Only after the refresh attempt *also* fails do we clear everything and
+    // Only after the refresh attempt *also* fails do we notify listeners and
     // let the next render's auth check redirect to /login.
     if (res.status === 401 && !isRetry && path !== "/auth/refresh") {
       try {
         await refreshAccessToken();
         return apiFetch<T>(path, init, true);
       } catch {
-        clearTokens();
         notifyUnauthorized();
       }
     } else if (res.status === 401) {
-      clearTokens();
       notifyUnauthorized();
     }
     const body = await res.json().catch(() => null);
@@ -271,25 +268,20 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
 }
 
 // Twin of apiFetch above for the one endpoint that returns text/html rather
-// than JSON (the invoice HTML preview) — same auth-header/401-refresh-retry
+// than JSON (the invoice HTML preview) — same cookie/401-refresh-retry
 // contract, just without the JSON parse apiFetch always does on its
 // response body.
 async function apiFetchText(path: string, isRetry = false): Promise<string> {
-  const token = getAccessToken();
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
   if (!res.ok) {
     if (res.status === 401 && !isRetry) {
       try {
         await refreshAccessToken();
         return apiFetchText(path, true);
       } catch {
-        clearTokens();
         notifyUnauthorized();
       }
     } else if (res.status === 401) {
-      clearTokens();
       notifyUnauthorized();
     }
     throw new ApiError(`Request failed (${res.status})`, res.status);
@@ -298,7 +290,7 @@ async function apiFetchText(path: string, isRetry = false): Promise<string> {
 }
 
 export function login(email: string, password: string) {
-  return apiFetch<TokenPair & { user: AuthUser }>("/auth/login", {
+  return apiFetch<{ user: AuthUser }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
@@ -320,22 +312,21 @@ export function signup(data: {
   country?: string;
   productEditorMode?: "simple" | "advanced";
 }) {
-  return apiFetch<TokenPair & { user: AuthUser; devVerificationLink?: string }>("/auth/signup", {
+  return apiFetch<{ user: AuthUser; devVerificationLink?: string }>("/auth/signup", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
+// httpOnly cookies can't be cleared by client JS — this is a real network
+// call now, not a synchronous local-storage removal (see auth-context.tsx's
+// own logout, which awaits this before assuming the session is gone).
+// Best-effort: caught by the caller so a network failure here doesn't block
+// logging out locally.
 export function logout() {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return Promise.resolve();
-  // Best-effort — the tokens are cleared client-side regardless of whether
-  // this round-trip succeeds (see auth-context.tsx), so a network failure
-  // here shouldn't block logging out locally.
-  return apiFetch<{ success: boolean }>("/auth/logout", {
-    method: "POST",
-    body: JSON.stringify({ refreshToken }),
-  }).catch(() => undefined);
+  return apiFetch<{ success: boolean }>("/auth/logout", { method: "POST" }).catch(
+    () => undefined,
+  );
 }
 
 export function me() {
@@ -362,7 +353,7 @@ export function createBranchUser(data: {
 }
 
 export function acceptInvite(data: { token: string; password: string }) {
-  return apiFetch<TokenPair & { user: AuthUser }>("/auth/accept-invite", {
+  return apiFetch<{ user: AuthUser }>("/auth/accept-invite", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -614,6 +605,18 @@ export function publishTheme(id: number) {
 
 export function deleteTheme(id: number) {
   return apiFetch<{ success: boolean }>(`/themes/${id}`, { method: "DELETE" });
+}
+
+// Session-cookie migration (security audit finding #1), phase 2 —
+// PreviewFrame.tsx used to embed this staff member's own real access token
+// (read straight out of localStorage) in the storefront preview iframe's
+// URL. It's an httpOnly cookie now and can't be read into a URL at all, so
+// this mints a separate, narrow, short-lived theme_preview token instead —
+// see ThemesService.issuePreviewToken's own comment for the full reasoning.
+export function getThemePreviewToken(id: number) {
+  return apiFetch<{ previewToken: string }>(`/themes/${id}/preview-token`, {
+    method: "POST",
+  });
 }
 
 // --- Menu (Phase C) — the storefront top bar's merchant-configured nav. ---

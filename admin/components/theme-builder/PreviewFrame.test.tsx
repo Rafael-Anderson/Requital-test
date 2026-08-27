@@ -40,6 +40,25 @@ function postFromPreview(data: unknown) {
   window.dispatchEvent(new MessageEvent("message", { data, origin: PREVIEW_ORIGIN }));
 }
 
+// Session-cookie migration (security audit finding #1), phase 2 — the
+// preview iframe's src (and therefore previewOrigin, and therefore the
+// window 'message' listener that depends on it — see PreviewFrame.tsx's
+// own registration effect) is now resolved async (a getThemePreviewToken()
+// fetch has to settle first, see that file's own comment), where it used to
+// be synchronous. `waitFor(iframe in DOM)` can observe the iframe's DOM
+// commit before React has actually run the listener-registration effect for
+// that same render — a single dispatchEvent sent right after is a real,
+// not merely theoretical, race: an event dispatched before a listener
+// exists is simply lost, never queued. Re-dispatching inside waitFor's own
+// retry loop until the assertion passes sidesteps the race without needing
+// to assert on a React internal.
+async function postFromPreviewUntil(data: unknown, assertion: () => void) {
+  await waitFor(() => {
+    postFromPreview(data);
+    assertion();
+  });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -50,9 +69,10 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     render(<PreviewFrame editor={editor} shop={shop} />);
     await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
 
-    postFromPreview({ type: "element-selected", sectionId: "sec-hero", elementId: "blk-heading", elementType: "heading" });
-
-    await waitFor(() => expect(editor.selectNode).toHaveBeenCalledWith("blk-heading"));
+    await postFromPreviewUntil(
+      { type: "element-selected", sectionId: "sec-hero", elementId: "blk-heading", elementType: "heading" },
+      () => expect(editor.selectNode).toHaveBeenCalledWith("blk-heading"),
+    );
   });
 
   it("routes theme-section-selected (the pre-existing single-click channel) to selectNode with the section id", async () => {
@@ -60,9 +80,10 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     render(<PreviewFrame editor={editor} shop={shop} />);
     await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
 
-    postFromPreview({ type: "theme-section-selected", sectionId: "sec-hero" });
-
-    await waitFor(() => expect(editor.selectNode).toHaveBeenCalledWith("sec-hero"));
+    await postFromPreviewUntil(
+      { type: "theme-section-selected", sectionId: "sec-hero" },
+      () => expect(editor.selectNode).toHaveBeenCalledWith("sec-hero"),
+    );
   });
 
   it("routes element-deselected to selectNode(null)", async () => {
@@ -70,9 +91,10 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     render(<PreviewFrame editor={editor} shop={shop} />);
     await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
 
-    postFromPreview({ type: "element-deselected" });
-
-    await waitFor(() => expect(editor.selectNode).toHaveBeenCalledWith(null));
+    await postFromPreviewUntil(
+      { type: "element-deselected" },
+      () => expect(editor.selectNode).toHaveBeenCalledWith(null),
+    );
   });
 
   it("routes element-moved to editor.reorderBlocks with a resolved section container and the given order", async () => {
@@ -80,14 +102,14 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     render(<PreviewFrame editor={editor} shop={shop} />);
     await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
 
-    postFromPreview({ type: "element-moved", sectionId: "sec-hero", elementId: "blk-cta", orderedIds: ["blk-subheading", "blk-cta"] });
-
-    await waitFor(() =>
-      expect(editor.reorderBlocks).toHaveBeenCalledWith(
-        { kind: "section", sectionId: "sec-hero", sectionType: "hero" },
-        null,
-        ["blk-subheading", "blk-cta"],
-      ),
+    await postFromPreviewUntil(
+      { type: "element-moved", sectionId: "sec-hero", elementId: "blk-cta", orderedIds: ["blk-subheading", "blk-cta"] },
+      () =>
+        expect(editor.reorderBlocks).toHaveBeenCalledWith(
+          { kind: "section", sectionId: "sec-hero", sectionType: "hero" },
+          null,
+          ["blk-subheading", "blk-cta"],
+        ),
     );
   });
 
@@ -96,10 +118,9 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     render(<PreviewFrame editor={editor} shop={shop} />);
     await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
 
-    postFromPreview({ type: "element-moved", sectionId: HEADER_CHROME_ID, elementId: "blk-logo", orderedIds: ["blk-logo"] });
-
-    await waitFor(() =>
-      expect(editor.reorderBlocks).toHaveBeenCalledWith({ kind: "header" }, null, ["blk-logo"]),
+    await postFromPreviewUntil(
+      { type: "element-moved", sectionId: HEADER_CHROME_ID, elementId: "blk-logo", orderedIds: ["blk-logo"] },
+      () => expect(editor.reorderBlocks).toHaveBeenCalledWith({ kind: "header" }, null, ["blk-logo"]),
     );
   });
 

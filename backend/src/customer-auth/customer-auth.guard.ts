@@ -10,6 +10,7 @@ import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { CustomerContext } from './customer-context';
+import { CUSTOMER_ACCESS_COOKIE } from './customer-auth.constants';
 
 interface CustomerJwtPayload {
   sub: number;
@@ -19,13 +20,13 @@ interface CustomerJwtPayload {
 // Every route this guards lives under /public/:shopSlug/account — always
 // marked @Public() (so the global staff AuthGuard skips it) and this guard
 // applied locally instead (see customer-account.controller.ts). Two checks
-// beyond "is this a valid JWT" are what actually make this safe to run
-// alongside the staff auth system on a shared JWT secret:
-//   1. `typ: 'customer'` must be present — without this, a staff access
-//      token (same secret, `{sub: user.id}`) whose numeric id happens to
-//      match some customer.id would authenticate as that customer, and vice
-//      versa on the staff side (see AuthGuard's matching `typ: 'staff'`
-//      check).
+// beyond "is this a valid JWT" matter here:
+//   1. `typ: 'customer'` must be present — CUSTOMER_JWT_SECRET (see
+//      CustomerAuthModule) already makes a staff token fail verifyAsync
+//      outright, so this is defense in depth, not the only thing stopping a
+//      staff token whose numeric `sub` happens to match a customer.id from
+//      authenticating as that customer (see AuthGuard's matching
+//      `typ: 'staff'` check on the other side).
 //   2. The resolved customer's shopId must match the shop resolved from
 //      this request's :shopSlug — a customer's account token must never
 //      work against a different shop's /account endpoints, even for the
@@ -42,7 +43,7 @@ export class CustomerAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const token = this.extractToken(request);
     if (!token) {
-      throw new UnauthorizedException('Missing bearer token');
+      throw new UnauthorizedException('Missing session cookie');
     }
 
     let payload: CustomerJwtPayload;
@@ -92,9 +93,13 @@ export class CustomerAuthGuard implements CanActivate {
     return true;
   }
 
+  // Session-cookie migration (security audit finding #1), phase 3. No
+  // bearer-header fallback anywhere, including tests — see
+  // customer-auth.controller.ts's own comment on why this tier's small e2e
+  // surface (3 specs) was converted outright instead of the staff tier's
+  // NODE_ENV=test compatibility shim.
   private extractToken(request: Request): string | null {
-    const header = request.headers.authorization;
-    if (!header?.startsWith('Bearer ')) return null;
-    return header.slice('Bearer '.length).trim() || null;
+    const raw: unknown = request.cookies?.[CUSTOMER_ACCESS_COOKIE];
+    return typeof raw === 'string' && raw ? raw : null;
   }
 }

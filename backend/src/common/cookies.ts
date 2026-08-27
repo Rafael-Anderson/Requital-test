@@ -34,10 +34,29 @@ export function sessionCookieOptions(path: string): CookieOptions {
   };
 }
 
-// The one cookie that must stay JS-readable — see common/csrf.ts.
-export function readableCookieOptions(path: string): CookieOptions {
+// The CSRF cookie's own attributes. httpOnly here too, as of a fix found
+// during phase 2/3's rollout (2026-08-27): the original design left this
+// cookie JS-readable specifically so frontend code could pull the token's
+// value via `document.cookie` (see this file's git history) — that only
+// ever worked in local dev, where every app shares the bare `localhost`
+// hostname and cookies aren't port-scoped. In any real deployment the admin/
+// storefront apps and the API sit on genuinely different hostnames
+// (admin.requital.io vs api.requital.io, {shop}.requital.io vs
+// api.requital.io) — a cookie set by the API (host-only, no Domain
+// attribute, by design) is invisible to `document.cookie` on a page loaded
+// from a different hostname, full stop, regardless of any other attribute.
+// Every tier's controller now instead returns the freshly-minted CSRF token
+// value directly in the JSON response body (login/signup/refresh, and the
+// "me" bootstrap endpoints) — see common/csrf.ts's `issue()`, whose return
+// value is that string. The frontend holds it in memory, never localStorage
+// (that would reintroduce the exact XSS-exposure problem this whole
+// migration exists to close), and this cookie only has to keep round-
+// tripping automatically with ordinary same-site requests, which httpOnly
+// doesn't affect at all — the server still reads it via the plain Cookie
+// header on every request, same as before.
+export function csrfCookieOptions(path: string): CookieOptions {
   return {
-    httpOnly: false,
+    httpOnly: true,
     secure: IS_PROD,
     sameSite: 'strict',
     path,

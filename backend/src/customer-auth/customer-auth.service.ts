@@ -16,7 +16,6 @@ import { escapeHtml } from '../common/email';
 import { JobsService } from '../jobs/jobs.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
-import { RefreshCustomerTokenDto } from './dto/refresh-customer-token.dto';
 import { ForgotCustomerPasswordDto } from './dto/forgot-customer-password.dto';
 import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
 
@@ -175,7 +174,7 @@ export class CustomerAuthService {
     return elapsedMs < delaySeconds * 1000;
   }
 
-  async refresh(shopSlug: string, dto: RefreshCustomerTokenDto) {
+  async refresh(shopSlug: string, dto: { refreshToken: string }) {
     const shop = await this.resolveShop(shopSlug);
     const tokenHash = hashToken(dto.refreshToken);
     const storedRows = await this.db.query<RowDataPacket[]>(
@@ -213,7 +212,7 @@ export class CustomerAuthService {
     return this.issueTokenPair(customer, stored.familyId as string);
   }
 
-  async logout(dto: RefreshCustomerTokenDto) {
+  async logout(dto: { refreshToken: string }) {
     const storedRows = await this.db.query<RowDataPacket[]>(
       `SELECT familyId FROM customerrefreshtoken WHERE tokenHash = ?`,
       [hashToken(dto.refreshToken)],

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveImageUrl, listProducts, getProduct, getStoredAuth, setStoredAuth, getMyOrders } from "./api";
+import { resolveImageUrl, listProducts, getProduct, getMyOrders, loginCustomer, updateMyProfile } from "./api";
 import type { Customer } from "./types";
 
 function mockFetchOnce(body: unknown) {
@@ -64,59 +64,57 @@ const testCustomer: Customer = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-// Same per-shop-namespaced localStorage pattern as lib/cart.tsx's own
-// tests — a logged-in session on one shop's storefront must never leak into
-// another's, same guarantee cart/referral already have.
-describe("customer auth storage", () => {
+// Session-cookie migration (security audit finding #1), phase 3 — the
+// customer session is an httpOnly cookie now (set/sent by the browser
+// automatically), not a bearer token this app stores or attaches by hand.
+// These tests cover what's left on this side: every request is credentialed
+// (so the cookie actually rides along), and the CSRF token — held in memory
+// only, distributed via the X-CSRF-Token *response* header (see
+// lib/api.ts's own comment for why not a readable cookie) — is captured
+// from responses and echoed back on the next state-changing request.
+describe("credentialed requests and CSRF token handling", () => {
   afterEach(() => {
-    localStorage.clear();
-  });
-
-  it("round-trips a stored session", () => {
-    expect(getStoredAuth("acme-shop")).toBeNull();
-    const auth = { accessToken: "a", refreshToken: "r", customer: testCustomer };
-    setStoredAuth("acme-shop", auth);
-    expect(getStoredAuth("acme-shop")).toEqual(auth);
-  });
-
-  it("clears the session when set to null", () => {
-    setStoredAuth("acme-shop", { accessToken: "a", refreshToken: "r", customer: testCustomer });
-    setStoredAuth("acme-shop", null);
-    expect(getStoredAuth("acme-shop")).toBeNull();
-  });
-
-  it("scopes storage per shop — one shop's session is invisible under another shop's key", () => {
-    setStoredAuth("shop-a", { accessToken: "a", refreshToken: "r", customer: testCustomer });
-    expect(getStoredAuth("shop-b")).toBeNull();
-    expect(getStoredAuth("shop-a")).not.toBeNull();
-  });
-
-  it("returns null for corrupt JSON rather than throwing", () => {
-    localStorage.setItem("requital_storefront_auth:acme-shop", "{not json");
-    expect(getStoredAuth("acme-shop")).toBeNull();
-  });
-});
-
-describe("authenticated requests", () => {
-  afterEach(() => {
-    localStorage.clear();
     vi.unstubAllGlobals();
   });
 
-  it("attaches the Authorization header from the stored session", async () => {
-    setStoredAuth("acme-shop", { accessToken: "secret-token", refreshToken: "r", customer: testCustomer });
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "[]" });
+  function mockFetch(headers: Record<string, string> = {}, body: unknown = "[]") {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: (name: string) => headers[name] ?? null },
+      text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
+      json: async () => body,
+    });
     vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("sends credentials: include on an authenticated GET (so the session cookie actually rides along)", async () => {
+    const fetchMock = mockFetch();
 
     await getMyOrders("acme-shop");
 
     const [, init] = fetchMock.mock.calls[0];
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer secret-token");
+    expect(init.credentials).toBe("include");
   });
 
-  it("sends no Authorization header when no session is stored (never crashes a guest call)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => "[]" });
-    vi.stubGlobal("fetch", fetchMock);
+  it("captures the CSRF token from a login response's X-CSRF-Token header and echoes it back on the next state-changing request, but not on a GET", async () => {
+    mockFetch({ "X-CSRF-Token": "fresh-csrf-token" }, { customer: testCustomer });
+    await loginCustomer("acme-shop", { identifier: "0501234567", password: "pw" });
+
+    const getMock = mockFetch();
+    await getMyOrders("acme-shop");
+    const [, getInit] = getMock.mock.calls[0];
+    expect((getInit.headers as Record<string, string>)["X-CSRF-Token"]).toBeUndefined();
+
+    const patchMock = mockFetch();
+    await updateMyProfile("acme-shop", { name: "New Name" });
+    const [, patchInit] = patchMock.mock.calls[0];
+    expect((patchInit.headers as Record<string, string>)["X-CSRF-Token"]).toBe("fresh-csrf-token");
+  });
+
+  it("never sends an Authorization header (no bearer token exists anymore)", async () => {
+    const fetchMock = mockFetch();
 
     await getMyOrders("acme-shop");
 

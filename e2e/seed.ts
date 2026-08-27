@@ -32,16 +32,47 @@ export interface SeedState {
   seededOrderId: number;
 }
 
+// Session-cookie migration (security audit finding #1) — the admin session
+// is an httpOnly cookie now, not a bearer token this script can just hold
+// as a string. This is a plain Node script driving the real backend
+// directly (not a browser, and not Jest — the NODE_ENV=test bearer-header
+// fallback AuthGuard keeps for existing Jest specs, see backend
+// CLAUDE.md's own note, only applies when the *server* runs under Jest;
+// the CI-started backend this script talks to runs in normal dev mode), so
+// it needs its own minimal cookie jar: capture Set-Cookie off the signup
+// response and replay it as a Cookie header on every later call, plus the
+// X-CSRF-Token response header for state-changing requests (see backend
+// common/csrf.ts's own CSRF_RESPONSE_HEADER comment — signup is the only
+// call in this script that ever mints a fresh CSRF token; nothing else
+// here re-issues one, so one capture covers the whole seed run).
+export interface AdminSession {
+  cookie: string;
+  csrfToken: string;
+}
+
+function sessionFromResponse(res: Response): AdminSession {
+  const cookie = res.headers
+    .getSetCookie()
+    .map((line) => line.split(';')[0])
+    .join('; ');
+  const csrfToken = res.headers.get('X-CSRF-Token') ?? '';
+  return { cookie, csrfToken };
+}
+
 async function api<T>(
   path: string,
   init: RequestInit = {},
-  token?: string,
+  session?: AdminSession,
 ): Promise<T> {
+  const method = (init.method ?? 'GET').toUpperCase();
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(session ? { Cookie: session.cookie } : {}),
+      ...(session && method !== 'GET' && method !== 'HEAD'
+        ? { 'X-CSRF-Token': session.csrfToken }
+        : {}),
       ...init.headers,
     },
   });
@@ -61,11 +92,9 @@ export async function seedShop(): Promise<SeedState> {
   const adminPassword = 'Password123!';
   const shopName = `Playwright E2E Shop ${runId}`;
 
-  const signup = await api<{
-    accessToken: string;
-    devVerificationLink?: string;
-  }>('/auth/signup', {
+  const signupRes = await fetch(`${API_URL}/auth/signup`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: 'Playwright Admin',
       email: adminEmail,
@@ -74,7 +103,12 @@ export async function seedShop(): Promise<SeedState> {
       subdomain,
     }),
   });
-  const accessToken = signup.accessToken;
+  if (!signupRes.ok) {
+    const text = await signupRes.text();
+    throw new Error(`seed: POST /auth/signup -> ${signupRes.status}: ${text}`);
+  }
+  const session = sessionFromResponse(signupRes);
+  const signup = (await signupRes.json()) as { devVerificationLink?: string };
 
   // Publishing requires a verified admin email (Phase 3 auth lifecycle) —
   // same dev-link flow backend/test/helpers/verify-signup-email.ts uses.
@@ -91,18 +125,18 @@ export async function seedShop(): Promise<SeedState> {
   // Signup already creates one default outlet in the same transaction (see
   // AuthService.signup) — just enable pickup on it so publish readiness and
   // the seeded pickup order both have somewhere to fulfil against.
-  const outlets = await api<{ id: number }[]>('/outlets', {}, accessToken);
+  const outlets = await api<{ id: number }[]>('/outlets', {}, session);
   const outletId = outlets[0].id;
   await api(
     `/outlets/${outletId}`,
     { method: 'PATCH', body: JSON.stringify({ pickupEnabled: true, active: true }) },
-    accessToken,
+    session,
   );
 
   const collection = await api<{ id: number }>(
     '/collections',
     { method: 'POST', body: JSON.stringify({ name: 'Flowers' }) },
-    accessToken,
+    session,
   );
   const collectionId = collection.id;
 
@@ -125,7 +159,7 @@ export async function seedShop(): Promise<SeedState> {
         trackInventory: true,
       }),
     },
-    accessToken,
+    session,
   );
 
   const variantBase = await api<{
@@ -147,7 +181,7 @@ export async function seedShop(): Promise<SeedState> {
         trackInventory: true,
       }),
     },
-    accessToken,
+    session,
   );
 
   await api(
@@ -156,7 +190,7 @@ export async function seedShop(): Promise<SeedState> {
       method: 'PUT',
       body: JSON.stringify({ options: [{ name: 'Color', values: ['Red', 'White'] }] }),
     },
-    accessToken,
+    session,
   );
   // Re-fetched rather than trusting updateOptions' own return shape — the
   // variant `label` field (e.g. "Red") is what the storefront PDP renders
@@ -164,7 +198,7 @@ export async function seedShop(): Promise<SeedState> {
   // every spec/tool in this app already relies on for that.
   const variantProductFull = await api<{
     variants: { id: number; label: string }[];
-  }>(`/products/${variantBase.id}`, {}, accessToken);
+  }>(`/products/${variantBase.id}`, {}, session);
   const variants: SeedVariant[] = variantProductFull.variants.map((v) => ({
     id: v.id,
     label: v.label,
@@ -186,13 +220,13 @@ export async function seedShop(): Promise<SeedState> {
         ],
       }),
     },
-    accessToken,
+    session,
   );
 
   await api(
     '/shop',
     { method: 'PATCH', body: JSON.stringify({ published: true }) },
-    accessToken,
+    session,
   );
 
   // A customer + one pending order (for the kanban spec) via a real guest

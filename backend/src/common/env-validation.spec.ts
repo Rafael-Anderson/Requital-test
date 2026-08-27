@@ -25,6 +25,7 @@ describe('validateEnv', () => {
     // only needs to break the one thing it's testing.
     process.env.DATABASE_URL = 'mysql://user:pass@localhost:3306/db';
     process.env.JWT_SECRET = 'a-real-secret';
+    process.env.CUSTOMER_JWT_SECRET = 'a-real-customer-secret';
     process.env.CREDENTIAL_ENCRYPTION_KEY = 'a-real-key';
     process.env.CSRF_SECRET = 'a-real-csrf-secret';
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
