@@ -312,6 +312,13 @@ export class CreateProductDto {
   @IsInt({ each: true })
   collectionIds: number[];
 
+  // Optional brand (see brands/ module). Validated for shop ownership in
+  // ProductsService. On update, `null` clears it.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  brandId?: number;
+
   // Free-form tags, e.g. "roses", "boxes" (SRS FR-4.2, distinct from collection).
   @IsOptional()
   @IsArray()

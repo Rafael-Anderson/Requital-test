@@ -8,6 +8,7 @@ const TABS = [
   { href: "/products/templates", label: "Templates" },
   { href: "/products/discounts", label: "Discounts" },
   { href: "/products/gift-cards", label: "Gift Cards" },
+  { href: "/products/brands", label: "Brands" },
 ];
 
 export default function ProductsTabs() {

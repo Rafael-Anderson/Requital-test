@@ -3,6 +3,7 @@ import type {
   AutoDiscount,
   BioLink,
   BioPageConfig,
+  Brand,
   Collection,
   CollectionDetail,
   HomepageTemplateSection,
@@ -107,6 +108,13 @@ export function listShopsForSitemap() {
 export function listCollections(shopSlug: string, previewToken?: string) {
   const qs = previewToken ? `?previewToken=${encodeURIComponent(previewToken)}` : "";
   return get<Collection[]>(`/public/${shopSlug}/collections${qs}`);
+}
+
+// Brands with at least one Available product — backs the collection page's
+// brand filter. Empty when the shop has no brands (or none in use).
+export function listBrands(shopSlug: string, previewToken?: string) {
+  const qs = previewToken ? `?previewToken=${encodeURIComponent(previewToken)}` : "";
+  return get<Brand[]>(`/public/${shopSlug}/brands${qs}`);
 }
 
 // Collection (taxonomy node) detail page — /[shop]/collections/[slug].

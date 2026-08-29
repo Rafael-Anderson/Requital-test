@@ -25,6 +25,7 @@ import { OrdersModule } from './orders/orders.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CollectionsModule } from './collections/collections.module';
+import { BrandsModule } from './brands/brands.module';
 import { ShopModule } from './shop/shop.module';
 import { DeliveryZonesModule } from './delivery-zones/delivery-zones.module';
 import { PublicModule } from './public/public.module';
@@ -95,6 +96,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
     DashboardModule,
     PaymentsModule,
     CollectionsModule,
+    BrandsModule,
     ShopModule,
     DeliveryZonesModule,
     PublicModule,

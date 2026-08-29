@@ -6,6 +6,7 @@ import {
   createProduct,
   duplicateProduct,
   getShop,
+  listBrands,
   listCollections,
   listIngredientCategories,
   listIngredients,
@@ -16,6 +17,7 @@ import {
 import { commitStockChanges } from "@/lib/stock";
 import {
   PRODUCT_STATUS_LABELS,
+  type Brand,
   type Collection,
   type Ingredient,
   type IngredientCategory,
@@ -102,6 +104,8 @@ export function useProductForm(initialProduct: Product | undefined) {
   );
 
   const [collections, setCollections] = useState<Collection[] | null>(null);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [brandId, setBrandId] = useState<number | null>(product?.brand?.id ?? null);
   const [productEditorMode, setProductEditorMode] = useState<"simple" | "advanced">("simple");
   const [showVariants, setShowVariants] = useState(product?.showVariants ?? false);
   const [showAttributes, setShowAttributes] = useState(product?.showAttributes ?? false);
@@ -132,6 +136,9 @@ export function useProductForm(initialProduct: Product | undefined) {
     listCollections()
       .then(setCollections)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load collections"));
+    listBrands()
+      .then(setBrands)
+      .catch(() => {});
     getShop()
       .then((s) => {
         setProductEditorMode(s.productEditorMode ?? "simple");
@@ -289,6 +296,7 @@ export function useProductForm(initialProduct: Product | undefined) {
         dimensions: physicalProduct ? dimensions || undefined : undefined,
         vendor: vendor || undefined,
         productType: productType || undefined,
+        brandId,
         tags,
         collectionIds: [...collectionIds],
         slug: slug || undefined,
@@ -371,7 +379,9 @@ export function useProductForm(initialProduct: Product | undefined) {
     metaTitle, setMetaTitle,
     metaDescription, setMetaDescription,
     collectionIds, toggleCollection,
-    collections,
+    collections, setCollections,
+    brands, setBrands,
+    brandId, setBrandId,
     productEditorMode,
     showVariants, setShowVariants,
     showAttributes, setShowAttributes,

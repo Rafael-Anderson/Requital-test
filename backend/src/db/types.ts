@@ -221,6 +221,16 @@ export interface ProductRow {
   metaTitle: string | null;
   metaDescription: string | null;
   additionalInfo: ProductAdditionalInfoBlock[] | null;
+  brandId: number | null;
+}
+
+export interface BrandRow {
+  id: number;
+  shopId: number;
+  name: string;
+  logoUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Product page "Additional information" accordion blocks (storefront-v2

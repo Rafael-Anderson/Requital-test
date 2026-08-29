@@ -360,6 +360,7 @@ export interface Product {
   status: string;
   trackInventory: boolean;
   collections: { id: number; name: string }[];
+  brand: { id: number; name: string; logoUrl: string | null } | null;
   stockQuantity: number | null; // null = unlimited/unknown (no outlet context or not tracked)
   images: ProductImage[];
   attributes: ProductAttribute[];
@@ -387,6 +388,12 @@ export interface Product {
   // Offered in the checkout add-ons popup for carts that don't already
   // contain this product.
   isCheckoutAddon: boolean;
+}
+
+export interface Brand {
+  id: number;
+  name: string;
+  logoUrl: string | null;
 }
 
 export interface Outlet {

@@ -18,6 +18,8 @@ import type {
   BioPageConfig,
   BusinessHours,
   Collection,
+  Brand,
+  BrandInput,
   Template,
   TemplateRules,
   TemplateType,
@@ -1260,6 +1262,39 @@ export function reorderCollections(ids: number[]) {
   return apiFetch<Collection[]>("/collections/reorder", {
     method: "PATCH",
     body: JSON.stringify({ ids }),
+  });
+}
+
+export function listBrands() {
+  return apiFetch<Brand[]>("/brands");
+}
+
+export function uploadBrandImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<{ url: string }>("/brands/upload", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function createBrand(data: BrandInput) {
+  return apiFetch<Brand>("/brands", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateBrand(id: number, data: Partial<BrandInput>) {
+  return apiFetch<Brand>(`/brands/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteBrand(id: number) {
+  return apiFetch<{ id: number; deleted: boolean }>(`/brands/${id}`, {
+    method: "DELETE",
   });
 }
 

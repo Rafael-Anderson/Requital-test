@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Product } from "@/lib/types";
 import { FIELD_STEP, useProductForm } from "@/lib/useProductForm";
 import { useUnsavedChangesGuard } from "@/lib/useUnsavedChangesGuard";
@@ -98,6 +98,35 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
     form.router.push("/products");
   }
 
+  // Advanced-editor sidebar scroll-spy — highlights the section currently
+  // under the top of the viewport as the user scrolls, and clicking a nav
+  // item smooth-scrolls to it. Inert in simple mode (no section elements).
+  const [activeSection, setActiveSection] = useState(ADVANCED_SECTIONS[0].id);
+  useEffect(() => {
+    if (form.productEditorMode !== "advanced") return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const els = ADVANCED_SECTIONS.map((s) => document.getElementById(s.id)).filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    if (els.length === 0) return;
+    const visible = new Set<string>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.add(entry.target.id);
+          else visible.delete(entry.target.id);
+        }
+        const topmost = ADVANCED_SECTIONS.find((s) => visible.has(s.id));
+        if (topmost) setActiveSection(topmost.id);
+      },
+      // A thin band near the top of the viewport — a section is "active"
+      // once its top scrolls past ~15% down and until it leaves that band.
+      { rootMargin: "-15% 0px -80% 0px", threshold: 0 },
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [form.productEditorMode]);
+
   // Advanced mode: one scrollable page, no stepper/slide transitions — every
   // section stacked with a sticky left anchor nav (hidden below lg, per the
   // task's own "hand-roll it, no new deps" call) instead of Next/Back.
@@ -110,13 +139,23 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
         <div className="flex gap-6 flex-col lg:flex-row items-start">
           <nav className="hidden lg:block w-48 shrink-0 sticky top-6 space-y-1">
             {ADVANCED_SECTIONS.map((s) => (
-              <a
+              <button
                 key={s.id}
-                href={`#${s.id}`}
-                className="block px-3 py-1.5 rounded-lg text-sm text-text-secondary dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                type="button"
+                aria-current={activeSection === s.id ? "true" : undefined}
+                onClick={() =>
+                  document
+                    .getElementById(s.id)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className={`block w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer ${
+                  activeSection === s.id
+                    ? "bg-accent/10 text-accent-text font-medium"
+                    : "text-text-secondary dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100"
+                }`}
               >
                 {s.label}
-              </a>
+              </button>
             ))}
           </nav>
 

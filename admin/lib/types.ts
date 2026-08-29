@@ -360,6 +360,19 @@ export interface CollectionNode extends Collection {
   depth: number;
 }
 
+export interface Brand {
+  id: number;
+  name: string;
+  logoUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BrandInput {
+  name: string;
+  logoUrl?: string | null;
+}
+
 // Builds a tree from the flat list the API returns. Ignores a
 // parentCollectionId that doesn't resolve to another row in the list (treats
 // it as root) rather than dropping the collection — the backend already
@@ -551,6 +564,8 @@ export interface ProductInput {
   continueSellingOutOfStock?: boolean;
   vendor?: string;
   productType?: string;
+  // Optional brand. `null` clears an existing assignment on update.
+  brandId?: number | null;
   physicalProduct?: boolean;
   weight?: number;
   weightUnit?: WeightUnit;
@@ -638,6 +653,10 @@ export interface Product {
   showFaqs: boolean;
   vendor: string | null;
   productType: string | null;
+  // Optional brand (see the Brands page). `brandId` is the raw column;
+  // `brand` is the resolved row, null when unset.
+  brandId: number | null;
+  brand: { id: number; name: string; logoUrl: string | null } | null;
   physicalProduct: boolean;
   weight: string | null;
   weightUnit: WeightUnit;

@@ -5,10 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, ChevronDown, Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
-import { getCollectionBySlug, listCollections, resolveImageUrl } from "@/lib/api";
+import { getCollectionBySlug, listBrands, listCollections, resolveImageUrl } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import CurrencySymbol from "@/components/CurrencySymbol";
-import type { CollectionDetail, Collection, Product } from "@/lib/types";
+import type { Brand, CollectionDetail, Collection, Product } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
 import PriceRangeSlider from "@/components/PriceRangeSlider";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
@@ -161,6 +161,7 @@ export default function CollectionPage() {
   const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, loading: shopLoading, error: shopError } = useShop();
   const [collection, setCollection] = useState<CollectionDetail | null>(null);
   const [allCollections, setAllCollections] = useState<Collection[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const defaultOutletId = outlets[0]?.id;
@@ -175,11 +176,14 @@ export default function CollectionPage() {
 
   useEffect(() => {
     listCollections(shopSlug, previewToken).then(setAllCollections).catch(() => setAllCollections([]));
+    listBrands(shopSlug, previewToken).then(setBrands).catch(() => setBrands([]));
   }, [shopSlug, previewToken]);
 
   // --- filter/sort/search bar state (storefront-v2 Phase 2B) ---
   const [sort, setSort] = useState<SortOption>("newest");
   const [search, setSearch] = useState("");
+  const [selectedBrandIds, setSelectedBrandIds] = useState<Set<number>>(new Set());
+  const [showAllBrands, setShowAllBrands] = useState(false);
   // Bug 6 fix: this was shopper-editable (a 2/3/4 column icon selector in
   // the filter bar) - a merchant layout choice, not a customer preference.
   // Now a fixed read from the merchant's own Theme Settings > Collection
@@ -209,7 +213,17 @@ export default function CollectionPage() {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
     setPage(1);
-  }, [search, sort, priceRange, collection?.id]);
+  }, [search, sort, priceRange, selectedBrandIds, collection?.id]);
+
+  // Brands actually present on this collection's products, intersected with
+  // the shop's brand list. Hidden entirely below 2 (nothing to filter by).
+  const brandFacets = useMemo(() => {
+    if (!collection) return [] as Brand[];
+    const present = new Set(
+      collection.products.map((p) => p.brand?.id).filter((id): id is number => id != null),
+    );
+    return brands.filter((b) => present.has(b.id));
+  }, [collection, brands]);
 
   const filtered = useMemo(() => {
     if (!collection) return [];
@@ -219,10 +233,11 @@ export default function CollectionPage() {
       if (q && !p.name.toLowerCase().includes(q)) return false;
       const price = Number(p.price);
       if (price < lo || price > hi) return false;
+      if (selectedBrandIds.size > 0 && !selectedBrandIds.has(p.brand?.id ?? -1)) return false;
       return true;
     });
     return sortProducts(matches, sort);
-  }, [collection, search, activeRange, sort]);
+  }, [collection, search, activeRange, sort, selectedBrandIds]);
 
   const collectionPageSettings = themeConfig?.globalSettings.collectionPage;
   const loadMoreStyle = collectionPageSettings?.loadMoreStyle ?? "infinite";
@@ -362,6 +377,50 @@ export default function CollectionPage() {
             </div>
           </label>
         </div>
+
+        {/* Brand filter — client-side, same as price/search/sort above.
+            Hidden when the collection has 0 or 1 brand (nothing to filter). */}
+        {brandFacets.length > 1 && (
+          <div className="mb-6 pb-4 border-b border-stroke">
+            <span className="block text-xs text-zinc-500 mb-2">Brand</span>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {(showAllBrands ? brandFacets : brandFacets.slice(0, 6)).map((b) => {
+                const logo = resolveImageUrl(b.logoUrl);
+                return (
+                  <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedBrandIds.has(b.id)}
+                      onChange={() =>
+                        setSelectedBrandIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(b.id)) next.delete(b.id);
+                          else next.add(b.id);
+                          return next;
+                        })
+                      }
+                      className="size-4 accent-[var(--color-accent)]"
+                    />
+                    {logo && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={logo} alt="" className="size-6 rounded object-contain" />
+                    )}
+                    <span className="text-foreground">{b.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {brandFacets.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setShowAllBrands((v) => !v)}
+                className="mt-2 text-xs text-accent-text hover:underline cursor-pointer"
+              >
+                {showAllBrands ? "Show less" : `Show ${brandFacets.length - 6} more`}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Bug 6 fix: the result-count label already existed here and is
             exactly what the ticket asked to show in place of the removed
