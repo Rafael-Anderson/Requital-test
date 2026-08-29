@@ -68,6 +68,23 @@ function messageContains(res: Response, substring: string): boolean {
   return messages.some((m) => m.includes(substring));
 }
 
+// The seeded shop's timezone (migration default) — the server validates
+// deliveryDate against the shop's *local* calendar day (dateKeyInTimezone),
+// so a bare `new Date().toISOString().slice(0, 10)` (UTC) disagrees with
+// the server for the 4 hours each day UTC is behind Asia/Dubai, tripping
+// assertWithinAcceptanceWindow's "date has already passed" branch before
+// the slot-specific check under test ever runs. Compute the date key the
+// same way the server does instead.
+const SHOP_TIMEZONE = 'Asia/Dubai';
+function shopDateKey(offsetDays = 0): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SHOP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000));
+}
+
 // Bypasses the outlet's own coordinates so radius checks are trivially
 // satisfied (distance 0) wherever the happy-path tests don't care about
 // radius specifically.
@@ -720,7 +737,7 @@ describe('Storefront public checkout (e2e)', () => {
 
   describe('delivery/pickup time slot — required once a date is picked, and the cutoff is enforced server-side', () => {
     it('rejects a deliveryDate with no deliveryTimeSlot at all', async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = shopDateKey();
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
         .send(
@@ -737,7 +754,7 @@ describe('Storefront public checkout (e2e)', () => {
     });
 
     it('rejects a garbage/unrecognized deliveryTimeSlot string', async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = shopDateKey();
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
         .send(
@@ -775,7 +792,7 @@ describe('Storefront public checkout (e2e)', () => {
         .send({ deliveryHours: openAllDay, deliveryTimeSlotGapMinutes: 60 })
         .expect(200);
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = shopDateKey();
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
         .send(
@@ -799,9 +816,7 @@ describe('Storefront public checkout (e2e)', () => {
       // to allowing both, untouched elsewhere in this file) — the point
       // here is only that the cutoff filter itself never touches a
       // non-today date, not re-testing the acceptance window.
-      const future = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
+      const future = shopDateKey(3);
 
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/orders`)
