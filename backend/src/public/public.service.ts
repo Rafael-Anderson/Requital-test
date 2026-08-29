@@ -52,6 +52,7 @@ import type {
   BannerimageRow,
   CollectionRow,
   ProductRow,
+  BrandRow,
   SurveyresponseRow,
 } from '../db/types';
 
@@ -428,6 +429,24 @@ export class PublicService {
     );
   }
 
+  // Storefront brand filter — only brands that have at least one Available
+  // product, so the filter never lists a brand that would match nothing.
+  async listPublicBrands(shopSlug: string, previewToken?: string) {
+    const shop = await this.resolveShop(shopSlug);
+    await this.assertPublishedOrPreview(shop, previewToken);
+    return this.db.query<RowDataPacket[]>(
+      `SELECT b.id, b.name, b.logoUrl
+       FROM brand b
+       WHERE b.shopId = ?
+         AND EXISTS (
+           SELECT 1 FROM product p
+           WHERE p.brandId = b.id AND p.status = 'Available'
+         )
+       ORDER BY b.name ASC`,
+      [shop.id],
+    );
+  }
+
   // Collection (taxonomy node) detail page — /[shop]/collections/[slug].
   // Reuses the same loadPublicProductsWithRelations shape listProducts
   // already returns, filtered the same way listProducts' collectionId
@@ -617,6 +636,7 @@ export class PublicService {
     collectionId?: number,
     isCheckoutAddon?: boolean,
     previewToken?: string,
+    brandId?: number,
   ) {
     const shop = await this.resolveShop(shopSlug);
     await this.assertPublishedOrPreview(shop, previewToken);
@@ -631,6 +651,10 @@ export class PublicService {
     if (isCheckoutAddon !== undefined) {
       conditions.push('isCheckoutAddon = ?');
       params.push(isCheckoutAddon);
+    }
+    if (brandId !== undefined) {
+      conditions.push('brandId = ?');
+      params.push(brandId);
     }
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM product WHERE ${conditions.join(' AND ')} ORDER BY id ASC`,
@@ -796,6 +820,7 @@ export class PublicService {
       options,
       variants,
       shadowStock,
+      brands,
     ] = await Promise.all([
       this.db.query<(ProductRow & RowDataPacket)[]>(
         `SELECT * FROM product WHERE id IN (${idList}) AND shopId = ? AND status = 'Available'`,
@@ -851,7 +876,19 @@ export class PublicService {
          WHERE ing.shadowProductId IN (${idList})`,
         productStockParams,
       ),
+      this.db.query<(BrandRow & RowDataPacket)[]>(
+        `SELECT DISTINCT b.id, b.name, b.logoUrl
+         FROM brand b JOIN product p ON p.brandId = b.id
+         WHERE p.id IN (${idList})`,
+        productIds,
+      ),
     ]);
+    const brandById = new Map(
+      brands.map((b) => [
+        b.id,
+        { id: b.id, name: b.name, logoUrl: b.logoUrl },
+      ]),
+    );
 
     const collectionsByProduct = new Map<number, RowDataPacket[]>();
     for (const row of collectionLinks) {
@@ -978,6 +1015,7 @@ export class PublicService {
           answer: f.answer,
           order: f.order,
         })),
+        brand: p.brandId != null ? (brandById.get(p.brandId) ?? null) : null,
         hasVariants: options_.length > 0,
         options: options_,
         variants: variantsByProduct.get(id) ?? [],

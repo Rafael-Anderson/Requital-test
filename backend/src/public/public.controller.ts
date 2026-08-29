@@ -44,6 +44,15 @@ export class PublicController {
   // replaces the pre-Phase-C curated-list detail that used to live at this
   // same URL (now served by GET templates/:slug instead).
   @Public()
+  @Get('brands')
+  listBrands(
+    @Param('shopSlug') shopSlug: string,
+    @Query('previewToken') previewToken?: string,
+  ) {
+    return this.publicService.listPublicBrands(shopSlug, previewToken);
+  }
+
+  @Public()
   @Get('collections/:slug')
   getCollectionBySlug(
     @Param('shopSlug') shopSlug: string,
@@ -139,6 +148,7 @@ export class PublicController {
     @Query('collectionId') collectionId?: string,
     @Query('isCheckoutAddon') isCheckoutAddon?: string,
     @Query('previewToken') previewToken?: string,
+    @Query('brandId') brandId?: string,
   ) {
     return this.publicService.listProducts(
       shopSlug,
@@ -146,6 +156,7 @@ export class PublicController {
       collectionId ? Number(collectionId) : undefined,
       isCheckoutAddon !== undefined ? isCheckoutAddon === 'true' : undefined,
       previewToken,
+      brandId ? Number(brandId) : undefined,
     );
   }
 

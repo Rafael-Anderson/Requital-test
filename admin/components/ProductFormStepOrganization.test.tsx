@@ -2,9 +2,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ProductFormStepOrganization from "./ProductFormStepOrganization";
+import { ToastProvider } from "@/components/ui/Toast";
 import type { ProductFormState } from "@/lib/useProductForm";
 
 afterEach(cleanup);
+
+function renderStep(form: ProductFormState) {
+  return render(
+    <ToastProvider>
+      <ProductFormStepOrganization form={form} hideFeatureSections />
+    </ToastProvider>,
+  );
+}
 
 function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
   return {
@@ -28,8 +37,13 @@ function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
     metaDescription: "",
     setMetaDescription: vi.fn(),
     collections: [],
+    setCollections: vi.fn(),
     collectionIds: [],
     toggleCollection: vi.fn(),
+    brands: [],
+    setBrands: vi.fn(),
+    brandId: null,
+    setBrandId: vi.fn(),
     images: [],
     setImages: vi.fn(),
     isEdit: false,
@@ -55,7 +69,7 @@ function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
 
 describe("ProductFormStepOrganization — Status picker", () => {
   it("renders the Status picker as a Combobox, not a native select", () => {
-    render(<ProductFormStepOrganization form={fakeForm()} hideFeatureSections />);
+    renderStep(fakeForm());
     expect(screen.getByRole("combobox")).toHaveTextContent("Active");
     expect(document.querySelector("select")).not.toBeInTheDocument();
   });
@@ -63,7 +77,7 @@ describe("ProductFormStepOrganization — Status picker", () => {
   it("selecting a new status calls form.setStatus", async () => {
     const user = userEvent.setup();
     const setStatus = vi.fn();
-    render(<ProductFormStepOrganization form={fakeForm({ setStatus })} hideFeatureSections />);
+    renderStep(fakeForm({ setStatus }));
 
     await user.click(screen.getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: "Draft" }));

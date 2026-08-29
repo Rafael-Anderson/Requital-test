@@ -213,6 +213,13 @@ export class UpdateProductDto {
   @IsInt({ each: true })
   collectionIds?: number[];
 
+  // Optional brand (see brands/ module). `null` clears it; omitted leaves
+  // it untouched. Validated for shop ownership in ProductsService.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  brandId?: number | null;
+
   // If provided, replaces the full tag set.
   @IsOptional()
   @IsArray()

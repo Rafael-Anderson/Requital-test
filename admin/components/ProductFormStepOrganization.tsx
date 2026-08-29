@@ -1,16 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
 import Combobox from "@/components/ui/Combobox";
+import MultiCombobox from "@/components/ui/MultiCombobox";
+import Modal from "@/components/ui/Modal";
 import Thumbnail from "@/components/ui/Thumbnail";
-import CollectionCheckboxTree from "@/components/CollectionCheckboxTree";
 import VariantsSection from "@/components/VariantsSection";
 import AttributesSection from "@/components/AttributesSection";
 import FaqsSection from "@/components/FaqsSection";
 import AdditionalInfoSection from "@/components/AdditionalInfoSection";
 import Tooltip from "@/components/ui/Tooltip";
-import { PRODUCT_STATUS_LABELS } from "@/lib/types";
+import ImageDropzone from "@/components/ui/ImageDropzone";
+import { useToast } from "@/components/ui/Toast";
+import {
+  createBrand,
+  createCollection,
+  resolveImageUrl,
+  uploadBrandImage,
+} from "@/lib/api";
+import {
+  PRODUCT_STATUS_LABELS,
+  buildCollectionTree,
+  flattenCollectionTree,
+} from "@/lib/types";
 import { PRODUCT_STATUSES, type ProductFormState } from "@/lib/useProductForm";
 
 export default function ProductFormStepOrganization({
@@ -23,7 +38,60 @@ export default function ProductFormStepOrganization({
   // aren't rendered twice.
   hideFeatureSections?: boolean;
 }) {
+  const toast = useToast();
   const sortedImages = [...form.images].sort((a, b) => a.order - b.order);
+
+  const collectionOptions = flattenCollectionTree(
+    buildCollectionTree(form.collections ?? []),
+  ).map((c) => ({ value: String(c.id), label: c.name, depth: c.depth }));
+  const brandOptions = form.brands.map((b) => ({
+    value: String(b.id),
+    label: b.name,
+  }));
+
+  // Inline "create new" from inside the selectors — happens in a modal so
+  // the product form never unmounts and unsaved edits survive.
+  const [creating, setCreating] = useState<"collection" | "brand" | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newBrandLogo, setNewBrandLogo] = useState<string | null>(null);
+  const [savingNew, setSavingNew] = useState(false);
+
+  function openCreate(kind: "collection" | "brand") {
+    setNewName("");
+    setNewBrandLogo(null);
+    setCreating(kind);
+  }
+
+  async function saveNew() {
+    const name = newName.trim();
+    if (!name) return;
+    setSavingNew(true);
+    try {
+      if (creating === "collection") {
+        const created = await createCollection({ name });
+        form.setCollections([...(form.collections ?? []), created]);
+        form.toggleCollection(created.id);
+      } else {
+        const created = await createBrand({ name, logoUrl: newBrandLogo });
+        form.setBrands([...form.brands, created]);
+        form.setBrandId(created.id);
+      }
+      setCreating(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to create", "error");
+    } finally {
+      setSavingNew(false);
+    }
+  }
+
+  async function handleBrandLogoUpload(file: File) {
+    try {
+      const { url } = await uploadBrandImage(file);
+      setNewBrandLogo(url);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Upload failed", "error");
+    }
+  }
 
   return (
     <>
@@ -38,17 +106,41 @@ export default function ProductFormStepOrganization({
       <Card className="space-y-4">
         <h3 className="text-sm font-semibold">Organization</h3>
         <div>
-          <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Collections</label>
-          <CollectionCheckboxTree
-            collections={form.collections ?? []}
-            selected={form.collectionIds}
-            onToggle={form.toggleCollection}
+          <MultiCombobox
+            label="Collections"
+            options={collectionOptions}
+            value={[...form.collectionIds].map(String)}
+            onChange={(next) => {
+              const nextSet = new Set(next.map(Number));
+              // Reconcile against the form's Set via its own toggle.
+              for (const id of nextSet) if (!form.collectionIds.has(id)) form.toggleCollection(id);
+              for (const id of form.collectionIds) if (!nextSet.has(id)) form.toggleCollection(id);
+            }}
+            placeholder="Select collections"
+            searchPlaceholder="Search collections"
+            emptyText="No collections yet"
+            onCreateNew={() => openCreate("collection")}
+            createLabel="Create new collection"
           />
           {form.fieldErrors.collections && (
             <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">
               {form.fieldErrors.collections}
             </p>
           )}
+        </div>
+        <div>
+          <MultiCombobox
+            single
+            label="Brand"
+            options={brandOptions}
+            value={form.brandId ? [String(form.brandId)] : []}
+            onChange={(next) => form.setBrandId(next[0] ? Number(next[0]) : null)}
+            placeholder="No brand"
+            searchPlaceholder="Search brands"
+            emptyText="No brands yet"
+            onCreateNew={() => openCreate("brand")}
+            createLabel="Create new brand"
+          />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Type" value={form.productType} onChange={(e) => form.setProductType(e.target.value)} />
@@ -170,6 +262,47 @@ export default function ProductFormStepOrganization({
           Variants/Attributes/FAQs, this has no separate advanced-mode
           anchor elsewhere, so it always renders exactly once here. */}
       <AdditionalInfoSection blocks={form.additionalInfo} onChange={form.setAdditionalInfo} />
+
+      {creating && (
+        <Modal
+          size="sm"
+          title={creating === "collection" ? "New collection" : "New brand"}
+          onClose={() => setCreating(null)}
+        >
+          {(requestClose) => (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveNew();
+              }}
+              className="space-y-4"
+            >
+              <Input
+                label="Name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+                required
+              />
+              {creating === "brand" && (
+                <ImageDropzone
+                  label="Logo (optional)"
+                  preview={resolveImageUrl(newBrandLogo)}
+                  onFileSelected={(file) => void handleBrandLogoUpload(file)}
+                />
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="secondary" onClick={requestClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" loading={savingNew} disabled={!newName.trim()}>
+                  Create
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
     </>
   );
 }

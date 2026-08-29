@@ -49,6 +49,12 @@ import {
   splitList,
 } from './products-import';
 
+interface BrandLiteRow extends RowDataPacket {
+  id: number;
+  name: string;
+  logoUrl: string | null;
+}
+
 interface IngredientLinkRow extends RowDataPacket {
   id: number;
   productId: number;
@@ -126,6 +132,8 @@ interface AssembledProduct {
   sku: string;
   status: string;
   usesIngredients: boolean;
+  brandId: number | null;
+  brand: { id: number; name: string; logoUrl: string | null } | null;
   productcollection: { collection: RowDataPacket }[];
   producttag: { tag: { name: string } }[];
   productimage: { id: number; url: string; order: number }[];
@@ -248,6 +256,9 @@ export class ProductsService {
 
   async create(ctx: TenantContext, dto: CreateProductDto) {
     await this.assertCollectionsBelongToShop(ctx, dto.collectionIds);
+    if (dto.brandId != null) {
+      await this.assertBrandBelongsToShop(ctx, dto.brandId);
+    }
     // Inferred, not just defaulted to false, when the caller doesn't touch
     // this field at all: submitting a non-empty `ingredients` array without
     // ever mentioning `usesIngredients` is exactly what every pre-Phase-A
@@ -286,8 +297,8 @@ export class ProductsService {
             isCheckoutAddon, showVariants, showAttributes, showFaqs, usesIngredients,
             vendor, productType, physicalProduct, weight, weightUnit, dimensions,
             isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax,
-            additionalInfo
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            additionalInfo, brandId
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
@@ -323,6 +334,7 @@ export class ProductsService {
             dto.giftCardCustomAmountMin ?? null,
             dto.giftCardCustomAmountMax ?? null,
             dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : null,
+            dto.brandId ?? null,
           ],
         );
         const newId = (result as { insertId: number }).insertId;
@@ -452,8 +464,8 @@ export class ProductsService {
             compareAtPrice, costPrice, sku, barcode, status, trackInventory,
             continueSellingOutOfStock, chargeTax, isCheckoutAddon, showVariants,
             showAttributes, showFaqs, vendor, productType, physicalProduct, weight,
-            weightUnit, dimensions, slug, metaTitle, metaDescription
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            weightUnit, dimensions, slug, metaTitle, metaDescription, brandId
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             newName,
@@ -483,6 +495,7 @@ export class ProductsService {
             newSlug,
             original.metaTitle,
             original.metaDescription,
+            original.brandId ?? null,
           ],
         );
         const newProduct = {
@@ -616,6 +629,9 @@ export class ProductsService {
 
     if (dto.collectionIds) {
       await this.assertCollectionsBelongToShop(ctx, dto.collectionIds);
+    }
+    if (dto.brandId != null) {
+      await this.assertBrandBelongsToShop(ctx, dto.brandId);
     }
     // Toggle-flip bookkeeping — see the shadow-provisioning methods below.
     // "current" is this product's state before this save; "next" is what it
@@ -774,6 +790,7 @@ export class ProductsService {
           giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
           giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
           additionalInfo: dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : undefined,
+          brandId: dto.brandId,
         });
         if (set) {
           await conn.query(`UPDATE product SET ${set.setClause} WHERE id = ?`, [
@@ -2751,6 +2768,16 @@ export class ProductsService {
     return sorted[0].url;
   }
 
+  private async assertBrandBelongsToShop(ctx: TenantContext, brandId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM brand WHERE id = ? AND shopId = ?`,
+      [brandId, ctx.shopId],
+    );
+    if (rows.length === 0) {
+      throw new BadRequestException('brandId is invalid for this shop');
+    }
+  }
+
   private async assertCollectionsBelongToShop(
     ctx: TenantContext,
     collectionIds: number[],
@@ -2948,8 +2975,15 @@ export class ProductsService {
       optionsByProduct.set(pid, optMap);
     }
 
+    const brandIds = [
+      ...new Set(
+        products
+          .map((p) => p.brandId as number | null)
+          .filter((b): b is number => b != null),
+      ),
+    ];
     const variantIds = variants.map((v) => v.id as number);
-    const [assembledVariants, variantIngredients] = await Promise.all([
+    const [assembledVariants, variantIngredients, brandRows] = await Promise.all([
       this.loadVariantsWithRelations(variantIds, outletId),
       this.loadIngredientLinks(
         variantIds.length
@@ -2958,7 +2992,21 @@ export class ProductsService {
         variantIds,
         outletId,
       ),
+      brandIds.length
+        ? this.db.query<BrandLiteRow[]>(
+            `SELECT id, name, logoUrl FROM brand WHERE id IN (${brandIds
+              .map(() => '?')
+              .join(', ')})`,
+            brandIds,
+          )
+        : Promise.resolve([] as BrandLiteRow[]),
     ]);
+    const brandById = new Map(
+      brandRows.map((b) => [
+        b.id,
+        { id: b.id, name: b.name, logoUrl: b.logoUrl },
+      ]),
+    );
     const variantsByProduct = new Map<number, AssembledVariant[]>();
     for (const v of variants) {
       const list = variantsByProduct.get(v.productId as number) ?? [];
@@ -2990,6 +3038,9 @@ export class ProductsService {
         thumbnail: p.thumbnail as string,
         sku: p.sku as string,
         usesIngredients: Boolean(p.usesIngredients),
+        brandId: (p.brandId as number | null) ?? null,
+        brand:
+          p.brandId != null ? (brandById.get(p.brandId as number) ?? null) : null,
         productcollection: collectionsByProduct.get(id) ?? [],
         producttag: tagsByProduct.get(id) ?? [],
         productimage: (imagesByProduct.get(id) ?? []).map((i) => ({

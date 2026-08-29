@@ -34,6 +34,16 @@ async function uploadImage(page: Page, filename: string) {
   }
 }
 
+// The product form's Collections picker is a searchable MultiCombobox
+// (closed popover) rather than an always-visible checkbox list — open it,
+// tick the option, then close so the popover doesn't overlap the submit
+// button on the advanced single-page form.
+async function selectCollection(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Select collections' }).click();
+  await page.getByRole('checkbox', { name, exact: true }).check();
+  await page.keyboard.press('Escape');
+}
+
 test('merchant signs up, completes the wizard, creates a product in both editor modes, and publishes', async ({
   page,
   request,
@@ -75,7 +85,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   await page.waitForURL(`${ADMIN_URL}/`, { timeout: 15_000 });
 
   // A collection has to pre-exist for the product form's required
-  // CollectionCheckboxTree — creating one is a separate concern from this
+  // Collections picker — creating one is a separate concern from this
   // flow (collections UI isn't one of the 4 critical paths), so it's done
   // directly against the API with the session the wizard just signed in
   // with, same as the outlet pickup-enable needed for Publish readiness.
@@ -133,7 +143,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   await page.getByLabel('Price (AED)').fill('50');
   await page.getByLabel('SKU').fill(`ONBOARD-SIMPLE-${runId}`);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByLabel('Flowers').check();
+  await selectCollection(page, 'Flowers');
   await page.getByRole('button', { name: 'Create product' }).click();
   await page.waitForURL(`${ADMIN_URL}/products`, { timeout: 15_000 });
 
@@ -153,7 +163,7 @@ test('merchant signs up, completes the wizard, creates a product in both editor 
   // title again.
   await page.getByLabel('Price (AED)').fill('40');
   await page.getByLabel('SKU').fill(`ONBOARD-ADVANCED-${runId}`);
-  await page.getByLabel('Flowers').check();
+  await selectCollection(page, 'Flowers');
   const titleField = page.getByLabel('Title', { exact: true });
   await titleField.fill('Tulip Bunch');
   await expect(titleField).toHaveValue('Tulip Bunch');
