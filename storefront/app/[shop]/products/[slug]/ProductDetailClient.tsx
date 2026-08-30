@@ -18,8 +18,7 @@ import NotifyMeForm from "@/components/NotifyMeForm";
 import AdditionalInfoAccordion from "@/components/AdditionalInfoAccordion";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import CurrencySymbol from "@/components/CurrencySymbol";
-import TabbyPromoWidget from "@/components/TabbyPromoWidget";
-import TamaraWidget from "@/components/TamaraWidget";
+import BnplWidgetCard from "@/components/BnplWidgetCard";
 import { tabbyWidgetPublicKey, tamaraWidgetPublicKey } from "@/lib/bnpl-widgets";
 import type { Collection, Product, ProductVariant, Shop } from "@/lib/types";
 
@@ -169,6 +168,7 @@ export default function ProductDetailClient() {
   const showStockIndicator = productPageSettings?.showStockIndicator ?? true;
   const showDeliveryIndicator = productPageSettings?.showDeliveryIndicator ?? true;
   const showPickupIndicator = productPageSettings?.showPickupIndicator ?? true;
+  const showBnplWidget = productPageSettings?.showBnplWidget ?? true;
   const fulfillmentTextColor = productPageSettings?.fulfillmentTextColor || undefined;
   const stockToneColor: Record<"ok" | "low" | "out", string> = {
     ok: productPageSettings?.inStockColor || "#15803d",
@@ -354,23 +354,21 @@ export default function ProductDetailClient() {
             )}
           </div>
 
-          {/* Tabby/Tamara installment-promo widgets — separate from actual
-              BNPL checkout, only need price/currency/a public key, so each
-              renders whenever that provider is enabled+configured
-              regardless of whether checkout itself is fully wired. No stock
-              concept for gift cards' widgets doesn't apply either. */}
-          {tabbyKey && (
-            <div className="mt-2">
-              {/* shop is necessarily non-null here — tabbyWidgetPublicKey
-                  only returns a real key when shop?.tabbyPublicKey does,
-                  which TS can't narrow across the function boundary. */}
-              <TabbyPromoWidget price={autoDiscounted ? autoDiscounted.discountedPrice : Number(displayPrice)} currency={shop!.currency} publicKey={tabbyKey} />
-            </div>
-          )}
-          {tamaraKey && (
-            <div className="mt-2">
-              <TamaraWidget price={autoDiscounted ? autoDiscounted.discountedPrice : Number(displayPrice)} publicKey={tamaraKey} />
-            </div>
+          {/* "Buy Now Pay Later!" card — Tabby/Tamara installment-promo
+              widgets, separate from actual BNPL checkout (they only need
+              price/currency/a public key). Each row is that provider's own
+              official on-site-messaging widget. Hidden entirely by the
+              theme's Product page > "Show Buy Now Pay Later card" toggle, or
+              when neither provider has a key. shop is necessarily non-null
+              when a key resolved (tabbyWidgetPublicKey only returns one when
+              shop?.tabbyPublicKey does — TS can't narrow across the call). */}
+          {showBnplWidget && (tabbyKey || tamaraKey) && (
+            <BnplWidgetCard
+              price={autoDiscounted ? autoDiscounted.discountedPrice : Number(displayPrice)}
+              currency={shop!.currency}
+              tabbyKey={tabbyKey}
+              tamaraKey={tamaraKey}
+            />
           )}
 
           {product.shortSummary && <p className="text-zinc-600 mt-3">{product.shortSummary}</p>}

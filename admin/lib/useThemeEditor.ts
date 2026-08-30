@@ -49,6 +49,8 @@ function defaultSettingsForType(type: ThemeSectionType): Record<string, unknown>
       return { ...shared, contentPosition: "center-center", height: "medium" };
     case "product_grid":
       return { ...shared, columns: 3, cardStyle: "minimal" };
+    case "brands":
+      return { ...shared, heading: "", logosPerRow: 5, brandIds: [] };
     default:
       return shared;
   }
@@ -92,6 +94,8 @@ function defaultBlocksForType(type: ThemeSectionType): ThemeBlock[] {
     case "newsletter":
       return [newBlock("heading", 0, { text: "Join our mailing list" }), newBlock("text", 1, { text: "" }), newBlock("email_form", 2, { buttonLabel: "Subscribe" })];
     case "testimonials":
+      return [];
+    case "brands":
       return [];
   }
 }
@@ -241,6 +245,10 @@ export function useThemeEditor(themeId: number) {
   // otherwise tear down and rebuild the interval/cleanup on every keystroke).
   const configRef = useRef<ThemeConfig | null>(null);
   const dirtyRef = useRef(false);
+  // One-shot per mount: seeds the Hero section's bannerImages/heroText from
+  // the legacy themesettings row the first time the builder opens (see the
+  // seed effect below).
+  const heroBackfillDoneRef = useRef(false);
   useEffect(() => {
     configRef.current = config;
   }, [config]);
@@ -276,6 +284,7 @@ export function useThemeEditor(themeId: number) {
       setConfig(t.config);
       setDirty(false);
       setSelectedId(null);
+      heroBackfillDoneRef.current = false;
       historyStackRef.current = [t.config];
       historyIndexRef.current = 0;
       setHistoryIndex(0);
@@ -296,6 +305,30 @@ export function useThemeEditor(themeId: number) {
       .then(setLegacyTheme)
       .catch(() => {});
   }, []);
+
+  // One-shot backfill: the "Classic homepage banner" fields (heroText +
+  // slideshow images) used to live in a dead sub-panel that wrote the legacy
+  // `themesettings` row directly; they're native Hero section settings now.
+  // The first time the builder opens for a shop that has legacy banner data
+  // but a Hero section with no bannerImages key yet, seed it across so
+  // nothing is lost. Marks the draft dirty — the existing autosave/publish
+  // persists it into theme.config. Never overwrites an explicit [] (a
+  // merchant who cleared the list), and never runs twice per mount.
+  useEffect(() => {
+    if (heroBackfillDoneRef.current || !config || !legacyTheme) return;
+    const hero = config.sections.find((s) => s.type === "hero");
+    if (!hero) return;
+    heroBackfillDoneRef.current = true;
+    if (hero.settings.bannerImages !== undefined) return;
+    const legacyImages = legacyTheme.images ?? [];
+    const legacyHeroText = legacyTheme.heroText ?? "";
+    if (legacyImages.length === 0 && !legacyHeroText) return;
+    updateSectionSetting(hero.id, "bannerImages", legacyImages);
+    if (legacyHeroText) updateSectionSetting(hero.id, "heroText", legacyHeroText);
+    // updateSectionSetting is a stable local fn; config/legacyTheme are the
+    // real triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, legacyTheme]);
 
   const updateLegacyTheme = useCallback(
     async (patch: Partial<Omit<ThemeSettings, "shopId" | "updatedAt">>) => {

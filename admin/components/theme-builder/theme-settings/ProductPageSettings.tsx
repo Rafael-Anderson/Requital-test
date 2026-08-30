@@ -33,6 +33,15 @@ export default function ProductPageSettings({ editor }: { editor: ThemeEditorSta
         <span className="text-sm font-medium">Show pickup availability</span>
         <Toggle checked={settings.showPickupIndicator} onChange={(v) => update({ showPickupIndicator: v })} />
       </div>
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Show &quot;Buy Now Pay Later&quot; card
+          <span className="block text-xs font-normal text-zinc-500">
+            Tabby / Tamara installment promo, shown only when a provider is enabled and configured.
+          </span>
+        </span>
+        <Toggle checked={settings.showBnplWidget} onChange={(v) => update({ showBnplWidget: v })} />
+      </div>
 
       <hr className="border-black/10 dark:border-white/10" />
 

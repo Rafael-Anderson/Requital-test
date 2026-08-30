@@ -66,7 +66,7 @@ export default function ProductCard({ product, orientation }: { product: Product
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={product.thumbnail} alt={product.name} className="size-20 rounded-lg object-cover shrink-0 bg-black/5" />
         <div className="min-w-0 flex-1">
-          <p className="font-medium truncate text-product-name" style={nameStyle}>{product.name}</p>
+          <p className="font-medium truncate text-product-name" style={nameStyle} title={product.name}>{product.name}</p>
           {product.shortSummary && <p className="text-sm text-zinc-500 truncate">{product.shortSummary}</p>}
           <p className="text-sm font-semibold mt-1 text-product-name">
             <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} />
@@ -96,10 +96,9 @@ export default function ProductCard({ product, orientation }: { product: Product
           </span>
         )}
       </div>
-      {/* line-clamp-2 (Tailwind v4 core, no plugin) instead of the old
-          single-line truncate — a bouquet/gift name running to two lines on
-          mobile no longer gets silently chopped mid-word (see design audit). */}
-      <p className="mt-3 text-[15px] leading-snug line-clamp-2 text-product-name" style={nameStyle}>{product.name}</p>
+      {/* Single-line ellipsis so long bouquet/gift names never wrap and break
+          card-row alignment across a grid; full name available on hover. */}
+      <p className="mt-3 text-[15px] leading-snug truncate text-product-name" style={nameStyle} title={product.name}>{product.name}</p>
       <p className="text-sm font-semibold mt-1 text-product-name">
         <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} />
       </p>

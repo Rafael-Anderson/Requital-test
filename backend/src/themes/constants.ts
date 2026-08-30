@@ -13,6 +13,7 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   'rich_text',
   'image_text',
   'newsletter',
+  'brands',
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -24,6 +25,7 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   rich_text: 'Rich Text',
   image_text: 'Image + Text',
   newsletter: 'Newsletter Signup',
+  brands: 'Brands',
 };
 
 export type BlockContainer = ThemeSectionType | 'header' | 'footer';
@@ -83,6 +85,8 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   rich_text: ['text', 'image'],
   image_text: ['image', 'text'],
   newsletter: ['heading', 'text', 'email_form'],
+  // Settings-only (heading / which brands / logos-per-row) — no blocks.
+  brands: [],
 };
 
 // Which sub-block types can be added inside a given block type — a block
@@ -245,6 +249,7 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       showStockIndicator: true,
       showDeliveryIndicator: true,
       showPickupIndicator: true,
+      showBnplWidget: true,
       inStockColor: '#15803d',
       lowStockColor: '#d97706',
       outOfStockColor: '#dc2626',

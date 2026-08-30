@@ -15,7 +15,8 @@ export type ThemeSectionType =
   | "testimonials"
   | "rich_text"
   | "image_text"
-  | "newsletter";
+  | "newsletter"
+  | "brands";
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
 export type SectionVisibility = "desktop" | "mobile" | "both";
@@ -215,6 +216,7 @@ export interface ProductPageSettings {
   showStockIndicator: boolean;
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
+  showBnplWidget: boolean;
   inStockColor: string;
   lowStockColor: string;
   outOfStockColor: string;

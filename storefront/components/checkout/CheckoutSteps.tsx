@@ -238,14 +238,14 @@ export default function CheckoutSteps(state: CheckoutFormState) {
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Subtotal</span>
                 <span>
-                  {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
+                  {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
               {discountAmount !== null && discountAmount > 0 && (
                 <div className="flex items-center justify-between text-green-600 dark:text-green-400">
                   <span>Discount</span>
                   <span>
-                    -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
+                    -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} />
                   </span>
                 </div>
               )}
@@ -253,14 +253,14 @@ export default function CheckoutSteps(state: CheckoutFormState) {
                 <div className="flex items-center justify-between text-green-600 dark:text-green-400">
                   <span>Gift card</span>
                   <span>
-                    -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
+                    -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} <CurrencySymbol code={shop?.currency} />
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600">Total (before delivery/tax)</span>
                 <span className="font-medium">
-                  {total.toFixed(2)} <CurrencySymbol code={shop?.currency} size="1em" />
+                  {total.toFixed(2)} <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
             </div>

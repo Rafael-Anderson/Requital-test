@@ -137,7 +137,7 @@ export default function SearchBar({
                     className="size-10 rounded object-cover shrink-0 bg-black/5"
                   />
                   <div className="min-w-0">
-                    <p className="text-sm truncate">{r.name}</p>
+                    <p className="text-sm truncate" title={r.name}>{r.name}</p>
                     <p className="text-xs text-zinc-500">
                       {r.price} <CurrencySymbol code={shop?.currency} />
                     </p>

@@ -33,6 +33,7 @@ import RichTextSettings from "./settings/RichTextSettings";
 import ImageTextSettings from "./settings/ImageTextSettings";
 import NewsletterSettings from "./settings/NewsletterSettings";
 import AnnouncementBarSettings from "./settings/AnnouncementBarSettings";
+import BrandsSettings from "./settings/BrandsSettings";
 import {
   HomeTabSetting,
   MenuSetting,
@@ -56,10 +57,10 @@ import type { ThemeEditorState } from "@/lib/useThemeEditor";
 type SectionSettingsProps = {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
-  // Optional, unused by 7 of the 8 section types — only HeroSettings reads
-  // it, to gate its "Classic homepage banner" legacy sub-section on whether
-  // Layout mode's Homepage layout setting can even reach it (see
-  // LegacyHeroSettings.tsx).
+  // Optional, passed to every section settings component generically; none
+  // read it today (HeroSettings used to, for the now-deleted "Classic
+  // homepage banner" sub-panel). Kept as a ready hook for a section settings
+  // form that needs cross-editor state.
   editor?: ThemeEditorState;
 };
 
@@ -72,6 +73,7 @@ const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<Sectio
   rich_text: RichTextSettings,
   image_text: ImageTextSettings,
   newsletter: NewsletterSettings,
+  brands: BrandsSettings,
 };
 
 // The 18 Theme Settings categories, in the confirmed spec order — keyed by
