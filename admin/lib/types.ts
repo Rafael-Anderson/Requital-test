@@ -1087,7 +1087,8 @@ export type ThemeSectionType =
   | "testimonials"
   | "rich_text"
   | "image_text"
-  | "newsletter";
+  | "newsletter"
+  | "brands";
 
 export const SECTION_TYPES: ThemeSectionType[] = [
   "announcement_bar",
@@ -1098,6 +1099,7 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   "rich_text",
   "image_text",
   "newsletter",
+  "brands",
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -1109,6 +1111,7 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   rich_text: "Rich Text",
   image_text: "Image + Text",
   newsletter: "Newsletter Signup",
+  brands: "Brands",
 };
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
@@ -1316,6 +1319,7 @@ export interface ProductPageSettings {
   showStockIndicator: boolean;
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
+  showBnplWidget: boolean;
   inStockColor: string;
   lowStockColor: string;
   outOfStockColor: string;
@@ -1422,6 +1426,7 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   rich_text: ["text", "image"],
   image_text: ["image", "text"],
   newsletter: ["heading", "text", "email_form"],
+  brands: [],
 };
 
 export const CHILD_BLOCK_TYPES: Record<string, string[]> = {

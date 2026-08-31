@@ -14,13 +14,15 @@ const OPTIONS: { value: ScrollAnimation; label: string }[] = [
 export default function ScrollAnimationControl({
   value,
   onChange,
+  label = "Scroll animation",
 }: {
   value: ScrollAnimation | undefined;
   onChange: (next: ScrollAnimation) => void;
+  label?: string;
 }) {
   return (
     <Select
-      label="Scroll animation"
+      label={label}
       value={value ?? "none"}
       onChange={(e) => onChange(e.target.value as ScrollAnimation)}
     >

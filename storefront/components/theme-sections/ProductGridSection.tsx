@@ -184,7 +184,8 @@ function GridProductCard({
       )}
       {showTitle && (
         <p
-          className="mt-3 line-clamp-2"
+          className="mt-3 truncate"
+          title={product.name}
           {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "product_title" }) : {})}
           style={{ ...nameStyle, ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
         >

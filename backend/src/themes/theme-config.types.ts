@@ -26,7 +26,8 @@ export type ThemeSectionType =
   | 'testimonials'
   | 'rich_text'
   | 'image_text'
-  | 'newsletter';
+  | 'newsletter'
+  | 'brands';
 
 export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | 'slide-right';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';
@@ -292,6 +293,11 @@ export interface ProductPageSettings {
   showStockIndicator: boolean;
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
+  // The "Buy Now Pay Later!" card (Tabby/Tamara installment-promo widgets)
+  // under the price. The card only renders at all when at least one of those
+  // providers is enabled + has a public key; this lets a merchant hide it
+  // even then. Default true.
+  showBnplWidget: boolean;
   inStockColor: string;
   lowStockColor: string;
   outOfStockColor: string;

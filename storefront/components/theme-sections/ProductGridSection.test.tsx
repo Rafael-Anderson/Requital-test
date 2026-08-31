@@ -108,6 +108,20 @@ describe("ProductGridSection", () => {
     expect(viewAllLink).toHaveAttribute("href", "/collections/premium");
   });
 
+  it("truncates the product title to a single line and exposes the full name via title=", async () => {
+    listProducts.mockResolvedValue([product(1)]);
+    const settings = {} as unknown as SectionSettings;
+
+    const { findByText } = render(
+      <ProductGridSection sectionId="sec-1" settings={settings} blocks={[cardBlock]} />,
+    );
+
+    const title = await findByText("Product 1");
+    expect(title).toHaveClass("truncate");
+    expect(title).not.toHaveClass("line-clamp-2");
+    expect(title).toHaveAttribute("title", "Product 1");
+  });
+
   it("hides View all when explicitly turned off, even with a resolved collection", async () => {
     listProducts.mockResolvedValue([product(1)]);
     listCollections.mockResolvedValue([{ id: 42, slug: "premium", name: "Premium" }]);

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
+import { ChevronDown } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
@@ -252,11 +253,12 @@ function MenuBarItem({
         onMouseEnter={(e) => onMegaEnter(e.currentTarget)}
         onMouseLeave={onMegaLeave}
         onClick={(e) => (isMegaOpen ? onMegaLeave() : onMegaEnter(e.currentTarget))}
-        className={`${linkClass} cursor-pointer shrink-0`}
+        className={`${linkClass} inline-flex items-center gap-0.5 cursor-pointer shrink-0`}
         style={cssStyle}
         {...handlers}
       >
         {item.label}
+        <ChevronDown className={`size-3.5 shrink-0 transition-transform ${isMegaOpen ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
     );
   }
@@ -264,8 +266,18 @@ function MenuBarItem({
   // DROPDOWN
   return (
     <div className="relative group shrink-0">
-      <button type="button" aria-haspopup="true" className={`${linkClass} cursor-pointer`} style={cssStyle} {...handlers}>
+      <button
+        type="button"
+        aria-haspopup="true"
+        className={`${linkClass} inline-flex items-center gap-0.5 cursor-pointer`}
+        style={cssStyle}
+        {...handlers}
+      >
         {item.label}
+        <ChevronDown
+          className="size-3.5 shrink-0 transition-transform group-hover:rotate-180 group-focus-within:rotate-180"
+          aria-hidden="true"
+        />
       </button>
       <div className="absolute left-0 top-full z-20 hidden group-hover:block group-focus-within:block pt-1">
         <div className="min-w-48 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg py-2">

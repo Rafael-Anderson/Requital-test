@@ -60,6 +60,34 @@ describe('assertValidThemeConfig', () => {
     });
   });
 
+  describe('section types', () => {
+    it('accepts a brands section (settings-only, no blocks)', () => {
+      const config = baseConfig();
+      config.sections.push({
+        id: 'sec-brands',
+        type: 'brands',
+        visible: true,
+        order: config.sections.length,
+        settings: { heading: 'Shop by brand', logosPerRow: 5, brandIds: [] },
+        blocks: [],
+      });
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+
+    it('rejects an unknown section type', () => {
+      const config = baseConfig();
+      config.sections.push({
+        id: 'sec-bogus',
+        type: 'not_a_real_section',
+        visible: true,
+        order: config.sections.length,
+        settings: {},
+        blocks: [],
+      });
+      expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
+    });
+  });
+
   describe('color schemes', () => {
     it('rejects a color scheme with no id', () => {
       const config = baseConfig();

@@ -206,12 +206,14 @@ export async function listProducts(
   collectionId?: number,
   isCheckoutAddon?: boolean,
   previewToken?: string,
+  brandId?: number,
 ) {
   const params = new URLSearchParams();
   if (outletId !== undefined) params.set("outletId", String(outletId));
   if (collectionId !== undefined) params.set("collectionId", String(collectionId));
   if (isCheckoutAddon !== undefined) params.set("isCheckoutAddon", String(isCheckoutAddon));
   if (previewToken) params.set("previewToken", previewToken);
+  if (brandId !== undefined) params.set("brandId", String(brandId));
   const qs = params.toString();
   const products = await get<Product[]>(`/public/${shopSlug}/products${qs ? `?${qs}` : ""}`);
   return products.map(resolveProductImage);
