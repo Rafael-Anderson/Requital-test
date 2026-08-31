@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBioPageMetadata, buildProductMetadata, buildShopMetadata } from "./seo";
+import { buildBioPageMetadata, buildBrandMetadata, buildProductMetadata, buildShopMetadata } from "./seo";
 import type { BioPageConfig, Product, Shop } from "./types";
 
 // Only the fields these functions actually read are filled in — the rest
@@ -79,6 +79,23 @@ describe("buildProductMetadata", () => {
 function bioPageConfig(overrides: Partial<BioPageConfig>): BioPageConfig {
   return { logoUrl: null, backgroundUrl: null, description: null, metaTitle: null, metaDescription: null, ...overrides };
 }
+
+describe("buildBrandMetadata", () => {
+  it("composes the title and description from the brand + resolved shop name", () => {
+    const result = buildBrandMetadata(shop({ displayName: "Acme Flowers" }), { name: "Rosewood" });
+    expect(result.title).toBe("Rosewood | Acme Flowers");
+    expect(result.description).toBe("Shop Rosewood products at Acme Flowers.");
+  });
+
+  it("falls back to shop.name when there is no displayName", () => {
+    expect(buildBrandMetadata(shop({ displayName: null }), { name: "Rosewood" }).title).toBe("Rosewood | fallback-name");
+  });
+
+  it("uses the shop ogImage for the OG image", () => {
+    const result = buildBrandMetadata(shop({ ogImage: "/uploads/theme/banner.jpg" }), { name: "Rosewood" });
+    expect(result.openGraph?.images).toEqual([{ url: "http://localhost:3000/uploads/theme/banner.jpg" }]);
+  });
+});
 
 describe("buildBioPageMetadata", () => {
   it("uses the bio-specific meta title/description when set", () => {

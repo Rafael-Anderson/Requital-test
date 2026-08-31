@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { listBrands, resolveImageUrl } from "@/lib/api";
 import { themeTextPresetStyle } from "@/lib/theme-element-style";
@@ -26,7 +27,7 @@ const COLS_CLASS: Record<number, string> = {
 // with none renders nothing on the live storefront (a placeholder in the
 // builder preview so the section isn't invisible while being configured).
 export default function BrandsSection({ settings }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, previewToken, previewMode } = useShop();
+  const { shopSlug, shopBasePath, previewToken, previewMode } = useShop();
   const [brands, setBrands] = useState<Brand[] | null>(null);
 
   useEffect(() => {
@@ -38,6 +39,9 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
   const heading = typeof settings.heading === "string" ? settings.heading.trim() : "";
   const brandIds = Array.isArray(settings.brandIds) ? (settings.brandIds as string[]) : [];
   const logosPerRow = typeof settings.logosPerRow === "number" && COLS_CLASS[settings.logosPerRow] ? settings.logosPerRow : 5;
+  // Links are suppressed inside the builder preview so a click selects the
+  // section rather than navigating the iframe away.
+  const linkBrands = settings.linkBrands === true && !previewMode;
 
   if (brands === null) return null;
 
@@ -66,13 +70,20 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
       <div className={`grid ${COLS_CLASS[logosPerRow]} items-center gap-x-6 gap-y-6`}>
         {shown.map((brand) => {
           const logo = resolveImageUrl(brand.logoUrl);
+          const inner: ReactNode = logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt={brand.name} title={brand.name} className="max-h-12 w-auto max-w-full object-contain opacity-80 transition-opacity hover:opacity-100" />
+          ) : (
+            <span className="text-sm font-medium text-zinc-500">{brand.name}</span>
+          );
           return (
             <div key={brand.id} className="flex items-center justify-center">
-              {logo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logo} alt={brand.name} title={brand.name} className="max-h-12 w-auto max-w-full object-contain opacity-80 transition-opacity hover:opacity-100" />
+              {linkBrands ? (
+                <Link href={`${shopBasePath}/brands/${brand.id}`} aria-label={brand.name} className="flex items-center justify-center">
+                  {inner}
+                </Link>
               ) : (
-                <span className="text-sm font-medium text-zinc-500">{brand.name}</span>
+                inner
               )}
             </div>
           );

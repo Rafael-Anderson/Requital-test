@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { BioPageConfig, Product, Shop } from "./types";
+import type { BioPageConfig, Brand, Product, Shop } from "./types";
 import { resolveImageUrl } from "./api";
 
 // Pulled out as pure functions (rather than inlined in the two
@@ -55,6 +55,26 @@ export function buildShopMetadata(shop: Shop): Metadata {
 // bio page's own logo isn't really an "og:image"-shaped asset (usually a
 // square avatar, not a link-preview banner), so this deliberately doesn't
 // try to repurpose bioPageConfig.logoUrl for that.
+// Brand-filtered listing page (/[shop]/brands/[brandId]). No brand-level
+// SEO fields exist, so the title/description are composed from the brand
+// name + the shop's own resolved name, and the OG image falls back to the
+// shop's — same "fallback lives here" shape as the helpers above.
+export function buildBrandMetadata(shop: Shop, brand: Pick<Brand, "name">): Metadata {
+  const shopName = shop.displayName ?? shop.name;
+  const title = `${brand.name} | ${shopName}`;
+  const description = `Shop ${brand.name} products at ${shopName}.`;
+  const image = resolveImageUrl(shop.ogImage);
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: image ? [{ url: image }] : undefined,
+    },
+  };
+}
+
 export function buildBioPageMetadata(shop: Shop, config: BioPageConfig): Metadata {
   const title = config.metaTitle ?? shop.metaTitle ?? shop.displayName ?? shop.name;
   const description = config.metaDescription ?? shop.metaDescription ?? shop.description ?? undefined;

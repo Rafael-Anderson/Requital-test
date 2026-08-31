@@ -17,7 +17,7 @@ vi.mock("@/lib/api", () => ({
 
 let previewMode = false;
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shopSlug: "shop", previewToken: undefined, previewMode }),
+  useShop: () => ({ shopSlug: "shop", shopBasePath: "", previewToken: undefined, previewMode }),
 }));
 
 const BRANDS = [
@@ -67,6 +67,29 @@ describe("BrandsSection", () => {
     listBrands.mockResolvedValue([]);
     renderSection({});
     expect(await screen.findByText(/No brands yet/i)).toBeInTheDocument();
+    previewMode = false;
+  });
+
+  it("wraps each logo in a link to the brand page when linkBrands is on", async () => {
+    listBrands.mockResolvedValue(BRANDS);
+    renderSection({ linkBrands: true });
+    const links = await screen.findAllByRole("link");
+    expect(links.map((el) => el.getAttribute("href"))).toEqual(["/brands/1", "/brands/2", "/brands/3"]);
+  });
+
+  it("does not link logos when linkBrands is off (default)", async () => {
+    listBrands.mockResolvedValue(BRANDS);
+    renderSection({});
+    await screen.findByAltText("Rosewood");
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("suppresses links inside the builder preview even when linkBrands is on", async () => {
+    previewMode = true;
+    listBrands.mockResolvedValue(BRANDS);
+    renderSection({ linkBrands: true });
+    await screen.findByAltText("Rosewood");
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
     previewMode = false;
   });
 });

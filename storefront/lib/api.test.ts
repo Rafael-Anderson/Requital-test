@@ -9,6 +9,12 @@ function mockFetchOnce(body: unknown) {
   );
 }
 
+function captureFetchUrl(body: unknown) {
+  const fn = vi.fn().mockResolvedValue({ ok: true, json: async () => body });
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -50,6 +56,22 @@ describe("product thumbnail resolution (regression)", () => {
     mockFetchOnce({ id: 1, name: "Widget", thumbnail: "https://cdn.example.com/x.jpg" });
     const product = await getProduct("acme-shop", 1);
     expect(product.thumbnail).toBe("https://cdn.example.com/x.jpg");
+  });
+});
+
+describe("listProducts brandId filter", () => {
+  it("appends ?brandId= when a brand id is passed", async () => {
+    const fn = captureFetchUrl([]);
+    await listProducts("acme-shop", undefined, undefined, undefined, undefined, 42);
+    expect(String(fn.mock.calls[0][0])).toContain("/public/acme-shop/products?brandId=42");
+  });
+
+  it("omits brandId when not passed", async () => {
+    const fn = captureFetchUrl([]);
+    await listProducts("acme-shop", 7);
+    const url = String(fn.mock.calls[0][0]);
+    expect(url).not.toContain("brandId");
+    expect(url).toContain("outletId=7");
   });
 });
 

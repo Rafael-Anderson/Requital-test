@@ -6,6 +6,7 @@ import Combobox from "@/components/ui/Combobox";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import Toggle from "@/components/ui/Toggle";
 import { listBrands } from "@/lib/api";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -140,6 +141,16 @@ export default function BrandsSettings({
           </option>
         ))}
       </Select>
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Link logos to a brand page
+          <span className="block text-xs font-normal text-zinc-500">
+            Each logo opens a listing of that brand&apos;s products.
+          </span>
+        </span>
+        <Toggle checked={settings.linkBrands === true} onChange={(v) => onUpdate("linkBrands", v)} />
+      </div>
 
       <hr className="border-black/10 dark:border-white/10" />
 

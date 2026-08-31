@@ -50,7 +50,7 @@ function defaultSettingsForType(type: ThemeSectionType): Record<string, unknown>
     case "product_grid":
       return { ...shared, columns: 3, cardStyle: "minimal" };
     case "brands":
-      return { ...shared, heading: "", logosPerRow: 5, brandIds: [] };
+      return { ...shared, heading: "", logosPerRow: 5, brandIds: [], linkBrands: false };
     default:
       return shared;
   }
