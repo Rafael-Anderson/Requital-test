@@ -27,7 +27,15 @@ export type ThemeSectionType =
   | 'rich_text'
   | 'image_text'
   | 'newsletter'
-  | 'brands';
+  | 'brands'
+  // Tabbed product carousel — pill toggles swap the product set client-side
+  // (theme-builder-expansion Phase 2). settings.tabs: { id, label,
+  // collectionId }[]; malformed entries are dropped at render, not 400'd
+  // (matches the validator's "shallow beyond structure" stance).
+  | 'product_tabs'
+  // Trust / social-proof strip (Phase 6) — repeatable `trust_item` blocks
+  // (icon + short text) + an optional `rating_badge`. Presentational only.
+  | 'trust_bar';
 
 export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | 'slide-right';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';
@@ -78,6 +86,37 @@ export interface ThemeSection {
 // Global chrome (Header/Footer) — same block-tree shape as a section, but a
 // fixed named slot rather than a sections[] array member (not reorderable
 // relative to page content; see the scope decision).
+// theme-builder-expansion Phase 3 (decision TBE1): an OPTIONAL grouping laid
+// over the existing flat `blocks[]` — it does not restructure anything. A
+// row lists block ids (in render order) that should appear on their own
+// horizontal bar. `header.settings.rows` absent ⇒ the storefront renders the
+// pre-existing single 3-zone grid, byte-for-byte. Blocks not referenced by
+// any row fall into the last row so nothing is ever dropped. Stored on
+// `settings`, which is already free-form `Record<string, unknown>` — no
+// structural / migration impact.
+export interface HeaderRow {
+  id: string;
+  blockIds: string[];
+  align?: 'left' | 'center' | 'right' | 'between';
+  background?: string;
+}
+
+// theme-builder-expansion Phase 5 (decision TBE3): the PERSISTENT chrome
+// announcement bar — distinct from the homepage-body `announcement_bar`
+// section (which is untouched). Stored at `header.settings.announcementBar`
+// (free-form settings bag, no structural impact). Absent / `enabled: false`
+// ⇒ the storefront falls back to the legacy `shop.announcementBarEnabled` /
+// `shop.notificationText` bar, unchanged.
+export interface AnnouncementBarConfig {
+  enabled: boolean;
+  messages: string[];
+  scrolling?: boolean;
+  speed?: 'fast' | 'medium' | 'slow';
+  dismissible?: boolean;
+  background?: string;
+  textColor?: string;
+}
+
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];
@@ -253,6 +292,11 @@ export interface ProductCardSettings {
   // Default off - matches the cleaner-look default the grid already shipped
   // with (a short excerpt under every card), a merchant opts in explicitly.
   showProductDescriptions: boolean;
+  // Optional (older published themes lack it) — gates the entire wishlist
+  // feature storefront-side: the heart on product cards, the account nav
+  // tile, and the /account/wishlist page. Absent/false ⇒ no wishlist UI at
+  // all. Mirrored in admin/lib/types.ts + storefront/lib/theme-config-types.ts.
+  showWishlist?: boolean;
 }
 
 // storefront-v2 Phase 2C/2D — settings for the standalone collection
@@ -335,6 +379,25 @@ export interface CustomCssSettings {
   css: string;
 }
 
+// theme-builder-expansion Phase 6 (TBE7): persistent overlay elements —
+// floating WhatsApp + custom link buttons (a rewards/chat launcher is just a
+// link-out; no embedded third-party scripts). Nested under globalSettings
+// specifically so it does NOT touch assertValidThemeConfig's top-level
+// allow-list. OPTIONAL — an existing published theme won't have the key;
+// every consumer guards with `?.`.
+export type FloatingPosition = 'bottom_right' | 'bottom_left';
+export interface FloatingCustomButton {
+  id: string;
+  label: string;
+  url: string;
+  iconUrl?: string;
+  position?: FloatingPosition;
+}
+export interface FloatingElementsSettings {
+  whatsapp: { enabled: boolean; position?: FloatingPosition };
+  customButtons: FloatingCustomButton[];
+}
+
 export interface GlobalThemeSettings {
   logo: LogoSettings;
   colorSchemes: ColorScheme[];
@@ -356,6 +419,9 @@ export interface GlobalThemeSettings {
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
   productPage: ProductPageSettings;
+  // Phase 6 — optional (older published themes lack it; DEFAULT_THEME_CONFIG
+  // seeds a no-op default for new ones).
+  floatingElements?: FloatingElementsSettings;
 }
 
 export interface ThemeConfig {

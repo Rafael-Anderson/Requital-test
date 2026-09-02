@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { stripHtmlToText } from "@/lib/sanitize-html";
 import { productCardNameStyle } from "@/lib/theme-element-style";
+import { resolveProductBadge } from "@/lib/product-badge";
 import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import WishlistButton from "@/components/WishlistButton";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import type { Product } from "@/lib/types";
 
@@ -25,7 +27,7 @@ function PriceDisplay({ product, currency, discounted }: { product: Product; cur
       <span className="line-through text-price-main font-normal mr-1.5">
         {discounted.originalPrice} <CurrencySymbol code={currency} />
       </span>
-      <span className="text-red-600 dark:text-red-400">
+      <span className="text-red-600">
         {discounted.discountedPrice} <span className="font-normal"><CurrencySymbol code={currency} /></span>
       </span>
     </>
@@ -50,6 +52,12 @@ export default function ProductCard({ product, orientation }: { product: Product
   const excerpt = cardExcerpt(product);
   const productCards = themeConfig?.globalSettings.productCards;
   const cardHoverEffect = themeConfig?.globalSettings.animations.cardHoverEffect;
+  // globalSettings.badges wiring (Phase 1) — sold-out wins over sale. null
+  // for an un-themed shop (no themeConfig ⇒ no badges), where the legacy
+  // "Out of stock" pill still renders below.
+  const badge =
+    (outOfStock ? resolveProductBadge("sold_out", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes) : null) ||
+    (discounted ? resolveProductBadge("sale", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes) : null);
   const images = product.images.length > 0 ? product.images.map((i) => i.url) : [product.thumbnail];
   const { activeIndex, handlers } = useProductCardImageIndex(images.length, {
     cycle: !!productCards?.showCarousel,
@@ -67,7 +75,7 @@ export default function ProductCard({ product, orientation }: { product: Product
         <img src={product.thumbnail} alt={product.name} className="size-20 rounded-lg object-cover shrink-0 bg-black/5" />
         <div className="min-w-0 flex-1">
           <p className="font-medium truncate text-product-name" style={nameStyle} title={product.name}>{product.name}</p>
-          {product.shortSummary && <p className="text-sm text-zinc-500 truncate">{product.shortSummary}</p>}
+          {product.shortSummary && <p className="text-sm text-price-main truncate">{product.shortSummary}</p>}
           <p className="text-sm font-semibold mt-1 text-product-name">
             <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} />
           </p>
@@ -90,11 +98,16 @@ export default function ProductCard({ product, orientation }: { product: Product
             style={{ opacity: i === activeIndex ? 1 : 0 }}
           />
         ))}
-        {outOfStock && (
-          <span className="absolute top-2 right-2 rounded-full bg-white/90 px-2 py-0.5 text-xs font-medium text-red-600">
+        {badge ? (
+          <span className={`absolute ${badge.positionClass} px-2 py-0.5 text-xs font-medium`} style={badge.style}>
+            {badge.label}
+          </span>
+        ) : outOfStock ? (
+          <span className="absolute top-2 right-2 rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium text-red-600">
             Out of stock
           </span>
-        )}
+        ) : null}
+        <WishlistButton productId={product.id} />
       </div>
       {/* Single-line ellipsis so long bouquet/gift names never wrap and break
           card-row alignment across a grid; full name available on hover. */}

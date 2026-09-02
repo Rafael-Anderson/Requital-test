@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle } from "@/lib/theme-element-style";
+import { useAnnouncementRotation } from "@/lib/announcement-rotation";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
-
-const ROTATION_INTERVAL_MS: Record<string, number> = { fast: 2000, medium: 4000, slow: 6000 };
-const FADE_MS = 400;
 
 // Same shape as RichTextSection.tsx's own local copy — this section-level
 // override was previously set by the admin panel's TypographyControls but
@@ -39,44 +37,11 @@ export default function AnnouncementBarSectionThemed({ sectionId, settings, bloc
   const visible = [...blocks].filter((b) => b.visible && b.type === "announcement").sort((a, b) => a.order - b.order);
   const texts = visible.map((b) => (typeof b.settings.text === "string" ? b.settings.text : "")).filter(Boolean);
 
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [faded, setFaded] = useState(false);
-
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mql.matches);
-    const onChange = () => setReducedMotion(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  const rotating = !settings.scrolling && !reducedMotion && texts.length > 1;
-
-  useEffect(() => {
-    if (!rotating) {
-      setIndex(0);
-      setFaded(false);
-      return;
-    }
-    const speed = typeof settings.speed === "string" ? settings.speed : "medium";
-    const intervalMs = ROTATION_INTERVAL_MS[speed] ?? ROTATION_INTERVAL_MS.medium;
-    let fadeTimer: ReturnType<typeof setTimeout>;
-    const tickTimer = setInterval(() => {
-      setFaded(true);
-      fadeTimer = setTimeout(() => {
-        setIndex((i) => (i + 1) % texts.length);
-        setFaded(false);
-      }, FADE_MS);
-    }, intervalMs);
-    return () => {
-      clearInterval(tickTimer);
-      clearTimeout(fadeTimer);
-    };
-    // texts.length (not texts itself) is the real dependency here — editing
-    // a block's own text doesn't need to restart the rotation timer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rotating, settings.speed, texts.length]);
+  // Shared crossfade rotator (also drives the persistent chrome bar) —
+  // enabled = "not in marquee mode". The hook itself gates on
+  // prefers-reduced-motion and message count.
+  const speed = typeof settings.speed === "string" ? settings.speed : undefined;
+  const { rotating, index, faded } = useAnnouncementRotation(texts, !settings.scrolling, speed);
 
   if (texts.length === 0) return null;
 

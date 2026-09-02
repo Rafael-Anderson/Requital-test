@@ -4,15 +4,18 @@ import { useParams } from "next/navigation";
 import { ShopProvider, useShop } from "@/lib/shop-context";
 import { CartProvider, useCart } from "@/lib/cart";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { WishlistProvider } from "@/lib/wishlist";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
+import { navMenuInHeaderRow } from "@/lib/header-rows";
 import TopBar from "@/components/TopBar";
 import CartDrawer from "@/components/CartDrawer";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import Footer from "@/components/Footer";
 import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
+import FloatingCustomButtons from "@/components/FloatingCustomButtons";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
@@ -31,7 +34,11 @@ import type { Shop } from "@/lib/types";
 // block is "no opinion," not "hidden" — only an existing block with
 // visible: false is a real, merchant-made "hide this" choice.
 function showMenuBar(shop: ReturnType<typeof useShop>["shop"], themeConfig: ReturnType<typeof useShop>["themeConfig"]) {
-  const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
+  const header = themeConfig?.header;
+  const navBlock = header?.blocks.find((b) => b.type === "nav_menu");
+  // Phase 3: nav_menu placed inside a header row renders inline there
+  // (ThemeDrivenHeader) — the separate below-header bar must not also render.
+  if (header && navMenuInHeaderRow(header.settings, header.blocks)) return false;
   if (navBlock) return navBlock.visible;
   return shop?.showCollectionMenu !== false;
 }
@@ -145,6 +152,7 @@ function Body({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
       <Footer />
       <WhatsAppFloatingButton />
+      <FloatingCustomButtons />
       <CookieConsentBanner />
       {previewMode && (
         <>
@@ -167,15 +175,17 @@ export default function ShopLayoutClient({ children }: { children: React.ReactNo
   return (
     <ShopProvider shopSlug={shopSlug}>
       <AuthProvider shopSlug={shopSlug}>
-        <CartProvider shopSlug={shopSlug}>
-          {/* Always mounted, regardless of theme.cartLayout — TopBar's cart
-              icon calls useCartDrawer() unconditionally (see components/
-              TopBar.tsx) so the context must exist even for shops using the
-              full-page cart, where it's simply never opened. */}
-          <CartDrawerProvider>
-            <Body>{children}</Body>
-          </CartDrawerProvider>
-        </CartProvider>
+        <WishlistProvider shopSlug={shopSlug}>
+          <CartProvider shopSlug={shopSlug}>
+            {/* Always mounted, regardless of theme.cartLayout — TopBar's cart
+                icon calls useCartDrawer() unconditionally (see components/
+                TopBar.tsx) so the context must exist even for shops using the
+                full-page cart, where it's simply never opened. */}
+            <CartDrawerProvider>
+              <Body>{children}</Body>
+            </CartDrawerProvider>
+          </CartProvider>
+        </WishlistProvider>
       </AuthProvider>
     </ShopProvider>
   );

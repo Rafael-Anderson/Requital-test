@@ -5,6 +5,7 @@ import {
   resolveImageElementStyle,
   resolveNavElementStyle,
   resolveMenuBarBackground,
+  headerNavSeamless,
   resolvePriceElementStyle,
   resolveIconStrokeWidth,
   resolveIconElementStyle,
@@ -128,6 +129,30 @@ describe("resolveMenuBarBackground", () => {
   it("does not fall back to a gradient or image header background — no single color to hand down", () => {
     expect(resolveMenuBarBackground({ background: { type: "gradient", gradientFrom: "#000", gradientTo: "#fff" } })).toBeUndefined();
     expect(resolveMenuBarBackground({ background: { type: "image", imageUrl: "/uploads/x.png" } })).toBeUndefined();
+  });
+});
+
+describe("headerNavSeamless (A2 seam fix)", () => {
+  it("is true when menuBarBackground exactly matches a solid header background — no divider", () => {
+    expect(
+      headerNavSeamless({ menuBarBackground: "#101010", background: { type: "solid", color: "#101010" } }),
+    ).toBe(true);
+  });
+
+  it("is true (case-insensitively) when the menu bar inherits the solid header color with no explicit key", () => {
+    expect(headerNavSeamless({ background: { type: "solid", color: "#ABCDEF" } })).toBe(true);
+  });
+
+  it("is false when the two backgrounds differ — the hairline divider stays", () => {
+    expect(
+      headerNavSeamless({ menuBarBackground: "#111111", background: { type: "solid", color: "#ffffff" } }),
+    ).toBe(false);
+  });
+
+  it("is false when there is no comparable header color (unset, gradient or image) — divider stays", () => {
+    expect(headerNavSeamless(undefined)).toBe(false);
+    expect(headerNavSeamless({})).toBe(false);
+    expect(headerNavSeamless({ menuBarBackground: "#111111", background: { type: "gradient", gradientFrom: "#000", gradientTo: "#fff" } })).toBe(false);
   });
 });
 

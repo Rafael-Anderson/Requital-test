@@ -16,6 +16,7 @@ import { SaveAddressDto } from './dto/save-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { InvoicesService } from '../invoices/invoices.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { PublicService } from '../public/public.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 
 // UAE PDPL: max one data-export request per customer per rolling 24h
@@ -26,6 +27,11 @@ const EXPORT_RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
 // Two-step delete (see requestDeletion/confirmDeletion): short-lived so a
 // confirmationToken issued but never acted on can't be replayed much later.
 const DELETION_TOKEN_LIFETIME_MINUTES = 10;
+// Ceiling on customer.wishlist — the whole array is read on every account
+// bootstrap and rewritten on every toggle, so it stays O(small). Far beyond
+// any real shopper; at the cap an add is rejected (409), never silently
+// dropped or evicted.
+const WISHLIST_MAX = 100;
 
 export interface CustomerAddress {
   id: string;
@@ -67,6 +73,7 @@ export class CustomerAccountService {
     private readonly db: DatabaseService,
     private readonly invoicesService: InvoicesService,
     private readonly auditLogService: AuditLogService,
+    private readonly publicService: PublicService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -144,6 +151,7 @@ export class CustomerAccountService {
       exportedAt: new Date().toISOString(),
       profile: this.toProfileResponse(customer),
       addresses: (customer.addresses as CustomerAddress[] | null) ?? [],
+      wishlist: this.readWishlist(customer),
       orders: orders.map((o) => this.toOrderSummary(o, false)),
     };
   }
@@ -234,7 +242,7 @@ export class CustomerAccountService {
   // scrubbed.
   private async anonymiseCustomer(shopId: number, customerId: number) {
     await this.db.execute(
-      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, passwordHash = NULL WHERE id = ?`,
+      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, wishlist = NULL, passwordHash = NULL WHERE id = ?`,
       [
         'Deleted User',
         // Derived from the customer's own (globally unique) id, not a
@@ -442,6 +450,96 @@ export class CustomerAccountService {
       ctx.customerId,
     ]);
     return { id: addressId, deleted: true };
+  }
+
+  // --- Wishlist -----------------------------------------------------------
+  // Storage mirrors `addresses`: a JSON array (of bare product ids) on the
+  // customer row, read-modify-written whole. Every method derives the
+  // customer + shop from ctx — a productId in the URL/body is only ever an
+  // array value + an existence check scoped to ctx.shopId, never a lookup
+  // key that could cross a tenant boundary.
+
+  // Raw ids — the hot path (the storefront wishlist context reads this on
+  // every page for a logged-in shopper), so it's a single-row read with no
+  // product resolution. Stale ids (product later deleted/archived) stay in
+  // the array and are simply filtered out by listWishlistProducts.
+  async listWishlistIds(ctx: CustomerContext): Promise<number[]> {
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
+    return this.readWishlist(customer);
+  }
+
+  // Resolved product cards for the account wishlist page. aggregateStock so
+  // the "Out of stock" treatment fires on a real cross-outlet total (the
+  // account area has no outlet context). Order-preserving; unavailable /
+  // deleted / cross-shop ids drop out here (getProductsByIds re-filters by
+  // shopId + status='Available').
+  async listWishlistProducts(ctx: CustomerContext) {
+    const ids = await this.listWishlistIds(ctx);
+    return this.publicService.getProductsByIds(ctx.shopId, ids, {
+      aggregateStock: true,
+    });
+  }
+
+  async addToWishlist(
+    ctx: CustomerContext,
+    productId: number,
+  ): Promise<{ productIds: number[] }> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM product WHERE id = ? AND shopId = ? AND status = 'Available'`,
+      [productId, ctx.shopId],
+    );
+    if (!rows[0]) {
+      // Covers not-found, another shop's product, and a draft/archived one —
+      // one 404 either way, never leaking which.
+      throw new NotFoundException(`Product ${productId} not found`);
+    }
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
+    const current = this.readWishlist(customer);
+    if (current.includes(productId)) {
+      return { productIds: current };
+    }
+    if (current.length >= WISHLIST_MAX) {
+      throw new ConflictException(
+        `Your wishlist is full (${WISHLIST_MAX} items). Remove one to add more.`,
+      );
+    }
+    const next = [...current, productId];
+    await this.db.execute(`UPDATE customer SET wishlist = ? WHERE id = ?`, [
+      JSON.stringify(next),
+      ctx.customerId,
+    ]);
+    return { productIds: next };
+  }
+
+  // Idempotent: removing an id that isn't there is a no-op success, same
+  // shape as deleteAddress's tolerance for a re-issued delete.
+  async removeFromWishlist(
+    ctx: CustomerContext,
+    productId: number,
+  ): Promise<{ productIds: number[] }> {
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
+    const current = this.readWishlist(customer);
+    if (!current.includes(productId)) {
+      return { productIds: current };
+    }
+    const next = current.filter((id) => id !== productId);
+    await this.db.execute(`UPDATE customer SET wishlist = ? WHERE id = ?`, [
+      JSON.stringify(next),
+      ctx.customerId,
+    ]);
+    return { productIds: next };
+  }
+
+  // customer.wishlist is a real MySQL JSON column (auto-parsed by the mysql2
+  // pool, same as addresses) — coerce defensively anyway: NULL ⇒ [], and
+  // drop anything that isn't a positive integer so one bad write can't wedge
+  // every later read.
+  private readWishlist(customer: { wishlist: unknown }): number[] {
+    const raw: unknown = customer.wishlist;
+    if (!Array.isArray(raw)) return [];
+    return (raw as unknown[]).filter(
+      (v): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0,
+    );
   }
 
   private async findCustomerOrThrow(

@@ -80,7 +80,13 @@
      per-shop at runtime. Defaults here match the storefront's current
      unstyled appearance, so shipping this feature is a no-visual-diff for
      any shop that hasn't touched these fields yet. */
-  --color-mouse-over: #057a7a;
+  /* Hover-pill tint (hover:bg-mouse-over/10). `currentColor`, not a fixed
+     hue: it used to be Requital's teal #057a7a, which leaked the admin accent
+     onto every storefront and was invisible on dark navs. Deriving from the
+     hovered element's own text color tints correctly on both light and dark
+     navs (A3 fix). Overridden per-shop by mouseOverColor when the merchant
+     sets one — see lib/theme-colors.ts. */
+  --color-mouse-over: currentColor;
   --color-button: #069494;
   /* Auto-contrast text for bg-button, same WCAG-guarded logic as
      --color-accent-foreground (never hardcode a fixed text color on a
@@ -92,6 +98,17 @@
   --color-homepage-info: #ffffff;
   --color-header: #ffffff;
   --color-header-fg: #171717;
+  /* Popover / dropdown / flyout surfaces — the mega-menu flyout, the nav
+     dropdown panel, and the header search results (all previously hardcoded
+     bg-white / text-zinc-700 / #E4E7E7, invisible-on-dark). Resolved
+     per-shop from globalSettings.popovers.schemeId in shop-context.tsx's
+     applyThemeConfigOverrides once a theme is published; these literal
+     defaults match the old hardcoded values so an un-themed shop is
+     unchanged. Not a merchant-settable Appearance Color (theme-colors.ts) —
+     it comes from the color scheme, like --color-accent. */
+  --color-popover: #ffffff;
+  --color-popover-fg: #18181b;
+  --color-popover-border: #e4e4e7;
   --color-footer-bg: #18181b;
   --color-footer-fg: #f4f4f5;
   --color-product-name: #171717;

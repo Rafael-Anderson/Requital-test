@@ -3,8 +3,18 @@ import type { Shop } from "./types";
 // Pure (no DOM/hooks) so the visibility/URL logic is directly testable —
 // same "extract the real logic, keep the component a thin wrapper" pattern
 // as lib/payment-methods.ts's resolvePaymentMethods.
-export function shouldShowWhatsAppButton(shop: Pick<Shop, "whatsappFloatingButtonEnabled" | "whatsappNumber"> | null): boolean {
-  return !!(shop?.whatsappFloatingButtonEnabled && shop.whatsappNumber);
+// `enabledOverride` (theme-builder-expansion Phase 6) — when the theme's
+// globalSettings.floatingElements.whatsapp.enabled is explicitly set it wins
+// over the legacy shop toggle (both directions); `undefined` ⇒ fall back to
+// the legacy shop.whatsappFloatingButtonEnabled. A number is still always
+// required.
+export function shouldShowWhatsAppButton(
+  shop: Pick<Shop, "whatsappFloatingButtonEnabled" | "whatsappNumber"> | null,
+  enabledOverride?: boolean,
+): boolean {
+  if (!shop?.whatsappNumber) return false;
+  const enabled = enabledOverride ?? !!shop.whatsappFloatingButtonEnabled;
+  return enabled;
 }
 
 // Same wa.me URL construction as backend BioLinksService.resolveSocialUrl's

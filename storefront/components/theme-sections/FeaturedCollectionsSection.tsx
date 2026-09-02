@@ -10,6 +10,20 @@ import { selectTiles } from "@/components/home-layouts/FeaturedGrid";
 import type { Collection } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
+// Tailwind's JIT scanner needs literal class strings. Mobile stays 2-up.
+const GRID_COLS: Record<number, string> = {
+  2: "grid-cols-2 sm:grid-cols-2",
+  3: "grid-cols-2 sm:grid-cols-3",
+  4: "grid-cols-2 sm:grid-cols-4",
+  5: "grid-cols-2 sm:grid-cols-5",
+  6: "grid-cols-2 sm:grid-cols-6",
+};
+const ASPECT_CLASS: Record<string, string> = {
+  square: "aspect-square",
+  portrait: "aspect-[3/4]",
+  landscape: "aspect-[4/3]",
+};
+
 // collection_header's own sub-blocks carry the section's title/"view all"
 // copy — there's no separate section.settings.heading field anymore (see
 // backend constants.ts's BLOCK_TYPES.featured_collections). No "browse all
@@ -50,6 +64,12 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
   }
   if (tiles.length === 0) return null;
 
+  // Phase 4 — tile grid controls. All absent ⇒ the pre-existing
+  // sm:grid-cols-4 / aspect-square / name-below layout.
+  const gridCols = GRID_COLS[settings.columns as number] ?? GRID_COLS[4];
+  const aspect = ASPECT_CLASS[settings.aspectRatio as string] ?? ASPECT_CLASS.square;
+  const overlayText = settings.overlayText === true;
+
   return (
     <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
@@ -78,7 +98,7 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
           )}
         </div>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className={`grid ${gridCols} gap-3`}>
         {tiles.map((c) => (
           <Link
             key={c.id}
@@ -86,7 +106,7 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
             className="group overflow-hidden border border-stroke"
             style={{ borderRadius: "var(--theme-radius, 8px)" }}
           >
-            <div className="aspect-square bg-black/5 overflow-hidden">
+            <div className={`relative ${aspect} bg-black/5 overflow-hidden`}>
               {c.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -99,8 +119,13 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
                   {c.name}
                 </div>
               )}
+              {overlayText && (
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-2 text-xs font-medium text-white truncate">
+                  {c.name}
+                </span>
+              )}
             </div>
-            <p className="px-2 py-1.5 text-xs font-medium truncate">{c.name}</p>
+            {!overlayText && <p className="px-2 py-1.5 text-xs font-medium truncate">{c.name}</p>}
           </Link>
         ))}
       </div>

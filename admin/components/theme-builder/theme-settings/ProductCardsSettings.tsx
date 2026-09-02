@@ -57,6 +57,11 @@ export default function ProductCardsSettings({ editor }: { editor: ThemeEditorSt
         <Toggle checked={productCards.showProductDescriptions} onChange={(v) => update({ showProductDescriptions: v })} />
       </div>
 
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Show wishlist heart on product cards</span>
+        <Toggle checked={!!productCards.showWishlist} onChange={(v) => update({ showWishlist: v })} />
+      </div>
+
       <hr className="border-black/10 dark:border-white/10" />
 
       <div>

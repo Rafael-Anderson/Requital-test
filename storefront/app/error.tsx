@@ -14,10 +14,10 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white dark:bg-zinc-950">
+    <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="text-center">
-        <p className="text-sm text-gray-500 dark:text-gray-400">Something went wrong. Refreshing…</p>
-        <button type="button" onClick={reset} className="mt-4 text-sm text-teal-600 dark:text-teal-400 underline">
+        <p className="text-sm text-gray-500">Something went wrong. Refreshing…</p>
+        <button type="button" onClick={reset} className="mt-4 text-sm text-teal-600 underline">
           Try again
         </button>
       </div>

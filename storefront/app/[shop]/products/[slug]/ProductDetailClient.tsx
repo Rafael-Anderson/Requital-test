@@ -336,7 +336,7 @@ export default function ProductDetailClient() {
                 <p className="text-sm text-price-secondary line-through">
                   {autoDiscounted.originalPrice} <CurrencySymbol code={shop?.currency} />
                 </p>
-                <p className="text-xl font-semibold text-red-600 dark:text-red-400">
+                <p className="text-xl font-semibold text-red-600">
                   {autoDiscounted.discountedPrice} <span className="text-base font-normal"><CurrencySymbol code={shop?.currency} /></span>
                 </p>
               </>
@@ -460,7 +460,7 @@ export default function ProductDetailClient() {
                       setGiftCardAmount(raw && !Number.isNaN(parsed) ? parsed : null);
                     }}
                     placeholder="Custom amount"
-                    className="h-10 w-full max-w-40 rounded-lg border border-stroke bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent transition-colors"
+                    className="h-10 w-full max-w-40 rounded-lg border border-stroke bg-white px-3 text-sm outline-none focus:border-accent transition-colors"
                   />
                 </div>
               )}
@@ -710,7 +710,7 @@ export default function ProductDetailClient() {
             <p className="text-xs text-zinc-500 truncate">{product.name}</p>
             <p className="font-semibold text-product-name">
               {autoDiscounted ? (
-                <span className="text-red-600 dark:text-red-400">
+                <span className="text-red-600">
                   {autoDiscounted.discountedPrice} <span className="text-xs font-normal"><CurrencySymbol code={shop?.currency} /></span>
                 </span>
               ) : (

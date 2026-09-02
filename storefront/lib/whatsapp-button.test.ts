@@ -17,6 +17,24 @@ describe("shouldShowWhatsAppButton", () => {
   it("is true only when both the toggle is on and a number is configured", () => {
     expect(shouldShowWhatsAppButton({ whatsappFloatingButtonEnabled: true, whatsappNumber: "501234567" })).toBe(true);
   });
+
+  describe("floatingElements override (Phase 6)", () => {
+    it("an explicit override wins over the legacy toggle, both directions", () => {
+      // legacy off, override on ⇒ show
+      expect(shouldShowWhatsAppButton({ whatsappFloatingButtonEnabled: false, whatsappNumber: "5012" }, true)).toBe(true);
+      // legacy on, override off ⇒ hide
+      expect(shouldShowWhatsAppButton({ whatsappFloatingButtonEnabled: true, whatsappNumber: "5012" }, false)).toBe(false);
+    });
+
+    it("undefined override falls back to the legacy toggle", () => {
+      expect(shouldShowWhatsAppButton({ whatsappFloatingButtonEnabled: true, whatsappNumber: "5012" }, undefined)).toBe(true);
+      expect(shouldShowWhatsAppButton({ whatsappFloatingButtonEnabled: false, whatsappNumber: "5012" }, undefined)).toBe(false);
+    });
+
+    it("still needs a number regardless of the override", () => {
+      expect(shouldShowWhatsAppButton({ whatsappFloatingButtonEnabled: true, whatsappNumber: null }, true)).toBe(false);
+    });
+  });
 });
 
 describe("buildWhatsAppUrl", () => {

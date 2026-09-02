@@ -16,7 +16,13 @@ export type ThemeSectionType =
   | "rich_text"
   | "image_text"
   | "newsletter"
-  | "brands";
+  | "brands"
+  // Tabbed product carousel — pill toggles swap the product set client-side
+  // (theme-builder-expansion Phase 2). Mirrors backend
+  // theme-config.types.ts. settings.tabs: { id, label, collectionId }[].
+  | "product_tabs"
+  // Trust / social-proof strip (Phase 6) — trust_item + rating_badge blocks.
+  | "trust_bar";
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
 export type SectionVisibility = "desktop" | "mobile" | "both";
@@ -47,6 +53,32 @@ export interface ThemeSection {
   order: number;
   settings: SectionSettings;
   blocks: ThemeBlock[];
+}
+
+// theme-builder-expansion Phase 3 (TBE1) — mirrors backend
+// theme-config.types.ts's HeaderRow. Optional grouping over the flat
+// blocks[]; `header.settings.rows` absent ⇒ ThemeDrivenHeader renders the
+// pre-existing single 3-zone grid unchanged (see lib/header-rows.ts).
+export interface HeaderRow {
+  id: string;
+  blockIds: string[];
+  align?: "left" | "center" | "right" | "between";
+  background?: string;
+}
+
+// Phase 5 (TBE3) — persistent chrome announcement bar, at
+// `header.settings.announcementBar`. Distinct from the homepage-body
+// `announcement_bar` section (see AnnouncementBarSectionThemed). Absent /
+// disabled ⇒ storefront falls back to the legacy shop.announcementBarEnabled
+// bar. Mirrors backend theme-config.types.ts.
+export interface AnnouncementBarConfig {
+  enabled: boolean;
+  messages: string[];
+  scrolling?: boolean;
+  speed?: "fast" | "medium" | "slow";
+  dismissible?: boolean;
+  background?: string;
+  textColor?: string;
 }
 
 export interface HeaderFooterConfig {
@@ -196,6 +228,10 @@ export interface ProductCardSettings {
   productNameFontWeight: "regular" | "medium" | "bold";
   productNameColor: string;
   showProductDescriptions: boolean;
+  // Optional (older published themes lack it) — gates the whole wishlist
+  // feature: the heart on product cards, the account nav tile, and the
+  // /account/wishlist page. See lib/wishlist.tsx's wishlistEnabled().
+  showWishlist?: boolean;
 }
 
 export interface CollectionPageSettings {
@@ -250,6 +286,22 @@ export interface CustomCssSettings {
   css: string;
 }
 
+// Phase 6 (TBE7) — persistent overlay elements. Mirrors backend
+// theme-config.types.ts. OPTIONAL — older published themes lack the key, so
+// every consumer guards with `?.`.
+export type FloatingPosition = "bottom_right" | "bottom_left";
+export interface FloatingCustomButton {
+  id: string;
+  label: string;
+  url: string;
+  iconUrl?: string;
+  position?: FloatingPosition;
+}
+export interface FloatingElementsSettings {
+  whatsapp: { enabled: boolean; position?: FloatingPosition };
+  customButtons: FloatingCustomButton[];
+}
+
 export interface GlobalThemeSettings {
   logo: LogoSettings;
   colorSchemes: ColorScheme[];
@@ -271,6 +323,7 @@ export interface GlobalThemeSettings {
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
   productPage: ProductPageSettings;
+  floatingElements?: FloatingElementsSettings;
 }
 
 export interface ThemeConfig {

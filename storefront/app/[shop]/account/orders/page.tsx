@@ -50,7 +50,7 @@ export default function OrderHistoryPage() {
           <Link
             key={order.id}
             href={`${shopBasePath}/account/orders/${order.id}`}
-            className="block rounded-lg border border-black/10 dark:border-white/10 p-4 hover:border-accent/50 transition-colors"
+            className="block rounded-lg border border-black/10 p-4 hover:border-accent/50 transition-colors"
           >
             <div className="flex justify-between items-start">
               <div>

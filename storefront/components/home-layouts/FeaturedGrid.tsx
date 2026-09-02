@@ -61,7 +61,7 @@ export default function FeaturedGrid({
               <Link
                 key={c.id}
                 href={`${shopBasePath}/collections/${c.slug}`}
-                className={`group rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-stroke ${tileClassName(topLevel.length, i)}`}
+                className={`group rounded-lg overflow-hidden bg-white border border-stroke ${tileClassName(topLevel.length, i)}`}
               >
                 <div className="aspect-square bg-black/5 overflow-hidden">
                   {c.image ? (

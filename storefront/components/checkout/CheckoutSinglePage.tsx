@@ -73,7 +73,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
               className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
                 orderType === "delivery"
                   ? "border-accent bg-accent/10 text-accent"
-                  : "border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300"
+                  : "border-black/15 bg-white text-zinc-600"
               }`}
             >
               Delivery
@@ -86,7 +86,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
               className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
                 orderType === "pickup"
                   ? "border-accent bg-accent/10 text-accent"
-                  : "border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300"
+                  : "border-black/15 bg-white text-zinc-600"
               }`}
             >
               Pickup
@@ -204,7 +204,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
         <GiftCardCodeField shopSlug={state.shopSlug} onAmountChange={(amount) => state.setGiftCardAmount(amount)} />
       </div>
 
-      <div className="pt-2 border-t border-black/10 dark:border-white/10 space-y-1">
+      <div className="pt-2 border-t border-black/10 space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-zinc-600">Subtotal</span>
           <span>
@@ -212,7 +212,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
           </span>
         </div>
         {discountAmount !== null && discountAmount > 0 && (
-          <div className="flex items-center justify-between text-green-600 dark:text-green-400">
+          <div className="flex items-center justify-between text-green-600">
             <span>Discount</span>
             <span>
               -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} />
@@ -220,7 +220,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
           </div>
         )}
         {giftCardAmount !== null && giftCardAmount > 0 && (
-          <div className="flex items-center justify-between text-green-600 dark:text-green-400">
+          <div className="flex items-center justify-between text-green-600">
             <span>Gift card</span>
             <span>
               -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} <CurrencySymbol code={shop?.currency} />

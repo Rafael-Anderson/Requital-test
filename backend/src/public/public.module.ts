@@ -50,5 +50,8 @@ import { ThemesModule } from '../themes/themes.module';
     PublicAbandonedCartRecoveryController,
   ],
   providers: [PublicService],
+  // CustomerAccountModule consumes PublicService.getProductsByIds for the
+  // wishlist page's product resolution.
+  exports: [PublicService],
 })
 export class PublicModule {}

@@ -20,6 +20,7 @@ import { CustomerAccountService } from './customer-account.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
+import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { CurrentCustomer } from '../customer-auth/decorators/current-customer.decorator';
 import { Public } from '../auth/decorators/public.decorator';
@@ -129,6 +130,35 @@ export class CustomerAccountController {
     @Param('addressId') addressId: string,
   ) {
     return this.customerAccountService.deleteAddress(ctx, addressId);
+  }
+
+  // Wishlist — see CustomerAccountService for the storage/scoping model.
+  // Bare ids (the storefront wishlist context's hot read); the resolved
+  // product cards for the account page come from the /products sibling.
+  @Get('wishlist')
+  listWishlist(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.listWishlistIds(ctx);
+  }
+
+  @Get('wishlist/products')
+  listWishlistProducts(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.listWishlistProducts(ctx);
+  }
+
+  @Post('wishlist')
+  addToWishlist(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Body() dto: AddWishlistItemDto,
+  ) {
+    return this.customerAccountService.addToWishlist(ctx, dto.productId);
+  }
+
+  @Delete('wishlist/:productId')
+  removeFromWishlist(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Param('productId', ParseIntPipe) productId: number,
+  ) {
+    return this.customerAccountService.removeFromWishlist(ctx, productId);
   }
 
   // UAE PDPL data export/deletion — mounted under this controller (not the

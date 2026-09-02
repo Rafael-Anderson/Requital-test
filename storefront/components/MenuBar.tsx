@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveNavElementStyle, resolveMenuBarBackground, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
+import { resolveNavElementStyle, resolveMenuBarBackground, headerNavSeamless, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
 
@@ -92,13 +92,13 @@ function MegaMenuPanel({
       ref={panelRef}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={{ top, left: adjustedLeft, borderColor: "#E4E7E7", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
-      className={`fixed z-40 w-fit max-w-[calc(100vw-2rem)] rounded-lg border bg-white ${animationClass} max-h-[70vh] overflow-y-auto`}
+      style={{ top, left: adjustedLeft, borderColor: "var(--color-popover-border)", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
+      className={`fixed z-40 w-fit max-w-[calc(100vw-2rem)] rounded-lg border bg-popover text-popover-fg ${animationClass} max-h-[70vh] overflow-y-auto`}
     >
       <div className="flex flex-wrap gap-8 px-6 py-6">
         {item.columns.map((column) => (
           <div key={column.id} className="w-48 shrink-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">{column.title}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-popover-fg/60 mb-2">{column.title}</p>
             <ul className="space-y-1.5">
               {column.links.map((link) => {
                 const href =
@@ -112,7 +112,7 @@ function MegaMenuPanel({
                     <Link
                       href={href}
                       className={`block text-sm transition-colors hover:underline ${
-                        link.featured ? "text-accent-text font-medium" : "text-zinc-700"
+                        link.featured ? "text-accent-text font-medium" : "text-popover-fg"
                       }`}
                     >
                       {link.label}
@@ -144,13 +144,16 @@ function MegaMenuPanel({
 // with its columns wrapping (flex-wrap) onto their own lines once they no
 // longer fit the viewport width, rather than a genuine accordion-in-a-drawer
 // that has nothing to live inside.
-export default function MenuBar() {
+// `inline` (theme-builder-expansion Phase 3) — rendered inside a header row
+// rather than as its own full-width bar below the header: drop the <nav>
+// wrapper's border/background/centering so the row owns the layout.
+export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   const { shopSlug, shopBasePath, previewToken, previewMode, themeConfig } = useShop();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [openMegaId, setOpenMegaId] = useState<number | null>(null);
   const [megaTop, setMegaTop] = useState(0);
   const [megaLeft, setMegaLeft] = useState(0);
-  const navRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -182,6 +185,9 @@ export default function MenuBar() {
 
   const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
   const menuBarBackground = resolveMenuBarBackground(themeConfig?.header.settings);
+  // Drop the top hairline when the menu bar and header are the same color —
+  // otherwise border-stroke shows as a light seam between them (A2 fix).
+  const seamless = headerNavSeamless(themeConfig?.header.settings);
   const navStyle = {
     ...(navBlock ? resolveNavElementStyle(navBlock.settings) : {}),
     ...(menuBarBackground ? { background: menuBarBackground } : {}),
@@ -189,32 +195,54 @@ export default function MenuBar() {
   const showOnMobile = navBlock?.settings.showOnMobile !== false;
   const menuAnimation = (themeConfig?.header.settings.menuAnimation as "fade" | "slide" | "none" | undefined) ?? "fade";
   const linkClass = "theme-nav-link px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors";
+  // Nav row alignment (Phase 3) — only affects the below-header bar; an
+  // inline nav is aligned by its header row's own justify setting.
+  const navAlign = navBlock?.settings.align;
+  const alignClass = navAlign === "center" ? "justify-center" : navAlign === "right" ? "justify-end" : "";
 
   const openItem = items.find((i) => i.id === openMegaId && i.type === "MEGA");
 
+  const itemsRow = items.map((item) => (
+    <MenuBarItem
+      key={item.id}
+      item={item}
+      linkClass={linkClass}
+      shopBasePath={shopBasePath}
+      isMegaOpen={openMegaId === item.id}
+      onMegaEnter={(el) => openMega(item.id, el)}
+      onMegaLeave={scheduleClose}
+    />
+  ));
+  const megaPanel = openItem ? (
+    <MegaMenuPanel item={openItem} top={megaTop} left={megaLeft} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
+  ) : null;
+
+  if (inline) {
+    return (
+      <>
+        <div
+          ref={navRef}
+          className="flex items-center gap-1 py-1 text-sm overflow-x-auto"
+          style={navBlock ? resolveNavElementStyle(navBlock.settings) : undefined}
+          {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
+        >
+          {itemsRow}
+        </div>
+        {megaPanel}
+      </>
+    );
+  }
+
   return (
     <nav
-      ref={navRef}
-      className={`border-t border-stroke ${showOnMobile ? "" : "hidden md:block"}`}
+      className={`${seamless ? "" : "border-t border-stroke"} ${showOnMobile ? "" : "hidden md:block"}`}
       style={navStyle}
       {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
     >
-      <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto">
-        {items.map((item) => (
-          <MenuBarItem
-            key={item.id}
-            item={item}
-            linkClass={linkClass}
-            shopBasePath={shopBasePath}
-            isMegaOpen={openMegaId === item.id}
-            onMegaEnter={(el) => openMega(item.id, el)}
-            onMegaLeave={scheduleClose}
-          />
-        ))}
+      <div ref={navRef} className={`mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto ${alignClass}`}>
+        {itemsRow}
       </div>
-      {openItem && (
-        <MegaMenuPanel item={openItem} top={megaTop} left={megaLeft} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
-      )}
+      {megaPanel}
     </nav>
   );
 }
@@ -280,15 +308,15 @@ function MenuBarItem({
         />
       </button>
       <div className="absolute left-0 top-full z-20 hidden group-hover:block group-focus-within:block pt-1">
-        <div className="min-w-48 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg py-2">
-          <span className="block px-3 pb-1 text-xs font-semibold text-zinc-400">{item.label}</span>
+        <div className="min-w-48 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-lg py-2">
+          <span className="block px-3 pb-1 text-xs font-semibold text-popover-fg/60">{item.label}</span>
           <ul className="space-y-0.5">
             {item.collections.map((c) =>
               c.collection ? (
                 <li key={c.collectionId}>
                   <Link
                     href={`${shopBasePath}/collections/${c.collection.slug}`}
-                    className="block px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    className="block px-3 py-1.5 text-sm text-popover-fg hover:bg-mouse-over/10 transition-colors"
                   >
                     {c.collection.name}
                   </Link>

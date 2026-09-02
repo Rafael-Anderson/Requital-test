@@ -25,7 +25,7 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
   } = state;
 
   return (
-    <div className="space-y-3 rounded-lg border border-black/10 dark:border-white/10 p-4">
+    <div className="space-y-3 rounded-lg border border-black/10 p-4">
       <p className="text-sm font-medium">Delivery address</p>
       {savedAddresses.length > 0 && (
         <div>

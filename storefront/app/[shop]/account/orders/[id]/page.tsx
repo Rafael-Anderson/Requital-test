@@ -66,7 +66,7 @@ export default function OrderDetailPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {order && (
-        <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-3">
+        <div className="rounded-lg border border-black/10 p-4 space-y-3">
           <div className="flex justify-between">
             <span className="text-zinc-500">Status</span>
             <span className="capitalize font-medium">{order.status}</span>
@@ -102,7 +102,7 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          <div className="border-t border-black/10 dark:border-white/10 pt-3 text-sm space-y-1">
+          <div className="border-t border-black/10 pt-3 text-sm space-y-1">
             {order.items.map((item, i) => (
               <div key={i} className="flex justify-between">
                 <div>
@@ -118,7 +118,7 @@ export default function OrderDetailPage() {
             ))}
           </div>
 
-          <div className="border-t border-black/10 dark:border-white/10 pt-3 text-sm space-y-1">
+          <div className="border-t border-black/10 pt-3 text-sm space-y-1">
             {order.deliveryFee && (
               <div className="flex justify-between text-zinc-500">
                 <span>Delivery fee</span>
@@ -128,7 +128,7 @@ export default function OrderDetailPage() {
               </div>
             )}
             {order.discountAmount && (
-              <div className="flex justify-between text-green-600 dark:text-green-400">
+              <div className="flex justify-between text-green-600">
                 <span>Discount</span>
                 <span>
                   -{order.discountAmount} <CurrencySymbol code={shop?.currency} />

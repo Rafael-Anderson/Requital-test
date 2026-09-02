@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import Combobox from "@/components/ui/Combobox";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
+import Toggle from "@/components/ui/Toggle";
 import Button from "@/components/ui/Button";
 import { listCollections } from "@/lib/api";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
@@ -130,6 +132,25 @@ export default function FeaturedCollectionsSettings({
           }}
         />
       )}
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      <Select label="Columns" value={String((settings.columns as number) ?? 4)} onChange={(e) => onUpdate("columns", Number(e.target.value))}>
+        {[2, 3, 4, 5, 6].map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </Select>
+      <Select label="Tile shape" value={(settings.aspectRatio as string) ?? "square"} onChange={(e) => onUpdate("aspectRatio", e.target.value)}>
+        <option value="square">Square</option>
+        <option value="portrait">Portrait</option>
+        <option value="landscape">Landscape</option>
+      </Select>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Name over the image</span>
+        <Toggle checked={(settings.overlayText as boolean) ?? false} onChange={(v) => onUpdate("overlayText", v)} />
+      </div>
 
       <hr className="border-black/10 dark:border-white/10" />
 

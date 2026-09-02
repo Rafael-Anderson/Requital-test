@@ -31,7 +31,7 @@ export default function NotifyMeForm({
   }
 
   if (status === "subscribed") {
-    return <p className="mt-3 text-sm text-green-700 dark:text-green-500">You're on the list. We'll email you when it's back.</p>;
+    return <p className="mt-3 text-sm text-green-700">You're on the list. We'll email you when it's back.</p>;
   }
   if (status === "duplicate") {
     return <p className="mt-3 text-sm text-zinc-500">You're already on the list.</p>;
@@ -47,7 +47,7 @@ export default function NotifyMeForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className="flex-1 h-10 rounded-lg border border-stroke bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent transition-colors"
+          className="flex-1 h-10 rounded-lg border border-stroke bg-white px-3 text-sm outline-none focus:border-accent transition-colors"
         />
         <button
           type="submit"

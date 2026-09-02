@@ -90,22 +90,22 @@ export default function SearchBar({
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-lg border border-stroke bg-header text-header-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-50 overflow-hidden">
-          <div className="p-2 border-b border-stroke">
+        <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-50 overflow-hidden">
+          <div className="p-2 border-b border-popover-border">
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search products…"
-              className="w-full h-9 rounded-md border border-stroke bg-white dark:bg-zinc-900 px-3 text-sm outline-none focus:border-accent transition-colors"
+              className="w-full h-9 rounded-md border border-popover-border bg-background px-3 text-sm outline-none focus:border-accent transition-colors"
             />
           </div>
           <div className="max-h-80 overflow-y-auto">
-            {loading && <p className="p-3 text-sm text-zinc-500">Searching…</p>}
+            {loading && <p className="p-3 text-sm text-popover-fg/60">Searching…</p>}
 
             {!loading && searched && suggestion && (
-              <p className="px-3 pt-2.5 text-xs text-zinc-500">
+              <p className="px-3 pt-2.5 text-xs text-popover-fg/60">
                 Did you mean{" "}
                 <button
                   type="button"
@@ -119,7 +119,7 @@ export default function SearchBar({
             )}
 
             {!loading && searched && results.length === 0 && (
-              <p className="p-3 text-sm text-zinc-500">No products found.</p>
+              <p className="p-3 text-sm text-popover-fg/60">No products found.</p>
             )}
 
             {!loading &&
@@ -138,7 +138,7 @@ export default function SearchBar({
                   />
                   <div className="min-w-0">
                     <p className="text-sm truncate" title={r.name}>{r.name}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-popover-fg/60">
                       {r.price} <CurrencySymbol code={shop?.currency} />
                     </p>
                   </div>

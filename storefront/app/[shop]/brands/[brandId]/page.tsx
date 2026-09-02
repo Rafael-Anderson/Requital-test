@@ -114,7 +114,7 @@ export default function BrandPage() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
-            className="h-10 rounded-lg border border-stroke bg-white dark:bg-zinc-900 px-3 text-sm text-foreground"
+            className="h-10 rounded-lg border border-stroke bg-white px-3 text-sm text-foreground"
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>

@@ -1105,7 +1105,13 @@ export type ThemeSectionType =
   | "rich_text"
   | "image_text"
   | "newsletter"
-  | "brands";
+  | "brands"
+  // Tabbed product carousel — pill toggles swap the product set client-side
+  // (theme-builder-expansion Phase 2). Mirrors backend
+  // theme-config.types.ts. settings.tabs: { id, label, collectionId }[].
+  | "product_tabs"
+  // Trust / social-proof strip (Phase 6) — trust_item + rating_badge blocks.
+  | "trust_bar";
 
 export const SECTION_TYPES: ThemeSectionType[] = [
   "announcement_bar",
@@ -1117,6 +1123,8 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   "image_text",
   "newsletter",
   "brands",
+  "product_tabs",
+  "trust_bar",
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -1129,6 +1137,8 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   image_text: "Image + Text",
   newsletter: "Newsletter Signup",
   brands: "Brands",
+  product_tabs: "Tabbed Products",
+  trust_bar: "Trust Bar",
 };
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
@@ -1164,6 +1174,30 @@ export interface ThemeSection {
   order: number;
   settings: SectionSettings;
   blocks: ThemeBlock[];
+}
+
+// theme-builder-expansion Phase 3 (TBE1) — mirrors backend
+// theme-config.types.ts's HeaderRow. An OPTIONAL grouping over the flat
+// blocks[]; `header.settings.rows` absent ⇒ storefront renders today's
+// single 3-zone grid unchanged. No structural change.
+export interface HeaderRow {
+  id: string;
+  blockIds: string[];
+  align?: "left" | "center" | "right" | "between";
+  background?: string;
+}
+
+// Phase 5 (TBE3) — persistent chrome announcement bar, at
+// `header.settings.announcementBar`. Distinct from the homepage-body
+// `announcement_bar` section. Mirrors backend theme-config.types.ts.
+export interface AnnouncementBarConfig {
+  enabled: boolean;
+  messages: string[];
+  scrolling?: boolean;
+  speed?: "fast" | "medium" | "slow";
+  dismissible?: boolean;
+  background?: string;
+  textColor?: string;
 }
 
 export interface HeaderFooterConfig {
@@ -1314,6 +1348,10 @@ export interface ProductCardSettings {
   productNameFontWeight: "regular" | "medium" | "bold";
   productNameColor: string;
   showProductDescriptions: boolean;
+  // Optional (older published themes lack it) — gates the whole storefront
+  // wishlist feature. Toggled from ProductCardsSettings.tsx. Mirrored in
+  // backend theme-config.types.ts + storefront theme-config-types.ts.
+  showWishlist?: boolean;
 }
 
 export interface CollectionPageSettings {
@@ -1370,6 +1408,22 @@ export interface CustomCssSettings {
   css: string;
 }
 
+// Phase 6 (TBE7) — persistent overlay elements. Mirrors backend
+// theme-config.types.ts. Nested under globalSettings (no top-level
+// allow-list change); OPTIONAL — older published themes lack the key.
+export type FloatingPosition = "bottom_right" | "bottom_left";
+export interface FloatingCustomButton {
+  id: string;
+  label: string;
+  url: string;
+  iconUrl?: string;
+  position?: FloatingPosition;
+}
+export interface FloatingElementsSettings {
+  whatsapp: { enabled: boolean; position?: FloatingPosition };
+  customButtons: FloatingCustomButton[];
+}
+
 export interface GlobalThemeSettings {
   logo: LogoSettings;
   colorSchemes: ColorScheme[];
@@ -1391,6 +1445,7 @@ export interface GlobalThemeSettings {
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
   productPage: ProductPageSettings;
+  floatingElements?: FloatingElementsSettings;
 }
 
 export interface ThemeConfig {
@@ -1412,6 +1467,11 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   cart_icon: "Cart",
   account_icon: "Account",
   header_text: "Header Text",
+  contact_bar_item: "Contact item",
+  social_row: "Social links",
+  language_switcher: "Language (coming soon)",
+  trust_item: "Trust item",
+  rating_badge: "Rating badge",
   footer_column: "Column",
   footer_social: "Social Links",
   footer_copyright: "Copyright",
@@ -1433,7 +1493,18 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
 };
 
 export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
-  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon", "header_text", "image"],
+  header: [
+    "logo",
+    "nav_menu",
+    "search_icon",
+    "cart_icon",
+    "account_icon",
+    "header_text",
+    "image",
+    "contact_bar_item",
+    "social_row",
+    "language_switcher",
+  ],
   footer: ["footer_column", "footer_social", "footer_copyright", "image"],
   announcement_bar: ["announcement"],
   hero: ["heading", "subheading", "cta", "image"],
@@ -1444,6 +1515,8 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   image_text: ["image", "text"],
   newsletter: ["heading", "text", "email_form"],
   brands: [],
+  product_tabs: [],
+  trust_bar: ["heading", "trust_item", "rating_badge"],
 };
 
 export const CHILD_BLOCK_TYPES: Record<string, string[]> = {
@@ -1622,6 +1695,11 @@ export interface ThemeColorFieldDef {
 // picker's displayed value here in admin; the storefront applies its own
 // identical copy of these defaults (see storefront/lib/theme-colors.ts).
 export const THEME_COLOR_DEFAULTS: Record<string, string> = {
+  // Storefront now defaults this to the CSS keyword `currentColor` (hover
+  // tint derived from the element's own text color, not a fixed hue — see
+  // storefront/lib/theme-colors.ts). A <input type="color"> can't display
+  // `currentColor`, so this hex stays only as the picker's starting swatch;
+  // it takes effect on the storefront only if the merchant actually saves it.
   mouseOverColor: "#057a7a",
   mouseSelectionColor: "#b2e0e0",
   buttonColor: "#069494",

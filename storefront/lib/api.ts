@@ -488,6 +488,38 @@ export function getMyOrder(shopSlug: string, id: number) {
   return authedFetch<CustomerOrderSummary>(shopSlug, `/public/${shopSlug}/account/orders/${id}`);
 }
 
+// Wishlist. The raw-ids call is the hot one — lib/wishlist.tsx reads it on
+// mount for a logged-in shopper to drive every product card's heart state,
+// so it stays a single-row backend read (no product resolution). The
+// resolved-products call is only for the /account/wishlist page itself.
+// Mutations go through authedFetch, so the CSRF header is auto-attached.
+export function getMyWishlistIds(shopSlug: string) {
+  return authedFetch<number[]>(shopSlug, `/public/${shopSlug}/account/wishlist`);
+}
+
+export async function getMyWishlistProducts(shopSlug: string) {
+  const products = await authedFetch<Product[]>(
+    shopSlug,
+    `/public/${shopSlug}/account/wishlist/products`,
+  );
+  return products.map(resolveProductImage);
+}
+
+export function addToWishlist(shopSlug: string, productId: number) {
+  return authedFetch<{ productIds: number[] }>(shopSlug, `/public/${shopSlug}/account/wishlist`, {
+    method: "POST",
+    body: JSON.stringify({ productId }),
+  });
+}
+
+export function removeFromWishlist(shopSlug: string, productId: number) {
+  return authedFetch<{ productIds: number[] }>(
+    shopSlug,
+    `/public/${shopSlug}/account/wishlist/${productId}`,
+    { method: "DELETE" },
+  );
+}
+
 // UAE PDPL: full export of the shopper's own data on this shop (profile,
 // addresses, orders) as a plain object — the caller (Privacy card) turns
 // this into a downloadable file client-side, same reasoning as

@@ -11,6 +11,8 @@ import RichTextSection from "./RichTextSection";
 import ImageTextSection from "./ImageTextSection";
 import NewsletterSection from "./NewsletterSection";
 import BrandsSection from "./BrandsSection";
+import ProductTabsSection from "./ProductTabsSection";
+import TrustBarSection from "./TrustBarSection";
 
 export interface SectionComponentProps {
   sectionId: string;
@@ -28,6 +30,8 @@ const SECTION_COMPONENTS: Record<ThemeSectionType, ComponentType<SectionComponen
   image_text: ImageTextSection,
   newsletter: NewsletterSection,
   brands: BrandsSection,
+  product_tabs: ProductTabsSection,
+  trust_bar: TrustBarSection,
 };
 
 // Homepage body only (see the plan's scope decision) — Header/Footer are
