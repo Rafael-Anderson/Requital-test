@@ -251,7 +251,18 @@ describe("validateCustomDomain", () => {
   });
 
   const valid = ["example.com", "shop.example.com", "my-shop.example.co.uk"];
-  const invalid = ["example", "http://example.com", "example.com/path", "not a domain", "-example.com"];
+  const invalid = [
+    "example",
+    "http://example.com",
+    "example.com/path",
+    "not a domain",
+    "-example.com",
+    "requital.io", // the platform apex
+    "evil.requital.io", // any *.requital.io host
+    "www.requital.io",
+    "api.requital.io",
+    "admin", // bare reserved label
+  ];
 
   it.each(valid)("accepts %s", (domain) => {
     expect(validateCustomDomain(domain)).toEqual({ valid: true });

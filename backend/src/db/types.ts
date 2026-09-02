@@ -369,6 +369,17 @@ export interface ShopRow {
   websiteUrl: string | null;
   customDomain: string | null;
   domainType: string;
+  // Custom-domain ownership verification (docs/plans/custom-domain-resolver.md
+  // Phase 2). customDomainStatus: null | 'pending' | 'verifying' | 'verified'
+  // | 'failed' (see custom-domain.constants.ts). customDomainVerifiedKey is
+  // DB-GENERATED (= customDomain while verified, else NULL) purely to back a
+  // verified-only UNIQUE index for CD2 — never written by app code.
+  customDomainStatus: string | null;
+  customDomainVerifyToken: string | null;
+  customDomainVerifiedAt: Date | null;
+  customDomainClaimedAt: Date | null;
+  customDomainLastCheckedAt: Date | null;
+  customDomainVerifiedKey: string | null;
   operatingModel: string | null;
   branchCount: string | null;
   businessType: string | null;

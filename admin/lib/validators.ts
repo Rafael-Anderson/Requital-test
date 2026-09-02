@@ -43,6 +43,18 @@ const SUBDOMAIN_REGEX = /^[a-z0-9-]+$/;
 // Mirrors backend/src/shop/domain-validation.ts's HOSTNAME_REGEX by hand.
 const CUSTOM_DOMAIN_REGEX =
   /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*\.[a-z]{2,63}$/;
+// Mirrors backend/src/shop/domain-validation.ts's PLATFORM_ROOT_DOMAIN /
+// isPlatformOwnedHost by hand. KEEP IN SYNC: a "custom" domain must never be a
+// Requital-owned hostname (the bare apex, anything under *.requital.io, or a
+// bare reserved label).
+const PLATFORM_ROOT_DOMAIN = "requital.io";
+function isPlatformOwnedHost(value: string): boolean {
+  return (
+    value === PLATFORM_ROOT_DOMAIN ||
+    value.endsWith(`.${PLATFORM_ROOT_DOMAIN}`) ||
+    RESERVED_SUBDOMAINS.includes(value)
+  );
+}
 
 export function validateEmail(value: string): ValidationResult {
   if (!value.trim()) return { valid: false, message: "Email is required" };
@@ -195,6 +207,9 @@ export function validateCustomDomain(value: string): ValidationResult {
   if (!trimmed) return { valid: false, message: "Domain is required" };
   if (!CUSTOM_DOMAIN_REGEX.test(trimmed) || trimmed.length > 253) {
     return { valid: false, message: "Enter a valid domain (e.g. shop.example.com)" };
+  }
+  if (isPlatformOwnedHost(trimmed)) {
+    return { valid: false, message: "Enter a domain you own, not a requital.io address." };
   }
   return { valid: true };
 }

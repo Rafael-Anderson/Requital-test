@@ -31,19 +31,32 @@ import type { ThemeConfig } from "./theme-config-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+// Base for every browser `fetch()` to the backend.
+//   Browser  -> "/api": a relative, same-origin path. next.config rewrites
+//     `/api/*` to the real backend server-side (docs/plans/custom-domain-
+//     resolver.md Phase 5), so the request is same-origin with the storefront
+//     host and SameSite=Strict customer cookies are actually sent — the whole
+//     point of the custom-domain auth fix.
+//   Server (RSC/SSR) -> the absolute backend origin: a relative URL has no
+//     origin there, and the rewrite doesn't apply to fetches the Next server
+//     itself makes.
+const apiBase = () => (typeof window === "undefined" ? API_URL : "/api");
+
 // Uploaded theme/product images are stored backend-relative (/uploads/...),
 // but the storefront runs on its own origin (:3002) — a bare relative <img
 // src> or Metadata icon URL resolves against the storefront origin and
 // 404s. Same fix as admin/lib/api.ts's resolveImageUrl. Absolute URLs
 // (seed/test data, or a merchant who pastes an external image URL) are left
-// untouched.
+// untouched. Stays on the absolute backend origin (not `/api`): images are
+// unauthenticated, cross-origin `<img>` loads are fine, and SSR needs a real
+// URL in the rendered HTML.
 export function resolveImageUrl(path: string | null | undefined): string | null {
   if (!path) return null;
   return path.startsWith("/") ? `${API_URL}${path}` : path;
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
+  const res = await fetch(`${apiBase()}${path}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.message ?? `Request failed (${res.status})`);
@@ -52,7 +65,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 async function post<T>(path: string, data: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -92,7 +105,7 @@ export function searchProducts(shopSlug: string, query: string, cursor?: string)
 
 export async function unsubscribeNotifyMe(email: string, productId: number) {
   const res = await fetch(
-    `${API_URL}/notify-subscriptions?email=${encodeURIComponent(email)}&productId=${productId}`,
+    `${apiBase()}/notify-subscriptions?email=${encodeURIComponent(email)}&productId=${productId}`,
     { method: "DELETE" },
   );
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -283,7 +296,7 @@ export function validateGiftCard(shopSlug: string, code: string) {
 // resolved value rather than thrown like a real failure. Doesn't reuse the
 // generic post() helper since that always throws on a non-2xx status.
 export async function subscribeNewsletter(shopSlug: string, email: string): Promise<{ alreadySubscribed: boolean }> {
-  const res = await fetch(`${API_URL}/public/${shopSlug}/newsletter-subscribe`, {
+  const res = await fetch(`${apiBase()}/public/${shopSlug}/newsletter-subscribe`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -370,7 +383,7 @@ let customerCsrfToken: string | null = null;
 async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
   const method = (init.method ?? "GET").toUpperCase();
   const csrfToken = method !== "GET" && method !== "HEAD" ? customerCsrfToken : null;
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     ...init,
     credentials: "include",
     headers: {
@@ -383,7 +396,7 @@ async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit 
   if (freshCsrfToken) customerCsrfToken = freshCsrfToken;
   if (res.status === 401 && !isRetry) {
     try {
-      const refreshRes = await fetch(`${API_URL}/public/${shopSlug}/auth/refresh`, {
+      const refreshRes = await fetch(`${apiBase()}/public/${shopSlug}/auth/refresh`, {
         method: "POST",
         credentials: "include",
         headers: { "X-CSRF-Token": customerCsrfToken ?? "" },
@@ -408,7 +421,7 @@ async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit 
 }
 
 async function credentialedPost<T>(path: string, data: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -441,7 +454,7 @@ export function loginCustomer(shopSlug: string, data: { identifier: string; pass
 // caller (lib/auth.tsx) clears local `customer` state regardless of whether
 // this round-trip succeeds, same as before.
 export async function logoutCustomer(shopSlug: string) {
-  await fetch(`${API_URL}/public/${shopSlug}/auth/logout`, {
+  await fetch(`${apiBase()}/public/${shopSlug}/auth/logout`, {
     method: "POST",
     credentials: "include",
     headers: { "X-CSRF-Token": customerCsrfToken ?? "" },
@@ -517,10 +530,10 @@ export function confirmMyAccountDeletion(shopSlug: string, token: string) {
 // refresh-retry contract otherwise (GET-only, so no CSRF header needed on
 // the request itself).
 async function authedFetchText(shopSlug: string, path: string, isRetry = false): Promise<string> {
-  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  const res = await fetch(`${apiBase()}${path}`, { credentials: "include" });
   if (res.status === 401 && !isRetry) {
     try {
-      const refreshRes = await fetch(`${API_URL}/public/${shopSlug}/auth/refresh`, {
+      const refreshRes = await fetch(`${apiBase()}/public/${shopSlug}/auth/refresh`, {
         method: "POST",
         credentials: "include",
         headers: { "X-CSRF-Token": customerCsrfToken ?? "" },

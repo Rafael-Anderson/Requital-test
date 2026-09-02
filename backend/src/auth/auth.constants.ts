@@ -1,4 +1,4 @@
-import { tieredCookieName } from '../common/cookies';
+import { tieredCookieName, pathScopedCookieName } from '../common/cookies';
 import { createTierCsrf } from '../common/csrf';
 
 // Session-cookie migration (security audit finding #1), phase 2 — see
@@ -7,7 +7,9 @@ import { createTierCsrf } from '../common/csrf';
 // the one route that ever needs it, matching the cookie-design table in the
 // approved migration plan.
 export const STAFF_ACCESS_COOKIE = tieredCookieName('req-staff-at');
-export const STAFF_REFRESH_COOKIE = tieredCookieName('req-staff-rt');
+// Path=/auth/refresh, not `/` — must be __Secure-, not __Host- (which the
+// browser drops on any non-root path). See pathScopedCookieName.
+export const STAFF_REFRESH_COOKIE = pathScopedCookieName('req-staff-rt');
 export const STAFF_REFRESH_PATH = '/auth/refresh';
 
 export const staffCsrf = createTierCsrf({

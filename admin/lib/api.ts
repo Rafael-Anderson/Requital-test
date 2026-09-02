@@ -81,6 +81,7 @@ import type {
   FailedJob,
   Shop,
   ShopDomainConfig,
+  VerifyDomainResult,
   StockMovementType,
   ThemeSettings,
   Theme,
@@ -557,6 +558,13 @@ export function updateShopDomain(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+// Runs the DNS-TXT ownership check for the shop's current custom-domain claim
+// right now (Settings > Domain's "Verify now"). Throws ApiError with status 409
+// when the domain has been verified by another account.
+export function verifyShopDomain() {
+  return apiFetch<VerifyDomainResult>("/shop/domain/verify", { method: "POST" });
 }
 
 export function uploadShopLogo(file: File) {

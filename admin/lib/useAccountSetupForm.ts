@@ -371,13 +371,15 @@ export function useAccountSetupForm() {
       // A custom domain is a separate, optional connect step on top of the
       // account that was just created successfully — a failure here (a
       // race on the uniqueness check, a network blip) shouldn't surface as
-      // "account creation failed" when it didn't. The merchant can always
-      // set it (or retry) later from Settings > Business Information.
+      // "account creation failed" when it didn't. This only starts the claim
+      // (a pending DNS-TXT verification); the merchant finishes it, adds the
+      // DNS record, and can retry from Settings > Business Settings > Domain
+      // (AccountSetup.tsx deep-links there after signup for the custom case).
       if (domainType === "custom" && customDomain.trim()) {
         try {
           await updateShopDomain({ type: "custom", customDomain: normalizeCustomDomain(customDomain) });
         } catch {
-          toast("Account created, but your custom domain couldn't be connected. Add it later in Settings.");
+          toast("Account created. Finish connecting your custom domain in Settings > Domain.");
         }
       }
       return { ok: true, errors: {} };

@@ -1,6 +1,10 @@
 import { doubleCsrf } from 'csrf-csrf';
 import type { Request, Response } from 'express';
-import { csrfCookieOptions, tieredCookieName } from './cookies';
+import {
+  csrfCookieOptions,
+  tieredCookieName,
+  pathScopedCookieName,
+} from './cookies';
 
 // Session-cookie migration (security audit finding #1) needs CSRF
 // protection it didn't before: SameSite=Strict blocks classic cross-site
@@ -94,13 +98,21 @@ export function createTierCsrf(opts: {
       const raw: unknown = req.cookies?.[opts.accessCookieName];
       return typeof raw === 'string' ? raw : '';
     },
-    cookieName: tieredCookieName(opts.cookieBaseName),
+    // __Host- only when this tier's CSRF cookie sits at Path=/ (staff);
+    // customer CSRF is Path=/public and must be __Secure- or the browser
+    // drops it — same rule as the session cookies. See pathScopedCookieName.
+    cookieName:
+      opts.path === '/'
+        ? tieredCookieName(opts.cookieBaseName)
+        : pathScopedCookieName(opts.cookieBaseName),
     cookieOptions: csrfCookieOptions(opts.path),
     ...(opts.skipIfNoAccessCookie || opts.skipPathPrefixes
       ? {
           skipCsrfProtection: (req: Request) => {
             if (
-              opts.skipPathPrefixes?.some((prefix) => req.path.startsWith(prefix))
+              opts.skipPathPrefixes?.some((prefix) =>
+                req.path.startsWith(prefix),
+              )
             ) {
               return true;
             }

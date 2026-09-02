@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
-import { isDuplicateKeyError } from '../database/mysql-errors';
 import { trimDecimal } from '../database/decimal.util';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { ShopRow } from '../db/types';
@@ -14,7 +13,13 @@ import { UpdateShopDto } from './dto/update-shop.dto';
 import { UpdateShopDomainDto } from './dto/update-shop-domain.dto';
 import { SOCIAL_PLATFORM_DOMAINS, SOCIAL_PLATFORMS } from './constants';
 import { isValidCustomDomain } from './domain-validation';
+import {
+  VERIFY_RECORD_PREFIX,
+  type CustomDomainStatus,
+} from './custom-domain.constants';
+import { generateOpaqueToken } from '../common/token-hash';
 import { normalizeCustomDomain } from '../common/normalize';
+import { DomainsService } from '../domains/domains.service';
 import type { TenantContext } from '../common/tenant-context';
 
 // Same env-driven storefront base URL every other customer-facing link in
@@ -28,7 +33,10 @@ const STOREFRONT_ROOT_DOMAIN =
 
 @Injectable()
 export class ShopService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly domains: DomainsService,
+  ) {}
 
   async findOne(ctx: TenantContext) {
     const shop = await this.findById(ctx.shopId);
@@ -212,15 +220,21 @@ export class ShopService {
       dynamicThemeBuilderEnabled: dto.dynamicThemeBuilderEnabled,
       disableStoreCart: dto.disableStoreCart,
       cartDisabledMode: dto.cartDisabledMode,
-      socialLinks: dto.socialLinks ? JSON.stringify(dto.socialLinks) : undefined,
+      socialLinks: dto.socialLinks
+        ? JSON.stringify(dto.socialLinks)
+        : undefined,
       deliveryPaymentCardOnline: dto.deliveryPaymentCardOnline,
       deliveryPaymentCashOnDelivery: dto.deliveryPaymentCashOnDelivery,
       deliveryPaymentCardOnDelivery: dto.deliveryPaymentCardOnDelivery,
       pickupPaymentCardOnline: dto.pickupPaymentCardOnline,
       pickupPaymentCashOnPickup: dto.pickupPaymentCashOnPickup,
       pickupPaymentCardOnPickup: dto.pickupPaymentCardOnPickup,
-      deliveryHours: dto.deliveryHours ? JSON.stringify(dto.deliveryHours) : undefined,
-      pickupHours: dto.pickupHours ? JSON.stringify(dto.pickupHours) : undefined,
+      deliveryHours: dto.deliveryHours
+        ? JSON.stringify(dto.deliveryHours)
+        : undefined,
+      pickupHours: dto.pickupHours
+        ? JSON.stringify(dto.pickupHours)
+        : undefined,
       deliveryTimeSlotGapMinutes: dto.deliveryTimeSlotGapMinutes,
       deliveryPreparationTimeMinutes: dto.deliveryPreparationTimeMinutes,
       deliveryPreparationPlusDeliveryTimeMinutes:
@@ -248,15 +262,33 @@ export class ShopService {
   // shop.subdomain itself is immutable after signup (see update()'s country
   // check above for the established precedent on locked fields) — this
   // endpoint only toggles which one actually drives the storefront's public
-  // URL, and sets/clears the custom hostname. Caddy's on-demand-TLS `ask`
-  // endpoint (DomainsService.verify) is what actually makes a saved
-  // customDomain reachable — this method just persists the merchant's choice.
+  // URL, and sets/clears the custom hostname. A custom domain is only actually
+  // served (and only gets a cert) once its DNS-TXT ownership check passes —
+  // see CustomDomainVerificationService and docs/plans/custom-domain-resolver.md.
   async getDomainConfig(ctx: TenantContext) {
     const shop = await this.findOne(ctx);
+    const status = shop.customDomainStatus as CustomDomainStatus | null;
+    // The DNS TXT record the merchant must add to prove control. Present only
+    // while a claim exists and is not yet verified; Phase 3's Settings page
+    // renders it. storefrontUrl deliberately still points at the custom domain
+    // regardless of verification state — the "is your store live yet" nuance is
+    // surfaced via `status`, and reworking storefrontUrl is Phase 3's call.
+    const verification =
+      shop.domainType === 'custom' &&
+      shop.customDomain &&
+      shop.customDomainVerifyToken &&
+      status !== 'verified'
+        ? {
+            recordName: `${VERIFY_RECORD_PREFIX}.${shop.customDomain}`,
+            recordValue: shop.customDomainVerifyToken,
+          }
+        : null;
     return {
       type: shop.domainType,
       subdomain: shop.subdomain,
       customDomain: shop.customDomain,
+      status,
+      verification,
       storefrontUrl:
         shop.domainType === 'custom' && shop.customDomain
           ? `https://${shop.customDomain}`
@@ -265,6 +297,14 @@ export class ShopService {
   }
 
   async updateDomain(ctx: TenantContext, dto: UpdateShopDomainDto) {
+    // Whatever custom domain this shop had before, so the resolve cache entry
+    // for it is dropped on a disconnect / domain-change, not left ≤30s stale.
+    const prior = await this.db.query<RowDataPacket[]>(
+      `SELECT customDomain FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const priorDomain = (prior[0]?.customDomain as string | null) ?? null;
+
     if (dto.type === 'custom') {
       const domain = normalizeCustomDomain(dto.customDomain ?? '');
       if (!isValidCustomDomain(domain)) {
@@ -272,32 +312,61 @@ export class ShopService {
           'Enter a valid domain (e.g. shop.example.com), with no protocol or path.',
         );
       }
-      try {
-        await this.db.execute(
-          `UPDATE shop SET domainType = 'custom', customDomain = ? WHERE id = ?`,
-          [domain, ctx.shopId],
+
+      // CD2: a pending claim never blocks another shop's pending claim — only a
+      // *verified* domain is exclusive. Reject early only if another shop has
+      // already verified it; the customDomainVerifiedKey unique index is the
+      // hard backstop at verify time (see CustomDomainVerificationService).
+      const taken = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM shop
+         WHERE customDomain = ? AND customDomainStatus = 'verified' AND id <> ? LIMIT 1`,
+        [domain, ctx.shopId],
+      );
+      if (taken.length > 0) {
+        throw new ConflictException(
+          'That domain is already connected to another store.',
         );
-      } catch (error) {
-        if (isDuplicateKeyError(error)) {
-          throw new ConflictException(
-            'This domain is already connected to another shop.',
-          );
-        }
-        throw error;
       }
-    } else {
-      // Switching back to the default {subdomain}.requital.io — clears
-      // whatever custom hostname was set so it doesn't linger unused (and
-      // frees it up for another shop to claim).
+
+      // Start (or restart) a pending claim with a fresh token. Re-saving the
+      // same domain, or switching to a different one, always re-arms
+      // verification from scratch and rotates the token, so a stale DNS TXT
+      // record from any earlier claim can't satisfy the new one.
       await this.db.execute(
-        `UPDATE shop SET domainType = 'subdomain', customDomain = NULL WHERE id = ?`,
+        `UPDATE shop
+         SET domainType = 'custom', customDomain = ?, customDomainStatus = 'pending',
+             customDomainVerifyToken = ?, customDomainClaimedAt = ?,
+             customDomainVerifiedAt = NULL, customDomainLastCheckedAt = NULL
+         WHERE id = ?`,
+        [domain, generateOpaqueToken(), new Date(), ctx.shopId],
+      );
+    } else {
+      // Disconnect: clear everything immediately. resolveSubdomain and the
+      // Caddy `ask` (both gated on customDomainStatus = 'verified') stop
+      // honouring the host on the very next request — no sweep tick needed.
+      // Nulling the token is the CD2 rule-4 rotation: a lingering DNS TXT
+      // record can't be reused to re-verify a later claim by anyone.
+      await this.db.execute(
+        `UPDATE shop
+         SET domainType = 'subdomain', customDomain = NULL, customDomainStatus = NULL,
+             customDomainVerifyToken = NULL, customDomainClaimedAt = NULL,
+             customDomainVerifiedAt = NULL, customDomainLastCheckedAt = NULL
+         WHERE id = ?`,
         [ctx.shopId],
       );
+    }
+    // Drop the resolve-cache entry for the old and (if custom) the new
+    // hostname so the change is visible on the very next storefront request.
+    if (priorDomain) this.domains.invalidate(priorDomain);
+    if (dto.type === 'custom' && dto.customDomain) {
+      this.domains.invalidate(normalizeCustomDomain(dto.customDomain));
     }
     return this.getDomainConfig(ctx);
   }
 
-  private async findById(id: number): Promise<(ShopRow & RowDataPacket) | undefined> {
+  private async findById(
+    id: number,
+  ): Promise<(ShopRow & RowDataPacket) | undefined> {
     const rows = await this.db.query<(ShopRow & RowDataPacket)[]>(
       `SELECT * FROM shop WHERE id = ?`,
       [id],

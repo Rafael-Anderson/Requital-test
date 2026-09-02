@@ -14,6 +14,8 @@ interface DomainBody {
   type: string;
   subdomain: string;
   customDomain: string | null;
+  status: string | null;
+  verification: { recordName: string; recordValue: string } | null;
   storefrontUrl: string;
 }
 
@@ -90,7 +92,7 @@ describe('Shop domain configuration (e2e)', () => {
     expect(domain.storefrontUrl).toBe(`https://${shop.subdomain}.requital.io`);
   });
 
-  it('sets a custom domain via PATCH /shop/domain', async () => {
+  it('sets a custom domain via PATCH /shop/domain — starts a pending claim with a TXT record to add', async () => {
     const shop = await setupShop('domain-custom');
     const res = await request(app.getHttpServer())
       .patch('/shop/domain')
@@ -100,6 +102,11 @@ describe('Shop domain configuration (e2e)', () => {
     const domain = body<DomainBody>(res);
     expect(domain.type).toBe('custom');
     expect(domain.customDomain).toBe(`shop-${runId}.example.com`);
+    expect(domain.status).toBe('pending');
+    expect(domain.verification?.recordName).toBe(
+      `_requital-verify.shop-${runId}.example.com`,
+    );
+    expect(domain.verification?.recordValue).toEqual(expect.any(String));
     expect(domain.storefrontUrl).toBe(`https://shop-${runId}.example.com`);
   });
 
@@ -149,25 +156,25 @@ describe('Shop domain configuration (e2e)', () => {
     expect(domain.customDomain).toBeNull();
   });
 
-  it('409s when two shops try to claim the same custom domain', async () => {
+  it('lets two shops both hold a pending claim on the same domain (CD2 — a pending claim is not exclusive)', async () => {
     const shopA = await setupShop('domain-dupe-a');
     const shopB = await setupShop('domain-dupe-b');
     const contested = `contested-${runId}.example.com`;
 
-    await request(app.getHttpServer())
+    const a = await request(app.getHttpServer())
       .patch('/shop/domain')
       .set('Authorization', `Bearer ${shopA.adminToken}`)
       .send({ type: 'custom', customDomain: contested })
       .expect(200);
+    expect(body<DomainBody>(a).status).toBe('pending');
 
-    const res = await request(app.getHttpServer())
+    // Not a 409 anymore — exclusivity only kicks in once a claim is verified.
+    const b = await request(app.getHttpServer())
       .patch('/shop/domain')
       .set('Authorization', `Bearer ${shopB.adminToken}`)
       .send({ type: 'custom', customDomain: contested })
-      .expect(409);
-    expect(body<{ message: string }>(res).message).toContain(
-      'already connected',
-    );
+      .expect(200);
+    expect(body<DomainBody>(b).status).toBe('pending');
   });
 
   it("a branch/order_manager/viewer token cannot reach another shop's domain config — every write is ctx-scoped, no shopId is ever accepted from the client", async () => {
@@ -200,7 +207,7 @@ describe('Shop domain configuration (e2e)', () => {
       .expect(200);
   });
 
-  it('GET /domains/verify returns 200 for a known custom domain', async () => {
+  it('GET /domains/verify returns 404 for an unverified custom domain claim (no cert until DNS-TXT proven)', async () => {
     const shop = await setupShop('domain-verify-custom');
     const domain = `shop-${runId}-verify.example.com`;
     await request(app.getHttpServer())
@@ -209,10 +216,13 @@ describe('Shop domain configuration (e2e)', () => {
       .send({ type: 'custom', customDomain: domain })
       .expect(200);
 
+    // Only a 'verified' custom domain is cert-eligible now. (The verified-state
+    // path is covered by custom-domain-verification.e2e-spec.ts, which can mock
+    // the DNS lookup.)
     await request(app.getHttpServer())
       .get('/domains/verify')
       .query({ domain })
-      .expect(200);
+      .expect(404);
   });
 
   it('GET /domains/verify returns 404 for an unknown domain', async () => {
@@ -251,7 +261,7 @@ describe('Shop domain configuration (e2e)', () => {
     expect(body<{ subdomain: string }>(res).subdomain).toBe(shop.subdomain);
   });
 
-  it('GET /domains/resolve returns the real subdomain (not the custom domain itself) for a connected custom domain', async () => {
+  it('GET /domains/resolve returns 404 for an unverified custom domain (a pending claim must not route to a storefront)', async () => {
     const shop = await setupShop('domain-resolve-custom');
     const domain = `shop-${runId}-resolve.example.com`;
     await request(app.getHttpServer())
@@ -260,11 +270,10 @@ describe('Shop domain configuration (e2e)', () => {
       .send({ type: 'custom', customDomain: domain })
       .expect(200);
 
-    const res = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .get('/domains/resolve')
       .query({ host: domain })
-      .expect(200);
-    expect(body<{ subdomain: string }>(res).subdomain).toBe(shop.subdomain);
+      .expect(404);
   });
 
   it('GET /domains/resolve returns 404 for a host that matches no shop', async () => {

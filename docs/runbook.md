@@ -125,3 +125,51 @@ This project's migrations are hand-authored `migration.sql` files applied via `p
 | `20260805110000_customer_login_lockout` | Schema-only | Drop `customer.failedLoginAttempts`/`lastFailedLoginAt` (the down-path is already spelled out, commented, directly in the migration file itself) — only resets every shopper account's lockout counter, no other data. |
 
 For any "Data-loss revert" row above, the actually-safe rollback procedure is: **restore from a backup taken before the migration was applied** (see Backup/Restore above), not attempt the down-path against a live database that already has real post-migration data in it. The down-paths listed are what you'd run to make the *schema* match a pre-migration state, not to un-lose the data that lived in the tables/columns being dropped.
+
+## Triage: custom domain connected but no cert
+
+Symptom: a merchant connected a custom domain (Settings > Business Settings >
+Domain shows it as **Verified**), but visiting `https://<domain>` fails the TLS
+handshake (`SSL_ERROR_*`, `ERR_SSL_PROTOCOL_ERROR`, or a browser "can't
+establish a secure connection"). Plain `http://<domain>` may redirect fine.
+
+Custom domains get their cert via Caddy **on-demand TLS**, gated by the `ask`
+endpoint (`deploy/Caddyfile` global block → `GET /domains/verify`). A missing
+cert means one of: the `ask` gate said no, DNS isn't actually pointed at the
+box, or ACME failed and Caddy is in its short failure-backoff window.
+
+Work through it in this order:
+
+1. **Is the `ask` gate open?**
+   `curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:3000/domains/verify?domain=<domain>'`
+   Must be `200`. If `404`, the backend does not consider the domain verified —
+   check the shop row:
+   `SELECT customDomain, customDomainStatus, customDomainVerifiedAt FROM shop WHERE customDomain = '<domain>';`
+   `customDomainStatus` must be `verified`. If it's `pending`/`verifying`/`failed`,
+   the merchant needs to finish (or retry) verification in the admin UI — this is
+   not a cert problem, it's a verification-state problem.
+
+2. **Does DNS actually reach the box?**
+   `dig +short <domain>` — the A/AAAA (or the CNAME target's A) must resolve to
+   the VPS IP (`187.52.114.246`). Caddy cannot obtain a cert for a name whose
+   HTTP-01 challenge won't route back to it. A merchant who verified the TXT
+   record but never pointed the apex/`www` record at us lands here.
+
+3. **What does Caddy say?**
+   `journalctl -u caddy --since '30 min ago' | grep -iE '<domain>|on_demand|obtain|acme'`
+   Look for `obtaining certificate`, `certificate obtained successfully`, or an
+   ACME error (rate limit, DNS, challenge failure).
+
+4. **Force a fresh attempt.** Caddy caches a recent on-demand *failure* in
+   memory for a short window (~1 min) and won't re-hit ACME on every handshake
+   during it. After fixing the underlying cause (step 1 or 2):
+   `systemctl reload caddy` (clears the in-memory on-demand caches), then
+   `curl -kv https://<domain> 2>&1 | grep -E 'SSL connection|subject:|issuer:'`
+   a couple of times — the first call triggers issuance, the second should show
+   a real Let's Encrypt cert.
+
+5. **Let's Encrypt rate limits.** If `journalctl` shows `too many certificates`
+   or `rateLimited`, the domain (or its registered domain) hit an LE limit —
+   nothing to do but wait it out (the failed-validation limit resets in an hour;
+   the certs-per-domain limit is weekly). Do **not** keep reloading Caddy in a
+   loop; that makes it worse.

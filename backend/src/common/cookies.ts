@@ -4,7 +4,14 @@ import type { CookieOptions } from 'express';
 // Shared attribute/name builders reused by every tier's auth module as each
 // one migrates off localStorage — platform admin first (this file's first
 // consumer), then staff, then customer.
-const IS_PROD = process.env.NODE_ENV === 'production';
+//
+// A function, not a `const` captured at module load, so a test can flip
+// NODE_ENV per-run and exercise the production cookie shapes (the
+// name-prefix helpers below still bake their result into per-tier constants
+// at import time — a spec that needs the prod prefixes uses jest.isolateModules).
+export function isProd(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
 
 // __Host- is a browser-enforced cookie-name prefix: the browser refuses to
 // even set a __Host- cookie unless it also has Secure + no Domain attribute
@@ -15,8 +22,23 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // don't get set at all there, so the prefix would silently break every
 // local login. Dropped outside production for exactly that reason, not
 // because the guarantee doesn't matter.
+//
+// USE ONLY for cookies whose Path is `/`. A __Host- cookie with any other
+// Path is silently dropped by every browser — see pathScopedCookieName.
 export function tieredCookieName(base: string): string {
-  return IS_PROD ? `__Host-${base}` : base;
+  return isProd() ? `__Host-${base}` : base;
+}
+
+// For a cookie deliberately scoped to a sub-path — the per-shop customer
+// cookies (`/public/<slug>`), the narrowly-scoped refresh cookies
+// (`/auth/refresh`, `/public/<slug>/auth/refresh`). `__Host-` mandates
+// `Path=/`, so it CANNOT be used here: a `__Host-...; Path=/public/x` cookie
+// is rejected outright by the browser and the session never persists (this
+// was a real, latent prod bug — customer sessions had never actually stuck).
+// `__Secure-` keeps the Secure-only + set-from-secure-origin guarantee with
+// no Path constraint.
+export function pathScopedCookieName(base: string): string {
+  return isProd() ? `__Secure-${base}` : base;
 }
 
 // httpOnly session cookies (access/refresh tokens) all share this shape —
@@ -28,7 +50,7 @@ export function tieredCookieName(base: string): string {
 export function sessionCookieOptions(path: string): CookieOptions {
   return {
     httpOnly: true,
-    secure: IS_PROD,
+    secure: isProd(),
     sameSite: 'strict',
     path,
   };
@@ -57,7 +79,7 @@ export function sessionCookieOptions(path: string): CookieOptions {
 export function csrfCookieOptions(path: string): CookieOptions {
   return {
     httpOnly: true,
-    secure: IS_PROD,
+    secure: isProd(),
     sameSite: 'strict',
     path,
   };

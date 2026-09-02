@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 // normal settings tabs here.
 const ITEMS = [
   { href: "/settings/business/information", label: "Business Information" },
+  { href: "/settings/business/domain", label: "Domain" },
   { href: "/settings/business/store-configuration", label: "Store Configuration" },
   { href: "/settings/business/online-presence", label: "Online Presence" },
   { href: "/settings/business/seo", label: "SEO" },
