@@ -247,12 +247,15 @@ beyond theming.
 
 ### Tier 3 — high impact, high churn (schedule separately)
 
-9. **Wishlist.** **[feature]** not a theming task.
-   Needs: a `wishlist` table (or a JSON array on `customer`, matching how
-   addresses are stored), `customer-account` endpoints, storefront cart-style
-   context, a heart control on `ProductCard` gated by a new
-   `globalSettings.productCards.showWishlist`. Real scope: one PR of backend +
-   one of storefront. Listed here so it is not mistaken for a quick card toggle.
+9. **Wishlist.** **[feature]** not a theming task. ✅ Backend done 2026-09-02
+   (Phase 7 below) — `customer.wishlist` JSON array (not a table),
+   `customer-account` `GET/POST/DELETE .../account/wishlist[...]` endpoints,
+   `WISHLIST_MAX = 100` cap, read-time resolution of deleted products via
+   `PublicService.getProductsByIds` (+ an `aggregateStock` cross-outlet mode
+   on the shared loader), `wishlist-isolation.e2e-spec.ts`. Storefront
+   `lib/wishlist.tsx` (localStorage → merge-on-login) + the heart control +
+   the `globalSettings.productCards.showWishlist` gate land in the paired
+   storefront/admin commit.
 
 10. **Header "layout variants" preset picker.** **[chrome]** optional sugar on
     top of item 1 — 3–4 named starting arrangements ("classic," "centered,"
@@ -494,9 +497,59 @@ backend gets a `theme-config.validation` case per new type.
   `AccountSetup` flake). Lint: backend baseline 317 → 325 (`any`-fixture
   category); storefront / admin +0.
 
-- **Phase 7 (separate track, not blocked by the above) — Wishlist (item 9). ⏸ DEFERRED 2026-09-02 — not started.**
-  Deferred deliberately, per the phase's own "stop rather than ship a
-  half-tested customer-data feature" instruction. Reasons:
+- **Phase 7 (separate track) — Wishlist (item 9). ✅ BACKEND DONE 2026-09-02 / storefront+admin commit to follow.**
+  Picked up after Phases 1–6. Built as a customer-account feature, not
+  theme-builder work (see reason 1 below — that framing held).
+  - **Storage (TBE5):** `customer.wishlist`, a nullable JSON column
+    (`ALTER TABLE customer ADD COLUMN wishlist JSON NULL`, migration
+    `20260902120000_customer_wishlist`), a bare `number[]` of product ids —
+    mirrors `customer.addresses` byte-for-byte (real JSON type ⇒ mysql2
+    auto-parse; whole-array read-modify-write; hand-maintained
+    `db/types.ts`). No divergence from the addresses pattern was needed.
+  - **Deleted / archived / OOS products:** resolved at read time, array
+    never synced. `listWishlistProducts` → new public
+    `PublicService.getProductsByIds(shopId, ids, { aggregateStock })` →
+    `loadPublicProductsWithRelations`, which already re-filters
+    `shopId + status='Available'`; stale ids drop from the response only.
+    OOS items stay on the list (buy-when-back). `aggregateStock` (new 4th
+    param on the loader, default off, every existing caller unchanged) sums
+    stock across all outlets so the account page — which has no outlet
+    context — still triggers the real "Out of stock" state on total ≤ 0.
+  - **Size cap:** `WISHLIST_MAX = 100`; an add at the cap is a `409`, never
+    a silent drop/evict.
+  - **Endpoints** (all `@Public()` + `CustomerAuthGuard` + global
+    `customerCsrf`, scoped to `ctx.customerId`+`ctx.shopId`):
+    `GET .../account/wishlist` (raw ids — storefront context hot read),
+    `GET .../account/wishlist/products` (resolved cards),
+    `POST .../account/wishlist` `{ productId }`,
+    `DELETE .../account/wishlist/:productId`. A `productId` is only ever an
+    array value + an `id=? AND shopId=? AND status='Available'` existence
+    check, never a cross-tenant lookup key.
+  - `anonymiseCustomer` nulls `wishlist`; `exportData` includes it (PDPL).
+  - `PublicModule` now `exports: [PublicService]`; `CustomerAccountModule`
+    imports it. `check-outlet-scoping.js` ALLOWLIST gains `getProductsByIds`
+    (read-only wrapper over an already-allowlisted loader).
+  - **Adversarial e2e** (`backend/test/wishlist-isolation.e2e-spec.ts`, 6
+    cases, all green): own-list-only; cross-shop rejected on every verb
+    (401); a shop-B product id into a shop-A wishlist → 404, list unchanged;
+    unauthenticated → 401; CSRF missing on POST/DELETE → 403; cap → 409;
+    later-deleted product resolves out of the account view without pruning
+    the stored array.
+  - **Migration safety:** single additive `ALTER TABLE customer` in a
+    far-future-timestamped folder; `customer` has existed since
+    `20260724200000`, so there is no cross-migration ordering hazard. Ran
+    `npm run db:migrate` locally (applied + recorded) and the full backend
+    jest (442) + the new e2e against the migrated dev DB. **CI's clean
+    service-container `db:migrate` cannot be exercised from this
+    environment** — that is the genuine clean-DB proof and runs on the PR.
+  - **Storefront/admin (separate commit, still to land):**
+    `globalSettings.productCards.showWishlist` (optional, default `false`)
+    gates the *entire* feature — the heart on `ProductCard`/`GridProductCard`,
+    the account nav tile, and `account/wishlist/page.tsx` (redirects to
+    `/account` when off). `lib/wishlist.tsx`: localStorage when logged out,
+    one-shot merge into the server array on login, never loses an action.
+
+  Original deferral reasons (2026-09-02), kept for context:
   1. It is **not theme-builder work** — Phases 1–6 (the actual capability-gap
      closure this doc was written for) are complete, gated, and committed.
      Wishlist is a customer-data feature (auth-scoped PII-adjacent state)
@@ -511,15 +564,10 @@ backend gets a `theme-config.validation` case per new type.
      cannot read/write customer B's wishlist; cross-shop holds, per the
      `security-outlet-isolation` convention) needs to genuinely run and pass
      in CI to be worth anything — same constraint as (2).
-  Scope when picked up (unchanged from item 9): `customer.wishlist` JSON
-  array (TBE5, mirroring `customer.addresses`); `customer-account` endpoints
-  `GET/POST/DELETE .../account/wishlist[/:productId]` behind
-  `CustomerAuthGuard`, scoped to `ctx.customerId` + `ctx.shopId`; storefront
-  `lib/wishlist.tsx` context (auth-gated — heart hidden / login-prompt when
-  logged out); heart control on `ProductCard` gated by a new optional
-  `globalSettings.productCards.showWishlist` (the only theme-side change,
-  lands with the storefront PR); `backend/test/wishlist-isolation.e2e-spec.ts`.
-  Split: one backend commit, one storefront commit.
+  Reason 1 held (built as a standalone customer-account feature). Reasons 2
+  and 3 stand as caveats: the e2e passes locally and the migration applied
+  locally, but CI's clean-DB `db:migrate` + e2e run is the real proof and
+  happens on the PR, not from this environment.
 
 Header layout-variant presets (item 10) fold into Phase 3 as a follow-up commit
 only if Phase 3 review agrees the row model is stable.

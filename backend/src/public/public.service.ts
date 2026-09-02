@@ -768,6 +768,33 @@ export class PublicService {
       .filter((p): p is NonNullable<typeof p> => !!p);
   }
 
+  // Public entry point for resolving an arbitrary, caller-owned id list to
+  // storefront product-card shapes — used by CustomerAccountService for the
+  // wishlist (which stores bare product ids). Preserves the caller's id
+  // order (WHERE id IN (...) does not) and drops any id that no longer
+  // resolves to an Available product in this shop, which is the whole
+  // deleted/archived-product story: nothing to sync, the read just filters.
+  // `aggregateStock` sums stock across every outlet (see the loader); when
+  // set, outletId is forced off so product- and variant-level stock stay
+  // consistent.
+  async getProductsByIds(
+    shopId: number,
+    ids: number[],
+    opts: { outletId?: number; aggregateStock?: boolean } = {},
+  ): Promise<PublicProductResponse[]> {
+    if (ids.length === 0) return [];
+    const aggregateStock = opts.aggregateStock ?? false;
+    const products = await this.loadPublicProductsWithRelations(
+      ids,
+      shopId,
+      aggregateStock ? undefined : opts.outletId,
+      aggregateStock,
+    );
+    return ids
+      .map((id) => products.get(id))
+      .filter((p): p is PublicProductResponse => !!p);
+  }
+
   // Batch-loads every relation the old publicProductInclude used to fetch
   // in one Prisma nested include, as separate WHERE...IN queries grouped in
   // JS (same technique as ProductsService.loadProductsWithRelations), and
@@ -780,6 +807,15 @@ export class PublicService {
     productIds: number[],
     shopId: number,
     outletId: number | undefined,
+    // When true, product-level stockQuantity is SUM(stockQuantity) across
+    // every outlet of the shop instead of one resolved outlet — used by the
+    // wishlist page, which has no outlet context but still needs the "Out of
+    // stock" treatment to fire on total <= 0. Ignores outletId (callers pass
+    // undefined alongside it); variant-level stock stays null in this mode,
+    // same as the no-outlet path. ponytail: sums all outlets, not just
+    // active ones — a per-outlet-active filter is a refinement nobody asked
+    // for.
+    aggregateStock = false,
   ): Promise<Map<number, PublicProductResponse>> {
     const result = new Map<number, PublicProductResponse>();
     if (productIds.length === 0) return result;
@@ -800,16 +836,23 @@ export class PublicService {
     const variantParams: QueryParam[] =
       outletId !== undefined ? [outletId, ...productIds] : productIds;
 
-    const productStockJoin =
-      outletId !== undefined
+    const productStockJoin = aggregateStock
+      ? 'LEFT JOIN outletingredientstock ois ON ois.ingredientId = ing.id'
+      : outletId !== undefined
         ? 'LEFT JOIN outletingredientstock ois ON ois.ingredientId = ing.id AND ois.outletId = ?'
         : '';
-    const productStockColumn =
-      outletId !== undefined
+    const productStockColumn = aggregateStock
+      ? 'SUM(ois.stockQuantity) AS stockQuantity'
+      : outletId !== undefined
         ? 'ois.stockQuantity AS stockQuantity'
         : 'NULL AS stockQuantity';
+    const productStockGroupBy = aggregateStock
+      ? 'GROUP BY ing.shadowProductId'
+      : '';
     const productStockParams: QueryParam[] =
-      outletId !== undefined ? [outletId, ...productIds] : productIds;
+      !aggregateStock && outletId !== undefined
+        ? [outletId, ...productIds]
+        : productIds;
 
     const [
       products,
@@ -873,7 +916,8 @@ export class PublicService {
         `SELECT ing.shadowProductId AS productId, ${productStockColumn}
          FROM ingredient ing
          ${productStockJoin}
-         WHERE ing.shadowProductId IN (${idList})`,
+         WHERE ing.shadowProductId IN (${idList})
+         ${productStockGroupBy}`,
         productStockParams,
       ),
       this.db.query<(BrandRow & RowDataPacket)[]>(

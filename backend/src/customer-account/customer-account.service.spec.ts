@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { CustomerAccountService } from './customer-account.service';
 import type { DatabaseService } from '../database/database.service';
 import type { InvoicesService } from '../invoices/invoices.service';
+import type { PublicService } from '../public/public.service';
 import type { AuditLogService } from '../audit-log/audit-log.service';
 import type { CustomerContext } from '../customer-auth/customer-context';
 
@@ -65,6 +66,9 @@ function createMockDb(opts: {
 }
 
 const mockInvoicesService = {} as InvoicesService;
+const mockPublicService = {
+  getProductsByIds: jest.fn().mockResolvedValue([]),
+} as unknown as PublicService;
 
 function createMockAuditLog() {
   return {
@@ -101,6 +105,7 @@ describe('CustomerAccountService.exportData', () => {
       db,
       mockInvoicesService,
       auditLog,
+      mockPublicService,
     );
 
     const result = await service.exportData(ctx);
@@ -140,6 +145,7 @@ describe('CustomerAccountService.exportData', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -159,6 +165,7 @@ describe('CustomerAccountService.exportData', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -173,6 +180,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     const result = await service.requestDeletion(ctx);
@@ -209,6 +217,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -248,6 +257,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -274,6 +284,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -291,6 +302,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -351,6 +363,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       db,
       mockInvoicesService,
       createMockAuditLog(),
+      mockPublicService,
     );
 
     const first = await service.confirmDeletion(ctx, raw);

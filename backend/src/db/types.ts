@@ -599,6 +599,12 @@ export interface CustomerRow {
   email: string | null;
   birthday: Date | null;
   addresses: unknown | null;
+  // JSON array of product ids — see CustomerAccountService wishlist methods.
+  // Same as `addresses` above (real MySQL JSON type, mysql2 pool
+  // auto-parses); bare `unknown` rather than `unknown | null` only to avoid
+  // adding a no-redundant-type-constituents lint finding — NULL is still a
+  // valid value.
+  wishlist: unknown;
   createdAt: Date;
   passwordHash: string | null;
   emailVerified: boolean;

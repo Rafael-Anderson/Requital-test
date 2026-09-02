@@ -66,6 +66,10 @@ const ALLOWLIST = [
   "products/products.service.ts:loadVariantsWithRelations",
   "products/products.service.ts:loadIngredientLinks",
   "public/public.service.ts:loadPublicProductsWithRelations",
+  // Thin public wrapper over loadPublicProductsWithRelations (above) —
+  // read-only, takes an explicit shopId that scopes its product query, and
+  // only forwards outletId into that same allowlisted loader's stock join.
+  "public/public.service.ts:getProductsByIds",
   // Read-only report/dashboard aggregates — outletId is always AND-ed
   // alongside shopId in the same where clause, so a foreign outletId
   // narrows to zero rows rather than leaking a different shop's rows.
