@@ -522,6 +522,24 @@ backend gets a `theme-config.validation` case per new type.
 Header layout-variant presets (item 10) fold into Phase 3 as a follow-up commit
 only if Phase 3 review agrees the row model is stable.
 
+### Cleanup batch — 2026-09-02 (three follow-ups, own commits)
+
+1. **`dark:` sweep completed** — see the note under Phase 1. 56 occurrences /
+   19 storefront files. Corrected the "never fires" premise (Tailwind v4
+   `dark:` = a `prefers-color-scheme` media query on the storefront, not
+   dead); light-mode rendering byte-identical.
+2. **Backend lint baseline: `baseConfig()` typed, not grandfathered.** The
+   Phase 2/3/5/6 climb (297 → 307 → 313 → 317 → 325, each a "documented
+   `any`-fixture" bump above) is **retired**: `theme-config.validation.spec.ts`'s
+   `baseConfig()` is now `(): ThemeConfig` (a typed deep clone). The ~5
+   adversarial cases that must build a structurally-invalid config carry a
+   narrow `as unknown as …` cast at the exact bad value. Baseline
+   **325 → 261** (`-64` — the `any` fixture had been generating findings
+   since well before this batch). All 31 spec cases (valid + adversarial)
+   still pass. Per-phase "backend baseline N → M" notes above are left as
+   dated history; the current floor is 261.
+3. **Announcement-bar rotation de-duplicated** — see the Phase 5 note.
+
 ## 6. New dependencies
 
 **None proposed.** Every item is achievable with what is installed:

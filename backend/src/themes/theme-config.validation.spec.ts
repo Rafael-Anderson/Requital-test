@@ -1,9 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
 import { assertValidThemeConfig } from './theme-config.validation';
 import { DEFAULT_THEME_CONFIG, MAX_BLOCK_DEPTH } from './constants';
+import type { ThemeBlock, ThemeConfig, ThemeSectionType } from './theme-config.types';
 
-function baseConfig() {
-  return JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG));
+// Properly typed (not `any`) so a *valid*-data test case can't silently
+// introduce a new lint finding just by touching the fixture. The handful of
+// adversarial cases that deliberately build a structurally-invalid shape
+// carry a narrow `as unknown as …` cast at the exact point of the invalid
+// value — see each one below.
+function baseConfig(): ThemeConfig {
+  return JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig;
 }
 
 describe('assertValidThemeConfig', () => {
@@ -19,7 +25,7 @@ describe('assertValidThemeConfig', () => {
   describe('recursive block validation', () => {
     it('accepts a nested sub-block (section -> block -> sub-block)', () => {
       const config = baseConfig();
-      config.sections[2].blocks[0].blocks.push({
+      (config.sections[2].blocks[0].blocks ??= []).push({
         id: 'blk-extra',
         type: 'view_all_button',
         visible: true,
@@ -31,7 +37,8 @@ describe('assertValidThemeConfig', () => {
 
     it('rejects a block missing a required field', () => {
       const config = baseConfig();
-      delete config.sections[1].blocks[0].visible;
+      // adversarial: drop a required field — `visible` is non-optional on ThemeBlock.
+      delete (config.sections[1].blocks[0] as { visible?: boolean }).visible;
       expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
     });
 
@@ -55,7 +62,8 @@ describe('assertValidThemeConfig', () => {
           blocks: [deepest],
         };
       }
-      config.sections[1].blocks = [deepest];
+      // adversarial: over-deep nesting — this tree is one level past the cap.
+      config.sections[1].blocks = [deepest] as unknown as ThemeBlock[];
       expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
     });
   });
@@ -78,7 +86,8 @@ describe('assertValidThemeConfig', () => {
       const config = baseConfig();
       config.sections.push({
         id: 'sec-bogus',
-        type: 'not_a_real_section',
+        // adversarial: a section type outside SECTION_TYPES.
+        type: 'not_a_real_section' as unknown as ThemeSectionType,
         visible: true,
         order: config.sections.length,
         settings: {},
@@ -169,7 +178,12 @@ describe('assertValidThemeConfig', () => {
 
     it('does NOT 400 a malformed globalSettings.floatingElements blob', () => {
       const config = baseConfig();
-      config.globalSettings.floatingElements = { whatsapp: 'yes', customButtons: 'nope' };
+      // adversarial: wrong types throughout — the validator treats
+      // globalSettings sub-fields (bar colorSchemes/customCss) as opaque.
+      config.globalSettings.floatingElements = {
+        whatsapp: 'yes',
+        customButtons: 'nope',
+      } as unknown as ThemeConfig['globalSettings']['floatingElements'];
       expect(() => assertValidThemeConfig(config)).not.toThrow();
     });
 
@@ -195,7 +209,10 @@ describe('assertValidThemeConfig', () => {
   describe('color schemes', () => {
     it('rejects a color scheme with no id', () => {
       const config = baseConfig();
-      config.globalSettings.colorSchemes.push({ name: 'Bad scheme' });
+      // adversarial: a scheme missing its required `id`.
+      config.globalSettings.colorSchemes.push({
+        name: 'Bad scheme',
+      } as unknown as ThemeConfig['globalSettings']['colorSchemes'][number]);
       expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
     });
   });
