@@ -10,6 +10,7 @@ import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillSty
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import { resolveProductBadge, type ResolvedProductBadge } from "@/lib/product-badge";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import WishlistButton from "@/components/WishlistButton";
 import type { Collection, Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -190,6 +191,7 @@ function GridProductCard({
               {badge.label}
             </span>
           )}
+          <WishlistButton productId={product.id} />
           {desktopQuickAdd}
         </div>
       )}

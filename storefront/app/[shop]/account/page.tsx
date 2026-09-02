@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
+import { wishlistEnabled } from "@/lib/wishlist";
 import { exportMyData, updateMyProfile } from "@/lib/api";
 import { sanitizePhoneInput } from "@/lib/phone";
 import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/form-styles";
@@ -13,7 +14,7 @@ import DeleteAccountModal from "@/components/DeleteAccountModal";
 
 export default function AccountDashboardPage() {
   const router = useRouter();
-  const { shopSlug, shopBasePath } = useShop();
+  const { shopSlug, shopBasePath, themeConfig } = useShop();
   const { customer, loading, logout, refreshProfile } = useAuth();
 
   useEffect(() => {
@@ -175,6 +176,15 @@ export default function AccountDashboardPage() {
           <p className="font-medium">Saved addresses</p>
           <p className="text-sm text-zinc-500">Manage delivery addresses</p>
         </Link>
+        {wishlistEnabled(themeConfig) && (
+          <Link
+            href={`${shopBasePath}/account/wishlist`}
+            className="rounded-lg border border-black/10 p-4 hover:border-accent/50 transition-colors"
+          >
+            <p className="font-medium">Wishlist</p>
+            <p className="text-sm text-zinc-500">Products you have saved</p>
+          </Link>
+        )}
       </div>
 
       <div className="rounded-lg border border-black/10 p-4 space-y-3">

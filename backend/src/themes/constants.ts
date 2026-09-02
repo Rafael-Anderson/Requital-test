@@ -242,6 +242,7 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       productNameFontWeight: 'regular',
       productNameColor: '#1B1F1E',
       showProductDescriptions: false,
+      showWishlist: false,
     },
     search: {
       productCornerRadius: 8,

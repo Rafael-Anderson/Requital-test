@@ -7,6 +7,7 @@ import { productCardNameStyle } from "@/lib/theme-element-style";
 import { resolveProductBadge } from "@/lib/product-badge";
 import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import WishlistButton from "@/components/WishlistButton";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import type { Product } from "@/lib/types";
 
@@ -106,6 +107,7 @@ export default function ProductCard({ product, orientation }: { product: Product
             Out of stock
           </span>
         ) : null}
+        <WishlistButton productId={product.id} />
       </div>
       {/* Single-line ellipsis so long bouquet/gift names never wrap and break
           card-row alignment across a grid; full name available on hover. */}

@@ -228,6 +228,10 @@ export interface ProductCardSettings {
   productNameFontWeight: "regular" | "medium" | "bold";
   productNameColor: string;
   showProductDescriptions: boolean;
+  // Optional (older published themes lack it) — gates the whole wishlist
+  // feature: the heart on product cards, the account nav tile, and the
+  // /account/wishlist page. See lib/wishlist.tsx's wishlistEnabled().
+  showWishlist?: boolean;
 }
 
 export interface CollectionPageSettings {

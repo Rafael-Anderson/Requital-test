@@ -497,7 +497,7 @@ backend gets a `theme-config.validation` case per new type.
   `AccountSetup` flake). Lint: backend baseline 317 → 325 (`any`-fixture
   category); storefront / admin +0.
 
-- **Phase 7 (separate track) — Wishlist (item 9). ✅ BACKEND DONE 2026-09-02 / storefront+admin commit to follow.**
+- **Phase 7 (separate track) — Wishlist (item 9). ✅ DONE 2026-09-02 (backend commit + storefront/admin commit).**
   Picked up after Phases 1–6. Built as a customer-account feature, not
   theme-builder work (see reason 1 below — that framing held).
   - **Storage (TBE5):** `customer.wishlist`, a nullable JSON column
@@ -542,12 +542,28 @@ backend gets a `theme-config.validation` case per new type.
     jest (442) + the new e2e against the migrated dev DB. **CI's clean
     service-container `db:migrate` cannot be exercised from this
     environment** — that is the genuine clean-DB proof and runs on the PR.
-  - **Storefront/admin (separate commit, still to land):**
-    `globalSettings.productCards.showWishlist` (optional, default `false`)
-    gates the *entire* feature — the heart on `ProductCard`/`GridProductCard`,
-    the account nav tile, and `account/wishlist/page.tsx` (redirects to
-    `/account` when off). `lib/wishlist.tsx`: localStorage when logged out,
-    one-shot merge into the server array on login, never loses an action.
+  - **Storefront/admin commit:** `globalSettings.productCards.showWishlist`
+    (optional, default `false`, mirrored in all 3 type files +
+    `DEFAULT_THEME_CONFIG`) gates the *entire* feature via
+    `wishlistEnabled(themeConfig)` — `components/WishlistButton.tsx` (heart in
+    `ProductCard` grid + `GridProductCard`), the `account/page.tsx` nav tile,
+    and `account/wishlist/page.tsx` (`router.replace`s to `/account` when
+    off). `lib/wishlist.tsx` `WishlistProvider` (in `ShopLayoutClient`,
+    inside `AuthProvider`): localStorage key
+    `requital_storefront_wishlist:${shopSlug}` when logged out; on login
+    `mergeWishlists` unions local ids with the server list (POSTs the ids the
+    server lacks, capped 100, first-capped-wins), clears local, switches to
+    server-backed; logout drops back. `useWishlist()` tolerates a missing
+    provider (inert no-op) since `ProductCard` renders in many trees. Mutating
+    `lib/api.ts` calls go through `authedFetch` ⇒ CSRF auto-attached. Admin:
+    one `<Toggle>` in `ProductCardsSettings.tsx`. Tests:
+    `storefront/lib/wishlist.test.ts` (pure helpers + enable gate) +
+    `admin/.../ProductCardsSettings.test.tsx`.
+  - **Gate:** storefront `npm run build` + `tsc` clean, vitest **340**
+    (+12 wishlist); admin `npm run build` clean, vitest **384 pass** (the
+    12 failures are the pre-documented `AccountSetup`/`login` full-suite
+    flake — both pass in isolation, neither touched here). Lint +0 vs
+    backend 261 / storefront 33 / admin 77.
 
   Original deferral reasons (2026-09-02), kept for context:
   1. It is **not theme-builder work** — Phases 1–6 (the actual capability-gap

@@ -292,6 +292,11 @@ export interface ProductCardSettings {
   // Default off - matches the cleaner-look default the grid already shipped
   // with (a short excerpt under every card), a merchant opts in explicitly.
   showProductDescriptions: boolean;
+  // Optional (older published themes lack it) — gates the entire wishlist
+  // feature storefront-side: the heart on product cards, the account nav
+  // tile, and the /account/wishlist page. Absent/false ⇒ no wishlist UI at
+  // all. Mirrored in admin/lib/types.ts + storefront/lib/theme-config-types.ts.
+  showWishlist?: boolean;
 }
 
 // storefront-v2 Phase 2C/2D — settings for the standalone collection

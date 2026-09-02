@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { ShopProvider, useShop } from "@/lib/shop-context";
 import { CartProvider, useCart } from "@/lib/cart";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { WishlistProvider } from "@/lib/wishlist";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
@@ -174,15 +175,17 @@ export default function ShopLayoutClient({ children }: { children: React.ReactNo
   return (
     <ShopProvider shopSlug={shopSlug}>
       <AuthProvider shopSlug={shopSlug}>
-        <CartProvider shopSlug={shopSlug}>
-          {/* Always mounted, regardless of theme.cartLayout — TopBar's cart
-              icon calls useCartDrawer() unconditionally (see components/
-              TopBar.tsx) so the context must exist even for shops using the
-              full-page cart, where it's simply never opened. */}
-          <CartDrawerProvider>
-            <Body>{children}</Body>
-          </CartDrawerProvider>
-        </CartProvider>
+        <WishlistProvider shopSlug={shopSlug}>
+          <CartProvider shopSlug={shopSlug}>
+            {/* Always mounted, regardless of theme.cartLayout — TopBar's cart
+                icon calls useCartDrawer() unconditionally (see components/
+                TopBar.tsx) so the context must exist even for shops using the
+                full-page cart, where it's simply never opened. */}
+            <CartDrawerProvider>
+              <Body>{children}</Body>
+            </CartDrawerProvider>
+          </CartProvider>
+        </WishlistProvider>
       </AuthProvider>
     </ShopProvider>
   );

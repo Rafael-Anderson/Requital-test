@@ -1348,6 +1348,10 @@ export interface ProductCardSettings {
   productNameFontWeight: "regular" | "medium" | "bold";
   productNameColor: string;
   showProductDescriptions: boolean;
+  // Optional (older published themes lack it) — gates the whole storefront
+  // wishlist feature. Toggled from ProductCardsSettings.tsx. Mirrored in
+  // backend theme-config.types.ts + storefront theme-config-types.ts.
+  showWishlist?: boolean;
 }
 
 export interface CollectionPageSettings {
