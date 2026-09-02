@@ -92,13 +92,13 @@ function MegaMenuPanel({
       ref={panelRef}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={{ top, left: adjustedLeft, borderColor: "#E4E7E7", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
-      className={`fixed z-40 w-fit max-w-[calc(100vw-2rem)] rounded-lg border bg-white ${animationClass} max-h-[70vh] overflow-y-auto`}
+      style={{ top, left: adjustedLeft, borderColor: "var(--color-popover-border)", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
+      className={`fixed z-40 w-fit max-w-[calc(100vw-2rem)] rounded-lg border bg-popover text-popover-fg ${animationClass} max-h-[70vh] overflow-y-auto`}
     >
       <div className="flex flex-wrap gap-8 px-6 py-6">
         {item.columns.map((column) => (
           <div key={column.id} className="w-48 shrink-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-2">{column.title}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-popover-fg/60 mb-2">{column.title}</p>
             <ul className="space-y-1.5">
               {column.links.map((link) => {
                 const href =
@@ -112,7 +112,7 @@ function MegaMenuPanel({
                     <Link
                       href={href}
                       className={`block text-sm transition-colors hover:underline ${
-                        link.featured ? "text-accent-text font-medium" : "text-zinc-700"
+                        link.featured ? "text-accent-text font-medium" : "text-popover-fg"
                       }`}
                     >
                       {link.label}
@@ -283,15 +283,15 @@ function MenuBarItem({
         />
       </button>
       <div className="absolute left-0 top-full z-20 hidden group-hover:block group-focus-within:block pt-1">
-        <div className="min-w-48 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg py-2">
-          <span className="block px-3 pb-1 text-xs font-semibold text-zinc-400">{item.label}</span>
+        <div className="min-w-48 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-lg py-2">
+          <span className="block px-3 pb-1 text-xs font-semibold text-popover-fg/60">{item.label}</span>
           <ul className="space-y-0.5">
             {item.collections.map((c) =>
               c.collection ? (
                 <li key={c.collectionId}>
                   <Link
                     href={`${shopBasePath}/collections/${c.collection.slug}`}
-                    className="block px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    className="block px-3 py-1.5 text-sm text-popover-fg hover:bg-mouse-over/10 transition-colors"
                   >
                     {c.collection.name}
                   </Link>

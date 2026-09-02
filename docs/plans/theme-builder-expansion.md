@@ -312,15 +312,37 @@ updated in the same PR with cross-reference comments. Storefront pure-logic
 resolvers get vitest coverage; admin settings components get a render smoke test;
 backend gets a `theme-config.validation` case per new type.
 
-- **Phase 1 — De-hardcode + wire dead config (build item 3).**
-  No new config keys. `--color-popover`/`--color-popover-fg` added to
-  `globals.css` `@theme` + `theme-colors.ts` (+ backend/admin mirrors), resolved
-  from `globalSettings.popovers.schemeId`. `MegaMenuPanel`, DROPDOWN panel,
-  `SearchBar` results, and `ProductCard`'s remaining `text-zinc-*`/literal-hex
-  switched to tokens. `globalSettings.badges` rendered on the two card
-  components. Ships value to every non-default-palette shop and clears the
-  A2/A3 bug class. Lowest risk, no shape change — goes first to de-risk the
-  wiring pattern the later phases reuse.
+- **Phase 1 — De-hardcode + wire dead config (build item 3). ✅ DONE 2026-09-02.**
+  No new config keys. `--color-popover` / `--color-popover-fg` /
+  `--color-popover-border` added to `storefront/app/globals.css`'s plain `@theme`
+  block (literal light defaults matching the old hardcoded values); resolved
+  per-shop from `globalSettings.popovers.schemeId` in `storefront/lib/shop-context.tsx`'s
+  `applyThemeConfigOverrides` (falls back to the default active scheme;
+  `--color-popover-border` only overridden when the scheme defines a `border`).
+  **Deviation from the plan text:** the vars were *not* added to
+  `storefront/lib/theme-colors.ts` or the backend/admin `THEME_COLOR_*` mirrors —
+  that file is the merchant-settable Appearance Color hex list, and a popover
+  colour derived from the colour scheme belongs with `--color-accent` in
+  `applyThemeConfigOverrides`, not there. No type/mirror change was needed
+  (`PopoverSettings.schemeId` already exists in all three).
+  `MegaMenuPanel` + the nav DROPDOWN panel (`MenuBar.tsx`), the header search
+  results surface (`SearchBar.tsx`), and `ProductCard.tsx`'s list-excerpt
+  `text-zinc-500` + sale-price dead `dark:` variant switched to tokens
+  (`bg-popover` / `text-popover-fg[/60]` / `border-popover-border` /
+  `text-price-main`). The out-of-stock pill's `bg-white/90` → `bg-background/90`.
+  `globalSettings.badges` (position / cornerRadius / scheme / case / font)
+  renders a Sale / Sold out chip on `ProductCard` **and** `GridProductCard` via
+  the new pure `storefront/lib/product-badge.ts` (`resolveProductBadge`,
+  returns `null` for an un-themed shop so the legacy pill still shows). Sale
+  badge on `GridProductCard` is deferred — that section deliberately does not
+  compute auto-discounts — only the Sold out chip is wired there.
+  **`dark:` sweep:** removed at the touched call sites only (4 occurrences in
+  `MenuBar.tsx` / `SearchBar.tsx` / `ProductCard.tsx`). A full storefront sweep
+  is ~23 files of pure noise removal with zero behaviour change; tracked as a
+  separate follow-up commit rather than bundled here to keep this diff
+  reviewable.
+  Tests: `storefront/lib/product-badge.test.ts` (5 cases). Gate: storefront
+  build clean, vitest 288 pass, lint +0. Backend/admin untouched.
 
 - **Phase 2 — Tabbed product section (build item 2).**
   New `product_tabs` section type end to end. Self-contained, touches no

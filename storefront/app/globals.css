@@ -98,6 +98,17 @@
   --color-homepage-info: #ffffff;
   --color-header: #ffffff;
   --color-header-fg: #171717;
+  /* Popover / dropdown / flyout surfaces — the mega-menu flyout, the nav
+     dropdown panel, and the header search results (all previously hardcoded
+     bg-white / text-zinc-700 / #E4E7E7, invisible-on-dark). Resolved
+     per-shop from globalSettings.popovers.schemeId in shop-context.tsx's
+     applyThemeConfigOverrides once a theme is published; these literal
+     defaults match the old hardcoded values so an un-themed shop is
+     unchanged. Not a merchant-settable Appearance Color (theme-colors.ts) —
+     it comes from the color scheme, like --color-accent. */
+  --color-popover: #ffffff;
+  --color-popover-fg: #18181b;
+  --color-popover-border: #e4e4e7;
   --color-footer-bg: #18181b;
   --color-footer-fg: #f4f4f5;
   --color-product-name: #171717;

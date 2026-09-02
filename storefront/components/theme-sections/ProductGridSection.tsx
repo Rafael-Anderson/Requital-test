@@ -8,6 +8,7 @@ import { listProducts, listCollections } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
+import { resolveProductBadge, type ResolvedProductBadge } from "@/lib/product-badge";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import type { Collection, Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -129,6 +130,7 @@ function GridProductCard({
   desktopQuickAdd,
   mobileQuickAdd,
   nameStyle,
+  badge,
 }: {
   product: Product;
   cardStyle: string;
@@ -137,6 +139,10 @@ function GridProductCard({
   showTitle: boolean;
   showPrice: boolean;
   showCurrencyCode: boolean;
+  // globalSettings.badges-driven Sold out chip (Phase 1) — resolved in the
+  // parent since this component has no useShop() of its own. null for an
+  // in-stock product or an un-themed shop.
+  badge: ResolvedProductBadge | null;
   // Bug 7 fix: holds the raw currency CODE (e.g. "AED") now, not a
   // pre-computed text symbol - rendered via <CurrencySymbol /> below so
   // AED gets the real glyph instead of being stuck as plain text.
@@ -179,6 +185,11 @@ function GridProductCard({
               }}
             />
           ))}
+          {badge && (
+            <span className={`absolute ${badge.positionClass} px-2 py-0.5 text-xs font-medium`} style={badge.style}>
+              {badge.label}
+            </span>
+          )}
           {desktopQuickAdd}
         </div>
       )}
@@ -318,6 +329,11 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             cardHoverEffect={themeConfig?.globalSettings.animations.cardHoverEffect}
             showCarousel={!!productCards?.showCarousel}
             nameStyle={productCards ? productCardNameStyle(productCards) : {}}
+            badge={
+              product.stockQuantity !== null && product.stockQuantity <= 0
+                ? resolveProductBadge("sold_out", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes)
+                : null
+            }
             desktopQuickAdd={
               shopCartUsable && productCards.quickAdd ? (
                 <QuickAddButton

@@ -230,6 +230,21 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     root.style.setProperty("--color-accent-foreground", scheme.buttonLabel);
   }
 
+  // Popovers/modals surface — mega-menu flyout, nav dropdown panel, header
+  // search results. globalSettings.popovers.schemeId was a dead setting
+  // (see storefront/CLAUDE.md's "no consumer" list); wired here now.
+  // Falls back to the default active scheme so a themed shop that never
+  // picked a popover scheme still gets themed popovers, not hardcoded white.
+  // --color-popover-border is only overridden when the scheme defines one;
+  // otherwise it keeps its globals.css default (#e4e4e7, the old hardcoded
+  // value).
+  const popoverScheme = resolveScheme(g.popovers?.schemeId, g.colorSchemes) ?? scheme;
+  if (popoverScheme) {
+    root.style.setProperty("--color-popover", popoverScheme.background);
+    root.style.setProperty("--color-popover-fg", popoverScheme.text);
+    if (popoverScheme.border) root.style.setProperty("--color-popover-border", popoverScheme.border);
+  }
+
   root.style.setProperty("--theme-max-width", PAGE_WIDTH_PX[g.pageLayout?.width ?? "normal"]);
 
   if (g.typography?.bodyFont) {
