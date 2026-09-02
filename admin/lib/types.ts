@@ -1183,6 +1183,19 @@ export interface HeaderRow {
   background?: string;
 }
 
+// Phase 5 (TBE3) — persistent chrome announcement bar, at
+// `header.settings.announcementBar`. Distinct from the homepage-body
+// `announcement_bar` section. Mirrors backend theme-config.types.ts.
+export interface AnnouncementBarConfig {
+  enabled: boolean;
+  messages: string[];
+  scrolling?: boolean;
+  speed?: "fast" | "medium" | "slow";
+  dismissible?: boolean;
+  background?: string;
+  textColor?: string;
+}
+
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];

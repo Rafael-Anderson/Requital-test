@@ -432,9 +432,31 @@ backend gets a `theme-config.validation` case per new type.
   (2, new). Gate: storefront build + vitest 307, admin build + vitest 385
   (+3 documented `AccountSetup` flake), lint +0 both.
 
-- **Phase 5 — Persistent dismissible announcement bar (build item 4).**
-  Move the chrome bar into `theme.config`; legacy `shop.announcementBarEnabled`
-  stays as the un-migrated fallback. `localStorage` dismiss key.
+- **Phase 5 — Persistent dismissible announcement bar (build item 4). ✅ DONE 2026-09-02.**
+  `AnnouncementBarConfig` (`{ enabled, messages[], scrolling?, speed?,
+  dismissible?, background?, textColor? }`) mirrored across the 3 type files;
+  stored at `header.settings.announcementBar` (free-form settings bag, no
+  structural change). Storefront `components/AnnouncementBar.tsx` rewritten:
+  a themed `ThemedAnnouncementBar` (rotation via the new shared
+  `lib/announcement-rotation.ts` hook, marquee, dismiss-with-X persisted per
+  shop + per message-set to `localStorage` via `announcementDismissKey`, a
+  djb2 hash so a re-worded bar re-shows) when a config exists, else the
+  **legacy `shop.announcementBarEnabled` / `shop.notificationText` path,
+  byte-identical**. `background`/`textColor` unset ⇒ `bg-accent` fallback.
+  Admin: `AnnouncementBarChromeSettings.tsx` (enable / message list / marquee
+  / speed / dismissible / colors) rendered inside `HeaderSettings.tsx`.
+  **Deviation:** `AnnouncementBarSectionThemed` was NOT refactored to use the
+  shared hook (its own test suite + preview-edit concerns) — it keeps its
+  inline rotation copy; the shared module carries a comment saying so.
+  Tests: `storefront/lib/announcement-rotation.test.ts` (3),
+  `storefront/components/AnnouncementBar.test.tsx` (7, incl. legacy-fallback
+  + dismiss-persistence), `admin/.../AnnouncementBarChromeSettings.test.tsx`
+  (4). Gate: backend `tsc` + jest (validation spec +1), storefront build +
+  vitest 317, admin build + vitest 387 (+4 documented `AccountSetup` flake).
+  Lint: backend baseline 313 → 317 (`any`-fixture category); storefront
+  34 → 35 (`setFaded` in the rotation interval — the same shape
+  `AnnouncementBarSectionThemed` already carries in the baseline, now in a
+  shared hook; dated note in CLAUDE.md); admin +0.
 
 - **Phase 6 — Floating elements + trust bar (build items 7 + 8).**
   `globalSettings.floatingElements`; `trust_bar` section (or `testimonials`

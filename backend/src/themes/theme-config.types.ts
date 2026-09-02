@@ -98,6 +98,22 @@ export interface HeaderRow {
   background?: string;
 }
 
+// theme-builder-expansion Phase 5 (decision TBE3): the PERSISTENT chrome
+// announcement bar — distinct from the homepage-body `announcement_bar`
+// section (which is untouched). Stored at `header.settings.announcementBar`
+// (free-form settings bag, no structural impact). Absent / `enabled: false`
+// ⇒ the storefront falls back to the legacy `shop.announcementBarEnabled` /
+// `shop.notificationText` bar, unchanged.
+export interface AnnouncementBarConfig {
+  enabled: boolean;
+  messages: string[];
+  scrolling?: boolean;
+  speed?: 'fast' | 'medium' | 'slow';
+  dismissible?: boolean;
+  background?: string;
+  textColor?: string;
+}
+
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];

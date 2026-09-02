@@ -146,6 +146,24 @@ describe('assertValidThemeConfig', () => {
       config.header.settings.rows = [null, 'x', { blockIds: 'not-an-array' }, { id: 5 }];
       expect(() => assertValidThemeConfig(config)).not.toThrow();
     });
+
+    it('accepts a header.settings.announcementBar blob (Phase 5) and does not 400 a malformed one', () => {
+      const ok = baseConfig();
+      ok.header.settings.announcementBar = {
+        enabled: true,
+        messages: ['Free delivery over AED 200', 'New season'],
+        scrolling: false,
+        speed: 'medium',
+        dismissible: true,
+        background: '#101010',
+        textColor: '#ffffff',
+      };
+      expect(() => assertValidThemeConfig(ok)).not.toThrow();
+
+      const bad = baseConfig();
+      bad.header.settings.announcementBar = { enabled: 'yes', messages: 'not-an-array' };
+      expect(() => assertValidThemeConfig(bad)).not.toThrow();
+    });
   });
 
   describe('color schemes', () => {

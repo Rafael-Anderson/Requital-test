@@ -7,8 +7,9 @@ import ColorPicker from "@/components/ui/ColorPicker";
 import Button from "@/components/ui/Button";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
+import AnnouncementBarChromeSettings from "./AnnouncementBarChromeSettings";
 import LegacyHeaderSettings from "../LegacyHeaderSettings";
-import { BLOCK_TYPE_LABELS, type HeaderRow, type ThemeBlock } from "@/lib/types";
+import { BLOCK_TYPE_LABELS, type AnnouncementBarConfig, type HeaderRow, type ThemeBlock } from "@/lib/types";
 
 // Header is global chrome (pinned to every page, not part of the
 // reorderable sections list). Its logo/menu/search/cart/account blocks are
@@ -164,6 +165,13 @@ export default function HeaderSettings({
           </ul>
         )}
       </div>
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      <AnnouncementBarChromeSettings
+        value={settings.announcementBar as AnnouncementBarConfig | undefined}
+        onChange={(v) => onUpdate("announcementBar", v)}
+      />
 
       <hr className="border-black/10 dark:border-white/10" />
 
