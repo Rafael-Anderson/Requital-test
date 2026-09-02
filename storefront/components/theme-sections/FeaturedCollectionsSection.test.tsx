@@ -68,4 +68,31 @@ describe("FeaturedCollectionsSection", () => {
     const links = await findAllByRole("link");
     expect(links).toHaveLength(1);
   });
+
+  describe("tile grid controls (Phase 4)", () => {
+    it("defaults to sm:grid-cols-4 / aspect-square / name below when unset", async () => {
+      listCollections.mockResolvedValue([{ ...collection(1), image: "/img.jpg" }]);
+      const { container, findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={{} as SectionSettings} blocks={[]} />,
+      );
+      await findByText("Collection 1");
+      expect(container.querySelector(".grid.sm\\:grid-cols-4")).not.toBeNull();
+      expect(container.querySelector(".aspect-square")).not.toBeNull();
+      // name rendered as the <p> below, not an overlay <span>
+      expect(container.querySelector("p.truncate")?.textContent).toBe("Collection 1");
+    });
+
+    it("applies columns / aspectRatio and moves the name into an overlay when overlayText is on", async () => {
+      listCollections.mockResolvedValue([{ ...collection(1), image: "/img.jpg" }]);
+      const settings = { columns: 3, aspectRatio: "portrait", overlayText: true } as unknown as SectionSettings;
+      const { container, findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={settings} blocks={[]} />,
+      );
+      await findByText("Collection 1");
+      expect(container.querySelector(".grid.sm\\:grid-cols-3")).not.toBeNull();
+      expect(container.querySelector(".aspect-\\[3\\/4\\]")).not.toBeNull();
+      expect(container.querySelector("p.truncate")).toBeNull();
+      expect(container.querySelector("span.text-white")?.textContent).toBe("Collection 1");
+    });
+  });
 });

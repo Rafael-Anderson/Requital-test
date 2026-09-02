@@ -410,8 +410,27 @@ backend gets a `theme-config.validation` case per new type.
   documented `baseConfig()` `any`-fixture category, dated note in CLAUDE.md);
   admin / storefront +0.
 
-- **Phase 4 — Hero inset + pagination, category-tile controls (build items 5 + 6).**
-  Two section extensions, both small, bundled. `settings` additions only.
+- **Phase 4 — Hero inset + pagination, category-tile controls (build items 5 + 6). ✅ DONE 2026-09-02.**
+  `settings` additions only, no new types, no backend change.
+  Hero (`HeroSection.tsx` / admin `HeroSettings.tsx`): `heroLayout`
+  (`full_bleed` default / `inset` — inset wraps the hero in a
+  `--theme-max-width` container with `py-4`), `cornerRadius` (px, only shown
+  in admin for the inset layout), `showSlideIndicators` (dot pagination row
+  added to `HeroSlideshow`, which already held the `index` state — a dot
+  click calls the existing `setIndex`; dots are white/translucent over the
+  photo, above the banner link).
+  **Deviation:** the key is `heroLayout`, not the plan's `settings.layout` —
+  `layout` is too generic a name to reserve on the free-form settings bag.
+  Featured Collections (`FeaturedCollectionsSection.tsx` / admin
+  `FeaturedCollectionsSettings.tsx`): `columns` (2–6, literal Tailwind class
+  map, mobile stays 2-up), `aspectRatio` (`square`/`portrait`/`landscape`),
+  `overlayText` (name in a gradient overlay on the image vs. the `<p>`
+  below). Tile inner div gained `relative` (no-op with no positioned child).
+  Every key absent ⇒ the exact previous rendering.
+  Tests: `HeroSection.test.tsx` +4, `FeaturedCollectionsSection.test.tsx` +2,
+  `admin/.../HeroSettings.test.tsx` (3, new), `admin/.../FeaturedCollectionsSettings.test.tsx`
+  (2, new). Gate: storefront build + vitest 307, admin build + vitest 385
+  (+3 documented `AccountSetup` flake), lint +0 both.
 
 - **Phase 5 — Persistent dismissible announcement bar (build item 4).**
   Move the chrome bar into `theme.config`; legacy `shop.announcementBarEnabled`

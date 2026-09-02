@@ -55,10 +55,12 @@ function HeroSlideshow({
   images,
   durationMs,
   transition,
+  showIndicators = false,
 }: {
   images: HeroImage[];
   durationMs: number;
   transition: ScrollAnimation;
+  showIndicators?: boolean;
 }) {
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -110,6 +112,23 @@ function HeroSlideshow({
         />
       ))}
       {activeLink && <a href={activeLink} className="absolute inset-0" aria-label="Hero banner" />}
+      {/* Phase 4 — dot pagination (over the photo, so white/translucent is
+          the universal convention, not a themeable surface). Sits above the
+          hero link so a dot click never triggers the banner link. */}
+      {showIndicators && count > 1 && (
+        <div className="absolute inset-x-0 bottom-4 z-20 flex justify-center gap-2">
+          {images.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setIndex(i)}
+              aria-label={`Go to slide ${i + 1}`}
+              aria-current={i === active}
+              className={`h-2 rounded-full transition-all ${i === active ? "w-6 bg-white" : "w-2 bg-white/50 hover:bg-white/75"}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -147,6 +166,11 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
       : DEFAULT_SLIDE_DURATION_S;
   const slideTransition = (settings.slideTransition as ScrollAnimation) ?? "fade-in";
   const heroText = typeof settings.heroText === "string" ? settings.heroText.trim() : "";
+  // Phase 4 — inset (margined + rounded) vs the default full-bleed hero, and
+  // slideshow dot indicators. Both keys absent ⇒ renders exactly as before.
+  const inset = settings.heroLayout === "inset";
+  const cornerRadius = typeof settings.cornerRadius === "number" ? settings.cornerRadius : 0;
+  const showSlideIndicators = settings.showSlideIndicators === true;
 
   const visible = [...blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
 
@@ -202,14 +226,32 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
     }
   }
 
+  const heroInner = (
+    <div
+      className={`relative flex ${height} ${position} overflow-hidden px-6 py-12`}
+      style={inset && cornerRadius ? { borderRadius: `${cornerRadius}px` } : undefined}
+    >
+      {bannerImages.length > 0 && (
+        <HeroSlideshow
+          images={bannerImages}
+          durationMs={slideDurationS * 1000}
+          transition={slideTransition}
+          showIndicators={showSlideIndicators}
+        />
+      )}
+      <div className="relative z-10 max-w-2xl">{visible.map(renderBlock)}</div>
+    </div>
+  );
+
   return (
     <>
-      <div className={`relative flex ${height} ${position} overflow-hidden px-6 py-12`}>
-        {bannerImages.length > 0 && (
-          <HeroSlideshow images={bannerImages} durationMs={slideDurationS * 1000} transition={slideTransition} />
-        )}
-        <div className="relative z-10 max-w-2xl">{visible.map(renderBlock)}</div>
-      </div>
+      {inset ? (
+        <div className="mx-auto px-4 sm:px-6 py-4" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+          {heroInner}
+        </div>
+      ) : (
+        heroInner
+      )}
       {heroText && <p className="bg-homepage-info px-4 py-3 text-center text-sm text-zinc-600">{heroText}</p>}
     </>
   );

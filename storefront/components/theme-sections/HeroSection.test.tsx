@@ -107,4 +107,33 @@ describe("HeroSection slideshow", () => {
     renderHero({});
     expect(bannerImages()).toHaveLength(0);
   });
+
+  describe("inset layout + dot indicators (Phase 4)", () => {
+    it("no dots when showSlideIndicators is unset, even with multiple images", () => {
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }, { url: IMG_B }] });
+      expect(container.querySelectorAll("button[aria-label^='Go to slide']").length).toBe(0);
+    });
+
+    it("renders one dot per slide when showSlideIndicators is on; clicking one switches slide", () => {
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }, { url: IMG_B }], showSlideIndicators: true });
+      const dots = container.querySelectorAll("button[aria-label^='Go to slide']");
+      expect(dots.length).toBe(2);
+      fireEvent.click(dots[1]);
+      expect(bannerImages()[1].style.opacity).toBe("1");
+    });
+
+    it("full-bleed by default: no max-width wrapper, no border radius on the hero", () => {
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }] });
+      const hero = container.querySelector(".relative.flex") as HTMLElement;
+      expect(hero.style.borderRadius).toBe("");
+      expect(hero.parentElement?.style.maxWidth ?? "").not.toContain("theme-max-width");
+    });
+
+    it("inset layout wraps the hero in a max-width container and rounds its corners", () => {
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }], heroLayout: "inset", cornerRadius: 20 });
+      const hero = container.querySelector(".relative.flex") as HTMLElement;
+      expect(hero.style.borderRadius).toBe("20px");
+      expect(hero.parentElement?.getAttribute("style") ?? "").toContain("theme-max-width");
+    });
+  });
 });

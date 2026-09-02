@@ -2,6 +2,7 @@
 
 import Select from "@/components/ui/Select";
 import Input from "@/components/ui/Input";
+import Toggle from "@/components/ui/Toggle";
 import BannerImageGallery from "@/components/BannerImageGallery";
 import NineZoneGridPicker from "./shared/NineZoneGridPicker";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
@@ -55,6 +56,29 @@ export default function HeroSettings({
           </option>
         ))}
       </Select>
+
+      <Select
+        label="Layout"
+        value={(settings.heroLayout as string) ?? "full_bleed"}
+        onChange={(e) => onUpdate("heroLayout", e.target.value)}
+      >
+        <option value="full_bleed">Full bleed (edge to edge)</option>
+        <option value="inset">Inset (margins + rounded)</option>
+      </Select>
+      {settings.heroLayout === "inset" && (
+        <Input
+          label="Corner radius (px)"
+          type="number"
+          min={0}
+          max={64}
+          value={(settings.cornerRadius as number) ?? 16}
+          onChange={(e) => onUpdate("cornerRadius", Math.max(0, Math.min(64, Number(e.target.value) || 0)))}
+        />
+      )}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Show slideshow dots</span>
+        <Toggle checked={(settings.showSlideIndicators as boolean) ?? false} onChange={(v) => onUpdate("showSlideIndicators", v)} />
+      </div>
 
       <hr className="border-black/10 dark:border-white/10" />
 
