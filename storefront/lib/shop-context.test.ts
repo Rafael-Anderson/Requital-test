@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveThemeCssVars } from "./shop-context";
+import { resolveThemeCssVars, resolveSchemeCssVars } from "./shop-context";
+import type { ColorScheme } from "./theme-config-types";
 import type { Shop } from "./types";
 
 function shop(overrides: Partial<Shop>): Shop {
@@ -131,5 +132,66 @@ describe("resolveThemeCssVars", () => {
       expect(vars["--color-price-main"]).toBe("#71717a");
       expect(vars["--color-stroke"]).toBe("#e4e4e7");
     });
+  });
+});
+
+// The admin Colors panel edits globalSettings.colorSchemes[]; the active
+// scheme (colorSchemes[0]) must reach the page canvas / body text / header /
+// product-name vars, not just --color-accent* + --color-popover* (the bug:
+// "changing Background to black did nothing on the storefront").
+describe("resolveSchemeCssVars", () => {
+  // Matches DEFAULT_THEME_CONFIG.globalSettings.colorSchemes[0] (backend
+  // constants.ts) — every currently-themed shop is still on this.
+  const DEFAULT_SCHEME: ColorScheme = {
+    id: "scheme-light",
+    name: "Scheme 1",
+    background: "#ffffff",
+    text: "#18181b",
+    button: "#069494",
+    buttonLabel: "#ffffff",
+    secondaryButtonLabel: "#069494",
+  };
+
+  it("returns {} for a missing scheme (un-themed shop — applyTheme's Appearance Colors stand)", () => {
+    expect(resolveSchemeCssVars(null)).toEqual({});
+    expect(resolveSchemeCssVars(undefined)).toEqual({});
+  });
+
+  it("a custom scheme drives all four surface groups — page, body text, header, product name", () => {
+    const vars = resolveSchemeCssVars({
+      ...DEFAULT_SCHEME,
+      background: "#000000",
+      text: "#ff0000",
+      button: "#123456",
+      buttonLabel: "#abcdef",
+    });
+    // background → page canvas + header base
+    expect(vars["--background"]).toBe("#000000");
+    expect(vars["--color-header"]).toBe("#000000");
+    // text → body text + header text + product name
+    expect(vars["--foreground"]).toBe("#ff0000");
+    expect(vars["--color-header-fg"]).toBe("#ff0000");
+    expect(vars["--color-product-name"]).toBe("#ff0000");
+    // button pair unchanged in behaviour, still mapped
+    expect(vars["--color-accent"]).toBe("#123456");
+    expect(vars["--color-accent-hover"]).toBe("#123456");
+    expect(vars["--color-accent-foreground"]).toBe("#abcdef");
+  });
+
+  it("the default scheme is a visual no-op — maps only to the neutral light baseline", () => {
+    const vars = resolveSchemeCssVars(DEFAULT_SCHEME);
+    expect(vars["--background"]).toBe("#ffffff");
+    expect(vars["--color-header"]).toBe("#ffffff");
+    // #18181b vs globals.css's #171717 fallback is imperceptible (rgb 24/24/27
+    // vs 23/23/23); no themed shop's rendering changes.
+    expect(vars["--foreground"]).toBe("#18181b");
+    expect(vars["--color-header-fg"]).toBe("#18181b");
+    expect(vars["--color-product-name"]).toBe("#18181b");
+    expect(vars["--color-accent"]).toBe("#069494");
+  });
+
+  it("does not map secondaryButtonLabel — no secondary button variant renders", () => {
+    const vars = resolveSchemeCssVars({ ...DEFAULT_SCHEME, secondaryButtonLabel: "#ff00ff" });
+    expect(Object.values(vars)).not.toContain("#ff00ff");
   });
 });
