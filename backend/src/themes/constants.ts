@@ -14,6 +14,7 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   'image_text',
   'newsletter',
   'brands',
+  'product_tabs',
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -26,6 +27,7 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   image_text: 'Image + Text',
   newsletter: 'Newsletter Signup',
   brands: 'Brands',
+  product_tabs: 'Tabbed Products',
 };
 
 export type BlockContainer = ThemeSectionType | 'header' | 'footer';
@@ -87,6 +89,8 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   newsletter: ['heading', 'text', 'email_form'],
   // Settings-only (heading / which brands / logos-per-row) — no blocks.
   brands: [],
+  // Settings-only (the tabs array + shared card settings) — no blocks.
+  product_tabs: [],
 };
 
 // Which sub-block types can be added inside a given block type — a block

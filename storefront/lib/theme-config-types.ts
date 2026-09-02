@@ -16,7 +16,11 @@ export type ThemeSectionType =
   | "rich_text"
   | "image_text"
   | "newsletter"
-  | "brands";
+  | "brands"
+  // Tabbed product carousel — pill toggles swap the product set client-side
+  // (theme-builder-expansion Phase 2). Mirrors backend
+  // theme-config.types.ts. settings.tabs: { id, label, collectionId }[].
+  | "product_tabs";
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
 export type SectionVisibility = "desktop" | "mobile" | "both";

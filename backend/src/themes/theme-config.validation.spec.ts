@@ -86,6 +86,44 @@ describe('assertValidThemeConfig', () => {
       });
       expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
     });
+
+    it('accepts a product_tabs section (settings-only, no blocks)', () => {
+      const config = baseConfig();
+      config.sections.push({
+        id: 'sec-product-tabs',
+        type: 'product_tabs',
+        visible: true,
+        order: config.sections.length,
+        settings: {
+          columns: 4,
+          productLimit: 8,
+          tabs: [
+            { id: 'tab-1', label: 'Best Selling', collectionId: 3 },
+            { id: 'tab-2', label: 'Seasonal', collectionId: 7 },
+          ],
+        },
+        blocks: [],
+      });
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+
+    it('does NOT 400 a product_tabs section with a malformed tabs array — settings are shallow beyond structure', () => {
+      const config = baseConfig();
+      config.sections.push({
+        id: 'sec-product-tabs-bad',
+        type: 'product_tabs',
+        visible: true,
+        order: config.sections.length,
+        settings: {
+          // Every one of these is wrong (missing fields, wrong types, not
+          // even an object) — the storefront's resolveProductTabs drops them
+          // and renders nothing; the validator must not reject the save.
+          tabs: [{ label: 'no id' }, { id: 5, collectionId: 'x' }, 'garbage', null],
+        },
+        blocks: [],
+      });
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
   });
 
   describe('color schemes', () => {

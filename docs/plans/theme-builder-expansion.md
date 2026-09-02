@@ -344,10 +344,34 @@ backend gets a `theme-config.validation` case per new type.
   Tests: `storefront/lib/product-badge.test.ts` (5 cases). Gate: storefront
   build clean, vitest 288 pass, lint +0. Backend/admin untouched.
 
-- **Phase 2 — Tabbed product section (build item 2).**
-  New `product_tabs` section type end to end. Self-contained, touches no
-  existing section. Adversarial validation test: unknown tab shape renders
-  empty, never 400s.
+- **Phase 2 — Tabbed product section (build item 2). ✅ DONE 2026-09-02.**
+  New `product_tabs` section type end to end. `ThemeSectionType` +
+  `SECTION_TYPES` + `SECTION_TYPE_LABELS` + `BLOCK_TYPES.product_tabs = []`
+  mirrored across `backend/src/themes/{theme-config.types,constants}.ts`,
+  `admin/lib/types.ts`, `storefront/lib/theme-config-types.ts` (cross-ref
+  comments). `admin/lib/useThemeEditor.ts`'s `defaultSettingsForType` /
+  `defaultBlocksForType` seed `{ tabs: [], columns: 4, productLimit: 8 }` /
+  `[]`. Admin `ProductTabsSettings.tsx` (label + collection Combobox +
+  up/down/remove per tab, "+ Add tab", columns/limit) registered in
+  `SettingsPanel.tsx`; the shared `AddSectionModal` picks it up from
+  `SECTION_TYPES` automatically. Storefront `ProductTabsSection.tsx`
+  (registered in `SectionRenderer.tsx`) — pill toggles, per-tab products
+  lazy-fetched on first activation and cached in a `Record`, reuses the
+  shared `<ProductCard>`. Tab normalisation is the pure
+  `storefront/lib/product-tabs.ts`'s `resolveProductTabs` (drops malformed
+  entries, de-dupes by id, `[]` ⇒ section renders nothing).
+  **Deviation:** the active-tab / loading state was originally two `useState`s
+  updated synchronously in effects (`react-hooks/set-state-in-effect`, +2
+  lint); restructured so the effective active id is derived in render and
+  loading is `byTab[activeId] === undefined` — no lint delta, no separate
+  loading state.
+  Tests: `storefront/lib/product-tabs.test.ts` (3),
+  `admin/.../ProductTabsSettings.test.tsx` (3 render smoke),
+  `backend/.../theme-config.validation.spec.ts` +2 (`product_tabs` accepted;
+  a malformed `tabs` array does **not** 400 — matches the validator's shallow
+  stance). Gate: backend `tsc` clean + jest green, admin build + vitest 381,
+  storefront build + vitest 291, lint +0 (backend baseline 297 → 307, dated
+  note in CLAUDE.md — the documented `baseConfig()` `any`-fixture category).
 
 - **Phase 3 — Header rows + nav placement + utility catalog (build item 1).**
   `header.settings.rows` (optional), new header block types, `nav_menu` allowed

@@ -27,7 +27,12 @@ export type ThemeSectionType =
   | 'rich_text'
   | 'image_text'
   | 'newsletter'
-  | 'brands';
+  | 'brands'
+  // Tabbed product carousel — pill toggles swap the product set client-side
+  // (theme-builder-expansion Phase 2). settings.tabs: { id, label,
+  // collectionId }[]; malformed entries are dropped at render, not 400'd
+  // (matches the validator's "shallow beyond structure" stance).
+  | 'product_tabs';
 
 export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | 'slide-right';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';

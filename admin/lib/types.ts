@@ -1105,7 +1105,11 @@ export type ThemeSectionType =
   | "rich_text"
   | "image_text"
   | "newsletter"
-  | "brands";
+  | "brands"
+  // Tabbed product carousel — pill toggles swap the product set client-side
+  // (theme-builder-expansion Phase 2). Mirrors backend
+  // theme-config.types.ts. settings.tabs: { id, label, collectionId }[].
+  | "product_tabs";
 
 export const SECTION_TYPES: ThemeSectionType[] = [
   "announcement_bar",
@@ -1117,6 +1121,7 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   "image_text",
   "newsletter",
   "brands",
+  "product_tabs",
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -1129,6 +1134,7 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   image_text: "Image + Text",
   newsletter: "Newsletter Signup",
   brands: "Brands",
+  product_tabs: "Tabbed Products",
 };
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
@@ -1444,6 +1450,7 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   image_text: ["image", "text"],
   newsletter: ["heading", "text", "email_form"],
   brands: [],
+  product_tabs: [],
 };
 
 export const CHILD_BLOCK_TYPES: Record<string, string[]> = {

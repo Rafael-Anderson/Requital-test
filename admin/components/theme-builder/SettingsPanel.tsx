@@ -34,6 +34,7 @@ import ImageTextSettings from "./settings/ImageTextSettings";
 import NewsletterSettings from "./settings/NewsletterSettings";
 import AnnouncementBarSettings from "./settings/AnnouncementBarSettings";
 import BrandsSettings from "./settings/BrandsSettings";
+import ProductTabsSettings from "./settings/ProductTabsSettings";
 import {
   HomeTabSetting,
   MenuSetting,
@@ -74,6 +75,7 @@ const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<Sectio
   image_text: ImageTextSettings,
   newsletter: NewsletterSettings,
   brands: BrandsSettings,
+  product_tabs: ProductTabsSettings,
 };
 
 // The 18 Theme Settings categories, in the confirmed spec order — keyed by
