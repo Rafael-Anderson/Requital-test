@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveNavElementStyle, resolveMenuBarBackground, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
+import { resolveNavElementStyle, resolveMenuBarBackground, headerNavSeamless, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
 
@@ -182,6 +182,9 @@ export default function MenuBar() {
 
   const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
   const menuBarBackground = resolveMenuBarBackground(themeConfig?.header.settings);
+  // Drop the top hairline when the menu bar and header are the same color —
+  // otherwise border-stroke shows as a light seam between them (A2 fix).
+  const seamless = headerNavSeamless(themeConfig?.header.settings);
   const navStyle = {
     ...(navBlock ? resolveNavElementStyle(navBlock.settings) : {}),
     ...(menuBarBackground ? { background: menuBarBackground } : {}),
@@ -195,7 +198,7 @@ export default function MenuBar() {
   return (
     <nav
       ref={navRef}
-      className={`border-t border-stroke ${showOnMobile ? "" : "hidden md:block"}`}
+      className={`${seamless ? "" : "border-t border-stroke"} ${showOnMobile ? "" : "hidden md:block"}`}
       style={navStyle}
       {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
     >

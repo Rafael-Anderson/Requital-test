@@ -75,6 +75,19 @@ describe("resolveThemeCssVars", () => {
     expect(vars["--color-button"]).toBe("#fefefe");
   });
 
+  it("defaults --color-mouse-over to `currentColor`, not the Requital accent (A3)", () => {
+    // Hover-pill tints must derive from the hovered element's own text color,
+    // not leak a fixed teal onto every merchant storefront.
+    const vars = resolveThemeCssVars(null);
+    expect(vars["--color-mouse-over"]).toBe("currentColor");
+    expect(vars["--color-mouse-over"]).not.toBe("#057a7a");
+  });
+
+  it("an explicit mouseOverColor override still wins over the currentColor default", () => {
+    const vars = resolveThemeCssVars(shop({ colors: { mouseOverColor: "#123456" } }));
+    expect(vars["--color-mouse-over"]).toBe("#123456");
+  });
+
   it("derives --color-accent-hover from brandColor when secondaryColor is unset", () => {
     const vars = resolveThemeCssVars(shop({ brandColor: "#ff0000" }));
     expect(vars["--color-accent"]).toBe("#ff0000");

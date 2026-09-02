@@ -7,7 +7,7 @@ import { useShop } from "@/lib/shop-context";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth } from "@/lib/theme-element-style";
+import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth, headerNavSeamless } from "@/lib/theme-element-style";
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
 import ThemeImageBlock from "./ThemeImageBlock";
@@ -219,8 +219,14 @@ export default function ThemeDrivenHeader({
     }
   }
 
+  // Drop the bottom hairline when the menu bar directly below is the same
+  // color as this header — border-stroke otherwise shows as a light seam
+  // between them (A2 fix). The outer <header> in ShopLayoutClient keeps its
+  // own border-b, so header/page separation is unaffected.
+  const seamless = headerNavSeamless(config.settings);
+
   return (
-    <div className={`${sticky ? "sticky top-0 z-30" : ""} border-b border-stroke`} style={style}>
+    <div className={`${sticky ? "sticky top-0 z-30" : ""} ${seamless ? "" : "border-b border-stroke"}`} style={style}>
       <div className="mx-auto px-4 py-3 grid grid-cols-3 items-center gap-4" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         {ZONES.map((zone) => (
           <div

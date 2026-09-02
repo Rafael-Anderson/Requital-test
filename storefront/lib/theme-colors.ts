@@ -34,7 +34,14 @@ export interface ThemeColorFieldDef {
 }
 
 export const THEME_COLOR_FIELDS: ThemeColorFieldDef[] = [
-  { key: "mouseOverColor", cssVar: "--color-mouse-over", default: "#057a7a", wired: true },
+  // Default is the CSS keyword `currentColor`, NOT a fixed hue: this drives
+  // hover-pill tints (hover:bg-mouse-over/10 in MenuBar/TopBar/SearchBar/
+  // CollectionNav/...), and a fixed color (it used to be Requital's teal
+  // #057a7a) leaked the admin accent onto every merchant's storefront and was
+  // invisible on dark navs. `currentColor` resolves to the hovered element's
+  // own text color, so the tint is derived from the merchant's nav colors in
+  // both directions (A3 fix). An explicit merchant hex still overrides it.
+  { key: "mouseOverColor", cssVar: "--color-mouse-over", default: "currentColor", wired: true },
   { key: "mouseSelectionColor", cssVar: "--color-selection", default: "#b2e0e0", wired: true },
   { key: "buttonColor", cssVar: "--color-button", default: "#069494", wired: true },
   { key: "addToCartTextColor", cssVar: "--color-add-to-cart-text", default: "#ffffff", wired: true },

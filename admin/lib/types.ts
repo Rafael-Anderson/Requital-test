@@ -1622,6 +1622,11 @@ export interface ThemeColorFieldDef {
 // picker's displayed value here in admin; the storefront applies its own
 // identical copy of these defaults (see storefront/lib/theme-colors.ts).
 export const THEME_COLOR_DEFAULTS: Record<string, string> = {
+  // Storefront now defaults this to the CSS keyword `currentColor` (hover
+  // tint derived from the element's own text color, not a fixed hue — see
+  // storefront/lib/theme-colors.ts). A <input type="color"> can't display
+  // `currentColor`, so this hex stays only as the picker's starting swatch;
+  // it takes effect on the storefront only if the merchant actually saves it.
   mouseOverColor: "#057a7a",
   mouseSelectionColor: "#b2e0e0",
   buttonColor: "#069494",

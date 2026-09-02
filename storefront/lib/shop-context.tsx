@@ -3,9 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
-import { getReadableTextColor } from "./color-contrast";
-import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
-import { parseJsonField } from "./notification-text";
+import { resolveThemeCssVars } from "./theme-css-vars";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
@@ -61,72 +59,11 @@ interface ShopContextValue {
 
 const ShopContext = createContext<ShopContextValue | null>(null);
 
-const DEFAULT_ACCENT = "#069494";
-const DEFAULT_ACCENT_HOVER = "#057a7a";
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-
-function darken(hex: string, amount = 0.15): string {
-  const num = parseInt(hex.replace("#", ""), 16);
-  const channel = (shift: number) => {
-    const value = Math.round(((num >> shift) & 255) * (1 - amount));
-    return Math.max(0, value).toString(16).padStart(2, "0");
-  };
-  return `#${channel(16)}${channel(8)}${channel(0)}`;
-}
-
-// Pure CSS-var resolution — no DOM access — so the fallback/override logic
-// (which is exactly the kind of thing that shipped a real contrast bug
-// earlier in this project) is directly testable. applyTheme() below just
-// loops over the result and calls root.style.setProperty.
-//
-// No OS prefers-color-scheme handling here (there was, briefly, via a
-// DARK_MODE_DEFAULTS map + a matchMedia listener in applyTheme — removed,
-// see the storefront dark-mode-mismatch bug report). --background is just
-// another entry in WIRED_THEME_COLOR_FIELDS now (Page Background Color,
-// defaulting to white — see theme-colors.ts), always resolved from the
-// merchant's own setting like every other field in this loop, never from a
-// visitor's OS preference the shop never opted into.
-export function resolveThemeCssVars(shop: Shop | null): Record<string, string> {
-  const accent = shop?.brandColor && HEX_COLOR.test(shop.brandColor) ? shop.brandColor : DEFAULT_ACCENT;
-  const accentHover =
-    shop?.secondaryColor && HEX_COLOR.test(shop.secondaryColor) ? shop.secondaryColor : darken(accent) || DEFAULT_ACCENT_HOVER;
-
-  const vars: Record<string, string> = {
-    "--color-accent": accent,
-    "--color-accent-hover": accentHover,
-    "--color-accent-foreground": getReadableTextColor(accent),
-    "--font-sans": `var(--font-${shop?.fontFamily ?? "inter"})`,
-  };
-
-  // Granular Appearance Color overrides — only the fields with a real
-  // storefront element to apply to (see theme-colors.ts). themesettings.colors
-  // was LONGTEXT, not real JSON, until
-  // 20260816140000_fix_contact_numbers_colors_columns — see that
-  // migration's comment (same bug class as notificationText, PR #44).
-  const colors = parseJsonField<Record<string, string>>(shop?.colors, {});
-  for (const field of WIRED_THEME_COLOR_FIELDS) {
-    const override = colors[field.key];
-    vars[field.cssVar] = override && HEX_COLOR.test(override) ? override : field.default;
-  }
-
-  // Add to Cart Text is the one exception among the wired fields: an
-  // explicit override is honored (handled by the loop above), but an unset
-  // value falls back to the same auto-contrast guard as --color-accent-
-  // foreground (never a hardcoded white) rather than its own static default.
-  const addToCartButton =
-    colors.addToCartButtonColor && HEX_COLOR.test(colors.addToCartButtonColor) ? colors.addToCartButtonColor : "#069494";
-  if (!(colors.addToCartTextColor && HEX_COLOR.test(colors.addToCartTextColor))) {
-    vars["--color-add-to-cart-text"] = getReadableTextColor(addToCartButton);
-  }
-
-  // Derived (not a saved field of its own), same pattern as
-  // --color-accent-foreground — auto-contrast text for bg-button, so a
-  // merchant picking a near-white Button Color can't ship unreadable text.
-  const buttonColor = colors.buttonColor && HEX_COLOR.test(colors.buttonColor) ? colors.buttonColor : "#069494";
-  vars["--color-button-foreground"] = getReadableTextColor(buttonColor);
-
-  return vars;
-}
+// resolveThemeCssVars now lives in lib/theme-css-vars.ts (non-"use client")
+// so app/[shop]/layout.tsx can emit these server-side; re-exported here
+// (imported at the top of this file) since existing callers/tests import it
+// from this module.
+export { resolveThemeCssVars };
 
 // Applies (or resets to Requital's teal default) the CSS custom properties
 // every storefront component already reads via bg-accent/text-accent/etc.
