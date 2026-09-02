@@ -456,18 +456,20 @@ backend gets a `theme-config.validation` case per new type.
   byte-identical**. `background`/`textColor` unset ⇒ `bg-accent` fallback.
   Admin: `AnnouncementBarChromeSettings.tsx` (enable / message list / marquee
   / speed / dismissible / colors) rendered inside `HeaderSettings.tsx`.
-  **Deviation:** `AnnouncementBarSectionThemed` was NOT refactored to use the
-  shared hook (its own test suite + preview-edit concerns) — it keeps its
-  inline rotation copy; the shared module carries a comment saying so.
+  **Follow-up (cleanup batch, 2026-09-02):** `AnnouncementBarSectionThemed`
+  *was* refactored onto the shared `useAnnouncementRotation` hook — verified
+  behaviorally equivalent (hook API covers exactly what the section needs; no
+  dismiss/localStorage leakage; internal lazy-reduced-motion / derived-state
+  differences produce identical output). Its two rotation tests still pass.
+  Inline copy + the "keeps its own inline copy" comment removed.
   Tests: `storefront/lib/announcement-rotation.test.ts` (3),
   `storefront/components/AnnouncementBar.test.tsx` (7, incl. legacy-fallback
   + dismiss-persistence), `admin/.../AnnouncementBarChromeSettings.test.tsx`
   (4). Gate: backend `tsc` + jest (validation spec +1), storefront build +
   vitest 317, admin build + vitest 387 (+4 documented `AccountSetup` flake).
-  Lint: backend baseline 313 → 317 (`any`-fixture category); storefront
-  34 → 35 (`setFaded` in the rotation interval — the same shape
-  `AnnouncementBarSectionThemed` already carries in the baseline, now in a
-  shared hook; dated note in CLAUDE.md); admin +0.
+  Lint: backend baseline 313 → 317 (later retired, see cleanup batch);
+  storefront 34 → 35 (shared hook) → 33 (cleanup batch: section's inline
+  rotation effect removed); admin +0.
 
 - **Phase 6 — Floating elements + trust bar (build items 7 + 8). ✅ DONE 2026-09-02.**
   `FloatingElementsSettings` / `FloatingCustomButton` / `FloatingPosition`
@@ -538,7 +540,11 @@ only if Phase 3 review agrees the row model is stable.
    since well before this batch). All 31 spec cases (valid + adversarial)
    still pass. Per-phase "backend baseline N → M" notes above are left as
    dated history; the current floor is 261.
-3. **Announcement-bar rotation de-duplicated** — see the Phase 5 note.
+3. **Announcement-bar rotation de-duplicated** — `AnnouncementBarSectionThemed`
+   moved onto the shared `lib/announcement-rotation.ts` `useAnnouncementRotation`
+   hook (verified behaviorally equivalent). Its inline rotation effect and the
+   "keeps its own inline copy" comment are gone; storefront baseline
+   35 → 33. Both announcement-bar tests still pass. See the Phase 5 note.
 
 ## 6. New dependencies
 

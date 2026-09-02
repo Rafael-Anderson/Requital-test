@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-// Matches AnnouncementBarSectionThemed.tsx's own local constants (that
-// homepage-body section keeps its inline copy — a future cleanup can point
-// it at this module; not touched here to keep its test suite untouched).
+// Rotation timing — shared by both announcement bars: the persistent chrome
+// bar (components/AnnouncementBar.tsx) and the homepage-body section
+// (components/theme-sections/AnnouncementBarSectionThemed.tsx).
 export const ANNOUNCEMENT_ROTATION_MS: Record<string, number> = { fast: 2000, medium: 4000, slow: 6000 };
 export const ANNOUNCEMENT_FADE_MS = 400;
 
@@ -17,10 +17,11 @@ export function announcementDismissKey(shopSlug: string, messages: string[]): st
   return `requital_storefront_announcement_dismissed:${shopSlug}:${(hash >>> 0).toString(36)}`;
 }
 
-// Crossfade rotator for the persistent chrome announcement bar. `enabled` is
-// the caller's "rotate" gate (false ⇒ marquee/static). Rotation also stops
-// under prefers-reduced-motion or with ≤1 message. Returns the active index
-// (always valid mod messages.length) and the mid-transition `faded` flag.
+// Crossfade rotator for both announcement bars. `enabled` is the caller's
+// "rotate" gate (false ⇒ marquee/static — e.g. the section passes
+// !settings.scrolling). Rotation also stops under prefers-reduced-motion or
+// with ≤1 message. Returns the active index (always valid mod
+// messages.length) and the mid-transition `faded` flag.
 export function useAnnouncementRotation(
   messages: string[],
   enabled: boolean,
