@@ -481,9 +481,32 @@ backend gets a `theme-config.validation` case per new type.
   `AccountSetup` flake). Lint: backend baseline 317 → 325 (`any`-fixture
   category); storefront / admin +0.
 
-- **Phase 7 (separate track, not blocked by the above) — Wishlist (item 9).**
-  Backend PR + storefront PR. `globalSettings.productCards.showWishlist` is the
-  only theme-side change and it lands with the storefront PR.
+- **Phase 7 (separate track, not blocked by the above) — Wishlist (item 9). ⏸ DEFERRED 2026-09-02 — not started.**
+  Deferred deliberately, per the phase's own "stop rather than ship a
+  half-tested customer-data feature" instruction. Reasons:
+  1. It is **not theme-builder work** — Phases 1–6 (the actual capability-gap
+     closure this doc was written for) are complete, gated, and committed.
+     Wishlist is a customer-data feature (auth-scoped PII-adjacent state)
+     that stands alone.
+  2. It requires a **DB migration** (`customer.wishlist` JSON column). This
+     repo's #1 documented failure mode is a migration that passes against the
+     long-lived local dev DB but fails CI's clean service-container
+     `db:migrate` — a path that cannot be exercised from here. Shipping an
+     unverifiable migration in the same session as six other phases is the
+     wrong risk.
+  3. The required multi-tenant **adversarial isolation e2e** (customer A
+     cannot read/write customer B's wishlist; cross-shop holds, per the
+     `security-outlet-isolation` convention) needs to genuinely run and pass
+     in CI to be worth anything — same constraint as (2).
+  Scope when picked up (unchanged from item 9): `customer.wishlist` JSON
+  array (TBE5, mirroring `customer.addresses`); `customer-account` endpoints
+  `GET/POST/DELETE .../account/wishlist[/:productId]` behind
+  `CustomerAuthGuard`, scoped to `ctx.customerId` + `ctx.shopId`; storefront
+  `lib/wishlist.tsx` context (auth-gated — heart hidden / login-prompt when
+  logged out); heart control on `ProductCard` gated by a new optional
+  `globalSettings.productCards.showWishlist` (the only theme-side change,
+  lands with the storefront PR); `backend/test/wishlist-isolation.e2e-spec.ts`.
+  Split: one backend commit, one storefront commit.
 
 Header layout-variant presets (item 10) fold into Phase 3 as a follow-up commit
 only if Phase 3 review agrees the row model is stable.
