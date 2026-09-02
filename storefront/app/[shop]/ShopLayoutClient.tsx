@@ -11,6 +11,7 @@ import MenuBar from "@/components/MenuBar";
 import { navMenuInHeaderRow } from "@/lib/header-rows";
 import TopBar from "@/components/TopBar";
 import CartDrawer from "@/components/CartDrawer";
+import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import Footer from "@/components/Footer";
@@ -61,6 +62,7 @@ function Header() {
   const { shopSlug, shop, themeConfig } = useShop();
   const { count } = useCart();
   const { customer } = useAuth();
+  const customHeaderBg = headerBackgroundColor(themeConfig);
 
   return (
     // relative + z-30 gives the header its own stacking context so it
@@ -72,7 +74,16 @@ function Header() {
     // dropdown (z-20, scoped to its own parent) behind that section.
     <header
       className="relative z-30 border-b border-stroke bg-header text-header-fg"
-      style={{ backgroundColor: headerBackgroundColor(themeConfig) }}
+      style={{
+        backgroundColor: customHeaderBg,
+        // A hardcoded light border-stroke reads as a white line under a
+        // dark custom header. When the merchant has set their own header
+        // background, derive the header/page separator from the header's
+        // own text color instead (faint, works light or dark — same
+        // philosophy as --color-mouse-over: currentColor). Untouched for a
+        // shop on the default header (still the grey border-stroke line).
+        ...(customHeaderBg ? { borderBottomColor: "color-mix(in srgb, currentColor 12%, transparent)" } : {}),
+      }}
     >
       <AnnouncementBar />
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />
@@ -130,6 +141,14 @@ function CustomCss() {
 // experience, not a new way to leak an unpublished shop's content.
 function Body({ children }: { children: React.ReactNode }) {
   const { shop, loading, previewMode } = useShop();
+
+  // While the shop itself is still resolving, render ONLY the neutral
+  // skeleton — never the branded chrome (TopBar/MenuBar), which at this
+  // point has no shop/theme and would flash the raw slug text plus default
+  // Requital iconography before the merchant's real theme loads.
+  if (loading) {
+    return <StorefrontLoadingSkeleton />;
+  }
 
   if (!loading && shop && !shop.published && !previewMode) {
     return (

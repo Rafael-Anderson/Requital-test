@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveNavElementStyle, resolveMenuBarBackground, headerNavSeamless, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
+import { resolveNavElementStyle, resolveMenuBarBackground, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
 
@@ -184,17 +184,25 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   if (items.length === 0) return <CollectionNav />;
 
   const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
-  const menuBarBackground = resolveMenuBarBackground(themeConfig?.header.settings);
-  // Drop the top hairline when the menu bar and header are the same color —
-  // otherwise border-stroke shows as a light seam between them (A2 fix).
-  const seamless = headerNavSeamless(themeConfig?.header.settings);
+  // Nav-row background, independent of the header row above it: the nav
+  // block's own navRowBackgroundColor wins; otherwise fall back to the
+  // shared header background (menuBarBackground / a solid header.settings
+  // background). Unset ⇒ the nav row inherits whatever the header is (no
+  // visual change from before this key existed).
+  const navRowBackground =
+    (typeof navBlock?.settings.navRowBackgroundColor === "string" && navBlock.settings.navRowBackgroundColor) ||
+    resolveMenuBarBackground(themeConfig?.header.settings);
   const navStyle = {
     ...(navBlock ? resolveNavElementStyle(navBlock.settings) : {}),
-    ...(menuBarBackground ? { background: menuBarBackground } : {}),
+    ...(navRowBackground ? { background: navRowBackground } : {}),
   };
   const showOnMobile = navBlock?.settings.showOnMobile !== false;
   const menuAnimation = (themeConfig?.header.settings.menuAnimation as "fade" | "slide" | "none" | undefined) ?? "fade";
-  const linkClass = "theme-nav-link px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors";
+  // Underline-on-hover animation, default on (opt out via the nav block's
+  // "Enable hover animation" toggle). Off ⇒ static hover only (the existing
+  // bg tint + "Hover color" behaviour), driven purely by .theme-nav-link.
+  const hoverAnimationClass = navBlock?.settings.hoverAnimation === false ? "" : "theme-nav-link--anim";
+  const linkClass = `theme-nav-link ${hoverAnimationClass} px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors`;
   // Nav row alignment (Phase 3) — only affects the below-header bar; an
   // inline nav is aligned by its header row's own justify setting.
   const navAlign = navBlock?.settings.align;
@@ -223,7 +231,7 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
         <div
           ref={navRef}
           className="flex items-center gap-1 py-1 text-sm overflow-x-auto"
-          style={navBlock ? resolveNavElementStyle(navBlock.settings) : undefined}
+          style={navStyle}
           {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
         >
           {itemsRow}
@@ -235,7 +243,7 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
 
   return (
     <nav
-      className={`${seamless ? "" : "border-t border-stroke"} ${showOnMobile ? "" : "hidden md:block"}`}
+      className={`${showOnMobile ? "" : "hidden md:block"}`}
       style={navStyle}
       {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
     >

@@ -279,7 +279,28 @@ function NavElementSettings({ block, onUpdate }: FamilyProps) {
       </Select>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Header background color</span>
-        <ColorPicker value={(s.headerBackgroundColor as string) ?? "#ffffff"} onChange={(hex) => onUpdate("headerBackgroundColor", hex)} />
+        <div className="flex items-center gap-1">
+          {s.headerBackgroundColor != null && (
+            <button type="button" onClick={() => onUpdate("headerBackgroundColor", undefined)} className="text-xs text-zinc-400 hover:text-zinc-700">
+              clear
+            </button>
+          )}
+          <ColorPicker value={(s.headerBackgroundColor as string) ?? "#ffffff"} onChange={(hex) => onUpdate("headerBackgroundColor", hex)} />
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Nav row background color</span>
+          <div className="flex items-center gap-1">
+            {s.navRowBackgroundColor != null && (
+              <button type="button" onClick={() => onUpdate("navRowBackgroundColor", undefined)} className="text-xs text-zinc-400 hover:text-zinc-700">
+                clear
+              </button>
+            )}
+            <ColorPicker value={(s.navRowBackgroundColor as string) ?? "#ffffff"} onChange={(hex) => onUpdate("navRowBackgroundColor", hex)} />
+          </div>
+        </div>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Leave unset to match the header background above.</p>
       </div>
       <Slider label="Font size" min={10} max={24} value={(s.fontSize as number) ?? 14} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
       <div className="flex items-center justify-between">
@@ -297,6 +318,10 @@ function NavElementSettings({ block, onUpdate }: FamilyProps) {
           </option>
         ))}
       </Select>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Enable hover animation</span>
+        <Toggle checked={(s.hoverAnimation as boolean | undefined) ?? true} onChange={(v) => onUpdate("hoverAnimation", v)} />
+      </div>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Show on mobile</span>
         <Toggle checked={(s.showOnMobile as boolean) ?? true} onChange={(v) => onUpdate("showOnMobile", v)} />
