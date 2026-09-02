@@ -216,6 +216,78 @@ export default function BlockSettingsForm({
       );
     }
 
+    case "contact_bar_item":
+      return (
+        <div className="space-y-3">
+          <Select label="Type" value={(block.settings.kind as string) ?? "text"} onChange={(e) => onUpdate("kind", e.target.value)}>
+            <option value="phone">Phone (click to call)</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="text">Plain text</option>
+          </Select>
+          <Input
+            label={(block.settings.kind as string) === "text" ? "Text" : "Number"}
+            placeholder={(block.settings.kind as string) === "whatsapp" ? "9715XXXXXXXX" : "+971 5X XXX XXXX"}
+            value={(block.settings.value as string) ?? ""}
+            onChange={(e) => onUpdate("value", e.target.value)}
+          />
+          <Input
+            label="Display label (optional)"
+            placeholder="Falls back to the number/text above"
+            value={(block.settings.label as string) ?? ""}
+            onChange={(e) => onUpdate("label", e.target.value)}
+          />
+        </div>
+      );
+
+    case "social_row": {
+      const socialLinks = (block.settings.links as { platform?: string; url?: string }[] | undefined) ?? [];
+      const setLinks = (next: { platform: string; url: string }[]) => onUpdate("links", next);
+      return (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            {socialLinks.map((link, i) => (
+              <div key={i} className="flex items-end gap-1.5">
+                <Select
+                  label={i === 0 ? "Platform" : ""}
+                  value={link.platform ?? "instagram"}
+                  onChange={(e) => setLinks(socialLinks.map((l, idx) => (idx === i ? { platform: e.target.value, url: l.url ?? "" } : { platform: l.platform ?? "", url: l.url ?? "" })))}
+                >
+                  {["instagram", "facebook", "twitter", "x", "youtube", "tiktok", "snapchat", "linkedin"].map((p) => (
+                    <option key={p} value={p}>
+                      {p[0].toUpperCase() + p.slice(1)}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  label={i === 0 ? "URL" : ""}
+                  value={link.url ?? ""}
+                  onChange={(e) => setLinks(socialLinks.map((l, idx) => (idx === i ? { platform: l.platform ?? "", url: e.target.value } : { platform: l.platform ?? "", url: l.url ?? "" })))}
+                />
+                <button
+                  type="button"
+                  onClick={() => setLinks(socialLinks.filter((_, idx) => idx !== i).map((l) => ({ platform: l.platform ?? "", url: l.url ?? "" })))}
+                  aria-label="Remove link"
+                  className="mb-1 shrink-0 text-zinc-400 hover:text-red-500"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => setLinks([...socialLinks.map((l) => ({ platform: l.platform ?? "", url: l.url ?? "" })), { platform: "instagram", url: "" }])}>
+            <Plus className="mr-1 size-3.5" /> Add link
+          </Button>
+        </div>
+      );
+    }
+
+    case "language_switcher":
+      return (
+        <p className="text-xs text-zinc-500">
+          Placeholder — shows a language menu on the storefront once multi-language support ships. No configuration yet.
+        </p>
+      );
+
     case "collection_header":
     case "product_card":
       return <p className="text-xs text-zinc-500">Contains the blocks below — use the eye icon to show/hide the whole group.</p>;

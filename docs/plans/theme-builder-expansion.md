@@ -373,11 +373,42 @@ backend gets a `theme-config.validation` case per new type.
   storefront build + vitest 291, lint +0 (backend baseline 297 → 307, dated
   note in CLAUDE.md — the documented `baseConfig()` `any`-fixture category).
 
-- **Phase 3 — Header rows + nav placement + utility catalog (build item 1).**
-  `header.settings.rows` (optional), new header block types, `nav_menu` allowed
-  in a header row, nav alignment. Absent `rows` ⇒ pixel-identical to today
-  (regression test). The largest phase; landing it after Phases 1–2 means the
-  token-wiring and section-registration muscle memory is already there.
+- **Phase 3 — Header rows + nav placement + utility catalog (build item 1). ✅ DONE 2026-09-02.**
+  `HeaderRow` (`{ id, blockIds[], align?, background? }`) mirrored across the
+  three type files; stored on the already-free-form `header.settings.rows` —
+  **no structural change** to `HeaderFooterConfig`. New header block types
+  `contact_bar_item` / `social_row` / `language_switcher` added to
+  `BLOCK_TYPES.header` + `BLOCK_TYPE_LABELS` (backend `constants.ts` +
+  `admin/lib/types.ts`); the block `type` field has no server allow-list so
+  the validator already accepts them (a spec case documents it). Storefront
+  `lib/header-rows.ts` (`resolveHeaderRows` / `navMenuInHeaderRow`, pure) —
+  **returns `null` whenever `rows` is absent/empty/invalid, and
+  `ThemeDrivenHeader` then renders its exact old 3-zone grid code path**
+  (`outerClass` extracted, string-identical). Rows path renders one bar per
+  row; unplaced blocks (except `nav_menu`) append to the last row.
+  `renderBlock` gained the 3 utility cases + a `nav_menu` case
+  (`<MenuBar inline />`); the classic zone filter now explicitly excludes
+  `nav_menu` (it was already `null` there). `MenuBar` gained an `inline` prop
+  (drops the `<nav>` border/bg/centering) and a `nav_menu.settings.align`
+  control for the below-header bar. `ShopLayoutClient.showMenuBar` consults
+  `navMenuInHeaderRow` to skip the below-header bar when nav is placed in a
+  row. Admin: `HeaderSettings.tsx` takes a new `blocks` prop and renders a
+  form-based rows editor (align / bg / assign-blocks / reorder / remove);
+  `NavElementSettings` gained an Alignment select; `BlockSettingsForm` gained
+  the 3 new block-type forms (`language_switcher` = a "coming soon" note,
+  TBE4).
+  **Regression gate (hard):** `ThemeDrivenHeader.test.tsx` asserts the
+  `.grid.grid-cols-3` with exactly 3 zone columns renders when `rows` is
+  absent *and* when `rows: []` — **PASS**.
+  Tests: `storefront/lib/header-rows.test.ts` (7),
+  `storefront/.../ThemeDrivenHeader.test.tsx` (3),
+  `admin/.../HeaderSettings.test.tsx` +3 (rows editor),
+  `backend/.../theme-config.validation.spec.ts` +2. Gate: backend `tsc` +
+  jest green, storefront build + vitest 301, admin build + vitest 380 (the 3
+  `AccountSetup.test.tsx` fails are the documented pre-existing full-suite
+  flake — pass 12/12 in isolation). Lint: backend baseline 307 → 313 (same
+  documented `baseConfig()` `any`-fixture category, dated note in CLAUDE.md);
+  admin / storefront +0.
 
 - **Phase 4 — Hero inset + pagination, category-tile controls (build items 5 + 6).**
   Two section extensions, both small, bundled. `settings` additions only.

@@ -126,6 +126,28 @@ describe('assertValidThemeConfig', () => {
     });
   });
 
+  describe('header rows + utility blocks (Phase 3)', () => {
+    it('accepts the new header utility block types and a header.settings.rows blob', () => {
+      const config = baseConfig();
+      config.header.settings.rows = [
+        { id: 'row-1', blockIds: ['hdr-contact', 'hdr-social'], align: 'between', background: '#101010' },
+        { id: 'row-2', blockIds: ['hdr-logo'], align: 'center' },
+      ];
+      config.header.blocks.push(
+        { id: 'hdr-contact', type: 'contact_bar_item', visible: true, order: 5, settings: { kind: 'phone', value: '+97140000000' } },
+        { id: 'hdr-social', type: 'social_row', visible: true, order: 6, settings: { links: [{ platform: 'instagram', url: 'https://x' }] } },
+        { id: 'hdr-lang', type: 'language_switcher', visible: true, order: 7, settings: {} },
+      );
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+
+    it('does NOT 400 a malformed header.settings.rows — settings are shallow beyond structure', () => {
+      const config = baseConfig();
+      config.header.settings.rows = [null, 'x', { blockIds: 'not-an-array' }, { id: 5 }];
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+  });
+
   describe('color schemes', () => {
     it('rejects a color scheme with no id', () => {
       const config = baseConfig();

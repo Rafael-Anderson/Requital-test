@@ -270,7 +270,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   if (selection.kind === "header") {
     return (
       <FilterableSettingsBody editor={editor} contentKey="header" heading={<h2 className="mb-4 text-sm font-semibold">Header</h2>}>
-        <HeaderSettings settings={config.header.settings} onUpdate={editor.updateHeaderSetting} />
+        <HeaderSettings settings={config.header.settings} blocks={config.header.blocks} onUpdate={editor.updateHeaderSetting} />
       </FilterableSettingsBody>
     );
   }

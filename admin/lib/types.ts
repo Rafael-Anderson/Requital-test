@@ -1172,6 +1172,17 @@ export interface ThemeSection {
   blocks: ThemeBlock[];
 }
 
+// theme-builder-expansion Phase 3 (TBE1) — mirrors backend
+// theme-config.types.ts's HeaderRow. An OPTIONAL grouping over the flat
+// blocks[]; `header.settings.rows` absent ⇒ storefront renders today's
+// single 3-zone grid unchanged. No structural change.
+export interface HeaderRow {
+  id: string;
+  blockIds: string[];
+  align?: "left" | "center" | "right" | "between";
+  background?: string;
+}
+
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];
@@ -1418,6 +1429,9 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   cart_icon: "Cart",
   account_icon: "Account",
   header_text: "Header Text",
+  contact_bar_item: "Contact item",
+  social_row: "Social links",
+  language_switcher: "Language (coming soon)",
   footer_column: "Column",
   footer_social: "Social Links",
   footer_copyright: "Copyright",
@@ -1439,7 +1453,18 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
 };
 
 export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
-  header: ["logo", "nav_menu", "search_icon", "cart_icon", "account_icon", "header_text", "image"],
+  header: [
+    "logo",
+    "nav_menu",
+    "search_icon",
+    "cart_icon",
+    "account_icon",
+    "header_text",
+    "image",
+    "contact_bar_item",
+    "social_row",
+    "language_switcher",
+  ],
   footer: ["footer_column", "footer_social", "footer_copyright", "image"],
   announcement_bar: ["announcement"],
   hero: ["heading", "subheading", "cta", "image"],

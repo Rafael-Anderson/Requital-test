@@ -269,9 +269,14 @@ function NavElementSettings({ block, onUpdate }: FamilyProps) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        The navigation menu&apos;s position is fixed below the header — the controls below style it (and the header
-        it sits under) rather than repositioning it.
+        The navigation menu renders as its own row below the header. Place it in a Header row (Header settings) to
+        show it inline instead. The controls below style it and the header it sits under.
       </p>
+      <Select label="Alignment (below-header row)" value={(s.align as string) ?? "left"} onChange={(e) => onUpdate("align", e.target.value)}>
+        <option value="left">Left</option>
+        <option value="center">Center</option>
+        <option value="right">Right</option>
+      </Select>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Header background color</span>
         <ColorPicker value={(s.headerBackgroundColor as string) ?? "#ffffff"} onChange={(hex) => onUpdate("headerBackgroundColor", hex)} />

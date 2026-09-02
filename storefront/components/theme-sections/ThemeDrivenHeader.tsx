@@ -2,18 +2,39 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
+import { ChevronDown, Globe, MessageCircle, Phone } from "lucide-react";
 import { ShoppingCart, User } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth, headerNavSeamless } from "@/lib/theme-element-style";
+import { resolveHeaderRows } from "@/lib/header-rows";
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
+import MenuBar from "@/components/MenuBar";
 import ThemeImageBlock from "./ThemeImageBlock";
 import { backgroundStyle } from "./SectionWrapper";
 import type { Customer, Shop } from "@/lib/types";
 import type { HeaderFooterConfig, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
+
+const ROW_JUSTIFY: Record<string, string> = {
+  left: "justify-start",
+  center: "justify-center",
+  right: "justify-end",
+  between: "justify-between",
+};
+
+const SOCIAL_LABEL: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  twitter: "Twitter",
+  x: "X",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+  snapchat: "Snapchat",
+  linkedin: "LinkedIn",
+};
 
 const ZONES = ["left", "center", "right"] as const;
 
@@ -214,6 +235,87 @@ export default function ThemeDrivenHeader({
           </span>
         );
       }
+      // theme-builder-expansion Phase 3 — header utility blocks. Render in
+      // both the rows path and (for robustness) the classic zone path if a
+      // merchant adds one without configuring rows.
+      case "nav_menu":
+        return <MenuBar key={block.id} inline />;
+      case "contact_bar_item": {
+        const kind = (block.settings.kind as string) ?? "text";
+        const value = (block.settings.value as string) ?? "";
+        const label = (block.settings.label as string) || value;
+        if (!value) return null;
+        const cls = "inline-flex items-center gap-1.5 text-sm hover:opacity-70 transition-opacity";
+        const tagProps = editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "contact_bar_item" });
+        if (kind === "phone") {
+          return (
+            <a key={block.id} href={`tel:${value.replace(/[^\d+]/g, "")}`} className={cls} {...tagProps}>
+              <Phone className="size-4 shrink-0" {...iconProps} />
+              {label}
+            </a>
+          );
+        }
+        if (kind === "whatsapp") {
+          return (
+            <a
+              key={block.id}
+              href={`https://wa.me/${value.replace(/[^\d]/g, "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cls}
+              {...tagProps}
+            >
+              <MessageCircle className="size-4 shrink-0" {...iconProps} />
+              {label}
+            </a>
+          );
+        }
+        return (
+          <span key={block.id} className="inline-flex items-center gap-1.5 text-sm" {...tagProps}>
+            {label}
+          </span>
+        );
+      }
+      case "social_row": {
+        const links = Array.isArray(block.settings.links) ? (block.settings.links as { platform?: string; url?: string }[]) : [];
+        const valid = links.filter((l) => l && typeof l.url === "string" && l.url);
+        if (valid.length === 0) return null;
+        return (
+          <span
+            key={block.id}
+            className="inline-flex items-center gap-2.5"
+            {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "social_row" })}
+          >
+            {valid.map((l, i) => (
+              <a
+                key={i}
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={SOCIAL_LABEL[(l.platform ?? "").toLowerCase()] ?? l.platform ?? "Social link"}
+                className="text-sm hover:opacity-70 transition-opacity"
+              >
+                {SOCIAL_LABEL[(l.platform ?? "").toLowerCase()] ?? l.platform ?? "Link"}
+              </a>
+            ))}
+          </span>
+        );
+      }
+      // Non-functional placeholder (decision TBE4) — renders the affordance
+      // so a merchant's header layout looks complete; wired up when
+      // multi-language support ships. No click behaviour.
+      case "language_switcher":
+        return (
+          <span
+            key={block.id}
+            className="inline-flex items-center gap-1 text-sm opacity-70 select-none"
+            {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "language_switcher" })}
+          >
+            <Globe className="size-4 shrink-0" {...iconProps} />
+            EN
+            <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+          </span>
+        );
       default:
         return null;
     }
@@ -224,9 +326,37 @@ export default function ThemeDrivenHeader({
   // between them (A2 fix). The outer <header> in ShopLayoutClient keeps its
   // own border-b, so header/page separation is unaffected.
   const seamless = headerNavSeamless(config.settings);
+  const outerClass = `${sticky ? "sticky top-0 z-30" : ""} ${seamless ? "" : "border-b border-stroke"}`;
+
+  // theme-builder-expansion Phase 3 (TBE1). `resolveHeaderRows` returns null
+  // whenever header.settings.rows is absent/empty/invalid — in which case
+  // the classic single 3-zone grid below renders BYTE-FOR-BYTE unchanged
+  // (regression-tested). Only a merchant who has explicitly built rows takes
+  // the multi-row branch.
+  const rows = resolveHeaderRows(config.settings, blocks);
+  if (rows) {
+    return (
+      <div className={outerClass} style={style}>
+        {rows.map((row, i) => (
+          <div
+            key={row.id}
+            className={`${i > 0 ? "border-t border-stroke/60" : ""}`}
+            style={row.background ? { background: row.background } : undefined}
+          >
+            <div
+              className={`mx-auto px-4 py-2 flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"}`}
+              style={{ maxWidth: "var(--theme-max-width, 80rem)" }}
+            >
+              {applyLogoRelativePosition(row.blocks).map((b) => renderBlock(b))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className={`${sticky ? "sticky top-0 z-30" : ""} ${seamless ? "" : "border-b border-stroke"}`} style={style}>
+    <div className={outerClass} style={style}>
       <div className="mx-auto px-4 py-3 grid grid-cols-3 items-center gap-4" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         {ZONES.map((zone) => (
           <div
@@ -234,7 +364,15 @@ export default function ThemeDrivenHeader({
             className={`flex items-center gap-1 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
           >
             {applyLogoRelativePosition(
-              blocks.filter((b) => (b.settings.zone as string | undefined) === zone || (zone === "left" && !b.settings.zone)),
+              blocks.filter(
+                (b) =>
+                  // nav_menu never renders in the zone grid — the classic
+                  // path leaves it to the separate below-header MenuBar
+                  // (ShopLayoutClient). It only renders inside ThemeDrivenHeader
+                  // when explicitly placed in a header row (Phase 3).
+                  b.type !== "nav_menu" &&
+                  ((b.settings.zone as string | undefined) === zone || (zone === "left" && !b.settings.zone)),
+              ),
             ).map((b) => renderBlock(b))}
           </div>
         ))}

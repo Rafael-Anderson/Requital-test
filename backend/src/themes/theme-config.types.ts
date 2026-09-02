@@ -83,6 +83,21 @@ export interface ThemeSection {
 // Global chrome (Header/Footer) — same block-tree shape as a section, but a
 // fixed named slot rather than a sections[] array member (not reorderable
 // relative to page content; see the scope decision).
+// theme-builder-expansion Phase 3 (decision TBE1): an OPTIONAL grouping laid
+// over the existing flat `blocks[]` — it does not restructure anything. A
+// row lists block ids (in render order) that should appear on their own
+// horizontal bar. `header.settings.rows` absent ⇒ the storefront renders the
+// pre-existing single 3-zone grid, byte-for-byte. Blocks not referenced by
+// any row fall into the last row so nothing is ever dropped. Stored on
+// `settings`, which is already free-form `Record<string, unknown>` — no
+// structural / migration impact.
+export interface HeaderRow {
+  id: string;
+  blockIds: string[];
+  align?: 'left' | 'center' | 'right' | 'between';
+  background?: string;
+}
+
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];

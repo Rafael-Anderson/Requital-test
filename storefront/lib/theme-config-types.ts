@@ -53,6 +53,17 @@ export interface ThemeSection {
   blocks: ThemeBlock[];
 }
 
+// theme-builder-expansion Phase 3 (TBE1) — mirrors backend
+// theme-config.types.ts's HeaderRow. Optional grouping over the flat
+// blocks[]; `header.settings.rows` absent ⇒ ThemeDrivenHeader renders the
+// pre-existing single 3-zone grid unchanged (see lib/header-rows.ts).
+export interface HeaderRow {
+  id: string;
+  blockIds: string[];
+  align?: "left" | "center" | "right" | "between";
+  background?: string;
+}
+
 export interface HeaderFooterConfig {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];

@@ -144,13 +144,16 @@ function MegaMenuPanel({
 // with its columns wrapping (flex-wrap) onto their own lines once they no
 // longer fit the viewport width, rather than a genuine accordion-in-a-drawer
 // that has nothing to live inside.
-export default function MenuBar() {
+// `inline` (theme-builder-expansion Phase 3) — rendered inside a header row
+// rather than as its own full-width bar below the header: drop the <nav>
+// wrapper's border/background/centering so the row owns the layout.
+export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   const { shopSlug, shopBasePath, previewToken, previewMode, themeConfig } = useShop();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [openMegaId, setOpenMegaId] = useState<number | null>(null);
   const [megaTop, setMegaTop] = useState(0);
   const [megaLeft, setMegaLeft] = useState(0);
-  const navRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -192,32 +195,54 @@ export default function MenuBar() {
   const showOnMobile = navBlock?.settings.showOnMobile !== false;
   const menuAnimation = (themeConfig?.header.settings.menuAnimation as "fade" | "slide" | "none" | undefined) ?? "fade";
   const linkClass = "theme-nav-link px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors";
+  // Nav row alignment (Phase 3) — only affects the below-header bar; an
+  // inline nav is aligned by its header row's own justify setting.
+  const navAlign = navBlock?.settings.align;
+  const alignClass = navAlign === "center" ? "justify-center" : navAlign === "right" ? "justify-end" : "";
 
   const openItem = items.find((i) => i.id === openMegaId && i.type === "MEGA");
 
+  const itemsRow = items.map((item) => (
+    <MenuBarItem
+      key={item.id}
+      item={item}
+      linkClass={linkClass}
+      shopBasePath={shopBasePath}
+      isMegaOpen={openMegaId === item.id}
+      onMegaEnter={(el) => openMega(item.id, el)}
+      onMegaLeave={scheduleClose}
+    />
+  ));
+  const megaPanel = openItem ? (
+    <MegaMenuPanel item={openItem} top={megaTop} left={megaLeft} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
+  ) : null;
+
+  if (inline) {
+    return (
+      <>
+        <div
+          ref={navRef}
+          className="flex items-center gap-1 py-1 text-sm overflow-x-auto"
+          style={navBlock ? resolveNavElementStyle(navBlock.settings) : undefined}
+          {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
+        >
+          {itemsRow}
+        </div>
+        {megaPanel}
+      </>
+    );
+  }
+
   return (
     <nav
-      ref={navRef}
       className={`${seamless ? "" : "border-t border-stroke"} ${showOnMobile ? "" : "hidden md:block"}`}
       style={navStyle}
       {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
     >
-      <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto">
-        {items.map((item) => (
-          <MenuBarItem
-            key={item.id}
-            item={item}
-            linkClass={linkClass}
-            shopBasePath={shopBasePath}
-            isMegaOpen={openMegaId === item.id}
-            onMegaEnter={(el) => openMega(item.id, el)}
-            onMegaLeave={scheduleClose}
-          />
-        ))}
+      <div ref={navRef} className={`mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto ${alignClass}`}>
+        {itemsRow}
       </div>
-      {openItem && (
-        <MegaMenuPanel item={openItem} top={megaTop} left={megaLeft} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
-      )}
+      {megaPanel}
     </nav>
   );
 }

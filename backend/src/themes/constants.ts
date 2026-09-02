@@ -41,6 +41,12 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   cart_icon: 'Cart',
   account_icon: 'Account',
   header_text: 'Header Text',
+  // theme-builder-expansion Phase 3 — header utility blocks. Placed into a
+  // header row via header.settings.rows[]; with no rows they render inline in
+  // the default single-row header, same as any other header block.
+  contact_bar_item: 'Contact item',
+  social_row: 'Social links',
+  language_switcher: 'Language (coming soon)',
   footer_column: 'Column',
   footer_social: 'Social Links',
   footer_copyright: 'Copyright',
@@ -74,7 +80,18 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   // own 'image' case in renderBlock/content-area rendering. 'header_text'
   // (fix/header-text-and-dnd) is a separate, unrelated addition — a plain
   // text block for the header bar, next to the logo.
-  header: ['logo', 'nav_menu', 'search_icon', 'cart_icon', 'account_icon', 'header_text', 'image'],
+  header: [
+    'logo',
+    'nav_menu',
+    'search_icon',
+    'cart_icon',
+    'account_icon',
+    'header_text',
+    'image',
+    'contact_bar_item',
+    'social_row',
+    'language_switcher',
+  ],
   footer: ['footer_column', 'footer_social', 'footer_copyright', 'image'],
   announcement_bar: ['announcement'],
   hero: ['heading', 'subheading', 'cta', 'image'],
