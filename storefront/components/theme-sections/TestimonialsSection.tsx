@@ -18,7 +18,7 @@ function StarRating({ rating }: { rating: number }) {
   return (
     <div className="mb-2 text-amber-500" aria-label={`${filled} out of 5 stars`}>
       {"★".repeat(filled)}
-      <span className="text-zinc-300 dark:text-zinc-700">{"★".repeat(5 - filled)}</span>
+      <span className="text-zinc-300">{"★".repeat(5 - filled)}</span>
     </div>
   );
 }

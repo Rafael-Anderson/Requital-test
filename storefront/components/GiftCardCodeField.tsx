@@ -117,7 +117,7 @@ export default function GiftCardCodeField({
           type="button"
           onClick={apply}
           disabled={checking || !input.trim()}
-          className="h-9 px-3 rounded-lg border border-stroke text-sm cursor-pointer disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          className="h-9 px-3 rounded-lg border border-stroke text-sm cursor-pointer disabled:opacity-50 hover:bg-black/5 transition-colors"
         >
           {checking ? "Checking…" : "Apply"}
         </button>

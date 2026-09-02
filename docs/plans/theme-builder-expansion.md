@@ -106,7 +106,7 @@ one instance of a wider pattern. Others found in the same sweep:
 | Location | Hardcoded value | Effect on a dark-themed shop |
 |---|---|---|
 | `MenuBar.tsx` `MegaMenuPanel` | `bg-white`, `text-zinc-700`, `borderColor:"#E4E7E7"`, `boxShadow` literal | White flyout with dark text over a dark site |
-| `MenuBar.tsx` DROPDOWN panel | `bg-white dark:bg-zinc-900`, `border-black/10` | `dark:` never fires on the storefront → always white |
+| `MenuBar.tsx` DROPDOWN panel | `bg-white dark:bg-zinc-900`, `border-black/10` | light-mode: always white; OS-dark-mode: inconsistent partial-dark (see the `dark:` sweep note under Phase 1 — `dark:` compiles to a `prefers-color-scheme` media query, it is not dead) |
 | `SearchBar.tsx` results input | `bg-white dark:bg-zinc-900` | same |
 | `ProductCard.tsx` | `text-red-600 dark:text-red-400` (sale price), `bg-white/90 text-red-600` (out-of-stock pill) | fixed red, fixed white pill |
 | `ProductCard.tsx` list excerpt | `text-zinc-500` | not `--color-price-main`, ignores theme |
@@ -161,7 +161,7 @@ Legend: **A** = already possible · **B** = possible but awkward / partial ·
 | Q2 | Are product cards configurable? | **Mostly yes.** `globalSettings.productCards` + `product_card` sub-blocks + `cardHoverEffect: swap` (hover image swap already works) cover most of it. Gaps: sale-badge rendering (`globalSettings.badges` exists but is dead), extra metadata sub-blocks (vendor/rating/short-desc as toggles), and wishlist (a missing feature, not a card-config gap). The sub-block shape is correct — extend it, don't replace it. |
 | Q3 | Does the section system support tabbed / filtered content? | **No — genuine blocker.** Every section renders one static content set. Needs one new section type whose `settings` holds an array of `{label, collectionId}` and whose component switches client-side. No config-shape change (a new type + an array inside its own `settings`). |
 | Q4 | Is there any concept of floating / persistent UI? | **No — small blocker.** `WhatsAppFloatingButton` is hardcoded chrome on a legacy `shop.*` flag, absent from `theme.config`. Add one `globalSettings.floatingElements` category; wire WhatsApp through it and add a generic custom-link button. Embedded third-party widgets stay out (script injection). |
-| Q5 | How much visual polish is themeable vs hardcoded? | **Config vocabulary is ahead of the wiring.** Section- and card-level colour is largely tokenised. But popovers / dropdowns / the mega-menu flyout carry hardcoded `bg-white` / `text-zinc-*` / literal hex and dead `dark:` variants (table in §1.4), and `globalSettings.popovers`/`drawers`/`badges` have no consumer. Same class as the A2/A3 bugs. Pure wiring debt, no architecture change. |
+| Q5 | How much visual polish is themeable vs hardcoded? | **Config vocabulary is ahead of the wiring.** Section- and card-level colour is largely tokenised. But popovers / dropdowns / the mega-menu flyout carry hardcoded `bg-white` / `text-zinc-*` / literal hex and OS-dark-only `dark:` variants (table in §1.4 — `dark:` compiles to a `prefers-color-scheme` media query, since swept), and `globalSettings.popovers`/`drawers`/`badges` have no consumer. Same class as the A2/A3 bugs. Pure wiring debt, no architecture change. |
 
 ## 3. Prioritised build list
 
@@ -327,7 +327,7 @@ backend gets a `theme-config.validation` case per new type.
   (`PopoverSettings.schemeId` already exists in all three).
   `MegaMenuPanel` + the nav DROPDOWN panel (`MenuBar.tsx`), the header search
   results surface (`SearchBar.tsx`), and `ProductCard.tsx`'s list-excerpt
-  `text-zinc-500` + sale-price dead `dark:` variant switched to tokens
+  `text-zinc-500` + sale-price `dark:` variant switched to tokens
   (`bg-popover` / `text-popover-fg[/60]` / `border-popover-border` /
   `text-price-main`). The out-of-stock pill's `bg-white/90` → `bg-background/90`.
   `globalSettings.badges` (position / cornerRadius / scheme / case / font)
@@ -336,11 +336,22 @@ backend gets a `theme-config.validation` case per new type.
   returns `null` for an un-themed shop so the legacy pill still shows). Sale
   badge on `GridProductCard` is deferred — that section deliberately does not
   compute auto-discounts — only the Sold out chip is wired there.
-  **`dark:` sweep:** removed at the touched call sites only (4 occurrences in
-  `MenuBar.tsx` / `SearchBar.tsx` / `ProductCard.tsx`). A full storefront sweep
-  is ~23 files of pure noise removal with zero behaviour change; tracked as a
-  separate follow-up commit rather than bundled here to keep this diff
-  reviewable.
+  **`dark:` sweep — ✅ COMPLETED 2026-09-02 (cleanup batch, its own commit).**
+  Phase 1 removed `dark:` at the 4 call sites it touched. The remainder is now
+  done: **56 `dark:` class occurrences removed across 19 files** (every
+  storefront `.tsx`/`.ts` under `app/`+`components/`; comment lines that
+  document the history were left intact). **Correction to Phase 1's note:**
+  these are NOT dead — Tailwind v4's `dark:` with no `@custom-variant`
+  override compiles to `@media (prefers-color-scheme: dark)` (verified in the
+  built CSS), so they fired for OS-dark-mode visitors, producing
+  *inconsistent partial-dark* rendering while `:root` tokens stayed light
+  (the same bug class `checkout-field-styles.ts` / `collections/[slug]/page.tsx`
+  already document + fixed). Removal is **byte-identical for light-mode
+  visitors** (every `dark:` had a light base class) and completes the
+  documented "storefront ignores OS dark mode" intent for OS-dark visitors
+  (consistently light instead of partial-dark). No `.dark` class toggle
+  exists anywhere in the storefront. Pure prefix removal only — no base-class
+  changes.
   Tests: `storefront/lib/product-badge.test.ts` (5 cases). Gate: storefront
   build clean, vitest 288 pass, lint +0. Backend/admin untouched.
 

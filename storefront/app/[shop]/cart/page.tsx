@@ -52,7 +52,7 @@ export default function CartPage() {
           </span>
         </div>
         {discountAmount !== null && discountAmount > 0 && (
-          <div className="flex items-center justify-between text-green-600 dark:text-green-400">
+          <div className="flex items-center justify-between text-green-600">
             <span>Discount</span>
             <span>
               -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} />

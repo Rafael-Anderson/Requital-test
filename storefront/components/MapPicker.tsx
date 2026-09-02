@@ -101,16 +101,16 @@ export default function MapPicker({ latitude, longitude, onPick, className = "" 
       <input
         ref={inputRef}
         placeholder="Search an address"
-        className="w-full h-9 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-zinc-900 px-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20 mb-2"
+        className="w-full h-9 rounded-lg border border-black/15 bg-white px-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20 mb-2"
       />
       {failed ? (
-        <div className="w-full h-64 rounded-lg border border-black/15 dark:border-white/15 flex items-center justify-center text-sm text-zinc-500">
+        <div className="w-full h-64 rounded-lg border border-black/15 flex items-center justify-center text-sm text-zinc-500">
           Failed to load Google Maps
         </div>
       ) : (
         <div
           ref={mapDivRef}
-          className={`w-full h-64 rounded-lg overflow-hidden border border-black/15 dark:border-white/15 ${ready ? "" : "animate-pulse bg-zinc-100 dark:bg-zinc-900"}`}
+          className={`w-full h-64 rounded-lg overflow-hidden border border-black/15 ${ready ? "" : "animate-pulse bg-zinc-100"}`}
         />
       )}
     </div>

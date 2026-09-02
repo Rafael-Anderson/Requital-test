@@ -123,9 +123,9 @@ function TrackOrderContent() {
       </div>
 
       {order && (
-        <div className="mt-6 rounded-lg border border-black/10 dark:border-white/10 bg-background p-4 space-y-3">
+        <div className="mt-6 rounded-lg border border-black/10 bg-background p-4 space-y-3">
           {ownedByCurrentCustomer && (
-            <div className="flex items-center justify-between gap-3 -mt-1 -mx-1 mb-1 px-1 pb-3 border-b border-black/10 dark:border-white/10">
+            <div className="flex items-center justify-between gap-3 -mt-1 -mx-1 mb-1 px-1 pb-3 border-b border-black/10">
               <p className="text-xs text-accent">This is one of your orders.</p>
               <Link href={`${shopBasePath}/account/orders/${order.id}`} className="text-xs text-accent hover:underline shrink-0">
                 View full details →
@@ -158,7 +158,7 @@ function TrackOrderContent() {
               </div>
             )}
           </div>
-          <div className="border-t border-black/10 dark:border-white/10 pt-3 text-sm space-y-1">
+          <div className="border-t border-black/10 pt-3 text-sm space-y-1">
             {order.items.map((item, i) => (
               <div key={i} className="flex justify-between">
                 <div>
@@ -186,7 +186,7 @@ function TrackOrderContent() {
               confirmed to be someone else's order while a different
               customer is signed in. */}
           {!customer && order.hasAccount && (
-            <div className="border-t border-black/10 dark:border-white/10 pt-3">
+            <div className="border-t border-black/10 pt-3">
               <p className="text-xs text-zinc-500">
                 This order is linked to an account on {shop?.name ?? "this store"}.{" "}
                 <Link href={`${shopBasePath}/account/login`} className="text-accent hover:underline">

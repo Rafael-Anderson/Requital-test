@@ -100,7 +100,7 @@ export default function AccountDashboardPage() {
         </button>
       </div>
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4">
+      <div className="rounded-lg border border-black/10 p-4">
         {!editing ? (
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
@@ -163,21 +163,21 @@ export default function AccountDashboardPage() {
       <div className="grid grid-cols-2 gap-3">
         <Link
           href={`${shopBasePath}/account/orders`}
-          className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:border-accent/50 transition-colors"
+          className="rounded-lg border border-black/10 p-4 hover:border-accent/50 transition-colors"
         >
           <p className="font-medium">Order history</p>
           <p className="text-sm text-zinc-500">View your past orders</p>
         </Link>
         <Link
           href={`${shopBasePath}/account/addresses`}
-          className="rounded-lg border border-black/10 dark:border-white/10 p-4 hover:border-accent/50 transition-colors"
+          className="rounded-lg border border-black/10 p-4 hover:border-accent/50 transition-colors"
         >
           <p className="font-medium">Saved addresses</p>
           <p className="text-sm text-zinc-500">Manage delivery addresses</p>
         </Link>
       </div>
 
-      <div className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-3">
+      <div className="rounded-lg border border-black/10 p-4 space-y-3">
         <div>
           <p className="font-medium">Privacy</p>
           <p className="text-sm text-zinc-500">Download or delete the personal data we hold about you.</p>
@@ -195,7 +195,7 @@ export default function AccountDashboardPage() {
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
-            className="h-9 px-3 rounded-lg text-sm cursor-pointer text-red-600 border border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+            className="h-9 px-3 rounded-lg text-sm cursor-pointer text-red-600 border border-red-300 hover:bg-red-50"
           >
             Delete my account
           </button>

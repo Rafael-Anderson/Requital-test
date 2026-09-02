@@ -123,7 +123,7 @@ export default function AddressesPage() {
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
       {editingId !== null && (
-        <form onSubmit={handleSave} className="rounded-lg border border-black/10 dark:border-white/10 p-4 space-y-3 mb-4">
+        <form onSubmit={handleSave} className="rounded-lg border border-black/10 p-4 space-y-3 mb-4">
           <div>
             <label className="text-sm font-medium block mb-1">Label (optional)</label>
             <input
@@ -195,10 +195,10 @@ export default function AddressesPage() {
           <p className="text-zinc-500">No saved addresses yet.</p>
         )}
         {addresses?.map((a) => (
-          <div key={a.id} className="rounded-lg border border-black/10 dark:border-white/10 p-4 flex justify-between gap-3">
+          <div key={a.id} className="rounded-lg border border-black/10 p-4 flex justify-between gap-3">
             <div className="min-w-0">
               {a.label && <p className="font-medium">{a.label}</p>}
-              <p className="text-sm text-zinc-600 dark:text-zinc-300">{a.address}</p>
+              <p className="text-sm text-zinc-600">{a.address}</p>
               <p className="text-xs text-zinc-500">
                 {a.area ? `${a.area}, ` : ""}
                 {a.emirate}

@@ -107,7 +107,7 @@ export default function BioPage() {
               <a
                 key={link.id}
                 href={bioLinkClickUrl(link.id)}
-                className="flex items-center gap-3 w-full rounded-xl border border-stroke bg-white dark:bg-zinc-900 px-4 py-3 text-sm font-medium hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors"
+                className="flex items-center gap-3 w-full rounded-xl border border-stroke bg-white px-4 py-3 text-sm font-medium hover:bg-black/[0.02] transition-colors"
               >
                 {resolvedThumbnail && (
                   // eslint-disable-next-line @next/next/no-img-element
