@@ -458,10 +458,28 @@ backend gets a `theme-config.validation` case per new type.
   `AnnouncementBarSectionThemed` already carries in the baseline, now in a
   shared hook; dated note in CLAUDE.md); admin +0.
 
-- **Phase 6 — Floating elements + trust bar (build items 7 + 8).**
-  `globalSettings.floatingElements`; `trust_bar` section (or `testimonials`
-  compact variant). Rewards/chat launcher supported as a custom link button
-  only.
+- **Phase 6 — Floating elements + trust bar (build items 7 + 8). ✅ DONE 2026-09-02.**
+  `FloatingElementsSettings` / `FloatingCustomButton` / `FloatingPosition`
+  mirrored in the 3 type files; `GlobalThemeSettings.floatingElements?`
+  OPTIONAL, nested under `globalSettings` so `assertValidThemeConfig`'s
+  top-level allow-list is untouched (§4); `DEFAULT_THEME_CONFIG` seeds a
+  no-op `{ whatsapp: { enabled: false }, customButtons: [] }`. Storefront:
+  `shouldShowWhatsAppButton` gained an `enabledOverride?` arg (wins over the
+  legacy `shop.whatsappFloatingButtonEnabled` both ways; `undefined` ⇒
+  legacy); `WhatsAppFloatingButton` passes `floatingElements.whatsapp.enabled`
+  + position. New `components/FloatingCustomButtons.tsx` (link-out only, no
+  embedded scripts — TBE7; per-side stacks above the WhatsApp button),
+  mounted in `ShopLayoutClient`. New admin theme-settings category **"Floating
+  elements"** (21st; guards `undefined` with a local `DEFAULT`). New
+  **`trust_bar` section** end to end (`heading` / `trust_item` / `rating_badge`
+  blocks; `useThemeEditor` seeds two `trust_item`s; `TrustBarSettings` +
+  `BlockSettingsForm` forms; presentational `TrustBarSection.tsx`).
+  Tests: `whatsapp-button.test.ts` +3, `TrustBarSection.test.tsx` (4),
+  `FloatingCustomButtons.test.tsx` (4), `FloatingElementsSettings.test.tsx`
+  (3), `theme-config.validation.spec.ts` +2. Gate: backend `tsc` + jest,
+  storefront build + vitest 328, admin build + vitest 390 (+4 documented
+  `AccountSetup` flake). Lint: backend baseline 317 → 325 (`any`-fixture
+  category); storefront / admin +0.
 
 - **Phase 7 (separate track, not blocked by the above) — Wishlist (item 9).**
   Backend PR + storefront PR. `globalSettings.productCards.showWishlist` is the

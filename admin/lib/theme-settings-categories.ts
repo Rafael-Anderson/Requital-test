@@ -27,4 +27,5 @@ export const THEME_SETTINGS_CATEGORY_LABELS = [
   "Custom CSS",
   "Collection page",
   "Product page",
+  "Floating elements",
 ] as const;

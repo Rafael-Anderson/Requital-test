@@ -32,7 +32,10 @@ export type ThemeSectionType =
   // (theme-builder-expansion Phase 2). settings.tabs: { id, label,
   // collectionId }[]; malformed entries are dropped at render, not 400'd
   // (matches the validator's "shallow beyond structure" stance).
-  | 'product_tabs';
+  | 'product_tabs'
+  // Trust / social-proof strip (Phase 6) — repeatable `trust_item` blocks
+  // (icon + short text) + an optional `rating_badge`. Presentational only.
+  | 'trust_bar';
 
 export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | 'slide-right';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';
@@ -371,6 +374,25 @@ export interface CustomCssSettings {
   css: string;
 }
 
+// theme-builder-expansion Phase 6 (TBE7): persistent overlay elements —
+// floating WhatsApp + custom link buttons (a rewards/chat launcher is just a
+// link-out; no embedded third-party scripts). Nested under globalSettings
+// specifically so it does NOT touch assertValidThemeConfig's top-level
+// allow-list. OPTIONAL — an existing published theme won't have the key;
+// every consumer guards with `?.`.
+export type FloatingPosition = 'bottom_right' | 'bottom_left';
+export interface FloatingCustomButton {
+  id: string;
+  label: string;
+  url: string;
+  iconUrl?: string;
+  position?: FloatingPosition;
+}
+export interface FloatingElementsSettings {
+  whatsapp: { enabled: boolean; position?: FloatingPosition };
+  customButtons: FloatingCustomButton[];
+}
+
 export interface GlobalThemeSettings {
   logo: LogoSettings;
   colorSchemes: ColorScheme[];
@@ -392,6 +414,9 @@ export interface GlobalThemeSettings {
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
   productPage: ProductPageSettings;
+  // Phase 6 — optional (older published themes lack it; DEFAULT_THEME_CONFIG
+  // seeds a no-op default for new ones).
+  floatingElements?: FloatingElementsSettings;
 }
 
 export interface ThemeConfig {

@@ -23,6 +23,7 @@ import VariantPickersSettings from "./theme-settings/VariantPickersSettings";
 import CustomCssSettings from "./theme-settings/CustomCssSettings";
 import CollectionPageSettings from "./theme-settings/CollectionPageSettings";
 import ProductPageSettings from "./theme-settings/ProductPageSettings";
+import FloatingElementsSettings from "./theme-settings/FloatingElementsSettings";
 import HeaderSettings from "./settings/HeaderSettings";
 import FooterSettings from "./settings/FooterSettings";
 import HeroSettings from "./settings/HeroSettings";
@@ -35,6 +36,7 @@ import NewsletterSettings from "./settings/NewsletterSettings";
 import AnnouncementBarSettings from "./settings/AnnouncementBarSettings";
 import BrandsSettings from "./settings/BrandsSettings";
 import ProductTabsSettings from "./settings/ProductTabsSettings";
+import TrustBarSettings from "./settings/TrustBarSettings";
 import {
   HomeTabSetting,
   MenuSetting,
@@ -76,6 +78,7 @@ const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<Sectio
   newsletter: NewsletterSettings,
   brands: BrandsSettings,
   product_tabs: ProductTabsSettings,
+  trust_bar: TrustBarSettings,
 };
 
 // The 18 Theme Settings categories, in the confirmed spec order — keyed by
@@ -108,6 +111,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
   "Custom CSS": CustomCssSettings,
   "Collection page": CollectionPageSettings,
   "Product page": ProductPageSettings,
+  "Floating elements": FloatingElementsSettings,
 };
 
 // Layout mode's 13 categories — a straight port of the old Theme

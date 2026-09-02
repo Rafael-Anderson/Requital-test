@@ -1109,7 +1109,9 @@ export type ThemeSectionType =
   // Tabbed product carousel — pill toggles swap the product set client-side
   // (theme-builder-expansion Phase 2). Mirrors backend
   // theme-config.types.ts. settings.tabs: { id, label, collectionId }[].
-  | "product_tabs";
+  | "product_tabs"
+  // Trust / social-proof strip (Phase 6) — trust_item + rating_badge blocks.
+  | "trust_bar";
 
 export const SECTION_TYPES: ThemeSectionType[] = [
   "announcement_bar",
@@ -1122,6 +1124,7 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   "newsletter",
   "brands",
   "product_tabs",
+  "trust_bar",
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -1135,6 +1138,7 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   newsletter: "Newsletter Signup",
   brands: "Brands",
   product_tabs: "Tabbed Products",
+  trust_bar: "Trust Bar",
 };
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
@@ -1400,6 +1404,22 @@ export interface CustomCssSettings {
   css: string;
 }
 
+// Phase 6 (TBE7) — persistent overlay elements. Mirrors backend
+// theme-config.types.ts. Nested under globalSettings (no top-level
+// allow-list change); OPTIONAL — older published themes lack the key.
+export type FloatingPosition = "bottom_right" | "bottom_left";
+export interface FloatingCustomButton {
+  id: string;
+  label: string;
+  url: string;
+  iconUrl?: string;
+  position?: FloatingPosition;
+}
+export interface FloatingElementsSettings {
+  whatsapp: { enabled: boolean; position?: FloatingPosition };
+  customButtons: FloatingCustomButton[];
+}
+
 export interface GlobalThemeSettings {
   logo: LogoSettings;
   colorSchemes: ColorScheme[];
@@ -1421,6 +1441,7 @@ export interface GlobalThemeSettings {
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
   productPage: ProductPageSettings;
+  floatingElements?: FloatingElementsSettings;
 }
 
 export interface ThemeConfig {
@@ -1445,6 +1466,8 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   contact_bar_item: "Contact item",
   social_row: "Social links",
   language_switcher: "Language (coming soon)",
+  trust_item: "Trust item",
+  rating_badge: "Rating badge",
   footer_column: "Column",
   footer_social: "Social Links",
   footer_copyright: "Copyright",
@@ -1489,6 +1512,7 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   newsletter: ["heading", "text", "email_form"],
   brands: [],
   product_tabs: [],
+  trust_bar: ["heading", "trust_item", "rating_badge"],
 };
 
 export const CHILD_BLOCK_TYPES: Record<string, string[]> = {

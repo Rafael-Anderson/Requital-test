@@ -14,6 +14,7 @@ import StorefrontPageShell from "@/components/StorefrontPageShell";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import Footer from "@/components/Footer";
 import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
+import FloatingCustomButtons from "@/components/FloatingCustomButtons";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
@@ -150,6 +151,7 @@ function Body({ children }: { children: React.ReactNode }) {
       <main className="flex-1">{children}</main>
       <Footer />
       <WhatsAppFloatingButton />
+      <FloatingCustomButtons />
       <CookieConsentBanner />
       {previewMode && (
         <>

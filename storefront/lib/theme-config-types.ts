@@ -20,7 +20,9 @@ export type ThemeSectionType =
   // Tabbed product carousel — pill toggles swap the product set client-side
   // (theme-builder-expansion Phase 2). Mirrors backend
   // theme-config.types.ts. settings.tabs: { id, label, collectionId }[].
-  | "product_tabs";
+  | "product_tabs"
+  // Trust / social-proof strip (Phase 6) — trust_item + rating_badge blocks.
+  | "trust_bar";
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
 export type SectionVisibility = "desktop" | "mobile" | "both";
@@ -280,6 +282,22 @@ export interface CustomCssSettings {
   css: string;
 }
 
+// Phase 6 (TBE7) — persistent overlay elements. Mirrors backend
+// theme-config.types.ts. OPTIONAL — older published themes lack the key, so
+// every consumer guards with `?.`.
+export type FloatingPosition = "bottom_right" | "bottom_left";
+export interface FloatingCustomButton {
+  id: string;
+  label: string;
+  url: string;
+  iconUrl?: string;
+  position?: FloatingPosition;
+}
+export interface FloatingElementsSettings {
+  whatsapp: { enabled: boolean; position?: FloatingPosition };
+  customButtons: FloatingCustomButton[];
+}
+
 export interface GlobalThemeSettings {
   logo: LogoSettings;
   colorSchemes: ColorScheme[];
@@ -301,6 +319,7 @@ export interface GlobalThemeSettings {
   customCss: CustomCssSettings;
   collectionPage: CollectionPageSettings;
   productPage: ProductPageSettings;
+  floatingElements?: FloatingElementsSettings;
 }
 
 export interface ThemeConfig {

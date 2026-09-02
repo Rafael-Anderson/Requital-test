@@ -15,6 +15,7 @@ export const SECTION_TYPES: ThemeSectionType[] = [
   'newsletter',
   'brands',
   'product_tabs',
+  'trust_bar',
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
@@ -28,6 +29,7 @@ export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
   newsletter: 'Newsletter Signup',
   brands: 'Brands',
   product_tabs: 'Tabbed Products',
+  trust_bar: 'Trust Bar',
 };
 
 export type BlockContainer = ThemeSectionType | 'header' | 'footer';
@@ -47,6 +49,8 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   contact_bar_item: 'Contact item',
   social_row: 'Social links',
   language_switcher: 'Language (coming soon)',
+  trust_item: 'Trust item',
+  rating_badge: 'Rating badge',
   footer_column: 'Column',
   footer_social: 'Social Links',
   footer_copyright: 'Copyright',
@@ -108,6 +112,8 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   brands: [],
   // Settings-only (the tabs array + shared card settings) — no blocks.
   product_tabs: [],
+  // Optional intro heading + repeatable trust items + one rating badge.
+  trust_bar: ['heading', 'trust_item', 'rating_badge'],
 };
 
 // Which sub-block types can be added inside a given block type — a block
@@ -275,6 +281,12 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       lowStockColor: '#d97706',
       outOfStockColor: '#dc2626',
       fulfillmentTextColor: '#71717a',
+    },
+    // Phase 6 — no-op default (WhatsApp floating button still falls back to
+    // the legacy shop.whatsappFloatingButtonEnabled when disabled here).
+    floatingElements: {
+      whatsapp: { enabled: false, position: 'bottom_right' },
+      customButtons: [],
     },
   },
   header: {

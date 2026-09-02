@@ -51,6 +51,8 @@ function defaultSettingsForType(type: ThemeSectionType): Record<string, unknown>
       return { ...shared, columns: 3, cardStyle: "minimal" };
     case "product_tabs":
       return { ...shared, tabs: [], columns: 4, productLimit: 8 };
+    case "trust_bar":
+      return shared;
     case "brands":
       return { ...shared, heading: "", logosPerRow: 5, brandIds: [], linkBrands: false };
     default:
@@ -101,6 +103,11 @@ function defaultBlocksForType(type: ThemeSectionType): ThemeBlock[] {
       return [];
     case "product_tabs":
       return [];
+    case "trust_bar":
+      return [
+        newBlock("trust_item", 0, { text: "Same-day delivery", icon: "truck" }),
+        newBlock("trust_item", 1, { text: "100% fresh guarantee", icon: "shield" }),
+      ];
   }
 }
 

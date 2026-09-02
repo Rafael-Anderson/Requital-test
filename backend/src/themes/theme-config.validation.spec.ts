@@ -147,6 +147,32 @@ describe('assertValidThemeConfig', () => {
       expect(() => assertValidThemeConfig(config)).not.toThrow();
     });
 
+    it('accepts a trust_bar section and a globalSettings.floatingElements blob (Phase 6)', () => {
+      const config = baseConfig();
+      config.sections.push({
+        id: 'sec-trust',
+        type: 'trust_bar',
+        visible: true,
+        order: config.sections.length,
+        settings: {},
+        blocks: [
+          { id: 't1', type: 'trust_item', visible: true, order: 0, settings: { text: 'Same-day delivery', icon: 'truck' } },
+          { id: 'rb', type: 'rating_badge', visible: true, order: 1, settings: { rating: 4.8, label: '1,200 reviews' } },
+        ],
+      });
+      config.globalSettings.floatingElements = {
+        whatsapp: { enabled: true, position: 'bottom_left' },
+        customButtons: [{ id: 'b1', label: 'Rewards', url: 'https://x' }],
+      };
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+
+    it('does NOT 400 a malformed globalSettings.floatingElements blob', () => {
+      const config = baseConfig();
+      config.globalSettings.floatingElements = { whatsapp: 'yes', customButtons: 'nope' };
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+
     it('accepts a header.settings.announcementBar blob (Phase 5) and does not 400 a malformed one', () => {
       const ok = baseConfig();
       ok.header.settings.announcementBar = {

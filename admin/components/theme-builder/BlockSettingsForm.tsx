@@ -288,6 +288,52 @@ export default function BlockSettingsForm({
         </p>
       );
 
+    case "trust_item":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Text"
+            placeholder="Same-day delivery"
+            value={(block.settings.text as string) ?? ""}
+            onChange={(e) => onUpdate("text", e.target.value)}
+          />
+          <Select label="Icon" value={(block.settings.icon as string) ?? "check"} onChange={(e) => onUpdate("icon", e.target.value)}>
+            {["check", "truck", "shield", "star", "heart", "clock", "leaf"].map((ic) => (
+              <option key={ic} value={ic}>
+                {ic[0].toUpperCase() + ic.slice(1)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      );
+
+    case "rating_badge":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Rating (0–5)"
+            type="number"
+            min={0}
+            max={5}
+            step={0.1}
+            value={(block.settings.rating as number) ?? 4.8}
+            onChange={(e) => onUpdate("rating", Math.max(0, Math.min(5, Number(e.target.value) || 0)))}
+          />
+          <Input
+            label="Label (optional)"
+            placeholder="1,200+ reviews"
+            value={(block.settings.label as string) ?? ""}
+            onChange={(e) => onUpdate("label", e.target.value)}
+          />
+          <Input
+            label="Link (optional)"
+            placeholder="https://…"
+            value={(block.settings.url as string) ?? ""}
+            onChange={(e) => onUpdate("url", e.target.value)}
+          />
+        </div>
+      );
+
     case "collection_header":
     case "product_card":
       return <p className="text-xs text-zinc-500">Contains the blocks below — use the eye icon to show/hide the whole group.</p>;
