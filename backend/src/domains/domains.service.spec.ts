@@ -26,8 +26,8 @@ describe('DomainsService.isKnownDomain', () => {
     expect(await service.isKnownDomain('nobody.requital.io')).toBe(false);
   });
 
-  it('looks up a non-requital.io host by customDomain', async () => {
-    const db = createMockDb([{ id: 1 }]);
+  it('looks up a non-requital.io host by customDomain, gated on verified status', async () => {
+    const db = createMockDb([{ subdomain: 'acme' }]);
     const service = new DomainsService(db);
 
     const result = await service.isKnownDomain('shop.acme.com');
@@ -35,10 +35,11 @@ describe('DomainsService.isKnownDomain', () => {
     expect(result).toBe(true);
     const [sql, params] = db.query.mock.calls[0];
     expect(sql).toContain('customDomain = ?');
+    expect(sql).toContain("customDomainStatus = 'verified'");
     expect(params).toEqual(['shop.acme.com']);
   });
 
-  it('returns false for an unclaimed custom domain', async () => {
+  it('returns false for an unclaimed or unverified custom domain', async () => {
     const db = createMockDb([]);
     const service = new DomainsService(db);
 
@@ -64,7 +65,7 @@ describe('DomainsService.resolveSubdomain', () => {
     expect(await service.resolveSubdomain('nobody.requital.io')).toBeNull();
   });
 
-  it('resolves a custom domain to its shop\'s real subdomain, not the custom domain itself', async () => {
+  it("resolves a VERIFIED custom domain to its shop's real subdomain, not the custom domain itself", async () => {
     const db = createMockDb([{ subdomain: 'acme' }]);
     const service = new DomainsService(db);
 
@@ -72,10 +73,12 @@ describe('DomainsService.resolveSubdomain', () => {
     const [sql, params] = db.query.mock.calls[0];
     expect(sql).toContain('customDomain = ?');
     expect(sql).toContain('subdomain');
+    // A pending / verifying / failed claim must never resolve to a storefront.
+    expect(sql).toContain("customDomainStatus = 'verified'");
     expect(params).toEqual(['shop.acme.com']);
   });
 
-  it('returns null for an unclaimed custom domain', async () => {
+  it('returns null for an unclaimed or unverified custom domain', async () => {
     const db = createMockDb([]);
     const service = new DomainsService(db);
 

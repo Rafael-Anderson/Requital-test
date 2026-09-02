@@ -9,7 +9,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { ShopService } from './shop.service';
+import { CustomDomainVerificationService } from './custom-domain-verification.service';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { UpdateShopDomainDto } from './dto/update-shop-domain.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
@@ -27,6 +29,7 @@ export class ShopController {
   constructor(
     private readonly shopService: ShopService,
     private readonly storageService: StorageService,
+    private readonly customDomainVerification: CustomDomainVerificationService,
   ) {}
 
   @Get()
@@ -58,6 +61,16 @@ export class ShopController {
     @Body() dto: UpdateShopDomainDto,
   ) {
     return this.shopService.updateDomain(ctx, dto);
+  }
+
+  // "Verify now" — runs the DNS-TXT ownership check for this shop's current
+  // custom-domain claim right away, rather than waiting for the sweep. Does a
+  // live DNS lookup, so it carries its own tight throttle on top of the
+  // app-wide default.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('domain/verify')
+  verifyDomain(@CurrentUser() ctx: TenantContext) {
+    return this.customDomainVerification.verifyClaim(ctx.shopId);
   }
 
   @Post('upload')

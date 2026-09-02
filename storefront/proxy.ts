@@ -13,10 +13,27 @@ import { isLocalHost } from "./lib/is-local-host";
 // fetch is completely unaware this happened.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+// Last-known-good host -> subdomain, used ONLY when the resolve call fails
+// (backend restart / blip). A wrong 404 for a real shop is worse than briefly
+// stale-but-correct routing; the backend also owns a 30s fresh cache, so this
+// only kicks in when it's actually unreachable. A genuinely-removed domain
+// stops resolving here once GRACE_MS passes or the backend recovers and
+// returns null. docs/plans/custom-domain-resolver.md Phase 6.
+const GRACE_MS = 5 * 60 * 1000;
+const lastGood = new Map<string, { subdomain: string; at: number }>();
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const host = request.headers.get("host") ?? "";
   const hostname = host.split(":")[0];
+
+  // `/api/*` is the same-origin backend proxy (next.config rewrites, Phase 5).
+  // Middleware runs before rewrites — without this, a hostname-resolved
+  // `/api/public/x` would get prepended with the shop slug and never reach the
+  // rewrite. The matcher below also excludes it; this is belt-and-braces.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
 
   // Local dev (and any *.local hostname) never went through Caddy's
   // domain-routing in the first place — keep the existing manual
@@ -26,19 +43,38 @@ export async function proxy(request: NextRequest) {
   }
 
   let subdomain: string | null = null;
+  let backendReached = false;
   try {
     const res = await fetch(
       `${API_URL}/domains/resolve?host=${encodeURIComponent(hostname)}`,
     );
+    backendReached = true;
     if (res.ok) {
       const data = (await res.json()) as { subdomain?: string };
       subdomain = data.subdomain ?? null;
     }
+    // res not ok (404) => genuinely unknown host; leave subdomain null.
   } catch {
-    // Backend unreachable — fall through to the not-found page below rather
-    // than letting an unresolved host hit app/page.tsx (which has no idea
-    // what shop, if any, this request is for).
+    // Backend unreachable — see the last-known-good fallback below.
     subdomain = null;
+  }
+
+  if (subdomain) {
+    lastGood.set(hostname, { subdomain, at: Date.now() });
+  } else if (!backendReached) {
+    // Only when the backend couldn't be reached — a real 404 from it means the
+    // host is genuinely unknown and must not be served from a stale entry.
+    const cached = lastGood.get(hostname);
+    if (cached && Date.now() - cached.at < GRACE_MS) {
+      console.warn(
+        `[proxy] /domains/resolve unreachable for "${hostname}" — serving last-known-good subdomain "${cached.subdomain}"`,
+      );
+      subdomain = cached.subdomain;
+    } else {
+      console.warn(
+        `[proxy] /domains/resolve unreachable for "${hostname}" and no fresh last-known-good — 404`,
+      );
+    }
   }
 
   if (!subdomain) {
@@ -47,7 +83,9 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  return NextResponse.rewrite(new URL(`/${subdomain}${pathname}${search}`, request.url));
+  return NextResponse.rewrite(
+    new URL(`/${subdomain}${pathname}${search}`, request.url),
+  );
 }
 
 export const config = {
@@ -56,6 +94,8 @@ export const config = {
     // these are ever shop-specific, and resolving a host on every one of
     // them would be pure overhead. /store-not-found itself is also excluded
     // so the rewrite above doesn't get intercepted again on its own way in.
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|store-not-found).*)",
+    // `api/` is the same-origin backend proxy (next.config rewrites) — it must
+    // reach the rewrite untouched, not be prefixed with a shop slug.
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|store-not-found|api/).*)",
   ],
 };

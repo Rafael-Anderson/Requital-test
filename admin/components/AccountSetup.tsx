@@ -96,7 +96,12 @@ export default function AccountSetup() {
 
   function handleEnterApp() {
     suppressGuardRef.current = true;
-    form.router.push("/");
+    // A merchant who chose a custom domain still has to add a DNS record and
+    // verify it — send them straight to that page (CD7 in
+    // docs/plans/custom-domain-resolver.md) rather than the dashboard.
+    form.router.push(
+      form.domainType === "custom" ? "/settings/business/domain" : "/",
+    );
   }
 
   function handleErrorBack() {
@@ -221,10 +226,12 @@ export default function AccountSetup() {
           <CheckCircle2 className="mx-auto size-12 text-accent" />
           <h2 className="mt-4 text-lg font-semibold text-zinc-900 dark:text-white">Welcome, {form.firstName}!</h2>
           <p className="mt-1.5 text-sm text-text-muted dark:text-zinc-400">
-            Your account is ready. Let&apos;s get you set up.
+            {form.domainType === "custom"
+              ? "Your account is ready. Next, add a DNS record to connect your custom domain."
+              : "Your account is ready. Let's get you set up."}
           </p>
           <Button variant="primary" className="w-full mt-6" onClick={handleEnterApp}>
-            Enter App
+            {form.domainType === "custom" ? "Set up my domain" : "Enter App"}
           </Button>
         </Modal>
       )}

@@ -88,6 +88,14 @@ async function bootstrap() {
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       if (REQUITAL_SUBDOMAIN_ORIGIN.test(origin)) return callback(null, true);
+      // As of the same-origin `/api/*` proxy (docs/plans/custom-domain-resolver.md
+      // Phase 5) the storefront's browser no longer calls this API cross-origin
+      // from a custom domain — its requests go same-origin to the storefront
+      // host and are proxied here server-side (no Origin header). This branch is
+      // now a safety net for any *other* cross-origin caller on a connected
+      // custom domain (e.g. a merchant's own tooling), not a load-bearing path
+      // for normal storefront traffic; kept because "no other caller" can't be
+      // fully proven.
       domainsService
         .isCustomDomain(origin.replace(/^https?:\/\//, ''))
         .then((allowed) => callback(null, allowed))

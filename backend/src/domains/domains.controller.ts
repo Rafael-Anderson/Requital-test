@@ -1,4 +1,5 @@
 import { Controller, Get, NotFoundException, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/decorators/public.decorator';
 import { DomainsService } from './domains.service';
 
@@ -11,6 +12,18 @@ import { DomainsService } from './domains.service';
 export class DomainsController {
   constructor(private readonly domainsService: DomainsService) {}
 
+  // Tighter than the app-wide default: legitimate callers are sparse (Caddy
+  // only consults this for a host it has no cached cert for), so a low per-IP
+  // ceiling here caps an external prober / cert-issuance-abuse attempt without
+  // touching real traffic. Jest skips throttling globally (see app.module.ts),
+  // so this only bites in production and in the one e2e that flips NODE_ENV.
+  //
+  // GET /domains/resolve is deliberately NOT throttled: its one legitimate
+  // caller is the storefront server itself, making every storefront request's
+  // lookup from a single IP — a per-IP limit there would 429 real traffic into
+  // a 404. Hardening it (internal-only caller / caching) is Phase 6 of
+  // docs/plans/custom-domain-resolver.md.
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Public()
   @Get('verify')
   async verify(@Query('domain') domain?: string) {

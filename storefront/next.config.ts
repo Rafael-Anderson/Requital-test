@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
 
-// Same backend origin the browser calls directly for every public API
-// request (lib/api.ts) — img-src/connect-src must include it or every
-// product thumbnail and fetch() call breaks under the CSP below.
+// The real backend origin. Since the same-origin `/api/*` proxy landed
+// (docs/plans/custom-domain-resolver.md Phase 5) the browser no longer calls
+// this cross-origin for fetch() — those go to a relative `/api/*` path that
+// the rewrite below forwards here server-side, so `SameSite=Strict` customer
+// cookies are actually sent (they weren't, cross-site, on a custom domain).
+// It's still needed for `<img src>` (product/theme images stay absolute) so
+// img-src below keeps it; connect-src no longer does.
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 // Mirrors lib/theme-preview-origin.ts's isTrustedAdminOrigin allowlist by
@@ -32,7 +36,11 @@ const CSP = [
   // Map tiles/marker icons come from Google's domains; Roboto is the font
   // Google Maps' own UI (Autocomplete dropdown, etc.) requests.
   `img-src 'self' data: ${API_ORIGIN} https://maps.googleapis.com https://maps.gstatic.com`,
-  `connect-src 'self' ${API_ORIGIN} https://maps.googleapis.com`,
+  // 'self' only — every browser fetch() goes to the same-origin `/api/*`
+  // rewrite now (Phase 5). A missed absolute call site would trip a visible
+  // CSP violation here instead of silently working cross-site and failing on
+  // custom domains, which is the point.
+  "connect-src 'self' https://maps.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "object-src 'none'",
   // 'self' covers this app embedding its own pages; the two admin origins
@@ -46,10 +54,25 @@ const CSP = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  // Same-origin API proxy (docs/plans/custom-domain-resolver.md Phase 5): the
+  // storefront's browser code calls a relative `/api/*` path; this forwards it
+  // to the real backend server-side, so every storefront->API request is
+  // same-origin with the storefront host and SameSite=Strict cookies are sent
+  // on both `<sub>.requital.io` and connected custom domains. Declarative
+  // config, not a route handler — stays within this app's "no server
+  // actions/route handlers" convention. proxy.ts (middleware) skips `/api/`
+  // so it doesn't rewrite these onto the /[shop]/... tree.
+  async rewrites() {
+    return [
+      { source: "/api/:path*", destination: `${API_ORIGIN}/:path*` },
+    ];
+  },
   async headers() {
     return [
       {
-        source: "/:path*",
+        // Not `/api/*` — a proxied backend response (e.g. the printable
+        // invoice HTML) must not be wrapped in the storefront's own CSP.
+        source: "/:path((?!api/).*)",
         headers: [
           { key: "Content-Security-Policy", value: CSP },
           { key: "X-Content-Type-Options", value: "nosniff" },

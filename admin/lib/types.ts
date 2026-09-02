@@ -998,12 +998,29 @@ export interface PublishReadiness {
   missing: string[];
 }
 
+// Custom-domain DNS-TXT ownership state — see docs/plans/custom-domain-resolver.md
+// Phase 2 (backend CustomDomainVerificationService).
+export type CustomDomainStatus = "pending" | "verifying" | "verified" | "failed";
+
 // GET/PATCH /shop/domain's response shape — see backend ShopService.getDomainConfig.
 export interface ShopDomainConfig {
   type: "subdomain" | "custom";
   subdomain: string;
   customDomain: string | null;
+  // null for a subdomain-only shop; otherwise the ownership-verification state.
+  status: CustomDomainStatus | null;
+  // The TXT record the merchant adds to prove control. Present while a
+  // custom-domain claim exists and is not yet verified (so also on "failed").
+  verification: { recordName: string; recordValue: string } | null;
   storefrontUrl: string;
+}
+
+// POST /shop/domain/verify — runs the DNS-TXT check for the current claim now,
+// rather than waiting for the backend's periodic sweep.
+export interface VerifyDomainResult {
+  status: CustomDomainStatus | null;
+  verified: boolean;
+  message?: string;
 }
 
 export const FONT_CHOICES = ["inter", "poppins", "playfair-display", "roboto"] as const;

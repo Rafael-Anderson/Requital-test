@@ -1,4 +1,4 @@
-import { tieredCookieName } from '../common/cookies';
+import { pathScopedCookieName } from '../common/cookies';
 import { createTierCsrf } from '../common/csrf';
 
 // Session-cookie migration (security audit finding #1), phase 3 — see
@@ -13,8 +13,12 @@ import { createTierCsrf } from '../common/csrf';
 // platform tiers, which have one fixed Path for the whole app's lifetime —
 // callers build it fresh per issue() call via customerCookiePath(shopSlug)
 // rather than baking one in here.
-export const CUSTOMER_ACCESS_COOKIE = tieredCookieName('req-customer-at');
-export const CUSTOMER_REFRESH_COOKIE = tieredCookieName('req-customer-rt');
+// Path=/public/<slug>, never `/` — so __Secure-, not __Host- (a __Host- cookie
+// with a non-root Path is silently dropped by every browser, which is why
+// customer sessions had never actually persisted in production). See
+// pathScopedCookieName.
+export const CUSTOMER_ACCESS_COOKIE = pathScopedCookieName('req-customer-at');
+export const CUSTOMER_REFRESH_COOKIE = pathScopedCookieName('req-customer-rt');
 
 export function customerAccessPath(shopSlug: string): string {
   return `/public/${shopSlug}`;

@@ -21,6 +21,11 @@ describe('isValidCustomDomain', () => {
     'example .com',
     'a'.repeat(64) + '.com', // label over 63 chars
     'a'.repeat(250) + '.com', // over 253 chars total
+    'requital.io', // the platform apex
+    'evil.requital.io', // any *.requital.io host
+    'www.requital.io',
+    'api.requital.io',
+    'admin', // bare reserved label (also fails the hostname regex; asserted anyway)
   ];
 
   it.each(valid)('accepts %s', (domain) => {

@@ -1,0 +1,58 @@
+# Requital VPS reverse proxy — canonical copy of /etc/caddy/Caddyfile.
+#
+# Captured verbatim from the live VPS (187.52.114.246:/etc/caddy/Caddyfile) on
+# 2026-08-31. The only additions in this repo copy are these leading comment
+# lines, which Caddy ignores. Deploy instructions: deploy/README.md.
+#
+# Blocks, in Caddy's precedence order:
+#   {...}                     global: ACME email + on-demand-TLS `ask` hook.
+#                             `ask` -> http://localhost:3000/domains/verify
+#                             (the backend DomainsController). Consulted only by
+#                             the `https://` catch-all below.
+#   requital.io, www.         301 redirect to admin.requital.io.
+#   admin.requital.io         -> :3001 (admin app). Cert: automatic (HTTP-01).
+#   api.requital.io           -> :3000 (NestJS backend). Cert: automatic.
+#   *.requital.io             -> :3002 (storefront). Cert: ONE Cloudflare DNS-01
+#                             wildcard (needs CLOUDFLARE_API_TOKEN from
+#                             /etc/caddy/caddy.env). NOT on-demand TLS — every
+#                             subdomain shop rides this proactively-issued
+#                             wildcard.
+#   https://                  catch-all for connected custom domains -> :3002.
+#                             Cert: on-demand TLS, gated by the `ask` hook above.
+#                             This is the ONLY block that uses on-demand TLS.
+#
+# CLOUDFLARE_API_TOKEN lives in /etc/caddy/caddy.env (systemd EnvironmentFile,
+# mode 600) — a secret, NOT committed here, same as backend/.env.
+
+{
+	email admin@requital.io
+	on_demand_tls {
+		ask http://localhost:3000/domains/verify
+	}
+}
+
+requital.io, www.requital.io {
+	redir https://admin.requital.io{uri} 301
+}
+
+admin.requital.io {
+	reverse_proxy localhost:3001
+}
+
+api.requital.io {
+	reverse_proxy localhost:3000
+}
+
+*.requital.io {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy localhost:3002
+}
+
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy localhost:3002
+}

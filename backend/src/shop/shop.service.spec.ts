@@ -1,6 +1,9 @@
 import { ShopService } from './shop.service';
 import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
+import type { DomainsService } from '../domains/domains.service';
+
+const domainsMock = { invalidate: jest.fn() } as unknown as DomainsService;
 
 function createMockDb(currentShop: Record<string, unknown>) {
   const query = jest.fn().mockResolvedValue([currentShop]);
@@ -43,7 +46,7 @@ function baseShop(overrides: Record<string, unknown> = {}) {
 describe('ShopService — payment methods require at least one enabled', () => {
   it('rejects turning off the only enabled delivery payment method', async () => {
     const db = createMockDb(baseShop());
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await expect(
       service.update(adminCtx, { deliveryPaymentCardOnline: false } as any),
@@ -53,7 +56,7 @@ describe('ShopService — payment methods require at least one enabled', () => {
 
   it('rejects turning off the only enabled pickup payment method', async () => {
     const db = createMockDb(baseShop());
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await expect(
       service.update(adminCtx, { pickupPaymentCardOnline: false } as any),
@@ -67,7 +70,7 @@ describe('ShopService — payment methods require at least one enabled', () => {
         deliveryPaymentCashOnDelivery: true,
       }),
     );
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await expect(
       service.update(adminCtx, {
@@ -79,7 +82,7 @@ describe('ShopService — payment methods require at least one enabled', () => {
 
   it('allows switching which delivery method is enabled (one off, another on, in the same request)', async () => {
     const db = createMockDb(baseShop()); // cardOnline: true, others false
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await service.update(adminCtx, {
       deliveryPaymentCardOnline: false,
@@ -91,7 +94,7 @@ describe('ShopService — payment methods require at least one enabled', () => {
 
   it('does not run the payment-method check (or the extra read) for unrelated updates', async () => {
     const db = createMockDb(baseShop());
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await service.update(adminCtx, { name: 'Renamed Shop' });
 
@@ -109,7 +112,7 @@ describe('ShopService — payment methods require at least one enabled', () => {
         deliveryPaymentCardOnDelivery: false,
       }),
     );
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     // Delivery is already all-false in the stored row (pre-existing/legacy
     // state) — a request that only touches pickup must still succeed.
@@ -128,7 +131,7 @@ describe('ShopService — domain configuration', () => {
         customDomain: null,
       }),
     );
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await expect(
       service.updateDomain(adminCtx, {
@@ -139,7 +142,7 @@ describe('ShopService — domain configuration', () => {
     expect(db.execute).not.toHaveBeenCalled();
   });
 
-  it('normalizes a pasted URL before validating/storing it', async () => {
+  it('normalizes a pasted URL before validating/storing it, and starts a pending claim', async () => {
     const db = createMockDb(
       baseShop({
         subdomain: 'acme',
@@ -147,18 +150,24 @@ describe('ShopService — domain configuration', () => {
         customDomain: 'shop.acme.com',
       }),
     );
-    const service = new ShopService(db);
+    // updateDomain reads the prior customDomain, then runs the "already
+    // verified by another shop?" pre-check (-> nobody).
+    db.query
+      .mockResolvedValueOnce([{ customDomain: null }])
+      .mockResolvedValueOnce([]);
+    const service = new ShopService(db, domainsMock);
 
     await service.updateDomain(adminCtx, {
       type: 'custom',
       customDomain: 'HTTPS://Shop.Acme.com/',
     });
 
-    const [, params] = db.execute.mock.calls[0];
+    const [sql, params] = db.execute.mock.calls[0];
+    expect(sql).toContain("customDomainStatus = 'pending'");
     expect(params).toContain('shop.acme.com');
   });
 
-  it('maps a duplicate-key error on customDomain to a 409 with a field-specific message', async () => {
+  it('409s only when another shop has already VERIFIED the same custom domain (a pending claim does not block)', async () => {
     const db = createMockDb(
       baseShop({
         subdomain: 'acme',
@@ -166,18 +175,20 @@ describe('ShopService — domain configuration', () => {
         customDomain: null,
       }),
     );
-    const dupeError = Object.assign(new Error('Duplicate entry'), {
-      errno: 1062,
-    });
-    db.execute.mockRejectedValueOnce(dupeError);
-    const service = new ShopService(db);
+    // prior customDomain read, then the pre-check finds a different shop
+    // already holding this domain verified.
+    db.query
+      .mockResolvedValueOnce([{ customDomain: null }])
+      .mockResolvedValueOnce([{ id: 2 }]);
+    const service = new ShopService(db, domainsMock);
 
     await expect(
       service.updateDomain(adminCtx, {
         type: 'custom',
         customDomain: 'taken.example.com',
       }),
-    ).rejects.toThrow('already connected to another shop');
+    ).rejects.toThrow('already connected to another store');
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('switching to type=subdomain clears customDomain in the same write', async () => {
@@ -188,7 +199,7 @@ describe('ShopService — domain configuration', () => {
         customDomain: 'shop.acme.com',
       }),
     );
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     await service.updateDomain(adminCtx, { type: 'subdomain' });
 
@@ -205,7 +216,7 @@ describe('ShopService — domain configuration', () => {
         customDomain: null,
       }),
     );
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     const result = await service.getDomainConfig(adminCtx);
     expect(result.storefrontUrl).toBe('https://acme.requital.io');
@@ -219,7 +230,7 @@ describe('ShopService — domain configuration', () => {
         customDomain: 'shop.acme.com',
       }),
     );
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
 
     const result = await service.getDomainConfig(adminCtx);
     expect(result.storefrontUrl).toBe('https://shop.acme.com');
@@ -229,7 +240,7 @@ describe('ShopService — domain configuration', () => {
 describe('ShopService — store/delivery/pickup hours are independent records', () => {
   it('updating deliveryHours does not touch businessHours or pickupHours in the write', async () => {
     const db = createMockDb(baseShop());
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
     const newHours = { mon: { open: '10:00', close: '20:00', closed: false } };
 
     await service.update(adminCtx, { deliveryHours: newHours });
@@ -243,7 +254,7 @@ describe('ShopService — store/delivery/pickup hours are independent records', 
 
   it('updating pickupHours does not touch businessHours or deliveryHours in the write', async () => {
     const db = createMockDb(baseShop());
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
     const newHours = { tue: { open: '11:00', close: '15:00', closed: false } };
 
     await service.update(adminCtx, { pickupHours: newHours });
@@ -257,7 +268,7 @@ describe('ShopService — store/delivery/pickup hours are independent records', 
 
   it('updating businessHours (store hours) does not touch deliveryHours or pickupHours in the write', async () => {
     const db = createMockDb(baseShop());
-    const service = new ShopService(db);
+    const service = new ShopService(db, domainsMock);
     const newHours = JSON.stringify({
       wed: { open: '08:00', close: '22:00', closed: false },
     });
