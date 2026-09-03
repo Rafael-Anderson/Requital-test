@@ -8,6 +8,7 @@ import ColorsSettings from "./theme-settings/ColorsSettings";
 import TypographySettings from "./theme-settings/TypographySettings";
 import PageLayoutSettings from "./theme-settings/PageLayoutSettings";
 import AnimationsSettings from "./theme-settings/AnimationsSettings";
+import MotionSettings from "./theme-settings/MotionSettings";
 import BadgesSettings from "./theme-settings/BadgesSettings";
 import ButtonsSettings from "./theme-settings/ButtonsSettings";
 import CartSettings from "./theme-settings/CartSettings";
@@ -96,6 +97,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
   Typography: TypographySettings,
   "Page layout": PageLayoutSettings,
   Animations: AnimationsSettings,
+  Motion: MotionSettings,
   Badges: BadgesSettings,
   Buttons: ButtonsSettings,
   Cart: CartSettings,

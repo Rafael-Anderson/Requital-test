@@ -186,6 +186,11 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       addToCart: true,
       cardHoverEffect: 'zoom',
     },
+    // Phase A — inert default. `applyMotionOverrides` no-ops on an empty
+    // object (no `intensity`), so every `var(--motion-*, <literal>)` in the
+    // storefront resolves to its literal fallback. `deepMergeDefaults`
+    // backfills `{}` into pre-existing themes harmlessly.
+    motion: {},
     badges: {
       position: 'top_right',
       cornerRadius: 4,

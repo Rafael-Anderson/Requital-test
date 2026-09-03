@@ -25,7 +25,37 @@ export type ThemeSectionType =
   | "trust_bar";
 
 export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "slide-right";
+// Phase A (motion foundation) — section-entrance vocabulary extension; legacy
+// ScrollAnimation values stay valid, these are additive. Mirrors
+// backend/src/themes/theme-config.types.ts.
+export type SectionEntrance = ScrollAnimation | "scale-in" | "blur-in" | "mask-reveal";
 export type SectionVisibility = "desktop" | "mobile" | "both";
+
+// Phase A — the global motion model. Mirrors backend theme-config.types.ts's
+// MotionSettings. OPTIONAL and inert when `intensity` is unset (the only true
+// no-op — `intensity: 'standard'` is a deliberate near-today baseline, not
+// byte-identical). Consumed by lib/motion.ts's resolveMotionCssVars +
+// shop-context.tsx's applyMotionOverrides.
+export interface MotionSettings {
+  intensity?: "none" | "subtle" | "standard" | "expressive";
+  speed?: number;
+  easing?: "standard" | "gentle" | "snappy" | "overshoot" | "linear";
+  scrollMotion?: boolean;
+  hoverMotion?: boolean;
+  smoothScroll?: boolean;
+  scrollProgressBar?: boolean;
+  snapSections?: boolean;
+  decorativeParallax?: boolean;
+  customCursor?: boolean;
+}
+
+// Phase A — per-section motion override on the free-form SectionSettings bag.
+export interface SectionMotionSettings {
+  entrance?: SectionEntrance;
+  stagger?: boolean;
+  animateOnce?: boolean;
+  trigger?: "scroll" | "load";
+}
 
 export interface ThemeBlock {
   id: string;
@@ -42,6 +72,7 @@ export interface SectionSettings {
   background?: Record<string, unknown>;
   schemeId?: string;
   scrollAnimation?: ScrollAnimation;
+  motion?: SectionMotionSettings;
   visibility?: SectionVisibility;
   [key: string]: unknown;
 }
@@ -308,6 +339,7 @@ export interface GlobalThemeSettings {
   typography: TypographySettings;
   pageLayout: PageLayoutSettings;
   animations: AnimationSettings;
+  motion?: MotionSettings;
   badges: BadgeSettings;
   buttons: ButtonSettings;
   cart: CartSettings;

@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
 import { resolveThemeCssVars } from "./theme-css-vars";
+import { applyMotionCssVars } from "./motion";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
@@ -167,14 +168,18 @@ const HEADING_KEYS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
 // whole card, not just its photo — two separate vars for two separate
 // elements. 'swap' has no CSS transform (handled via
 // use-product-card-image-index.ts swapping which <img> is rendered).
+// Phase A — the hover magnitudes now defer to the --motion-* tokens; the
+// `var(…, <literal>)` fallbacks are the exact pre-Phase-A values (scale 1.04,
+// translateY -4px, the same shadow), so a shop with `globalSettings.motion`
+// unset is unchanged.
 const CARD_IMAGE_HOVER_TRANSFORM: Record<string, string> = {
-  zoom: "scale(1.04)",
+  zoom: "scale(var(--motion-hover-scale, 1.04))",
 };
 const CARD_WRAPPER_HOVER_TRANSFORM: Record<string, string> = {
-  rise: "translateY(-4px)",
+  rise: "translateY(var(--motion-hover-lift, -4px))",
 };
 const CARD_WRAPPER_HOVER_SHADOW: Record<string, string> = {
-  rise: "0 8px 20px rgba(15,23,22,0.12)",
+  rise: "var(--motion-hover-shadow, 0 8px 20px rgba(15,23,22,0.12))",
 };
 
 function applyHeadingPreset(root: CSSStyleDeclaration, key: string, preset: HeadingTextPreset) {
@@ -349,7 +354,12 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   // or snaps instantly — ProductGridSection previously hardcoded
   // `transition-transform duration-300` on every card image regardless of
   // this boolean, so turning it off in Theme Settings did nothing.
-  root.style.setProperty("--theme-card-hover-transition-duration", g.animations?.productCardTransition === false ? "0ms" : "300ms");
+  root.style.setProperty(
+    "--theme-card-hover-transition-duration",
+    // Phase A — still a hard 0ms when the merchant turns the toggle off;
+    // otherwise defer to the motion token (300ms fallback = today).
+    g.animations?.productCardTransition === false ? "0ms" : "var(--motion-duration-base, 300ms)",
+  );
 
   // animations.pageTransition and animations.addToCart have no CSS var
   // here — this storefront has no route-transition wrapper and no
@@ -357,6 +367,19 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   // toggle to gate (confirmed via grep). Building those animation systems
   // from scratch is a new feature, not a wiring fix; flagged rather than
   // fabricated, same reasoning as buttons.secondary/pillCornerRadius above.
+}
+
+// Phase A (motion foundation) — writes the --motion-* token table (desktop +
+// the sub-640px `-m` mobile tier) from globalSettings.motion, and clears any
+// --motion-* prop this theme doesn't define (SPA-leak guard). Runs in the same
+// merged [shop, themeConfig] effect as applyThemeConfigOverrides. When `motion`
+// is unset / {} / has no known `intensity`, nothing is written — every
+// `var(--motion-*, <literal>)` across globals.css + the components then
+// resolves to its literal fallback (= today's exact value), so the storefront
+// renders byte-identically. The set/clear loop is applyMotionCssVars in
+// lib/motion.ts (unit-tested there, incl. the set-then-unset transition).
+function applyMotionOverrides(config: ThemeConfig | null) {
+  applyMotionCssVars(document.documentElement.style, config?.globalSettings?.motion);
 }
 
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
@@ -516,6 +539,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
     applyTheme(shop);
     applyLegacyThemeOverrides(shop);
     applyThemeConfigOverrides(themeConfig);
+    applyMotionOverrides(themeConfig);
   }, [shop, themeConfig]);
 
   return (

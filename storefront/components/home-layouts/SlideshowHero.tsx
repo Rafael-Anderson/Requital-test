@@ -80,9 +80,10 @@ export default function SlideshowHero({
           key={i}
           src={slide.image}
           alt={slide.label ?? ""}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity ${
             i === index ? "opacity-100" : "opacity-0"
           }`}
+          style={{ transitionDuration: "var(--motion-duration-slow, 500ms)" }}
         />
       ))}
       {current.label && (

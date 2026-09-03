@@ -69,7 +69,7 @@ export default function FeaturedGrid({
                     <img
                       src={resolveImageUrl(c.image) ?? undefined}
                       alt=""
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      className="w-full h-full object-cover theme-hover-zoom"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-400 text-xs px-2 text-center">

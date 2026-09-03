@@ -49,7 +49,7 @@ export default function AnnouncementBarSectionThemed({ sectionId, settings, bloc
   const firstBlock = visible[0];
   const tagProps = firstBlock ? editableAttrs(previewMode, { id: firstBlock.id, sectionId, type: "announcement_text" }) : {};
   const textStyle = { ...typographyStyle(settings.typography), ...(firstBlock ? resolveTextElementStyle(firstBlock.settings) : {}) };
-  const fadeStyle = rotating ? { transition: "opacity 0.4s", opacity: faded ? 0 : 1 } : undefined;
+  const fadeStyle = rotating ? { transition: "opacity var(--motion-duration-base, 0.4s)", opacity: faded ? 0 : 1 } : undefined;
 
   // A hardcoded bg-accent class here was previously always opaque, so a
   // custom settings.background (set via the admin panel's Background

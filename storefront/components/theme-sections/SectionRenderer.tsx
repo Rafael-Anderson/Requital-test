@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { SectionSettings, ThemeBlock, ThemeSection, ThemeSectionType } from "@/lib/theme-config-types";
+import { resolveSectionMotion } from "@/lib/section-motion";
 import SectionWrapper from "./SectionWrapper";
 import ScrollAnimatedWrapper from "./ScrollAnimatedWrapper";
 import AnnouncementBarSectionThemed from "./AnnouncementBarSectionThemed";
@@ -45,7 +46,7 @@ export default function SectionRenderer({ sections }: { sections: ThemeSection[]
       {visible.map((section) => {
         const Component = SECTION_COMPONENTS[section.type];
         return (
-          <ScrollAnimatedWrapper key={section.id} animation={section.settings.scrollAnimation}>
+          <ScrollAnimatedWrapper key={section.id} motion={resolveSectionMotion(section.settings)}>
             <SectionWrapper sectionId={section.id} settings={section.settings}>
               <Component sectionId={section.id} settings={section.settings} blocks={section.blocks} />
             </SectionWrapper>

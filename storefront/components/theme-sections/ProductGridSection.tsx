@@ -179,10 +179,15 @@ function GridProductCard({
               key={url}
               src={url}
               alt={product.name}
-              className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity duration-150"
+              className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity"
               style={{
                 opacity: i === activeIndex ? 1 : 0,
-                transitionDuration: i === activeIndex ? "150ms" : "0ms, var(--theme-card-hover-transition-duration, 300ms)",
+                // Phase A — crossfade duration from the motion token (150ms
+                // fallback = today).
+                transitionDuration:
+                  i === activeIndex
+                    ? "var(--motion-duration-fast, 150ms)"
+                    : "0ms, var(--theme-card-hover-transition-duration, 300ms)",
               }}
             />
           ))}

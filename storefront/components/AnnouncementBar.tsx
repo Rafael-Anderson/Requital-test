@@ -128,7 +128,7 @@ function ThemedAnnouncementBar({
       className={`relative text-xs text-center py-1.5 px-8 ${useAccentFallback ? "bg-accent text-accent-foreground" : ""}`}
       style={style}
     >
-      <span style={rotating ? { transition: "opacity 0.4s", opacity: faded ? 0 : 1 } : undefined}>{displayText}</span>
+      <span style={rotating ? { transition: "opacity var(--motion-duration-base, 0.4s)", opacity: faded ? 0 : 1 } : undefined}>{displayText}</span>
       {dismissBtn}
     </div>
   );
