@@ -94,6 +94,15 @@ describe("LoginPage — error message by failure type", () => {
     await submitFailedLogin("Something went wrong. Please try again.");
   });
 
+  // A CSRF failure on the login POST (a stale session cookie in the jar,
+  // see backend common/csrf.ts) comes back as 403 "invalid csrf token".
+  // It must NOT be shown as a credential error just because the message
+  // contains "invalid" — a real status wins over substring matching.
+  it("403 → \"Something went wrong.\", not the credential error", async () => {
+    login.mockRejectedValueOnce(new ApiError("invalid csrf token", 403));
+    await submitFailedLogin("Something went wrong. Please try again.");
+  });
+
   it("falls back to message-substring matching for a non-ApiError rejection", async () => {
     login.mockRejectedValueOnce(new Error("Too many login attempts, rate limited"));
     await submitFailedLogin("Too many attempts. Please wait a moment.");

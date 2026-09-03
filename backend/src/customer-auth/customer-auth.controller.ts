@@ -17,6 +17,7 @@ import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import {
   CUSTOMER_ACCESS_COOKIE,
+  CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS,
   CUSTOMER_REFRESH_COOKIE,
   customerAccessPath,
   customerRefreshPath,
@@ -33,7 +34,10 @@ function setCustomerSessionCookies(
   res.cookie(
     CUSTOMER_ACCESS_COOKIE,
     session.accessToken,
-    sessionCookieOptions(customerAccessPath(shopSlug)),
+    sessionCookieOptions(
+      customerAccessPath(shopSlug),
+      CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS,
+    ),
   );
   res.cookie(
     CUSTOMER_REFRESH_COOKIE,

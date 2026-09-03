@@ -251,6 +251,39 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
   });
 
+  // Regression: a "random logout" left a dead-but-still-present access
+  // cookie in the jar (sessionCookieOptions had no maxAge, so it was a
+  // session cookie outliving its 15m JWT). staffCsrf's skipIfNoAccessCookie
+  // then saw that cookie and enforced CSRF on the very /auth/login POST
+  // meant to recover — but a cold page had no in-memory CSRF token to send,
+  // so login 403'd "invalid csrf token" (surfaced in the UI as "incorrect
+  // email or password") until a full browser restart cleared the cookie.
+  // Fix: the pre-session auth POSTs are skipped in createTierCsrf's
+  // skipCsrfProtection regardless of cookie presence; /auth/refresh is not.
+  describe('login is reachable with a stale session cookie in the jar (CSRF)', () => {
+    it('POST /auth/login succeeds with a valid access cookie present but no CSRF token/header', async () => {
+      const signup = await signupShop('stale-cookie-login');
+      // The cookie a "logged out" browser still carries — the access token
+      // from a prior session, its JWT possibly dead, no CSRF value in memory.
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('Cookie', `req-staff-at=${signup.accessToken}`)
+        .send({ email: signup.email, password: 'password123' })
+        .expect(201);
+    });
+
+    it('POST /auth/refresh with an access cookie present still requires CSRF (fix did not loosen refresh)', async () => {
+      const signup = await signupShop('refresh-still-csrf');
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set(
+          'Cookie',
+          `req-staff-at=${signup.accessToken}; req-staff-rt=${signup.refreshToken}`,
+        )
+        .expect(403);
+    });
+  });
+
   describe('email verification gates Change Password', () => {
     it('rejects change-password for an unverified account', async () => {
       const signup = await signupShop('unverified');

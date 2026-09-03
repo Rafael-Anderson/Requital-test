@@ -179,9 +179,13 @@ export class AppModule implements NestModule {
     // scoped with forRoutes/exclude. Each middleware is a no-op unless this
     // tier's own access cookie is actually present on the request — see
     // createTierCsrf's skipIfNoAccessCookie comment for why that's still a
-    // real, uncompromised guarantee. No explicit login/signup exclusion is
-    // needed here either, for the same reason: neither cookie exists yet on
-    // a pre-login request, so the skip already covers it.
+    // real, uncompromised guarantee. The pre-session auth POSTs
+    // (login/signup/register) are excluded the same way platform-auth/login
+    // is above, but from *inside* createTierCsrf's skipCsrfProtection rather
+    // than here — a stale session-cookie access cookie could still be in the
+    // browser jar on a "pre-login" request (the access cookie now carries a
+    // maxAge to bound that, but the skip must not rely on absence), which is
+    // exactly what was 403ing legitimate re-logins as "invalid csrf token".
     consumer.apply(staffCsrf.doubleCsrfProtection).forRoutes('*');
     consumer.apply(customerCsrf.doubleCsrfProtection).forRoutes('*');
   }

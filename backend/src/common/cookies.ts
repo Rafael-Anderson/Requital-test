@@ -47,12 +47,28 @@ export function pathScopedCookieName(base: string): string {
 // it is NOT optional/a convenience — a Secure cookie is simply never sent
 // by the browser over http, so leaving this hardcoded true would silently
 // break every non-production login.
-export function sessionCookieOptions(path: string): CookieOptions {
+//
+// maxAgeMs, when passed, bounds the cookie's client-side lifetime. Omitting
+// it makes a *session cookie* — one the browser keeps until its process
+// exits, regardless of the token inside. That's wrong for the access
+// cookie: a dead-JWT-but-still-present access cookie kept the tier CSRF
+// middleware's `skipIfNoAccessCookie` from skipping on a cold /auth/login
+// or /auth/refresh (nothing else had ever set that cookie's Path=/ value on
+// a pre-login request), 403ing legitimate re-logins until a full browser
+// restart cleared the jar. Set it to the access token's own lifetime so the
+// cookie can't outlive the JWT. The refresh cookie is deliberately left as
+// a session cookie (no maxAge) — persisting it across restarts is a "stay
+// signed in" product choice, not this fix.
+export function sessionCookieOptions(
+  path: string,
+  maxAgeMs?: number,
+): CookieOptions {
   return {
     httpOnly: true,
     secure: isProd(),
     sameSite: 'strict',
     path,
+    ...(maxAgeMs !== undefined ? { maxAge: maxAgeMs } : {}),
   };
 }
 

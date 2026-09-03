@@ -106,22 +106,41 @@ export function createTierCsrf(opts: {
         ? tieredCookieName(opts.cookieBaseName)
         : pathScopedCookieName(opts.cookieBaseName),
     cookieOptions: csrfCookieOptions(opts.path),
-    ...(opts.skipIfNoAccessCookie || opts.skipPathPrefixes
-      ? {
-          skipCsrfProtection: (req: Request) => {
-            if (
-              opts.skipPathPrefixes?.some((prefix) =>
-                req.path.startsWith(prefix),
-              )
-            ) {
-              return true;
-            }
-            if (!opts.skipIfNoAccessCookie) return false;
-            const raw: unknown = req.cookies?.[opts.accessCookieName];
-            return typeof raw !== 'string' || raw === '';
-          },
-        }
-      : {}),
+    skipCsrfProtection: (req: Request) => {
+      // This middleware is applied via Nest's `forRoutes('*')`, and in that
+      // mode `req.path` is `"/"` (the mount is the whole path) — the real
+      // request path lives on `req.originalUrl`. Match against that, minus
+      // any query string.
+      const reqPath = (req.originalUrl || req.path).split('?')[0];
+      // Pre-session credential POSTs: staff /auth/login + /auth/signup,
+      // customer /public/<slug>/auth/login + .../register. These are the
+      // request that *creates* the session a CSRF cookie would be checked
+      // against — there's nothing valid to check yet, and an attacker
+      // forging one only logs the victim into an account whose credentials
+      // the attacker already supplied (same rationale as app.module.ts's
+      // explicit `.exclude('platform-auth/login')`). Crucially this does
+      // NOT depend on the access cookie being absent: a stale
+      // session-cookie access cookie (dead JWT, browser never restarted)
+      // is exactly the state that was 403ing legitimate re-logins as
+      // "invalid csrf token". /auth/refresh is deliberately excluded from
+      // this skip — a forged same-site refresh is a session-DoS the threat
+      // model cares about, and now that the access cookie carries a maxAge
+      // the legitimate cold-refresh path sends no access cookie anyway, so
+      // skipIfNoAccessCookie already covers it. (`/platform-auth/login`
+      // does not match — the char before `auth` there is `-`, not `/`.)
+      if (
+        req.method === 'POST' &&
+        /(^|\/)auth\/(login|signup|register)$/.test(reqPath)
+      ) {
+        return true;
+      }
+      if (opts.skipPathPrefixes?.some((prefix) => reqPath.startsWith(prefix))) {
+        return true;
+      }
+      if (!opts.skipIfNoAccessCookie) return false;
+      const raw: unknown = req.cookies?.[opts.accessCookieName];
+      return typeof raw !== 'string' || raw === '';
+    },
   });
 
   return {
