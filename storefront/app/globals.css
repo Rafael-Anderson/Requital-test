@@ -194,6 +194,36 @@ body {
   color: var(--theme-nav-hover-color, inherit);
 }
 
+/* Nav link hover animation (nav_menu block's "Enable hover animation"
+   toggle, default on — MenuBar.tsx adds .theme-nav-link--anim when it's
+   not turned off). A left-to-right underline reveal in the link's own
+   current color, sitting inside the px-3 pill padding. Turning the toggle
+   off drops the class, leaving only the static hover color/tint above. */
+.theme-nav-link--anim {
+  position: relative;
+}
+.theme-nav-link--anim::after {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.25rem;
+  height: 1.5px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.2s ease;
+}
+.theme-nav-link--anim:hover::after,
+.theme-nav-link--anim:focus-visible::after {
+  transform: scaleX(1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-nav-link--anim::after {
+    transition: none;
+  }
+}
+
 /* Theme Settings > Logo's desktopHeight/mobileHeight (globalSettings.logo,
    see shop-context.tsx's applyThemeConfigOverrides) — ThemeDrivenHeader.tsx
    applies this class to the logo <img> instead of a hardcoded h-8. */

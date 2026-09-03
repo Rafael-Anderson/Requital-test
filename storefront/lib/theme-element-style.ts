@@ -193,23 +193,6 @@ export function resolveMenuBarBackground(
   return headerBackground?.type === "solid" ? headerBackground.color : undefined;
 }
 
-// True when the effective menu bar background is the exact same color as the
-// header above it (whether the merchant set menuBarBackground explicitly, or
-// left it unset so it inherits the header's solid color via
-// resolveMenuBarBackground). In that case the default border-stroke hairline
-// between the header row and the menu bar (ThemeDrivenHeader's border-b /
-// MenuBar's border-t) reads as an unwanted light seam, not structure, so
-// callers drop it. Every other case — colors differ, or the header
-// background is a gradient/image with no single color to compare — keeps the
-// hairline so the two surfaces stay visually separated.
-export function headerNavSeamless(headerSettings: Record<string, unknown> | undefined): boolean {
-  const menuBar = resolveMenuBarBackground(headerSettings);
-  if (!menuBar) return false;
-  const bg = headerSettings?.background as { type?: string; color?: string } | undefined;
-  const headerColor = bg?.type === "solid" ? bg.color : undefined;
-  return typeof headerColor === "string" && headerColor.toLowerCase() === menuBar.toLowerCase();
-}
-
 // lucide-react's own default strokeWidth is 2 — "default" maps to that
 // exact value so a shop that never touches Theme Settings > Icons renders
 // pixel-identical to before this was wired up. A numeric SVG prop, not a

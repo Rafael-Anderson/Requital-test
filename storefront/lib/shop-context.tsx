@@ -9,7 +9,7 @@ import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
 import { resolveLetterSpacing, resolveLineHeight } from "./theme-typography";
 import type { AutoDiscount, Outlet, Shop } from "./types";
-import type { HeadingTextPreset, ThemeConfig } from "./theme-config-types";
+import type { ColorScheme, HeadingTextPreset, ThemeConfig } from "./theme-config-types";
 
 interface ShopContextValue {
   shopSlug: string;
@@ -207,6 +207,37 @@ function loadGoogleFont(family: string | undefined) {
   document.head.appendChild(link);
 }
 
+// The active color scheme (globalSettings.colorSchemes[0]) → the CSS custom
+// properties every storefront surface already reads. Pure + exported so
+// shop-context.test.ts can assert the mapping without a DOM.
+//   button      → --color-accent / --color-accent-hover  (bg-accent buttons)
+//   buttonLabel → --color-accent-foreground              (text on those buttons)
+//   background  → --background / --color-header           (page canvas + header base)
+//   text        → --foreground / --color-header-fg / --color-product-name  (main text)
+// secondaryButtonLabel is deliberately left unmapped — no "secondary" button
+// variant renders anywhere in theme-sections/* (same status as
+// globalSettings.buttons.secondary / pillCornerRadius, already flagged in
+// applyThemeConfigOverrides below).
+// --color-header is the LOWEST-priority header input: ThemeDrivenHeader's
+// `header.settings.background` and ShopLayoutClient's
+// `nav_menu.settings.headerBackgroundColor` are inline styles that shadow
+// it, so on a shop that sets its header background either of those ways the
+// scheme background won't visibly move the header — page canvas / body text
+// / product names still update.
+export function resolveSchemeCssVars(scheme: ColorScheme | null | undefined): Record<string, string> {
+  if (!scheme) return {};
+  return {
+    "--color-accent": scheme.button,
+    "--color-accent-hover": scheme.button,
+    "--color-accent-foreground": scheme.buttonLabel,
+    "--background": scheme.background,
+    "--color-header": scheme.background,
+    "--foreground": scheme.text,
+    "--color-header-fg": scheme.text,
+    "--color-product-name": scheme.text,
+  };
+}
+
 // New visual theme builder's global settings — applied as a second, smaller
 // layer on top of applyTheme() above (not folded into resolveThemeCssVars,
 // which stays a pure function with existing unit test coverage keyed on
@@ -224,10 +255,8 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   // still reference a different scheme by id via its own schemeId (see
   // theme-color-scheme.ts's resolveScheme, used at those call sites).
   const scheme = resolveScheme(g.colorSchemes[0]?.id, g.colorSchemes);
-  if (scheme) {
-    root.style.setProperty("--color-accent", scheme.button);
-    root.style.setProperty("--color-accent-hover", scheme.button);
-    root.style.setProperty("--color-accent-foreground", scheme.buttonLabel);
+  for (const [name, value] of Object.entries(resolveSchemeCssVars(scheme))) {
+    root.style.setProperty(name, value);
   }
 
   // Popovers/modals surface — mega-menu flyout, nav dropdown panel, header
@@ -474,14 +503,20 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
     return () => window.removeEventListener("message", handleMessage);
   }, [preview]);
 
+  // One effect, both deps: applyTheme (Appearance Colors) and
+  // applyThemeConfigOverrides (the published theme's color scheme) both
+  // write shared surface vars (--background, --color-header,
+  // --color-header-fg, --color-product-name, --color-accent*). Running them
+  // in a fixed order in a single effect keyed on BOTH inputs means the
+  // scheme always re-applies last — so editing a Layout-mode setting in the
+  // builder (which updates `shop` via mergeLegacyThemeIntoShop and would
+  // otherwise re-run applyTheme alone) can't leave the scheme's colors
+  // clobbered until the next theme-config-update message.
   useEffect(() => {
     applyTheme(shop);
     applyLegacyThemeOverrides(shop);
-  }, [shop]);
-
-  useEffect(() => {
     applyThemeConfigOverrides(themeConfig);
-  }, [themeConfig]);
+  }, [shop, themeConfig]);
 
   return (
     <ShopContext.Provider

@@ -50,10 +50,23 @@ describe("ElementSettingsPanel — per-elementType dispatch", () => {
     expect(screen.getByText("Full width")).toBeInTheDocument();
   });
 
-  it("nav_menu (NAV family) shows hover color + show-on-mobile toggle", () => {
+  it("nav_menu (NAV family) shows hover color + show-on-mobile toggle + the separate nav-row background and hover-animation controls", () => {
     render(<ElementSettingsPanel block={block("nav_menu")} onUpdate={noop} onToggleVisibility={noop} />);
     expect(screen.getByText("Hover color")).toBeInTheDocument();
     expect(screen.getByText("Show on mobile")).toBeInTheDocument();
+    expect(screen.getByText("Header background color")).toBeInTheDocument();
+    expect(screen.getByText("Nav row background color")).toBeInTheDocument();
+    expect(screen.getByText("Enable hover animation")).toBeInTheDocument();
+  });
+
+  it("nav_menu 'Enable hover animation' defaults on and toggles the hoverAnimation setting", () => {
+    const onUpdate = vi.fn();
+    render(<ElementSettingsPanel block={block("nav_menu")} onUpdate={onUpdate} onToggleVisibility={noop} />);
+    const row = screen.getByText("Enable hover animation").closest("div")!;
+    const toggle = row.querySelector('[role="switch"]')!;
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(toggle);
+    expect(onUpdate).toHaveBeenCalledWith("hoverAnimation", false);
   });
 
   it("product_price (PRICE family) shows the currency toggle", () => {
