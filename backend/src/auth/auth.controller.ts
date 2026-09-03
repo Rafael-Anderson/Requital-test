@@ -29,6 +29,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 import {
   STAFF_ACCESS_COOKIE,
+  STAFF_ACCESS_COOKIE_MAX_AGE_MS,
   STAFF_REFRESH_COOKIE,
   STAFF_REFRESH_PATH,
   staffCsrf,
@@ -54,7 +55,7 @@ function setStaffSessionCookies(
   res.cookie(
     STAFF_ACCESS_COOKIE,
     session.accessToken,
-    sessionCookieOptions('/'),
+    sessionCookieOptions('/', STAFF_ACCESS_COOKIE_MAX_AGE_MS),
   );
   if (session.refreshToken) {
     res.cookie(

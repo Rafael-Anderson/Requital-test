@@ -811,6 +811,27 @@ describe('Customer storefront accounts (e2e)', () => {
         .expect(201);
     });
 
+    // Regression (same bug as auth-security.e2e-spec.ts's staff version): a
+    // stale req-customer-at cookie left in the jar after a "random logout"
+    // must not make customerCsrf enforce a CSRF check on the /auth/login
+    // POST meant to recover the session — a cold storefront page has no
+    // in-memory CSRF token to send, so that 403'd "invalid csrf token"
+    // until a full browser restart cleared the cookie.
+    it('POST /public/:shopSlug/auth/login succeeds with a stale access cookie present but no CSRF token/header', async () => {
+      const { shopSlug } = await setupShop('cust-stale-cookie-login');
+      const phone = '0505560010';
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone, password: 'password123' }).expect(201),
+      );
+      const staleAccessCookie = `req-customer-at=${session.cookieHeaderStr.match(/req-customer-at=([^;]+)/)![1]}`;
+
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/login`)
+        .set('Cookie', staleAccessCookie)
+        .send({ identifier: phone, password: 'password123' })
+        .expect(201);
+    });
+
     it("two different shops' customer sessions coexist in the same cookie jar without one overwriting the other — same cookie NAME, different Path", async () => {
       const shopA = await setupShop('cust-two-shops-a');
       const shopB = await setupShop('cust-two-shops-b');

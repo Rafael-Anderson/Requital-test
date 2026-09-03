@@ -12,20 +12,32 @@ import { AUTH_INPUT_CLASS } from "@/components/auth/auth-input-class";
 const ERROR_INPUT_CLASS = "!border-2 !border-red-600 dark:!border-red-600";
 
 // Prefers err.status (ApiError, see lib/api.ts's own comment on why status
-// beats string-matching) — the message-substring checks are only a fallback
-// for a non-ApiError rejection (e.g. a network-level Error with no status)
-// that still happens to carry one of these words.
+// beats string-matching). When a status is present we trust it outright and
+// never fall through to the substring checks: a 403 "invalid csrf token"
+// (a stale session cookie blocking the login POST, see backend
+// common/csrf.ts) was matching `includes("invalid")` and rendering as
+// "Incorrect email or password.", making a CSRF failure impossible to tell
+// apart from a genuine bad password. The substring matching is only a
+// fallback for a non-ApiError rejection (a network-level Error with no
+// status) that still happens to carry one of these words.
 function describeLoginError(err: unknown): string {
   const status = err instanceof ApiError ? err.status : undefined;
-  const message = err instanceof Error ? err.message.toLowerCase() : "";
 
-  if (status === 401 || message.includes("invalid") || message.includes("incorrect")) {
+  if (status !== undefined) {
+    if (status === 401) return "Incorrect email or password.";
+    if (status === 429) return "Too many attempts. Please wait a moment.";
+    if (status === 423) return "Account locked. Please reset your password.";
+    return "Something went wrong. Please try again.";
+  }
+
+  const message = err instanceof Error ? err.message.toLowerCase() : "";
+  if (message.includes("invalid") || message.includes("incorrect")) {
     return "Incorrect email or password.";
   }
-  if (status === 429 || message.includes("too many") || message.includes("rate")) {
+  if (message.includes("too many") || message.includes("rate")) {
     return "Too many attempts. Please wait a moment.";
   }
-  if (status === 423 || message.includes("locked")) {
+  if (message.includes("locked")) {
     return "Account locked. Please reset your password.";
   }
   return "Something went wrong. Please try again.";

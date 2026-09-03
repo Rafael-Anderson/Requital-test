@@ -19,6 +19,11 @@ import { createTierCsrf } from '../common/csrf';
 // pathScopedCookieName.
 export const CUSTOMER_ACCESS_COOKIE = pathScopedCookieName('req-customer-at');
 export const CUSTOMER_REFRESH_COOKIE = pathScopedCookieName('req-customer-rt');
+// Bounds the access cookie's client-side lifetime to the JWT's own (15m,
+// see CustomerAuthService's ACCESS_TOKEN_LIFETIME) so a dead-JWT cookie
+// can't linger in the jar and keep customerCsrf's skipIfNoAccessCookie
+// from skipping on a cold re-login. See common/cookies.ts.
+export const CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
 
 export function customerAccessPath(shopSlug: string): string {
   return `/public/${shopSlug}`;

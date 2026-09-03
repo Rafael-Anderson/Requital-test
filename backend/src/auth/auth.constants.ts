@@ -7,6 +7,12 @@ import { createTierCsrf } from '../common/csrf';
 // the one route that ever needs it, matching the cookie-design table in the
 // approved migration plan.
 export const STAFF_ACCESS_COOKIE = tieredCookieName('req-staff-at');
+// Bounds the access cookie's client-side lifetime to the JWT's own (15m,
+// see AuthService.ACCESS_TOKEN_LIFETIME). Without it the cookie is a
+// session cookie that outlives its dead JWT until the browser restarts,
+// which kept staffCsrf's skipIfNoAccessCookie from skipping on a cold
+// re-login. See common/cookies.ts sessionCookieOptions.
+export const STAFF_ACCESS_COOKIE_MAX_AGE_MS = 15 * 60 * 1000;
 // Path=/auth/refresh, not `/` — must be __Secure-, not __Host- (which the
 // browser drops on any non-root path). See pathScopedCookieName.
 export const STAFF_REFRESH_COOKIE = pathScopedCookieName('req-staff-rt');
