@@ -9,6 +9,7 @@ import { WishlistProvider } from "@/lib/wishlist";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
+import MobileNav from "@/components/MobileNav";
 import { navMenuInHeaderRow } from "@/lib/header-rows";
 import TopBar from "@/components/TopBar";
 import CartDrawer from "@/components/CartDrawer";
@@ -22,6 +23,7 @@ import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
+import type { MobileNavMode } from "@/lib/theme-config-types";
 
 // Whether the MenuBar row shows: a themed shop's own nav_menu header block
 // visibility wins (set in the builder's Header tree node) *when that block
@@ -87,6 +89,10 @@ function Header() {
   // nav, right above <main>) — still inside this <header> element (keeps it
   // part of sticky header chrome either way).
   const announcementBelow = themeConfig?.header.settings.announcementPosition === "below";
+  // C2 — header.settings.mobileNav: 'scroll'/absent never mounts MobileNav
+  // at all (zero DOM, zero fetch — MenuBar.tsx's horizontal-scroll row is
+  // completely untouched, the byte-identical no-op path).
+  const mobileNavMode = themeConfig?.header.settings.mobileNav as MobileNavMode | undefined;
 
   return (
     // relative + z-30 gives the header its own stacking context so it
@@ -105,6 +111,7 @@ function Header() {
       {showMenuBar(shop, themeConfig) && <MenuBar />}
       {shop?.cartLayout === "drawer" && <CartDrawer />}
       {announcementBelow && <AnnouncementBar />}
+      {mobileNavMode && mobileNavMode !== "scroll" && <MobileNav mode={mobileNavMode} />}
     </header>
   );
 }
@@ -156,7 +163,10 @@ function CustomCss() {
 // regardless of what renders here, so this is purely a friendlier preview
 // experience, not a new way to leak an unpublished shop's content.
 function Body({ children }: { children: React.ReactNode }) {
-  const { shop, loading, previewMode } = useShop();
+  const { shop, loading, previewMode, themeConfig } = useShop();
+  // C2 — reserve space for the fixed bottom-bar mobile nav so it never
+  // overlaps the last bit of page content/footer.
+  const bottomBarSpacingClass = themeConfig?.header.settings.mobileNav === "bottom-bar" ? "pb-14 md:pb-0" : "";
 
   // While the shop itself is still resolving, render ONLY the neutral
   // skeleton — never the branded chrome (TopBar/MenuBar), which at this
@@ -184,7 +194,7 @@ function Body({ children }: { children: React.ReactNode }) {
     <>
       <CustomCss />
       <Header />
-      <main className="flex-1">{children}</main>
+      <main className={`flex-1 ${bottomBarSpacingClass}`}>{children}</main>
       <Footer />
       <WhatsAppFloatingButton />
       <FloatingCustomButtons />
