@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { CreditCard, Banknote, Mail, Phone } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
+import { paymentBadges } from "@/lib/payment-badges";
 import ThemeDrivenFooter from "@/components/theme-sections/ThemeDrivenFooter";
 import { parseJsonField } from "@/lib/notification-text";
 import { POLICY_PAGE_LABELS, POLICY_PAGE_TYPES, type Density, type Shop } from "@/lib/types";
@@ -26,20 +27,6 @@ const FOOTER_DENSITY_PADDING: Record<Density, { main: string; bottom: string }> 
   regular: { main: "py-12", bottom: "py-4" },
   spacious: { main: "py-20", bottom: "py-6" },
 };
-
-function paymentBadges(shop: Shop): { key: string; label: string; Icon: typeof CreditCard }[] {
-  const badges: { key: string; label: string; Icon: typeof CreditCard }[] = [];
-  // Real config, not a fixed icon set that might not match what this shop
-  // actually accepts — see the task's own instruction.
-  if (shop.cardProcessorEnabled) badges.push({ key: "card", label: "Card", Icon: CreditCard });
-  if (shop.deliveryPaymentCashOnDelivery || shop.pickupPaymentCashOnPickup) {
-    badges.push({ key: "cash", label: "Cash", Icon: Banknote });
-  }
-  for (const provider of shop.enabledPaymentProviders) {
-    badges.push({ key: provider, label: provider.charAt(0).toUpperCase() + provider.slice(1), Icon: CreditCard });
-  }
-  return badges;
-}
 
 function FollowUs({ socialEntries }: { socialEntries: [string, string][] }) {
   return (
