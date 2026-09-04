@@ -31,6 +31,7 @@
 import { DEFAULT_THEME_CONFIG } from './constants';
 import type {
   ColorScheme,
+  HeaderRow,
   SectionEntrance,
   ThemeBlock,
   ThemeConfig,
@@ -184,6 +185,16 @@ function scheme(id: string, name: string, c: Omit<ColorScheme, 'id' | 'name'>): 
   return { id, name, ...c };
 }
 
+// C1 re-author (post-batch) — header row / footer helpers, same shapes as
+// admin/lib/header-footer-presets.ts's HEADER_PRESETS/FOOTER_PRESETS (that
+// file can't be imported here — admin/backend share nothing but the HTTP
+// boundary, per this repo's no-shared-package convention — so the two
+// intentionally duplicate the same literal shapes rather than one importing
+// the other).
+function headerRow(blockIds: string[], align: HeaderRow['align'] = 'left', background?: string): HeaderRow {
+  return { id: bid('row'), blockIds, align, ...(background ? { background } : {}) };
+}
+
 // ---------------------------------------------------------------------------
 // 1. Atelier — quiet editorial luxury
 // ---------------------------------------------------------------------------
@@ -219,6 +230,8 @@ const atelier: ThemeConfig = (() => {
   g.prices.salePriceStyle = 'strikethrough-only';
   g.badges.cornerRadius = 0;
   g.badges.case = 'default';
+  // C1/C2 re-author — closes out Atelier's mobileNav deferred item.
+  c.header.settings.mobileNav = 'fullscreen';
 
   c.sections = [
     announcementOff(0),
@@ -265,6 +278,30 @@ const market: ThemeConfig = (() => {
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#C81E4A';
   g.badges.case = 'uppercase';
+
+  // C1/C2 re-author — Market's deferred header preset + mobileNav, closed
+  // out. "Contact-bar + centered nav": a slim contact row, logo/icons on
+  // their own row, nav centred below — matches
+  // admin/lib/header-footer-presets.ts's 'contact-bar-centered-nav' preset.
+  {
+    const contact = block('contact_bar_item', { kind: 'phone', value: '+971 4 000 0000', label: 'Call us' });
+    const logo = block('logo');
+    const search = block('search_icon');
+    const cart = block('cart_icon');
+    const account = block('account_icon');
+    const nav = block('nav_menu');
+    c.header = {
+      settings: {
+        mobileNav: 'bottom-bar',
+        rows: [
+          headerRow([contact.id], 'right'),
+          headerRow([logo.id, search.id, cart.id, account.id], 'between'),
+          headerRow([nav.id], 'center'),
+        ],
+      },
+      blocks: [contact, logo, search, cart, account, nav],
+    };
+  }
 
   c.sections = [
     announcement(0, 'Same-day delivery before 6pm'),
@@ -323,6 +360,17 @@ const bloom: ThemeConfig = (() => {
   g.productCards.showWishlist = true;
   g.prices.salePriceStyle = 'color';
   g.badges.cornerRadius = 9999;
+  // C1/C2 re-author — closes out Bloom's mobileNav + footer deferred items.
+  c.header.settings.mobileNav = 'drawer';
+  {
+    const cta = block('footer_column', {
+      title: 'Ready to send something joyful?',
+      links: [{ label: 'Start a gift', url: '/' }],
+    });
+    const social = block('footer_social');
+    const copyright = block('footer_copyright');
+    c.footer = { settings: { columns: 1, waveEdge: true }, blocks: [cta, social, copyright] };
+  }
 
   c.sections = [
     announcement(0, 'Free gift wrap on every order'),
@@ -379,6 +427,47 @@ const heritage: ThemeConfig = (() => {
   g.productCards.showWishlist = false;
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#8A3324';
+
+  // C1/C2 re-author — closes out Heritage's header/footer/mobileNav
+  // deferred items (Heritage was flagged as "notably does NOT need" most of
+  // C-F, so this is the last real gap). "Colored band": a contact bar + the
+  // green scheme-2 background as a real header band, matching
+  // admin/lib/header-footer-presets.ts's 'colored-band' preset, authored
+  // here with Heritage's own deep-green (not the admin preset's generic
+  // placeholder colour).
+  {
+    const contact = block('contact_bar_item', { kind: 'phone', value: '+971 4 000 0000', label: 'Call us' });
+    const social = block('social_row', { links: [] });
+    const logo = block('logo');
+    const nav = block('nav_menu');
+    const search = block('search_icon');
+    const cart = block('cart_icon');
+    const account = block('account_icon');
+    c.header = {
+      settings: {
+        mobileNav: 'drawer',
+        rows: [
+          headerRow([contact.id, social.id], 'right', '#1E3A2F'),
+          headerRow([logo.id, nav.id, search.id, cart.id, account.id], 'between'),
+        ],
+      },
+      blocks: [contact, social, logo, nav, search, cart, account],
+    };
+  }
+  // "Multi-column" footer with authored Shop/Occasions/Company/Contact
+  // columns + payment row + a separate bottom bar, per the deferred note.
+  {
+    const shop = block('footer_column', { title: 'Shop', links: [{ label: 'All arrangements', url: '/' }] });
+    const occasions = block('footer_column', { title: 'Occasions', links: [{ label: 'Sympathy', url: '/' }, { label: 'Weddings', url: '/' }] });
+    const company = block('footer_column', { title: 'Company', links: [{ label: 'Our story', url: '/' }] });
+    const contactCol = block('footer_column', { title: 'Contact', links: [{ label: 'Corporate accounts', url: '/' }] });
+    const social = block('footer_social');
+    const copyright = block('footer_copyright');
+    c.footer = {
+      settings: { columns: 4, showPaymentIcons: true, bottomBarSeparate: true },
+      blocks: [shop, occasions, company, contactCol, social, copyright],
+    };
+  }
 
   c.sections = [
     announcementOff(0),
@@ -438,7 +527,7 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
   return typeof v === 'string' && (TEMPLATE_KEYS as readonly string[]).includes(v);
 }
 
-// ── Deferred to C–F (re-author each template when these land — see
+// ── Deferred to D–F (re-author each template when these land — see
 //    docs/plans/theme-templates-and-motion.md §8.3/§8.4) ──────────────────
 //
 // Post-G0 batch (2026-09-04) shipped and adopted here: animations.
@@ -452,33 +541,41 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 // marquee — renders nothing until the merchant adds brands, same graceful
 // degradation as before).
 //
+// C1/C2 batch (2026-09-05) shipped and adopted here: every template's
+// header.settings.mobileNav is now set; Market gained the "Contact-bar +
+// centered nav" header preset, Heritage gained the "Colored band" header
+// preset (its own deep-green scheme-2 colour, not the admin preset's
+// generic placeholder) + the "Multi-column" footer preset (payment icons +
+// separate bottom bar), Bloom gained a wave-edge footer with a CTA column.
+// Atelier and Market's headers/footers otherwise match their deferred notes
+// below exactly (no header/footer preset was called for on Atelier; no
+// footer preset was called for on Market). `floatingElements.backToTop` is
+// also now real (built globally, not per-template) — none of the four
+// templates opts into it here; a future re-author may choose to.
+//
 // ALL templates:
 //   - animations.addToCart / pageTransition — deliberately left false (no
 //     silent behaviour change when the consumer lands; re-author instead)
-//   - header layout preset (header.settings.rows + zones), footer named preset
-//   - header.settings.mobileNav (drawer / bottom-bar / fullscreen)
 //   - icons.* (style / corners / size)
+//   - header.settings.height / contentWidth / separator /
+//     announcementPosition, icon block showLabel — none of the four
+//     templates needed a non-default value for these; available if a future
+//     re-author wants one
 //
 // atelier:  hero kenBurns; header scrollBehavior 'reveal-on-hero' +
-//           transparentOverHero + mobileNav 'fullscreen'; buttons.primary
-//           hoverEffect 'sweep' + pressEffect; motion smoothScroll;
-//           badges.style 'rectangle'
+//           transparentOverHero; buttons.primary hoverEffect 'sweep' +
+//           pressEffect; motion smoothScroll; badges.style 'rectangle'
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
-//           subtotalAnimation 'count'; floatingElements.backToTop;
-//           inputFields.focusAnimation 'float-label'; motion.scrollProgressBar;
-//           header scrollBehavior 'shrink' + mobileNav 'bottom-bar';
-//           product_tabs section (needs real collectionIds); trust_bar rating
-//           count-up; hero indicatorStyle 'progress';
+//           subtotalAnimation 'count'; inputFields.focusAnimation
+//           'float-label'; motion.scrollProgressBar; header scrollBehavior
+//           'shrink'; product_tabs section (needs real collectionIds);
+//           trust_bar rating count-up; hero indicatorStyle 'progress';
 //           productCards.wishlistAnimation 'pop'; product_vendor /
 //           product_stock card sub-blocks; buttons.secondary rendered variant
 //           + hoverEffect 'border-fill'; badges.style 'tag' + entranceAnimation
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
 //           shapes; buttons.primary hoverEffect 'shine';
 //           buttons.pillCornerRadius pills; header scrollBehavior
-//           'hide-on-scroll' + mobileNav 'drawer'; footer 'big-CTA' preset +
-//           wave background; section separators; product_tabs section;
+//           'hide-on-scroll'; section separators; product_tabs section;
 //           announcement_bar marquee; badges.style 'circle' + entranceAnimation
-// heritage: buttons.secondary rendered as outline CTAs;
-//           header 'coloured band' preset (HeaderRow.background + nav_menu
-//           inline + contact bar) + mobileNav 'drawer'; footer 'multi-column'
-//           preset + payment icons + separate bottom bar; badges.style 'ribbon'
+// heritage: buttons.secondary rendered as outline CTAs; badges.style 'ribbon'
