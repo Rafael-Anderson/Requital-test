@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { assertValidThemeConfig } from './theme-config.validation';
 import { DEFAULT_THEME_CONFIG, MAX_BLOCK_DEPTH } from './constants';
+import { TEMPLATE_KEYS, THEME_TEMPLATES } from './templates';
 import type { ThemeBlock, ThemeConfig, ThemeSectionType } from './theme-config.types';
 
 // Properly typed (not `any`) so a *valid*-data test case can't silently
@@ -51,6 +52,15 @@ describe('assertValidThemeConfig', () => {
     config.globalSettings.density = { preset: 'spacious' };
     expect(() => assertValidThemeConfig(config)).not.toThrow();
   });
+
+  // Phase G0 — mirrors 'accepts the real DEFAULT_THEME_CONFIG unchanged' for
+  // each starter template. Held to the same in-lockstep-with-the-types
+  // discipline as DEFAULT_THEME_CONFIG.
+  for (const key of TEMPLATE_KEYS) {
+    it(`accepts THEME_TEMPLATES.${key} unchanged`, () => {
+      expect(() => assertValidThemeConfig(THEME_TEMPLATES[key])).not.toThrow();
+    });
+  }
 
   it('rejects an unknown top-level key', () => {
     const config = { ...baseConfig(), notARealKey: true };

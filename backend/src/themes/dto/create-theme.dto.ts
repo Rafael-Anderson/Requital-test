@@ -1,4 +1,5 @@
-import { IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { TEMPLATE_KEYS } from '../templates';
 
 export class CreateThemeDto {
   @IsString()
@@ -12,4 +13,12 @@ export class CreateThemeDto {
   @IsOptional()
   @IsInt()
   duplicateFromId?: number;
+
+  // Phase G0 — start from one of the built-in starter templates
+  // (backend/src/themes/templates.ts). Mutually exclusive with
+  // duplicateFromId. Omitted (and no duplicateFromId) -> DEFAULT_THEME_CONFIG.
+  @IsOptional()
+  @IsString()
+  @IsIn(TEMPLATE_KEYS as unknown as string[])
+  fromTemplate?: string;
 }

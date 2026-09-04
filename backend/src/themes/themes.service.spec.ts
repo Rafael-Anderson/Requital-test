@@ -1,6 +1,9 @@
-import { backfillGlobalSettings, cloneConfigWithFreshIds } from './themes.service';
+import { BadRequestException } from '@nestjs/common';
+import { ThemesService, backfillGlobalSettings, cloneConfigWithFreshIds } from './themes.service';
 import { DEFAULT_THEME_CONFIG } from './constants';
+import { THEME_TEMPLATES } from './templates';
 import type { ThemeConfig } from './theme-config.types';
+import type { TenantContext } from '../common/tenant-context';
 
 // cloneConfigWithFreshIds is a pure function (source ThemeConfig -> new
 // ThemeConfig with every id regenerated) — tested directly rather than
@@ -157,5 +160,67 @@ describe('backfillGlobalSettings', () => {
       JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig,
     );
     expect(result.globalSettings).toEqual(DEFAULT_THEME_CONFIG.globalSettings);
+  });
+});
+
+// Phase G0 — the fromTemplate branch of ThemesService.create. Mocked DB, same
+// isolation convention as above.
+describe('ThemesService.create — fromTemplate (Flow A)', () => {
+  const ctx = { shopId: 7, userId: 1, role: 'admin', outletId: null } as TenantContext;
+
+  function makeService(captured: { config?: ThemeConfig }) {
+    const db = {
+      execute: jest.fn().mockResolvedValue({ insertId: 99 }),
+      query: jest.fn().mockImplementation((_sql: string, params: unknown[]) => {
+        // getOwnedTheme(result.insertId) — return the row we just "inserted".
+        return Promise.resolve([{ id: params[0], shopId: 7, name: 'x', isPublished: 0, config: captured.config }]);
+      }),
+    };
+    return new ThemesService(
+      db as never,
+      { invalidate: jest.fn() } as never,
+      {} as never,
+    );
+  }
+
+  it('builds the new theme from the named template with fresh ids', async () => {
+    const captured: { config?: ThemeConfig } = {};
+    const db = {
+      execute: jest.fn().mockImplementation((_sql: string, params: unknown[]) => {
+        captured.config = JSON.parse(params[2] as string) as ThemeConfig;
+        return Promise.resolve({ insertId: 99 });
+      }),
+      query: jest.fn().mockResolvedValue([{ id: 99, shopId: 7, name: 'x', isPublished: 0, config: captured.config ?? DEFAULT_THEME_CONFIG }]),
+    };
+    const service = new ThemesService(db as never, { invalidate: jest.fn() } as never, {} as never);
+
+    await service.create(ctx, { name: 'Heritage', fromTemplate: 'heritage' });
+
+    expect(captured.config).toBeDefined();
+    expect(captured.config!.globalSettings.colorSchemes[0].background).toBe(
+      THEME_TEMPLATES.heritage.globalSettings.colorSchemes[0].background,
+    );
+    // fresh ids, not the template literal's
+    expect(captured.config!.sections[0].id).not.toBe(THEME_TEMPLATES.heritage.sections[0].id);
+    expect(captured.config!.globalSettings.colorSchemes[0].id).not.toBe(
+      THEME_TEMPLATES.heritage.globalSettings.colorSchemes[0].id,
+    );
+  });
+
+  it('rejects duplicateFromId + fromTemplate together', async () => {
+    const service = makeService({});
+    await expect(
+      service.create(ctx, { name: 'x', duplicateFromId: 1, fromTemplate: 'atelier' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('listTemplates returns preview metadata for all four', () => {
+    const service = makeService({});
+    const metas = service.listTemplates();
+    expect(metas.map((m) => m.key).sort()).toEqual(['atelier', 'bloom', 'heritage', 'market']);
+    for (const m of metas) {
+      expect(m.name.length).toBeGreaterThan(0);
+      expect(m.previewColors.button).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
   });
 });

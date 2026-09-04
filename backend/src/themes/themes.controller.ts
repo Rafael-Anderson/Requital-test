@@ -23,6 +23,14 @@ export class ThemesController {
     return this.themesService.list(ctx);
   }
 
+  // Phase G0 — the built-in starter templates for the library picker
+  // (preview metadata only). Declared before `@Get(':id')` so its
+  // ParseIntPipe never sees the literal "templates".
+  @Get('templates')
+  listTemplates() {
+    return this.themesService.listTemplates();
+  }
+
   @Get(':id')
   findOne(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
     return this.themesService.findOne(ctx, id);
