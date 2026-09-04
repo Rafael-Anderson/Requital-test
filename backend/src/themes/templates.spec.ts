@@ -94,6 +94,8 @@ describe.each(TEMPLATE_KEYS)('THEME_TEMPLATES.%s', (key) => {
   });
 
   it('only sets a currently-valid cardHoverEffect value', () => {
-    expect(['none', 'zoom', 'rise', 'swap']).toContain(template.globalSettings.animations.cardHoverEffect);
+    expect(['none', 'zoom', 'rise', 'swap', 'desaturate', 'quick-add-slide', 'overlay', 'shadow', 'tilt']).toContain(
+      template.globalSettings.animations.cardHoverEffect,
+    );
   });
 });

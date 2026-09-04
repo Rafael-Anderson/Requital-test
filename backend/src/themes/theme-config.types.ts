@@ -41,7 +41,9 @@ export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | '
 // Phase A (motion foundation) — section-entrance vocabulary extension. The
 // legacy ScrollAnimation values above stay valid; these are additive. A value
 // the storefront doesn't recognise renders as 'none' (no-op).
-export type SectionEntrance = ScrollAnimation | 'scale-in' | 'blur-in' | 'mask-reveal';
+// Post-G0 batch — 'rotate-in' (needed by Bloom's testimonials; the plan's
+// §3.4 #6).
+export type SectionEntrance = ScrollAnimation | 'scale-in' | 'blur-in' | 'mask-reveal' | 'rotate-in';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';
 
 // Phase A — the global motion model (docs/plans/theme-templates-and-motion.md
@@ -302,7 +304,18 @@ export interface AnimationSettings {
   // image on hover (no CSS transform at all — see
   // use-product-card-image-index.ts). storefront-v2 Phase 2E renamed this
   // from 'lift'/'scale' to 'rise'/'zoom' and added 'swap'.
-  cardHoverEffect: 'none' | 'zoom' | 'rise' | 'swap';
+  // Post-G0 batch — 'desaturate' (grayscale-ish -> colour on hover, image
+  // filter), 'quick-add-slide' (the quick-add button slides up + fades in
+  // instead of instant show/hide), 'overlay' (a scheme-tinted wash fades over
+  // the image), 'shadow' (box-shadow grows, card static, no transform), 'tilt'
+  // (a fixed-angle CSS-only rotate, no cursor tracking — the S version from
+  // the plan's §3.1 #10).
+  cardHoverEffect: 'none' | 'zoom' | 'rise' | 'swap' | 'desaturate' | 'quick-add-slide' | 'overlay' | 'shadow' | 'tilt';
+  // Post-G0 batch — skeleton -> image crossfade on load, replacing the bare
+  // bg-black/5 placeholder. Unset ⇒ today (no fade, image just pops in once
+  // decoded). 'blur-up' needs a stored tiny preview per upload (no resize
+  // endpoint exists today) — deliberately not built; only 'fade' ships.
+  imageLoad?: 'none' | 'fade';
 }
 
 export interface BadgeSettings {

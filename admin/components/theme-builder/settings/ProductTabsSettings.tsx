@@ -170,7 +170,12 @@ export default function ProductTabsSettings({
 
       <SpacingControls value={settings.spacing as SpacingValue} onChange={(v) => onUpdate("spacing", v)} />
       <BackgroundControls value={settings.background as BackgroundValue} onChange={(v) => onUpdate("background", v)} />
-      <ScrollAnimationControl value={settings.scrollAnimation as ScrollAnimation} onChange={(v) => onUpdate("scrollAnimation", v)} />
+      <ScrollAnimationControl
+        value={settings.scrollAnimation as ScrollAnimation}
+        onChange={(v) => onUpdate("scrollAnimation", v)}
+        stagger={(settings.motion as { stagger?: boolean } | undefined)?.stagger}
+        onStaggerChange={(v) => onUpdate("motion", { ...(settings.motion as object), stagger: v })}
+      />
       <VisibilityControl value={settings.visibility as SectionVisibility} onChange={(v) => onUpdate("visibility", v)} />
     </div>
   );

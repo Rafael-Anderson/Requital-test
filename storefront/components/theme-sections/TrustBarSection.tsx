@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Check, Clock, Heart, Leaf, Shield, Star, Truck, type LucideIcon } from "lucide-react";
 import { themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -44,10 +45,10 @@ export default function TrustBarSection({
         )}
         {items.length > 0 && (
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-            {items.map((b) => {
+            {items.map((b, i) => {
               const Icon = TRUST_ICON[(b.settings.icon as string) ?? "check"] ?? Check;
               return (
-                <span key={b.id} className="inline-flex items-center gap-2 text-sm">
+                <span key={b.id} className="inline-flex items-center gap-2 text-sm theme-stagger-child" style={{ "--i": i } as CSSProperties}>
                   <Icon className="size-4 shrink-0 text-accent" aria-hidden="true" />
                   {b.settings.text as string}
                 </span>

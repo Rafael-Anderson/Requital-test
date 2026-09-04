@@ -29,6 +29,8 @@ export default function TestimonialsSettings({
       <ScrollAnimationControl
         value={settings.scrollAnimation as ScrollAnimation}
         onChange={(v) => onUpdate("scrollAnimation", v)}
+        stagger={(settings.motion as { stagger?: boolean } | undefined)?.stagger}
+        onStaggerChange={(v) => onUpdate("motion", { ...(settings.motion as object), stagger: v })}
       />
       <VisibilityControl
         value={settings.visibility as SectionVisibility}

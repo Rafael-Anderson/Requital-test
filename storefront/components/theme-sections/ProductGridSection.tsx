@@ -62,6 +62,7 @@ function QuickAddButton({
   product,
   outletId,
   className,
+  style,
   background,
   color,
   fill,
@@ -72,6 +73,7 @@ function QuickAddButton({
   product: Product;
   outletId: number | undefined;
   className: string;
+  style?: CSSProperties;
   background?: string;
   color?: string;
   fill?: string;
@@ -102,7 +104,7 @@ function QuickAddButton({
           outletId,
         );
       }}
-      style={{ ...resolveButtonFillStyle(fill), background, color }}
+      style={{ ...resolveButtonFillStyle(fill), background, color, ...style }}
       className={className}
     >
       {label}
@@ -110,11 +112,22 @@ function QuickAddButton({
   );
 }
 
+// Post-G0 batch — 'quick-add-slide' card hover effect: the desktop quick-add
+// button slides up + fades in instead of instantly toggling display. Kept as
+// a separate className (not layered onto the default) since display:none/flex
+// can't be transitioned — every other effect keeps the exact pre-existing
+// `hidden sm:group-hover:flex` markup, byte-identical.
+const QUICK_ADD_DEFAULT_CLASS =
+  "hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow";
+const QUICK_ADD_SLIDE_CLASS =
+  "hidden sm:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 translate-y-2 pointer-events-none transition-all group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto";
+
 // One product tile — its own component (not inline in the outer .map())
 // because useProductCardImageIndex is a hook and needs one instance per
 // card, not one shared across the whole grid.
 function GridProductCard({
   product,
+  index,
   cardStyle,
   cardStyleKey,
   aspectClass,
@@ -131,6 +144,7 @@ function GridProductCard({
   previewMode,
   sectionId,
   cardHoverEffect,
+  imageLoad,
   showCarousel,
   desktopQuickAdd,
   mobileQuickAdd,
@@ -138,6 +152,9 @@ function GridProductCard({
   badge,
 }: {
   product: Product;
+  // Post-G0 batch — this card's position in the grid, for the stagger
+  // --i custom property (theme-stagger-child, see globals.css).
+  index: number;
   cardStyle: string;
   // Phase B1 — the raw style key (for the `overlay` render branch) + the
   // resolved image-aspect / name-margin / text-align classes.
@@ -163,12 +180,16 @@ function GridProductCard({
   previewMode: boolean;
   sectionId: string;
   cardHoverEffect: string | undefined;
+  imageLoad: string | undefined;
   showCarousel: boolean;
   desktopQuickAdd: ReactNode;
   mobileQuickAdd: ReactNode;
   nameStyle: CSSProperties;
 }) {
   const images = product.images.length > 0 ? product.images.map((i) => i.url) : [product.thumbnail];
+  // Post-G0 batch — see ProductCard.tsx's identical comment.
+  const imageLoadFade = imageLoad === "fade";
+  const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set());
   const { activeIndex, handlers } = useProductCardImageIndex(images.length, {
     cycle: showCarousel,
     swapOnHover: cardHoverEffect === "swap",
@@ -206,8 +227,8 @@ function GridProductCard({
   return (
     <Link
       href={`${shopBasePath}/products/${product.slug}`}
-      className={`theme-product-card block group relative transition-all ${cardStyle}`}
-      style={{ transitionDuration: "var(--theme-card-hover-transition-duration, 300ms)" }}
+      className={`theme-product-card block group relative transition-all theme-stagger-child ${cardStyle}`}
+      style={{ transitionDuration: "var(--theme-card-hover-transition-duration, 300ms)", "--i": index } as CSSProperties}
       {...handlers}
     >
       {showMedia && (
@@ -218,9 +239,10 @@ function GridProductCard({
               key={url}
               src={url}
               alt={product.name}
+              onLoad={imageLoadFade ? () => setLoadedImages((s) => (s.has(i) ? s : new Set(s).add(i))) : undefined}
               className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity"
               style={{
-                opacity: i === activeIndex ? 1 : 0,
+                opacity: imageLoadFade && !loadedImages.has(i) ? 0 : i === activeIndex ? 1 : 0,
                 // Phase A — crossfade duration from the motion token (150ms
                 // fallback = today).
                 transitionDuration:
@@ -230,6 +252,9 @@ function GridProductCard({
               }}
             />
           ))}
+          {/* Post-G0 batch — 'overlay' card hover effect; invisible for every
+              other effect (see globals.css). */}
+          <span className="theme-product-hover-overlay absolute inset-0 pointer-events-none" aria-hidden />
           {badge && (
             <span className={`absolute ${badge.positionClass} px-2 py-0.5 text-xs font-medium`} style={badge.style}>
               {badge.label}
@@ -353,9 +378,10 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
         </div>
       )}
       <div className={`grid ${columns} theme-grid-gap`}>
-        {products.map((product) => (
+        {products.map((product, index) => (
           <GridProductCard
             key={product.id}
+            index={index}
             product={product}
             cardStyle={cardStyle}
             cardStyleKey={cardStyleKey}
@@ -373,6 +399,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             previewMode={previewMode}
             sectionId={sectionId}
             cardHoverEffect={themeConfig?.globalSettings.animations.cardHoverEffect}
+            imageLoad={themeConfig?.globalSettings.animations.imageLoad}
             showCarousel={!!productCards?.showCarousel}
             nameStyle={productCards ? productCardNameStyle(productCards) : {}}
             badge={
@@ -391,7 +418,16 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                   label={quickAddLabel}
                   previewMode={previewMode}
                   tagProps={editableAttrs(previewMode, { id: PRODUCT_CARDS_SENTINEL_ID, sectionId, type: "add_to_cart_button" })}
-                  className="hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow"
+                  className={
+                    themeConfig?.globalSettings.animations.cardHoverEffect === "quick-add-slide"
+                      ? QUICK_ADD_SLIDE_CLASS
+                      : QUICK_ADD_DEFAULT_CLASS
+                  }
+                  style={
+                    themeConfig?.globalSettings.animations.cardHoverEffect === "quick-add-slide"
+                      ? { transitionDuration: "var(--motion-duration-base, 300ms)" }
+                      : undefined
+                  }
                 />
               ) : null
             }

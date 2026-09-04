@@ -9,7 +9,17 @@ const HOVER_EFFECTS: { value: AnimationSettingsType["cardHoverEffect"]; label: s
   { value: "zoom", label: "Image zoom" },
   { value: "rise", label: "Card rise" },
   { value: "swap", label: "Image swap (second photo)" },
+  { value: "desaturate", label: "Desaturate (colour on hover)" },
+  { value: "quick-add-slide", label: "Quick-add slide-up" },
+  { value: "overlay", label: "Colour overlay wash" },
+  { value: "shadow", label: "Shadow only (no movement)" },
+  { value: "tilt", label: "Tilt" },
   { value: "none", label: "None" },
+];
+
+const IMAGE_LOAD_OPTIONS: { value: NonNullable<AnimationSettingsType["imageLoad"]>; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "fade", label: "Fade in on load" },
 ];
 
 export default function AnimationsSettings({ editor }: { editor: ThemeEditorState }) {
@@ -34,6 +44,17 @@ export default function AnimationsSettings({ editor }: { editor: ThemeEditorStat
       </div>
       <Select label="Card hover effect" value={animations.cardHoverEffect} onChange={(e) => update({ cardHoverEffect: e.target.value as AnimationSettingsType["cardHoverEffect"] })}>
         {HOVER_EFFECTS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </Select>
+      <Select
+        label="Product image load"
+        value={animations.imageLoad ?? "none"}
+        onChange={(e) => update({ imageLoad: e.target.value as AnimationSettingsType["imageLoad"] })}
+      >
+        {IMAGE_LOAD_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>

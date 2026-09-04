@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { listProducts } from "@/lib/api";
 import { resolveProductTabs } from "@/lib/product-tabs";
@@ -114,8 +114,10 @@ export default function ProductTabsSection({
         <p className="text-sm text-price-main">No products in this collection yet.</p>
       ) : (
         <div className={`grid ${columns} theme-grid-gap`}>
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} orientation="grid" />
+          {products.map((product, i) => (
+            <div key={product.id} className="theme-stagger-child" style={{ "--i": i } as CSSProperties}>
+              <ProductCard product={product} orientation="grid" />
+            </div>
           ))}
         </div>
       )}

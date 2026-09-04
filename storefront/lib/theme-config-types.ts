@@ -28,7 +28,8 @@ export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "
 // Phase A (motion foundation) — section-entrance vocabulary extension; legacy
 // ScrollAnimation values stay valid, these are additive. Mirrors
 // backend/src/themes/theme-config.types.ts.
-export type SectionEntrance = ScrollAnimation | "scale-in" | "blur-in" | "mask-reveal";
+// Post-G0 batch — mirrors backend theme-config.types.ts.
+export type SectionEntrance = ScrollAnimation | "scale-in" | "blur-in" | "mask-reveal" | "rotate-in";
 
 // Phase B1 (design-token foundation) — mirrors backend theme-config.types.ts.
 export type RadiusPreset = "sharp" | "subtle" | "rounded" | "soft" | "pill";
@@ -218,7 +219,10 @@ export interface AnimationSettings {
   pageTransition: boolean;
   productCardTransition: boolean;
   addToCart: boolean;
-  cardHoverEffect: "none" | "zoom" | "rise" | "swap";
+  // Post-G0 batch — mirrors backend theme-config.types.ts.
+  cardHoverEffect: "none" | "zoom" | "rise" | "swap" | "desaturate" | "quick-add-slide" | "overlay" | "shadow" | "tilt";
+  // Post-G0 batch — see backend theme-config.types.ts.
+  imageLoad?: "none" | "fade";
 }
 
 export interface BadgeSettings {

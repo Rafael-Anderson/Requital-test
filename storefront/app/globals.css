@@ -71,7 +71,8 @@
   .theme-anim-slide-right,
   .theme-anim-scale-in,
   .theme-anim-blur-in,
-  .theme-anim-mask-reveal {
+  .theme-anim-mask-reveal,
+  .theme-anim-rotate-in {
     opacity: 1 !important;
     transform: none !important;
     filter: none !important;
@@ -319,6 +320,14 @@ body {
    transform (or none) comes from the merchant's own setting. */
 .group:hover .theme-product-image {
   transform: var(--theme-card-hover-transform, none);
+  filter: var(--theme-card-hover-filter-hover, none);
+}
+
+/* Post-G0 batch — 'desaturate' needs a filter applied BEFORE hover too (the
+   image starts desaturated, hover restores colour); every other effect never
+   writes this var, so it stays "none" and this rule is a no-op for them. */
+.theme-product-image {
+  filter: var(--theme-card-hover-filter-base, none);
 }
 
 /* 'rise' effect (storefront-v2 Phase 2E) targets the card wrapper itself,
@@ -327,6 +336,19 @@ body {
 .group:hover .theme-product-card {
   transform: var(--theme-card-hover-card-transform, none);
   box-shadow: var(--theme-card-hover-card-shadow, none);
+}
+
+/* Post-G0 batch — 'overlay' card hover effect: a scheme-tinted wash fades in
+   over the product image on hover. Always rendered (see ProductCard.tsx /
+   ProductGridSection.tsx) so every effect shares one DOM shape; opacity is 0
+   at rest and only the 'overlay' effect ever sets a non-zero hover value. */
+.theme-product-hover-overlay {
+  background: var(--color-accent);
+  opacity: 0;
+  transition: opacity var(--motion-duration-base, 300ms) var(--motion-ease, ease);
+}
+.group:hover .theme-product-hover-overlay {
+  opacity: var(--theme-card-hover-overlay-opacity, 0);
 }
 
 /* Phase A — generic hover-zoom for images/buttons that used a hardcoded
@@ -458,16 +480,32 @@ body {
 .theme-anim-mask-reveal.theme-anim-visible {
   animation: theme-mask-reveal var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
 }
+/* Post-G0 batch. */
+.theme-anim-rotate-in {
+  opacity: 0;
+  transform: rotate(-2deg);
+}
+.theme-anim-rotate-in.theme-anim-visible {
+  animation: theme-rotate-in var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
+}
 
-/* Phase A — per-child stagger plumbing. TYPE + CSS only for now: no section
-   renders `.theme-stagger-child` / sets `--i` yet, and no admin control
-   exposes `section.settings.motion.stagger` (Amendment 1, option b). B/D/E
-   wire the list sections and add the control; a pure-CSS
-   `:nth-child(n+13) { animation-delay: 0 }` will cap it there (no JS count). */
+/* Phase A plumbing, wired in the post-G0 batch: product_grid, product_tabs,
+   featured_collections, testimonials, trust_bar, and brands (grid mode) now
+   render their list items with .theme-stagger-child + style={{'--i': i}};
+   section.settings.motion.stagger (per-section) exposes the toggle via
+   ScrollAnimationControl.tsx. */
 .theme-anim-visible[data-stagger] .theme-stagger-child {
   opacity: 0;
   animation: theme-fade-in var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
   animation-delay: calc(var(--motion-stagger, 0ms) * var(--i, 0));
+}
+/* Cap: children beyond the 12th get no stagger delay (still fade in via the
+   rule above, just without the accumulating calc(...)) — pure CSS, no JS
+   count needed. `:nth-child(An+B of S)` degrades gracefully (silently
+   unmatched, so the cap simply doesn't apply) on the handful of older
+   browser versions that predate it; every current major browser supports it. */
+.theme-anim-visible[data-stagger] .theme-stagger-child:nth-child(n+13 of .theme-stagger-child) {
+  animation-delay: 0s;
 }
 
 @keyframes theme-fade-in {
@@ -534,6 +572,16 @@ body {
   }
   to {
     clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes theme-rotate-in {
+  from {
+    opacity: 0;
+    transform: rotate(-2deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0);
   }
 }
 

@@ -7,6 +7,7 @@ import { resolveThemeCssVars } from "./theme-css-vars";
 import { applyMotionCssVars } from "./motion";
 import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
 import { applyDensityCssVars } from "./density";
+import { applyCardHoverCssVars } from "./card-hover";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
@@ -164,25 +165,6 @@ const PAGE_WIDTH_PX: Record<ThemeConfig["globalSettings"]["pageLayout"]["width"]
 };
 
 const HEADING_KEYS = ["h1", "h2", "h3", "h4", "h5", "h6"] as const;
-
-// 'zoom' targets the card's own image (theme-product-image); 'rise'
-// targets the card wrapper itself (theme-product-card) since it moves the
-// whole card, not just its photo — two separate vars for two separate
-// elements. 'swap' has no CSS transform (handled via
-// use-product-card-image-index.ts swapping which <img> is rendered).
-// Phase A — the hover magnitudes now defer to the --motion-* tokens; the
-// `var(…, <literal>)` fallbacks are the exact pre-Phase-A values (scale 1.04,
-// translateY -4px, the same shadow), so a shop with `globalSettings.motion`
-// unset is unchanged.
-const CARD_IMAGE_HOVER_TRANSFORM: Record<string, string> = {
-  zoom: "scale(var(--motion-hover-scale, 1.04))",
-};
-const CARD_WRAPPER_HOVER_TRANSFORM: Record<string, string> = {
-  rise: "translateY(var(--motion-hover-lift, -4px))",
-};
-const CARD_WRAPPER_HOVER_SHADOW: Record<string, string> = {
-  rise: "var(--motion-hover-shadow, 0 8px 20px rgba(15,23,22,0.12))",
-};
 
 function applyHeadingPreset(root: CSSStyleDeclaration, key: string, preset: HeadingTextPreset) {
   root.setProperty(`--text-${key}-size`, `${preset.size}px`);
@@ -373,13 +355,9 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
 
   // Product card hover — same "hardcoded class instead of the setting"
   // gap as --theme-radius; ProductGridSection previously always applied
-  // `group-hover:scale-[1.04]` regardless of this field's value.
-  if (g.animations?.cardHoverEffect) {
-    const effect = g.animations.cardHoverEffect;
-    root.style.setProperty("--theme-card-hover-transform", CARD_IMAGE_HOVER_TRANSFORM[effect] ?? "none");
-    root.style.setProperty("--theme-card-hover-card-transform", CARD_WRAPPER_HOVER_TRANSFORM[effect] ?? "none");
-    root.style.setProperty("--theme-card-hover-card-shadow", CARD_WRAPPER_HOVER_SHADOW[effect] ?? "none");
-  }
+  // `group-hover:scale-[1.04]` regardless of this field's value. Resolver +
+  // SPA-leak clear live in lib/card-hover.ts (post-G0 batch extraction).
+  applyCardHoverCssVars(root.style, g.animations?.cardHoverEffect);
 
   // productCardTransition gates whether the hover transform above animates
   // or snaps instantly — ProductGridSection previously hardcoded

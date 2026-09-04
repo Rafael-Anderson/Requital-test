@@ -152,6 +152,16 @@ export default function BrandsSettings({
         <Toggle checked={settings.linkBrands === true} onChange={(v) => onUpdate("linkBrands", v)} />
       </div>
 
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Scroll logos continuously
+          <span className="block text-xs font-normal text-zinc-500">
+            A marquee strip instead of a static grid. &quot;Logos per row&quot; is ignored while this is on.
+          </span>
+        </span>
+        <Toggle checked={settings.scrolling === true} onChange={(v) => onUpdate("scrolling", v)} />
+      </div>
+
       <hr className="border-black/10 dark:border-white/10" />
 
       <SpacingControls
@@ -165,6 +175,8 @@ export default function BrandsSettings({
       <ScrollAnimationControl
         value={settings.scrollAnimation as ScrollAnimation}
         onChange={(v) => onUpdate("scrollAnimation", v)}
+        stagger={(settings.motion as { stagger?: boolean } | undefined)?.stagger}
+        onStaggerChange={(v) => onUpdate("motion", { ...(settings.motion as object), stagger: v })}
       />
       <VisibilityControl
         value={settings.visibility as SectionVisibility}

@@ -1201,6 +1201,7 @@ case per new type, and a per-template validation spec once templates land.
 | **E — Section polish** | `product_tabs` magic-line + crossfade + height animate. `trust_bar` `rating_badge` count-up. Hero `kenBurns` / `parallax` / `indicatorStyle` / `slideTransition` extensions. `brands.scrolling` marquee. Section separators (`section.settings.separator`) + overlay/scrim + `contentWidth`. Newsletter `successAnimation`. Accordion (FAQ/filter) animation. | A, B | **M** |
 | **F — The expensive one-offs** | **Fly-to-cart** (`animations.addToCart`). Route-content fade (`animations.pageTransition`) + View Transitions progressive enhancement. `motion.scrollProgressBar`. `floatingElements.backToTop`. `motion.decorativeParallax`. `motion.customCursor`. `drawers.animation` + `cart.itemAnimation`/`subtotalAnimation`. Card metadata sub-blocks (`product_vendor`/`product_stock`/`product_swatches` — wires `swatches`). | A, and the specific dead-control it targets | **M–L** |
 | **G0 — Templates against A/B (Flow A)** *(BUILT 2026-09-04 on `feat/theme-templates-g0` — see §8.4)* | `THEME_TEMPLATES` (4 full typed `ThemeConfig` literals) authored against **only** what A/B render today; each with a `// ── Deferred to C–F ──` block. Flow A only: `fromTemplate` on `CreateThemeDto` + `GET /themes/templates` + a picker block in the library. Per-template validation + clone + byte-cap spec (D2). Zero keys without a live consumer ⇒ nothing to no-op. | A, B | **S** |
+| **Post-G0 batch 1 — §8.3 items 1-5** *(BUILT 2026-09-04 on `feat/theme-motion-batch-1` — see §8.5)* | Card-hover enum += `desaturate`/`quick-add-slide`/`overlay`/`shadow`/`tilt` (extracted to `lib/card-hover.ts`); `animations.imageLoad: 'fade'`; stagger wiring (`.theme-stagger-child` + `--i` in the 6 list sections + the `nth-child(n+13 of ...)` cap + the admin toggle on `ScrollAnimationControl.tsx`); `section.settings.motion.entrance: 'rotate-in'`; `brands.settings.scrolling` marquee. All 4 G0 templates updated to their real (no-stand-in) values. | A, B, G0 | **S** |
 | **G1 — `applyTemplate` (Flow B)** *(deferred — separate later plan)* | `applyTemplate(key)` replaces `globalSettings` + `header` + `footer` + `sections` in one `updateConfig` (one Ctrl+Z), fresh ids, preserves only uploaded logo/favicon, confirm modal with the standalone "Your custom CSS will be replaced." line (D3). The riskier half — draft-mutating, RESET-adjacent, modal UX. Re-author the G0 template literals against whatever C–F has shipped at that point. | G0, + whatever C–F capabilities the re-authored templates use | **S–M** |
 | **I — Icon set** *(parallel; blocks nothing; own sign-off gate)* | Multi-glyph, multi-style icon system. For each of the ~12 storefront icons (search, cart, account, heart, chevron, close, menu, phone, whatsapp, star, truck, shield): **2–3 distinct glyph variants** (e.g. cart: trolley / basket / tote; account: person / circle-person / outline-head), each drawn in all **3 styles** (`line` / `solid` / `duotone`) → **≈ 100+ inline SVGs** in `storefront/lib/icons/`. Config: `globalSettings.icons.style` (global `line`/`solid`/`duotone`) + a per-icon glyph override (proposed `globalSettings.icons.glyphs?: { cart?: 'trolley'\|'basket'\|'tote', account?: …, … }` — final shape decided at the gate). lucide stays the `line` default so **absent config ⇒ today's render exactly**. **Zero new deps** (no second icon package). **GATE:** before drawing any SVG, come back with (a) the exact glyph-variant list per icon, (b) the total SVG count, (c) the final config shape, and (d) a flag on whether the admin picker UI (12 icons × glyph choice + style) needs its own design pass. | — | **M** (SVG authoring) + a design-pass flag |
 
@@ -1209,12 +1210,13 @@ B1. C is independent of B (both only need A). G needs A–F for the templates to
 complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
-**Current commitment:** Phases **A + B + G0**, all built and merged / in review.
-C–F is **not** committed scope — §8.3 records the recommended priority for it
-(written before the G0 templates existed, so it isn't anchored to them);
-re-evaluate against §8.3 before starting any C–F work. G0 (Flow A) already
-delivers four visibly distinct starting points; the C–F flourishes each template
-wants are listed in its own deferred block.
+**Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5)**, all
+built and merged / in review. C–F items 6+ (C1, C2, and the rest of D/E/F) are
+**not** committed scope — re-evaluate against the remaining §8.3 priority before
+starting any of it. G0 (Flow A) + batch 1 already deliver four visibly distinct
+starting points that pick up real card-hover effects, image-load fade, stagger,
+and (Market) a brands marquee; the remaining C–F flourishes each template wants
+are listed in its own deferred block (§8.5 updated the four that batch 1 closed).
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1513,7 +1515,7 @@ prod shops (post-merge).
 
 ---
 
-### 8.3 Post-G0 capability priority — RECOMMENDATION (recorded 2026-09-04, before the templates were authored)
+### 8.3 Post-G0 capability priority — RECOMMENDATION (recorded 2026-09-04, before the templates were authored) — items 1-5 BUILT (see §8.5)
 
 G0 ships the four templates against A/B only (Flow A — see §8.4). It exists to
 inform what C–F should build first. This priority is written **before** the
@@ -1527,29 +1529,27 @@ class rule, JS animations self-gating on reduced motion — and what A/B made
 cheaper — motion timing/magnitude tokens, `use-scroll-value.ts`, the stagger
 plumbing, the `scale-in`/`blur-in`/`mask-reveal` entrances) produced this order:
 
-1. **Card-hover enum extension** (`animations.cardHoverEffect` +=
-   `desaturate` / `quick-add-slide` / `overlay` / `shadow` / `underline`;
-   `tilt` capped) — **4/4 templates, and all four fall back to a stand-in value
-   without it.** Cheapest large identity win now that `--motion-hover-*` supplies
-   the timing/magnitude: add entries to the three maps in `shop-context.tsx`
-   (`CARD_IMAGE_HOVER_TRANSFORM` / `CARD_WRAPPER_HOVER_TRANSFORM` /
-   `CARD_WRAPPER_HOVER_SHADOW`) + a CSS rule for the non-transform ones;
-   `underline` reuses `.theme-nav-link--anim`'s `::after` scaleX. **Do this
-   first in D.**
-2. **`animations.imageLoad: 'fade'`** (skeleton → image crossfade) — 4/4,
-   small, universal polish; no LQIP/backend work (`blur-up` stays a separate
-   backend-gated follow-up).
-3. **Stagger wiring** — Phase A shipped the `--i` / `.theme-stagger-child` /
-   `data-stagger` / `--motion-stagger` plumbing inert. Remaining: render
-   `.theme-stagger-child` with `style={{ '--i': i }}` on the list sections +
-   one admin toggle + the pure-CSS `:nth-child(n+13)` cap. 4/4 templates.
-   **Its own small PR** (wide, shallow, mechanical — the B1/B2 split rationale).
-4. **`section.settings.motion.entrance: 'rotate-in'` + `brands.settings.scrolling`
-   marquee** — two cheap, disproportionate identity wins for the two weakest
-   G0 templates. `rotate-in` is one `@keyframes` + one `KNOWN_ENTRANCES` entry
-   (Bloom's testimonials). `brands.scrolling` is ~5 lines reusing `.marquee-track`
-   + `--motion-marquee-duration` (Market's logo strip). Pull both forward ahead
-   of the rest of E.
+1. **BUILT — Card-hover enum extension** (`animations.cardHoverEffect` +=
+   `desaturate` / `quick-add-slide` / `overlay` / `shadow` / `tilt` — `underline`
+   deferred, see §8.5) — **4/4 templates, and all four fell back to a stand-in
+   value without it** (Atelier `zoom`→`desaturate`, Market `swap`→
+   `quick-add-slide`, Bloom `rise`→`tilt`, Heritage `rise`→`shadow`, all four now
+   on their real target). Extracted into `storefront/lib/card-hover.ts`
+   (resolver + SPA-leak clear, matching motion/radius/density) rather than the
+   inline `shop-context.tsx` maps the sketch above named.
+2. **BUILT — `animations.imageLoad: 'fade'`** — 4/4 templates now set it.
+3. **BUILT — Stagger wiring** — `.theme-stagger-child` + `style={{'--i':i}}`
+   wired into `product_grid`, `product_tabs`, `featured_collections`,
+   `testimonials`, `trust_bar`, and `brands` (grid mode); the
+   `:nth-child(n+13 of .theme-stagger-child)` cap; the admin toggle lives in the
+   shared `ScrollAnimationControl.tsx` (an optional `stagger`/`onStaggerChange`
+   prop pair — see §8.5, this is a *per-section* motion control, not the global
+   Motion category page the original phrasing suggested). Adopted by Atelier
+   (featured_collections + product_grid), Market (featured_collections), Bloom
+   (featured_collections + testimonials); Heritage deliberately has none.
+4. **BUILT — `section.settings.motion.entrance: 'rotate-in'` +
+   `brands.settings.scrolling` marquee** — Bloom's testimonials now use
+   `rotate-in`; Market gained a real `brands` section with `scrolling: true`.
 5. **C1 — header/footer layout presets** (named presets seeding `header.settings.rows`
    + zones, `footer` presets, `separator` / `height` / `contentWidth`,
    `scrollBehavior` via `use-scroll-value.ts`). Split from C. **M.** Makes
@@ -1571,17 +1571,26 @@ mirror how `use-scroll-value.ts` was pre-shipped in Phase A):
 - `useReducedMotion()` — a `matchMedia('(prefers-reduced-motion: reduce)')`
   subscription. Every JS animation in D/E/F + C2's drawer needs it; the blanket
   `globals.css` rule only covers CSS. Build with the second JS animation.
+  **Checked against items 1-5 (§8.5): none needed it** — card hover / imageLoad
+  / stagger / rotate-in / the marquee are all CSS-driven (transitions, CSS
+  `animation`, one `onLoad` React-state toggle), already covered by the
+  blanket rule (rotate-in added to its neutralize list, same as every other
+  entrance). Still not built — first real JS animation (fly-to-cart, count-up,
+  parallax, custom cursor) still owns this.
 - `useCountUp(target)` — rAF count-up, reads `--motion-duration-*`, self-gates
   on reduced motion. Consumers: `trust_bar` rating (E), `cart.subtotalAnimation:
-  'count'` (F), collection result count (§4.5). Build once in E.
+  'count'` (F), collection result count (§4.5). Not touched by items 1-5. Build
+  once in E.
 
-**§9.3 dead-control list needs a pass** — 4 rows are stale after A/B
-(`buttons.pillCornerRadius` "B/D" → B never touched it; `prices.*` → RESOLVED in
-B1, remove; `search.*` "B/D" → B never touched it; typography `case`/
-`letterSpacing` → were already wired pre-B1, `pairing`/`scale` only add a
-shortcut), and ~6 Phase-A-created typed-but-unwired controls are missing
-(`motion.smoothScroll` / `.scrollMotion` / `.hoverMotion` / `.parallax` /
-`.kenBurns` / `.decorativeParallax` / `.customCursor`, `section.settings.motion.stagger`).
+**§9.3 dead-control list — updated after this batch:** `section.settings.
+motion.stagger` is no longer typed-but-unwired (§8.5) — remove it from the
+"missing" list below. The other 4 stale rows and 5 remaining missing rows from
+the original pass still need fixing: `buttons.pillCornerRadius` "B/D" → B never
+touched it; `prices.*` → RESOLVED in B1, remove; `search.*` "B/D" → B never
+touched it; typography `case`/`letterSpacing` → were already wired pre-B1,
+`pairing`/`scale` only add a shortcut; and `motion.smoothScroll` /
+`.scrollMotion` / `.hoverMotion` / `.parallax` / `.kenBurns` /
+`.decorativeParallax` / `.customCursor` are still typed-but-unwired.
 
 ### 8.4 Phase G0 — the four templates against A/B only (Flow A) — planning
 
@@ -1633,6 +1642,119 @@ fast + trust-heavy structure. Closest pair: Market/Bloom, held apart by radius
 (8 vs 16), motion (`snappy`/`standard` vs `overshoot`/`expressive`), type scale
 (`compact` vs `spacious`) and card style. §8.3 items 1 and 4 are the cheap fixes
 that sharpen the two weak templates.
+
+---
+
+### 8.5 Post-G0 batch 1 — §8.3 items 1–5 — BUILT (2026-09-04, `feat/theme-motion-batch-1`)
+
+**Scratch-shop pass (before):** creating + publishing all four G0 templates and
+eyeballing the storefront (a real headless-browser pass, `prefers-reduced-motion`
+forced so below-the-fold scroll-triggered entrances don't read as false blank
+gaps) found and fixed two **template-authoring bugs** before this batch started:
+Bloom's `buttons.primary.cornerRadius: 9999` (meant for pill buttons) leaked
+into `--theme-radius`, which the Featured/ImageText/ProductGrid section image
+containers also read — rendering every collection tile as an ellipse; and none
+of the four templates actually used the `schemeId` plumbing they were built
+with, so the "one accent-scheme section" each template's own description
+promised never appeared. Both fixed in `templates.ts` before building anything
+new (see the branch's first commit).
+
+**1 — Card-hover enum extension.** `animations.cardHoverEffect` gains
+`desaturate` / `quick-add-slide` / `overlay` / `shadow` / `tilt` (`underline`
+deferred — no CTA trailing-icon slot to reuse `.theme-nav-link--anim` against
+yet). Extracted the three Phase-A/B1 inline maps out of `shop-context.tsx` into
+`storefront/lib/card-hover.ts` (`resolveCardHoverCssVars` + `applyCardHoverCssVars`,
+same resolver + SPA-leak-clear shape as `motion.ts`/`radius.ts`/`density.ts`) —
+`cardHoverEffect` is a *required* field (default `'zoom'`), so there's no "unset"
+case to prove; the byte-identical parity is "the four pre-batch values
+(`none`/`zoom`/`rise`/`swap`) resolve to exactly what the old inline maps
+produced, plus the three new vars neutral" — asserted directly in
+`card-hover.test.ts`.
+- `desaturate`: image `filter: saturate(0.55)` at rest → `saturate(1)` on hover
+  (new `--theme-card-hover-filter-base/-hover` vars + a `.theme-product-image`
+  base rule).
+- `overlay`: a new always-rendered `<span class="theme-product-hover-overlay">`
+  (opacity 0 at rest, `--theme-card-hover-overlay-opacity` on hover — 0.12 only
+  for this effect) in both `ProductCard.tsx` and `GridProductCard`.
+- `shadow`: reuses `rise`'s exact `--motion-hover-shadow` magnitude with no
+  paired transform (card stays static).
+- `tilt`: a fixed-angle CSS-only `rotate(-1.5deg)` on the card wrapper — the
+  plan's §3.1 #10 "S version", no cursor tracking, no JS.
+- `quick-add-slide`: `ProductGridSection.tsx`'s desktop quick-add button gets a
+  **separate** className (`QUICK_ADD_SLIDE_CLASS`, opacity+translateY+
+  pointer-events, transitionable) instead of the default `hidden
+  sm:group-hover:flex` (a `display` toggle can't be transitioned) — picked at
+  render time by `cardHoverEffect`, so every other effect's markup is
+  byte-identical.
+
+**2 — `animations.imageLoad: 'fade'`.** Each product image starts at opacity 0
+and crossfades in on its own `onLoad` (per-image `Set<number>` state in both
+`ProductCard.tsx` and `GridProductCard`); unset skips the state entirely,
+opacity governed only by the pre-existing carousel/swap `activeIndex` logic —
+identical to today. Known, accepted coupling: turning this on also means a
+subsequent hover-swap crossfade on that image inherits the load-fade's
+`--motion-duration-base` transition-duration instead of `-fast`, since both
+share the one `opacity` transition on the same element — cosmetic, opt-in only.
+
+**3 — Stagger wiring.** `.theme-stagger-child` + inline `style={{'--i': i}}` on
+the list items in `FeaturedCollectionsSection`, `TestimonialsSection`,
+`TrustBarSection`, `BrandsSection` (grid mode), `ProductTabsSection`, and
+`ProductGridSection`'s `GridProductCard` (its own root `<Link>`, no extra
+wrapper). Cap: `.theme-stagger-child:nth-child(n+13 of .theme-stagger-child) {
+animation-delay: 0s }` — pure CSS, degrades gracefully on the few pre-`:nth-child(of)`
+browser versions. **Load-bearing detail confirmed in `ScrollAnimatedWrapper.tsx`:**
+`stagger: true` alone does nothing — the wrapper returns children with no
+`.theme-anim-visible`/`data-stagger` at all when `entrance === 'none'`, so every
+section that wants stagger also needs a real entrance value (all six G0 uses
+already had one). Admin control: `ScrollAnimationControl.tsx` (the shared
+per-section motion control every list section's settings panel already uses)
+gained optional `stagger`/`onStaggerChange` props rendering a `Toggle` — **not**
+the global "Motion" theme-settings category, which only ever governed
+`globalSettings.motion` (intensity/speed/easing); `stagger` is a per-section
+field (`section.settings.motion.stagger`), so the per-section shared control is
+the correct, and only sensible, home for it.
+
+**4 — `rotate-in` entrance + `brands.scrolling` marquee.** `rotate-in`
+(`rotate(-2deg) → 0` + opacity) added to `SectionEntrance`, `KNOWN_ENTRANCES`,
+`ScrollAnimatedWrapper`'s `ANIMATION_CLASS`, and — easy to miss — the blanket
+`prefers-reduced-motion` rule's neutralize list (every entrance class needs to
+be in both places). `brands.settings.scrolling: true` doubles the logo list and
+wraps it in `.marquee-track` (the exact same class + `--motion-marquee-duration`
+token the announcement bar already uses) inside an `overflow-hidden` parent —
+~30 lines including the admin toggle, once the plumbing pattern already existed.
+
+**Templates updated to their real values** (no more stand-ins):
+`cardHoverEffect` (Atelier `desaturate`, Market `quick-add-slide`, Bloom `tilt`,
+Heritage `shadow`), `imageLoad: 'fade'` (all four), `motion.stagger: true`
+(Atelier's `featured_collections`+`product_grid`, Market's
+`featured_collections`, Bloom's `featured_collections`+`testimonials` —
+Heritage deliberately none), Bloom's testimonials `entrance: 'rotate-in'`
+(was `scale-in`), and a new `brands` section on Market with `scrolling: true`
+(position 5, before newsletter).
+
+**No-op guarantee for every existing shop:** none of the 5 changes alter any
+default value in `DEFAULT_THEME_CONFIG` — `cardHoverEffect` keeps its `'zoom'`
+default, `imageLoad` is a new optional key (absent ⇒ `undefined` ⇒ the fade
+branch never runs), `motion.stagger`/`entrance: 'rotate-in'`/`brands.scrolling`
+are all only reachable by a merchant (or template) explicitly setting them. A
+shop with none of these touched renders pixel-identical to before this batch.
+
+**Gate:** backend `tsc` + `jest` 484/484 (templates.spec.ts's stale
+`cardHoverEffect` allow-list test updated to the 9-value set) + lint +0 (261);
+storefront `tsc` + `build` + `vitest` 428/428 (+13 `card-hover.test.ts`) + lint
++0 (33); admin `tsc` + `build` + `vitest` (+4 `AnimationsSettings.test.tsx`,
+theme-builder subset 63/63) + lint +0 (77).
+
+**Scratch-shop pass (after):** the same four themes edited in place and
+republished (not recreated) — Bloom picked up `tilt` card hover + fading
+product images + staggered collection tiles/testimonials; Market picked up
+`quick-add-slide` + a scrolling brands marquee (renders nothing until brands
+exist) + staggered collection tiles; zero console/page errors on any of the
+four. See the session report for the actual before/after screenshots.
+
+**Deferred, not built this batch:** `underline` card hover (needs a CTA
+trailing-icon slot); `useReducedMotion()` / `useCountUp()` (neither needed by
+1–5 — see the note under §8.3's "Shared utilities").
 
 ---
 
