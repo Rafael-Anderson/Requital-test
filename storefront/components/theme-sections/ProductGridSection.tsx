@@ -337,9 +337,9 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   if (!products || products.length === 0) return null;
 
   return (
-    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(sectionTitle || (showViewAll && collectionSlug)) && (
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between theme-heading-gap">
           {sectionTitle && (
             <h2 className="text-xl font-semibold" style={themeTextPresetStyle("h2")}>
               {sectionTitle}
@@ -352,7 +352,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
           )}
         </div>
       )}
-      <div className={`grid ${columns} gap-4 sm:gap-6`}>
+      <div className={`grid ${columns} theme-grid-gap`}>
         {products.map((product) => (
           <GridProductCard
             key={product.id}

@@ -185,6 +185,11 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
     // pre-B1 Tailwind value. `deepMergeDefaults` backfills `{}` into older
     // themes harmlessly.
     radius: {},
+    // Phase B2 — inert default, same shape/reasoning as `radius` above.
+    // `resolveDensityCssVars` no-ops on `{}`; every `.theme-section-py` /
+    // `.theme-grid-gap` / `.theme-heading-gap` class falls back to its pre-B2
+    // Tailwind literal.
+    density: {},
     animations: {
       pageTransition: false,
       productCardTransition: true,

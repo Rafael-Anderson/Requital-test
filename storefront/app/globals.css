@@ -27,6 +27,21 @@
      ShopProvider from theme.colors.mouseSelectionColor — see
      lib/theme-colors.ts and lib/shop-context.tsx. */
   --color-selection: #b2e0e0;
+
+  /* Phase B2 — the density scale (globalSettings.density). Literal values here
+     are the exact pre-B2 Tailwind defaults, so `density` unset renders
+     byte-identically (the .theme-* classes below also carry them as var()
+     fallbacks). Overridden per-shop from globalSettings.density.preset in
+     shop-context.tsx's applyDensityOverrides.
+
+     Plain :root, NOT @theme. The section and grid token names are not in a
+     Tailwind namespace so they would not redefine a utility scale, but keeping
+     runtime design tokens off @theme is the rule after the B1 radius incident
+     (see the Tailwind v4 note in CLAUDE.md). */
+  --section-py: 2rem; /* = py-8 */
+  --grid-gap: 1.5rem; /* = sm:gap-6 (the >=640px value) */
+  --grid-gap-m: 1rem; /* = gap-4 (the <640px value) */
+  --section-heading-gap: 1rem; /* = mb-4 */
 }
 
 /* Phase A (motion foundation) — ONE blanket prefers-reduced-motion rule,
@@ -345,6 +360,33 @@ body {
 }
 .theme-round-lg {
   border-radius: var(--theme-round-lg, 0.75rem);
+}
+
+/* Phase B2 — the density scale, applied by class (same idiom as the
+   theme-round and theme-hover-zoom classes). Fallbacks are the exact pre-B2
+   Tailwind values: theme-section-py = py-8 (2rem), theme-heading-gap = mb-4
+   (1rem), theme-grid-gap = gap-4 sm:gap-6 (1rem below 640px, 1.5rem at 640px
+   and up). density unset means the runtime vars are never written, so every
+   class resolves to its fallback: byte-identical.
+
+   theme-grid-gap inverts the cascade the way the Phase-A motion mobile tier
+   does: the 640px-and-up value is the base declaration, and one
+   @media (max-width: 639px) block overrides it with the below-640px value. At
+   every integer viewport width this matches gap-4 sm:gap-6 exactly
+   (639 to mobile, 640 to desktop). */
+.theme-section-py {
+  padding-block: var(--section-py, 2rem);
+}
+.theme-heading-gap {
+  margin-bottom: var(--section-heading-gap, 1rem);
+}
+.theme-grid-gap {
+  gap: var(--grid-gap, 1.5rem);
+}
+@media (max-width: 639px) {
+  .theme-grid-gap {
+    gap: var(--grid-gap-m, 1rem);
+  }
 }
 
 /* New visual theme builder — per-section scroll-triggered entrance

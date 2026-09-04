@@ -61,6 +61,6 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
   }
 
   return (
-    <div className="px-4 sm:px-6 py-8 max-w-3xl mx-auto space-y-4">{visible.map(renderBlock)}</div>
+    <div className="px-4 sm:px-6 theme-section-py max-w-3xl mx-auto space-y-4">{visible.map(renderBlock)}</div>
   );
 }

@@ -253,6 +253,18 @@ export interface RadiusSettings {
   applyToButtons?: boolean;
 }
 
+// Phase B2 (design-token foundation) — one density lever. `preset` unset ⇒ inert
+// (resolveDensityCssVars → {}); every `.theme-section-py` / `.theme-grid-gap` /
+// `.theme-heading-gap` class in globals.css falls back to its pre-B2 Tailwind
+// literal ⇒ byte-identical. Object wrapper (not a bare enum) so
+// updateGlobalSettingsCategory can write it and DEFAULT_THEME_CONFIG can seed
+// `{}` inertly — same convention as `motion` / `radius`. See
+// storefront/lib/density.ts.
+export type DensityPreset = 'compact' | 'cozy' | 'comfortable' | 'spacious';
+export interface DensitySettings {
+  preset?: DensityPreset;
+}
+
 // Phase B1 — shared card-shape enums (mirrored in admin/storefront).
 export type CardStyle =
   | 'minimal'
@@ -512,6 +524,9 @@ export interface GlobalThemeSettings {
   // Phase B1 — the radius scale. OPTIONAL; DEFAULT_THEME_CONFIG seeds `{}`
   // (inert). See RadiusSettings above.
   radius?: RadiusSettings;
+  // Phase B2 — the density scale. OPTIONAL; DEFAULT_THEME_CONFIG seeds `{}`
+  // (inert). See DensitySettings above.
+  density?: DensitySettings;
   animations: AnimationSettings;
   // Phase A — the global motion model. OPTIONAL; DEFAULT_THEME_CONFIG seeds
   // `{}` (inert). See MotionSettings above.
