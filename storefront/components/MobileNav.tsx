@@ -170,23 +170,40 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
     };
   }, [mode, open]);
 
-  // Swipe the panel back off-screen to close (drawer and fullscreen both) —
-  // a real element exists here (the panel itself), so this one DOES use
-  // setPointerCapture, captured immediately on pointerdown per
-  // PreviewInteraction.tsx's own reasoning (deferring it loses the gesture
-  // to the browser's native handling of the very next move).
+  // Swipe the panel back off-screen to close (drawer and fullscreen both).
+  //
+  // Deliberately does NOT call setPointerCapture on pointerdown, unlike
+  // PreviewInteraction.tsx's own drag handler. Found via the scratch-shop
+  // Playwright pass (real Chromium), not caught by the jsdom-based unit
+  // test: capturing the pointer immediately, on a panel that CONTAINS real
+  // interactive children (the Close button, menu links), suppresses the
+  // browser's synthesized "click" event on those children entirely —
+  // Chromium retargets the captured pointerup to the capturing element,
+  // and when the down/up targets then disagree it never synthesizes a
+  // click on the original target. jsdom has no setPointerCapture at all,
+  // so this never manifested in the unit test. PreviewInteraction.tsx's
+  // draggable elements don't have this problem: they route clicks through
+  // a separate document-level capture-phase listener, not a child's own
+  // onClick. Fix: only capture once real horizontal movement confirms an
+  // actual swipe, never on a plain tap/click (which releases before any
+  // movement) — capture is then irrelevant to that click's own event.
   function handlePanelPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     const el = panelRef.current;
     if (!el) return;
-    // jsdom (unit tests) has no setPointerCapture implementation — real
-    // browsers do; the optional call keeps this file testable without a
-    // jsdom-specific workaround in every test.
-    el.setPointerCapture?.(e.pointerId);
+    const pointerId = e.pointerId;
     const startX = e.clientX;
     const startY = e.clientY;
+    let captured = false;
     function onMove(ev: PointerEvent) {
+      if (ev.pointerId !== pointerId) return;
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
+      if (!captured && Math.abs(dx) > 10) {
+        // jsdom (unit tests) has no setPointerCapture — the optional call
+        // keeps this file testable without a jsdom-specific workaround.
+        el!.setPointerCapture?.(pointerId);
+        captured = true;
+      }
       if (Math.abs(dx) > Math.abs(dy) * 1.5 && dx < -SWIPE_THRESHOLD_PX) {
         setOpen(false);
         cleanup();
