@@ -29,6 +29,32 @@ export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "
 // ScrollAnimation values stay valid, these are additive. Mirrors
 // backend/src/themes/theme-config.types.ts.
 export type SectionEntrance = ScrollAnimation | "scale-in" | "blur-in" | "mask-reveal";
+
+// Phase B1 (design-token foundation) — mirrors backend theme-config.types.ts.
+export type RadiusPreset = "sharp" | "subtle" | "rounded" | "soft" | "pill";
+export interface RadiusSettings {
+  preset?: RadiusPreset;
+  applyToButtons?: boolean;
+}
+export type CardStyle =
+  | "minimal"
+  | "bordered"
+  | "shadowed"
+  | "elevated"
+  | "outlined-hover"
+  | "filled"
+  | "polaroid"
+  | "overlay";
+export type ImageAspect = "square" | "portrait" | "landscape" | "tall";
+export type TypographyPairing =
+  | "modern-sans"
+  | "editorial-serif"
+  | "warm-humanist"
+  | "grotesque"
+  | "classic"
+  | "bold-display"
+  | "handwritten-accent";
+export type TypeScale = "compact" | "default" | "spacious" | "dramatic";
 export type SectionVisibility = "desktop" | "mobile" | "both";
 
 // Phase A — the global motion model. Mirrors backend theme-config.types.ts's
@@ -73,6 +99,7 @@ export interface SectionSettings {
   schemeId?: string;
   scrollAnimation?: ScrollAnimation;
   motion?: SectionMotionSettings;
+  imageAspect?: ImageAspect;
   visibility?: SectionVisibility;
   [key: string]: unknown;
 }
@@ -172,6 +199,10 @@ export interface TypographySettings {
   h4: HeadingTextPreset;
   h5: HeadingTextPreset;
   h6: HeadingTextPreset;
+  // Phase B1 — optional.
+  pairing?: TypographyPairing;
+  scale?: TypeScale;
+  baseFontSize?: 14 | 15 | 16 | 17;
 }
 
 export interface PageLayoutSettings {
@@ -247,6 +278,9 @@ export interface PriceSettings {
     cartItems: boolean;
     cartTotal: boolean;
   };
+  // Phase B1 — see backend theme-config.types.ts.
+  salePriceColor?: string;
+  salePriceStyle?: "color" | "strikethrough-only";
 }
 
 export interface ProductCardSettings {
@@ -263,6 +297,12 @@ export interface ProductCardSettings {
   // feature: the heart on product cards, the account nav tile, and the
   // /account/wishlist page. See lib/wishlist.tsx's wishlistEnabled().
   showWishlist?: boolean;
+  // Phase B1 — all optional. Unset ⇒ minimal / aspect-square / left /
+  // comfortable.
+  cardStyle?: CardStyle;
+  imageAspect?: ImageAspect;
+  textAlign?: "left" | "center";
+  density?: "comfortable" | "compact";
 }
 
 export interface CollectionPageSettings {
@@ -338,6 +378,7 @@ export interface GlobalThemeSettings {
   colorSchemes: ColorScheme[];
   typography: TypographySettings;
   pageLayout: PageLayoutSettings;
+  radius?: RadiusSettings;
   animations: AnimationSettings;
   motion?: MotionSettings;
   badges: BadgeSettings;

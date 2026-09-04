@@ -64,7 +64,7 @@ export default function TestimonialsSection({ sectionId, blocks }: { sectionId: 
         {testimonials.map((t) => {
           const photoUrl = resolveImageUrl(t.settings.photoUrl);
           return (
-            <div key={t.id} className="p-4 border border-stroke rounded-lg">
+            <div key={t.id} className="p-4 border border-stroke theme-round-md">
               {typeof t.settings.rating === "number" && <StarRating rating={t.settings.rating} />}
               <p
                 className="text-sm leading-relaxed"

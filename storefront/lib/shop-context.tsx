@@ -5,10 +5,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
 import { resolveThemeCssVars } from "./theme-css-vars";
 import { applyMotionCssVars } from "./motion";
+import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
-import { resolveLetterSpacing, resolveLineHeight } from "./theme-typography";
+import { resolveLetterSpacing, resolveLineHeight, resolveScaleSizes, resolveTypographyPairing } from "./theme-typography";
 import type { AutoDiscount, Outlet, Shop } from "./types";
 import type { ColorScheme, HeadingTextPreset, ThemeConfig } from "./theme-config-types";
 
@@ -281,28 +282,52 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
 
   root.style.setProperty("--theme-max-width", PAGE_WIDTH_PX[g.pageLayout?.width ?? "normal"]);
 
-  if (g.typography?.bodyFont) {
-    loadGoogleFont(g.typography.bodyFont);
-    root.style.setProperty("--theme-body-font", `"${g.typography.bodyFont}", sans-serif`);
+  // Phase B1 — the discounted-price colour (ProductCard.tsx's PriceDisplay
+  // reads `text-sale-price`). Always written (overwrite-healed on cross-shop
+  // nav, like the scheme vars); unset ⇒ #dc2626 = the old hardcoded
+  // `text-red-600`.
+  root.style.setProperty("--color-sale-price", g.prices?.salePriceColor || "#dc2626");
+
+  // Phase B1 — typography.pairing: when a bundle resolves, it sources the 4
+  // font roles and the per-role bodyFont/headingFont/accentFont/subheadingFont
+  // reads below are skipped. Unset ⇒ those per-role blocks run as today.
+  const pairing = resolveTypographyPairing(g.typography?.pairing);
+  const bodyFontName = pairing?.bodyFont ?? g.typography?.bodyFont;
+  const headingFontName = pairing?.headingFont ?? g.typography?.headingFont;
+  const accentFontName = pairing?.accentFont ?? g.typography?.accentFont;
+  if (bodyFontName) {
+    loadGoogleFont(bodyFontName);
+    root.style.setProperty("--theme-body-font", `"${bodyFontName}", sans-serif`);
   }
-  if (g.typography?.headingFont) {
-    loadGoogleFont(g.typography.headingFont);
-    root.style.setProperty("--theme-heading-font", `"${g.typography.headingFont}", sans-serif`);
+  if (headingFontName) {
+    loadGoogleFont(headingFontName);
+    root.style.setProperty("--theme-heading-font", `"${headingFontName}", sans-serif`);
   }
   // accentFont had no reader at all until this fix — HeadingTextPreset.font
   // can name "accent" per heading level (see applyHeadingPreset above), and
   // Buttons > Primary's font role (below) can too.
-  if (g.typography?.accentFont) {
-    loadGoogleFont(g.typography.accentFont);
-    root.style.setProperty("--theme-accent-font", `"${g.typography.accentFont}", sans-serif`);
+  if (accentFontName) {
+    loadGoogleFont(accentFontName);
+    root.style.setProperty("--theme-accent-font", `"${accentFontName}", sans-serif`);
   }
   if (g.typography?.paragraph) {
     root.style.setProperty("--text-paragraph-size", `${g.typography.paragraph.size}px`);
     root.style.setProperty("--text-paragraph-line-height", String(resolveLineHeight(g.typography.paragraph.lineHeight)));
   }
+  // Phase B1 — typography.baseFontSize overrides the paragraph size when set.
+  if (g.typography?.baseFontSize) {
+    root.style.setProperty("--text-paragraph-size", `${g.typography.baseFontSize}px`);
+  }
+  // Phase B1 — typography.scale: overrides ONLY --text-h{n}-size from a
+  // per-scale px table; applyHeadingPreset still drives line-height /
+  // letter-spacing / transform / font-role from the stored preset (which is
+  // never mutated). Unset ⇒ applyHeadingPreset writes preset.size, today's
+  // behaviour.
+  const scaleSizes = resolveScaleSizes(g.typography?.scale);
   for (const key of HEADING_KEYS) {
     const preset = g.typography?.[key];
     if (preset) applyHeadingPreset(root.style, key, preset);
+    if (scaleSizes) root.style.setProperty(`--text-${key}-size`, `${scaleSizes[key]}px`);
   }
 
   // Buttons — --theme-radius has been read by half a dozen section
@@ -313,7 +338,12 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   // guess. Sourced from the primary button style since that's what every
   // one of those call sites is really styling.
   if (g.buttons?.primary) {
-    root.style.setProperty("--theme-radius", `${g.buttons.primary.cornerRadius}px`);
+    // Phase B1 — `buttons.primary.cornerRadius` ALWAYS drives --theme-radius
+    // (buttons, the newsletter input, the Featured/ImageText/ProductGrid
+    // section image containers) unless the merchant explicitly turns on
+    // `radius.applyToButtons`, in which case the radius scale's --radius-md
+    // takes over. No seed sentinel. See resolveThemeRadius in lib/radius.ts.
+    root.style.setProperty("--theme-radius", resolveThemeRadius(g.radius, g.buttons.primary.cornerRadius));
     root.style.setProperty("--theme-button-border-width", `${g.buttons.primary.borderThickness}px`);
     root.style.setProperty("--theme-button-text-transform", g.buttons.primary.case === "uppercase" ? "uppercase" : "none");
     root.style.setProperty("--theme-button-font", g.buttons.primary.font === "accent" ? "var(--theme-accent-font, inherit)" : "var(--theme-body-font, inherit)");
@@ -380,6 +410,18 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
 // lib/motion.ts (unit-tested there, incl. the set-then-unset transition).
 function applyMotionOverrides(config: ThemeConfig | null) {
   applyMotionCssVars(document.documentElement.style, config?.globalSettings?.motion);
+}
+
+// Phase B1 (design-token foundation) — writes the --radius-sm/-md/-lg scale
+// from globalSettings.radius, and clears any this theme doesn't define
+// (SPA-leak guard). `radius` unset / {} / no `preset` ⇒ nothing written ⇒
+// every `var(--radius-*, <literal>)` / `.theme-round-*` class resolves to the
+// exact pre-B1 Tailwind value. `applyToButtons` is NOT handled here — it
+// gates the --theme-radius bridge inside applyThemeConfigOverrides. Set/clear
+// loop is applyRadiusCssVars in lib/radius.ts (unit-tested, incl. the
+// set-then-unset transition).
+function applyRadiusOverrides(config: ThemeConfig | null) {
+  applyRadiusCssVars(document.documentElement.style, config?.globalSettings?.radius);
 }
 
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
@@ -540,6 +582,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
     applyLegacyThemeOverrides(shop);
     applyThemeConfigOverrides(themeConfig);
     applyMotionOverrides(themeConfig);
+    applyRadiusOverrides(themeConfig);
   }, [shop, themeConfig]);
 
   return (

@@ -30,6 +30,22 @@ describe('assertValidThemeConfig', () => {
     expect(() => assertValidThemeConfig(config)).not.toThrow();
   });
 
+  it('accepts populated B1 design-token keys (radius / typography / prices / productCards — opaque to the validator)', () => {
+    const config = baseConfig();
+    config.globalSettings.radius = { preset: 'soft', applyToButtons: true };
+    config.globalSettings.typography.pairing = 'editorial-serif';
+    config.globalSettings.typography.scale = 'dramatic';
+    config.globalSettings.typography.baseFontSize = 16;
+    config.globalSettings.prices.salePriceColor = '#8a3324';
+    config.globalSettings.prices.salePriceStyle = 'strikethrough-only';
+    config.globalSettings.productCards.cardStyle = 'polaroid';
+    config.globalSettings.productCards.imageAspect = 'portrait';
+    config.globalSettings.productCards.textAlign = 'center';
+    config.globalSettings.productCards.density = 'compact';
+    config.sections[3].settings.imageAspect = 'landscape';
+    expect(() => assertValidThemeConfig(config)).not.toThrow();
+  });
+
   it('rejects an unknown top-level key', () => {
     const config = { ...baseConfig(), notARealKey: true };
     expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);

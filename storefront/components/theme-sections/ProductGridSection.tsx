@@ -9,6 +9,7 @@ import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import { resolveProductBadge, type ResolvedProductBadge } from "@/lib/product-badge";
+import { cardDensity, cardTextAlignClass, resolveCardAspectClass, resolveCardStyleClass } from "@/lib/product-card-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import WishlistButton from "@/components/WishlistButton";
 import type { Collection, Product } from "@/lib/types";
@@ -34,11 +35,10 @@ function mobileColumnsFor(desktopColumns: number, explicit: unknown): 1 | 2 {
   return desktopColumns <= 2 ? 1 : 2;
 }
 
-const CARD_STYLE_CLASS: Record<string, string> = {
-  minimal: "",
-  bordered: "border border-stroke rounded-lg p-2",
-  shadowed: "rounded-lg p-2 shadow-sm shadow-black/10",
-};
+// Phase B1 — card style / aspect / density / align now come from
+// lib/product-card-style.ts (shared with the standalone ProductCard.tsx).
+// `bordered`/`shadowed` keep their exact class set (radius via .theme-round-md
+// = the old `rounded-lg`), plus 5 new styles.
 
 // Homepage teaser, not the full catalog — collection/product browsing
 // already has its own real pages (see /[shop]/collections/[slug]). The
@@ -116,6 +116,10 @@ function QuickAddButton({
 function GridProductCard({
   product,
   cardStyle,
+  cardStyleKey,
+  aspectClass,
+  nameMargin,
+  alignClass,
   shopBasePath,
   showMedia,
   showTitle,
@@ -135,6 +139,12 @@ function GridProductCard({
 }: {
   product: Product;
   cardStyle: string;
+  // Phase B1 — the raw style key (for the `overlay` render branch) + the
+  // resolved image-aspect / name-margin / text-align classes.
+  cardStyleKey: string;
+  aspectClass: string;
+  nameMargin: string;
+  alignClass: string;
   shopBasePath: string;
   showMedia: boolean;
   showTitle: boolean;
@@ -163,6 +173,35 @@ function GridProductCard({
     cycle: showCarousel,
     swapOnHover: cardHoverEffect === "swap",
   });
+  const isOverlay = cardStyleKey === "overlay";
+
+  const titleEl = showTitle ? (
+    <p
+      className={`${isOverlay ? "truncate text-white" : `${nameMargin} truncate`} ${alignClass}`}
+      title={product.name}
+      {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "product_title" }) : {})}
+      style={{ ...(isOverlay ? {} : nameStyle), ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
+    >
+      {product.name}
+    </p>
+  ) : null;
+
+  const priceEl = showPrice ? (
+    <p
+      className={`${isOverlay ? "text-sm font-semibold text-white/90" : "mt-1 text-sm font-semibold"} ${alignClass}`}
+      {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
+      style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
+    >
+      {showCurrencyCode && shopCurrency ? (
+        <>
+          <CurrencySymbol code={shopCurrency} />{" "}
+        </>
+      ) : (
+        ""
+      )}
+      {product.price}
+    </p>
+  ) : null;
 
   return (
     <Link
@@ -172,7 +211,7 @@ function GridProductCard({
       {...handlers}
     >
       {showMedia && (
-        <div className="aspect-square overflow-hidden bg-black/5 relative" style={{ borderRadius: "var(--theme-radius, 8px)" }}>
+        <div className={`${aspectClass} overflow-hidden bg-black/5 relative`} style={{ borderRadius: "var(--theme-radius, 8px)" }}>
           {images.map((url, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -198,34 +237,19 @@ function GridProductCard({
           )}
           <WishlistButton productId={product.id} />
           {desktopQuickAdd}
+          {/* Phase B1 — `overlay` card style: title + price in a gradient
+              strip over the image (mirrors FeaturedCollectionsSection's
+              overlayText). */}
+          {isOverlay && (titleEl || priceEl) && (
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6">
+              {titleEl}
+              {priceEl}
+            </div>
+          )}
         </div>
       )}
-      {showTitle && (
-        <p
-          className="mt-3 truncate"
-          title={product.name}
-          {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "product_title" }) : {})}
-          style={{ ...nameStyle, ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
-        >
-          {product.name}
-        </p>
-      )}
-      {showPrice && (
-        <p
-          className="mt-1 text-sm font-semibold"
-          {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
-          style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
-        >
-          {showCurrencyCode && shopCurrency ? (
-            <>
-              <CurrencySymbol code={shopCurrency} />{" "}
-            </>
-          ) : (
-            ""
-          )}
-          {product.price}
-        </p>
-      )}
+      {!isOverlay && titleEl}
+      {!isOverlay && priceEl}
       {mobileQuickAdd}
     </Link>
   );
@@ -279,7 +303,18 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   const desktopColumns = (settings.columns as number) ?? 3;
   const mobileColumns = mobileColumnsFor(desktopColumns, settings.mobileColumns);
   const columns = `${MOBILE_COLS_CLASS[mobileColumns]} ${DESKTOP_COLS_CLASS[desktopColumns] ?? DESKTOP_COLS_CLASS[3]}`;
-  const cardStyle = CARD_STYLE_CLASS[(settings.cardStyle as string) ?? "minimal"] ?? "";
+  // Phase B1 — the section's own settings.cardStyle wins over the global
+  // productCards.cardStyle default; density/align come from the global.
+  const cardStyleKey =
+    (settings.cardStyle as string) ?? themeConfig?.globalSettings.productCards?.cardStyle ?? "minimal";
+  const cardDensityValue = themeConfig?.globalSettings.productCards?.density;
+  const cardStyle = resolveCardStyleClass(cardStyleKey, cardDensityValue);
+  const density = cardDensity(cardDensityValue);
+  const alignClass = cardTextAlignClass(themeConfig?.globalSettings.productCards?.textAlign);
+  // Per-section settings.imageAspect wins over the global productCards.imageAspect.
+  const aspectClass = resolveCardAspectClass(
+    (settings.imageAspect as string) ?? themeConfig?.globalSettings.productCards?.imageAspect,
+  );
 
   const cardBlock = blocks.find((b) => b.type === "product_card" && b.visible);
   const subBlocks = cardBlock?.blocks ?? [];
@@ -323,6 +358,10 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             key={product.id}
             product={product}
             cardStyle={cardStyle}
+            cardStyleKey={cardStyleKey}
+            aspectClass={aspectClass}
+            nameMargin={density.nameMargin}
+            alignClass={alignClass}
             shopBasePath={shopBasePath}
             showMedia={showMedia}
             showTitle={showTitle}

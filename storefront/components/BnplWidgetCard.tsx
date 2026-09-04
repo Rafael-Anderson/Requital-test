@@ -24,7 +24,7 @@ export default function BnplWidgetCard({
   tamaraKey: string | null;
 }) {
   return (
-    <div className="mt-4 rounded-xl border border-stroke p-4">
+    <div className="mt-4 theme-round-lg border border-stroke p-4">
       <p className="text-sm font-semibold text-product-name">Buy Now Pay Later!</p>
       <div className="mt-2 divide-y divide-stroke">
         {tabbyKey && (

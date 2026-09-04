@@ -12,7 +12,24 @@ import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { Collection, ScrollAnimation, SectionVisibility } from "@/lib/types";
 
-const CARD_STYLES = ["minimal", "bordered", "shadowed"] as const;
+// Phase B1 — extended card style set (shared shape with globalSettings.productCards.cardStyle).
+const CARD_STYLES = [
+  "minimal",
+  "bordered",
+  "shadowed",
+  "elevated",
+  "outlined-hover",
+  "filled",
+  "polaroid",
+  "overlay",
+] as const;
+const IMAGE_ASPECTS = [
+  { value: "", label: "Default (from Product cards)" },
+  { value: "square", label: "Square" },
+  { value: "portrait", label: "Portrait" },
+  { value: "landscape", label: "Landscape" },
+  { value: "tall", label: "Tall" },
+] as const;
 const DEFAULT_PRODUCT_LIMIT = 8;
 
 // Whether media/title/price show on each card is now controlled per
@@ -107,7 +124,18 @@ export default function ProductGridSettings({
       >
         {CARD_STYLES.map((s) => (
           <option key={s} value={s}>
-            {s[0].toUpperCase() + s.slice(1)}
+            {s[0].toUpperCase() + s.slice(1).replace("-", " ")}
+          </option>
+        ))}
+      </Select>
+      <Select
+        label="Image shape"
+        value={(settings.imageAspect as string) ?? ""}
+        onChange={(e) => onUpdate("imageAspect", e.target.value || undefined)}
+      >
+        {IMAGE_ASPECTS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
           </option>
         ))}
       </Select>
