@@ -7,6 +7,7 @@ import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
 import TypographySettings from "./theme-settings/TypographySettings";
 import PageLayoutSettings from "./theme-settings/PageLayoutSettings";
+import RadiusSettings from "./theme-settings/RadiusSettings";
 import AnimationsSettings from "./theme-settings/AnimationsSettings";
 import MotionSettings from "./theme-settings/MotionSettings";
 import BadgesSettings from "./theme-settings/BadgesSettings";
@@ -96,6 +97,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
   Colors: ColorsSettings,
   Typography: TypographySettings,
   "Page layout": PageLayoutSettings,
+  Radius: RadiusSettings,
   Animations: AnimationsSettings,
   Motion: MotionSettings,
   Badges: BadgesSettings,

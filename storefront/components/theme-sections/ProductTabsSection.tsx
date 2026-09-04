@@ -105,7 +105,7 @@ export default function ProductTabsSection({
           {Array.from({ length: Math.min(productLimit, 8) }).map((_, i) => (
             <div
               key={i}
-              className="aspect-square rounded-xl animate-pulse"
+              className="aspect-square theme-round-lg animate-pulse"
               style={{ background: "color-mix(in srgb, var(--foreground) 8%, transparent)" }}
             />
           ))}

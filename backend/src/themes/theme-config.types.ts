@@ -111,6 +111,10 @@ export interface SectionSettings {
   scrollAnimation?: ScrollAnimation;
   // Phase A — new-style per-section motion; wins over `scrollAnimation` when set.
   motion?: SectionMotionSettings;
+  // Phase B1 — per-section product-card image aspect; wins over
+  // globalSettings.productCards.imageAspect for a product_grid / product_tabs
+  // section. Unset ⇒ the global (or `square`).
+  imageAspect?: ImageAspect;
   visibility?: SectionVisibility;
   [key: string]: unknown;
 }
@@ -226,11 +230,55 @@ export interface TypographySettings {
   h4: HeadingTextPreset;
   h5: HeadingTextPreset;
   h6: HeadingTextPreset;
+  // Phase B1 — optional. See TypographyPairing / TypeScale above.
+  pairing?: TypographyPairing;
+  scale?: TypeScale;
+  baseFontSize?: 14 | 15 | 16 | 17;
 }
 
 export interface PageLayoutSettings {
   width: 'narrow' | 'normal' | 'wide';
 }
+
+// Phase B1 (design-token foundation) — one radius language. `preset` unset ⇒
+// inert (resolveRadiusCssVars → {}), every `var(--radius-*, <literal>)` resolves
+// to today's Tailwind value ⇒ byte-identical. `applyToButtons` is an EXPLICIT
+// opt-in: `buttons.primary.cornerRadius` always drives `--theme-radius` (buttons,
+// the newsletter input, the section image containers) unless the merchant turns
+// this on — no "seed default == untouched" guess. See
+// storefront/lib/radius.ts + shop-context.tsx's `--theme-radius` line.
+export type RadiusPreset = 'sharp' | 'subtle' | 'rounded' | 'soft' | 'pill';
+export interface RadiusSettings {
+  preset?: RadiusPreset;
+  applyToButtons?: boolean;
+}
+
+// Phase B1 — shared card-shape enums (mirrored in admin/storefront).
+export type CardStyle =
+  | 'minimal'
+  | 'bordered'
+  | 'shadowed'
+  | 'elevated'
+  | 'outlined-hover'
+  | 'filled'
+  | 'polaroid'
+  | 'overlay';
+export type ImageAspect = 'square' | 'portrait' | 'landscape' | 'tall';
+
+// Phase B1 — typography pairing + modular scale. Both OPTIONAL keys on the
+// EXISTING TypographySettings. `pairing` unset ⇒ the per-role bodyFont/etc.
+// reads run as today. `scale` unset ⇒ the explicit h1–h6 `.size` values win
+// (today's behaviour); when set it overrides ONLY `--text-h{n}-size` from a
+// per-scale px table, the stored sizes are untouched.
+export type TypographyPairing =
+  | 'modern-sans'
+  | 'editorial-serif'
+  | 'warm-humanist'
+  | 'grotesque'
+  | 'classic'
+  | 'bold-display'
+  | 'handwritten-accent';
+export type TypeScale = 'compact' | 'default' | 'spacious' | 'dramatic';
 
 export interface AnimationSettings {
   pageTransition: boolean;
@@ -307,6 +355,13 @@ export interface PriceSettings {
     cartItems: boolean;
     cartTotal: boolean;
   };
+  // Phase B1 — the discounted price colour on ProductCard.tsx's PriceDisplay
+  // (replaces the hardcoded `text-red-600`). Unset ⇒ `--color-sale-price`
+  // stays #dc2626 (= red-600). `strikethrough-only` drops the colour entirely
+  // (only the struck original marks the discount). No `badge` — the
+  // globalSettings.badges Sale chip already covers that.
+  salePriceColor?: string;
+  salePriceStyle?: 'color' | 'strikethrough-only';
 }
 
 // Quick-add colors are two plain color settings, not a scheme reference —
@@ -338,6 +393,16 @@ export interface ProductCardSettings {
   // tile, and the /account/wishlist page. Absent/false ⇒ no wishlist UI at
   // all. Mirrored in admin/lib/types.ts + storefront/lib/theme-config-types.ts.
   showWishlist?: boolean;
+  // Phase B1 — all optional. `cardStyle` here is the DEFAULT for the
+  // standalone collection-page ProductCard + a fallback for
+  // product_grid/product_tabs sections (the section's own
+  // settings.cardStyle still wins). `imageAspect` / `textAlign` / `density`
+  // apply to every product card storefront-wide. Unset ⇒ today
+  // (minimal / aspect-square / left / comfortable).
+  cardStyle?: CardStyle;
+  imageAspect?: ImageAspect;
+  textAlign?: 'left' | 'center';
+  density?: 'comfortable' | 'compact';
 }
 
 // storefront-v2 Phase 2C/2D — settings for the standalone collection
@@ -444,6 +509,9 @@ export interface GlobalThemeSettings {
   colorSchemes: ColorScheme[];
   typography: TypographySettings;
   pageLayout: PageLayoutSettings;
+  // Phase B1 — the radius scale. OPTIONAL; DEFAULT_THEME_CONFIG seeds `{}`
+  // (inert). See RadiusSettings above.
+  radius?: RadiusSettings;
   animations: AnimationSettings;
   // Phase A — the global motion model. OPTIONAL; DEFAULT_THEME_CONFIG seeds
   // `{}` (inert). See MotionSettings above.

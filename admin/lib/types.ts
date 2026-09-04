@@ -1147,6 +1147,32 @@ export type ScrollAnimation = "none" | "fade-in" | "slide-up" | "slide-left" | "
 export type SectionEntrance = ScrollAnimation | "scale-in" | "blur-in" | "mask-reveal";
 export type SectionVisibility = "desktop" | "mobile" | "both";
 
+// Phase B1 (design-token foundation) — mirrors backend theme-config.types.ts.
+export type RadiusPreset = "sharp" | "subtle" | "rounded" | "soft" | "pill";
+export interface RadiusSettings {
+  preset?: RadiusPreset;
+  applyToButtons?: boolean;
+}
+export type CardStyle =
+  | "minimal"
+  | "bordered"
+  | "shadowed"
+  | "elevated"
+  | "outlined-hover"
+  | "filled"
+  | "polaroid"
+  | "overlay";
+export type ImageAspect = "square" | "portrait" | "landscape" | "tall";
+export type TypographyPairing =
+  | "modern-sans"
+  | "editorial-serif"
+  | "warm-humanist"
+  | "grotesque"
+  | "classic"
+  | "bold-display"
+  | "handwritten-accent";
+export type TypeScale = "compact" | "default" | "spacious" | "dramatic";
+
 // Phase A — the global motion model (docs/plans/theme-templates-and-motion.md
 // §2). Mirrors backend theme-config.types.ts's MotionSettings. OPTIONAL and
 // inert when `intensity` is unset — the only true no-op (`intensity: 'standard'`
@@ -1194,6 +1220,7 @@ export interface SectionSettings {
   schemeId?: string;
   scrollAnimation?: ScrollAnimation;
   motion?: SectionMotionSettings;
+  imageAspect?: ImageAspect;
   visibility?: SectionVisibility;
   [key: string]: unknown;
 }
@@ -1292,6 +1319,13 @@ export interface TypographySettings {
   h4: HeadingTextPreset;
   h5: HeadingTextPreset;
   h6: HeadingTextPreset;
+  // Phase B1 — optional. `pairing` sources the 4 font roles from a named
+  // bundle; `scale` overrides `--text-h*-size` from a per-scale table (the
+  // per-heading Size fields grey out while it's set); `baseFontSize` drives
+  // `--text-paragraph-size`.
+  pairing?: TypographyPairing;
+  scale?: TypeScale;
+  baseFontSize?: 14 | 15 | 16 | 17;
 }
 
 export interface PageLayoutSettings {
@@ -1367,6 +1401,9 @@ export interface PriceSettings {
     cartItems: boolean;
     cartTotal: boolean;
   };
+  // Phase B1 — see backend theme-config.types.ts.
+  salePriceColor?: string;
+  salePriceStyle?: "color" | "strikethrough-only";
 }
 
 export interface ProductCardSettings {
@@ -1383,6 +1420,12 @@ export interface ProductCardSettings {
   // wishlist feature. Toggled from ProductCardsSettings.tsx. Mirrored in
   // backend theme-config.types.ts + storefront theme-config-types.ts.
   showWishlist?: boolean;
+  // Phase B1 — all optional. Unset ⇒ minimal / aspect-square / left /
+  // comfortable.
+  cardStyle?: CardStyle;
+  imageAspect?: ImageAspect;
+  textAlign?: "left" | "center";
+  density?: "comfortable" | "compact";
 }
 
 export interface CollectionPageSettings {
@@ -1460,6 +1503,7 @@ export interface GlobalThemeSettings {
   colorSchemes: ColorScheme[];
   typography: TypographySettings;
   pageLayout: PageLayoutSettings;
+  radius?: RadiusSettings;
   animations: AnimationSettings;
   motion?: MotionSettings;
   badges: BadgeSettings;

@@ -11,6 +11,7 @@ export const THEME_SETTINGS_CATEGORY_LABELS = [
   "Colors",
   "Typography",
   "Page layout",
+  "Radius",
   "Animations",
   "Motion",
   "Badges",

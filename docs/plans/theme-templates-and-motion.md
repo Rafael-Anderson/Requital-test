@@ -1147,12 +1147,15 @@ case per new type, and a per-template validation spec once templates land.
 
 ### Build scope authorised (2026-09-04)
 
-- **Phase A and Phase B only** are green-lit right now. Phase A is planned in
-  detail in §8.1 and starts immediately after that plan is approved.
-- **Phases C–F are NOT started.** After B lands, the plan is re-evaluated against
-  what the token foundations actually look like in practice — assume the C–F
-  specs in the table below may need revision (they were written before A/B were
-  real). Do not treat C–F as committed scope.
+- **Phase A (merged 2026-09-04, PR #88) and Phase B are green-lit.** Phase B is
+  split into **B1** (radius + typography + card style/aspect/density + prices
+  sale-colour — planned in detail in §8.2) and **B2** (the global density scale —
+  a follow-up PR after B1 is reviewed). Rationale for the split is on the B1/B2
+  rows below.
+- **Phases C–F are NOT started.** After B (B1 + B2) lands, the plan is
+  re-evaluated against what the token foundations actually look like in practice
+  — assume the C–F specs in the table below may need revision (they were written
+  before A/B were real). Do not treat C–F as committed scope.
 - **Phase I (icon set)** runs in parallel, is independent of A–G, and blocks
   nothing — but it has its own gate: a glyph-variant proposal comes back for
   sign-off *before* any SVG is drawn (see the Phase I row).
@@ -1161,7 +1164,8 @@ case per new type, and a per-template validation spec once templates land.
 | Phase | Content | Depends on | Effort |
 |---|---|---|---|
 | **A — Motion foundation** *(BUILT 2026-09-04 on `feat/motion-foundation-phase-a`; awaiting review — see §8.1)* | `globalSettings.motion` category + `applyMotionOverrides` + the `--motion-*` token table **including the sub-640px mobile tier** (mobile values shipped from the start: under 639px `intensity` steps down one level and `parallax` / `kenBurns` / `decorativeParallax` / `customCursor` are force-disabled — doing this now avoids retouching every token later). Rewrite every hardcoded duration/distance/scale/easing in `globals.css` + the animated components as `var(--motion-*, <today's literal>)` (exhaustive file-by-file list in §8.1). The single blanket `prefers-reduced-motion` rule replacing the per-class blocks (+ the `transitionend`/`animationend` listener audit the `0.01ms` value protects). `useScrollValue()` shared hook. Extend `ScrollAnimatedWrapper` for `motion.entrance` vocab + `stagger` + `animateOnce` + `trigger`. Type mirrors across backend/admin/storefront. **No-op proven** by both computed-style assertions and a preview visual pass (§8.1). | — | **L** |
-| **B — Design-token foundation** | `globalSettings.radius` + `globalSettings.density` scales (token wiring, today's-value fallbacks). `typography.pairing` presets + `typography.scale` + `baseFontSize`. Card `cardStyle` extension + `productCards.imageAspect` / `textAlign` / `density` + `section.settings.gap`/`imageAspect`. Price styling (`prices.salePriceColor` etc.). | A | **L** |
+| **B1 — Design-token foundation (radius + type + cards)** *(BUILT 2026-09-04 on `feat/design-tokens-phase-b1`; awaiting review — see §8.2)* | `globalSettings.radius` scale (`{ preset?, applyToButtons? }`: preset → `--radius-sm/-md/-lg` + `.theme-round-*` classes drive every previously-hardcoded card radius; `buttons.primary.cornerRadius` ALWAYS wins for `--theme-radius` unless the merchant flips the explicit `applyToButtons` opt-in — no seed sentinel). `typography.pairing` (7 named font bundles) + `typography.scale` (px table per name, overrides `--text-h*-size` only, stored h1–h6 sizes untouched) + `typography.baseFontSize`. `productCards.cardStyle` extension (`elevated`/`outlined-hover`/`filled`/`polaroid`/`overlay`) + `productCards.imageAspect` / `textAlign` / `density` (card-level `comfortable`/`compact` — padding/name-size/excerpt) + `section.settings.imageAspect`. `prices.salePriceColor` / `salePriceStyle` (`color`/`strikethrough-only`) — replaces the hardcoded `text-red-600`. Same pure-resolver + `var(--token, <literal>)` + SPA-leak-clear + parity-table + no-op discipline as A. | A | **L** |
+| **B2 — Global density scale** *(follow-up PR after B1 lands + is reviewed)* | `globalSettings.density` (`compact`/`cozy`/`comfortable`/`spacious`) → `--section-py` / `--grid-gap` / `--grid-gap-lg` / `--stack-gap`. **Split from B1** because its targets are mostly *responsive* Tailwind classes (`px-4 sm:px-6`, `gap-4 sm:gap-6`, `py-8`) — a byte-identical tokenisation needs a `.theme-*` class + `@media` layer (the `.theme-hover-zoom` / `.theme-logo-img` idiom), a different and wider diff shape than radius's direct literal swap; and `section.settings.spacing` already covers per-section spacing, so the marginal value is lower. Touches ~every `theme-sections/*Section.tsx` inner wrapper + the grid `gap-*`. | A, B1 | **M** |
 | **C — Header/footer layout + mobile nav** | Named header presets (seed `rows` + zones). `header.settings.scrollBehavior` (`shrink`/`hide-on-scroll`/`reveal-on-hero`) + `transparentOverHero` wiring + `height`/`contentWidth`/`separator`/`announcementPosition`. Footer presets + `showPaymentIcons` + bottom bar. **The mobile nav drawer / bottom-bar / fullscreen components** (the one genuinely new interactive build). | A | **L** |
 | **D — Card & button micro-interactions** | `animations.cardHoverEffect` enum extension (`underline`/`quick-add-slide`/`overlay`/`desaturate`/`shadow`/`tilt`). `buttons.primary.hoverEffect`/`pressEffect` + `buttons.secondary` rendered variant + `pillCornerRadius`. `productCards.wishlistAnimation`. `animations.imageLoad: fade` (skeleton→image crossfade). `inputFields.focusAnimation`. `icons.corners` + `icons.size`. | A, B | **M** |
 | **E — Section polish** | `product_tabs` magic-line + crossfade + height animate. `trust_bar` `rating_badge` count-up. Hero `kenBurns` / `parallax` / `indicatorStyle` / `slideTransition` extensions. `brands.scrolling` marquee. Section separators (`section.settings.separator`) + overlay/scrim + `contentWidth`. Newsletter `successAnimation`. Accordion (FAQ/filter) animation. | A, B | **M** |
@@ -1169,16 +1173,16 @@ case per new type, and a per-template validation spec once templates land.
 | **G — Templates** | `THEME_TEMPLATES` (the 4 configs, authored against A–F). Flow A (`fromTemplate` on `CreateThemeDto` + a picker in the library). Flow B (`applyTemplate` + confirm modal with the standalone "Your custom CSS will be replaced." line — D3). Per-template validation spec (D2). | A–F (a template referencing an unbuilt capability just no-ops, so G *can* ship earlier, but the templates would look wrong — ship it last so all four land complete) | **S** (each template is a config literal + picker UI once the capabilities exist) |
 | **I — Icon set** *(parallel; blocks nothing; own sign-off gate)* | Multi-glyph, multi-style icon system. For each of the ~12 storefront icons (search, cart, account, heart, chevron, close, menu, phone, whatsapp, star, truck, shield): **2–3 distinct glyph variants** (e.g. cart: trolley / basket / tote; account: person / circle-person / outline-head), each drawn in all **3 styles** (`line` / `solid` / `duotone`) → **≈ 100+ inline SVGs** in `storefront/lib/icons/`. Config: `globalSettings.icons.style` (global `line`/`solid`/`duotone`) + a per-icon glyph override (proposed `globalSettings.icons.glyphs?: { cart?: 'trolley'\|'basket'\|'tote', account?: …, … }` — final shape decided at the gate). lucide stays the `line` default so **absent config ⇒ today's render exactly**. **Zero new deps** (no second icon package). **GATE:** before drawing any SVG, come back with (a) the exact glyph-variant list per icon, (b) the total SVG count, (c) the final config shape, and (d) a flag on whether the admin picker UI (12 icons × glyph choice + style) needs its own design pass. | — | **M** (SVG authoring) + a design-pass flag |
 
-**Dependency summary:** A blocks everything. B blocks D/E/G. C is independent of B
-(both only need A). G needs A–F for the templates to be complete but is
-structurally independent (the create/apply flow). Phase I is fully parallel and
-gated on its own glyph-list sign-off.
+**Dependency summary:** A blocks everything. B1 needs A; B2 needs B1. D/E/G need
+B1. C is independent of B (both only need A). G needs A–F for the templates to be
+complete but is structurally independent (the create/apply flow). Phase I is
+fully parallel and gated on its own glyph-list sign-off.
 
-**Current commitment:** Phases **A + B**. After B, re-evaluate C–F against the real
-token foundations before committing further. A + B + the 4 templates (Flow A)
-alone already delivers four visibly distinct starting points (they'd lack
-fly-to-cart, magic-line, the mobile drawer, decorative motion — degrading
-gracefully to no-ops).
+**Current commitment:** Phases **A + B (B1 then B2)**. After B, re-evaluate C–F
+against the real token foundations before committing further. A + B + the 4
+templates (Flow A) alone already delivers four visibly distinct starting points
+(they'd lack fly-to-cart, magic-line, the mobile drawer, decorative motion —
+degrading gracefully to no-ops).
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1309,6 +1313,88 @@ table in the PR description, literal-for-literal. (3) Full existing suites green
 `tsc`+jest; admin `tsc`+build+vitest; lint +0 all three). (4) Deploy-time visual
 pass on the 4 themed prod shops (reviewer / post-merge — the browser extension is
 not connected this session).
+
+---
+
+### 8.2 Phase B1 — detailed plan (approved 2026-09-04, one change) — BUILT
+
+**Deliverable:** the radius + typography + product-card design-token layer. No
+merchant-visible radius/type/card/sale-colour change on any shop that hasn't set
+the new keys. **Landed on `feat/design-tokens-phase-b1` (2026-09-04).**
+
+**New optional keys** (all in EXISTING containers — RESET-not-migrated safe):
+
+- `globalSettings.radius?: { preset?: 'sharp'|'subtle'|'rounded'|'soft'|'pill'; applyToButtons?: boolean }`
+  (`DEFAULT_THEME_CONFIG.globalSettings.radius = {}`, inert).
+- `typography.pairing?` (7 named bundles), `typography.scale?: 'compact'|'default'|'spacious'|'dramatic'`,
+  `typography.baseFontSize?: 14|15|16|17`.
+- `productCards.cardStyle?` (extended: `elevated`/`outlined-hover`/`filled`/`polaroid`/`overlay`),
+  `productCards.imageAspect?: 'square'|'portrait'|'landscape'|'tall'`, `productCards.textAlign?: 'left'|'center'`,
+  `productCards.density?: 'comfortable'|'compact'`, `section.settings.imageAspect?` (per-section override).
+- `prices.salePriceColor?: string`, `prices.salePriceStyle?: 'color'|'strikethrough-only'`.
+
+**Radius precedence — no seed sentinel (the one approved change).** The
+`cornerRadius !== 8` guess is dropped. `buttons.primary.cornerRadius` ALWAYS drives
+`--theme-radius` (buttons, newsletter input, the Featured/ImageText/ProductGrid
+section image containers) unless the merchant explicitly turns on
+`radius.applyToButtons`, in which case the scale's `--radius-md` takes over.
+Picked the explicit opt-in flag over a nullable `cornerRadius` because
+`cornerRadius` is a shared `buttons.primary`+`.secondary` field written
+unconditionally today (nullable would be the only nullable dimension field +
+an admin Slider retrofit); the flag is one optional boolean on the already-opt-in
+`radius` category. `resolveThemeRadius(radius, cornerRadius)` in `lib/radius.ts`.
+
+- `radius.preset` set → `resolveRadiusCssVars` writes `--radius-sm/-md/-lg`; the
+  new `.theme-round-sm/-md/-lg` classes (fallbacks = the exact pre-B1 Tailwind
+  literals `0.375rem`/`0.5rem`/`0.75rem` = `rounded-md`/`-lg`/`-xl`) follow them.
+- `preset: 'rounded'` (md 8 = `rounded-lg`, lg 12 = `rounded-xl`) is a deliberate
+  near-today baseline, NOT byte-identical to unset — the only true no-op is
+  `radius` unset / `{}` / no `preset`.
+
+**Typography.** `resolveTypographyPairing(pairing)` → 4 role fonts or `null`
+(unset ⇒ per-role `bodyFont`/`headingFont`/… reads run as today).
+`resolveScaleSizes(scale)` → `{h1..h6}` px table or `null` (unset ⇒
+`applyHeadingPreset` writes each preset's own `.size`; the stored h1–h6 sizes
+are NEVER mutated, so unsetting `scale` restores them). `scale` set → override
+`--text-h{n}-size` only, everything else still from `applyHeadingPreset`; admin
+greys the per-heading Size sliders. `baseFontSize` set → `--text-paragraph-size`
+= `${n}px` (else the existing `paragraph.size`).
+
+**Cards.** New pure `lib/product-card-style.ts` — `resolveCardStyleClass`,
+`resolveCardAspectClass`, `cardDensity`, `cardTextAlignClass` (each `undefined` ⇒
+today's default: `minimal` `""` / `aspect-square` / `mt-3` + excerpt / left).
+`overlay` style renders title+price in a gradient strip over the image
+(`GridProductCard` branch). Section `settings.cardStyle` / `settings.imageAspect`
+win over the global `productCards.*`. `GridProductCard`'s image container KEEPS
+`style={{ borderRadius: "var(--theme-radius, 8px)" }}` — moving it to `--radius-md`
+would change a shop with a custom `cornerRadius` (byte-identical forbids it).
+
+**Prices.** `--color-sale-price` (`@theme`, default `#dc2626` = `text-red-600`),
+overwrite-healed from `prices.salePriceColor` in `applyThemeConfigOverrides`.
+`ProductCard`'s `PriceDisplay` discounted span → `text-sale-price`;
+`salePriceStyle: 'strikethrough-only'` drops the colour class entirely.
+
+**SPA-leak guard.** `applyRadiusCssVars(root, radius)` sets `--radius-*` and
+removes any it doesn't define (mirrors `applyMotionCssVars`) — unit-tested incl.
+the set-then-unset transition. The `--theme-*-font` / `--text-*` / `--color-sale-price`
+vars are already overwrite-healed (every themed shop writes them).
+
+**No-op proof:** (1) `radius.test.ts` (`resolveRadiusCssVars` / `applyRadiusCssVars`
+/ `resolveThemeRadius`), `product-card-style.test.ts`, `theme-typography.test.ts`
+new cases — every `resolve*(undefined)` → the today value. (2) Parity table in the
+PR body, literal-for-literal, plus the 4-themed-prod-shop regression rows
+(Testadmin/1, Irmain/7, Dubai Fresh Flowers/11, DFF/12 — all `cornerRadius: 8`,
+`radius` + every B1 key `undefined`; DFF's `h1.size: 36` unaffected since `scale`
+is unset → `--theme-radius` before = after = `"8px"`). (3) Full suites + builds
+green — backend `tsc` + `jest themes` 41/41 + lint +0 (261); storefront `tsc` +
+build + vitest 404/404 + lint +0 (33); admin `tsc` + build + `RadiusSettings` +
+`ProductCardsSettings` 7/7 + lint +0 (77). (4) Deploy-time visual pass on the 4
+themed prod shops (reviewer / post-merge).
+
+**Deferred to B2 (separate PR):** the global density scale
+(`--section-py` / `--grid-gap` via `.theme-*` classes + `@media` — responsive
+Tailwind classes need a class layer, a wider shallow diff). `productCards.density`
+(card-level enum) stays in B1.
 
 ---
 

@@ -180,6 +180,11 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       h6: { font: 'heading', size: 16, lineHeight: 'normal', letterSpacing: 'normal', case: 'default' },
     },
     pageLayout: { width: 'normal' },
+    // Phase B1 — inert default. `resolveRadiusCssVars` no-ops on `{}` (no
+    // `preset`), so every `var(--radius-*, <literal>)` resolves to the exact
+    // pre-B1 Tailwind value. `deepMergeDefaults` backfills `{}` into older
+    // themes harmlessly.
+    radius: {},
     animations: {
       pageTransition: false,
       productCardTransition: true,
