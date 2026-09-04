@@ -215,7 +215,7 @@ const atelier: ThemeConfig = (() => {
   c.sections = [
     announcementOff(0),
     hero(1, 'Flowers for the occasions that matter', 'Enquire', { entrance: 'mask-reveal', settings: { contentPosition: 'bottom-left', height: 'large', heroLayout: 'full_bleed', showSlideIndicators: false } }),
-    richText(2, '<p>A studio practice. Seasonal stems, considered arrangements, and a small number of weddings and events each year.</p>', { entrance: 'fade-in', settings: { contentWidth: 'narrow' } }),
+    richText(2, '<p>A studio practice. Seasonal stems, considered arrangements, and a small number of weddings and events each year.</p>', { entrance: 'fade-in', schemeId: 'scheme-2', settings: { contentWidth: 'narrow' } }),
     featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 2, aspectRatio: 'portrait', overlayText: true } }),
     productGrid(4, { settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait' } }),
     imageText(5, 'Every arrangement is made to order in our studio the morning of delivery.', { entrance: 'slide-left' }),
@@ -269,7 +269,7 @@ const market: ThemeConfig = (() => {
         { icon: 'star', text: 'Rated 4.8 / 5' },
       ],
       { rating: 4.8, label: '2,000+ reviews' },
-      { entrance: 'fade-in' },
+      { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }),
@@ -299,7 +299,12 @@ const bloom: ThemeConfig = (() => {
   g.animations.cardHoverEffect = 'rise'; // deferred target: 'tilt'
   g.animations.addToCart = false;
   g.animations.pageTransition = false;
-  g.buttons.primary.cornerRadius = 9999;
+  // Deliberately NOT setting buttons.primary.cornerRadius here (found during
+  // the scratch-shop pass): --theme-radius is shared between buttons AND the
+  // Featured/ImageText/ProductGrid section image containers (B1), so a
+  // cornerRadius: 9999 meant only for pill buttons rendered every collection
+  // tile as an ellipse. Pill buttons need buttons.pillCornerRadius, a
+  // separate, still-dead field (see the deferred block) — not this one.
   g.productCards.cardStyle = 'elevated';
   g.productCards.imageAspect = 'portrait';
   g.productCards.density = 'comfortable';
@@ -312,7 +317,7 @@ const bloom: ThemeConfig = (() => {
     announcement(0, 'Free gift wrap on every order'),
     hero(1, 'Gifting made joyful', 'Start a gift', { entrance: 'blur-in', settings: { height: 'large', showSlideIndicators: true } }),
     featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'portrait', overlayText: true } }),
-    imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up' }),
+    imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up', schemeId: 'scheme-2' }),
     productGrid(4, { entrance: 'scale-in', settings: { columns: 3, cardStyle: 'elevated', imageAspect: 'portrait', motion: { entrance: 'scale-in', animateOnce: false } } }),
     testimonials(5, [
       { quote: 'Arrived exactly on time and looked even better than the photo.', author: 'Reem A.', rating: 5 },
@@ -373,7 +378,7 @@ const heritage: ThemeConfig = (() => {
     ], { rating: 4.9, label: 'Trusted by thousands' }, { entrance: 'fade-in' }),
     featuredCollections(3, 'Our collections', { entrance: 'fade-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: false } }),
     productGrid(4, { settings: { columns: 3, cardStyle: 'bordered', imageAspect: 'landscape' } }),
-    imageText(5, 'A family business for four decades, serving homes, hotels, and offices across the country.', { entrance: 'none' }),
+    imageText(5, 'A family business for four decades, serving homes, hotels, and offices across the country.', { entrance: 'none', schemeId: 'scheme-2' }),
     richText(6, '<p>Sympathy tributes, corporate contracts, and weekly office flowers. Speak to our team for bespoke arrangements.</p>', { entrance: 'fade-in' }),
     newsletter(7, 'Seasonal updates', 'Sign up for occasional news and offers.'),
   ];
