@@ -71,9 +71,9 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
   const overlayText = settings.overlayText === true;
 
   return (
-    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between theme-heading-gap">
           {titleBlock?.visible !== false && (
             <h2
               className="text-xl font-semibold"

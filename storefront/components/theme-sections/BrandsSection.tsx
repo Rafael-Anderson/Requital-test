@@ -54,14 +54,14 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
   if (shown.length === 0) {
     if (!previewMode) return null;
     return (
-      <div className="mx-auto px-4 py-8 text-center text-sm text-zinc-400" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+      <div className="mx-auto px-4 theme-section-py text-center text-sm text-zinc-400" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         No brands yet. Add brands under Products to show them here.
       </div>
     );
   }
 
   return (
-    <div className="mx-auto px-4 sm:px-6 py-8" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="mx-auto px-4 sm:px-6 theme-section-py" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {heading && (
         <h2 className="text-xl font-semibold mb-5 text-center" style={themeTextPresetStyle("h2")}>
           {heading}

@@ -46,6 +46,12 @@ describe('assertValidThemeConfig', () => {
     expect(() => assertValidThemeConfig(config)).not.toThrow();
   });
 
+  it('accepts a populated globalSettings.density (Phase B2 — opaque to the validator)', () => {
+    const config = baseConfig();
+    config.globalSettings.density = { preset: 'spacious' };
+    expect(() => assertValidThemeConfig(config)).not.toThrow();
+  });
+
   it('rejects an unknown top-level key', () => {
     const config = { ...baseConfig(), notARealKey: true };
     expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);

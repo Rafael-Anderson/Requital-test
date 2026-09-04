@@ -6,6 +6,7 @@ import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from ".
 import { resolveThemeCssVars } from "./theme-css-vars";
 import { applyMotionCssVars } from "./motion";
 import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
+import { applyDensityCssVars } from "./density";
 import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
@@ -427,6 +428,17 @@ function applyRadiusOverrides(config: ThemeConfig | null) {
   applyRadiusCssVars(document.documentElement.style, config?.globalSettings?.radius);
 }
 
+// Phase B2 (design-token foundation) — writes --section-py / --grid-gap /
+// --grid-gap-m / --section-heading-gap from globalSettings.density, and clears
+// any this theme doesn't define (SPA-leak guard). `density` unset / {} / no
+// `preset` ⇒ nothing written ⇒ every `.theme-section-py` / `.theme-grid-gap` /
+// `.theme-heading-gap` class falls back to its pre-B2 Tailwind literal. Set/
+// clear loop is applyDensityCssVars in lib/density.ts (unit-tested, incl. the
+// set-then-unset transition).
+function applyDensityOverrides(config: ThemeConfig | null) {
+  applyDensityCssVars(document.documentElement.style, config?.globalSettings?.density);
+}
+
 export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -586,6 +598,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
     applyThemeConfigOverrides(themeConfig);
     applyMotionOverrides(themeConfig);
     applyRadiusOverrides(themeConfig);
+    applyDensityOverrides(themeConfig);
   }, [shop, themeConfig]);
 
   return (

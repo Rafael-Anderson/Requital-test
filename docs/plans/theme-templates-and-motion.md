@@ -668,15 +668,45 @@ Per-element icon override already exists (`resolveIconElementStyle`).
 All Google fonts load via the existing dynamic `<link>` mechanism
 (`loadGoogleFont` in `shop-context.tsx`) — no new dep, no `next/font` change.
 
-### 5.3 Spacing / density scale
+### 5.3 Spacing / density scale — BUILT as Phase B2 (see §8.2b)
 
-**`globalSettings.density?: 'compact' | 'cozy' | 'comfortable' | 'spacious'`** —
-sets a `--space-scale` multiplier + `--section-padding-y` / `--section-gap` /
-`--card-gap` tokens that section components read instead of hardcoded
-`py-8`/`py-12`/`gap-4 sm:gap-6`. Section-level `settings.spacing` (exists) becomes
-the override; `density` sets the default. Absent ⇒ today's values via
-`var(--section-padding-y, 2rem)` etc. Effort **M** (wiring across ~8 section
-components).
+**`globalSettings.density?: { preset?: 'compact' | 'cozy' | 'comfortable' |
+'spacious' }`** — drives `--section-py` (was `py-8`), `--grid-gap` +
+`--grid-gap-m` (was `gap-4 sm:gap-6`), `--section-heading-gap` (was `mb-4`) via
+`.theme-section-py` / `.theme-grid-gap` / `.theme-heading-gap` classes on the
+homepage sections. `density` unset ⇒ nothing written ⇒ every class falls back to
+its pre-B2 Tailwind literal (byte-identical).
+
+Revisions from this original sketch, made when B2 was built:
+
+- **Object wrapper, not a bare enum.** `{ preset? }`, matching B1's `radius` —
+  see the convention note below. `DEFAULT_THEME_CONFIG.globalSettings.density = {}`.
+- **No `--space-scale` multiplier** — an explicit per-preset px table
+  (`lib/density.ts`); a single multiplier over `py` + gaps + margins compounds
+  unpredictably (same call Phase A made for the type scale).
+- **`py-12` (Hero) is out** — a deliberate showcase one-off. Also out: the
+  horizontal gutter `px-4 sm:px-6`, Newsletter/Footer/TrustBar bands, the
+  non-product grid gaps. B2 tokenises the standard `py-8` body sections + the
+  product-grid `gap-4 sm:gap-6` + the `mb-4` heading gap only.
+- **Precedence is additive, not override.** `section.settings.spacing` is outer
+  inline padding on `<section>`; `--section-py` is the inner content padding.
+  They stack, exactly as `section.settings.spacing` already stacks on `py-8`
+  today — not a replace.
+
+### Conventions these three phases now share (state once, not per phase)
+
+1. **A new `globalSettings` category is an object seeded as `{}`** in
+   `DEFAULT_THEME_CONFIG`, never a bare scalar — so
+   `updateGlobalSettingsCategory` (`admin/lib/useThemeEditor.ts`, spreads the
+   category value as an object) and `deepMergeDefaults`
+   (`backend/src/themes/themes.service.ts`, backfills `{}` inertly onto old
+   themes) both work with no special-casing. Now `motion`, `radius`, `density`.
+2. **The near-today-baseline convention.** Phase A's `intensity: 'standard'`,
+   B1's `radius` preset, and B2's `density: 'cozy'` each reproduce today's values
+   *approximately* — but the **only** guaranteed byte-identical no-op is the
+   setting left **unset** (resolver returns `{}`, nothing is written, every
+   `var()` / class falls to its literal). A preset is a starting point, not a
+   promise of identity.
 
 ### 5.4 Corner-radius language
 
@@ -1165,7 +1195,7 @@ case per new type, and a per-template validation spec once templates land.
 |---|---|---|---|
 | **A — Motion foundation** *(BUILT 2026-09-04 on `feat/motion-foundation-phase-a`; awaiting review — see §8.1)* | `globalSettings.motion` category + `applyMotionOverrides` + the `--motion-*` token table **including the sub-640px mobile tier** (mobile values shipped from the start: under 639px `intensity` steps down one level and `parallax` / `kenBurns` / `decorativeParallax` / `customCursor` are force-disabled — doing this now avoids retouching every token later). Rewrite every hardcoded duration/distance/scale/easing in `globals.css` + the animated components as `var(--motion-*, <today's literal>)` (exhaustive file-by-file list in §8.1). The single blanket `prefers-reduced-motion` rule replacing the per-class blocks (+ the `transitionend`/`animationend` listener audit the `0.01ms` value protects). `useScrollValue()` shared hook. Extend `ScrollAnimatedWrapper` for `motion.entrance` vocab + `stagger` + `animateOnce` + `trigger`. Type mirrors across backend/admin/storefront. **No-op proven** by both computed-style assertions and a preview visual pass (§8.1). | — | **L** |
 | **B1 — Design-token foundation (radius + type + cards)** *(BUILT 2026-09-04 on `feat/design-tokens-phase-b1`; awaiting review — see §8.2)* | `globalSettings.radius` scale (`{ preset?, applyToButtons? }`: preset → `--radius-sm/-md/-lg` + `.theme-round-*` classes drive every previously-hardcoded card radius; `buttons.primary.cornerRadius` ALWAYS wins for `--theme-radius` unless the merchant flips the explicit `applyToButtons` opt-in — no seed sentinel). `typography.pairing` (7 named font bundles) + `typography.scale` (px table per name, overrides `--text-h*-size` only, stored h1–h6 sizes untouched) + `typography.baseFontSize`. `productCards.cardStyle` extension (`elevated`/`outlined-hover`/`filled`/`polaroid`/`overlay`) + `productCards.imageAspect` / `textAlign` / `density` (card-level `comfortable`/`compact` — padding/name-size/excerpt) + `section.settings.imageAspect`. `prices.salePriceColor` / `salePriceStyle` (`color`/`strikethrough-only`) — replaces the hardcoded `text-red-600`. Same pure-resolver + `var(--token, <literal>)` + SPA-leak-clear + parity-table + no-op discipline as A. | A | **L** |
-| **B2 — Global density scale** *(follow-up PR after B1 lands + is reviewed)* | `globalSettings.density` (`compact`/`cozy`/`comfortable`/`spacious`) → `--section-py` / `--grid-gap` / `--grid-gap-lg` / `--stack-gap`. **Split from B1** because its targets are mostly *responsive* Tailwind classes (`px-4 sm:px-6`, `gap-4 sm:gap-6`, `py-8`) — a byte-identical tokenisation needs a `.theme-*` class + `@media` layer (the `.theme-hover-zoom` / `.theme-logo-img` idiom), a different and wider diff shape than radius's direct literal swap; and `section.settings.spacing` already covers per-section spacing, so the marginal value is lower. Touches ~every `theme-sections/*Section.tsx` inner wrapper + the grid `gap-*`. | A, B1 | **M** |
+| **B2 — Global density scale** *(BUILT 2026-09-04 on `feat/design-tokens-phase-b2`; awaiting review — see §8.2b)* | `globalSettings.density` (`{ preset?: compact/cozy/comfortable/spacious }`) → `--section-py` (was `py-8`) + `--grid-gap`/`--grid-gap-m` (was `gap-4 sm:gap-6`) + `--section-heading-gap` (was `mb-4`), via `.theme-section-py` / `.theme-grid-gap` / `.theme-heading-gap` classes on the standard body sections. Responsive `gap` reproduced byte-identically with one `@media (max-width: 639px)` block (the Phase-A motion-tier idiom). `section.settings.spacing` is unchanged — an outer layer that stacks, not an override. Same pure-resolver + SPA-leak-clear + parity-table + no-op discipline as A / B1. | A, B1 | **M** |
 | **C — Header/footer layout + mobile nav** | Named header presets (seed `rows` + zones). `header.settings.scrollBehavior` (`shrink`/`hide-on-scroll`/`reveal-on-hero`) + `transparentOverHero` wiring + `height`/`contentWidth`/`separator`/`announcementPosition`. Footer presets + `showPaymentIcons` + bottom bar. **The mobile nav drawer / bottom-bar / fullscreen components** (the one genuinely new interactive build). | A | **L** |
 | **D — Card & button micro-interactions** | `animations.cardHoverEffect` enum extension (`underline`/`quick-add-slide`/`overlay`/`desaturate`/`shadow`/`tilt`). `buttons.primary.hoverEffect`/`pressEffect` + `buttons.secondary` rendered variant + `pillCornerRadius`. `productCards.wishlistAnimation`. `animations.imageLoad: fade` (skeleton→image crossfade). `inputFields.focusAnimation`. `icons.corners` + `icons.size`. | A, B | **M** |
 | **E — Section polish** | `product_tabs` magic-line + crossfade + height animate. `trust_bar` `rating_badge` count-up. Hero `kenBurns` / `parallax` / `indicatorStyle` / `slideTransition` extensions. `brands.scrolling` marquee. Section separators (`section.settings.separator`) + overlay/scrim + `contentWidth`. Newsletter `successAnimation`. Accordion (FAQ/filter) animation. | A, B | **M** |
@@ -1395,6 +1425,89 @@ themed prod shops (reviewer / post-merge).
 (`--section-py` / `--grid-gap` via `.theme-*` classes + `@media` — responsive
 Tailwind classes need a class layer, a wider shallow diff). `productCards.density`
 (card-level enum) stays in B1.
+
+**Follow-up hotfix (`fix/radius-tokens-out-of-theme-block`, merged separately):**
+B1 named its runtime radius tokens `--radius-sm/-md/-lg` in the `globals.css`
+`@theme` block. In Tailwind v4 `--radius-*` is a theme namespace — the
+`rounded-sm/-md/-lg` utilities compile to `var(--radius-md)` with no fallback, so
+defining those properties anywhere (`@theme` or `:root`) moved the whole utility
+family +2–4px on ~88 unrelated call sites. Renamed to `--theme-round-*` (outside
+every TW namespace); `.theme-round-*` behaviour and B1's sections are unchanged.
+Guarded by `storefront/app/globals.css.test.ts`.
+
+---
+
+### 8.2b Phase B2 — detailed plan (approved 2026-09-04) — BUILT
+
+**Deliverable:** the global density scale. No merchant-visible spacing change on
+any shop that hasn't set `globalSettings.density`. **Landed on
+`feat/design-tokens-phase-b2` (2026-09-04).**
+
+**Shape:** `globalSettings.density?: { preset?: 'compact' | 'cozy' | 'comfortable'
+| 'spacious' }` — an **object wrapper**, not §5.3's original bare enum (which
+predates B1 shipping `radius` as an object). Object so
+`updateGlobalSettingsCategory` can write it and `DEFAULT_THEME_CONFIG` can seed
+`{}` inertly. `DEFAULT_THEME_CONFIG.globalSettings.density = {}`.
+
+**Three tokens** (all on plain `:root` + `.theme-*` class fallbacks — NOT
+`@theme`, per the B1 hotfix rule):
+
+| token | class | replaces | fallback |
+|---|---|---|---|
+| `--section-py` | `.theme-section-py` (`padding-block`) | `py-8` on the standard body-section content `<div>` (9 sites / 7 components) | `2rem` |
+| `--grid-gap` + `--grid-gap-m` | `.theme-grid-gap` (`gap`) | `gap-4 sm:gap-6` on the product grids (3 sites / 2 components) | `1.5rem` / `1rem` |
+| `--section-heading-gap` | `.theme-heading-gap` (`margin-bottom`) | `mb-4` on the section title → content wrapper (4 sites) | `1rem` |
+
+Per-preset px table in `storefront/lib/density.ts` (`resolveDensityCssVars` →
+`{}` on unset / `{}` / unknown; `applyDensityCssVars` sets + clears over
+`DENSITY_CSS_VAR_NAMES`, SPA-leak guard, unit-tested incl. set-then-unset).
+`shop-context.tsx`'s `applyDensityOverrides` runs last in the merged
+`[shop, themeConfig]` effect. `cozy` reproduces today's values but the only
+guaranteed no-op is `density` unset (near-today-baseline convention below).
+
+**`.theme-grid-gap` @media — byte-identical at both breakpoints.** Tailwind
+`gap-4 sm:gap-6` = `1rem` unconditionally, `1.5rem` at `min-width: 640px`. The
+class inverts the cascade like the Phase-A motion mobile tier: the `≥640px`
+value is the base declaration, one `@media (max-width: 639px)` block overrides it
+with the `<640px` value. Verified in the built CSS (base rule precedes the media
+block): at every **integer** viewport width the two match exactly (639 → mobile,
+640 → desktop); the only divergence is a sub-pixel fractional band, the same
+already-accepted trade-off as the motion tier (§9.2).
+
+**Precedence — additive, not override.** `section.settings.spacing`
+(`{top,bottom,left,right}` px) is inline `padding-*` on the **outer `<section>`**
+in `SectionWrapper.tsx`, unchanged by B2. `--section-py` drives `padding-block`
+on the **inner content `<div>`**. They compose — exactly as
+`section.settings.spacing` already stacks on the hardcoded `py-8` today. Worked
+example (Testadmin/1, the one prod shop with section spacing set —
+`featured_collections`, `{top:5,bottom:4}`): today `5px + 32px` top; B2 with
+`density` unset `5px + var(--section-py, 2rem)` = `5px + 32px` — identical.
+§5.3's "becomes the override" wording is corrected below.
+
+**OUT of scope** (flagged): the horizontal gutter `px-4 sm:px-6` (a page gutter,
+not density); Hero `px-6 py-12`; Newsletter/Footer `py-10`; TrustBar `py-5`;
+AnnouncementBar/Header chrome; the non-product grid gaps
+(`FeaturedCollections` `gap-3`, `Testimonials` `gap-6`, `Brands` `gap-x/y-6`,
+`ImageText` `gap-8`); `RichText` `space-y-4`; `BrandsSection` `mb-5` /
+`ProductTabs` tab-row `mb-6`; legacy `home-layouts/*` (unreachable — no
+`themeConfig`); a new `section.settings.gap` per-section override (no prod
+section carries one; speculative).
+
+**No-op proof:** (1) `density.test.ts` — `resolveDensityCssVars(undefined | null
+| {} | { preset: bogus })` → `{}`; each preset → its 4 vars; `cozy` = today's
+values; `applyDensityCssVars` set-then-unset clears all 4. `globals.css.test.ts`
+gains a `postcss.parse` assertion (a `*/`-in-comment silently dropped every
+hand-written class during B2 dev — build still exited 0). (2) Parity table in the
+PR body (the file-by-file class → fallback map) + the 4-themed-prod-shop
+regression rows (none has `density`; `deepMergeDefaults` backfills `{}` ⇒
+`resolveDensityCssVars({})` → `{}`; only Testadmin/1 has `section.settings.spacing`
+— additive, unchanged). (3) Full suites + builds green — backend `tsc` +
+`jest themes` 42/42 (+1 validation case); storefront `tsc` + build + vitest
+414/414 (+`density` / +`globals.css` parse) + lint +0 (33); admin `tsc` + build +
+`DensitySettings` 3/3 + lint +0 (77). (4) Deploy-time visual pass on the 4 themed
+prod shops (post-merge).
+
+**Deferred:** nothing — B2 completes the design-token foundation (A + B).
 
 ---
 

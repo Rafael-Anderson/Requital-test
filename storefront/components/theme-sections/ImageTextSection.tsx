@@ -20,7 +20,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
   if (!imageUrl && !text) return null;
 
   return (
-    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       <div className={`flex flex-col sm:flex-row items-center gap-8 ${imageOnRight ? "sm:flex-row-reverse" : ""}`}>
         {imageUrl && imageBlock && (
           <div

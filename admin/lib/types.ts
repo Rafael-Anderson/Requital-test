@@ -1153,6 +1153,11 @@ export interface RadiusSettings {
   preset?: RadiusPreset;
   applyToButtons?: boolean;
 }
+// Phase B2 — the density scale. Mirrors backend theme-config.types.ts.
+export type DensityPreset = "compact" | "cozy" | "comfortable" | "spacious";
+export interface DensitySettings {
+  preset?: DensityPreset;
+}
 export type CardStyle =
   | "minimal"
   | "bordered"
@@ -1504,6 +1509,7 @@ export interface GlobalThemeSettings {
   typography: TypographySettings;
   pageLayout: PageLayoutSettings;
   radius?: RadiusSettings;
+  density?: DensitySettings;
   animations: AnimationSettings;
   motion?: MotionSettings;
   badges: BadgeSettings;

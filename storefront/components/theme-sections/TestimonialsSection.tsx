@@ -43,17 +43,17 @@ export default function TestimonialsSection({ sectionId, blocks }: { sectionId: 
 
   if (testimonials.length === 0) {
     return (
-      <div className="px-4 sm:px-6 py-8 mx-auto text-center" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+      <div className="px-4 sm:px-6 theme-section-py mx-auto text-center" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         <p className="text-sm text-zinc-500">Customer testimonials coming soon.</p>
       </div>
     );
   }
 
   return (
-    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {heading && headingBlock && (
         <h2
-          className="text-xl font-semibold mb-4 text-center"
+          className="text-xl font-semibold theme-heading-gap text-center"
           {...editableAttrs(previewMode, { id: headingBlock.id, sectionId, type: "heading", reorderable: true })}
           style={{ ...themeTextPresetStyle("h2"), ...resolveTextElementStyle(headingBlock.settings) }}
         >

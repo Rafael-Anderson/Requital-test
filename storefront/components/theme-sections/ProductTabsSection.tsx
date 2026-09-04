@@ -76,9 +76,9 @@ export default function ProductTabsSection({
   const loading = products === undefined;
 
   return (
-    <div className="px-4 sm:px-6 py-8 mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {sectionTitle && (
-        <h2 className="text-xl font-semibold mb-4" style={themeTextPresetStyle("h2")}>
+        <h2 className="text-xl font-semibold theme-heading-gap" style={themeTextPresetStyle("h2")}>
           {sectionTitle}
         </h2>
       )}
@@ -101,7 +101,7 @@ export default function ProductTabsSection({
       </div>
 
       {loading ? (
-        <div className={`grid ${columns} gap-4 sm:gap-6`}>
+        <div className={`grid ${columns} theme-grid-gap`}>
           {Array.from({ length: Math.min(productLimit, 8) }).map((_, i) => (
             <div
               key={i}
@@ -113,7 +113,7 @@ export default function ProductTabsSection({
       ) : products.length === 0 ? (
         <p className="text-sm text-price-main">No products in this collection yet.</p>
       ) : (
-        <div className={`grid ${columns} gap-4 sm:gap-6`}>
+        <div className={`grid ${columns} theme-grid-gap`}>
           {products.map((product) => (
             <ProductCard key={product.id} product={product} orientation="grid" />
           ))}
