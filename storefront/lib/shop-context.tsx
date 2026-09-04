@@ -341,7 +341,7 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     // Phase B1 — `buttons.primary.cornerRadius` ALWAYS drives --theme-radius
     // (buttons, the newsletter input, the Featured/ImageText/ProductGrid
     // section image containers) unless the merchant explicitly turns on
-    // `radius.applyToButtons`, in which case the radius scale's --radius-md
+    // `radius.applyToButtons`, in which case the radius scale's md value
     // takes over. No seed sentinel. See resolveThemeRadius in lib/radius.ts.
     root.style.setProperty("--theme-radius", resolveThemeRadius(g.radius, g.buttons.primary.cornerRadius));
     root.style.setProperty("--theme-button-border-width", `${g.buttons.primary.borderThickness}px`);
@@ -412,11 +412,14 @@ function applyMotionOverrides(config: ThemeConfig | null) {
   applyMotionCssVars(document.documentElement.style, config?.globalSettings?.motion);
 }
 
-// Phase B1 (design-token foundation) — writes the --radius-sm/-md/-lg scale
-// from globalSettings.radius, and clears any this theme doesn't define
+// Phase B1 (design-token foundation) — writes the --theme-round-sm/-md/-lg
+// scale from globalSettings.radius, and clears any this theme doesn't define
 // (SPA-leak guard). `radius` unset / {} / no `preset` ⇒ nothing written ⇒
-// every `var(--radius-*, <literal>)` / `.theme-round-*` class resolves to the
-// exact pre-B1 Tailwind value. `applyToButtons` is NOT handled here — it
+// every `var(--theme-round-*, <literal>)` in the `.theme-round-*` classes
+// resolves to its pre-B1 literal. (The name is --theme-round-*, NOT --radius-*:
+// the latter is a Tailwind v4 theme namespace and would move every `rounded-*`
+// utility site-wide — B1's original bug, fixed in the follow-up hotfix.)
+// `applyToButtons` is NOT handled here — it
 // gates the --theme-radius bridge inside applyThemeConfigOverrides. Set/clear
 // loop is applyRadiusCssVars in lib/radius.ts (unit-tested, incl. the
 // set-then-unset transition).

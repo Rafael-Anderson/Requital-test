@@ -18,9 +18,9 @@ describe("resolveRadiusCssVars", () => {
 
   it("`rounded` is a near-today baseline (md 8 = rounded-lg, lg 12 = rounded-xl) — not the no-op", () => {
     expect(resolveRadiusCssVars({ preset: "rounded" })).toEqual({
-      "--radius-sm": "6px",
-      "--radius-md": "8px",
-      "--radius-lg": "12px",
+      "--theme-round-sm": "6px",
+      "--theme-round-md": "8px",
+      "--theme-round-lg": "12px",
     });
   });
 
@@ -29,8 +29,8 @@ describe("resolveRadiusCssVars", () => {
       const v = resolveRadiusCssVars({ preset });
       expect(Object.keys(v).sort()).toEqual([...RADIUS_CSS_VAR_NAMES].sort());
     }
-    expect(resolveRadiusCssVars({ preset: "sharp" })["--radius-lg"]).toBe("0px");
-    expect(resolveRadiusCssVars({ preset: "pill" })["--radius-lg"]).toBe("9999px");
+    expect(resolveRadiusCssVars({ preset: "sharp" })["--theme-round-lg"]).toBe("0px");
+    expect(resolveRadiusCssVars({ preset: "pill" })["--theme-round-lg"]).toBe("9999px");
   });
 
   it("RADIUS_CSS_VAR_NAMES is a superset of every key any preset emits", () => {
@@ -47,7 +47,7 @@ describe("applyRadiusCssVars — the SPA-leak guard", () => {
     const out: string[] = [];
     for (let i = 0; i < style.length; i++) {
       const n = style.item(i);
-      if (n.startsWith("--radius-")) out.push(n);
+      if (n.startsWith("--theme-round-")) out.push(n);
     }
     return out;
   }
@@ -55,11 +55,11 @@ describe("applyRadiusCssVars — the SPA-leak guard", () => {
   it("sets all three for a preset", () => {
     const el = document.createElement("div");
     applyRadiusCssVars(el.style, { preset: "soft" });
-    expect(el.style.getPropertyValue("--radius-md")).toBe("16px");
+    expect(el.style.getPropertyValue("--theme-round-md")).toBe("16px");
     expect(names(el.style).sort()).toEqual([...RADIUS_CSS_VAR_NAMES].sort());
   });
 
-  it("clears every --radius-* on a set → unset transition", () => {
+  it("clears every --theme-round-* on a set → unset transition", () => {
     const el = document.createElement("div");
     applyRadiusCssVars(el.style, { preset: "pill" });
     expect(names(el.style).length).toBe(3);
@@ -74,7 +74,7 @@ describe("applyRadiusCssVars — the SPA-leak guard", () => {
     const el = document.createElement("div");
     applyRadiusCssVars(el.style, { preset: "pill" });
     applyRadiusCssVars(el.style, { preset: "subtle" });
-    expect(el.style.getPropertyValue("--radius-md")).toBe("4px");
+    expect(el.style.getPropertyValue("--theme-round-md")).toBe("4px");
     expect(names(el.style).length).toBe(3);
   });
 });
@@ -92,7 +92,7 @@ describe("resolveThemeRadius — the --theme-radius bridge", () => {
     expect(resolveThemeRadius({ preset: "pill", applyToButtons: false }, 8)).toBe("8px");
   });
 
-  it("applyToButtons + preset ⇒ the scale's --radius-md", () => {
+  it("applyToButtons + preset ⇒ the scale's --theme-round-md", () => {
     expect(resolveThemeRadius({ preset: "soft", applyToButtons: true }, 8)).toBe("16px");
     expect(resolveThemeRadius({ preset: "sharp", applyToButtons: true }, 8)).toBe("0px");
   });

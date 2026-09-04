@@ -196,17 +196,6 @@
      globalSettings.prices.salePriceColor in shop-context.tsx. Use
      `text-sale-price`. */
   --color-sale-price: #dc2626;
-
-  /* Phase B1 — the radius scale (globalSettings.radius). Literal defaults =
-     today's Tailwind values: --radius-sm 0.375rem = rounded-md, --radius-md
-     0.5rem = rounded-lg, --radius-lg 0.75rem = rounded-xl. Overridden per-shop
-     from globalSettings.radius.preset in shop-context.tsx's
-     applyRadiusOverrides. Consumed via the .theme-round-* classes below and,
-     when a preset + radius.applyToButtons are set, via --theme-radius (the
-     button/input/section-image bridge — see resolveThemeRadius in lib/radius.ts). */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
 }
 
 ::selection {
@@ -342,17 +331,20 @@ body {
 
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
-   fallbacks are the exact pre-B1 Tailwind values, so an un-scaled shop is
-   byte-identical: .theme-round-sm = rounded-md, -md = rounded-lg, -lg =
-   rounded-xl. */
+   custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4
+   `--radius-*` is a theme namespace, so defining it (in @theme OR :root)
+   redefines the stock `rounded-sm/-md/-lg` utilities everywhere. `--theme-round-*`
+   is set only by applyRadiusCssVars for a shop with a radius preset; unset, each
+   class falls back to the literal below — .theme-round-sm = the old `rounded-md`
+   (0.375rem), -md = `rounded-lg` (0.5rem), -lg = `rounded-xl` (0.75rem). */
 .theme-round-sm {
-  border-radius: var(--radius-sm, 0.375rem);
+  border-radius: var(--theme-round-sm, 0.375rem);
 }
 .theme-round-md {
-  border-radius: var(--radius-md, 0.5rem);
+  border-radius: var(--theme-round-md, 0.5rem);
 }
 .theme-round-lg {
-  border-radius: var(--radius-lg, 0.75rem);
+  border-radius: var(--theme-round-lg, 0.75rem);
 }
 
 /* New visual theme builder — per-section scroll-triggered entrance
