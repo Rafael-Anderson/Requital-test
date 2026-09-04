@@ -1631,6 +1631,16 @@ export interface Theme extends ThemeListItem {
   config: ThemeConfig;
 }
 
+// Phase G0 — mirrors backend/src/themes/templates.ts's TemplateMeta. Preview
+// metadata only for the library picker; the full ThemeConfig never leaves the
+// server except as a created row.
+export interface ThemeTemplateMeta {
+  key: string;
+  name: string;
+  blurb: string;
+  previewColors: { bg: string; text: string; button: string };
+}
+
 // Mirrors backend/src/theme/constants.ts's HOMEPAGE_LAYOUTS by hand. 'custom'
 // exists in the type (forward-compatible with a future full drag-and-drop
 // builder slotting in as a fourth option) but is deliberately absent from

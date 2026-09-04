@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Palette, Plus, Trash2 } from "lucide-react";
-import { getTheme, resolveImageUrl, listThemes, createTheme, deleteTheme } from "@/lib/api";
-import { HOMEPAGE_LAYOUT_OPTIONS, type ThemeSettings, type ThemeListItem } from "@/lib/types";
+import { getTheme, resolveImageUrl, listThemes, listThemeTemplates, createTheme, deleteTheme } from "@/lib/api";
+import { HOMEPAGE_LAYOUT_OPTIONS, type ThemeSettings, type ThemeListItem, type ThemeTemplateMeta } from "@/lib/types";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
@@ -27,11 +27,15 @@ export default function ThemeLibraryPage() {
   const toast = useToast();
   const [theme, setTheme] = useState<ThemeSettings | null>(null);
   const [themes, setThemes] = useState<ThemeListItem[] | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [templates, setTemplates] = useState<ThemeTemplateMeta[]>([]);
+  const [creating, setCreating] = useState<string | null>(null);
 
   useEffect(() => {
     getTheme().then(setTheme);
     refreshThemes();
+    listThemeTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
   }, []);
 
   function refreshThemes() {
@@ -44,15 +48,19 @@ export default function ThemeLibraryPage() {
   const layoutOption = HOMEPAGE_LAYOUT_OPTIONS.find((o) => o.key === theme?.homepageLayout);
   const logoPreview = resolveImageUrl(theme?.logoUrl);
 
-  async function handleAddTheme() {
-    setCreating(true);
+  async function createAndOpen(slot: string, data: { name: string; fromTemplate?: string }) {
+    setCreating(slot);
     try {
-      const created = await createTheme({ name: `Theme ${(themes?.length ?? 0) + 1}` });
+      const created = await createTheme(data);
       router.push(`/theme/${created.id}/builder`);
     } catch {
       toast("Failed to create theme", "error");
-      setCreating(false);
+      setCreating(null);
     }
+  }
+
+  function handleAddTheme() {
+    return createAndOpen("blank", { name: `Theme ${(themes?.length ?? 0) + 1}` });
   }
 
   // The published custom theme is what's actually live for shoppers right
@@ -114,10 +122,45 @@ export default function ThemeLibraryPage() {
             </p>
           </div>
 
-          <Button variant="primary" className="shrink-0" loading={creating} onClick={() => void handleEditCurrentTheme()}>
+          <Button variant="primary" className="shrink-0" loading={creating === "blank"} onClick={() => void handleEditCurrentTheme()}>
             Edit theme
           </Button>
         </Card>
+      )}
+
+      {templates.length > 0 && (
+        <>
+          <h2 className="text-[17px] font-extrabold text-text-primary dark:text-zinc-50 mb-1.5">Start from a template</h2>
+          <p className="text-[13.5px] text-text-faint mb-[18px]">
+            A ready-made look you can open in the editor and adjust. Creates a new unpublished theme, so
+            your live storefront is untouched.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            {templates.map((tpl) => (
+              <button
+                key={tpl.key}
+                type="button"
+                disabled={creating !== null}
+                onClick={() => void createAndOpen(tpl.key, { name: tpl.name, fromTemplate: tpl.key })}
+                className="text-left rounded-2xl border border-[#D3D8D7] dark:border-white/15 p-[18px] flex gap-3.5 items-start hover:border-accent-mid hover:bg-[#FAFCFC] dark:hover:border-white/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span
+                  className="size-11 rounded-[10px] shrink-0 border border-black/10 dark:border-white/10 flex items-center justify-center"
+                  style={{ background: tpl.previewColors.bg }}
+                  aria-hidden
+                >
+                  <span className="size-5 rounded-full" style={{ background: tpl.previewColors.button }} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[14.5px] font-bold text-text-primary dark:text-zinc-50">
+                    {creating === tpl.key ? "Creating…" : tpl.name}
+                  </span>
+                  <span className="block text-[12.5px] text-text-faint mt-0.5">{tpl.blurb}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       <h2 className="text-[17px] font-extrabold text-text-primary dark:text-zinc-50 mb-1.5">Custom themes</h2>
@@ -170,11 +213,11 @@ export default function ThemeLibraryPage() {
         <button
           type="button"
           onClick={() => void handleAddTheme()}
-          disabled={creating}
+          disabled={creating !== null}
           className="rounded-2xl border-[1.5px] border-dashed border-[#D3D8D7] dark:border-white/15 flex flex-col items-center justify-center gap-2 p-[18px] min-h-20 text-text-muted hover:border-accent-mid hover:text-accent-text hover:bg-[#FAFCFC] dark:hover:border-white/30 dark:hover:text-zinc-300 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="size-5" />
-          <span className="text-[13.5px] font-semibold">{creating ? "Creating…" : "Add theme"}</span>
+          <span className="text-[13.5px] font-semibold">{creating === "blank" ? "Creating…" : "Add theme"}</span>
         </button>
       </div>
     </PageShell>

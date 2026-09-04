@@ -9,6 +9,7 @@ import type { ThemeRow } from '../db/types';
 import { CreateThemeDto } from './dto/create-theme.dto';
 import { UpdateThemeDraftDto } from './dto/update-theme-draft.dto';
 import { DEFAULT_THEME_CONFIG } from './constants';
+import { TEMPLATE_KEYS, TEMPLATE_META, THEME_TEMPLATES, isTemplateKey } from './templates';
 import { assertValidThemeConfig } from './theme-config.validation';
 import { ThemeConfigCache } from './theme-config-cache';
 import type {
@@ -211,11 +212,29 @@ export class ThemesService {
     return { previewToken };
   }
 
+  // Phase G0 — Flow A: "new theme from template". Returns the built-in
+  // starter templates' preview metadata for the library picker (never the
+  // full config — the config only ever leaves the server as a created row).
+  listTemplates() {
+    return TEMPLATE_KEYS.map((key) => TEMPLATE_META[key]);
+  }
+
   async create(ctx: TenantContext, dto: CreateThemeDto) {
+    if (dto.duplicateFromId !== undefined && dto.fromTemplate !== undefined) {
+      throw new BadRequestException('Provide at most one of duplicateFromId or fromTemplate');
+    }
+
     let config: ThemeConfig;
     if (dto.duplicateFromId !== undefined) {
       const source = await this.getOwnedTheme(ctx, dto.duplicateFromId);
       config = cloneConfigWithFreshIds(source.config as ThemeConfig);
+    } else if (dto.fromTemplate !== undefined) {
+      // isTemplateKey is redundant with the DTO's @IsIn, but keeps the
+      // index access type-safe and guards a direct service call.
+      if (!isTemplateKey(dto.fromTemplate)) {
+        throw new BadRequestException(`Unknown template: ${dto.fromTemplate}`);
+      }
+      config = cloneConfigWithFreshIds(THEME_TEMPLATES[dto.fromTemplate]);
     } else {
       config = cloneConfigWithFreshIds(DEFAULT_THEME_CONFIG);
     }

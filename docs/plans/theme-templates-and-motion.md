@@ -1200,7 +1200,8 @@ case per new type, and a per-template validation spec once templates land.
 | **D — Card & button micro-interactions** | `animations.cardHoverEffect` enum extension (`underline`/`quick-add-slide`/`overlay`/`desaturate`/`shadow`/`tilt`). `buttons.primary.hoverEffect`/`pressEffect` + `buttons.secondary` rendered variant + `pillCornerRadius`. `productCards.wishlistAnimation`. `animations.imageLoad: fade` (skeleton→image crossfade). `inputFields.focusAnimation`. `icons.corners` + `icons.size`. | A, B | **M** |
 | **E — Section polish** | `product_tabs` magic-line + crossfade + height animate. `trust_bar` `rating_badge` count-up. Hero `kenBurns` / `parallax` / `indicatorStyle` / `slideTransition` extensions. `brands.scrolling` marquee. Section separators (`section.settings.separator`) + overlay/scrim + `contentWidth`. Newsletter `successAnimation`. Accordion (FAQ/filter) animation. | A, B | **M** |
 | **F — The expensive one-offs** | **Fly-to-cart** (`animations.addToCart`). Route-content fade (`animations.pageTransition`) + View Transitions progressive enhancement. `motion.scrollProgressBar`. `floatingElements.backToTop`. `motion.decorativeParallax`. `motion.customCursor`. `drawers.animation` + `cart.itemAnimation`/`subtotalAnimation`. Card metadata sub-blocks (`product_vendor`/`product_stock`/`product_swatches` — wires `swatches`). | A, and the specific dead-control it targets | **M–L** |
-| **G — Templates** | `THEME_TEMPLATES` (the 4 configs, authored against A–F). Flow A (`fromTemplate` on `CreateThemeDto` + a picker in the library). Flow B (`applyTemplate` + confirm modal with the standalone "Your custom CSS will be replaced." line — D3). Per-template validation spec (D2). | A–F (a template referencing an unbuilt capability just no-ops, so G *can* ship earlier, but the templates would look wrong — ship it last so all four land complete) | **S** (each template is a config literal + picker UI once the capabilities exist) |
+| **G0 — Templates against A/B (Flow A)** *(BUILT 2026-09-04 on `feat/theme-templates-g0` — see §8.4)* | `THEME_TEMPLATES` (4 full typed `ThemeConfig` literals) authored against **only** what A/B render today; each with a `// ── Deferred to C–F ──` block. Flow A only: `fromTemplate` on `CreateThemeDto` + `GET /themes/templates` + a picker block in the library. Per-template validation + clone + byte-cap spec (D2). Zero keys without a live consumer ⇒ nothing to no-op. | A, B | **S** |
+| **G1 — `applyTemplate` (Flow B)** *(deferred — separate later plan)* | `applyTemplate(key)` replaces `globalSettings` + `header` + `footer` + `sections` in one `updateConfig` (one Ctrl+Z), fresh ids, preserves only uploaded logo/favicon, confirm modal with the standalone "Your custom CSS will be replaced." line (D3). The riskier half — draft-mutating, RESET-adjacent, modal UX. Re-author the G0 template literals against whatever C–F has shipped at that point. | G0, + whatever C–F capabilities the re-authored templates use | **S–M** |
 | **I — Icon set** *(parallel; blocks nothing; own sign-off gate)* | Multi-glyph, multi-style icon system. For each of the ~12 storefront icons (search, cart, account, heart, chevron, close, menu, phone, whatsapp, star, truck, shield): **2–3 distinct glyph variants** (e.g. cart: trolley / basket / tote; account: person / circle-person / outline-head), each drawn in all **3 styles** (`line` / `solid` / `duotone`) → **≈ 100+ inline SVGs** in `storefront/lib/icons/`. Config: `globalSettings.icons.style` (global `line`/`solid`/`duotone`) + a per-icon glyph override (proposed `globalSettings.icons.glyphs?: { cart?: 'trolley'\|'basket'\|'tote', account?: …, … }` — final shape decided at the gate). lucide stays the `line` default so **absent config ⇒ today's render exactly**. **Zero new deps** (no second icon package). **GATE:** before drawing any SVG, come back with (a) the exact glyph-variant list per icon, (b) the total SVG count, (c) the final config shape, and (d) a flag on whether the admin picker UI (12 icons × glyph choice + style) needs its own design pass. | — | **M** (SVG authoring) + a design-pass flag |
 
 **Dependency summary:** A blocks everything. B1 needs A; B2 needs B1. D/E/G need
@@ -1208,11 +1209,12 @@ B1. C is independent of B (both only need A). G needs A–F for the templates to
 complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
-**Current commitment:** Phases **A + B (B1 then B2)**. After B, re-evaluate C–F
-against the real token foundations before committing further. A + B + the 4
-templates (Flow A) alone already delivers four visibly distinct starting points
-(they'd lack fly-to-cart, magic-line, the mobile drawer, decorative motion —
-degrading gracefully to no-ops).
+**Current commitment:** Phases **A + B + G0**, all built and merged / in review.
+C–F is **not** committed scope — §8.3 records the recommended priority for it
+(written before the G0 templates existed, so it isn't anchored to them);
+re-evaluate against §8.3 before starting any C–F work. G0 (Flow A) already
+delivers four visibly distinct starting points; the C–F flourishes each template
+wants are listed in its own deferred block.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1508,6 +1510,129 @@ regression rows (none has `density`; `deepMergeDefaults` backfills `{}` ⇒
 prod shops (post-merge).
 
 **Deferred:** nothing — B2 completes the design-token foundation (A + B).
+
+---
+
+### 8.3 Post-G0 capability priority — RECOMMENDATION (recorded 2026-09-04, before the templates were authored)
+
+G0 ships the four templates against A/B only (Flow A — see §8.4). It exists to
+inform what C–F should build first. This priority is written **before** the
+`templates.ts` literals exist, deliberately, so it isn't anchored by whatever
+the four templates happen to look like. Supersedes the raw §8 C–F ordering where
+they disagree; the §8 rows stay as the capability inventory.
+
+The re-evaluation of C–F against the built A/B foundations (the constraints A/B
+introduced — the Tailwind-v4 `@theme` namespace rule, the full-swap-never-additive
+class rule, JS animations self-gating on reduced motion — and what A/B made
+cheaper — motion timing/magnitude tokens, `use-scroll-value.ts`, the stagger
+plumbing, the `scale-in`/`blur-in`/`mask-reveal` entrances) produced this order:
+
+1. **Card-hover enum extension** (`animations.cardHoverEffect` +=
+   `desaturate` / `quick-add-slide` / `overlay` / `shadow` / `underline`;
+   `tilt` capped) — **4/4 templates, and all four fall back to a stand-in value
+   without it.** Cheapest large identity win now that `--motion-hover-*` supplies
+   the timing/magnitude: add entries to the three maps in `shop-context.tsx`
+   (`CARD_IMAGE_HOVER_TRANSFORM` / `CARD_WRAPPER_HOVER_TRANSFORM` /
+   `CARD_WRAPPER_HOVER_SHADOW`) + a CSS rule for the non-transform ones;
+   `underline` reuses `.theme-nav-link--anim`'s `::after` scaleX. **Do this
+   first in D.**
+2. **`animations.imageLoad: 'fade'`** (skeleton → image crossfade) — 4/4,
+   small, universal polish; no LQIP/backend work (`blur-up` stays a separate
+   backend-gated follow-up).
+3. **Stagger wiring** — Phase A shipped the `--i` / `.theme-stagger-child` /
+   `data-stagger` / `--motion-stagger` plumbing inert. Remaining: render
+   `.theme-stagger-child` with `style={{ '--i': i }}` on the list sections +
+   one admin toggle + the pure-CSS `:nth-child(n+13)` cap. 4/4 templates.
+   **Its own small PR** (wide, shallow, mechanical — the B1/B2 split rationale).
+4. **`section.settings.motion.entrance: 'rotate-in'` + `brands.settings.scrolling`
+   marquee** — two cheap, disproportionate identity wins for the two weakest
+   G0 templates. `rotate-in` is one `@keyframes` + one `KNOWN_ENTRANCES` entry
+   (Bloom's testimonials). `brands.scrolling` is ~5 lines reusing `.marquee-track`
+   + `--motion-marquee-duration` (Market's logo strip). Pull both forward ahead
+   of the rest of E.
+5. **C1 — header/footer layout presets** (named presets seeding `header.settings.rows`
+   + zones, `footer` presets, `separator` / `height` / `contentWidth`,
+   `scrollBehavior` via `use-scroll-value.ts`). Split from C. **M.** Makes
+   Market's contact-bar and Heritage's coloured band read as intentional
+   structure rather than a pile of rows.
+6. **C2 — the mobile nav component** (drawer / bottom-bar / fullscreen). Split
+   from C. **L** — the single biggest genuinely-new interactive build; its own
+   PR + review (focus trap, body-scroll-lock, pointer-events swipe, ESC,
+   backdrop).
+7. Then the rest of D/E (button `hoverEffect`/`pressEffect`, `buttons.secondary`
+   rendered variant, `product_tabs` magic-line, `trust_bar` count-up, section
+   separators, accordion, newsletter success) and F (fly-to-cart, route
+   transition + View Transitions PE, `scrollProgressBar`, `backToTop`,
+   decorative parallax, custom cursor, `drawers.animation` + `cart.*`).
+
+**Shared utilities to extract before the phase that first needs each** (both
+mirror how `use-scroll-value.ts` was pre-shipped in Phase A):
+
+- `useReducedMotion()` — a `matchMedia('(prefers-reduced-motion: reduce)')`
+  subscription. Every JS animation in D/E/F + C2's drawer needs it; the blanket
+  `globals.css` rule only covers CSS. Build with the second JS animation.
+- `useCountUp(target)` — rAF count-up, reads `--motion-duration-*`, self-gates
+  on reduced motion. Consumers: `trust_bar` rating (E), `cart.subtotalAnimation:
+  'count'` (F), collection result count (§4.5). Build once in E.
+
+**§9.3 dead-control list needs a pass** — 4 rows are stale after A/B
+(`buttons.pillCornerRadius` "B/D" → B never touched it; `prices.*` → RESOLVED in
+B1, remove; `search.*` "B/D" → B never touched it; typography `case`/
+`letterSpacing` → were already wired pre-B1, `pairing`/`scale` only add a
+shortcut), and ~6 Phase-A-created typed-but-unwired controls are missing
+(`motion.smoothScroll` / `.scrollMotion` / `.hoverMotion` / `.parallax` /
+`.kenBurns` / `.decorativeParallax` / `.customCursor`, `section.settings.motion.stagger`).
+
+### 8.4 Phase G0 — the four templates against A/B only (Flow A) — planning
+
+**Deliverable:** `THEME_TEMPLATES` (Atelier / Market / Bloom / Heritage) as full
+typed `ThemeConfig` literals in `backend/src/themes/templates.ts`, spread from
+`DEFAULT_THEME_CONFIG`, authored against **only capabilities that render today**
+(motion + radius + density + typography pairing/scale + colour schemes + card
+style/aspect/align/density + sale-price + the shipped section types + the
+`header.settings.rows` structure). **Flow A only** — `POST /themes { fromTemplate }`
+→ a new **unpublished** library row via `cloneConfigWithFreshIds`, current live
+theme untouched. **Flow B (`applyTemplate` + confirm modal, D1/D3) → G1**, a
+separate later plan (the riskier half; Flow A alone answers "let me try one").
+
+**The no-op guarantee:** a G0 template sets **zero keys without a live consumer**
+— "what the merchant gets" == "what's in the file", no asterisks. Each template
+carries a `// ── Deferred to C–F (re-author when these land) ──` block listing
+every intended-but-unavailable setting, **including `animations.addToCart` /
+`pageTransition`** (left `false` deliberately — a published template theme
+silently gaining motion the day F merges is an unrequested behaviour change with
+no changelog trail; re-authoring is the explicit path). `animations.cardHoverEffect`
+is the one concession — the enum is still `none|zoom|rise|swap`, so each template
+picks the closest valid stand-in (Atelier `zoom`, Market `swap`, Bloom `rise`,
+Heritage `rise`) with the real target (`desaturate` / `quick-add-slide` / `tilt`
+/ `shadow`) in its deferred block. `rotate-in` (Bloom) → `scale-in` in G0.
+
+**Drift protection:** `: ThemeConfig` annotation ⇒ `tsc` enforces the full
+current shape (stronger than the shallow validator); one
+`assertValidThemeConfig(THEME_TEMPLATES.<key>)`-doesn't-throw case per template
+(mirrors `accepts the real DEFAULT_THEME_CONFIG unchanged`); one
+`cloneConfigWithFreshIds` no-throw + fresh-ids + scheme-remap test per template;
+a `< 200_000` byte guard per template. Held to the same in-lockstep-with-
+`theme-config.types.ts` discipline as `DEFAULT_THEME_CONFIG`.
+
+**Surface:** `fromTemplate?` on `CreateThemeDto` (`@IsIn(TEMPLATE_KEYS)`); a third
+branch in `ThemesService.create` (`duplicateFromId` + `fromTemplate` together →
+400); `GET /themes/templates` → `{ key, name, blurb, previewColors }[]` (one
+source of truth, no hand-mirrored admin const); a "Start from a template" block
+of 4 cards above the "Custom themes" grid in `admin/app/theme/page.tsx`.
+
+**Distinctness (honest):** all four stay visibly distinct in G0 on the axes that
+carry the most weight (type / radius / density / motion intensity+easing / scheme
+/ card style+aspect / section composition). No two collapse. **Heritage is
+strongest** (§6.4: "notably does NOT need" most of C–F). **Bloom is weakest** —
+its `expressive` bouncy motion, `soft` radius, loud scheme, big display type and
+`elevated` cards land, but its signature flourishes (decorative parallax, `tilt`,
+wishlist `burst`, wave footer) are all C–F. **Market loses the most flourish**
+(fly-to-cart, count-up, magic-line, marquee, bottom-bar) but keeps its dense +
+fast + trust-heavy structure. Closest pair: Market/Bloom, held apart by radius
+(8 vs 16), motion (`snappy`/`standard` vs `overshoot`/`expressive`), type scale
+(`compact` vs `spacious`) and card style. §8.3 items 1 and 4 are the cheap fixes
+that sharpen the two weak templates.
 
 ---
 

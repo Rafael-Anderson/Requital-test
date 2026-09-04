@@ -86,6 +86,7 @@ import type {
   ThemeSettings,
   Theme,
   ThemeListItem,
+  ThemeTemplateMeta,
   ThemeConfig,
   TopProduct,
   UserRole,
@@ -601,8 +602,14 @@ export function getThemeBuilder(id: number) {
   return apiFetch<Theme>(`/themes/${id}`);
 }
 
-export function createTheme(data: { name: string; duplicateFromId?: number }) {
+export function createTheme(data: { name: string; duplicateFromId?: number; fromTemplate?: string }) {
   return apiFetch<Theme>("/themes", { method: "POST", body: JSON.stringify(data) });
+}
+
+// Phase G0 — the built-in starter templates for the library picker (preview
+// metadata only; the full config only ever exists server-side).
+export function listThemeTemplates() {
+  return apiFetch<ThemeTemplateMeta[]>("/themes/templates");
 }
 
 export function updateThemeDraft(id: number, data: { name?: string; config?: ThemeConfig }) {
