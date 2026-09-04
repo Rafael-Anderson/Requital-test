@@ -5,11 +5,14 @@ import Toggle from "@/components/ui/Toggle";
 import Select from "@/components/ui/Select";
 import ColorPicker from "@/components/ui/ColorPicker";
 import Button from "@/components/ui/Button";
+import PresetPicker from "@/components/PresetPicker";
+import { HeaderPresetThumbnail } from "@/components/PresetThumbnails";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import AnnouncementBarChromeSettings from "./AnnouncementBarChromeSettings";
 import LegacyHeaderSettings from "../LegacyHeaderSettings";
-import { BLOCK_TYPE_LABELS, type AnnouncementBarConfig, type HeaderRow, type ThemeBlock } from "@/lib/types";
+import { HEADER_PRESETS } from "@/lib/header-footer-presets";
+import { BLOCK_TYPE_LABELS, type AnnouncementBarConfig, type HeaderRow, type MobileNavMode, type ThemeBlock } from "@/lib/types";
 
 // Header is global chrome (pinned to every page, not part of the
 // reorderable sections list). Its logo/menu/search/cart/account blocks are
@@ -19,10 +22,12 @@ export default function HeaderSettings({
   settings,
   blocks,
   onUpdate,
+  onApplyPreset,
 }: {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];
   onUpdate: (key: string, value: unknown) => void;
+  onApplyPreset: (key: string) => void;
 }) {
   const rows: HeaderRow[] = Array.isArray(settings.rows) ? (settings.rows as HeaderRow[]) : [];
   const blockLabel = (id: string) => {
@@ -63,6 +68,24 @@ export default function HeaderSettings({
 
   return (
     <div className="space-y-4">
+      {/* C1 — a preset is a one-time apply: no stored identity, so nothing
+          here ever shows as "currently selected" (same value="" convention
+          as the Home tab's HOMEPAGE_PRESETS picker). Picking one replaces
+          the header wholesale; hand-editing afterward is indistinguishable
+          from a manually built header. */}
+      <div>
+        <span className="mb-2 block text-sm font-medium">Layout preset</span>
+        <PresetPicker
+          singleColumn
+          options={HEADER_PRESETS.map((p) => ({ key: p.key, label: p.label }))}
+          value=""
+          onChange={(key) => onApplyPreset(key)}
+          renderThumbnail={(key) => <HeaderPresetThumbnail preset={key} />}
+        />
+      </div>
+
+      <hr className="border-black/10 dark:border-white/10" />
+
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Sticky header</span>
         <Toggle checked={!!settings.sticky} onChange={(v) => onUpdate("sticky", v)} />
@@ -80,6 +103,46 @@ export default function HeaderSettings({
         <option value="fade">Fade</option>
         <option value="slide">Slide down</option>
         <option value="none">None</option>
+      </Select>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Select label="Height" value={(settings.height as string) ?? "default"} onChange={(e) => onUpdate("height", e.target.value)}>
+          <option value="compact">Compact</option>
+          <option value="default">Default</option>
+          <option value="tall">Tall</option>
+        </Select>
+        <Select
+          label="Content width"
+          value={(settings.contentWidth as string) ?? "contained"}
+          onChange={(e) => onUpdate("contentWidth", e.target.value)}
+        >
+          <option value="contained">Contained</option>
+          <option value="full">Full width</option>
+        </Select>
+        <Select label="Separator" value={(settings.separator as string) ?? "line"} onChange={(e) => onUpdate("separator", e.target.value)}>
+          <option value="line">Line</option>
+          <option value="shadow">Shadow</option>
+          <option value="none">None</option>
+        </Select>
+        <Select
+          label="Announcement bar position"
+          value={(settings.announcementPosition as string) ?? "above"}
+          onChange={(e) => onUpdate("announcementPosition", e.target.value)}
+        >
+          <option value="above">Above header</option>
+          <option value="below">Below header</option>
+        </Select>
+      </div>
+
+      <Select
+        label="Mobile nav"
+        value={(settings.mobileNav as MobileNavMode) ?? "scroll"}
+        onChange={(e) => onUpdate("mobileNav", e.target.value)}
+      >
+        <option value="scroll">Scroll row (default)</option>
+        <option value="drawer">Drawer</option>
+        <option value="bottom-bar">Bottom bar</option>
+        <option value="fullscreen">Fullscreen</option>
       </Select>
 
       <hr className="border-black/10 dark:border-white/10" />

@@ -53,6 +53,109 @@ export function HomepagePresetThumbnail({ preset }: { preset: HomepagePreset["ke
   );
 }
 
+// C1 — header/footer layout presets (HEADER_PRESETS/FOOTER_PRESETS in
+// header-footer-presets.ts). Same "small static illustration, not a live
+// preview" rule as every other thumbnail on this page.
+export function HeaderPresetThumbnail({ preset }: { preset: string }) {
+  const zone = (justify: string, width = "w-6") => <div className={`flex ${justify} flex-1`}><div className={`h-3 ${width} ${BOX}`} /></div>;
+  if (preset === "centered") {
+    return (
+      <div className={FRAME}>
+        <div className="flex items-center flex-1"><div className="flex-1" />{zone("justify-center", "w-8")}<div className="flex-1 flex justify-end gap-1"><div className={`size-3 ${BAR}`} /><div className={`size-3 ${BAR}`} /></div></div>
+      </div>
+    );
+  }
+  if (preset === "contact-bar-centered-nav") {
+    return (
+      <div className={FRAME}>
+        <div className={`h-2 ${BAR}`} />
+        <div className="flex items-center flex-1">{zone("justify-start")}<div className="flex-1 flex justify-end gap-1"><div className={`size-3 ${BAR}`} /><div className={`size-3 ${BAR}`} /></div></div>
+        <div className="flex justify-center"><div className={`h-2 w-10 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  if (preset === "split-nav") {
+    return (
+      <div className={FRAME}>
+        <div className="flex justify-center"><div className={`h-3 w-8 ${BOX}`} /></div>
+        <div className="flex items-center justify-between flex-1"><div className={`h-2 w-10 ${BAR}`} /><div className={`size-3 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  if (preset === "minimal") {
+    return (
+      <div className={FRAME}>
+        <div className="flex items-center justify-between flex-1"><div className={`h-3 w-6 ${BOX}`} /><div className={`size-3 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  if (preset === "editorial") {
+    return (
+      <div className={FRAME}>
+        <div className="flex justify-center"><div className={`h-2 w-6 ${BAR}`} /></div>
+        <div className="flex justify-center flex-1"><div className={`h-4 w-10 ${BOX}`} /></div>
+        <div className="flex justify-center"><div className={`h-2 w-10 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  if (preset === "colored-band") {
+    return (
+      <div className={FRAME}>
+        <div className="h-2 rounded bg-accent/50" />
+        <div className="flex items-center justify-between flex-1"><div className={`h-3 w-6 ${BOX}`} /><div className={`h-2 w-10 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  // classic
+  return (
+    <div className={FRAME}>
+      <div className="flex items-center justify-between flex-1"><div className={`h-3 w-6 ${BOX}`} /><div className="flex gap-1"><div className={`size-3 ${BAR}`} /><div className={`size-3 ${BAR}`} /><div className={`size-3 ${BAR}`} /></div></div>
+    </div>
+  );
+}
+
+export function FooterPresetThumbnail({ preset }: { preset: string }) {
+  if (preset === "multi-column") {
+    return (
+      <div className={FRAME}>
+        <div className="flex gap-1 flex-1">{[0, 1, 2, 3].map((i) => <div key={i} className={`flex-1 ${BAR}`} />)}</div>
+        <div className={`h-2 ${BAR}`} />
+      </div>
+    );
+  }
+  if (preset === "centered-stack") {
+    return (
+      <div className={FRAME}>
+        <div className="flex flex-col items-center gap-1 flex-1 justify-center"><div className={`h-2 w-10 ${BAR}`} /><div className={`h-2 w-8 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  if (preset === "big-cta") {
+    return (
+      <div className={FRAME}>
+        <div className={`h-8 ${BOX}`} />
+        <div className={`h-2 w-16 ${BAR}`} />
+      </div>
+    );
+  }
+  if (preset === "one-line") {
+    return (
+      <div className={FRAME}>
+        <div className="flex-1" />
+        <div className="flex justify-center"><div className={`h-2 w-20 ${BAR}`} /></div>
+      </div>
+    );
+  }
+  // mega
+  return (
+    <div className={FRAME}>
+      <div className="flex gap-1 flex-1">{[0, 1, 2, 3, 4].map((i) => <div key={i} className={`flex-1 ${BAR}`} />)}</div>
+      <div className={`h-2 ${BAR}`} />
+      <div className={`h-1.5 ${BAR}`} />
+    </div>
+  );
+}
+
 export function HomepageLayoutThumbnail({ layout }: { layout: HomepageLayout }) {
   if (layout === "slideshow") {
     return (

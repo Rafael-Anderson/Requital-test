@@ -74,19 +74,29 @@ describe("ElementSettingsPanel — per-elementType dispatch", () => {
     expect(screen.getByText("Show currency code")).toBeInTheDocument();
   });
 
-  it("cart_icon (ICON family) shows visibility + color + size + position — the Part 5 minimum panel", () => {
+  it("cart_icon (ICON family) shows visibility + color + size + position + show label", () => {
     render(<ElementSettingsPanel block={block("cart_icon")} onUpdate={noop} onToggleVisibility={noop} />);
     expect(screen.getByText("Visible")).toBeInTheDocument();
     expect(screen.getByText("Color")).toBeInTheDocument();
     expect(screen.getByText("Size")).toBeInTheDocument();
     expect(screen.getByLabelText("Position")).toBeInTheDocument();
+    expect(screen.getByText("Show label")).toBeInTheDocument();
   });
 
   it("cart_icon's visibility toggle calls onToggleVisibility, not onUpdate", () => {
     const onToggleVisibility = vi.fn();
     render(<ElementSettingsPanel block={block("cart_icon")} onUpdate={noop} onToggleVisibility={onToggleVisibility} />);
-    fireEvent.click(screen.getByRole("switch"));
+    // The Visible toggle is the first switch; "Show label" (C1) is the second.
+    fireEvent.click(screen.getAllByRole("switch")[0]);
     expect(onToggleVisibility).toHaveBeenCalledOnce();
+  });
+
+  it("cart_icon's Show label toggle (C1) calls onUpdate, defaults off", () => {
+    const onUpdate = vi.fn();
+    render(<ElementSettingsPanel block={block("cart_icon")} onUpdate={onUpdate} onToggleVisibility={noop} />);
+    const switches = screen.getAllByRole("switch");
+    fireEvent.click(switches[switches.length - 1]);
+    expect(onUpdate).toHaveBeenCalledWith("showLabel", true);
   });
 
   it("falls back to BlockSettingsForm's own content for a type outside all 6 families", () => {

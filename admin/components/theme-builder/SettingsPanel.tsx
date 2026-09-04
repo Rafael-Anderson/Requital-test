@@ -280,7 +280,12 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   if (selection.kind === "header") {
     return (
       <FilterableSettingsBody editor={editor} contentKey="header" heading={<h2 className="mb-4 text-sm font-semibold">Header</h2>}>
-        <HeaderSettings settings={config.header.settings} blocks={config.header.blocks} onUpdate={editor.updateHeaderSetting} />
+        <HeaderSettings
+          settings={config.header.settings}
+          blocks={config.header.blocks}
+          onUpdate={editor.updateHeaderSetting}
+          onApplyPreset={editor.applyHeaderPreset}
+        />
       </FilterableSettingsBody>
     );
   }
@@ -288,7 +293,11 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   if (selection.kind === "footer") {
     return (
       <FilterableSettingsBody editor={editor} contentKey="footer" heading={<h2 className="mb-4 text-sm font-semibold">Footer</h2>}>
-        <FooterSettings settings={config.footer.settings} onUpdate={editor.updateFooterSetting} />
+        <FooterSettings
+          settings={config.footer.settings}
+          onUpdate={editor.updateFooterSetting}
+          onApplyPreset={editor.applyFooterPreset}
+        />
       </FilterableSettingsBody>
     );
   }
