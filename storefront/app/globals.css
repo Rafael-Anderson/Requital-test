@@ -29,6 +29,67 @@
   --color-selection: #b2e0e0;
 }
 
+/* Phase A (motion foundation) — ONE blanket prefers-reduced-motion rule,
+   replacing the five near-identical per-class blocks this file used to carry
+   (one each for .marquee-track, .theme-nav-link--anim, the .theme-anim-*
+   entrances, .theme-mega-panel-*, .dropdown-in). 0.01ms (not 0) so a
+   transitionend/animationend listener still fires — audited: there are none in
+   the storefront today, this is defence in depth. JS timers (HeroSlideshow's
+   setInterval, announcement-rotation's) self-gate on matchMedia separately; a
+   CSS rule can't stop a timer. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The section-entrance base classes hide/offset the element until JS adds
+     .theme-anim-visible. Neutralise that here so a reduced-motion visitor
+     never sees a section held invisible/offset (matches the old per-class
+     blocks' intent). */
+  .theme-anim-fade-in,
+  .theme-anim-slide-up,
+  .theme-anim-slide-left,
+  .theme-anim-slide-right,
+  .theme-anim-scale-in,
+  .theme-anim-blur-in,
+  .theme-anim-mask-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    clip-path: none !important;
+  }
+  .theme-anim-visible[data-stagger] .theme-stagger-child {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Phase A — the --motion-* token mobile tier. lib/motion.ts's
+   resolveMotionCssVars emits a parallel `--motion-*-m` set at one intensity
+   step gentler; this block maps the base token names to those `-m` names below
+   640px. NO self-reference (that would be a custom-property cycle → the whole
+   declaration goes guaranteed-invalid): each literal fallback here is the exact
+   pre-Phase-A value, so a shop with `motion` unset renders byte-identically on
+   mobile too. */
+@media (max-width: 639px) {
+  :root {
+    --motion-duration-fast: var(--motion-duration-fast-m, 150ms);
+    --motion-duration-base: var(--motion-duration-base-m, 300ms);
+    --motion-duration-slow: var(--motion-duration-slow-m, 600ms);
+    --motion-entrance-distance: var(--motion-entrance-distance-m, 24px);
+    --motion-stagger: var(--motion-stagger-m, 0ms);
+    --motion-hover-lift: var(--motion-hover-lift-m, -4px);
+    --motion-hover-scale: var(--motion-hover-scale-m, 1.04);
+    --motion-hover-shadow: var(--motion-hover-shadow-m, 0 8px 20px rgba(15, 23, 22, 0.12));
+    --motion-ease: var(--motion-ease-m, ease-out);
+    --motion-marquee-duration: var(--motion-marquee-duration-m, 18s);
+  }
+}
+
 /* Only tokens whose OWN value is itself a var() reference live here.
    @theme *inline* tells Tailwind v4 to bake the resolved value directly
    into every generated utility at build time, rather than emitting
@@ -176,13 +237,10 @@ body {
 }
 
 .marquee-track {
-  animation: marquee-scroll 18s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .marquee-track {
-    animation: none;
-  }
+  /* Phase A — duration from the motion token (18s fallback = today). Stays
+     `linear` (a ticker should not ease). Reduced-motion is the blanket rule
+     near the top of this file. */
+  animation: marquee-scroll var(--motion-marquee-duration, 18s) linear infinite;
 }
 
 /* Theme builder's per-element NAV editing (ElementSettingsPanel's "Hover
@@ -212,16 +270,13 @@ body {
   background: currentColor;
   transform: scaleX(0);
   transform-origin: left center;
-  transition: transform 0.2s ease;
+  /* Phase A — duration/ease from the motion tokens (0.2s ease fallback =
+     today). Reduced-motion is the blanket rule near the top of this file. */
+  transition: transform var(--motion-duration-fast, 0.2s) var(--motion-ease, ease);
 }
 .theme-nav-link--anim:hover::after,
 .theme-nav-link--anim:focus-visible::after {
   transform: scaleX(1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .theme-nav-link--anim::after {
-    transition: none;
-  }
 }
 
 /* Theme Settings > Logo's desktopHeight/mobileHeight (globalSettings.logo,
@@ -252,6 +307,21 @@ body {
   box-shadow: var(--theme-card-hover-card-shadow, none);
 }
 
+/* Phase A — generic hover-zoom for images/buttons that used a hardcoded
+   `group-hover:scale-105` / `hover:scale-105` + `transition-transform`
+   (FeaturedCollections tiles, the legacy FeaturedGrid, the two floating
+   buttons). Scale + timing from the motion tokens; the 1.05 fallback keeps
+   an un-themed shop byte-identical (a themed shop unifies on
+   --motion-hover-scale, 1.04 by default). Works for both a `.group` parent
+   and self-hover. */
+.theme-hover-zoom {
+  transition: transform var(--motion-duration-base, 300ms) var(--motion-ease, ease);
+}
+.group:hover .theme-hover-zoom,
+.theme-hover-zoom:hover {
+  transform: scale(var(--motion-hover-scale, 1.05));
+}
+
 /* New visual theme builder — per-section scroll-triggered entrance
    animations (Phase 5). Same pattern as marquee-track above: hand-written
    keyframes + explicit classes (NOT animate-* prefixed, same Tailwind v4
@@ -262,35 +332,75 @@ body {
    theme-anim-visible triggers the animation into its final state — this
    two-class split (rather than putting the animation directly on the base
    class) avoids a flash of the final state before JS ever runs. */
+/* Phase A — durations/easing/travel now come from the --motion-* tokens (the
+   `var(…, <literal>)` fallbacks are the exact pre-Phase-A values, so a shop
+   with `globalSettings.motion` unset renders byte-identically). Reduced-motion
+   is the single blanket block near the top of this file. `var()` inside
+   @keyframes is resolved per-element and is supported in every current
+   browser. */
 .theme-anim-fade-in {
   opacity: 0;
 }
 .theme-anim-fade-in.theme-anim-visible {
-  animation: theme-fade-in 0.6s ease-out forwards;
+  animation: theme-fade-in var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
 }
 
 .theme-anim-slide-up {
   opacity: 0;
-  transform: translateY(24px);
+  transform: translateY(var(--motion-entrance-distance, 24px));
 }
 .theme-anim-slide-up.theme-anim-visible {
-  animation: theme-slide-up 0.6s ease-out forwards;
+  animation: theme-slide-up var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
 }
 
 .theme-anim-slide-left {
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateX(var(--motion-entrance-distance, 24px));
 }
 .theme-anim-slide-left.theme-anim-visible {
-  animation: theme-slide-left 0.6s ease-out forwards;
+  animation: theme-slide-left var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
 }
 
 .theme-anim-slide-right {
   opacity: 0;
-  transform: translateX(-24px);
+  transform: translateX(calc(-1 * var(--motion-entrance-distance, 24px)));
 }
 .theme-anim-slide-right.theme-anim-visible {
-  animation: theme-slide-right 0.6s ease-out forwards;
+  animation: theme-slide-right var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
+}
+
+/* Phase A — new entrance vocabulary (section.settings.motion.entrance).
+   Same two-class (base "hidden" state + .theme-anim-visible triggers) split. */
+.theme-anim-scale-in {
+  opacity: 0;
+  transform: scale(0.94);
+}
+.theme-anim-scale-in.theme-anim-visible {
+  animation: theme-scale-in var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
+}
+.theme-anim-blur-in {
+  opacity: 0;
+  filter: blur(8px);
+}
+.theme-anim-blur-in.theme-anim-visible {
+  animation: theme-blur-in var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
+}
+.theme-anim-mask-reveal {
+  clip-path: inset(100% 0 0 0);
+}
+.theme-anim-mask-reveal.theme-anim-visible {
+  animation: theme-mask-reveal var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
+}
+
+/* Phase A — per-child stagger plumbing. TYPE + CSS only for now: no section
+   renders `.theme-stagger-child` / sets `--i` yet, and no admin control
+   exposes `section.settings.motion.stagger` (Amendment 1, option b). B/D/E
+   wire the list sections and add the control; a pure-CSS
+   `:nth-child(n+13) { animation-delay: 0 }` will cap it there (no JS count). */
+.theme-anim-visible[data-stagger] .theme-stagger-child {
+  opacity: 0;
+  animation: theme-fade-in var(--motion-duration-slow, 0.6s) var(--motion-ease, ease-out) forwards;
+  animation-delay: calc(var(--motion-stagger, 0ms) * var(--i, 0));
 }
 
 @keyframes theme-fade-in {
@@ -304,7 +414,7 @@ body {
 @keyframes theme-slide-up {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(var(--motion-entrance-distance, 24px));
   }
   to {
     opacity: 1;
@@ -314,7 +424,7 @@ body {
 @keyframes theme-slide-left {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(var(--motion-entrance-distance, 24px));
   }
   to {
     opacity: 1;
@@ -324,22 +434,39 @@ body {
 @keyframes theme-slide-right {
   from {
     opacity: 0;
-    transform: translateX(-24px);
+    transform: translateX(calc(-1 * var(--motion-entrance-distance, 24px)));
   }
   to {
     opacity: 1;
     transform: translateX(0);
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .theme-anim-fade-in,
-  .theme-anim-slide-up,
-  .theme-anim-slide-left,
-  .theme-anim-slide-right {
+@keyframes theme-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
     opacity: 1;
-    transform: none;
-    animation: none;
+    transform: scale(1);
+  }
+}
+@keyframes theme-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes theme-mask-reveal {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
   }
 }
 
@@ -393,16 +520,10 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .theme-mega-panel-fade {
-  animation: theme-mega-fade 0.15s ease-out;
+  animation: theme-mega-fade var(--motion-duration-fast, 0.15s) var(--motion-ease, ease-out);
 }
 .theme-mega-panel-slide {
-  animation: theme-mega-slide 0.18s ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .theme-mega-panel-fade,
-  .theme-mega-panel-slide {
-    animation: none;
-  }
+  animation: theme-mega-slide var(--motion-duration-fast, 0.18s) var(--motion-ease, ease-out);
 }
 
 /* Generic dropdown/select popover entrance (collection page's Sort by,
@@ -415,10 +536,5 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 .dropdown-in {
-  animation: dropdown-in 0.14s ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dropdown-in {
-    animation: none;
-  }
+  animation: dropdown-in var(--motion-duration-fast, 0.14s) var(--motion-ease, ease-out);
 }

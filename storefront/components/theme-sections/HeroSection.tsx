@@ -29,16 +29,20 @@ const POSITION_CLASS: Record<string, string> = {
 
 const MIN_SLIDE_DURATION_S = 2;
 const DEFAULT_SLIDE_DURATION_S = 5;
-const SLIDE_TRANSITION_MS = 600;
+
+// Phase A — the crossfade duration + easing now come from the motion tokens
+// (the `var(…, <literal>)` fallbacks — 600ms, `ease` — are today's values).
+const SLIDE_TRANSITION = "var(--motion-duration-slow, 600ms) var(--motion-ease, ease)";
 
 // The non-active resting state per transition mode — the active slide always
 // sits at { opacity: 1, transform: none }, so switching which slide is active
 // animates the incoming one in from here (and the outgoing one back to it).
+// The translate distance defers to --motion-entrance-distance (24px fallback).
 const SLIDE_RESTING: Record<Exclude<ScrollAnimation, "none">, CSSProperties> = {
   "fade-in": { opacity: 0 },
-  "slide-up": { opacity: 0, transform: "translateY(24px)" },
-  "slide-left": { opacity: 0, transform: "translateX(24px)" },
-  "slide-right": { opacity: 0, transform: "translateX(-24px)" },
+  "slide-up": { opacity: 0, transform: "translateY(var(--motion-entrance-distance, 24px))" },
+  "slide-left": { opacity: 0, transform: "translateX(var(--motion-entrance-distance, 24px))" },
+  "slide-right": { opacity: 0, transform: "translateX(calc(-1 * var(--motion-entrance-distance, 24px)))" },
 };
 
 interface HeroImage {
@@ -106,7 +110,7 @@ function HeroSlideshow({
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
           style={{
-            transition: transition === "none" ? undefined : `opacity ${SLIDE_TRANSITION_MS}ms ease, transform ${SLIDE_TRANSITION_MS}ms ease`,
+            transition: transition === "none" ? undefined : `opacity ${SLIDE_TRANSITION}, transform ${SLIDE_TRANSITION}`,
             ...(i === active ? { opacity: 1, transform: "none" } : resting),
           }}
         />

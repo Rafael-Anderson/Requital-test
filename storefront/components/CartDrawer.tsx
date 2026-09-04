@@ -26,9 +26,10 @@ export default function CartDrawer() {
         aria-hidden={!open}
       />
       <div
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-header text-header-fg shadow-2xl flex flex-col transition-transform duration-300 ${
+        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-header text-header-fg shadow-2xl flex flex-col transition-transform ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
+        style={{ transitionDuration: "var(--motion-duration-base, 300ms)" }}
         role="dialog"
         aria-modal="true"
         aria-label="Cart"

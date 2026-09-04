@@ -52,7 +52,7 @@ function Stack({ buttons, side }: { buttons: FloatingCustomButton[]; side: "left
             href={b.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-full bg-accent text-accent-foreground px-4 h-11 text-sm font-medium shadow-lg shadow-black/20 hover:scale-105 transition-transform"
+            className="flex items-center gap-2 rounded-full bg-accent text-accent-foreground px-4 h-11 text-sm font-medium shadow-lg shadow-black/20 theme-hover-zoom"
           >
             {icon && (
               // eslint-disable-next-line @next/next/no-img-element

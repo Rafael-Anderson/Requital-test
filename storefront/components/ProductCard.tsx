@@ -86,16 +86,26 @@ export default function ProductCard({ product, orientation }: { product: Product
   }
 
   return (
-    <Link href={`${shopBasePath}/products/${product.slug}`} className="theme-product-card block group transition-all" {...handlers}>
-      <div className="aspect-square rounded-xl overflow-hidden bg-black/5 relative shadow-sm shadow-black/5 group-hover:shadow-lg group-hover:shadow-black/10 transition-shadow duration-300">
+    <Link
+      href={`${shopBasePath}/products/${product.slug}`}
+      className="theme-product-card block group transition-all"
+      // Phase A — the `rise` hover transform animates at the card-hover motion
+      // duration (300ms fallback = today), matching GridProductCard.
+      style={{ transitionDuration: "var(--theme-card-hover-transition-duration, 300ms)" }}
+      {...handlers}
+    >
+      <div
+        className="aspect-square rounded-xl overflow-hidden bg-black/5 relative shadow-sm shadow-black/5 group-hover:shadow-lg group-hover:shadow-black/10 transition-shadow"
+        style={{ transitionDuration: "var(--motion-duration-base, 300ms)" }}
+      >
         {images.map((url, i) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             key={url}
             src={url}
             alt={product.name}
-            className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity duration-150"
-            style={{ opacity: i === activeIndex ? 1 : 0 }}
+            className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity"
+            style={{ opacity: i === activeIndex ? 1 : 0, transitionDuration: "var(--motion-duration-fast, 150ms)" }}
           />
         ))}
         {badge ? (

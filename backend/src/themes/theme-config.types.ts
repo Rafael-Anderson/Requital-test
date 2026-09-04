@@ -38,7 +38,46 @@ export type ThemeSectionType =
   | 'trust_bar';
 
 export type ScrollAnimation = 'none' | 'fade-in' | 'slide-up' | 'slide-left' | 'slide-right';
+// Phase A (motion foundation) — section-entrance vocabulary extension. The
+// legacy ScrollAnimation values above stay valid; these are additive. A value
+// the storefront doesn't recognise renders as 'none' (no-op).
+export type SectionEntrance = ScrollAnimation | 'scale-in' | 'blur-in' | 'mask-reveal';
 export type SectionVisibility = 'desktop' | 'mobile' | 'both';
+
+// Phase A — the global motion model (docs/plans/theme-templates-and-motion.md
+// §2). Nested under GlobalThemeSettings like floatingElements, so
+// assertValidThemeConfig's top-level allow-list is untouched; the validator
+// treats it as opaque (no per-field schema check). OPTIONAL and inert when
+// `intensity` is unset: `applyMotionOverrides` (storefront shop-context.tsx)
+// writes nothing, every `var(--motion-*, <literal>)` resolves to its literal
+// fallback (= today's exact value), and the storefront renders byte-identical.
+// NOTE: `intensity: 'standard'` is a deliberate near-today baseline, NOT
+// byte-identical to unset — the only true no-op is `motion` unset / `{}`.
+export interface MotionSettings {
+  intensity?: 'none' | 'subtle' | 'standard' | 'expressive';
+  speed?: number; // 0.5–2.0 multiplier on the duration tokens, default 1
+  easing?: 'standard' | 'gentle' | 'snappy' | 'overshoot' | 'linear';
+  scrollMotion?: boolean; // master switch for scroll-triggered entrances, default true
+  hoverMotion?: boolean; // master switch for hover micro-interactions, default true
+  smoothScroll?: boolean; // scroll-behavior: smooth on <html>, default false
+  // Declared for a stable shape; no consumer until Phase E/F — the admin
+  // Motion panel does not expose these yet.
+  scrollProgressBar?: boolean;
+  snapSections?: boolean;
+  decorativeParallax?: boolean;
+  customCursor?: boolean;
+}
+
+// Phase A — per-section motion override, carried on the free-form
+// SectionSettings bag. Absent ⇒ resolveSectionMotion falls back to
+// `scrollAnimation` (or 'none'), stagger off, animateOnce on, trigger 'scroll'
+// — the exact pre-Phase-A behaviour.
+export interface SectionMotionSettings {
+  entrance?: SectionEntrance;
+  stagger?: boolean; // per-child stagger — type + CSS plumbing only in Phase A, no exposed control
+  animateOnce?: boolean; // default true; false = re-animate on every scroll-in
+  trigger?: 'scroll' | 'load';
+}
 
 // A block within a section (or Header/Footer) — the real Shopify-style
 // content-piece-inside-a-container model, replacing PR #31's flat
@@ -70,6 +109,8 @@ export interface SectionSettings {
   background?: Record<string, unknown>;
   schemeId?: string;
   scrollAnimation?: ScrollAnimation;
+  // Phase A — new-style per-section motion; wins over `scrollAnimation` when set.
+  motion?: SectionMotionSettings;
   visibility?: SectionVisibility;
   [key: string]: unknown;
 }
@@ -404,6 +445,9 @@ export interface GlobalThemeSettings {
   typography: TypographySettings;
   pageLayout: PageLayoutSettings;
   animations: AnimationSettings;
+  // Phase A — the global motion model. OPTIONAL; DEFAULT_THEME_CONFIG seeds
+  // `{}` (inert). See MotionSettings above.
+  motion?: MotionSettings;
   badges: BadgeSettings;
   buttons: ButtonSettings;
   cart: CartSettings;

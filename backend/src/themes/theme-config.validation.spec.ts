@@ -17,6 +17,19 @@ describe('assertValidThemeConfig', () => {
     expect(() => assertValidThemeConfig(baseConfig())).not.toThrow();
   });
 
+  it('accepts a populated globalSettings.motion (Phase A — opaque to the validator)', () => {
+    const config = baseConfig();
+    config.globalSettings.motion = {
+      intensity: 'expressive',
+      speed: 1.2,
+      easing: 'overshoot',
+      scrollMotion: true,
+      hoverMotion: false,
+    };
+    config.sections[1].settings.motion = { entrance: 'blur-in', stagger: true, animateOnce: false };
+    expect(() => assertValidThemeConfig(config)).not.toThrow();
+  });
+
   it('rejects an unknown top-level key', () => {
     const config = { ...baseConfig(), notARealKey: true };
     expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
