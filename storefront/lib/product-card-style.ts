@@ -23,7 +23,7 @@ export function resolveCardAspectClass(aspect: ImageAspect | string | undefined 
 
 // Radius classes use `.theme-round-*` (globals.css) so they follow
 // globalSettings.radius; the literal fallbacks are the exact pre-B1 values
-// (`bordered`/`shadowed` were `rounded-lg` = `--radius-md` fallback `0.5rem`).
+// (`bordered`/`shadowed` were `rounded-lg` = `--theme-round-md` fallback `0.5rem`).
 const CARD_STYLE_BASE: Record<CardStyle, string> = {
   minimal: "",
   bordered: "border border-stroke theme-round-md",

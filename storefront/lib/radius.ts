@@ -6,18 +6,23 @@
 // CONTRACT — the byte-identical no-op:
 //   resolveRadiusCssVars(undefined | {} | { preset: <unset/unknown> } |
 //   { applyToButtons: true })  →  {}
-//   → applyRadiusCssVars writes nothing → every `var(--radius-*, <literal>)`
-//   in globals.css / the .theme-round-* classes resolves to its literal
-//   fallback (= the exact pre-B1 Tailwind value: rounded-md 0.375rem,
-//   rounded-lg 0.5rem, rounded-xl 0.75rem). This is the ONLY no-op.
+//   → applyRadiusCssVars writes nothing → every `var(--theme-round-*, <literal>)`
+//   in globals.css's .theme-round-* classes resolves to its literal fallback
+//   (= the exact pre-B1 value: the old rounded-md 0.375rem, rounded-lg 0.5rem,
+//   rounded-xl 0.75rem). This is the ONLY no-op.
 //
-// `preset: 'rounded'` is a deliberate near-today baseline (md 8px = rounded-lg,
-// lg 12px = rounded-xl), NOT byte-identical to unset — the only true no-op is
-// `radius` unset / `{}` / no `preset`.
+// The custom property is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4
+// `--radius-*` is a theme namespace, so setting it (anywhere) redefines the
+// stock `rounded-sm/-md/-lg` utilities on every unrelated call site. B1 shipped
+// with `--radius-*` and hit exactly that; renamed in the follow-up hotfix.
+//
+// `preset: 'rounded'` is a deliberate near-today baseline (md 8px ≈ old
+// rounded-lg, lg 12px ≈ old rounded-xl), NOT byte-identical to unset — the only
+// true no-op is `radius` unset / `{}` / no `preset`.
 //
 // `applyToButtons` is NOT resolved here — it gates the `--theme-radius` bridge
-// in shop-context.tsx (whether the scale's --radius-md also drives
-// buttons/inputs/section-image-containers). On its own it emits no --radius-*.
+// in shop-context.tsx (whether the scale's md value also drives
+// buttons/inputs/section-image-containers). On its own it emits no vars.
 
 import type { RadiusPreset, RadiusSettings } from "./theme-config-types";
 
@@ -32,7 +37,11 @@ const RADIUS_SCALE: Record<RadiusPreset, { sm: number; md: number; lg: number }>
   pill: { sm: 12, md: 24, lg: 9999 },
 };
 
-export const RADIUS_CSS_VAR_NAMES: readonly string[] = ["--radius-sm", "--radius-md", "--radius-lg"];
+export const RADIUS_CSS_VAR_NAMES: readonly string[] = [
+  "--theme-round-sm",
+  "--theme-round-md",
+  "--theme-round-lg",
+];
 
 function isKnownPreset(v: unknown): v is RadiusPreset {
   return typeof v === "string" && (PRESETS as readonly string[]).includes(v);
@@ -43,15 +52,15 @@ export function resolveRadiusCssVars(radius: RadiusSettings | null | undefined):
   if (!isKnownPreset(preset)) return {};
   const s = RADIUS_SCALE[preset];
   return {
-    "--radius-sm": `${s.sm}px`,
-    "--radius-md": `${s.md}px`,
-    "--radius-lg": `${s.lg}px`,
+    "--theme-round-sm": `${s.sm}px`,
+    "--theme-round-md": `${s.md}px`,
+    "--theme-round-lg": `${s.lg}px`,
   };
 }
 
 // Set the resolved vars; clear any this theme doesn't define — the SPA-leak
 // guard (a client-side nav / preview postMessage from a radius-scaled theme to
-// one without a preset must not leave stale --radius-* on :root). Mirrors
+// one without a preset must not leave stale --theme-round-* on :root). Mirrors
 // motion.ts's applyMotionCssVars.
 export function applyRadiusCssVars(
   root: Pick<CSSStyleDeclaration, "setProperty" | "removeProperty">,
@@ -73,7 +82,7 @@ export function resolveThemeRadius(
   buttonCornerRadius: number,
 ): string {
   if (radius?.applyToButtons) {
-    const md = resolveRadiusCssVars(radius)["--radius-md"];
+    const md = resolveRadiusCssVars(radius)["--theme-round-md"];
     if (md) return md;
   }
   return `${buttonCornerRadius}px`;
