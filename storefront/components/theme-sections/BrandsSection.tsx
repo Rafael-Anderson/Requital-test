@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { listBrands, resolveImageUrl } from "@/lib/api";
@@ -42,6 +42,10 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
   // Links are suppressed inside the builder preview so a click selects the
   // section rather than navigating the iframe away.
   const linkBrands = settings.linkBrands === true && !previewMode;
+  // Post-G0 batch — a continuous marquee instead of the static grid, reusing
+  // the exact same .marquee-track + --motion-marquee-duration the
+  // announcement bar already uses (theme-templates-and-motion.md §3.8 #9).
+  const scrolling = settings.scrolling === true;
 
   if (brands === null) return null;
 
@@ -60,6 +64,23 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
     );
   }
 
+  function renderBrand(brand: Brand) {
+    const logo = resolveImageUrl(brand.logoUrl);
+    const inner: ReactNode = logo ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={logo} alt={brand.name} title={brand.name} className="max-h-12 w-auto max-w-full object-contain opacity-80 transition-opacity hover:opacity-100" />
+    ) : (
+      <span className="text-sm font-medium text-zinc-500">{brand.name}</span>
+    );
+    return linkBrands ? (
+      <Link href={`${shopBasePath}/brands/${brand.id}`} aria-label={brand.name} className="flex items-center justify-center">
+        {inner}
+      </Link>
+    ) : (
+      inner
+    );
+  }
+
   return (
     <div className="mx-auto px-4 sm:px-6 theme-section-py" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {heading && (
@@ -67,28 +88,27 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
           {heading}
         </h2>
       )}
-      <div className={`grid ${COLS_CLASS[logosPerRow]} items-center gap-x-6 gap-y-6`}>
-        {shown.map((brand) => {
-          const logo = resolveImageUrl(brand.logoUrl);
-          const inner: ReactNode = logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={brand.name} title={brand.name} className="max-h-12 w-auto max-w-full object-contain opacity-80 transition-opacity hover:opacity-100" />
-          ) : (
-            <span className="text-sm font-medium text-zinc-500">{brand.name}</span>
-          );
-          return (
-            <div key={brand.id} className="flex items-center justify-center">
-              {linkBrands ? (
-                <Link href={`${shopBasePath}/brands/${brand.id}`} aria-label={brand.name} className="flex items-center justify-center">
-                  {inner}
-                </Link>
-              ) : (
-                inner
-              )}
+      {scrolling ? (
+        // Doubled logo list so the -50% translateX loop seams seamlessly
+        // (same technique as components/AnnouncementBar.tsx's text marquee).
+        <div className="overflow-hidden">
+          <div className="inline-flex items-center gap-x-12 marquee-track">
+            {[...shown, ...shown].map((brand, i) => (
+              <div key={`${brand.id}-${i}`} className="flex items-center justify-center shrink-0">
+                {renderBrand(brand)}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className={`grid ${COLS_CLASS[logosPerRow]} items-center gap-x-6 gap-y-6`}>
+          {shown.map((brand, i) => (
+            <div key={brand.id} className="flex items-center justify-center theme-stagger-child" style={{ "--i": i } as CSSProperties}>
+              {renderBrand(brand)}
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

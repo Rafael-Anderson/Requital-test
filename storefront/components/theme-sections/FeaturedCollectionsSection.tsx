@@ -99,12 +99,12 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
         </div>
       )}
       <div className={`grid ${gridCols} gap-3`}>
-        {tiles.map((c) => (
+        {tiles.map((c, i) => (
           <Link
             key={c.id}
             href={`${shopBasePath}/collections/${c.slug}`}
-            className="group overflow-hidden border border-stroke"
-            style={{ borderRadius: "var(--theme-radius, 8px)" }}
+            className="group overflow-hidden border border-stroke theme-stagger-child"
+            style={{ borderRadius: "var(--theme-radius, 8px)", "--i": i } as CSSProperties}
           >
             <div className={`relative ${aspect} bg-black/5 overflow-hidden`}>
               {c.image ? (

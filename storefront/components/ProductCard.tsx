@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { stripHtmlToText } from "@/lib/sanitize-html";
@@ -74,6 +75,12 @@ export default function ProductCard({ product, orientation }: { product: Product
     (outOfStock ? resolveProductBadge("sold_out", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes) : null) ||
     (discounted ? resolveProductBadge("sale", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes) : null);
   const images = product.images.length > 0 ? product.images.map((i) => i.url) : [product.thumbnail];
+  // Post-G0 batch — animations.imageLoad: 'fade'. Each image starts invisible
+  // and crossfades in once its own onLoad fires; unset (the default) skips
+  // this entirely so an image renders exactly as before (visible as soon as
+  // decoded, opacity governed only by the carousel/swap activeIndex below).
+  const imageLoadFade = themeConfig?.globalSettings.animations.imageLoad === "fade";
+  const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set());
   const { activeIndex, handlers } = useProductCardImageIndex(images.length, {
     cycle: !!productCards?.showCarousel,
     swapOnHover: cardHoverEffect === "swap",
@@ -126,10 +133,17 @@ export default function ProductCard({ product, orientation }: { product: Product
             key={url}
             src={url}
             alt={product.name}
+            onLoad={imageLoadFade ? () => setLoadedImages((s) => (s.has(i) ? s : new Set(s).add(i))) : undefined}
             className="theme-product-image absolute inset-0 w-full h-full object-cover transition-opacity"
-            style={{ opacity: i === activeIndex ? 1 : 0, transitionDuration: "var(--motion-duration-fast, 150ms)" }}
+            style={{
+              opacity: imageLoadFade && !loadedImages.has(i) ? 0 : i === activeIndex ? 1 : 0,
+              transitionDuration: imageLoadFade ? "var(--motion-duration-base, 300ms)" : "var(--motion-duration-fast, 150ms)",
+            }}
           />
         ))}
+        {/* Post-G0 batch — 'overlay' card hover effect (see globals.css);
+            invisible (opacity 0) for every other effect. */}
+        <span className="theme-product-hover-overlay absolute inset-0 pointer-events-none" aria-hidden />
         {badge ? (
           <span className={`absolute ${badge.positionClass} px-2 py-0.5 text-xs font-medium`} style={badge.style}>
             {badge.label}

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
@@ -61,10 +62,10 @@ export default function TestimonialsSection({ sectionId, blocks }: { sectionId: 
         </h2>
       )}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {testimonials.map((t) => {
+        {testimonials.map((t, i) => {
           const photoUrl = resolveImageUrl(t.settings.photoUrl);
           return (
-            <div key={t.id} className="p-4 border border-stroke theme-round-md">
+            <div key={t.id} className="p-4 border border-stroke theme-round-md theme-stagger-child" style={{ "--i": i } as CSSProperties}>
               {typeof t.settings.rating === "number" && <StarRating rating={t.settings.rating} />}
               <p
                 className="text-sm leading-relaxed"

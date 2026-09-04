@@ -173,6 +173,13 @@ function announcement(order: number, text: string): ThemeSection {
   return section('announcement_bar', order, { blocks: [block('announcement', { text })] });
 }
 
+// Settings-only, no blocks (BLOCK_TYPES.brands = []). `scrolling: true` is the
+// post-G0-batch marquee mode; the section renders nothing on a shop with no
+// brands configured yet (graceful, not an error).
+function brands(order: number, opts: SectionOpts = {}): ThemeSection {
+  return section('brands', order, opts);
+}
+
 function scheme(id: string, name: string, c: Omit<ColorScheme, 'id' | 'name'>): ColorScheme {
   return { id, name, ...c };
 }
@@ -194,7 +201,8 @@ const atelier: ThemeConfig = (() => {
   g.radius = { preset: 'sharp' };
   g.density = { preset: 'spacious' };
   g.motion = { intensity: 'subtle', speed: 0.8, easing: 'gentle' };
-  g.animations.cardHoverEffect = 'zoom'; // deferred target: 'desaturate'
+  g.animations.cardHoverEffect = 'desaturate';
+  g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
   g.animations.pageTransition = false;
   g.buttons.primary.cornerRadius = 0;
@@ -216,8 +224,8 @@ const atelier: ThemeConfig = (() => {
     announcementOff(0),
     hero(1, 'Flowers for the occasions that matter', 'Enquire', { entrance: 'mask-reveal', settings: { contentPosition: 'bottom-left', height: 'large', heroLayout: 'full_bleed', showSlideIndicators: false } }),
     richText(2, '<p>A studio practice. Seasonal stems, considered arrangements, and a small number of weddings and events each year.</p>', { entrance: 'fade-in', schemeId: 'scheme-2', settings: { contentWidth: 'narrow' } }),
-    featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 2, aspectRatio: 'portrait', overlayText: true } }),
-    productGrid(4, { settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait' } }),
+    featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 2, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
+    productGrid(4, { entrance: 'fade-in', settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait', motion: { stagger: true } } }),
     imageText(5, 'Every arrangement is made to order in our studio the morning of delivery.', { entrance: 'slide-left' }),
     newsletter(6, 'Seasonal notes', 'Occasional letters on what is in season.'),
   ];
@@ -244,7 +252,8 @@ const market: ThemeConfig = (() => {
   g.radius = { preset: 'rounded' };
   g.density = { preset: 'compact' };
   g.motion = { intensity: 'standard', speed: 1.1, easing: 'snappy' };
-  g.animations.cardHoverEffect = 'swap'; // deferred target: 'quick-add-slide'
+  g.animations.cardHoverEffect = 'quick-add-slide';
+  g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
   g.animations.pageTransition = false;
   g.productCards.cardStyle = 'shadowed';
@@ -271,9 +280,10 @@ const market: ThemeConfig = (() => {
       { rating: 4.8, label: '2,000+ reviews' },
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
-    featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true } }),
+    featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }),
-    newsletter(5, 'Get 10% off your first order', 'Delivery updates and seasonal offers.'),
+    brands(5, { settings: { scrolling: true } }),
+    newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.'),
   ];
 
   return c;
@@ -296,7 +306,8 @@ const bloom: ThemeConfig = (() => {
   g.radius = { preset: 'soft' };
   g.density = { preset: 'cozy' };
   g.motion = { intensity: 'expressive', speed: 1, easing: 'overshoot' };
-  g.animations.cardHoverEffect = 'rise'; // deferred target: 'tilt'
+  g.animations.cardHoverEffect = 'tilt';
+  g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
   g.animations.pageTransition = false;
   // Deliberately NOT setting buttons.primary.cornerRadius here (found during
@@ -316,14 +327,14 @@ const bloom: ThemeConfig = (() => {
   c.sections = [
     announcement(0, 'Free gift wrap on every order'),
     hero(1, 'Gifting made joyful', 'Start a gift', { entrance: 'blur-in', settings: { height: 'large', showSlideIndicators: true } }),
-    featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'portrait', overlayText: true } }),
+    featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
     imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up', schemeId: 'scheme-2' }),
     productGrid(4, { entrance: 'scale-in', settings: { columns: 3, cardStyle: 'elevated', imageAspect: 'portrait', motion: { entrance: 'scale-in', animateOnce: false } } }),
     testimonials(5, [
       { quote: 'Arrived exactly on time and looked even better than the photo.', author: 'Reem A.', rating: 5 },
       { quote: 'The gift box is gorgeous. Ordering again for every birthday.', author: 'Daniel K.', rating: 5 },
       { quote: 'So easy to personalise. My mum loved it.', author: 'Priya S.', rating: 5 },
-    ], { entrance: 'scale-in' }),
+    ], { entrance: 'rotate-in', settings: { motion: { stagger: true } } }),
     trustBar(6, [
       { icon: 'truck', text: 'Next-day delivery' },
       { icon: 'star', text: 'Thousands of 5-star gifts' },
@@ -356,7 +367,8 @@ const heritage: ThemeConfig = (() => {
   g.radius = { preset: 'subtle' };
   g.density = { preset: 'comfortable' };
   g.motion = { intensity: 'subtle', speed: 0.9, easing: 'standard' };
-  g.animations.cardHoverEffect = 'rise'; // deferred target: 'shadow'
+  g.animations.cardHoverEffect = 'shadow';
+  g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
   g.animations.pageTransition = false;
   g.productCards.cardStyle = 'bordered';
@@ -429,11 +441,18 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 // ── Deferred to C–F (re-author each template when these land — see
 //    docs/plans/theme-templates-and-motion.md §8.3/§8.4) ──────────────────
 //
+// Post-G0 batch (2026-09-04) shipped and adopted here: animations.
+// cardHoverEffect's real per-template target (desaturate / quick-add-slide /
+// tilt / shadow — no more stand-ins), animations.imageLoad: 'fade' (all four),
+// section.settings.motion.stagger (Atelier's featured_collections +
+// product_grid, Market's featured_collections, Bloom's featured_collections +
+// testimonials — Heritage deliberately has none, "everything appears
+// symmetrically"), section.settings.motion.entrance: 'rotate-in' (Bloom's
+// testimonials), and Market's brands section with scrolling: true (a
+// marquee — renders nothing until the merchant adds brands, same graceful
+// degradation as before).
+//
 // ALL templates:
-//   - animations.cardHoverEffect real target (atelier 'desaturate',
-//     market 'quick-add-slide', bloom 'tilt', heritage 'shadow') — the enum
-//     is still none|zoom|rise|swap; each currently uses the closest valid value
-//   - animations.imageLoad: 'fade' (skeleton → image crossfade) — key not built
 //   - animations.addToCart / pageTransition — deliberately left false (no
 //     silent behaviour change when the consumer lands; re-author instead)
 //   - header layout preset (header.settings.rows + zones), footer named preset
@@ -442,26 +461,24 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //
 // atelier:  hero kenBurns; header scrollBehavior 'reveal-on-hero' +
 //           transparentOverHero + mobileNav 'fullscreen'; buttons.primary
-//           hoverEffect 'sweep' + pressEffect; section stagger; motion
-//           smoothScroll; badges.style 'rectangle'
+//           hoverEffect 'sweep' + pressEffect; motion smoothScroll;
+//           badges.style 'rectangle'
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; floatingElements.backToTop;
 //           inputFields.focusAnimation 'float-label'; motion.scrollProgressBar;
 //           header scrollBehavior 'shrink' + mobileNav 'bottom-bar';
-//           product_tabs section (needs real collectionIds); brands section +
-//           brands.scrolling marquee; trust_bar rating count-up; hero
-//           indicatorStyle 'progress'; productCards.wishlistAnimation 'pop';
-//           product_vendor / product_stock card sub-blocks; buttons.secondary
-//           rendered variant + hoverEffect 'border-fill'; badges.style 'tag' +
-//           entranceAnimation
-// bloom:    card hover 'tilt'; wishlist 'burst'; hero parallax +
-//           decorativeParallax floating shapes; buttons.primary hoverEffect
-//           'shine'; buttons.pillCornerRadius pills; header scrollBehavior
+//           product_tabs section (needs real collectionIds); trust_bar rating
+//           count-up; hero indicatorStyle 'progress';
+//           productCards.wishlistAnimation 'pop'; product_vendor /
+//           product_stock card sub-blocks; buttons.secondary rendered variant
+//           + hoverEffect 'border-fill'; badges.style 'tag' + entranceAnimation
+// bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
+//           shapes; buttons.primary hoverEffect 'shine';
+//           buttons.pillCornerRadius pills; header scrollBehavior
 //           'hide-on-scroll' + mobileNav 'drawer'; footer 'big-CTA' preset +
-//           wave background; testimonials entrance 'rotate-in' (currently
-//           'scale-in'); section separators; product_tabs section;
+//           wave background; section separators; product_tabs section;
 //           announcement_bar marquee; badges.style 'circle' + entranceAnimation
-// heritage: card hover 'shadow'; buttons.secondary rendered as outline CTAs;
+// heritage: buttons.secondary rendered as outline CTAs;
 //           header 'coloured band' preset (HeaderRow.background + nav_menu
 //           inline + contact bar) + mobileNav 'drawer'; footer 'multi-column'
 //           preset + payment icons + separate bottom bar; badges.style 'ribbon'

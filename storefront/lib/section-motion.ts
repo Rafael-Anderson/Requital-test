@@ -26,6 +26,7 @@ const KNOWN_ENTRANCES: readonly SectionEntrance[] = [
   "scale-in",
   "blur-in",
   "mask-reveal",
+  "rotate-in",
 ];
 
 export function resolveSectionMotion(settings: SectionSettings | undefined): ResolvedSectionMotion {

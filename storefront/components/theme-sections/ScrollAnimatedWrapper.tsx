@@ -14,6 +14,8 @@ const ANIMATION_CLASS: Record<Exclude<SectionEntrance, "none">, string> = {
   "scale-in": "theme-anim-scale-in",
   "blur-in": "theme-anim-blur-in",
   "mask-reveal": "theme-anim-mask-reveal",
+  // Post-G0 batch.
+  "rotate-in": "theme-anim-rotate-in",
 };
 
 // Generalises the one existing IntersectionObserver usage in
