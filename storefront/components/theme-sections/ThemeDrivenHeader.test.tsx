@@ -55,6 +55,49 @@ describe("ThemeDrivenHeader — rows-absent regression (Phase 3)", () => {
   });
 });
 
+describe("ThemeDrivenHeader — icon showLabel (C1)", () => {
+  it("renders no text label by default (byte-identical to before showLabel existed)", () => {
+    const { queryByText } = renderHeader(CLASSIC_HEADER);
+    expect(queryByText("Cart")).not.toBeInTheDocument();
+    expect(queryByText("Account")).not.toBeInTheDocument();
+  });
+
+  it("renders 'Cart'/'Account' text labels when each block's showLabel is true", () => {
+    const cfg: HeaderFooterConfig = {
+      ...CLASSIC_HEADER,
+      blocks: CLASSIC_HEADER.blocks.map((b) =>
+        b.type === "cart_icon" || b.type === "account_icon" ? { ...b, settings: { ...b.settings, showLabel: true } } : b,
+      ),
+    };
+    const { getByText } = renderHeader(cfg);
+    expect(getByText("Cart")).toBeInTheDocument();
+    expect(getByText("Account")).toBeInTheDocument();
+  });
+});
+
+describe("ThemeDrivenHeader — height/contentWidth (C1)", () => {
+  it("defaults to today's py-3 classic padding and the var() max-width cap", () => {
+    const { container } = renderHeader(CLASSIC_HEADER);
+    const inner = container.querySelector(".grid.grid-cols-3") as HTMLElement;
+    expect(inner.className).toContain("py-3");
+    expect(inner.style.maxWidth).toBe("var(--theme-max-width, 80rem)");
+  });
+
+  it("applies a compact/tall padding class per settings.height", () => {
+    const compact = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, height: "compact" } });
+    expect((compact.container.querySelector(".grid.grid-cols-3") as HTMLElement).className).toContain("py-2");
+    compact.unmount();
+    const tall = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, height: "tall" } });
+    expect((tall.container.querySelector(".grid.grid-cols-3") as HTMLElement).className).toContain("py-5");
+  });
+
+  it("drops the max-width cap when contentWidth is 'full'", () => {
+    const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, contentWidth: "full" } });
+    const inner = container.querySelector(".grid.grid-cols-3") as HTMLElement;
+    expect(inner.style.maxWidth).toBe("");
+  });
+});
+
 describe("ThemeDrivenHeader — rows present (Phase 3)", () => {
   it("renders one bar per row and drops the 3-zone grid", () => {
     const cfg: HeaderFooterConfig = {
