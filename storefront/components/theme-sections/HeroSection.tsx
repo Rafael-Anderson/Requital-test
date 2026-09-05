@@ -243,6 +243,12 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
 
   const heroInner = (
     <div
+      // §8.7 item 2 — a DOM marker, not a threaded ref: ThemeDrivenHeader is
+      // global chrome mounted independently of this section (only ever
+      // present together on the homepage route), so 'reveal-on-hero'
+      // measures this element's real rendered height via
+      // getBoundingClientRect() instead of a cross-tree ref.
+      data-theme-hero="true"
       className={`relative flex ${height} ${position} overflow-hidden px-6 py-12`}
       style={inset && cornerRadius ? { borderRadius: `${cornerRadius}px` } : undefined}
     >
