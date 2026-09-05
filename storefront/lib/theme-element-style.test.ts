@@ -10,6 +10,7 @@ import {
   resolveIconElementStyle,
   themeButtonBaseStyle,
   resolveButtonFillStyle,
+  resolveButtonHoverClass,
   themeTextPresetStyle,
 } from "./theme-element-style";
 
@@ -219,5 +220,55 @@ describe("resolveButtonFillStyle", () => {
     expect(style.color).toBe("var(--color-accent)");
     expect(style.borderColor).toBe("transparent");
     expect(style.borderWidth).toBe("0px");
+  });
+});
+
+describe("resolveButtonHoverClass", () => {
+  it("returns an empty className and no icon when both are unset (byte-identical no-op)", () => {
+    expect(resolveButtonHoverClass(undefined, undefined)).toEqual({ className: "", showIcon: false });
+  });
+
+  it("'none' is identical to unset", () => {
+    expect(resolveButtonHoverClass("none", undefined)).toEqual({ className: "", showIcon: false });
+  });
+
+  it("'sweep' adds the sweep class plus relative/overflow-hidden", () => {
+    expect(resolveButtonHoverClass("sweep", undefined)).toEqual({
+      className: "theme-btn-sweep relative overflow-hidden",
+      showIcon: false,
+    });
+  });
+
+  it("'shine' adds the shine class plus relative/overflow-hidden", () => {
+    expect(resolveButtonHoverClass("shine", undefined)).toEqual({
+      className: "theme-btn-shine relative overflow-hidden",
+      showIcon: false,
+    });
+  });
+
+  it("'border-fill' adds only its own class, no relative/overflow-hidden needed", () => {
+    expect(resolveButtonHoverClass("border-fill", undefined)).toEqual({
+      className: "theme-btn-border-fill",
+      showIcon: false,
+    });
+  });
+
+  it("'icon-nudge' signals showIcon and adds 'group' for the group-hover translate", () => {
+    expect(resolveButtonHoverClass("icon-nudge", undefined)).toEqual({ className: "group", showIcon: true });
+  });
+
+  it("pressEffect adds theme-btn-press independent of hoverEffect, and composes with it", () => {
+    expect(resolveButtonHoverClass(undefined, true)).toEqual({ className: "theme-btn-press", showIcon: false });
+    expect(resolveButtonHoverClass("sweep", true)).toEqual({
+      className: "theme-btn-sweep relative overflow-hidden theme-btn-press",
+      showIcon: false,
+    });
+  });
+
+  it("pressEffect: false behaves the same as unset", () => {
+    expect(resolveButtonHoverClass("shine", false)).toEqual({
+      className: "theme-btn-shine relative overflow-hidden",
+      showIcon: false,
+    });
   });
 });
