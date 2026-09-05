@@ -11,6 +11,7 @@ import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
 import MobileNav from "@/components/MobileNav";
 import { navMenuInHeaderRow } from "@/lib/header-rows";
+import { useHeaderScrollState } from "@/lib/use-header-scroll-state";
 import TopBar from "@/components/TopBar";
 import CartDrawer from "@/components/CartDrawer";
 import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
@@ -94,6 +95,22 @@ function Header() {
   // completely untouched, the byte-identical no-op path).
   const mobileNavMode = themeConfig?.header.settings.mobileNav as MobileNavMode | undefined;
 
+  // §8.7 item 2 — header.settings.scrollBehavior. 'shrink'/'hide-on-scroll'/
+  // 'reveal-on-hero' promote this whole <header> (announcement + top bar +
+  // menu bar together) to sticky and own the hide/solid treatment HERE, not
+  // in ThemeDrivenHeader.tsx — this element is where the header's real
+  // opaque background lives (bg-header/customHeaderBg); ThemeDrivenHeader's
+  // own inner div can't fake transparency on its own, since whatever shows
+  // "through" it is just this same opaque ancestor. The plain 'sticky'
+  // value (or the legacy bare `sticky` boolean) is untouched — it keeps
+  // applying narrowly to ThemeDrivenHeader's own div only, exactly as
+  // today, since that's meant to be a drop-in equivalent, not a redesign.
+  const scrollBehavior = (themeConfig?.header.settings.scrollBehavior as string) || "";
+  const transparentOnHero = !!themeConfig?.header.settings.transparentOnHero;
+  const { hidden, solid } = useHeaderScrollState(scrollBehavior, transparentOnHero);
+  const wholeHeaderSticky = scrollBehavior === "shrink" || scrollBehavior === "hide-on-scroll" || scrollBehavior === "reveal-on-hero";
+  const isTransparent = scrollBehavior === "reveal-on-hero" && !solid;
+
   return (
     // relative + z-30 gives the header its own stacking context so it
     // always paints above <main>'s content, regardless of DOM order — a
@@ -103,8 +120,14 @@ function Header() {
     // context) could end up painted underneath it, hiding MenuBar's hover
     // dropdown (z-20, scoped to its own parent) behind that section.
     <header
-      className={`relative z-30 bg-header text-header-fg ${separator.className}`}
-      style={{ backgroundColor: customHeaderBg, ...separator.style }}
+      className={`${wholeHeaderSticky ? "sticky top-0" : "relative"} z-30 bg-header text-header-fg ${separator.className} ${hidden ? "theme-header-hidden" : ""}`}
+      style={{
+        backgroundColor: isTransparent ? "transparent" : customHeaderBg,
+        ...(wholeHeaderSticky
+          ? { transition: "background-color var(--motion-duration-base, 300ms) var(--motion-ease, ease), transform var(--motion-duration-base, 300ms) var(--motion-ease, ease)" }
+          : {}),
+        ...separator.style,
+      }}
     >
       {!announcementBelow && <AnnouncementBar />}
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />

@@ -431,6 +431,22 @@ body {
   box-shadow: none;
 }
 
+/* §8.7 item 2 — header.settings.scrollBehavior. .theme-header-hidden is
+   applied to the ancestor <header> (ShopLayoutClient.tsx) for
+   'hide-on-scroll'; .theme-logo-shrink and .theme-header-shrink-transition
+   are applied within ThemeDrivenHeader.tsx for 'shrink'. All three read the
+   existing --motion-duration-base/--motion-ease tokens — no new timing. */
+.theme-header-hidden {
+  transform: translateY(-100%);
+}
+.theme-header-shrink-transition {
+  transition: padding var(--motion-duration-base, 300ms) var(--motion-ease, ease);
+}
+.theme-logo-shrink {
+  transform: scale(0.85);
+  transition: transform var(--motion-duration-base, 300ms) var(--motion-ease, ease);
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4
