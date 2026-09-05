@@ -7,6 +7,7 @@ import {
   resolveMenuBarBackground,
   resolvePriceElementStyle,
   resolveIconStrokeWidth,
+  resolveIconCorners,
   resolveIconElementStyle,
   themeButtonBaseStyle,
   resolveButtonFillStyle,
@@ -149,6 +150,18 @@ describe("resolveIconStrokeWidth", () => {
   it("falls back to lucide's own default (2) for an unset/unknown value — pixel-identical to before this setting existed", () => {
     expect(resolveIconStrokeWidth(undefined)).toBe(2);
     expect(resolveIconStrokeWidth("not-a-real-value")).toBe(2);
+  });
+});
+
+describe("resolveIconCorners", () => {
+  it("maps 'sharp' to butt/miter", () => {
+    expect(resolveIconCorners("sharp")).toEqual({ strokeLinecap: "butt", strokeLinejoin: "miter" });
+  });
+
+  it("returns lucide's own round/round default explicitly for unset/'rounded'/unknown — byte-identical to before this setting existed", () => {
+    expect(resolveIconCorners(undefined)).toEqual({ strokeLinecap: "round", strokeLinejoin: "round" });
+    expect(resolveIconCorners("rounded")).toEqual({ strokeLinecap: "round", strokeLinejoin: "round" });
+    expect(resolveIconCorners("not-a-real-value")).toEqual({ strokeLinecap: "round", strokeLinejoin: "round" });
   });
 });
 
