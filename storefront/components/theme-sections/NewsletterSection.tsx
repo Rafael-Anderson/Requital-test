@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type FormEvent } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { subscribeNewsletter } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
@@ -41,6 +41,10 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+
+  // §8.7 item 5 — section.settings.successAnimation. Off/absent ⇒ the plain
+  // instant text swap below, byte-identical to today.
+  const successAnimation = settings.successAnimation === true;
 
   const headingBlock = blocks.find((b) => b.type === "heading" && b.visible);
   const textBlock = blocks.find((b) => b.type === "text" && b.visible);
@@ -90,7 +94,14 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
         </p>
       )}
       {status === "success" ? (
-        <p className="text-sm font-medium">Thanks for subscribing!</p>
+        successAnimation ? (
+          <div className="theme-newsletter-success flex items-center justify-center gap-2 text-sm font-medium">
+            <Check className="size-5 text-accent" aria-hidden="true" />
+            Thanks for subscribing!
+          </div>
+        ) : (
+          <p className="text-sm font-medium">Thanks for subscribing!</p>
+        )
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           <input

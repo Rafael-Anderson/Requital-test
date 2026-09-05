@@ -447,6 +447,16 @@ body {
   transition: transform var(--motion-duration-base, 300ms) var(--motion-ease, ease);
 }
 
+/* §8.7 item 5 — newsletter successAnimation. The success block mounts fresh
+   when the form is submitted, so a plain one-shot animation plays exactly
+   once on appearance (no observer, no .theme-anim-visible toggle). Reuses
+   Phase A's @keyframes theme-scale-in; the blanket prefers-reduced-motion
+   rule near the top of this file neutralizes it — the checkmark + message
+   still appear, just without the scale ramp. */
+.theme-newsletter-success {
+  animation: theme-scale-in var(--motion-duration-base, 300ms) var(--motion-ease, ease-out) forwards;
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4

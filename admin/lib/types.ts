@@ -1228,6 +1228,8 @@ export interface SectionSettings {
   motion?: SectionMotionSettings;
   imageAspect?: ImageAspect;
   visibility?: SectionVisibility;
+  // §8.7 item 5 — newsletter section only.
+  successAnimation?: boolean;
   [key: string]: unknown;
 }
 
