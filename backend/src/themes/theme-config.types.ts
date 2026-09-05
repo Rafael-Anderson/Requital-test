@@ -118,6 +118,9 @@ export interface SectionSettings {
   // section. Unset ⇒ the global (or `square`).
   imageAspect?: ImageAspect;
   visibility?: SectionVisibility;
+  // §8.7 item 5 — newsletter section only; on ⇒ a checkmark + message scale
+  // in on successful signup instead of the plain instant text swap.
+  successAnimation?: boolean;
   [key: string]: unknown;
 }
 

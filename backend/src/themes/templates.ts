@@ -250,7 +250,7 @@ const atelier: ThemeConfig = (() => {
     featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 2, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait', motion: { stagger: true } } }),
     imageText(5, 'Every arrangement is made to order in our studio the morning of delivery.', { entrance: 'slide-left' }),
-    newsletter(6, 'Seasonal notes', 'Occasional letters on what is in season.'),
+    newsletter(6, 'Seasonal notes', 'Occasional letters on what is in season.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
 
   return c;
@@ -340,7 +340,7 @@ const market: ThemeConfig = (() => {
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }),
     brands(5, { settings: { scrolling: true } }),
-    newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.'),
+    newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
 
   return c;
@@ -414,7 +414,7 @@ const bloom: ThemeConfig = (() => {
       { icon: 'star', text: 'Thousands of 5-star gifts' },
       { icon: 'shield', text: 'Happiness guarantee' },
     ], null),
-    newsletter(7, 'Join the club', 'Early access to new gifts and seasonal drops.'),
+    newsletter(7, 'Join the club', 'Early access to new gifts and seasonal drops.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
 
   return c;
@@ -609,7 +609,8 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //
 // atelier:  hero kenBurns; motion smoothScroll; badges.style 'rectangle'
 //           (header scrollBehavior 'reveal-on-hero' + transparentOnHero
-//           closed out §8.7 item 2, 2026-09-05)
+//           closed out §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
+//           newsletter successAnimation §8.7 item 5 — all 2026-09-05)
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; inputFields.focusAnimation
 //           'float-label'; motion.scrollProgressBar; product_tabs section
@@ -618,13 +619,14 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           product_stock card sub-blocks; buttons.secondary rendered
 //           variant + hoverEffect 'border-fill'; badges.style 'tag' +
 //           entranceAnimation (header scrollBehavior 'shrink' closed out
-//           §8.7 item 2, 2026-09-05; trust_bar rating count-up closed out
-//           §8.7 item 3, 2026-09-05)
+//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
+//           successAnimation §8.7 item 5 — all 2026-09-05)
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
 //           shapes; buttons.pillCornerRadius pills; section separators;
 //           product_tabs section; announcement_bar marquee; badges.style
 //           'circle' + entranceAnimation (header scrollBehavior
-//           'hide-on-scroll' closed out §8.7 item 2, 2026-09-05)
+//           'hide-on-scroll' closed out §8.7 item 2; newsletter
+//           successAnimation §8.7 item 5 — all 2026-09-05)
 // heritage: buttons.secondary rendered as outline CTAs; badges.style 'ribbon'
 //           (scrollBehavior deliberately left unset — not named in
 //           Heritage's own deferred note, matching its "notably does NOT

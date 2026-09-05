@@ -483,7 +483,7 @@ Merchant control: `globalSettings.animations.imageLoad?: 'none' | 'fade' | 'blur
 | 2 | Form validation shake/pulse | GPU | S | ✅ | generalise the admin login `.shake` + key-remount trick as a storefront utility (newsletter, checkout) |
 | 3 | Field focus: label float / border-colour / focus-ring grow | GPU/paint | S | ✅ `inputFields.focusAnimation?: 'none' | 'border' | 'float-label' | 'glow'` | **gives the dead `inputFields` category a consumer** |
 | 4 | Checkbox/toggle: checkmark draw, knob slide + slight overshoot | GPU | S | ✅ | |
-| 5 | Newsletter success: form collapses, checkmark + "You're in!" scales in | GPU/layout | M | ✅ `newsletter.successAnimation?: boolean` | |
+| 5 | Newsletter success: form collapses, checkmark + "You're in!" scales in | GPU/layout | M | ✅ **BUILT §8.12** — `section.settings.successAnimation?: boolean`; the "collapse" is the form unmount (heights are near-equal in this layout), the payoff is the success block's scale-in | |
 | 6 | Add-to-cart button success state ("Add" → ✓ → "Added" → "Add") | GPU | M | ✅ | see §3.2 #7 `label-swap` |
 | 7 | Accordion (FAQ, filter groups): height expand + chevron rotate | layout | M | ✅ | `grid-template-rows: 0fr→1fr` (no JS measurement) |
 | 8 | Tab switch (`product_tabs`): active pill slides (magic-line), content crossfades, height animates to new content | GPU + layout | M | ✅ | `product_tabs` currently hard-swaps — clear polish target; used by Market + Bloom |
@@ -1077,7 +1077,7 @@ priority recommendation for what's left.
 | button `hoverEffect` / `pressEffect` (`buttons.primary`) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ §8.8 |
 | footer layout presets | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C1 |
 | `animations.imageLoad: fade` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ batch 1 |
-| newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 | open |
+| newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 | ✅ §8.12 (table confirmed correct this time — matches each template's own §6 entry) |
 | `header.settings.scrollBehavior` + `transparentOnHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 | ✅ §8.9 |
 | `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✗ | ✗ | **1** | ✅ §8.10 (table corrected — Bloom has no `rating_badge`, Heritage's deferred block never asked for it) |
 | `icons.corners` (rounded/sharp) | ✓ | ✗ | ✗ | ✓ | **2** | ✅ §8.11 (table corrected — Market and Bloom both spec `rounded`, which is byte-identical to unset) |
@@ -1215,20 +1215,21 @@ complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
-§8.7 items 1-4 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
-scrollBehavior, §8.10 trust_bar rating count-up, §8.11 icons.corners)**, all
-built and merged. The rest of §8.7's priority list (items 5+) and D/E/F/G1
-more broadly are **not** committed scope — **see §8.7 for the current
-re-evaluation and priority order** (recorded 2026-09-05, supersedes §8.3's
-ordering the same way §8.3 superseded the raw table below where they
-disagree). G0 (Flow A) + batch 1 + C + §8.8–§8.11 already deliver four
-visibly distinct starting points that pick up real card-hover effects,
-image-load fade, stagger, a brands marquee (Market), header/footer
-structure, a real mobile nav, button hover/press feedback, real header
-scroll behaviour, (Market only) a real animated trust-bar rating, and sharp
-icon corners (Atelier + Heritage); the remaining D/E/F flourishes each
-template wants are listed in its own deferred block (§8.11 updated
-Atelier/Heritage's) and re-prioritized in §8.7.
+§8.7 items 1-5 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
+scrollBehavior, §8.10 trust_bar rating count-up, §8.11 icons.corners, §8.12
+newsletter successAnimation)**, all built and merged. The rest of §8.7's
+priority list (items 6+) and D/E/F/G1 more broadly are **not** committed
+scope — **see §8.7 for the current re-evaluation and priority order**
+(recorded 2026-09-05, supersedes §8.3's ordering the same way §8.3
+superseded the raw table below where they disagree). G0 (Flow A) + batch 1
++ C + §8.8–§8.12 already deliver four visibly distinct starting points that
+pick up real card-hover effects, image-load fade, stagger, a brands marquee
+(Market), header/footer structure, a real mobile nav, button hover/press
+feedback, real header scroll behaviour, (Market only) a real animated
+trust-bar rating, sharp icon corners (Atelier + Heritage), and a newsletter
+success animation (Atelier + Market + Bloom); the remaining D/E/F
+flourishes each template wants are listed in its own deferred block (§8.12
+updated Atelier/Market/Bloom's) and re-prioritized in §8.7.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1935,8 +1936,9 @@ Treat the current §8 D/E/F rows as still-accurate scope, not stale.
 4. **`icons.corners` (rounded/sharp, §5.1) — BUILT, see §8.11's correction:
    real committed scope was 2/4 (Atelier + Heritage), not the table's 3/4
    (Market and Bloom both spec `rounded` = unset).**
-5. **Newsletter `successAnimation` (§3.9 #5)** — 3/4 templates, Effort **S–M**
-   (form collapses, a checkmark + confirmation text scales in).
+5. **Newsletter `successAnimation` (§3.9 #5) — BUILT, see §8.12. The §6.5
+   table's 3/4 was confirmed correct this time (Atelier + Market + Bloom;
+   Heritage plain).**
 6. **`buttons.secondary` rendered variant (§3.2, §9.3)** — 2/4 templates
    (Market, Heritage) — the one remaining item that finally gives
    `buttons.secondary` and `secondaryButtonLabel` (scheme) a real consumer.
@@ -2335,6 +2337,101 @@ lint +0 (77).
 
 ---
 
+### 8.12 newsletter `successAnimation` — BUILT (2026-09-05, `feat/newsletter-success-animation`)
+
+§8.7 item 5. On a successful newsletter signup, the form is swapped for a
+checkmark + message that scales in via a one-shot CSS animation, instead of
+the plain instant `<p>Thanks for subscribing!</p>` swap that happens today.
+
+**This time the §6.5 table was confirmed correct, not corrected.** Items
+2–4 each found the table wrong, imprecise, or internally inconsistent. Here
+§6.5's "3/4" matches each template's own §6 catalog table exactly: Atelier
+(§6.1) `newsletter — successAnimation: true`, Market (§6.2)
+`successAnimation: true`, Bloom (§6.3) `form collapses to a checkmark on
+success (successAnimation: true)`, Heritage (§6.4) `newsletter — plain`.
+The one gap closed: `templates.ts`'s terse deferred-block comments had
+never mentioned it for any template (the last few rounds leaned on those as
+a secondary source) — the detailed §6 tables are authoritative and
+internally consistent, so 3/4 stood; the deferred-block comments for
+Atelier/Market/Bloom now record it closed.
+
+**Settings location: `section.settings.successAnimation` (per-section), not
+a `globalSettings` category** — unlike most of this batch. `NewsletterSection`
+already reads `settings.typography` from its own `section.settings`;
+`SectionSettings` is `[key: string]: unknown` (free-form) in all three
+mirrors, and validation only checks `sections[].settings must be an
+object`. An explicit optional `successAnimation?: boolean` was added to the
+`SectionSettings` interface in all three anyway, for read-site clarity
+alongside `imageAspect?` — not a structural requirement.
+
+**Baseline confirmed first:** `NewsletterSection.tsx` today does an
+*instant* conditional swap on `status === 'success'` — `<p className="text-sm
+font-medium">Thanks for subscribing!</p>` replaces `<form>`, no animation,
+no checkmark. `subscribeNewsletter` POSTs to
+`/public/:shopSlug/newsletter-subscribe` (real `newslettersubscriber` row
+insert — no email provider).
+
+**"Collapse" = the swap itself, no height animation — and why.** The
+`grid-template-rows: 0fr→1fr` collapse trick the plan mentions "used
+before" is used **nowhere** in the storefront today (it's a *planned*
+accordion item, §3.9 #7). More to the point: in this section's centred
+`max-w-xl` layout the `<form>` (one row) and the success block (one line)
+are nearly the same height — a height-morph would animate ~0–20px while
+fighting the accessibility friction of keeping a `required`-input form
+mounted-but-inert through a transition. The form unmounts as today; the
+visible payoff — "a checkmark scales in where the form was" — comes
+entirely from the success block's own entrance animation.
+
+**Scale-in: one new class, zero new keyframes.** `.theme-newsletter-success
+{ animation: theme-scale-in var(--motion-duration-base, 300ms)
+var(--motion-ease, ease-out) forwards; }` — reuses Phase A's `@keyframes
+theme-scale-in` (opacity 0→1 + scale 0.94→1). The success `<div>` mounts
+fresh when `status` flips to `'success'`, so the animation plays exactly
+once on appearance — no `IntersectionObserver`, no `.theme-anim-visible`
+toggle, no `ScrollAnimatedWrapper` (that's for on-scroll entrances, the
+wrong trigger). `--motion-duration-base` (not `-slow`) — a quick
+micro-feedback, not a section entrance.
+
+**Reduced motion:** the single blanket `@media (prefers-reduced-motion:
+reduce)` rule sets `animation-duration: 0.01ms !important` on `*` — it
+neutralizes `.theme-newsletter-success` for free. The checkmark + message
+still appear, just without the ramp. Zero new gating.
+
+**Checkmark:** a lucide `Check` icon, rendered only when `successAnimation`
+is on. Existing copy kept — the catalog's "You're in!" was illustrative;
+changing user-facing copy is a separate concern.
+
+**No-op:** `section.settings.successAnimation` absent/`false` ⇒ the current
+instant `<p>` swap, byte-for-byte. No `DEFAULT_THEME_CONFIG` seed (per-
+section setting). The existing `NewsletterSection.test.tsx` cases all pass
+`settings={{}}` and keep passing.
+
+Admin: `NewsletterSettings.tsx` gains a "Success animation" `<Toggle>` +
+caption. Templates: `successAnimation: true` on Atelier/Market/Bloom's
+`newsletter(...)` calls (the helper already forwards `opts.settings`);
+Heritage untouched.
+
+**Scratch-shop pass — a real form submission, not a mock.** The dev shop's
+`/newsletter-subscribe` just inserts a row. Published the real re-authored
+Atelier template plus Heritage as an untouched control; for each, filled
+the email with a timestamp-unique address, clicked Subscribe, waited for
+the swap. Atelier: a `.theme-newsletter-success` div containing an svg,
+`getComputedStyle().animationName === 'theme-scale-in'`,
+`animationDuration` a real `0.176s` (Atelier's `subtle` motion tier).
+Atelier again with `emulateMedia({ reducedMotion: 'reduce' })`: the div +
+svg still present, `animationDuration` computed at `1e-05s` (the blanket
+rule). Heritage: the plain `<p>`, `animationName: none`, no such div. Zero
+console errors. Scratch spec deleted + `playwright.config.ts` reverted
+after.
+
+**Gate:** backend `tsc` + `jest` (themes, 87/87) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 503/503 + lint +0 (33); admin `tsc` + `build` +
+`vitest` (3 failures in `AccountSetup.test.tsx` — the pre-documented
+full-suite-only flakiness, 12/12 in isolation, untouched by this change) +
+lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -2456,6 +2553,7 @@ avoids retouching every token later. Full table in §8.1.
 | `buttons.primary.hoverEffect`/`.pressEffect` | ✅ `resolveButtonHoverClass()`, Hero CTA + Newsletter submit | ✅ §8.8 |
 | `rating_badge.countUp` | ✅ `useCountUp()`, Market's trust_bar (only template that requested it) | ✅ §8.10 |
 | `icons.corners` | ✅ `resolveIconCorners()`, header + search icons (same narrow scope as `icons.stroke`) | ✅ §8.11 |
+| `section.settings.successAnimation` (newsletter) | ✅ `.theme-newsletter-success` scale-in on the success swap | ✅ §8.12 |
 
 ### 9.4 Other risks
 
