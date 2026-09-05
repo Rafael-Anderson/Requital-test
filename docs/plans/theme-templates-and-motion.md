@@ -1920,9 +1920,10 @@ Treat the current §8 D/E/F rows as still-accurate scope, not stale.
 (highest surviving template-count first) plus the layout-catalog items
 (§4.2–4.5, 4.8) that were never actually assigned to a lettered phase:
 
-1. **`buttons.primary.hoverEffect` + `.pressEffect` (§3.2)** — **4/4
-   templates**, the single highest-count open item on the whole board now
-   that header/footer/mobile-nav are done. Effort **S** per effect
+1. **`buttons.primary.hoverEffect` + `.pressEffect` (§3.2) — PICKED UP
+   2026-09-05, see §8.8.** **4/4 templates**, the single highest-count open
+   item on the whole board now that header/footer/mobile-nav are done.
+   Effort **S** per effect
    (`sweep`/`shine`/`border-fill`/`pressEffect` are all one-shot CSS
    transitions, no JS) — cheap relative to its reach. Do this first.
 2. **`header.settings.scrollBehavior` + `.transparentOverHero` (§3.3)** —
@@ -2004,9 +2005,16 @@ rows/quick-add styles/featured-card, §4.3 asymmetric grids/carousel row,
 but never folded into D/E/F's table rows in the original plan. None is
 requested by any of the 4 templates' own descriptions (§6), so none is
 prioritized above — flagging their existence here so a future re-evaluation
-doesn't have to rediscover them. §4.4 (PDP layouts) and §4.5 (collection
-page layouts) are the largest ungrouped chunks; each is plausibly its own
-phase if ever picked up, not a line item inside E.
+doesn't have to rediscover them.
+
+**Decision (2026-09-05): §4.4 (PDP layouts) and §4.5 (collection-page
+layouts) stay unassigned line items in §4, not their own phases.** Fold
+either into E opportunistically whenever a change already touches that
+surface, rather than scheduling either as a dedicated phase — despite being
+the largest ungrouped chunks in the catalog, nothing currently requests
+them (not one of the 4 templates, not this priority list), and a dedicated
+phase for unrequested scope would be exactly the kind of premature build-out
+this plan has otherwise avoided.
 
 **Doc hygiene fixed this pass:** §5.2 (typography pairing), §5.4
 (corner-radius — shipped as `globalSettings.radius`, not the bare enum
