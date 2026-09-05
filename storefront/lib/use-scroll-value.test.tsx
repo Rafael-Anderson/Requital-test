@@ -59,4 +59,40 @@ describe("useScrollValue", () => {
     });
     expect(seen.some((v) => v.y === 999)).toBe(false);
   });
+
+  // §8.7 item 2 regression — found via the header-scrollBehavior scratch-shop
+  // pass: a headless/unfocused browser tab's rAF callback for this listener
+  // can simply never fire, silently freezing every consumer mid-scroll (this
+  // hook's only real consumer before this batch, BackToTopButton, had never
+  // been exercised with a real scroll either, so the bug went unnoticed
+  // until now). The setTimeout fallback races against rAF so the value still
+  // updates even when rAF is starved.
+  it("still updates via the setTimeout fallback when requestAnimationFrame never calls back (starved rAF)", () => {
+    vi.useFakeTimers();
+    // Simulate a starved rAF: scheduled, but its callback is never invoked
+    // (unlike the file-level stub above, which calls back synchronously).
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+
+    setScrollY(0);
+    let latest: ScrollValue | null = null;
+    render(<Probe sink={(v) => (latest = v)} />);
+
+    act(() => {
+      setScrollY(500);
+      window.dispatchEvent(new Event("scroll"));
+    });
+    // rAF never fired, so nothing has updated yet.
+    expect(latest).toEqual({ y: 0, direction: "none" });
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(latest).toEqual({ y: 500, direction: "down" });
+
+    vi.useRealTimers();
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 1;
+    });
+  });
 });
