@@ -644,7 +644,7 @@ joins) — it has no filled/solid variants.
 
 Per-element icon override already exists (`resolveIconElementStyle`).
 
-### 5.2 Typography pairing presets
+### 5.2 Typography pairing presets — BUILT as part of Phase B1 (see §8.2)
 
 `typography` already takes arbitrary Google-Font names per role (`bodyFont`,
 `subheadingFont`, `headingFont`, `accentFont`) + per-heading presets. Add:
@@ -708,7 +708,7 @@ Revisions from this original sketch, made when B2 was built:
    `var()` / class falls to its literal). A preset is a starting point, not a
    promise of identity.
 
-### 5.4 Corner-radius language
+### 5.4 Corner-radius language — BUILT as part of Phase B1 (see §8.2; shipped as `globalSettings.radius: { preset?, applyToButtons? }`, not the bare enum this section originally sketched)
 
 **`globalSettings.radius?: 'sharp' (0) | 'subtle' (4) | 'rounded' (8) | 'soft' (16) | 'pill-ish'`**
 — sets `--radius-sm` / `--radius-md` / `--radius-lg` tokens that buttons, cards,
@@ -726,14 +726,14 @@ Extend: `badges.style?: 'pill' | 'rectangle' | 'ribbon' (diagonal) | 'tag' (notc
 `badges.size?`, `badges.entranceAnimation?: boolean` (pop-in on card entrance, §3.1 #14).
 Effort **S**.
 
-### 5.6 Price styling
+### 5.6 Price styling — `salePriceColor`/`salePriceStyle` BUILT as part of Phase B1 (see §8.2); the rest below still open
 
 `globalSettings.prices` only has the four `currencyCode` toggles today. Extend
 (**gives `prices` a real consumer**):
 
-- `prices.salePriceColor?` — replaces the hardcoded `text-red-600` in
+- ✅ `prices.salePriceColor?` — replaces the hardcoded `text-red-600` in
   `ProductCard.tsx` / `PriceDisplay`
-- `prices.salePriceStyle?: 'color' | 'strikethrough-only' | 'badge'`
+- ✅ `prices.salePriceStyle?: 'color' | 'strikethrough-only'` (`'badge'` not built — no badge-as-price-treatment consumer exists)
 - `prices.showUnitPrice?: boolean` ("per stem" / "per box" — feature-adjacent,
   needs a unit field; **flag**)
 - `prices.fontWeight?`, `prices.compareAtPosition?: 'before' | 'after' | 'below'`
@@ -1053,45 +1053,48 @@ look established" template.
 
 ### 6.5 Cross-template capability dependency (→ build-order signal)
 
-Capabilities used by **3 or more** templates ship first.
+Capabilities used by **3 or more** templates ship first. **Updated 2026-09-05
+(post-C re-evaluation, §8.7) — ✅ rows are BUILT; the phase that closed each
+is noted.** Kept as the historical build-order signal; §8.7 is the current
+priority recommendation for what's left.
 
-| Capability | Atelier | Market | Bloom | Heritage | count |
-|---|:-:|:-:|:-:|:-:|:-:|
-| `globalSettings.motion` token system + `--motion-*` wiring | ✓ | ✓ | ✓ | ✓ | **4** |
-| system-wide reduced-motion blanket rule | ✓ | ✓ | ✓ | ✓ | **4** |
-| `globalSettings.radius` scale + wiring | ✓ | ✓ | ✓ | ✓ | **4** |
-| `globalSettings.density` / spacing scale + wiring | ✓ | ✓ | ✓ | ✓ | **4** |
-| `typography.pairing` presets + `typography.scale` | ✓ | ✓ | ✓ | ✓ | **4** |
-| Colours panel completion (`background`/`text` fully driving page + a green section; scheme → cards/badges) | ✓ | ✓ | ✓ | ✓ | **4** |
-| section-entrance vocab extension + `motion.stagger` + `animateOnce` | ✓ | ✓ | ✓ | ✓ | **4** |
-| card hover enum extension (`desaturate`/`quick-add-slide`/`tilt`/`shadow`/`overlay`) | ✓ | ✓ | ✓ | ✓ | **4** |
-| card style extension (`elevated`/`bordered`/`overlay`/`polaroid`) | ✓ | ✓ | ✓ | ✓ | **4** |
-| `productCards.imageAspect` + `section.settings.imageAspect` | ✓ | ✓ | ✓ | ✓ | **4** |
-| grid `gap` scale | ✓ | ✓ | ✓ | ✓ | **4** |
-| header layout presets (seed `rows` + zones) | ✓ | ✓ | ✓ | ✓ | **4** |
-| mobile nav patterns (drawer / bottom-bar / fullscreen) | ✓ | ✓ | ✓ | ✓ | **4** |
-| button `hoverEffect` / `pressEffect` (`buttons.primary`) | ✓ | ✓ | ✓ | ✓ | **4** |
-| footer layout presets | ✓ | ✓ | ✓ | ✓ | **4** |
-| `animations.imageLoad: fade` | ✓ | ✓ | ✓ | ✓ | **4** |
-| newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 |
-| `header.settings.scrollBehavior` + `transparentOverHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 |
-| `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✓ | ✓ | 3 |
-| `icons.corners` (rounded/sharp) | ✓ | ✗ | ✓ | ✓ | 3 |
-| `buttons.secondary` rendered variant | ✗ | ✓ | ✗ | ✓ | 2 |
-| `product_tabs` magic-line + crossfade polish | ✗ | ✓ | ✓ | ✗ | 2 |
-| wishlist animation (`pop`/`burst`/`sweep`) | ✗ | ✓ | ✓ | ✗ | 2 |
-| `floatingElements.backToTop` | ✗ | ✓ | ✓ | ✗ | 2 |
-| `icons.style: solid/duotone` (hand-drawn set) | ✗ | ✓ | ✓ | ✗ | 2 |
-| `drawers.animation` (+ `cart.itemAnimation`/`subtotalAnimation`) | ✗ | ✓ | ✗ | ✗ | 1 |
-| **fly-to-cart** (`animations.addToCart`) | ✗ | ✓ | ✗ | ✗ | 1 |
-| `scrollProgressBar` | ✗ | ✓ | ✗ | ✗ | 1 |
-| hero `kenBurns` | ✓ | ✗ | ✗ | ✗ | 1 |
-| hero `parallax` + `decorativeParallax` | ✗ | ✗ | ✓ | ✗ | 1 |
-| hero `indicatorStyle: progress` | ✗ | ✓ | ✗ | ✗ | 1 |
-| `brands.scrolling` (marquee) | ✗ | ✓ | ✗ | ✗ | 1 |
-| section separators (wave/angle) | ✗ | ✗ | ✓ | ✗ | 1 |
-| `inputFields.focusAnimation` | ✗ | ✓ | ✗ | ✗ | 1 |
-| card sub-blocks (`product_vendor` / `product_stock` / `product_swatches`) | ✗ | ✓ | ✗ | ✗ | 1 |
+| Capability | Atelier | Market | Bloom | Heritage | count | Status |
+|---|:-:|:-:|:-:|:-:|:-:|---|
+| `globalSettings.motion` token system + `--motion-*` wiring | ✓ | ✓ | ✓ | ✓ | **4** | ✅ A |
+| system-wide reduced-motion blanket rule | ✓ | ✓ | ✓ | ✓ | **4** | ✅ A |
+| `globalSettings.radius` scale + wiring | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B1 |
+| `globalSettings.density` / spacing scale + wiring | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B2 |
+| `typography.pairing` presets + `typography.scale` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B1 |
+| Colours panel completion (`background`/`text` fully driving page + a green section; scheme → cards/badges) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ header/menu-polish batch (2026-09-03) |
+| section-entrance vocab extension + `motion.stagger` + `animateOnce` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ A + batch 1 |
+| card hover enum extension (`desaturate`/`quick-add-slide`/`tilt`/`shadow`/`overlay`) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ batch 1 |
+| card style extension (`elevated`/`bordered`/`overlay`/`polaroid`) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B1 |
+| `productCards.imageAspect` + `section.settings.imageAspect` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B1 |
+| grid `gap` scale | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B2 |
+| header layout presets (seed `rows` + zones) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C1 |
+| mobile nav patterns (drawer / bottom-bar / fullscreen) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C2 |
+| button `hoverEffect` / `pressEffect` (`buttons.primary`) | ✓ | ✓ | ✓ | ✓ | **4** | open — top of §8.7 |
+| footer layout presets | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C1 |
+| `animations.imageLoad: fade` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ batch 1 |
+| newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 | open |
+| `header.settings.scrollBehavior` + `transparentOverHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 | open — deferred through C1/C2 twice now |
+| `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✓ | ✓ | 3 | open |
+| `icons.corners` (rounded/sharp) | ✓ | ✗ | ✓ | ✓ | 3 | open |
+| `buttons.secondary` rendered variant | ✗ | ✓ | ✗ | ✓ | 2 | open |
+| `product_tabs` magic-line + crossfade polish | ✗ | ✓ | ✓ | ✗ | 2 | open |
+| wishlist animation (`pop`/`burst`/`sweep`) | ✗ | ✓ | ✓ | ✗ | 2 | open |
+| `floatingElements.backToTop` | ✗ | ✓ | ✓ | ✗ | 2 | ✅ capability built (C1/C2) — **not yet enabled on Market/Bloom themselves**, see §8.7 |
+| `icons.style: solid/duotone` (hand-drawn set) | ✗ | ✓ | ✓ | ✗ | 2 | open — separate gated Phase I, untouched |
+| `drawers.animation` (+ `cart.itemAnimation`/`subtotalAnimation`) | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| **fly-to-cart** (`animations.addToCart`) | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| `scrollProgressBar` | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| hero `kenBurns` | ✓ | ✗ | ✗ | ✗ | 1 | open |
+| hero `parallax` + `decorativeParallax` | ✗ | ✗ | ✓ | ✗ | 1 | open |
+| hero `indicatorStyle: progress` | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| `brands.scrolling` (marquee) | ✗ | ✓ | ✗ | ✗ | 1 | ✅ batch 1 |
+| section separators (wave/angle) | ✗ | ✗ | ✓ | ✗ | 1 | open |
+| `inputFields.focusAnimation` | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| card sub-blocks (`product_vendor` / `product_stock` / `product_swatches`) | ✗ | ✓ | ✗ | ✗ | 1 | open |
 
 Already shipped (theme-builder-expansion Phases 1–6), reused by all four:
 `featured_collections` column/aspect/overlay controls, hero inset + corner radius,
@@ -1211,13 +1214,15 @@ complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C**,
-all built and merged / in review (see §8.6 for C). The rest of D/E/F are
-**not** committed scope — re-evaluate against the remaining §8.3 priority before
-starting any of it. G0 (Flow A) + batch 1 + C already deliver four visibly
-distinct starting points that pick up real card-hover effects, image-load
-fade, stagger, a brands marquee (Market), header/footer structure, and a real
-mobile nav; the remaining D/E/F flourishes each template wants are listed in
-its own deferred block (§8.6 updated the four that this batch closed).
+all built and merged (see §8.6 for C). The rest of D/E/F/G1 are **not**
+committed scope — **see §8.7 for the current re-evaluation and priority
+order** (recorded 2026-09-05, supersedes §8.3's ordering the same way §8.3
+superseded the raw table below where they disagree). G0 (Flow A) + batch 1 +
+C already deliver four visibly distinct starting points that pick up real
+card-hover effects, image-load fade, stagger, a brands marquee (Market),
+header/footer structure, and a real mobile nav; the remaining D/E/F
+flourishes each template wants are listed in its own deferred block (§8.6
+updated the four that C closed) and re-prioritized in §8.7.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1870,6 +1875,164 @@ future phase actually wires header scroll behaviour.
 
 ---
 
+### 8.7 Post-C capability re-evaluation — RECOMMENDATION (recorded 2026-09-05, before picking up D/E/F/G1)
+
+Phases A, B1, B2, G0, post-G0 batch 1, and C (C1+C2) are all built. Same
+instinct as §8.3 (re-evaluate the remaining catalog against what's actually
+been absorbed, rather than assume the original D/E/F specs still describe
+what's left) — this time applied one phase later, since batch 1 and C both
+closed out items originally attributed to D/E/F. §6.5's dependency table is
+updated in place with ✅/open status; this section is the fresh priority
+recommendation drawn from it, not a re-derivation from scratch.
+
+**Scorecard — how much of D/E/F's original scope is actually gone:**
+
+- **D** (`animations.cardHoverEffect` extension, `buttons.primary/secondary`
+  hover/press effects + `pillCornerRadius`, `productCards.wishlistAnimation`,
+  `animations.imageLoad`, `inputFields.focusAnimation`, `icons.corners`/`.size`)
+  — 2 of 7 line items closed (card-hover enum via batch 1, `imageLoad` via
+  batch 1). **The button/icon/input/wishlist micro-interaction items are
+  entirely untouched.**
+- **E** (`product_tabs` polish, `trust_bar` count-up, hero `kenBurns`/
+  `parallax`/`indicatorStyle` extensions, `brands.scrolling`, section
+  separators/overlay/`contentWidth`, newsletter `successAnimation`, accordion
+  animation) — 1 of 7 closed (`brands.scrolling` via batch 1). **Everything
+  else in E is untouched.**
+- **F** (fly-to-cart, route-content fade + View Transitions,
+  `scrollProgressBar`, `floatingElements.backToTop`, `decorativeParallax`,
+  `customCursor`, `drawers.animation` + `cart.itemAnimation`/
+  `subtotalAnimation`, card metadata sub-blocks) — 1 of 8 closed
+  (`backToTop`, this batch). **The rest — including the two most expensive
+  single items, fly-to-cart and page transitions — is untouched.**
+- **G1** (`applyTemplate` Flow B) — untouched, still its own separate later
+  plan per §7.2's decision record.
+
+**Conclusion: unlike the G0→C1/C2 gap (which genuinely absorbed most of what
+D/E's easy wins would have covered), D/E/F are still substantially open.**
+Batch 1 + C picked the lowest-hanging, highest-template-count fruit each time
+(`cardHoverEffect`, `imageLoad`, stagger, `brands.scrolling`, `backToTop`,
+header/footer/mobile-nav structure) — real progress, but D/E/F's *bulk*
+(button/input/wishlist micro-interactions, hero motion, drawer/cart
+animation, fly-to-cart, page transitions) was never touched by either batch.
+Treat the current §8 D/E/F rows as still-accurate scope, not stale.
+
+**Priority-ordered remaining work**, re-derived from §6.5's updated table
+(highest surviving template-count first) plus the layout-catalog items
+(§4.2–4.5, 4.8) that were never actually assigned to a lettered phase:
+
+1. **`buttons.primary.hoverEffect` + `.pressEffect` (§3.2) — PICKED UP
+   2026-09-05, see §8.8.** **4/4 templates**, the single highest-count open
+   item on the whole board now that header/footer/mobile-nav are done.
+   Effort **S** per effect
+   (`sweep`/`shine`/`border-fill`/`pressEffect` are all one-shot CSS
+   transitions, no JS) — cheap relative to its reach. Do this first.
+2. **`header.settings.scrollBehavior` + `.transparentOverHero` (§3.3)** —
+   3/4 templates, deferred through both batch 1 and C1/C2 now. Effort **M**
+   (scroll-direction JS + a `useScrollValue()` consumer — the hook already
+   exists, unused for this). The dead `transparentOnHero` flag has been
+   sitting in `header.settings` since before this whole plan started.
+3. **`trust_bar` `rating_badge` count-up (§3.4 #9)** — 3/4 templates, a
+   contained, self-testable JS item (rAF + `matchMedia` guard, no shared
+   infra needed) — this is the first real consumer for `useCountUp()`,
+   flagged as a prerequisite back in the original C1/C2 instruction but
+   never actually needed until now.
+4. **`icons.corners` (rounded/sharp, §5.1)** — 3/4 templates, Effort **S**
+   (a CSS override on lucide SVGs, no new icons drawn — distinct from the
+   separately-gated Phase I glyph/style work).
+5. **Newsletter `successAnimation` (§3.9 #5)** — 3/4 templates, Effort **S–M**
+   (form collapses, a checkmark + confirmation text scales in).
+6. **`buttons.secondary` rendered variant (§3.2, §9.3)** — 2/4 templates
+   (Market, Heritage) — the one remaining item that finally gives
+   `buttons.secondary` and `secondaryButtonLabel` (scheme) a real consumer.
+   Effort **M** (needs a real secondary-button render path on the CTA
+   block, not just a style enum).
+7. **`product_tabs` magic-line + crossfade + height-animate polish (§3.9
+   #8)** — 2/4 templates (Market, Bloom), Effort **M**. `product_tabs`
+   currently hard-swaps; this is a clear, contained polish target.
+8. **Wishlist animation (`pop`/`burst`/`sweep`, §3.6 #10–12)** — 2/4
+   templates, Effort **S–M**, self-contained (no shared infra beyond what
+   exists).
+9. **Enable `floatingElements.backToTop` on Market + Bloom** — not new work,
+   just template re-authoring: the capability shipped this batch but neither
+   template that originally wanted it (§6.5) actually turned it on. **S**,
+   arguably worth folding into whichever PR does item 1 or 3 above rather
+   than its own PR.
+10. **`inputFields.focusAnimation` (§3.9 #3)** — 1/4 (Market), but it's the
+    dead `inputFields` category's only assigned consumer — Effort **S**.
+11. **Section separators (§4.8, §3.4 pairs with #10 `draw`)** — 1/4 (Bloom),
+    Effort **S–M**, decorative SVG edges between sections.
+12. **Hero `kenBurns` / `parallax` + `decorativeParallax` / `indicatorStyle:
+    progress` (§3.5)** — 1/4 each (Atelier, Bloom, Market respectively),
+    Effort **S** (`kenBurns`), **M** (`parallax`), **M–L**
+    (`decorativeParallax` — Bloom's signature flourish, explicitly flagged
+    as expensive-if-overused in §9.4).
+13. **`drawers.animation` + `cart.itemAnimation`/`subtotalAnimation` (§3.6
+    #1–8)** — 1/4 (Market) today, but this is the natural prerequisite for
+    fly-to-cart (#14) and gives the still-dead `drawers`/`cart` categories
+    their consumers. Effort **S** (drawer easing) up to **M** (line-item
+    expand/collapse, count-up subtotal).
+14. **Fly-to-cart (`animations.addToCart`, §3.6 #9)** — 1/4 (Market), but
+    it's F's single most-requested "expensive one-off" and the whole reason
+    `animations.addToCart` has stayed `false` in every template's literal
+    since G0. Effort **L**, self-contained (`getBoundingClientRect` +
+    WAAPI/rAF, no shared infra) — do it after drawers/cart (#13) since a fly
+    animation ending at a themed, already-animating drawer reads better than
+    landing on a static one.
+15. **Route-content fade + View Transitions progressive enhancement (§3.8
+    #1–2)** — universal (not template-specific — every navigation on every
+    shop), Effort **M** for the real feature, **L** if the View Transitions
+    layer is attempted (Chromium-only, Next support experimental — ship the
+    plain fade, gate VT behind `'startViewTransition' in document`, never
+    block on it, per §9.4's Flag #2).
+16. **`scrollProgressBar` (§3.8 #3)** — 1/4 (Market), Effort **S**, trivial
+    once `useScrollValue()` has a second real consumer (item 2 above is the
+    first).
+17. **Card metadata sub-blocks (`product_vendor`/`product_stock`/
+    `product_swatches`, §3.6 F-row / §4.2)** — 1/4 (Market) for the
+    animation angle, but this is really a **card-content** feature (wires
+    the dead `swatches` category) more than an animation — flag for a
+    content-block-shaped PR, not a motion one.
+18. **`customCursor` (§5.7)** — 0/4 templates want it today (not in §6.5's
+    table at all), expressive-only, accessibility-sensitive (must not hide
+    the cursor for keyboard/AT users, disabled on touch, killed by reduced
+    motion). Lowest priority of everything above; revisit only if a future
+    template wants an editorial cursor treatment.
+
+**Layout-catalog items never assigned to a lettered phase** (§4.2 metadata
+rows/quick-add styles/featured-card, §4.3 asymmetric grids/carousel row,
+§4.4 PDP layout enums, §4.5 collection-page layout enums, §4.8 overlay/scrim
++ container bleed + themed skeletons + empty states) — these were cataloged
+but never folded into D/E/F's table rows in the original plan. None is
+requested by any of the 4 templates' own descriptions (§6), so none is
+prioritized above — flagging their existence here so a future re-evaluation
+doesn't have to rediscover them.
+
+**Decision (2026-09-05): §4.4 (PDP layouts) and §4.5 (collection-page
+layouts) stay unassigned line items in §4, not their own phases.** Fold
+either into E opportunistically whenever a change already touches that
+surface, rather than scheduling either as a dedicated phase — despite being
+the largest ungrouped chunks in the catalog, nothing currently requests
+them (not one of the 4 templates, not this priority list), and a dedicated
+phase for unrequested scope would be exactly the kind of premature build-out
+this plan has otherwise avoided.
+
+**Doc hygiene fixed this pass:** §5.2 (typography pairing), §5.4
+(corner-radius — shipped as `globalSettings.radius`, not the bare enum
+originally sketched), and §5.6 (`salePriceColor`/`salePriceStyle`) were all
+actually built in Phase B1 but never marked BUILT in their own section
+headers — fixed. §9.3's dead-control table had the same staleness
+(`prices.*`, `search.*`'s radius half, typography `case`/`letterSpacing`,
+`buttons.pillCornerRadius`'s radius half all resolved but unmarked) — fixed,
+plus three new rows for what C1/C2 resolved.
+
+**Not committed scope.** This is a recorded recommendation, not a build
+authorization — picking up item 1 (or any subset) still gets its own
+plan-mode round before code, per this plan's standing practice, especially
+once the list reaches the **L**-effort items (fly-to-cart, View Transitions,
+`decorativeParallax`).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -1968,20 +2131,25 @@ avoids retouching every token later. Full table in §8.1.
 
 ### 9.3 Dead-control resolution (what each dead control finally gets)
 
+**Updated 2026-09-05 — ✅ rows are resolved.**
+
 | Dead control | Gets a consumer via | Phase |
 |---|---|---|
 | `animations.pageTransition` | route-content fade (F) | F |
 | `animations.addToCart` | fly-to-cart (F) | F |
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
-| `buttons.pillCornerRadius` | the `radius` scale + Bloom's pill buttons (B/D) | B/D |
+| `buttons.pillCornerRadius` | ✅ the `radius` scale half is done (B1); Bloom's pill buttons themselves still open (D) | B1 ✅ / D open |
 | `drawers.schemeId` + `drawers.*` | `drawers.animation` + cart-drawer theming (F) | F |
 | `swatches.*` | the `product_swatches` card sub-block (F) | F |
 | `inputFields.*` | `inputFields.focusAnimation` + radius/border tokens on the newsletter input (D) | D |
-| `prices.*` (beyond currency) | `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` (B) | B |
-| `search.*` (corner radius / titleCase) | radius scale + search-results theming | B/D |
+| `prices.*` (beyond currency) | ✅ `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` | ✅ B1 |
+| `search.*` (corner radius / titleCase) | ✅ radius scale half done (B1); search-results theming itself still open | B1 ✅ / D open |
 | `cart.*` (media fields) | drawer theming (F); the boolean feature-flags stay checkout-behaviour, out of scope — leave flagged | F |
-| Typography paragraph/heading `case`/`letterSpacing` | reachable via one `typography.pairing`/`scale` control (B) | B |
+| Typography paragraph/heading `case`/`letterSpacing` | ✅ reachable via one `typography.pairing`/`scale` control | ✅ B1 |
 | `secondaryButtonLabel` (scheme) | consumed when a secondary button variant renders (D) | D |
+| `header.settings.rows` / footer named layout | ✅ named header/footer presets that seed both | ✅ C1 |
+| `header.settings.mobileNav` | ✅ `MobileNav.tsx` (drawer/bottom-bar/fullscreen) | ✅ C2 |
+| `globalSettings.floatingElements.backToTop` | ✅ `BackToTopButton.tsx`, gated on scroll position | ✅ C1/C2 |
 
 ### 9.4 Other risks
 
