@@ -2,6 +2,8 @@
 
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Slider from "@/components/ui/Slider";
+import Select from "@/components/ui/Select";
+import Toggle from "@/components/ui/Toggle";
 import type { ButtonSettings as ButtonSettingsType, ButtonStyleSettings } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
@@ -9,10 +11,17 @@ function ButtonStyleFields({
   label,
   value,
   onChange,
+  showEffects,
 }: {
   label: string;
   value: ButtonStyleSettings;
   onChange: (patch: Partial<ButtonStyleSettings>) => void;
+  // §8.7 item 1 — hoverEffect/pressEffect only make sense to expose where a
+  // real render path exists (Hero CTA, Newsletter submit) — today that's
+  // Primary only; Secondary renders nowhere yet (see the plan doc's §9.3
+  // dead-control table), so surfacing these controls there would just be a
+  // new unused setting, not a fix.
+  showEffects?: boolean;
 }) {
   return (
     <details className="rounded-lg border border-black/10 p-3 dark:border-white/10" open>
@@ -36,6 +45,25 @@ function ButtonStyleFields({
           ]}
           onChange={(v) => onChange({ case: v })}
         />
+        {showEffects && (
+          <>
+            <Select
+              label="Hover effect"
+              value={value.hoverEffect ?? "none"}
+              onChange={(e) => onChange({ hoverEffect: e.target.value as ButtonStyleSettings["hoverEffect"] })}
+            >
+              <option value="none">None</option>
+              <option value="sweep">Sweep</option>
+              <option value="shine">Shine</option>
+              <option value="border-fill">Border fill</option>
+              <option value="icon-nudge">Icon nudge</option>
+            </Select>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Press effect</span>
+              <Toggle checked={!!value.pressEffect} onChange={(v) => onChange({ pressEffect: v })} />
+            </div>
+          </>
+        )}
       </div>
     </details>
   );
@@ -49,7 +77,12 @@ export default function ButtonsSettings({ editor }: { editor: ThemeEditorState }
 
   return (
     <div className="space-y-4">
-      <ButtonStyleFields label="Primary button" value={buttons.primary} onChange={(patch) => update({ primary: { ...buttons.primary, ...patch } })} />
+      <ButtonStyleFields
+        label="Primary button"
+        value={buttons.primary}
+        onChange={(patch) => update({ primary: { ...buttons.primary, ...patch } })}
+        showEffects
+      />
       <ButtonStyleFields label="Secondary button" value={buttons.secondary} onChange={(patch) => update({ secondary: { ...buttons.secondary, ...patch } })} />
       <Slider label="Pill button corner radius" min={0} max={9999} suffix="px" value={buttons.pillCornerRadius} onChange={(v) => update({ pillCornerRadius: v })} />
     </div>
