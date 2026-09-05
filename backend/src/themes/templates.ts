@@ -143,12 +143,12 @@ function newsletter(order: number, heading: string, subtext: string, opts: Secti
   });
 }
 
-function trustBar(order: number, items: { icon: string; text: string }[], rating: { rating: number; label: string } | null, opts: SectionOpts = {}): ThemeSection {
+function trustBar(order: number, items: { icon: string; text: string }[], rating: { rating: number; label: string; countUp?: boolean } | null, opts: SectionOpts = {}): ThemeSection {
   return section('trust_bar', order, {
     ...opts,
     blocks: [
       ...items.map((it) => block('trust_item', { icon: it.icon, text: it.text })),
-      ...(rating ? [block('rating_badge', { rating: rating.rating, label: rating.label })] : []),
+      ...(rating ? [block('rating_badge', { rating: rating.rating, label: rating.label, ...(rating.countUp ? { countUp: true } : {}) })] : []),
     ],
   });
 }
@@ -332,7 +332,8 @@ const market: ThemeConfig = (() => {
         { icon: 'check', text: 'Secure checkout' },
         { icon: 'star', text: 'Rated 4.8 / 5' },
       ],
-      { rating: 4.8, label: '2,000+ reviews' },
+      // §8.7 item 3 — closes out Market's deferred trust_bar rating count-up.
+      { rating: 4.8, label: '2,000+ reviews', countUp: true },
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }),
@@ -608,12 +609,13 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; inputFields.focusAnimation
 //           'float-label'; motion.scrollProgressBar; product_tabs section
-//           (needs real collectionIds); trust_bar rating count-up; hero
-//           indicatorStyle 'progress'; productCards.wishlistAnimation 'pop';
-//           product_vendor / product_stock card sub-blocks; buttons.secondary
-//           rendered variant + hoverEffect 'border-fill'; badges.style 'tag'
-//           + entranceAnimation (header scrollBehavior 'shrink' closed out
-//           §8.7 item 2, 2026-09-05)
+//           (needs real collectionIds); hero indicatorStyle 'progress';
+//           productCards.wishlistAnimation 'pop'; product_vendor /
+//           product_stock card sub-blocks; buttons.secondary rendered
+//           variant + hoverEffect 'border-fill'; badges.style 'tag' +
+//           entranceAnimation (header scrollBehavior 'shrink' closed out
+//           §8.7 item 2, 2026-09-05; trust_bar rating count-up closed out
+//           §8.7 item 3, 2026-09-05)
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
 //           shapes; buttons.pillCornerRadius pills; section separators;
 //           product_tabs section; announcement_bar marquee; badges.style

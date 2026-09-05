@@ -1079,7 +1079,7 @@ priority recommendation for what's left.
 | `animations.imageLoad: fade` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ batch 1 |
 | newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 | open |
 | `header.settings.scrollBehavior` + `transparentOnHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 | ✅ §8.9 |
-| `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✓ | ✓ | 3 | open |
+| `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✗ | ✗ | **1** | ✅ §8.10 (table corrected — Bloom has no `rating_badge`, Heritage's deferred block never asked for it) |
 | `icons.corners` (rounded/sharp) | ✓ | ✗ | ✓ | ✓ | 3 | open |
 | `buttons.secondary` rendered variant | ✗ | ✓ | ✗ | ✓ | 2 | open |
 | `product_tabs` magic-line + crossfade polish | ✗ | ✓ | ✓ | ✗ | 2 | open |
@@ -1215,18 +1215,19 @@ complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
-§8.7 items 1-2 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
-scrollBehavior)**, all built and merged. The rest of §8.7's priority list
-(items 3+) and D/E/F/G1 more broadly are **not** committed scope — **see
-§8.7 for the current re-evaluation and priority order** (recorded
-2026-09-05, supersedes §8.3's ordering the same way §8.3 superseded the raw
-table below where they disagree). G0 (Flow A) + batch 1 + C + §8.8/§8.9
-already deliver four visibly distinct starting points that pick up real
-card-hover effects, image-load fade, stagger, a brands marquee (Market),
-header/footer structure, a real mobile nav, button hover/press feedback,
-and real header scroll behaviour; the remaining D/E/F flourishes each
-template wants are listed in its own deferred block (§8.9 updated the three
-templates it closed) and re-prioritized in §8.7.
+§8.7 items 1-3 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
+scrollBehavior, §8.10 trust_bar rating count-up)**, all built and merged.
+The rest of §8.7's priority list (items 4+) and D/E/F/G1 more broadly are
+**not** committed scope — **see §8.7 for the current re-evaluation and
+priority order** (recorded 2026-09-05, supersedes §8.3's ordering the same
+way §8.3 superseded the raw table below where they disagree). G0 (Flow A) +
+batch 1 + C + §8.8/§8.9/§8.10 already deliver four visibly distinct
+starting points that pick up real card-hover effects, image-load fade,
+stagger, a brands marquee (Market), header/footer structure, a real mobile
+nav, button hover/press feedback, real header scroll behaviour, and (Market
+only) a real animated trust-bar rating; the remaining D/E/F flourishes each
+template wants are listed in its own deferred block (§8.10 updated Market's)
+and re-prioritized in §8.7.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1585,12 +1586,12 @@ mirror how `use-scroll-value.ts` was pre-shipped in Phase A):
   / stagger / rotate-in / the marquee are all CSS-driven (transitions, CSS
   `animation`, one `onLoad` React-state toggle), already covered by the
   blanket rule (rotate-in added to its neutralize list, same as every other
-  entrance). Still not built — first real JS animation (fly-to-cart, count-up,
-  parallax, custom cursor) still owns this.
-- `useCountUp(target)` — rAF count-up, reads `--motion-duration-*`, self-gates
-  on reduced motion. Consumers: `trust_bar` rating (E), `cart.subtotalAnimation:
-  'count'` (F), collection result count (§4.5). Not touched by items 1-5. Build
-  once in E.
+  entrance). ✅ BUILT §8.10, `useCountUp`'s first real consumer.
+- `useCountUp(target, active)` — ✅ BUILT §8.10. rAF count-up, reads
+  `--motion-duration-slow`, self-gates on reduced motion. Consumers so far:
+  `trust_bar` rating (Market only — §8.10's scope correction). Still
+  available for `cart.subtotalAnimation: 'count'` (F) and the collection
+  result count (§4.5) if either is picked up later.
 
 **§9.3 dead-control list — updated after this batch:** `section.settings.
 motion.stagger` is no longer typed-but-unwired (§8.5) — remove it from the
@@ -1928,11 +1929,8 @@ Treat the current §8 D/E/F rows as still-accurate scope, not stale.
    §8.8.**
 2. **`header.settings.scrollBehavior` + `.transparentOnHero` (§3.3) — BUILT,
    see §8.9.**
-3. **`trust_bar` `rating_badge` count-up (§3.4 #9)** — 3/4 templates, a
-   contained, self-testable JS item (rAF + `matchMedia` guard, no shared
-   infra needed) — this is the first real consumer for `useCountUp()`,
-   flagged as a prerequisite back in the original C1/C2 instruction but
-   never actually needed until now.
+3. **`trust_bar` `rating_badge` count-up (§3.4 #9) — BUILT, see §8.10's
+   correction: real committed scope was 1/4 (Market), not the table's 3/4.**
 4. **`icons.corners` (rounded/sharp, §5.1)** — 3/4 templates, Effort **S**
    (a CSS override on lucide SVGs, no new icons drawn — distinct from the
    separately-gated Phase I glyph/style work).
@@ -2170,6 +2168,94 @@ two consecutive runs, none touching this change; the one relevant file,
 
 ---
 
+### 8.10 `trust_bar` `rating_badge` count-up — BUILT (2026-09-05, `feat/trust-bar-rating-countup`)
+
+§8.7 item 3. `useCountUp(target, active)`, the first shared JS-animation
+utility since `MobileNav`'s swipe math and the first real second consumer of
+`useReducedMotion()`. Deliberately does not read `useScrollValue()` — this
+is an elapsed-wall-clock animation driven by rAF's own timestamp, not a
+scroll-position one. First hook to *read* a `--motion-*` token at runtime
+(`--motion-duration-slow`) rather than only setting one; falls back to `600`
+(the `standard` intensity's own `durationSlow`, not an invented number) when
+unset. Initial/inactive state is `target`, not `0` — SSR and any
+pre-hydration or pre-trigger render shows the real, correct number, and
+count-up only ever dips to `0` and ramps back up to the *same* value once
+`active` flips true, a "ta-da" layered on an always-correct value rather
+than a replacement for it. No synchronous `setState` call in the effect body
+at all (every `setValue` happens inside the rAF callback, the
+`react-hooks/set-state-in-effect` lint rule's own endorsed shape) — avoided
+the finding entirely rather than accepting a baseline bump.
+
+**Scope correction, found by checking the actual `trustBar()` call sites and
+each template's own deferred block rather than trusting §6.5's table**: the
+table's "3/4 templates" was wrong. `rating_badge` stores exactly two data
+fields (`rating: number`, `label: string` free text — no stored numeric
+review-count field anywhere). Market's deferred block explicitly names
+`trust_bar rating count-up` and has a real `rating_badge`. Bloom has **no**
+`rating_badge` at all — its own §6.3 catalog description says trust_bar is
+"icon + text items" only, and its deferred block never mentions count-up
+either; inventing one to make the table's count come out right would have
+been scope creep, not a deferred item being closed out. Heritage has a real
+`rating_badge` but its deferred block never names count-up either, matching
+its established restraint (its label, `'Trusted by thousands'`, also has no
+parseable number, though that's moot since only `rating` ever animates —
+see below). **Real committed scope is Market only (1/4)** — table corrected.
+
+**`label` never animates, only `rating`.** `label` is arbitrary merchant
+free text (`'2,000+ reviews'`, `'Trusted by thousands'`) with no separate
+numeric field — the latter has no number to parse at all, proving the
+general case can't be handled robustly. The admin toggle's caption states
+this plainly so a merchant doesn't expect their label text to count.
+
+**Trigger: `RatingBadge` gets its own one-shot `IntersectionObserver`
+(threshold `0.1`, matching `ScrollAnimatedWrapper`'s own value), not a reuse
+of `ScrollAnimatedWrapper`'s.** Confirmed by reading `ScrollAnimatedWrapper.tsx`:
+it renders bare `<>{children}</>` with **no ref, no observer at all** when
+the section's `motion.entrance === 'none'` — the same trap
+`section.settings.motion.stagger` already fell into (documented in
+storefront's own CLAUDE.md). Reusing it wasn't structurally possible anyway
+(it exposes no visibility signal to children) and would have made count-up
+silently inert on any trust_bar with no configured entrance — independence
+from the section's own entrance choice is the point.
+
+**Stars stay static**, driven by the real, final `rating` — animating fill
+state per frame would flicker through 0★→1★→2★... as visual noise nobody
+asked for; every count-up reference in the catalog is about the *number*.
+
+New optional key: `rating_badge` block settings gain `countUp?: boolean`.
+`ThemeBlock.settings` is already `Record<string, unknown>` (confirmed
+`assertValidBlock` never inspects `settings` fields) — zero backend
+validation change. Admin: the existing rating_badge settings form (Rating /
+Label / Link) gains an "Animate on scroll" Toggle + caption.
+
+**No-op guarantee:** `countUp` absent/`false` ⇒ `RatingBadge` never mounts
+an observer, `useCountUp`'s `active` stays `false`, returns `target`
+unconditionally — byte-identical to today. The pre-existing
+`TrustBarSection.test.tsx` rating-badge test (never sets `countUp`)
+exercises this with zero changes needed.
+
+**Scratch-shop pass — the real point of this batch, per the header batch's
+lesson that "looks safe on inspection" isn't proof.** Publishing the actual
+re-authored Market template (not a manual patch) and sampling the DOM
+text via an in-page `requestAnimationFrame` loop (a per-sample Playwright
+IPC round trip was slow enough on its own that the whole ~500ms ramp
+finished before even the first read landed — a real methodology lesson,
+not a product bug) confirmed: a genuine `0.0 → 4.8` ease-out ramp under real
+motion; an instant jump straight to `4.8` with zero dip under
+`prefers-reduced-motion: reduce`; and a clean `4.8` on the very first read
+after a fresh page load, proving Strict Mode's dev-only
+mount→cleanup→remount cycle (exercised for free by every `next dev` load)
+never leaves a stuck partial value. A short viewport was needed to keep the
+trust_bar below the fold at load — otherwise the one-shot observer fires
+during initial page load, before any explicit test scroll, and the ramp
+finishes before sampling starts.
+
+**Gate:** backend `tsc` + `jest` (themes, 87/87) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 497/497 + lint +0 (33); admin `tsc` + `build` +
+`vitest` 465/465 + lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -2289,6 +2375,7 @@ avoids retouching every token later. Full table in §8.1.
 | `globalSettings.floatingElements.backToTop` | ✅ `BackToTopButton.tsx`, gated on scroll position | ✅ C1/C2 |
 | `header.settings.transparentOnHero` | ✅ `reveal-on-hero` scroll behavior consumes it | ✅ §8.9 |
 | `buttons.primary.hoverEffect`/`.pressEffect` | ✅ `resolveButtonHoverClass()`, Hero CTA + Newsletter submit | ✅ §8.8 |
+| `rating_badge.countUp` | ✅ `useCountUp()`, Market's trust_bar (only template that requested it) | ✅ §8.10 |
 
 ### 9.4 Other risks
 
