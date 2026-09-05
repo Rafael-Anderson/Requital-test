@@ -334,11 +334,21 @@ export interface BadgeSettings {
   case: TextCase;
 }
 
+// hoverEffect/pressEffect (§8.7 item 1, 2026-09-05) — OPTIONAL, no
+// DEFAULT_THEME_CONFIG value, so absent ⇒ today's exact button render.
+// Shared by .primary and .secondary even though only .primary has a real
+// render path today (Hero CTA, Newsletter submit) — .secondary renders
+// nowhere yet, so these fields simply sit unused there until a future phase
+// gives it one (see §9.3's dead-control table).
+export type ButtonHoverEffect = 'none' | 'sweep' | 'shine' | 'border-fill' | 'icon-nudge';
+
 export interface ButtonStyleSettings {
   borderThickness: number;
   cornerRadius: number;
   font: 'body' | 'accent';
   case: TextCase;
+  hoverEffect?: ButtonHoverEffect;
+  pressEffect?: boolean;
 }
 
 export interface ButtonSettings {

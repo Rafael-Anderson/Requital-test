@@ -1360,11 +1360,18 @@ export interface BadgeSettings {
   case: TextCase;
 }
 
+// hoverEffect/pressEffect (§8.7 item 1) — OPTIONAL, mirrors backend
+// theme-config.types.ts. Shared by .primary and .secondary even though only
+// .primary renders anywhere today.
+export type ButtonHoverEffect = "none" | "sweep" | "shine" | "border-fill" | "icon-nudge";
+
 export interface ButtonStyleSettings {
   borderThickness: number;
   cornerRadius: number;
   font: "body" | "accent";
   case: TextCase;
+  hoverEffect?: ButtonHoverEffect;
+  pressEffect?: boolean;
 }
 
 export interface ButtonSettings {

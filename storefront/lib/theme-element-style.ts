@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { resolveLetterSpacing, resolveLineHeight } from "./theme-typography";
-import type { TextLetterSpacing, TextLineHeight } from "./theme-config-types";
+import type { ButtonHoverEffect, TextLetterSpacing, TextLineHeight } from "./theme-config-types";
 
 // Pure per-block style resolution for the theme builder's in-preview
 // element editing (ElementSettingsPanel, admin-side) — a block's settings
@@ -58,6 +58,34 @@ export function themeButtonBaseStyle(): CSSProperties {
     textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
     fontFamily: "var(--theme-button-font, inherit)",
   };
+}
+
+export interface ButtonHoverClassResult {
+  // Applied to the button element itself.
+  className: string;
+  // sweep/shine/icon-nudge is inert until the button becomes a stacking
+  // context and needs relative+overflow-hidden to trap the pseudo-element,
+  // or (icon-nudge) group-hover on a real trailing icon child.
+  showIcon: boolean;
+}
+
+// §8.7 item 1 — buttons.primary.hoverEffect / .pressEffect. A pure resolver
+// (same convention as card-hover.ts/product-badge.ts) so both real
+// themeButtonBaseStyle() consumers (Hero CTA, Newsletter submit) derive
+// identical class/icon-visibility decisions from one place, rather than
+// re-deriving the enum→class mapping twice. Absent/'none' hoverEffect and
+// falsy pressEffect both return "" — byte-identical to today's plain
+// `bg-accent text-accent-foreground` button, since neither the .theme-btn-*
+// classes nor the group/relative/overflow-hidden classes ever apply.
+export function resolveButtonHoverClass(hoverEffect: ButtonHoverEffect | undefined, pressEffect: boolean | undefined): ButtonHoverClassResult {
+  const classes: string[] = [];
+  const showIcon = hoverEffect === "icon-nudge";
+  if (hoverEffect === "sweep") classes.push("theme-btn-sweep", "relative", "overflow-hidden");
+  else if (hoverEffect === "shine") classes.push("theme-btn-shine", "relative", "overflow-hidden");
+  else if (hoverEffect === "border-fill") classes.push("theme-btn-border-fill");
+  else if (showIcon) classes.push("group");
+  if (pressEffect) classes.push("theme-btn-press");
+  return { className: classes.join(" "), showIcon };
 }
 
 // Legacy Layout mode's Button fill (solid/outline — "ghost" is handled

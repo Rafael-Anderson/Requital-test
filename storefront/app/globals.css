@@ -366,6 +366,71 @@ body {
   transform: scale(var(--motion-hover-scale, 1.05));
 }
 
+/* §8.7 item 1 — buttons.primary.hoverEffect / .pressEffect
+   (globalSettings.buttons.primary, see lib/theme-element-style.ts's
+   resolveButtonHoverClass). Applied to the two real themeButtonBaseStyle()
+   consumers, Hero CTA and Newsletter submit. All four hover effects and the
+   press effect read the existing --motion-* tokens, same convention as
+   .theme-nav-link--anim/.theme-hover-zoom above — no new timing invented.
+   None of these hold an element in a hidden/offset base state, so the
+   blanket prefers-reduced-motion rule near the top of this file already
+   covers them; nothing added to its neutralize list. */
+.theme-btn-sweep::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, white 18%, transparent);
+  transform: translateX(-100%);
+  transition: transform var(--motion-duration-fast, 0.2s) var(--motion-ease, ease);
+  pointer-events: none;
+}
+.theme-btn-sweep:hover::before {
+  transform: translateX(0);
+}
+
+.theme-btn-shine::after {
+  content: "";
+  position: absolute;
+  inset: -50% -20%;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
+  transform: translateX(-150%) skewX(-15deg);
+  transition: transform var(--motion-duration-base, 300ms) var(--motion-ease, ease);
+  pointer-events: none;
+}
+.theme-btn-shine:hover::after {
+  transform: translateX(150%) skewX(-15deg);
+}
+
+/* Visually inert on the two consumers' default *solid* fill (hover state
+   equals rest state) — the natural partner is the legacy buttonFill:
+   outline look (resolveButtonFillStyle), where this becomes a real
+   outline-to-solid wash. Real and correctly implemented either way, not a
+   bug when it happens to be invisible on a solid button. */
+.theme-btn-border-fill {
+  transition:
+    background-color var(--motion-duration-fast, 0.2s) var(--motion-ease, ease),
+    color var(--motion-duration-fast, 0.2s) var(--motion-ease, ease);
+}
+.theme-btn-border-fill:hover {
+  background-color: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+.theme-btn-icon {
+  transition: transform var(--motion-duration-fast, 0.2s) var(--motion-ease, ease);
+}
+.group:hover .theme-btn-icon {
+  transform: translateX(3px);
+}
+
+.theme-btn-press {
+  transition: transform var(--motion-duration-fast, 0.2s) var(--motion-ease, ease);
+}
+.theme-btn-press:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4

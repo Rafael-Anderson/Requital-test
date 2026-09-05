@@ -6,10 +6,12 @@ import type { SectionSettings } from "@/lib/theme-config-types";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  themeConfig = null;
 });
 
+let themeConfig: unknown = null;
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ previewMode: false, shop: null }),
+  useShop: () => ({ previewMode: false, shop: null, themeConfig }),
 }));
 
 // jsdom has no real matchMedia — default to "motion allowed" so rotation runs;
@@ -135,5 +137,50 @@ describe("HeroSection slideshow", () => {
       expect(hero.style.borderRadius).toBe("20px");
       expect(hero.parentElement?.getAttribute("style") ?? "").toContain("theme-max-width");
     });
+  });
+});
+
+describe("HeroSection CTA button hoverEffect/pressEffect (§8.7 item 1)", () => {
+  function renderHeroWithCta() {
+    return render(
+      <HeroSection
+        sectionId="sec-hero"
+        settings={{} as SectionSettings}
+        blocks={[{ id: "blk-cta", type: "cta", visible: true, order: 0, settings: { label: "Shop now" } }]}
+      />,
+    );
+  }
+
+  it("renders no extra class and no icon when buttons.primary.hoverEffect is unset (no-op)", () => {
+    themeConfig = { globalSettings: { buttons: { primary: {} } } };
+    renderHeroWithCta();
+    const cta = screen.getByText("Shop now").closest("a")!;
+    expect(cta.className).not.toContain("theme-btn-");
+    expect(cta.querySelector("svg")).toBeNull();
+  });
+
+  it("applies theme-btn-sweep + relative/overflow-hidden for 'sweep'", () => {
+    themeConfig = { globalSettings: { buttons: { primary: { hoverEffect: "sweep" } } } };
+    renderHeroWithCta();
+    const cta = screen.getByText("Shop now").closest("a")!;
+    expect(cta.className).toContain("theme-btn-sweep");
+    expect(cta.className).toContain("relative");
+    expect(cta.className).toContain("overflow-hidden");
+  });
+
+  it("renders a trailing arrow icon for 'icon-nudge' only", () => {
+    themeConfig = { globalSettings: { buttons: { primary: { hoverEffect: "icon-nudge" } } } };
+    renderHeroWithCta();
+    const cta = screen.getByText("Shop now").closest("a")!;
+    expect(cta.querySelector("svg")).not.toBeNull();
+    expect(cta.className).toContain("group");
+  });
+
+  it("applies theme-btn-press when pressEffect is true, independent of hoverEffect", () => {
+    themeConfig = { globalSettings: { buttons: { primary: { hoverEffect: "shine", pressEffect: true } } } };
+    renderHeroWithCta();
+    const cta = screen.getByText("Shop now").closest("a")!;
+    expect(cta.className).toContain("theme-btn-shine");
+    expect(cta.className).toContain("theme-btn-press");
   });
 });

@@ -1,10 +1,18 @@
 "use client";
 
 import { useState, type CSSProperties, type FormEvent } from "react";
+import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { subscribeNewsletter } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle, resolveButtonFillStyle, themeButtonBaseStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import {
+  resolveTextElementStyle,
+  resolveButtonElementStyle,
+  resolveButtonFillStyle,
+  resolveButtonHoverClass,
+  themeButtonBaseStyle,
+  themeTextPresetStyle,
+} from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Same shape as RichTextSection.tsx's own local copy — this section-level
@@ -27,7 +35,9 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
 // heading/text/button copy come from this section's own blocks (see backend
 // constants.ts's BLOCK_TYPES.newsletter), not flat section.settings fields.
 export default function NewsletterSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { previewMode, shop, shopSlug } = useShop();
+  const { previewMode, shop, shopSlug, themeConfig } = useShop();
+  const primaryButton = themeConfig?.globalSettings.buttons.primary;
+  const buttonHover = resolveButtonHoverClass(primaryButton?.hoverEffect, primaryButton?.pressEffect);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -96,10 +106,13 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
             type="submit"
             disabled={status === "submitting"}
             {...editableAttrs(previewMode, { id: formBlock.id, sectionId, type: "cta_button", reorderable: true })}
-            className="h-10 px-5 text-sm font-medium text-accent-foreground bg-accent disabled:opacity-60"
+            className={`h-10 px-5 text-sm font-medium text-accent-foreground bg-accent disabled:opacity-60 ${buttonHover.className}`}
             style={{ ...themeButtonBaseStyle(), ...resolveButtonFillStyle(shop?.buttonFill), ...resolveButtonElementStyle(formBlock.settings) }}
           >
             {status === "submitting" ? "Submitting…" : buttonLabel}
+            {buttonHover.showIcon && status !== "submitting" && (
+              <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />
+            )}
           </button>
         </form>
       )}
