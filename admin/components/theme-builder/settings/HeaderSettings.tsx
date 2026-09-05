@@ -86,10 +86,22 @@ export default function HeaderSettings({
 
       <hr className="border-black/10 dark:border-white/10" />
 
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Sticky header</span>
-        <Toggle checked={!!settings.sticky} onChange={(v) => onUpdate("sticky", v)} />
-      </div>
+      {/* §8.7 item 2 — scrollBehavior supersedes the legacy sticky boolean
+          once touched. Seed the displayed value from that boolean so a shop
+          that never opens this panel keeps reading exactly as before;
+          picking any option here always writes scrollBehavior going
+          forward, sticky is never written again. */}
+      <Select
+        label="Scroll behavior"
+        value={(settings.scrollBehavior as string) ?? (settings.sticky ? "sticky" : "static")}
+        onChange={(e) => onUpdate("scrollBehavior", e.target.value)}
+      >
+        <option value="static">Static (scrolls with the page)</option>
+        <option value="sticky">Sticky</option>
+        <option value="shrink">Shrink on scroll</option>
+        <option value="hide-on-scroll">Hide on scroll down</option>
+        <option value="reveal-on-hero">Transparent over hero, solid once scrolled</option>
+      </Select>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Transparent over hero</span>
         <Toggle checked={!!settings.transparentOnHero} onChange={(v) => onUpdate("transparentOnHero", v)} />

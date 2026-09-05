@@ -46,7 +46,8 @@ edits.
   Global chrome, not in `sections[]`. `header.settings.rows?: HeaderRow[]`
   (optional row grouping over the flat `blocks[]`, added in the theme-builder-
   expansion Phase 3). `header.settings.sticky: boolean`,
-  `header.settings.transparentOnHero: boolean` (**collected in admin, not wired**).
+  `header.settings.transparentOnHero: boolean`, `header.settings.scrollBehavior?`
+  (§8.9 — BUILT; `scrollBehavior` wins over `sticky` when present).
 - **`sections[]`** — reorderable homepage body. 11 types: `announcement_bar`,
   `hero`, `featured_collections`, `product_grid`, `testimonials`, `rich_text`,
   `image_text`, `newsletter`, `brands`, `product_tabs`, `trust_bar`.
@@ -1073,11 +1074,11 @@ priority recommendation for what's left.
 | grid `gap` scale | ✓ | ✓ | ✓ | ✓ | **4** | ✅ B2 |
 | header layout presets (seed `rows` + zones) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C1 |
 | mobile nav patterns (drawer / bottom-bar / fullscreen) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C2 |
-| button `hoverEffect` / `pressEffect` (`buttons.primary`) | ✓ | ✓ | ✓ | ✓ | **4** | open — top of §8.7 |
+| button `hoverEffect` / `pressEffect` (`buttons.primary`) | ✓ | ✓ | ✓ | ✓ | **4** | ✅ §8.8 |
 | footer layout presets | ✓ | ✓ | ✓ | ✓ | **4** | ✅ C1 |
 | `animations.imageLoad: fade` | ✓ | ✓ | ✓ | ✓ | **4** | ✅ batch 1 |
 | newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 | open |
-| `header.settings.scrollBehavior` + `transparentOverHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 | open — deferred through C1/C2 twice now |
+| `header.settings.scrollBehavior` + `transparentOnHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 | ✅ §8.9 |
 | `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✓ | ✓ | 3 | open |
 | `icons.corners` (rounded/sharp) | ✓ | ✗ | ✓ | ✓ | 3 | open |
 | `buttons.secondary` rendered variant | ✗ | ✓ | ✗ | ✓ | 2 | open |
@@ -1213,16 +1214,19 @@ B1. C is independent of B (both only need A). G needs A–F for the templates to
 complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
-**Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C**,
-all built and merged (see §8.6 for C). The rest of D/E/F/G1 are **not**
-committed scope — **see §8.7 for the current re-evaluation and priority
-order** (recorded 2026-09-05, supersedes §8.3's ordering the same way §8.3
-superseded the raw table below where they disagree). G0 (Flow A) + batch 1 +
-C already deliver four visibly distinct starting points that pick up real
+**Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
+§8.7 items 1-2 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
+scrollBehavior)**, all built and merged. The rest of §8.7's priority list
+(items 3+) and D/E/F/G1 more broadly are **not** committed scope — **see
+§8.7 for the current re-evaluation and priority order** (recorded
+2026-09-05, supersedes §8.3's ordering the same way §8.3 superseded the raw
+table below where they disagree). G0 (Flow A) + batch 1 + C + §8.8/§8.9
+already deliver four visibly distinct starting points that pick up real
 card-hover effects, image-load fade, stagger, a brands marquee (Market),
-header/footer structure, and a real mobile nav; the remaining D/E/F
-flourishes each template wants are listed in its own deferred block (§8.6
-updated the four that C closed) and re-prioritized in §8.7.
+header/footer structure, a real mobile nav, button hover/press feedback,
+and real header scroll behaviour; the remaining D/E/F flourishes each
+template wants are listed in its own deferred block (§8.9 updated the three
+templates it closed) and re-prioritized in §8.7.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1920,17 +1924,10 @@ Treat the current §8 D/E/F rows as still-accurate scope, not stale.
 (highest surviving template-count first) plus the layout-catalog items
 (§4.2–4.5, 4.8) that were never actually assigned to a lettered phase:
 
-1. **`buttons.primary.hoverEffect` + `.pressEffect` (§3.2) — PICKED UP
-   2026-09-05, see §8.8.** **4/4 templates**, the single highest-count open
-   item on the whole board now that header/footer/mobile-nav are done.
-   Effort **S** per effect
-   (`sweep`/`shine`/`border-fill`/`pressEffect` are all one-shot CSS
-   transitions, no JS) — cheap relative to its reach. Do this first.
-2. **`header.settings.scrollBehavior` + `.transparentOverHero` (§3.3)** —
-   3/4 templates, deferred through both batch 1 and C1/C2 now. Effort **M**
-   (scroll-direction JS + a `useScrollValue()` consumer — the hook already
-   exists, unused for this). The dead `transparentOnHero` flag has been
-   sitting in `header.settings` since before this whole plan started.
+1. **`buttons.primary.hoverEffect` + `.pressEffect` (§3.2) — BUILT, see
+   §8.8.**
+2. **`header.settings.scrollBehavior` + `.transparentOnHero` (§3.3) — BUILT,
+   see §8.9.**
 3. **`trust_bar` `rating_badge` count-up (§3.4 #9)** — 3/4 templates, a
    contained, self-testable JS item (rAF + `matchMedia` guard, no shared
    infra needed) — this is the first real consumer for `useCountUp()`,
@@ -2033,6 +2030,146 @@ once the list reaches the **L**-effort items (fly-to-cart, View Transitions,
 
 ---
 
+### 8.8 `buttons.primary.hoverEffect` + `.pressEffect` — BUILT (2026-09-05, `feat/button-hover-press-effects`, PR #97)
+
+§8.7 item 1. `ButtonStyleSettings` gained `hoverEffect?: 'none'|'sweep'|
+'shine'|'border-fill'|'icon-nudge'` and `pressEffect?: boolean`, mirrored
+across backend/admin/storefront, shared by `.primary`/`.secondary` even
+though only `.primary` has a real render path today. New pure
+`resolveButtonHoverClass()` in `storefront/lib/theme-element-style.ts` (same
+convention as `card-hover.ts`/`product-badge.ts`) selects the right
+`.theme-btn-*` class(es), consumed by `themeButtonBaseStyle()`'s two real
+call sites — Hero CTA and Newsletter submit. **Quick-add is not a third
+consumer** (confirmed via grep — it's styled entirely through
+`globalSettings.productCards`, a separate category), which narrowed this
+batch's scope from what the catalog implied. All four effects read the
+existing `--motion-*` tokens, no new timing invented; none hold an element
+in a hidden/offset base state, so the existing blanket
+`prefers-reduced-motion` rule covers them with zero additions.
+`icon-nudge` needed a small markup addition (a trailing lucide `ArrowRight`,
+rendered only for that value). `border-fill` is visually inert on both
+consumers' default solid fill — correct, not a bug (its natural partner is
+the legacy `buttonFill: outline` look).
+
+Admin: `ButtonsSettings.tsx`'s shared `ButtonStyleFields` gained an optional
+`showEffects` prop, passed only on the Primary call site (Secondary renders
+nowhere yet, so the controls would be a new unused setting there).
+
+Templates re-authored per each one's own deferred note: Atelier
+(`hoverEffect: 'sweep'`, `pressEffect: true`), Bloom (`hoverEffect: 'shine'`),
+Market (`hoverEffect: 'icon-nudge'`, `pressEffect: true` — its deferred block
+only named `border-fill` tied to the secondary variant, still out of scope;
+`icon-nudge` was picked instead for real visual variety across all four
+templates' now-real values), Heritage (left genuinely unset, matching its
+own restraint).
+
+**No-op guarantee:** both fields absent/`'none'`/`false` resolve to an empty
+className — byte-identical to today's plain `bg-accent` button. Neither
+field has a `DEFAULT_THEME_CONFIG` value.
+
+**Gate:** backend `tsc` + `jest` 490/490 + lint +0 (261).
+
+---
+
+### 8.9 `header.settings.scrollBehavior` + `.transparentOnHero` — BUILT (2026-09-05, `feat/header-scroll-behavior`)
+
+§8.7 item 2. `scrollBehavior?: 'static'|'sticky'|'shrink'|'hide-on-scroll'|
+'reveal-on-hero'` (new `HeaderScrollBehavior` type alias, mirrored across
+backend/admin/storefront next to the existing `MobileNavMode` alias) wins
+over the legacy `header.settings.sticky` boolean when present; `sticky`
+stays the sole reader for a shop that never touches this control (confirmed
+via grep it has exactly one reader, `ThemeDrivenHeader.tsx`, before
+designing the precedence around it). The catalog's "transparentOverHero"
+spelling was never real code — the already-shipped key is
+`transparentOnHero` (kept as-is, no rename); it was genuinely unread on the
+storefront before this batch (confirmed via grep, not assumed from the
+doc).
+
+**Ownership split, found by reading the actual component tree first:** the
+header's real opaque background lives on the *ancestor* `<header>` in
+`ShopLayoutClient.tsx`, not on `ThemeDrivenHeader.tsx`'s own inner div — so
+`shrink`/`hide-on-scroll`/`reveal-on-hero` promote that ancestor to sticky
+and own its hidden/transparent-vs-solid state there; the plain `'sticky'`
+value (or the legacy boolean) stays exactly as before, narrowly applied
+inside `ThemeDrivenHeader`'s own div. New shared `use-header-scroll-state.ts`
+hook (wrapping the already-shipped-but-until-now-unused-for-direction
+`useScrollValue()`) returns `{ shrunk, hidden, solid }`: `shrink` swaps the
+effective height key to `'compact'`, reusing C1's existing
+`HEADER_ROWS_PY`/`HEADER_CLASSIC_PY` tables (no new padding scale); a
+`.theme-logo-shrink` class scales the logo via `transform` only, no reflow.
+`hide-on-scroll` translates the header off-screen on down-scroll past an
+80px dead zone, reappears on any up-scroll. `reveal-on-hero` reads a hero's
+height via a `data-theme-hero` DOM marker on `HeroSection.tsx` (no React-tree
+access exists between global chrome and a homepage-only section — a marker
+plus `getBoundingClientRect()` was simpler and equally correct than
+ref-threading) and only means anything on the homepage route, where
+`SectionRenderer` mounts a hero at all. All three states are CSS-transition-
+driven (transform/padding/background-color) triggered by class/style
+toggles, not a continuous JS animation loop — the existing blanket
+`prefers-reduced-motion` rule covers them with zero additions; the scroll
+*listener* itself stays active under reduced motion (a real functional
+behaviour, not an animation).
+
+**Two real bugs found, both in `use-scroll-value.ts`, both invisible to
+every prior unit test** (this is the first real consumer of the hook's
+`direction` field, and the first real-browser-scroll exercise `BackToTopButton`
+never got either):
+1. rAF-only throttling can starve in a backgrounded/unfocused tab — `onScroll`
+   sets a `pending` guard, but if the scheduled `requestAnimationFrame`
+   callback never fires, nothing ever clears it. Fixed by racing a
+   `setTimeout(runOnce, 100)` fallback against the rAF call, whichever fires
+   first wins.
+2. **The one that was actually blocking every render in the real dev
+   server, found via instance-tagged console logging across a genuine
+   Playwright scroll pass:** React Strict Mode's dev-only mount → cleanup →
+   remount cycle cancelled the scheduled rAF/timeout in cleanup but never
+   reset the `pending` guard — the second (real, final) mount's own
+   sync-on-mount call then saw a stale `pending: true` and never scheduled
+   anything again, permanently starving every future scroll event for the
+   component's lifetime. Neither bug showed up in any isolated unit test —
+   React Testing Library's `render()` doesn't wrap in Strict Mode, so the
+   remount cycle that triggers bug 2 never happens there. Fixed by resetting
+   the guard inside the cleanup function itself.
+
+**Admin:** `HeaderSettings.tsx`'s "Sticky header" Toggle replaced with a
+"Scroll behavior" Select, displayed value seeded from the legacy `sticky`
+boolean when `scrollBehavior` is unset; picking any option always writes
+`scrollBehavior` going forward, never touches `sticky` again. "Transparent
+over hero" stays the existing Toggle, unchanged — it simply starts doing
+something once `reveal-on-hero` is picked.
+
+Templates re-authored per each one's own deferred note: Atelier
+(`reveal-on-hero` + `transparentOnHero: true`), Market (`shrink`), Bloom
+(`hide-on-scroll`). Heritage stays unset — not named in its own deferred
+block, matching the 3/4 count in §6.5's table exactly.
+
+**No-op guarantee:** `header.settings` stays free-form (no validation
+change needed); `scrollBehavior` absent falls back to reading `sticky`
+exactly as before this batch; a shop with neither set renders byte-identical
+to today.
+
+**Scratch-shop pass:** the user explicitly required confirming the existing
+methodology actually *scrolls* the page (not just loads it) before writing
+any header logic — it didn't; `page.mouse.wheel()` plus before/scrolled-down/
+scrolled-up snapshots is the first real scroll exercise in this plan's
+scratch-pass history. Verified all four `scrollBehavior` values (including
+the no-op case with the legacy `sticky` boolean explicitly set) on desktop
+and mobile viewports, then re-verified against the actual re-authored
+Atelier/Market/Bloom templates (not a manually-patched config) publishing
+for real. Zero real console errors in every pass. Both scratch spec files
+and the temporary `playwright.config.ts` `globalSetup` disablement were
+removed/reverted after verification.
+
+**Gate:** backend `tsc` + `jest` (themes, 87/87) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 489/489 (1 pre-existing flaky timing test,
+confirmed passing in isolation) + lint +0 (33); admin `tsc` + `build` +
+`vitest` (full-suite-only flakiness across a different file set on each of
+two consecutive runs, none touching this change; the one relevant file,
+`HeaderSettings.test.tsx`, confirmed 13/13 in isolation twice) + lint +0
+(77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -2047,7 +2184,7 @@ Every proposal fits the "optional key in an existing container" rule:
 | `animations.imageLoad`, extended `animations.cardHoverEffect` values | EXISTING `animations` | **None** — `cardHoverEffect` is a string field; any value tolerated, unknown ⇒ `none` behaviour. |
 | `buttons.primary.hoverEffect`/`pressEffect`, `buttons.secondary.*` | EXISTING `buttons` | **None.** |
 | `prices.salePriceColor` etc., `badges.style` etc., `drawers.animation`, `cart.itemAnimation`, `inputFields.focusAnimation`, `search.*`, `productCards.imageAspect`/`textAlign`/`density`/`wishlistAnimation`, `icons.corners`/`size`/`style`, `floatingElements.backToTop` | new optional keys in EXISTING categories | **None.** |
-| `header.settings.scrollBehavior`/`transparentOverHero`/`mobileNav`/`height`/`contentWidth`/`separator`/layout-preset-seeded `rows` | `header.settings` is already `Record<string, unknown>` | **None.** |
+| `header.settings.scrollBehavior`/`transparentOnHero`/`mobileNav`/`height`/`contentWidth`/`separator`/layout-preset-seeded `rows` | `header.settings` is already `Record<string, unknown>` | **None.** — ✅ `scrollBehavior`/`transparentOnHero` BUILT §8.9. |
 | `footer.settings.*` (preset, columns, payment icons, bottom bar) | `footer.settings` free-form | **None.** |
 | `section.settings.motion`/`gap`/`imageAspect`/`separator`/`overlay`/`contentWidth`/`featuredFirst`, hero `kenBurns`/`parallax`/`indicatorStyle`, `brands.scrolling` | `section.settings` free-form, shallow-validated | **None.** |
 | `globalSettings.productPage.*` layout enums (§4.4), `globalSettings.collectionPage.*` additions (§4.5) | EXISTING small categories | **None.** |
@@ -2150,6 +2287,8 @@ avoids retouching every token later. Full table in §8.1.
 | `header.settings.rows` / footer named layout | ✅ named header/footer presets that seed both | ✅ C1 |
 | `header.settings.mobileNav` | ✅ `MobileNav.tsx` (drawer/bottom-bar/fullscreen) | ✅ C2 |
 | `globalSettings.floatingElements.backToTop` | ✅ `BackToTopButton.tsx`, gated on scroll position | ✅ C1/C2 |
+| `header.settings.transparentOnHero` | ✅ `reveal-on-hero` scroll behavior consumes it | ✅ §8.9 |
+| `buttons.primary.hoverEffect`/`.pressEffect` | ✅ `resolveButtonHoverClass()`, Hero CTA + Newsletter submit | ✅ §8.8 |
 
 ### 9.4 Other risks
 

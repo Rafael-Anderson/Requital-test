@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import ThemeDrivenHeader from "./ThemeDrivenHeader";
 import type { HeaderFooterConfig } from "@/lib/theme-config-types";
 import type { Shop } from "@/lib/types";
@@ -118,5 +118,47 @@ describe("ThemeDrivenHeader — rows present (Phase 3)", () => {
     expect(getByText("Call us")).toBeInTheDocument();
     // nav_menu placed in a row renders the inline <MenuBar />
     expect(getAllByTestId("menubar").length).toBe(1);
+  });
+});
+
+describe("ThemeDrivenHeader — scrollBehavior precedence + 'shrink' (§8.7 item 2)", () => {
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+    cb(0);
+    return 1;
+  });
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+
+  function setScrollY(y: number) {
+    Object.defineProperty(window, "scrollY", { value: y, writable: true, configurable: true });
+    window.dispatchEvent(new Event("scroll"));
+  }
+
+  afterEach(() => {
+    Object.defineProperty(window, "scrollY", { value: 0, writable: true, configurable: true });
+  });
+
+  it("no scrollBehavior falls back to the legacy sticky boolean, byte-identical", () => {
+    const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, sticky: true } });
+    expect(container.querySelector(".sticky.top-0")).not.toBeNull();
+  });
+
+  it("scrollBehavior: 'static' overrides a true legacy sticky boolean", () => {
+    const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { sticky: true, scrollBehavior: "static" } });
+    expect(container.querySelector(".sticky.top-0")).toBeNull();
+  });
+
+  it("scrollBehavior: 'shrink' does not apply this div's own sticky (the ancestor <header> owns it)", () => {
+    const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { scrollBehavior: "shrink" } });
+    expect(container.querySelector(".sticky.top-0")).toBeNull();
+  });
+
+  it("'shrink' swaps to compact padding past the threshold and back above it", () => {
+    const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { scrollBehavior: "shrink" } });
+    const grid = container.querySelector(".grid.grid-cols-3") as HTMLElement;
+    expect(grid.className).toContain("py-3"); // default, unscrolled
+    act(() => setScrollY(100));
+    expect(grid.className).toContain("py-2"); // compact, shrunk
+    act(() => setScrollY(0));
+    expect(grid.className).toContain("py-3");
   });
 });

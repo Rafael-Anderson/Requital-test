@@ -104,3 +104,34 @@ describe("HeaderSettings — layout presets and new settings (C1)", () => {
     expect(onUpdate).toHaveBeenCalledWith("mobileNav", "drawer");
   });
 });
+
+describe("HeaderSettings — scroll behavior (§8.7 item 2)", () => {
+  it("defaults to 'static' when neither scrollBehavior nor the legacy sticky boolean is set", () => {
+    render(<HeaderSettings settings={{}} blocks={BLOCKS} onUpdate={vi.fn()} onApplyPreset={vi.fn()} />);
+    expect(screen.getByLabelText("Scroll behavior")).toHaveValue("static");
+  });
+
+  it("seeds the displayed value from the legacy sticky boolean when scrollBehavior is unset", () => {
+    render(<HeaderSettings settings={{ sticky: true }} blocks={BLOCKS} onUpdate={vi.fn()} onApplyPreset={vi.fn()} />);
+    expect(screen.getByLabelText("Scroll behavior")).toHaveValue("sticky");
+  });
+
+  it("scrollBehavior wins over the legacy sticky boolean when both are set", () => {
+    render(<HeaderSettings settings={{ sticky: true, scrollBehavior: "shrink" }} blocks={BLOCKS} onUpdate={vi.fn()} onApplyPreset={vi.fn()} />);
+    expect(screen.getByLabelText("Scroll behavior")).toHaveValue("shrink");
+  });
+
+  it("picking a value writes scrollBehavior only, never touches sticky", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(<HeaderSettings settings={{}} blocks={BLOCKS} onUpdate={onUpdate} onApplyPreset={vi.fn()} />);
+    await user.selectOptions(screen.getByLabelText("Scroll behavior"), "reveal-on-hero");
+    expect(onUpdate).toHaveBeenCalledWith("scrollBehavior", "reveal-on-hero");
+    expect(onUpdate).not.toHaveBeenCalledWith("sticky", expect.anything());
+  });
+
+  it("still renders the existing Transparent over hero toggle", () => {
+    render(<HeaderSettings settings={{}} blocks={BLOCKS} onUpdate={vi.fn()} onApplyPreset={vi.fn()} />);
+    expect(screen.getByText("Transparent over hero")).toBeInTheDocument();
+  });
+});

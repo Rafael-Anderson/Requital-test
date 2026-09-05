@@ -155,6 +155,11 @@ export interface HeaderRow {
 // MenuBar (see that file's own header comment for why).
 export type MobileNavMode = 'scroll' | 'drawer' | 'bottom-bar' | 'fullscreen';
 
+// §8.7 item 2 — `header.settings.scrollBehavior`. Absent ⇒ falls back to
+// reading the legacy `header.settings.sticky` boolean; 'static' is this
+// field's own explicit "not sticky" value (distinct from "unset").
+export type HeaderScrollBehavior = 'static' | 'sticky' | 'shrink' | 'hide-on-scroll' | 'reveal-on-hero';
+
 // theme-builder-expansion Phase 5 (decision TBE3): the PERSISTENT chrome
 // announcement bar — distinct from the homepage-body `announcement_bar`
 // section (which is untouched). Stored at `header.settings.announcementBar`

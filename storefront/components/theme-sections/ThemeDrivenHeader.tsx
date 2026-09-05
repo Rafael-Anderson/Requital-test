@@ -10,13 +10,14 @@ import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth } from "@/lib/theme-element-style";
 import { resolveHeaderRows } from "@/lib/header-rows";
+import { useHeaderScrollState } from "@/lib/use-header-scroll-state";
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
 import MenuBar from "@/components/MenuBar";
 import ThemeImageBlock from "./ThemeImageBlock";
 import { backgroundStyle } from "./SectionWrapper";
 import type { Customer, Shop } from "@/lib/types";
-import type { HeaderFooterConfig, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
+import type { HeaderFooterConfig, HeaderScrollBehavior, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const ROW_JUSTIFY: Record<string, string> = {
   left: "justify-start",
@@ -97,8 +98,9 @@ const HEADER_CHROME_ID = "__header__";
 // full-width below this component for both themed and legacy shops; that
 // component reads this same config to decide whether to show it, so the
 // block's visibility is still honored, just not by this file.
-// `transparentOnHero` is collected in the admin settings panel but not yet
-// visually wired here — flagged, not silently dropped.
+// `transparentOnHero` (§8.7 item 2) is wired in ShopLayoutClient.tsx's
+// ancestor <header>, not here — that element owns the header's real opaque
+// background, so the transparent-over-hero state has to toggle there.
 export default function ThemeDrivenHeader({
   shopSlug,
   shop,
@@ -114,8 +116,23 @@ export default function ThemeDrivenHeader({
 }) {
   const { shopBasePath, previewMode, themeConfig } = useShop();
   const { openDrawer } = useCartDrawer();
-  const sticky = !!config.settings.sticky;
-  const heightKey = (config.settings.height as string) || "default";
+  // §8.7 item 2 — precedence: scrollBehavior (when present) is the sole
+  // source of truth; the legacy bare `sticky` boolean is only consulted
+  // when scrollBehavior is absent (back-compat, byte-identical for a shop
+  // that's never touched the new field). 'shrink'/'hide-on-scroll'/
+  // 'reveal-on-hero' promote the WHOLE header to sticky one level up
+  // (ShopLayoutClient.tsx) — this div does not also apply its own sticky
+  // for those three, avoiding a redundant nested-sticky pair; only the
+  // plain 'sticky' value (or the legacy boolean) applies it narrowly here,
+  // exactly as before.
+  const scrollBehavior = (config.settings.scrollBehavior as HeaderScrollBehavior) || "";
+  const sticky = scrollBehavior ? scrollBehavior === "sticky" : !!config.settings.sticky;
+  const transparentOnHero = !!config.settings.transparentOnHero;
+  const { shrunk } = useHeaderScrollState(scrollBehavior, transparentOnHero);
+  const heightKey = shrunk ? "compact" : (config.settings.height as string) || "default";
+  // Only added for 'shrink' — a shop on any other value never gets a
+  // transition-padding class it doesn't need.
+  const shrinkTransitionClass = scrollBehavior === "shrink" ? "theme-header-shrink-transition" : "";
   // C1 — header.settings.contentWidth: 'full' drops the max-width cap
   // entirely; absent/'contained' (default) keeps today's var() cap.
   const contentMaxWidth = config.settings.contentWidth === "full" ? undefined : "var(--theme-max-width, 80rem)";
@@ -162,7 +179,10 @@ export default function ThemeDrivenHeader({
               <img
                 src={logoUrl}
                 alt={shop?.displayName ?? shop?.name}
-                className="theme-logo-img max-w-40 object-contain shrink-0"
+                // §8.7 item 2 — 'shrink' scales the logo down via a toggled
+                // class (transform, compositor-only, no reflow) rather than
+                // touching the --theme-logo-height var mechanism.
+                className={`theme-logo-img max-w-40 object-contain shrink-0 ${shrunk ? "theme-logo-shrink" : ""}`}
                 style={resolveImageElementStyle(block.settings)}
               />
             ) : (
@@ -372,7 +392,7 @@ export default function ThemeDrivenHeader({
             style={row.background ? { background: row.background } : undefined}
           >
             <div
-              className={`mx-auto px-4 ${HEADER_ROWS_PY[heightKey] ?? HEADER_ROWS_PY.default} flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"}`}
+              className={`mx-auto px-4 ${HEADER_ROWS_PY[heightKey] ?? HEADER_ROWS_PY.default} flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"} ${shrinkTransitionClass}`}
               style={contentStyle}
             >
               {applyLogoRelativePosition(row.blocks).map((b) => renderBlock(b))}
@@ -385,7 +405,10 @@ export default function ThemeDrivenHeader({
 
   return (
     <div className={outerClass} style={style}>
-      <div className={`mx-auto px-4 ${HEADER_CLASSIC_PY[heightKey] ?? HEADER_CLASSIC_PY.default} grid grid-cols-3 items-center gap-4`} style={contentStyle}>
+      <div
+        className={`mx-auto px-4 ${HEADER_CLASSIC_PY[heightKey] ?? HEADER_CLASSIC_PY.default} grid grid-cols-3 items-center gap-4 ${shrinkTransitionClass}`}
+        style={contentStyle}
+      >
         {ZONES.map((zone) => (
           <div
             key={zone}

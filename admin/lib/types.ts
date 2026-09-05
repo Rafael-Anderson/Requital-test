@@ -1254,6 +1254,9 @@ export interface HeaderRow {
 // C1/C2 batch — mirrors backend theme-config.types.ts's MobileNavMode.
 export type MobileNavMode = "scroll" | "drawer" | "bottom-bar" | "fullscreen";
 
+// §8.7 item 2 — mirrors backend theme-config.types.ts's HeaderScrollBehavior.
+export type HeaderScrollBehavior = "static" | "sticky" | "shrink" | "hide-on-scroll" | "reveal-on-hero";
+
 // Phase 5 (TBE3) — persistent chrome announcement bar, at
 // `header.settings.announcementBar`. Distinct from the homepage-body
 // `announcement_bar` section. Mirrors backend theme-config.types.ts.
