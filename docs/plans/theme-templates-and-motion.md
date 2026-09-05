@@ -639,7 +639,7 @@ joins) — it has no filled/solid variants.
 
 | Proposal | Achievable no-dep? | Effort | Notes |
 |---|---|---|---|
-| `icons.corners: 'rounded' | 'sharp'` | ✅ yes | S | CSS override on lucide SVGs: `stroke-linecap`/`stroke-linejoin: butt` vs `round` |
+| `icons.corners: 'rounded' | 'sharp'` | ✅ **BUILT §8.11** | S | per-icon `strokeLinecap`/`strokeLinejoin` prop (not a CSS override — mirrors `icons.stroke`); header + search icons only |
 | `icons.size: 'sm' | 'md' | 'lg'` | ✅ yes | S | scale the icon-size classes |
 | `icons.style: 'line' | 'solid' | 'duotone'` **+ per-icon glyph variants** | ⚠️ partial | M | **Expanded to its own parallel phase — see §8 Phase I.** `line` = lucide as-is (no-op default). `solid`/`duotone` + 2–3 glyph variants per icon = a **hand-drawn inline-SVG set** in `storefront/lib/icons/`, ≈ 100+ SVGs across the ~12 storefront icons × 2–3 glyphs × 3 styles. Config: `globalSettings.icons.style` (global) + `globalSettings.icons.glyphs?` (per-icon override — final shape decided at the Phase I gate). **Zero new deps** — a second icon package is explicitly **rejected**. **Gated:** a glyph-variant list + SVG count + config shape + admin-picker-design-pass flag come back for sign-off before any SVG is drawn. |
 
@@ -1080,7 +1080,7 @@ priority recommendation for what's left.
 | newsletter `successAnimation` | ✓ | ✓ | ✓ | ✗ | 3 | open |
 | `header.settings.scrollBehavior` + `transparentOnHero` wiring | ✓ | ✓ | ✓ | ✗ | 3 | ✅ §8.9 |
 | `trust_bar` polish (count-up on `rating_badge`) | ✗ | ✓ | ✗ | ✗ | **1** | ✅ §8.10 (table corrected — Bloom has no `rating_badge`, Heritage's deferred block never asked for it) |
-| `icons.corners` (rounded/sharp) | ✓ | ✗ | ✓ | ✓ | 3 | open |
+| `icons.corners` (rounded/sharp) | ✓ | ✗ | ✗ | ✓ | **2** | ✅ §8.11 (table corrected — Market and Bloom both spec `rounded`, which is byte-identical to unset) |
 | `buttons.secondary` rendered variant | ✗ | ✓ | ✗ | ✓ | 2 | open |
 | `product_tabs` magic-line + crossfade polish | ✗ | ✓ | ✓ | ✗ | 2 | open |
 | wishlist animation (`pop`/`burst`/`sweep`) | ✗ | ✓ | ✓ | ✗ | 2 | open |
@@ -1215,19 +1215,20 @@ complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
-§8.7 items 1-3 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
-scrollBehavior, §8.10 trust_bar rating count-up)**, all built and merged.
-The rest of §8.7's priority list (items 4+) and D/E/F/G1 more broadly are
-**not** committed scope — **see §8.7 for the current re-evaluation and
-priority order** (recorded 2026-09-05, supersedes §8.3's ordering the same
-way §8.3 superseded the raw table below where they disagree). G0 (Flow A) +
-batch 1 + C + §8.8/§8.9/§8.10 already deliver four visibly distinct
-starting points that pick up real card-hover effects, image-load fade,
-stagger, a brands marquee (Market), header/footer structure, a real mobile
-nav, button hover/press feedback, real header scroll behaviour, and (Market
-only) a real animated trust-bar rating; the remaining D/E/F flourishes each
-template wants are listed in its own deferred block (§8.10 updated Market's)
-and re-prioritized in §8.7.
+§8.7 items 1-4 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
+scrollBehavior, §8.10 trust_bar rating count-up, §8.11 icons.corners)**, all
+built and merged. The rest of §8.7's priority list (items 5+) and D/E/F/G1
+more broadly are **not** committed scope — **see §8.7 for the current
+re-evaluation and priority order** (recorded 2026-09-05, supersedes §8.3's
+ordering the same way §8.3 superseded the raw table below where they
+disagree). G0 (Flow A) + batch 1 + C + §8.8–§8.11 already deliver four
+visibly distinct starting points that pick up real card-hover effects,
+image-load fade, stagger, a brands marquee (Market), header/footer
+structure, a real mobile nav, button hover/press feedback, real header
+scroll behaviour, (Market only) a real animated trust-bar rating, and sharp
+icon corners (Atelier + Heritage); the remaining D/E/F flourishes each
+template wants are listed in its own deferred block (§8.11 updated
+Atelier/Heritage's) and re-prioritized in §8.7.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1931,9 +1932,9 @@ Treat the current §8 D/E/F rows as still-accurate scope, not stale.
    see §8.9.**
 3. **`trust_bar` `rating_badge` count-up (§3.4 #9) — BUILT, see §8.10's
    correction: real committed scope was 1/4 (Market), not the table's 3/4.**
-4. **`icons.corners` (rounded/sharp, §5.1)** — 3/4 templates, Effort **S**
-   (a CSS override on lucide SVGs, no new icons drawn — distinct from the
-   separately-gated Phase I glyph/style work).
+4. **`icons.corners` (rounded/sharp, §5.1) — BUILT, see §8.11's correction:
+   real committed scope was 2/4 (Atelier + Heritage), not the table's 3/4
+   (Market and Bloom both spec `rounded` = unset).**
 5. **Newsletter `successAnimation` (§3.9 #5)** — 3/4 templates, Effort **S–M**
    (form collapses, a checkmark + confirmation text scales in).
 6. **`buttons.secondary` rendered variant (§3.2, §9.3)** — 2/4 templates
@@ -2256,6 +2257,84 @@ finishes before sampling starts.
 
 ---
 
+### 8.11 `globalSettings.icons.corners` — BUILT (2026-09-05, `feat/icon-corners`)
+
+§8.7 item 4. New optional `'rounded' | 'sharp'` field on the existing
+`icons` category — a CSS-level stroke-join treatment on the lucide icons
+already in use, distinct from the gated Phase I icon-glyph project.
+
+**Mechanism follows `icons.stroke`'s exact precedent — verified, not
+assumed.** `resolveIconStrokeWidth(stroke)` in
+`storefront/lib/theme-element-style.ts` is a pure function returning a
+numeric SVG prop (not a CSS var), merged into an `iconProps` object that
+gets spread onto each rendered icon. New sibling `resolveIconCorners
+(corners)` mirrors it exactly: unset/`'rounded'`/unknown returns lucide's
+own baked-in `{ strokeLinecap: 'round', strokeLinejoin: 'round' }` pair
+explicitly (checked `node_modules/lucide-react/dist/cjs/lucide-react.js` —
+those are lucide's real `defaultAttributes`), so a shop that never touches
+the control renders byte-identical to today; `'sharp'` returns `{
+strokeLinecap: 'butt', strokeLinejoin: 'miter' }`. `LucideProps extends
+SVGProps<SVGSVGElement>`, so both attributes are plain props — no CSS
+override, no new mechanism.
+
+**Scope confirmed narrow, by design.** Grepped every `lucide-react` import
+in `storefront/` — 27 files render lucide icons, but only two
+(`ThemeDrivenHeader.tsx`, `SearchBar.tsx`) construct `iconProps` from
+`globalSettings.icons`. `icons.stroke` already has exactly this narrow
+scope (header + search icons); `icons.corners` follows it. A site-wide `svg
+{ stroke-linejoin: var(...) }` CSS rule would have been easier to write but
+would make `corners` behave differently from its sibling `stroke` for no
+reason — a worse inconsistency than the narrow scope.
+
+**Scope correction: 2/4 templates, not the §6.5 table's 3/4.** Each
+template's own §6 catalog table names an `icons.corners` value: Atelier
+`sharp`, Market `rounded`, Bloom `rounded`, Heritage `sharp`. §6.5's table
+marks Atelier ✓, Market ✗, Bloom ✓, Heritage ✓ — but Market and Bloom have
+the *identical* stated value (`rounded`), so marking one ✓ and the other ✗
+is an internal inconsistency in the tracking artifact, not a real
+distinction. `'rounded'` is byte-identical to unset (lucide's own
+default), so **only Atelier and Heritage get `icons.corners` set in code
+(`'sharp'`)**; Market and Bloom are left untouched — their stated
+preference is already exactly what unset renders. Matches this engagement's
+established practice (e.g. Heritage's `buttons.primary.hoverEffect` staying
+genuinely unset elsewhere).
+
+**Admin:** `IconsSettings.tsx` gains a second `SegmentedToggle`
+(Rounded/Sharp), writing `corners: undefined` for the "Rounded" choice per
+`RadiusSettings.tsx`'s "write undefined for the true no-op" convention (not
+`icons.stroke`'s own always-write-a-string convention, since `stroke` has
+no unset state and `corners` does).
+
+**Type mirrors:** `IconSettings.corners?: 'rounded' | 'sharp'` added to
+backend/admin/storefront. No `DEFAULT_THEME_CONFIG` seed — unset renders
+identically to `'rounded'`. No validation-shape change
+(`theme-config.validation.ts` doesn't inspect `icons` sub-fields).
+
+*(Side observation, not acted on: each template's catalog table also names
+a `stroke` value — Atelier `thin`, Heritage `default` — that no template
+has ever set. Flagged for a future pass, out of scope here.)*
+
+**Scratch-shop pass — purely visual, no scroll or timing**, so none of
+§8.9/§8.10's scroll-step or in-page rAF-sampler machinery. Published the
+real re-authored Atelier and Heritage templates plus Market as an
+untouched control, and read the header cart/account icon's rendered
+`stroke-linecap`/`stroke-linejoin` DOM attribute via `getAttribute` (a
+discrete attribute value — strictly more precise and non-flaky than a
+screenshot pixel-diff): Atelier/Heritage's `lucide-search` /
+`lucide-shopping-cart` / `lucide-user` icons render `butt`/`miter`, Market
+stays `round`/`round`, and the deliberately-out-of-scope `lucide-menu` /
+`lucide-chevron-down` icons in the same header stay `round`/`round`
+everywhere. Zero console errors. Scratch file deleted and
+`playwright.config.ts` reverted after.
+
+**Gate:** backend `tsc` + `jest` (themes, 87/87) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 501/501 + lint +0 (33); admin `tsc` + `build` +
+`vitest` (2 failures in `AccountSetup.test.tsx` — the pre-documented
+full-suite-only flakiness, 12/12 in isolation, untouched by this change) +
+lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -2376,6 +2455,7 @@ avoids retouching every token later. Full table in §8.1.
 | `header.settings.transparentOnHero` | ✅ `reveal-on-hero` scroll behavior consumes it | ✅ §8.9 |
 | `buttons.primary.hoverEffect`/`.pressEffect` | ✅ `resolveButtonHoverClass()`, Hero CTA + Newsletter submit | ✅ §8.8 |
 | `rating_badge.countUp` | ✅ `useCountUp()`, Market's trust_bar (only template that requested it) | ✅ §8.10 |
+| `icons.corners` | ✅ `resolveIconCorners()`, header + search icons (same narrow scope as `icons.stroke`) | ✅ §8.11 |
 
 ### 9.4 Other risks
 
