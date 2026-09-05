@@ -219,6 +219,9 @@ const atelier: ThemeConfig = (() => {
   g.buttons.primary.cornerRadius = 0;
   g.buttons.primary.borderThickness = 0;
   g.buttons.secondary.cornerRadius = 0;
+  // §8.7 item 1 — closes out Atelier's deferred hoverEffect/pressEffect.
+  g.buttons.primary.hoverEffect = 'sweep';
+  g.buttons.primary.pressEffect = true;
   g.productCards.cardStyle = 'minimal';
   g.productCards.imageAspect = 'portrait';
   g.productCards.textAlign = 'left';
@@ -278,6 +281,13 @@ const market: ThemeConfig = (() => {
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#C81E4A';
   g.badges.case = 'uppercase';
+  // §8.7 item 1 — Market's deferred block didn't name a hoverEffect value
+  // (border-fill was tied to the *secondary* button variant, out of scope
+  // this round); icon-nudge's "let's go" affordance fits Market's dense/
+  // fast/conversion-focused personality and gives the four templates real
+  // variety across every non-'none' enum value.
+  g.buttons.primary.hoverEffect = 'icon-nudge';
+  g.buttons.primary.pressEffect = true;
 
   // C1/C2 re-author — Market's deferred header preset + mobileNav, closed
   // out. "Contact-bar + centered nav": a slim contact row, logo/icons on
@@ -360,6 +370,10 @@ const bloom: ThemeConfig = (() => {
   g.productCards.showWishlist = true;
   g.prices.salePriceStyle = 'color';
   g.badges.cornerRadius = 9999;
+  // §8.7 item 1 — closes out Bloom's deferred hoverEffect (explicitly named
+  // 'shine' in its own deferred block). No pressEffect — Bloom's bounce
+  // already comes from its expressive/overshoot motion profile.
+  g.buttons.primary.hoverEffect = 'shine';
   // C1/C2 re-author — closes out Bloom's mobileNav + footer deferred items.
   c.header.settings.mobileNav = 'drawer';
   {
@@ -427,6 +441,10 @@ const heritage: ThemeConfig = (() => {
   g.productCards.showWishlist = false;
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#8A3324';
+  // §8.7 item 1 — buttons.primary.hoverEffect deliberately left UNSET, not
+  // an explicit 'none' string: matches Heritage's own "notably does NOT
+  // need" restraint (§6.4), and demonstrates that unset and 'none' render
+  // identically (resolveButtonHoverClass returns "" for both).
 
   // C1/C2 re-author — closes out Heritage's header/footer/mobileNav
   // deferred items (Heritage was flagged as "notably does NOT need" most of
@@ -553,6 +571,15 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 // also now real (built globally, not per-template) — none of the four
 // templates opts into it here; a future re-author may choose to.
 //
+// §8.7 item 1 batch (2026-09-05) shipped and adopted here:
+// buttons.primary.hoverEffect + .pressEffect. Atelier ('sweep' +
+// pressEffect) and Bloom ('shine') both used the exact value their own
+// deferred block already named. Heritage stays genuinely unset (not an
+// explicit 'none') — its own restraint. Market's deferred block only named
+// 'border-fill' tied to the *secondary* button variant (still out of
+// scope); picked 'icon-nudge' instead for real visual variety across all
+// four templates' now-real hoverEffect values.
+//
 // ALL templates:
 //   - animations.addToCart / pageTransition — deliberately left false (no
 //     silent behaviour change when the consumer lands; re-author instead)
@@ -561,21 +588,24 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //     announcementPosition, icon block showLabel — none of the four
 //     templates needed a non-default value for these; available if a future
 //     re-author wants one
+//   - buttons.secondary hoverEffect/pressEffect — the fields exist (shared
+//     ButtonStyleSettings) but .secondary has no render path yet, so
+//     setting them now would be inert
 //
 // atelier:  hero kenBurns; header scrollBehavior 'reveal-on-hero' +
-//           transparentOverHero; buttons.primary hoverEffect 'sweep' +
-//           pressEffect; motion smoothScroll; badges.style 'rectangle'
+//           transparentOverHero; motion smoothScroll; badges.style
+//           'rectangle'
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; inputFields.focusAnimation
 //           'float-label'; motion.scrollProgressBar; header scrollBehavior
 //           'shrink'; product_tabs section (needs real collectionIds);
 //           trust_bar rating count-up; hero indicatorStyle 'progress';
 //           productCards.wishlistAnimation 'pop'; product_vendor /
-//           product_stock card sub-blocks; buttons.secondary rendered variant
-//           + hoverEffect 'border-fill'; badges.style 'tag' + entranceAnimation
+//           product_stock card sub-blocks; buttons.secondary rendered
+//           variant + hoverEffect 'border-fill'; badges.style 'tag' +
+//           entranceAnimation
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
-//           shapes; buttons.primary hoverEffect 'shine';
-//           buttons.pillCornerRadius pills; header scrollBehavior
+//           shapes; buttons.pillCornerRadius pills; header scrollBehavior
 //           'hide-on-scroll'; section separators; product_tabs section;
 //           announcement_bar marquee; badges.style 'circle' + entranceAnimation
 // heritage: buttons.secondary rendered as outline CTAs; badges.style 'ribbon'
