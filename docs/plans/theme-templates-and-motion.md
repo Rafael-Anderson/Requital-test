@@ -1054,6 +1054,17 @@ look established" template.
 
 ### 6.5 Cross-template capability dependency (→ build-order signal)
 
+> **STALE as of 2026-09-06 (see §8.13).** This hand-maintained summary of
+> §6.1–6.4 was the pre-G0 build-order signal and is kept for history. It has
+> drifted from its source: wrong counts (items 3–4 of §8.7), an internal
+> inconsistency (`icons.corners` — Market/Bloom both `rounded`, marked ✗/✓),
+> and — found in the §8.13 stock-take — **missing rows for capabilities all
+> four templates want** (`badges.style`, 4/4). **Do NOT use this table for
+> current planning or add rows to it.** Its ✅ rows are still accurate; its
+> open rows are superseded by **§8.13.C**, which is the live remaining-work
+> list, cross-checked against §6.1–6.4 directly. Any future stock-take
+> re-derives from §6.1–6.4 + `templates.ts`, never from here.
+
 Capabilities used by **3 or more** templates ship first. **Updated 2026-09-05
 (post-C re-evaluation, §8.7) — ✅ rows are BUILT; the phase that closed each
 is noted.** Kept as the historical build-order signal; §8.7 is the current
@@ -1927,6 +1938,13 @@ Treat the current §8 D/E/F rows as still-accurate scope, not stale.
 (highest surviving template-count first) plus the layout-catalog items
 (§4.2–4.5, 4.8) that were never actually assigned to a lettered phase:
 
+> **Items 1–5 are BUILT (§8.8–§8.12). Items 6+ below are SUPERSEDED by
+> §8.13.C** (2026-09-06 stock-take), which re-derived priority from
+> §6.1–6.4 directly and found this list was missing `badges.style` (4/4
+> templates — now item 1 of §8.13.C) because it was built from §6.5, which
+> had no row for it. Use §8.13.C, not the numbering below, for anything not
+> yet started.
+
 1. **`buttons.primary.hoverEffect` + `.pressEffect` (§3.2) — BUILT, see
    §8.8.**
 2. **`header.settings.scrollBehavior` + `.transparentOnHero` (§3.3) — BUILT,
@@ -2429,6 +2447,179 @@ after.
 `vitest` (3 failures in `AccountSetup.test.tsx` — the pre-documented
 full-suite-only flakiness, 12/12 in isolation, untouched by this change) +
 lint +0 (77).
+
+---
+
+### 8.13 Post-§8.12 capability stock-take — RECOMMENDATION (recorded 2026-09-06, before picking up items 6+)
+
+Same structure as the pre-G0 stock-take (§8.3). Everything through §8.12 is
+merged: motion tokens + reduced-motion rule, radius, density, typography
+pairing/scale, colours completion, section-entrance vocab + stagger +
+animateOnce, card-hover enum extension, card-style extension, imageAspect,
+grid gap, header/footer layout presets, mobile nav, `imageLoad: fade`,
+`brands.scrolling`, buttons hoverEffect/pressEffect, header scrollBehavior +
+transparentOnHero, trust_bar count-up, icons.corners, newsletter
+successAnimation.
+
+**Cross-checked per template against §6.1–6.4's own catalog tables and
+`templates.ts`'s deferred-block comments — NOT §6.5, which is wrong or
+imprecise on 4 of the last 5 items and, as this pass found, is also
+*missing entire rows*.**
+
+#### A. What §6.5 is missing entirely (verified against the templates' own text + the code)
+
+| Item | Templates that want it (per their own §6 table) | count | Wired today? | Catalog ref |
+|---|---|:-:|---|---|
+| **`badges.style`** (`pill`/`rectangle`/`ribbon`/`tag`/`circle`) | Atelier `rectangle`, Market `tag`, Bloom `circle`, Heritage `ribbon` | **4** | **No** — `BadgeSettings` is `{ position, cornerRadius, saleSchemeId, soldOutSchemeId, font, case }`; `lib/product-badge.ts` renders a plain rounded chip, no shape variants | §5.5 |
+| **`badges.entranceAnimation`** (pop-in on card entrance) | Market `true`, Bloom `true` | **2** | **No** — not a field on `BadgeSettings` | §5.5 / §3.1 #14 |
+| **`motion.smoothScroll`** (`scroll-behavior: smooth` on `<html>`) | Atelier (`smoothScroll: true`, in its `motion` block **and** its "→ needs" list) | 1 | **No** — the field is declared on `MotionSettings` with a `// scroll-behavior: smooth` comment, but `grep` finds zero consumers in `storefront/` | §2 (motion model) |
+| **`buttons.pillCornerRadius`** (fully-round pill buttons) | Bloom (`pillCornerRadius: 9999`, in its `buttons.primary` block **and** "→ needs") | 1 | **No** — field exists on `ButtonStyleSettings`; `shop-context.tsx` has two explicit comments that it "has no CSS var here". Tracked in §9.3's prose but never given a §6.5 row or a §8.7 item | §3.2 |
+| hero `slideTransition` extended values (`zoom-cross`) | Market (`slideTransition: zoom-cross`) | 1 | **Partial** — `HeroSection.tsx` reads `settings.slideTransition` but types it as `ScrollAnimation` (`fade-in`/`slide-*`), so `zoom-cross` silently falls back to `fade-in`. Acceptable substitute; lowest priority | §3.5 |
+
+`badges.style` at **4/4** is the single highest-count open item on the
+entire board, and it was invisible to §8.7's priority list because that
+list was "re-derived from §6.5" and §6.5 has no row for it. **This is the
+headline finding.**
+
+#### B. §6.5's existing "open" rows — all verified consistent with the templates' §6 text this pass
+
+`buttons.secondary` (Market + Heritage, 2), `product_tabs` magic-line
+(Market + Bloom, 2), wishlist animation (Market `pop` + Bloom `burst`, 2),
+`floatingElements.backToTop` re-author (Market + Bloom, 2 — capability
+built, neither template's literal enables it), `icons.style: solid/duotone`
+(Market + Bloom, 2 — **separate gated Phase I**, ~100 hand-drawn SVGs, not
+a normal batch item), `drawers.animation` + `cart.itemAnimation`/
+`subtotalAnimation` (Market, 1), fly-to-cart (Market, 1), `scrollProgressBar`
+(Market, 1), hero `kenBurns` (Atelier, 1), hero `parallax` +
+`decorativeParallax` (Bloom, 1), hero `indicatorStyle: progress` (Market,
+1), section separators (Bloom, 1), `inputFields.focusAnimation` (Market, 1),
+card sub-blocks `product_vendor`/`product_stock`/`product_swatches` (Market,
+1). Route-content fade / View Transitions (§3.8) is universal, not
+template-specific. `customCursor` — 0/4, no template wants it.
+
+#### C. Re-derived priority order (real per-template count, highest first)
+
+1. **`badges.style` — 4/4.** Effort **S** (a shape enum → per-style CSS
+   class on the existing badge chip: `rectangle` = radius 0, `pill` =
+   9999, `circle` = 1:1 + full radius, `tag` = a notch via `clip-path`,
+   `ribbon` = a diagonal via `clip-path` + `::before`). `lib/product-badge.ts`
+   already returns a `ResolvedProductBadge` with a `style` object and a
+   `positionClass` — this slots straight in. **The clear next pick.**
+2. **`buttons.secondary` rendered variant — 2/4** (Market, Heritage).
+   Effort **M** (a real secondary-button render path on the CTA block +
+   `secondaryButtonLabel` scheme wiring — not just an enum). Unchanged
+   cost.
+3. **`product_tabs` magic-line + crossfade + height-animate — 2/4**
+   (Market, Bloom). Effort **M**. **Cheaper now**: `useScrollValue`'s
+   rAF-throttle pattern and the `--motion-*` token table exist; the
+   magic-line is a `transform`/`width` transition reading `--motion-duration-base`,
+   the crossfade is `@keyframes theme-fade-in` (already in `globals.css`),
+   the height-animate is the `grid-template-rows: 0fr→1fr` trick (still
+   unbuilt but small).
+4. **Wishlist animation (`pop`/`burst`/`sweep`) — 2/4** (Market `pop`,
+   Bloom `burst`). Effort **S–M**. **Cheaper now**: `WishlistButton`
+   already exists; this is a one-shot `@keyframes` on click (like
+   §8.12's `.theme-newsletter-success`), reduced-motion covered by the
+   blanket rule, reads `--motion-duration-fast`.
+5. **`badges.entranceAnimation` — 2/4** (Market, Bloom). Effort **S**,
+   and **naturally folds into item 1** (same `BadgeSettings` extension,
+   same file). A one-shot pop `@keyframes` when the card enters — the
+   card-entrance trigger already exists via `ScrollAnimatedWrapper`.
+6. **Enable `floatingElements.backToTop` on Market + Bloom — 2/4**,
+   re-author only, Effort **S**. Fold into any batch touching
+   `templates.ts`.
+7. **`inputFields.focusAnimation` — 1/4** (Market `float-label`). Effort
+   **S**. Roughly unchanged — a CSS-only float-label on the newsletter +
+   checkout inputs; the dead `inputFields` category's only assigned
+   consumer.
+8. **`motion.smoothScroll` — 1/4** (Atelier). Effort **XS** now — one
+   line in `shop-context.tsx`'s motion effect
+   (`document.documentElement.style.scrollBehavior = motion.smoothScroll
+   && !reducedMotion ? 'smooth' : ''`), SPA-leak-cleared like every other
+   motion override. **Much cheaper than it looks** — `applyMotionOverrides`
+   already runs on the merged `[shop, themeConfig]` effect with a
+   set/clear loop; this is one more property in it.
+9. **Section separators (wave/angle SVG edges) — 1/4** (Bloom). Effort
+   **S–M**. Roughly unchanged (decorative inline SVG between sections,
+   `section.settings.separator`).
+10. **`buttons.pillCornerRadius` — 1/4** (Bloom). Effort **S**. **Cheaper
+    now** — `resolveThemeRadius` / the `--theme-radius` plumbing from B1
+    already exists; this is a `radius.applyToButtons`-style opt-in that
+    forces the pill value. Could ride with item 2 (both touch button
+    styling).
+11. **Hero `kenBurns` — 1/4** (Atelier). Effort **S** — a slow `scale()`
+    `@keyframes` on the hero image, `--motion-duration-slow` ×N,
+    reduced-motion covered. **Cheaper now.**
+12. **Hero `indicatorStyle: progress` — 1/4** (Market). Effort **S–M** —
+    the slideshow already tracks the active index; a progress bar is a
+    `transform: scaleX()` transition per slide duration.
+13. **`drawers.animation` + `cart.itemAnimation`/`subtotalAnimation` —
+    1/4** (Market). Effort **S–M**. `subtotalAnimation: count` is
+    **much cheaper now** — `useCountUp` exists (§8.10), this is a second
+    consumer. Drawer easing is a `--motion-*`-driven transition swap.
+14. **`scrollProgressBar` — 1/4** (Market). Effort **S** — `useScrollValue`
+    now has real consumers (header scrollBehavior, BackToTop); a top-of-
+    page `scaleX` bar driven by `y / scrollHeight` is trivial.
+15. **Hero `parallax` + `decorativeParallax` — 1/4** (Bloom). Effort
+    **M** / **M–L**. `useScrollValue` helps the parallax math;
+    `decorativeParallax` (floating shapes) stays Bloom's signature
+    expensive flourish, §9.4-flagged.
+16. **Fly-to-cart (`animations.addToCart`) — 1/4** (Market). Effort **L**,
+    self-contained. Do after item 13 (drawers/cart) so the fly lands on
+    an already-animating drawer. Unchanged cost — genuinely the big one.
+17. **Route-content fade + View Transitions — universal.** Effort **M**
+    (plain fade) / **L** (VT layer). Unchanged.
+18. **Card sub-blocks (`product_vendor`/`product_stock`/`product_swatches`)
+    — 1/4** (Market). A card-*content* feature more than a motion one;
+    wires the dead `swatches` category. Flag for a content-shaped PR.
+19. **`icons.style: solid/duotone` — 2/4** (Market, Bloom). **Separate
+    gated Phase I** (~100 hand-drawn SVGs + a glyph-list sign-off).
+    Not a normal batch item; stays parked until explicitly greenlit.
+20. **`customCursor` — 0/4.** Parked; revisit only if a future template
+    wants it.
+
+#### D. Spec-vs-code mismatches spotted from the templates' own text (flagged now, not mid-build)
+
+- **`badges.style`**: the templates assume a shape enum that has never
+  existed on `BadgeSettings`. Not a count discrepancy like
+  count-up/icons.corners — a whole missing field, 4/4.
+- **`motion.smoothScroll`** and **`buttons.pillCornerRadius`**: both are
+  *declared* on their interfaces (with comments implying intent) but have
+  zero consumers. A reader skimming the types would reasonably assume
+  they work.
+- **`slideTransition: zoom-cross`** (Market): the field is read but typed
+  to a value set that excludes it — it silently degrades to `fade-in`.
+- **No count discrepancies found this pass** in §6.5's *existing* open
+  rows (unlike items 3–4, where "3/4" was really 1/4 and 2/4). Every
+  surviving "open" row's count matches the templates' §6 text. The
+  problem this time is omission, not miscounting.
+
+#### E. §6.5 structural fix — RECOMMENDED
+
+§6.5 is a hand-maintained summary of §6.1–6.4. It has now been wrong or
+imprecise on counts (items 3–4), internally inconsistent (Market vs Bloom
+both `rounded` for `icons.corners`, marked ✗/✓), and — this pass —
+**missing rows for capabilities all four templates want** (`badges.style`).
+A hand-maintained "derived" table drifts from its source every batch.
+
+**Recommendation: demote §6.5 to a frozen historical artifact.** Add a
+banner at its top: *"STALE as of 2026-09-06 (§8.13). This table was the
+pre-G0 build-order signal and is kept for history. Do NOT use it for
+current planning or add rows to it — every remaining item is tracked in
+§8.13's priority list, cross-checked against §6.1–6.4 directly. §6.5's ✅
+rows are still accurate; its open rows are superseded by §8.13.C."* Then
+never touch §6.5 again — §8.13.C is the live list, and any future
+stock-take re-derives from §6.1–6.4 + `templates.ts`, not from §6.5.
+
+(A genuinely machine-checkable version would need §6.1–6.4 restructured
+into a per-template YAML block that a script diffs against
+`templates.ts` + a "wired capabilities" manifest. Worth doing if this
+plan runs many more batches; overkill if items 1–2 above roughly close it
+out. Flagging, not recommending, that build-out.)
+
+**Not committed scope.** A recorded recommendation, same as §8.3 was
+before G0. Picking up item 1 (`badges.style`) — or any subset — still gets
+its own plan-mode round first.
 
 ---
 
