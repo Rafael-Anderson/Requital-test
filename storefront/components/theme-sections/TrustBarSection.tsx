@@ -1,8 +1,9 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Check, Clock, Heart, Leaf, Shield, Star, Truck, type LucideIcon } from "lucide-react";
 import { themeTextPresetStyle } from "@/lib/theme-element-style";
+import { useCountUp } from "@/lib/use-count-up";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const TRUST_ICON: Record<string, LucideIcon> = {
@@ -61,6 +62,7 @@ export default function TrustBarSection({
             rating={rating}
             label={typeof ratingBlock?.settings.label === "string" ? ratingBlock.settings.label : ""}
             url={typeof ratingBlock?.settings.url === "string" ? ratingBlock.settings.url : ""}
+            countUp={ratingBlock?.settings.countUp === true}
           />
         )}
       </div>
@@ -68,7 +70,41 @@ export default function TrustBarSection({
   );
 }
 
-function RatingBadge({ rating, label, url }: { rating: number; label: string; url: string }) {
+// §8.7 item 3 — countUp animates `rating` only, never `label` (free text with
+// no stored numeric field — 'Trusted by thousands' has no number to parse at
+// all). Stars stay driven by the real, final `rating`, not the animating
+// value, to avoid flickering through fill states as the number ramps up.
+//
+// Uses its own IntersectionObserver rather than ScrollAnimatedWrapper's:
+// that wrapper renders bare children with no observer at all when the
+// section's motion.entrance is 'none' (the same trap section.settings.motion
+// .stagger already fell into), so reusing it would make count-up silently
+// inert on a trust_bar with no configured entrance. One-shot (unobserve
+// after first intersect) — no replay.
+function RatingBadge({ rating, label, url, countUp }: { rating: number; label: string; url: string; countUp: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    if (!countUp || inView) return;
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.unobserve(el);
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [countUp, inView]);
+
+  const animatedRating = useCountUp(rating, countUp && inView);
+  const displayRating = countUp ? animatedRating : rating;
+
   const rounded = Math.round(Math.max(0, Math.min(5, rating)));
   const stars = (
     <span className="inline-flex" aria-hidden="true">
@@ -78,9 +114,9 @@ function RatingBadge({ rating, label, url }: { rating: number; label: string; ur
     </span>
   );
   const inner = (
-    <span className="inline-flex items-center gap-2 text-sm font-medium">
+    <span ref={ref} className="inline-flex items-center gap-2 text-sm font-medium">
       {stars}
-      {rating.toFixed(1)}
+      {displayRating.toFixed(1)}
       {label && <span className="text-price-main font-normal">· {label}</span>}
     </span>
   );

@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import Select from "@/components/ui/Select";
+import Toggle from "@/components/ui/Toggle";
 import Button from "@/components/ui/Button";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { uploadThemeImage, resolveImageUrl } from "@/lib/api";
@@ -331,6 +332,15 @@ export default function BlockSettingsForm({
             value={(block.settings.url as string) ?? ""}
             onChange={(e) => onUpdate("url", e.target.value)}
           />
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Animate on scroll</span>
+              <Toggle checked={(block.settings.countUp as boolean) ?? false} onChange={(v) => onUpdate("countUp", v)} />
+            </div>
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Counts up from 0 when scrolled into view. Only the rating number animates, not the label.
+            </p>
+          </div>
         </div>
       );
 
