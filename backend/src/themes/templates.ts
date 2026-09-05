@@ -235,6 +235,12 @@ const atelier: ThemeConfig = (() => {
   g.badges.case = 'default';
   // C1/C2 re-author — closes out Atelier's mobileNav deferred item.
   c.header.settings.mobileNav = 'fullscreen';
+  // §8.7 item 2 — closes out Atelier's deferred scrollBehavior +
+  // transparentOnHero (named 'transparentOverHero' in the deferred note;
+  // transparentOnHero is the real, already-shipped key). Transparent over
+  // the hero, solid once scrolled past it.
+  c.header.settings.scrollBehavior = 'reveal-on-hero';
+  c.header.settings.transparentOnHero = true;
 
   c.sections = [
     announcementOff(0),
@@ -303,6 +309,8 @@ const market: ThemeConfig = (() => {
     c.header = {
       settings: {
         mobileNav: 'bottom-bar',
+        // §8.7 item 2 — closes out Market's deferred scrollBehavior.
+        scrollBehavior: 'shrink',
         rows: [
           headerRow([contact.id], 'right'),
           headerRow([logo.id, search.id, cart.id, account.id], 'between'),
@@ -376,6 +384,8 @@ const bloom: ThemeConfig = (() => {
   g.buttons.primary.hoverEffect = 'shine';
   // C1/C2 re-author — closes out Bloom's mobileNav + footer deferred items.
   c.header.settings.mobileNav = 'drawer';
+  // §8.7 item 2 — closes out Bloom's deferred scrollBehavior.
+  c.header.settings.scrollBehavior = 'hide-on-scroll';
   {
     const cta = block('footer_column', {
       title: 'Ready to send something joyful?',
@@ -592,20 +602,24 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //     ButtonStyleSettings) but .secondary has no render path yet, so
 //     setting them now would be inert
 //
-// atelier:  hero kenBurns; header scrollBehavior 'reveal-on-hero' +
-//           transparentOverHero; motion smoothScroll; badges.style
-//           'rectangle'
+// atelier:  hero kenBurns; motion smoothScroll; badges.style 'rectangle'
+//           (header scrollBehavior 'reveal-on-hero' + transparentOnHero
+//           closed out §8.7 item 2, 2026-09-05)
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; inputFields.focusAnimation
-//           'float-label'; motion.scrollProgressBar; header scrollBehavior
-//           'shrink'; product_tabs section (needs real collectionIds);
-//           trust_bar rating count-up; hero indicatorStyle 'progress';
-//           productCards.wishlistAnimation 'pop'; product_vendor /
-//           product_stock card sub-blocks; buttons.secondary rendered
-//           variant + hoverEffect 'border-fill'; badges.style 'tag' +
-//           entranceAnimation
+//           'float-label'; motion.scrollProgressBar; product_tabs section
+//           (needs real collectionIds); trust_bar rating count-up; hero
+//           indicatorStyle 'progress'; productCards.wishlistAnimation 'pop';
+//           product_vendor / product_stock card sub-blocks; buttons.secondary
+//           rendered variant + hoverEffect 'border-fill'; badges.style 'tag'
+//           + entranceAnimation (header scrollBehavior 'shrink' closed out
+//           §8.7 item 2, 2026-09-05)
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
-//           shapes; buttons.pillCornerRadius pills; header scrollBehavior
-//           'hide-on-scroll'; section separators; product_tabs section;
-//           announcement_bar marquee; badges.style 'circle' + entranceAnimation
+//           shapes; buttons.pillCornerRadius pills; section separators;
+//           product_tabs section; announcement_bar marquee; badges.style
+//           'circle' + entranceAnimation (header scrollBehavior
+//           'hide-on-scroll' closed out §8.7 item 2, 2026-09-05)
 // heritage: buttons.secondary rendered as outline CTAs; badges.style 'ribbon'
+//           (scrollBehavior deliberately left unset — not named in
+//           Heritage's own deferred note, matching its "notably does NOT
+//           need" restraint)

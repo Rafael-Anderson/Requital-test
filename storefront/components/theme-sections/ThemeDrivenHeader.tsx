@@ -17,7 +17,7 @@ import MenuBar from "@/components/MenuBar";
 import ThemeImageBlock from "./ThemeImageBlock";
 import { backgroundStyle } from "./SectionWrapper";
 import type { Customer, Shop } from "@/lib/types";
-import type { HeaderFooterConfig, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
+import type { HeaderFooterConfig, HeaderScrollBehavior, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const ROW_JUSTIFY: Record<string, string> = {
   left: "justify-start",
@@ -125,7 +125,7 @@ export default function ThemeDrivenHeader({
   // for those three, avoiding a redundant nested-sticky pair; only the
   // plain 'sticky' value (or the legacy boolean) applies it narrowly here,
   // exactly as before.
-  const scrollBehavior = (config.settings.scrollBehavior as string) || "";
+  const scrollBehavior = (config.settings.scrollBehavior as HeaderScrollBehavior) || "";
   const sticky = scrollBehavior ? scrollBehavior === "sticky" : !!config.settings.sticky;
   const transparentOnHero = !!config.settings.transparentOnHero;
   const { shrunk } = useHeaderScrollState(scrollBehavior, transparentOnHero);

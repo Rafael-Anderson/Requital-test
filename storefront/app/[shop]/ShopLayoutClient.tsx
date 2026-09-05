@@ -24,7 +24,7 @@ import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
-import type { MobileNavMode } from "@/lib/theme-config-types";
+import type { HeaderScrollBehavior, MobileNavMode } from "@/lib/theme-config-types";
 
 // Whether the MenuBar row shows: a themed shop's own nav_menu header block
 // visibility wins (set in the builder's Header tree node) *when that block
@@ -105,7 +105,7 @@ function Header() {
   // value (or the legacy bare `sticky` boolean) is untouched — it keeps
   // applying narrowly to ThemeDrivenHeader's own div only, exactly as
   // today, since that's meant to be a drop-in equivalent, not a redesign.
-  const scrollBehavior = (themeConfig?.header.settings.scrollBehavior as string) || "";
+  const scrollBehavior = (themeConfig?.header.settings.scrollBehavior as HeaderScrollBehavior) || "";
   const transparentOnHero = !!themeConfig?.header.settings.transparentOnHero;
   const { hidden, solid } = useHeaderScrollState(scrollBehavior, transparentOnHero);
   const wholeHeaderSticky = scrollBehavior === "shrink" || scrollBehavior === "hide-on-scroll" || scrollBehavior === "reveal-on-hero";
