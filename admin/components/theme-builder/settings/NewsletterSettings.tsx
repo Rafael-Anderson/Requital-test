@@ -1,5 +1,6 @@
 "use client";
 
+import Toggle from "@/components/ui/Toggle";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -30,6 +31,15 @@ export default function NewsletterSettings({
         value={settings.background as BackgroundValue}
         onChange={(v) => onUpdate("background", v)}
       />
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Success animation
+          <span className="block text-xs font-normal text-zinc-500">
+            A checkmark and message scale in when the form is submitted.
+          </span>
+        </span>
+        <Toggle checked={settings.successAnimation === true} onChange={(v) => onUpdate("successAnimation", v)} />
+      </div>
       <ScrollAnimationControl
         value={settings.scrollAnimation as ScrollAnimation}
         onChange={(v) => onUpdate("scrollAnimation", v)}
