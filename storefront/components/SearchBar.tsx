@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl, searchProducts } from "@/lib/api";
 import { iconStyleProps } from "@/lib/icon-style";
+import type { IconCornerProps } from "@/lib/theme-element-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import type { SearchResultItem } from "@/lib/types";
 
@@ -21,10 +22,14 @@ const DEBOUNCE_MS = 300;
 // ThemeDrivenHeader.tsx is the only caller passing them today.
 export default function SearchBar({
   iconStrokeWidth,
+  iconCorners,
   iconOverrideStyle,
   showLabel,
 }: {
   iconStrokeWidth?: number;
+  // §8.7 item 4 — icons.corners, passed down from ThemeDrivenHeader the same
+  // way iconStrokeWidth is; absent ⇒ lucide's own round/round default.
+  iconCorners?: IconCornerProps;
   iconOverrideStyle?: CSSProperties;
   // C1 — header.blocks[].settings.showLabel on search_icon (default/absent
   // false, today's icon-only trigger unchanged).
@@ -80,7 +85,7 @@ export default function SearchBar({
     return () => clearTimeout(timer);
   }, [query, shopSlug]);
 
-  const iconProps = iconStyleProps(shop?.iconStyle, iconStrokeWidth ?? 1.75);
+  const iconProps = { ...iconStyleProps(shop?.iconStyle, iconStrokeWidth ?? 1.75), ...iconCorners };
 
   return (
     <div ref={rootRef} className="relative">

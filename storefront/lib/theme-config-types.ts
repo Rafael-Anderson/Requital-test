@@ -280,6 +280,10 @@ export interface DrawerSettings {
 
 export interface IconSettings {
   stroke: "thin" | "default" | "heavy";
+  // §8.7 item 4 — optional; absent renders identically to "rounded" (lucide's
+  // own default stroke-linecap/linejoin). Only wired for header + search
+  // icons, matching `stroke`'s existing scope.
+  corners?: "rounded" | "sharp";
 }
 
 export interface InputFieldSettings {

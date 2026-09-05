@@ -105,4 +105,20 @@ describe("SearchBar", () => {
     render(<SearchBar showLabel />);
     expect(screen.getByText("Search", { selector: "span" })).toBeInTheDocument();
   });
+
+  it("spreads iconCorners onto the search icon (§8.7 item 4)", () => {
+    const { container } = render(
+      <SearchBar iconCorners={{ strokeLinecap: "butt", strokeLinejoin: "miter" }} />,
+    );
+    const svg = container.querySelector("svg")!;
+    expect(svg.getAttribute("stroke-linecap")).toBe("butt");
+    expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
+  });
+
+  it("leaves lucide's own round joins untouched when iconCorners is absent", () => {
+    const { container } = render(<SearchBar />);
+    const svg = container.querySelector("svg")!;
+    expect(svg.getAttribute("stroke-linecap")).toBe("round");
+    expect(svg.getAttribute("stroke-linejoin")).toBe("round");
+  });
 });

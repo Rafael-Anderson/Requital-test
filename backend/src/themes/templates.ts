@@ -211,6 +211,7 @@ const atelier: ThemeConfig = (() => {
   g.typography.scale = 'dramatic';
   g.radius = { preset: 'sharp' };
   g.density = { preset: 'spacious' };
+  g.icons.corners = 'sharp'; // §8.7 item 4
   g.motion = { intensity: 'subtle', speed: 0.8, easing: 'gentle' };
   g.animations.cardHoverEffect = 'desaturate';
   g.animations.imageLoad = 'fade';
@@ -439,6 +440,7 @@ const heritage: ThemeConfig = (() => {
   g.typography.h3.letterSpacing = 'wide';
   g.radius = { preset: 'subtle' };
   g.density = { preset: 'comfortable' };
+  g.icons.corners = 'sharp'; // §8.7 item 4
   g.motion = { intensity: 'subtle', speed: 0.9, easing: 'standard' };
   g.animations.cardHoverEffect = 'shadow';
   g.animations.imageLoad = 'fade';
@@ -594,7 +596,9 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 // ALL templates:
 //   - animations.addToCart / pageTransition — deliberately left false (no
 //     silent behaviour change when the consumer lands; re-author instead)
-//   - icons.* (style / corners / size)
+//   - icons.style / icons.size (icons.corners closed out §8.7 item 4,
+//     2026-09-05: 'sharp' on Atelier + Heritage; Market + Bloom want
+//     'rounded' which is byte-identical to unset, so left untouched)
 //   - header.settings.height / contentWidth / separator /
 //     announcementPosition, icon block showLabel — none of the four
 //     templates needed a non-default value for these; available if a future

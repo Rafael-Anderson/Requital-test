@@ -232,6 +232,25 @@ export function resolveIconStrokeWidth(stroke: string | undefined): number {
   return ICON_STROKE_WIDTH[stroke ?? "default"] ?? 2;
 }
 
+export interface IconCornerProps {
+  strokeLinecap: "round" | "butt";
+  strokeLinejoin: "round" | "miter";
+}
+
+// §8.7 item 4 — globalSettings.icons.corners. Same mechanism/scope as
+// resolveIconStrokeWidth above (a numeric/string SVG prop, not a CSS
+// override): lucide's own compiled defaultAttributes already set
+// strokeLinecap/strokeLinejoin to "round" for every icon, so unset/unknown
+// returns that exact pair back explicitly — pixel-identical to before this
+// setting existed, not an empty object. 'sharp' flips both to their
+// non-rounded counterpart (strokeLinecap has no 'miter' option, strokeLinejoin
+// has no 'butt' option — the two enums are distinct, this is the one pairing
+// that reads as "sharp corners" on both line ends and joints together).
+export function resolveIconCorners(corners: string | undefined): IconCornerProps {
+  if (corners === "sharp") return { strokeLinecap: "butt", strokeLinejoin: "miter" };
+  return { strokeLinecap: "round", strokeLinejoin: "round" };
+}
+
 export interface IconElementSettings {
   color?: string;
   size?: number;

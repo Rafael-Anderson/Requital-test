@@ -1401,6 +1401,9 @@ export interface DrawerSettings {
 
 export interface IconSettings {
   stroke: "thin" | "default" | "heavy";
+  // §8.7 item 4 — optional; absent renders identically to "rounded" (lucide's
+  // own default). Only wired for header + search icons on the storefront.
+  corners?: "rounded" | "sharp";
 }
 
 export interface InputFieldSettings {

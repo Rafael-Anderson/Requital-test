@@ -8,7 +8,7 @@ import { useShop } from "@/lib/shop-context";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth } from "@/lib/theme-element-style";
+import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth, resolveIconCorners } from "@/lib/theme-element-style";
 import { resolveHeaderRows } from "@/lib/header-rows";
 import { useHeaderScrollState } from "@/lib/use-header-scroll-state";
 import { iconStyleProps } from "@/lib/icon-style";
@@ -152,7 +152,10 @@ export default function ThemeDrivenHeader({
   // anything for shops on the outline style — correct, since a heavier
   // "stroke" has no meaning on a filled icon.
   const iconStrokeWidth = resolveIconStrokeWidth(themeConfig?.globalSettings.icons.stroke);
-  const iconProps = iconStyleProps(shop?.iconStyle, iconStrokeWidth);
+  // §8.7 item 4 — icons.corners rides the same iconProps spread as
+  // stroke width; unset ⇒ lucide's own round/round default, explicitly.
+  const iconCorners = resolveIconCorners(themeConfig?.globalSettings.icons.corners);
+  const iconProps = { ...iconStyleProps(shop?.iconStyle, iconStrokeWidth), ...iconCorners };
   // New-system Theme Settings > Logo wins over the legacy shop.logoUrl
   // field (set via Business Information/the old Customizer) when a
   // merchant has actually uploaded one there — the legacy field stays the
@@ -200,6 +203,7 @@ export default function ThemeDrivenHeader({
           >
             <SearchBar
               iconStrokeWidth={iconStrokeWidth}
+              iconCorners={iconCorners}
               iconOverrideStyle={resolveIconElementStyle(block.settings)}
               showLabel={block.settings.showLabel === true}
             />
