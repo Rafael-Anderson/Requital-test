@@ -1196,7 +1196,7 @@ case per new type, and a per-template validation spec once templates land.
 | **A — Motion foundation** *(BUILT 2026-09-04 on `feat/motion-foundation-phase-a`; awaiting review — see §8.1)* | `globalSettings.motion` category + `applyMotionOverrides` + the `--motion-*` token table **including the sub-640px mobile tier** (mobile values shipped from the start: under 639px `intensity` steps down one level and `parallax` / `kenBurns` / `decorativeParallax` / `customCursor` are force-disabled — doing this now avoids retouching every token later). Rewrite every hardcoded duration/distance/scale/easing in `globals.css` + the animated components as `var(--motion-*, <today's literal>)` (exhaustive file-by-file list in §8.1). The single blanket `prefers-reduced-motion` rule replacing the per-class blocks (+ the `transitionend`/`animationend` listener audit the `0.01ms` value protects). `useScrollValue()` shared hook. Extend `ScrollAnimatedWrapper` for `motion.entrance` vocab + `stagger` + `animateOnce` + `trigger`. Type mirrors across backend/admin/storefront. **No-op proven** by both computed-style assertions and a preview visual pass (§8.1). | — | **L** |
 | **B1 — Design-token foundation (radius + type + cards)** *(BUILT 2026-09-04 on `feat/design-tokens-phase-b1`; awaiting review — see §8.2)* | `globalSettings.radius` scale (`{ preset?, applyToButtons? }`: preset → `--radius-sm/-md/-lg` + `.theme-round-*` classes drive every previously-hardcoded card radius; `buttons.primary.cornerRadius` ALWAYS wins for `--theme-radius` unless the merchant flips the explicit `applyToButtons` opt-in — no seed sentinel). `typography.pairing` (7 named font bundles) + `typography.scale` (px table per name, overrides `--text-h*-size` only, stored h1–h6 sizes untouched) + `typography.baseFontSize`. `productCards.cardStyle` extension (`elevated`/`outlined-hover`/`filled`/`polaroid`/`overlay`) + `productCards.imageAspect` / `textAlign` / `density` (card-level `comfortable`/`compact` — padding/name-size/excerpt) + `section.settings.imageAspect`. `prices.salePriceColor` / `salePriceStyle` (`color`/`strikethrough-only`) — replaces the hardcoded `text-red-600`. Same pure-resolver + `var(--token, <literal>)` + SPA-leak-clear + parity-table + no-op discipline as A. | A | **L** |
 | **B2 — Global density scale** *(BUILT 2026-09-04 on `feat/design-tokens-phase-b2`; awaiting review — see §8.2b)* | `globalSettings.density` (`{ preset?: compact/cozy/comfortable/spacious }`) → `--section-py` (was `py-8`) + `--grid-gap`/`--grid-gap-m` (was `gap-4 sm:gap-6`) + `--section-heading-gap` (was `mb-4`), via `.theme-section-py` / `.theme-grid-gap` / `.theme-heading-gap` classes on the standard body sections. Responsive `gap` reproduced byte-identically with one `@media (max-width: 639px)` block (the Phase-A motion-tier idiom). `section.settings.spacing` is unchanged — an outer layer that stacks, not an override. Same pure-resolver + SPA-leak-clear + parity-table + no-op discipline as A / B1. | A, B1 | **M** |
-| **C — Header/footer layout + mobile nav** | Named header presets (seed `rows` + zones). `header.settings.scrollBehavior` (`shrink`/`hide-on-scroll`/`reveal-on-hero`) + `transparentOverHero` wiring + `height`/`contentWidth`/`separator`/`announcementPosition`. Footer presets + `showPaymentIcons` + bottom bar. **The mobile nav drawer / bottom-bar / fullscreen components** (the one genuinely new interactive build). | A | **L** |
+| **C — Header/footer layout + mobile nav** *(BUILT 2026-09-05 on `feat/theme-header-footer-presets-mobile-nav` — see §8.6)* | Named header presets (seed `rows` + zones) + footer presets. `height`/`contentWidth`/`separator`/`announcementPosition` + icon `showLabel`. `showPaymentIcons` + `waveEdge` + `bottomBarSeparate`. **`MobileNav.tsx`** — drawer / bottom-bar / fullscreen (the one genuinely new interactive build). `header.settings.scrollBehavior`/`transparentOverHero` deferred (out of this batch's scope). | A | **L** |
 | **D — Card & button micro-interactions** | `animations.cardHoverEffect` enum extension (`underline`/`quick-add-slide`/`overlay`/`desaturate`/`shadow`/`tilt`). `buttons.primary.hoverEffect`/`pressEffect` + `buttons.secondary` rendered variant + `pillCornerRadius`. `productCards.wishlistAnimation`. `animations.imageLoad: fade` (skeleton→image crossfade). `inputFields.focusAnimation`. `icons.corners` + `icons.size`. | A, B | **M** |
 | **E — Section polish** | `product_tabs` magic-line + crossfade + height animate. `trust_bar` `rating_badge` count-up. Hero `kenBurns` / `parallax` / `indicatorStyle` / `slideTransition` extensions. `brands.scrolling` marquee. Section separators (`section.settings.separator`) + overlay/scrim + `contentWidth`. Newsletter `successAnimation`. Accordion (FAQ/filter) animation. | A, B | **M** |
 | **F — The expensive one-offs** | **Fly-to-cart** (`animations.addToCart`). Route-content fade (`animations.pageTransition`) + View Transitions progressive enhancement. `motion.scrollProgressBar`. `floatingElements.backToTop`. `motion.decorativeParallax`. `motion.customCursor`. `drawers.animation` + `cart.itemAnimation`/`subtotalAnimation`. Card metadata sub-blocks (`product_vendor`/`product_stock`/`product_swatches` — wires `swatches`). | A, and the specific dead-control it targets | **M–L** |
@@ -1210,13 +1210,14 @@ B1. C is independent of B (both only need A). G needs A–F for the templates to
 complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
-**Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5)**, all
-built and merged / in review. C–F items 6+ (C1, C2, and the rest of D/E/F) are
+**Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C**,
+all built and merged / in review (see §8.6 for C). The rest of D/E/F are
 **not** committed scope — re-evaluate against the remaining §8.3 priority before
-starting any of it. G0 (Flow A) + batch 1 already deliver four visibly distinct
-starting points that pick up real card-hover effects, image-load fade, stagger,
-and (Market) a brands marquee; the remaining C–F flourishes each template wants
-are listed in its own deferred block (§8.5 updated the four that batch 1 closed).
+starting any of it. G0 (Flow A) + batch 1 + C already deliver four visibly
+distinct starting points that pick up real card-hover effects, image-load
+fade, stagger, a brands marquee (Market), header/footer structure, and a real
+mobile nav; the remaining D/E/F flourishes each template wants are listed in
+its own deferred block (§8.6 updated the four that this batch closed).
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -1755,6 +1756,117 @@ four. See the session report for the actual before/after screenshots.
 **Deferred, not built this batch:** `underline` card hover (needs a CTA
 trailing-icon slot); `useReducedMotion()` / `useCountUp()` (neither needed by
 1–5 — see the note under §8.3's "Shared utilities").
+
+---
+
+### 8.6 Phase C (C1 header/footer presets + C2 mobile nav) — BUILT (2026-09-05, `feat/theme-header-footer-presets-mobile-nav`)
+
+The last piece of Phase C from §8's table. Plan reviewed before code (see the
+session's plan-mode transcript); one design question — the drawer's swipe
+gesture depth — was put to the user directly (AskUserQuestion) rather than
+decided silently: discrete threshold swipe (no live drag-follow), dismissed
+via X/backdrop/Escape.
+
+**C1 — header/footer presets: one-time apply-then-diverge, matching
+`HOMEPAGE_PRESETS`.** No backend endpoint — `admin/lib/header-footer-presets.ts`'s
+`HEADER_PRESETS`/`FOOTER_PRESETS` are plain client-side literals, applied via
+`useThemeEditor.ts`'s `applyHeaderPreset`/`applyFooterPreset` (same
+`updateConfig` + `save()` + `toast` shape as `applyHomepagePreset`). 7 header
+presets (Classic/Centered/Contact-bar+centered nav/Split nav/Minimal/
+Editorial/Colored band), 5 footer presets (Multi-column/Centered stack/Big
+CTA/One line/Mega) — every one a literal built only from block/row shapes
+`ThemeDrivenHeader.tsx`/`ThemeDrivenFooter.tsx` already rendered before this
+batch (confirmed by reading both files in full first, not assumed).
+
+New settings, all optional, none with a `DEFAULT_THEME_CONFIG` value:
+`header.settings.height`/`.contentWidth`/`.separator`/`.announcementPosition`/
+`.mobileNav`, icon block `.showLabel`, `footer.settings.columns`/
+`.showPaymentIcons`/`.waveEdge`/`.bottomBarSeparate`. None needed a new global
+CSS var — every one is a render-time class/component-order choice.
+`showPaymentIcons` reuses the legacy `Footer.tsx`'s real `paymentBadges()`
+helper (extracted to `lib/payment-badges.ts`). Back-to-top
+(`globalSettings.floatingElements.backToTop`) was moved off `footer.settings`
+mid-plan per review feedback — it now lives with `floatingElements`
+(matching `motion`/`radius`/`density`'s object-wrapper convention) and
+consumes the already-shipped-but-unused `use-scroll-value.ts`; this closes
+that item out of Phase F's remaining scope.
+
+**C2 — `MobileNav.tsx`, the storefront's first real mobile nav.**
+`header.settings.mobileNav`: `'scroll'` (default, `MenuBar.tsx`'s existing
+horizontal-scroll row, completely untouched) / `'drawer'` / `'bottom-bar'` /
+`'fullscreen'`. Own component, not a `MenuBar` branch — mounted only when the
+setting is non-`'scroll'` (`ShopLayoutClient.tsx` gates it before mounting at
+all, so the no-op path is "this component isn't in the tree," not "a new
+branch that happens not to fire"). Drawer/fullscreen share one `<details>`-
+based accordion renderer for nested menu items and a portaled panel (same
+portal-for-overflow precedent as `MegaMenuPanel`); bottom-bar is structurally
+different (5 fixed destinations, no menu fetch, no trigger). New shared
+`storefront/lib/use-reduced-motion.ts` (promised in `storefront/CLAUDE.md`'s
+pre-PR checklist as "build when the second JS animation lands" — this is
+that phase), gating the swipe listener and open/close transition duration
+only — tap/keyboard interaction always works regardless of reduced motion.
+
+**Two real bugs found via the scratch-shop Playwright pass** (not caught by
+any unit test — both are exactly the "verify against actual behaviour in a
+real browser" class of finding this methodology exists to catch):
+1. `cloneConfigWithFreshIds` gave every header block a fresh id but never
+   remapped `header.settings.rows[].blockIds` to match — `resolveHeaderRows`
+   found no match for any reference and dumped every block into the last row
+   via its "leftover" fallback, silently collapsing Market's and Heritage's
+   multi-row header presets into one row on every real `fromTemplate`
+   creation, even though the stored config looked correct in isolation.
+   Fixed with the same map-old-id-to-new-id-then-rewrite shape
+   `cloneColorSchemesWithRemap` already used for colour scheme references.
+2. `MobileNav.tsx`'s swipe-to-close handler called `setPointerCapture`
+   immediately on `pointerdown` — safe in isolation, but on a panel
+   containing real interactive children (the Close button, menu links) this
+   suppresses the browser's synthesized `click` event on those children
+   entirely once Chromium retargets the captured `pointerup`. jsdom has no
+   `setPointerCapture` at all, so the unit test never exercised this path.
+   Fixed by deferring capture until real horizontal movement (>10px)
+   confirms an actual swipe — a plain tap releases before any movement, so
+   capture never engages for it.
+
+**Re-authored all 4 templates off their header/footer/mobileNav deferred
+items:** Atelier (`mobileNav: 'fullscreen'`), Market ("Contact-bar + centered
+nav" header preset + `mobileNav: 'bottom-bar'`), Bloom (`mobileNav: 'drawer'`
++ a wave-edge footer with a CTA column), Heritage ("Colored band" header
+preset using its own deep-green scheme colour, not a generic placeholder +
+`mobileNav: 'drawer'` + "Multi-column" footer preset with payment icons and a
+separate bottom bar). `floatingElements.backToTop` intentionally not enabled
+on any of the four — available for a future re-author.
+
+**No-op guarantee:** every new key is optional with no default value and the
+same `settings.<key> as X | undefined` reader convention every existing
+header/footer setting already uses; `mobileNav` unset/`'scroll'` means
+`MobileNav.tsx` is never mounted, zero fetch, zero DOM.
+
+**Scratch-shop pass:** a disposable shop this batch's own Playwright spec
+seeded (own signup, not the shared `e2e/seed.ts` fixture), verified on both
+desktop (1280×800) and a mobile viewport (390×844, `hasTouch: true` — the
+first mobile-viewport pass in this plan's history) — baseline no-op (classic
+header, no hamburger/bottom-bar), a custom header/footer preset combo (wave
+edge, `showLabel`, hamburger open/close via tap, backdrop, X, and Escape,
+plus a real touch-emulated edge-swipe-open), and all 4 re-authored templates
+(mobile nav affordance present, zero real console errors past the two bugs
+above, which were fixed and re-verified). The scratch spec and its
+screenshots were deleted after verification, per this plan's standing
+scratch-shop-pass convention.
+
+**Gate:** backend `tsc` + `jest` 490/490 (+6: 2 in `themes.service.spec.ts`,
+4 via `templates.spec.ts`'s `describe.each`) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 461/461 + lint +0 (33); admin `tsc` + `build` +
+`vitest` 452/454 (2 failures are the pre-documented full-suite-only
+flakiness in `AccountSetup.test.tsx`, confirmed by re-running the file alone:
+20/20) + lint +0 (77). `check-page-width`/`check-outlet-scoping`/
+`check-no-console-log` guardrails all clean.
+
+**Deferred, not built this batch:** `header.settings.scrollBehavior`
+(`shrink`/`hide-on-scroll`/`reveal-on-hero`) and `.transparentOverHero` —
+out of the user's given C1/C2 field list, stay on each template's deferred
+ledger. `icons.*` (style/corners/size). This closes out Phase C (§8's table)
+in full except those two scroll-behaviour fields, which move to whichever
+future phase actually wires header scroll behaviour.
 
 ---
 

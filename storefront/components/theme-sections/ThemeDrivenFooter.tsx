@@ -5,7 +5,9 @@ import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
+import { paymentBadges } from "@/lib/payment-badges";
 import ThemeImageBlock from "./ThemeImageBlock";
+import BackToTopButton from "@/components/BackToTopButton";
 import { backgroundStyle } from "./SectionWrapper";
 import type { Shop } from "@/lib/types";
 import type { HeaderFooterConfig, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -89,7 +91,7 @@ function FooterSocial({ shop }: { shop: Shop }) {
 export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config: HeaderFooterConfig }) {
   const { previewMode } = useShop();
   const blocks = [...config.blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
-  const columns = blocks.filter((b) => b.type === "footer_column");
+  const columnBlocks = blocks.filter((b) => b.type === "footer_column");
   const socialBlock = blocks.find((b) => b.type === "footer_social");
   const copyrightBlock = blocks.find((b) => b.type === "footer_copyright");
   // Image blocks (storefront-v2 Phase 4B) — inline alongside columns/social
@@ -111,12 +113,71 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
     ...backgroundStyle(config.settings.background as SectionSettings["background"]),
   };
 
+  // C1 — settings.columns: an explicit column count renders the top content
+  // row as a real CSS grid instead of flex-wrap, so a "multi-column"/"mega"
+  // preset lays out as intentional columns rather than however-many-fit-
+  // on-a-line. Absent ⇒ today's flex-wrap-justify-between, unchanged.
+  const columnCount = typeof config.settings.columns === "number" ? (config.settings.columns as number) : undefined;
+  const topRowClass = columnCount ? "grid gap-8 pb-8 mb-6 border-b border-white/10" : "flex flex-wrap justify-between gap-8 pb-8 mb-6 border-b border-white/10";
+  const topRowStyle = columnCount ? { gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` } : undefined;
+
+  const showPaymentIcons = config.settings.showPaymentIcons === true;
+  const badges = showPaymentIcons ? paymentBadges(shop) : [];
+
+  // waveEdge (part of settings.background's "incl. wave" spec) is its own
+  // boolean, not a new `background.type`, deliberately — SectionSettings's
+  // background union is shared by every section's backgroundStyle(); adding
+  // a 'wave' branch there for one consumer risks the same "shared token,
+  // unintended consequence" class of bug the B1 radius leak taught (see
+  // CLAUDE.md). fill: var(--background) is the page-canvas token (global
+  // since the 2026-09-03 Colors-panel fix) — cuts a wave out of the
+  // footer's own top edge, no new CSS var.
+  const waveEdge = config.settings.waveEdge === true;
+
+  // bottomBarSeparate wraps the copyright/payment row in its own tinted
+  // strip — same "faint tint from the surface's own text colour" idiom the
+  // 2026-09-03 header polish batch used for the header/page border.
+  const bottomBarSeparate = config.settings.bottomBarSeparate === true;
+  const bottomRow = (
+    <div className={`flex flex-wrap items-center justify-center gap-4 ${badges.length > 0 ? "sm:justify-between" : ""}`}>
+      <p
+        className="text-center text-xs opacity-80"
+        {...(copyrightBlock
+          ? editableAttrs(previewMode, { id: copyrightBlock.id, sectionId: FOOTER_CHROME_ID, type: "copyright_text" })
+          : {})}
+        style={copyrightBlock ? resolveTextElementStyle(copyrightBlock.settings) : undefined}
+      >
+        {copyrightText}
+      </p>
+      {badges.length > 0 && (
+        <div className="flex items-center gap-2">
+          {badges.map(({ key, label, Icon }) => (
+            <span key={key} className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs opacity-80">
+              <Icon className="size-3.5" />
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <footer style={style} className="py-10">
+    <footer style={style} className="relative py-10">
+      {waveEdge && (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 1200 24"
+          preserveAspectRatio="none"
+          className="absolute top-0 left-0 w-full h-6 -translate-y-full"
+        >
+          <path d="M0,24 C300,0 900,0 1200,24 L1200,24 L0,24 Z" fill="var(--background)" />
+        </svg>
+      )}
       <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
-        {(columns.length > 0 || socialBlock || imageBlocks.length > 0) && (
-          <div className="flex flex-wrap justify-between gap-8 pb-8 mb-6 border-b border-white/10">
-            {columns.map((block) => (
+        {(columnBlocks.length > 0 || socialBlock || imageBlocks.length > 0) && (
+          <div className={topRowClass} style={topRowStyle}>
+            {columnBlocks.map((block) => (
               <FooterColumn key={block.id} block={block} sectionId={FOOTER_CHROME_ID} previewMode={previewMode} />
             ))}
             {socialBlock && <FooterSocial shop={shop} />}
@@ -125,16 +186,18 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
             ))}
           </div>
         )}
-        <p
-          className="text-center text-xs opacity-80"
-          {...(copyrightBlock
-            ? editableAttrs(previewMode, { id: copyrightBlock.id, sectionId: FOOTER_CHROME_ID, type: "copyright_text" })
-            : {})}
-          style={copyrightBlock ? resolveTextElementStyle(copyrightBlock.settings) : undefined}
-        >
-          {copyrightText}
-        </p>
+        {bottomBarSeparate ? (
+          <div
+            className="-mx-4 sm:-mx-6 px-4 sm:px-6 pt-6"
+            style={{ background: "color-mix(in srgb, var(--color-footer-fg) 8%, transparent)" }}
+          >
+            {bottomRow}
+          </div>
+        ) : (
+          bottomRow
+        )}
       </div>
+      <BackToTopButton />
     </footer>
   );
 }

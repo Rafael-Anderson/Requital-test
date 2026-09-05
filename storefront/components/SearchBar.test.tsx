@@ -95,4 +95,14 @@ describe("SearchBar", () => {
 
     expect(await screen.findByText("No products found.")).toBeInTheDocument();
   });
+
+  it("renders no label by default (icon-only, byte-identical to before showLabel existed)", () => {
+    render(<SearchBar />);
+    expect(screen.queryByText("Search", { selector: "span" })).not.toBeInTheDocument();
+  });
+
+  it("renders a 'Search' label when showLabel is true", () => {
+    render(<SearchBar showLabel />);
+    expect(screen.getByText("Search", { selector: "span" })).toBeInTheDocument();
+  });
 });

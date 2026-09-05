@@ -443,6 +443,11 @@ function IconElementSettings({ block, onUpdate, onToggleVisibility }: FamilyProp
           </option>
         ))}
       </Select>
+      {/* C1 — default/absent false, today's icon-only rendering unchanged. */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Show label</span>
+        <Toggle checked={s.showLabel === true} onChange={(v) => onUpdate("showLabel", v)} />
+      </div>
     </div>
   );
 }

@@ -88,6 +88,26 @@ describe.each(TEMPLATE_KEYS)('THEME_TEMPLATES.%s', (key) => {
     }
   });
 
+  // C1 real bug, found via the scratch-shop Playwright pass: a template's
+  // header.settings.rows[].blockIds referenced the SOURCE template's block
+  // ids, which cloneConfigWithFreshIds regenerates — every id resolved to
+  // nothing, silently collapsing Market's/Heritage's multi-row header into
+  // one row on every real fromTemplate creation. Fixed in
+  // cloneConfigWithFreshIds itself (themes.service.ts); this asserts the
+  // fix holds for every template that actually uses rows (a template with
+  // no rows has nothing to check, hence the guard).
+  it("cloneConfigWithFreshIds remaps header.settings.rows[].blockIds to real cloned block ids (if this template uses rows)", () => {
+    const clone = cloneConfigWithFreshIds(template);
+    const rows = clone.header.settings.rows as { blockIds: string[] }[] | undefined;
+    if (!rows) return;
+    const cloneBlockIds = new Set(clone.header.blocks.map((b) => b.id));
+    for (const row of rows) {
+      for (const blockId of row.blockIds) {
+        expect(cloneBlockIds.has(blockId)).toBe(true);
+      }
+    }
+  });
+
   it('leaves animations.addToCart / pageTransition off (deliberate — re-author when the consumer lands)', () => {
     expect(template.globalSettings.animations.addToCart).toBe(false);
     expect(template.globalSettings.animations.pageTransition).toBe(false);

@@ -148,6 +148,13 @@ export interface HeaderRow {
   background?: string;
 }
 
+// C2 — `header.settings.mobileNav`, default (absent/'scroll') is today's
+// only behaviour: MenuBar.tsx's horizontal-scroll pill row at every
+// viewport width, completely untouched. The other three modes are rendered
+// by the new storefront/components/MobileNav.tsx, mounted independently of
+// MenuBar (see that file's own header comment for why).
+export type MobileNavMode = 'scroll' | 'drawer' | 'bottom-bar' | 'fullscreen';
+
 // theme-builder-expansion Phase 5 (decision TBE3): the PERSISTENT chrome
 // announcement bar — distinct from the homepage-body `announcement_bar`
 // section (which is untouched). Stored at `header.settings.announcementBar`
@@ -527,6 +534,12 @@ export interface FloatingCustomButton {
 export interface FloatingElementsSettings {
   whatsapp: { enabled: boolean; position?: FloatingPosition };
   customButtons: FloatingCustomButton[];
+  // C1/C2 batch — closes out floatingElements.backToTop from Phase F's
+  // remaining scope (built now, not later). OPTIONAL; absent/enabled:false
+  // ⇒ BackToTopButton never renders. Fixed bottom-left position (opposite
+  // WhatsApp's default bottom-right) — no position field, unlike whatsapp/
+  // customButtons, since there's only ever one back-to-top button.
+  backToTop?: { enabled?: boolean };
 }
 
 export interface GlobalThemeSettings {

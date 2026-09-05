@@ -125,6 +125,42 @@ function remapSchemeId(id: string, idMap: Map<string, string>): string {
   return idMap.get(id) ?? id;
 }
 
+// C1 — same "map old id -> new id, then rewrite references" shape as
+// cloneColorSchemesWithRemap above, for header.settings.rows[].blockIds
+// (theme-builder-expansion Phase 3). Found via the C1/C2 scratch-shop pass:
+// cloneBlock gives every header block a fresh id, but a row's blockIds keep
+// referencing the SOURCE theme's ids — resolveHeaderRows then finds no
+// match for any of them, and the "leftover" fallback dumps every block into
+// the last row, silently collapsing a multi-row header preset/template into
+// one row on every clone (fromTemplate creation and duplicateFromId both go
+// through this same function). Only header blocks are top-level enough to
+// be row-referenced — footer has no rows-equivalent concept, and neither
+// header nor footer blocks nest sub-blocks with their own ids that a row
+// could reference.
+function cloneBlocksWithIdMap(blocks: ThemeBlock[]): { cloned: ThemeBlock[]; idMap: Map<string, string> } {
+  const idMap = new Map<string, string>();
+  const cloned = blocks.map((block) => {
+    const newBlock = cloneBlock(block);
+    idMap.set(block.id, newBlock.id);
+    return newBlock;
+  });
+  return { cloned, idMap };
+}
+
+function remapHeaderRowBlockIds(settings: Record<string, unknown>, idMap: Map<string, string>): Record<string, unknown> {
+  // Array.isArray narrows `unknown` to `any[]`, not `unknown[]` (a known TS
+  // quirk) — the explicit `unknown[]` re-annotation keeps the .map callback
+  // below honest instead of silently working in `any`.
+  const rows: unknown[] | undefined = Array.isArray(settings.rows) ? (settings.rows as unknown[]) : undefined;
+  if (!rows) return settings;
+  const remapped = rows.map((row): unknown => {
+    if (!row || typeof row !== 'object' || !Array.isArray((row as { blockIds?: unknown }).blockIds)) return row;
+    const r = row as { blockIds: unknown[] };
+    return { ...r, blockIds: r.blockIds.map((id) => (typeof id === 'string' ? (idMap.get(id) ?? id) : id)) };
+  });
+  return { ...settings, rows: remapped };
+}
+
 // Fresh ids on clone (theme duplication and the DEFAULT_THEME_CONFIG
 // starting point) so two themes never share a section/block/scheme id — the
 // admin editor's selection state and the storefront's React keys both rely
@@ -161,9 +197,11 @@ export function cloneConfigWithFreshIds(source: ThemeConfig): ThemeConfig {
     return cloned;
   };
 
+  const { cloned: headerBlocks, idMap: headerIdMap } = cloneBlocksWithIdMap(source.header.blocks);
+
   return {
     globalSettings,
-    header: { ...source.header, blocks: source.header.blocks.map(cloneBlock) },
+    header: { settings: remapHeaderRowBlockIds(source.header.settings, headerIdMap), blocks: headerBlocks },
     footer: { ...source.footer, blocks: source.footer.blocks.map(cloneBlock) },
     sections: source.sections.map(cloneSection),
   };

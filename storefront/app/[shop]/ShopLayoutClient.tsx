@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useParams } from "next/navigation";
 import { ShopProvider, useShop } from "@/lib/shop-context";
 import { CartProvider, useCart } from "@/lib/cart";
@@ -8,6 +9,7 @@ import { WishlistProvider } from "@/lib/wishlist";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
+import MobileNav from "@/components/MobileNav";
 import { navMenuInHeaderRow } from "@/lib/header-rows";
 import TopBar from "@/components/TopBar";
 import CartDrawer from "@/components/CartDrawer";
@@ -21,6 +23,7 @@ import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
+import type { MobileNavMode } from "@/lib/theme-config-types";
 
 // Whether the MenuBar row shows: a themed shop's own nav_menu header block
 // visibility wins (set in the builder's Header tree node) *when that block
@@ -58,11 +61,38 @@ function headerBackgroundColor(themeConfig: ReturnType<typeof useShop>["themeCon
   return typeof color === "string" ? color : undefined;
 }
 
+// C1 — header.settings.separator: 'line' (absent/default, today's grey
+// border-stroke or the theme-colour-aware color-mix above) | 'none' (drop
+// the border entirely) | 'shadow' (a soft box-shadow instead of a border —
+// for a header whose own background already reads as separated, e.g. a
+// coloured band preset, where a hard line looks redundant).
+function headerSeparatorStyle(themeConfig: ReturnType<typeof useShop>["themeConfig"], customHeaderBg: string | undefined) {
+  const separator = (themeConfig?.header.settings.separator as string) || "line";
+  if (separator === "none") return { className: "", style: {} as CSSProperties };
+  if (separator === "shadow") {
+    return { className: "", style: { boxShadow: "0 1px 0 0 rgba(0,0,0,0.06), 0 4px 12px -4px rgba(0,0,0,0.08)" } };
+  }
+  return {
+    className: "border-b border-stroke",
+    style: customHeaderBg ? { borderBottomColor: "color-mix(in srgb, currentColor 12%, transparent)" } : {},
+  };
+}
+
 function Header() {
   const { shopSlug, shop, themeConfig } = useShop();
   const { count } = useCart();
   const { customer } = useAuth();
   const customHeaderBg = headerBackgroundColor(themeConfig);
+  const separator = headerSeparatorStyle(themeConfig, customHeaderBg);
+  // C1 — header.settings.announcementPosition: 'above' (absent/default,
+  // today's position, before the logo/nav content) | 'below' (after the
+  // nav, right above <main>) — still inside this <header> element (keeps it
+  // part of sticky header chrome either way).
+  const announcementBelow = themeConfig?.header.settings.announcementPosition === "below";
+  // C2 — header.settings.mobileNav: 'scroll'/absent never mounts MobileNav
+  // at all (zero DOM, zero fetch — MenuBar.tsx's horizontal-scroll row is
+  // completely untouched, the byte-identical no-op path).
+  const mobileNavMode = themeConfig?.header.settings.mobileNav as MobileNavMode | undefined;
 
   return (
     // relative + z-30 gives the header its own stacking context so it
@@ -73,22 +103,15 @@ function Header() {
     // context) could end up painted underneath it, hiding MenuBar's hover
     // dropdown (z-20, scoped to its own parent) behind that section.
     <header
-      className="relative z-30 border-b border-stroke bg-header text-header-fg"
-      style={{
-        backgroundColor: customHeaderBg,
-        // A hardcoded light border-stroke reads as a white line under a
-        // dark custom header. When the merchant has set their own header
-        // background, derive the header/page separator from the header's
-        // own text color instead (faint, works light or dark — same
-        // philosophy as --color-mouse-over: currentColor). Untouched for a
-        // shop on the default header (still the grey border-stroke line).
-        ...(customHeaderBg ? { borderBottomColor: "color-mix(in srgb, currentColor 12%, transparent)" } : {}),
-      }}
+      className={`relative z-30 bg-header text-header-fg ${separator.className}`}
+      style={{ backgroundColor: customHeaderBg, ...separator.style }}
     >
-      <AnnouncementBar />
+      {!announcementBelow && <AnnouncementBar />}
       <TopBar shopSlug={shopSlug} shop={shop} customer={customer} count={count} />
       {showMenuBar(shop, themeConfig) && <MenuBar />}
       {shop?.cartLayout === "drawer" && <CartDrawer />}
+      {announcementBelow && <AnnouncementBar />}
+      {mobileNavMode && mobileNavMode !== "scroll" && <MobileNav mode={mobileNavMode} />}
     </header>
   );
 }
@@ -140,7 +163,10 @@ function CustomCss() {
 // regardless of what renders here, so this is purely a friendlier preview
 // experience, not a new way to leak an unpublished shop's content.
 function Body({ children }: { children: React.ReactNode }) {
-  const { shop, loading, previewMode } = useShop();
+  const { shop, loading, previewMode, themeConfig } = useShop();
+  // C2 — reserve space for the fixed bottom-bar mobile nav so it never
+  // overlaps the last bit of page content/footer.
+  const bottomBarSpacingClass = themeConfig?.header.settings.mobileNav === "bottom-bar" ? "pb-14 md:pb-0" : "";
 
   // While the shop itself is still resolving, render ONLY the neutral
   // skeleton — never the branded chrome (TopBar/MenuBar), which at this
@@ -168,7 +194,7 @@ function Body({ children }: { children: React.ReactNode }) {
     <>
       <CustomCss />
       <Header />
-      <main className="flex-1">{children}</main>
+      <main className={`flex-1 ${bottomBarSpacingClass}`}>{children}</main>
       <Footer />
       <WhatsAppFloatingButton />
       <FloatingCustomButtons />

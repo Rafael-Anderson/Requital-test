@@ -98,6 +98,38 @@ describe('cloneConfigWithFreshIds', () => {
     cloneConfigWithFreshIds(DEFAULT_THEME_CONFIG);
     expect(JSON.stringify(DEFAULT_THEME_CONFIG)).toBe(originalJson);
   });
+
+  // C1 real bug, found via the scratch-shop Playwright pass: cloneBlock
+  // gives every header block a fresh id, but a row's blockIds kept
+  // referencing the SOURCE theme's ids — resolveHeaderRows found no match
+  // for any of them, and its "leftover" fallback dumped every block into
+  // the last row, silently collapsing a multi-row header into one row on
+  // every clone (fromTemplate creation and duplicateFromId both go through
+  // this function). Confirmed for real against Market/Heritage's own
+  // header.settings.rows (see templates.ts).
+  it('remaps header.settings.rows[].blockIds to the cloned block ids, not the originals', () => {
+    const source: ThemeConfig = {
+      ...DEFAULT_THEME_CONFIG,
+      header: {
+        settings: { rows: [{ id: 'row-1', blockIds: ['hdr-logo', 'hdr-nav-menu'], align: 'left' }] },
+        blocks: DEFAULT_THEME_CONFIG.header.blocks,
+      },
+    };
+
+    const clone = cloneConfigWithFreshIds(source);
+    const clonedLogo = clone.header.blocks.find((b) => b.type === 'logo')!;
+    const clonedNav = clone.header.blocks.find((b) => b.type === 'nav_menu')!;
+    const rows = clone.header.settings.rows as { blockIds: string[] }[];
+
+    expect(rows[0].blockIds).toEqual([clonedLogo.id, clonedNav.id]);
+    expect(rows[0].blockIds).not.toContain('hdr-logo');
+    expect(rows[0].blockIds).not.toContain('hdr-nav-menu');
+  });
+
+  it('leaves header.settings untouched when rows is absent (no-op case)', () => {
+    const clone = cloneConfigWithFreshIds(DEFAULT_THEME_CONFIG);
+    expect(clone.header.settings).toEqual(DEFAULT_THEME_CONFIG.header.settings);
+  });
 });
 
 // Regression coverage for the QA-audit ColorPicker crash: a theme row

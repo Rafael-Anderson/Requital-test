@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import FloatingElementsSettings from "./FloatingElementsSettings";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -22,10 +22,27 @@ describe("FloatingElementsSettings", () => {
     const user = userEvent.setup();
     const editor = makeEditor({ whatsapp: { enabled: false }, customButtons: [] });
     render(<FloatingElementsSettings editor={editor} />);
-    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getAllByRole("switch")[0]);
     expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith(
       "floatingElements",
       expect.objectContaining({ whatsapp: expect.objectContaining({ enabled: true }) }),
+    );
+  });
+
+  it("renders a Back-to-top toggle, off by default (C1/C2 batch)", () => {
+    render(<FloatingElementsSettings editor={makeEditor(undefined)} />);
+    expect(screen.getByText("Back-to-top button")).toBeInTheDocument();
+  });
+
+  it("toggling Back-to-top on calls updateGlobalSettingsCategory with backToTop.enabled true", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor({ whatsapp: { enabled: false }, customButtons: [], backToTop: { enabled: false } });
+    render(<FloatingElementsSettings editor={editor} />);
+    const row = screen.getByText("Back-to-top button").closest("div")!;
+    await user.click(within(row).getByRole("switch"));
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith(
+      "floatingElements",
+      expect.objectContaining({ backToTop: { enabled: true } }),
     );
   });
 

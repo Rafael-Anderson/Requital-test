@@ -22,6 +22,7 @@ import type {
   ThemeSettings,
 } from "@/lib/types";
 import { useToast } from "@/components/ui/Toast";
+import { HEADER_PRESETS, FOOTER_PRESETS } from "@/lib/header-footer-presets";
 
 export type DevicePreview = "desktop" | "tablet" | "mobile";
 export type EditorMode = "sections" | "theme_settings" | "layout";
@@ -614,6 +615,26 @@ export function useThemeEditor(themeId: number) {
     toast(`"${preset.label}" applied — check the Sections tab`, "success");
   }
 
+  // C1 — header/footer layout presets. Same one-time apply-then-diverge
+  // shape as applyHomepagePreset above: replaces the whole header/footer
+  // config wholesale (never merges with what's there), no preset identity
+  // retained afterward.
+  function applyHeaderPreset(presetKey: string) {
+    const preset = HEADER_PRESETS.find((p) => p.key === presetKey);
+    if (!preset) return;
+    updateConfig((prev) => ({ ...prev, header: preset.build() }));
+    void save();
+    toast(`"${preset.label}" header applied`, "success");
+  }
+
+  function applyFooterPreset(presetKey: string) {
+    const preset = FOOTER_PRESETS.find((p) => p.key === presetKey);
+    if (!preset) return;
+    updateConfig((prev) => ({ ...prev, footer: preset.build() }));
+    void save();
+    toast(`"${preset.label}" footer applied`, "success");
+  }
+
   function removeSection(id: string) {
     updateConfig((prev) => ({
       ...prev,
@@ -791,6 +812,8 @@ export function useThemeEditor(themeId: number) {
     removeColorScheme,
     updateHeaderSetting,
     updateFooterSetting,
+    applyHeaderPreset,
+    applyFooterPreset,
     addSection,
     applyHomepagePreset,
     removeSection,

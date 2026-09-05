@@ -1251,6 +1251,9 @@ export interface HeaderRow {
   background?: string;
 }
 
+// C1/C2 batch — mirrors backend theme-config.types.ts's MobileNavMode.
+export type MobileNavMode = "scroll" | "drawer" | "bottom-bar" | "fullscreen";
+
 // Phase 5 (TBE3) — persistent chrome announcement bar, at
 // `header.settings.announcementBar`. Distinct from the homepage-body
 // `announcement_bar` section. Mirrors backend theme-config.types.ts.
@@ -1505,6 +1508,8 @@ export interface FloatingCustomButton {
 export interface FloatingElementsSettings {
   whatsapp: { enabled: boolean; position?: FloatingPosition };
   customButtons: FloatingCustomButton[];
+  // C1/C2 batch — closes out floatingElements.backToTop from Phase F.
+  backToTop?: { enabled?: boolean };
 }
 
 export interface GlobalThemeSettings {

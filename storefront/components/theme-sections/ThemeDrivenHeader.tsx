@@ -38,6 +38,13 @@ const SOCIAL_LABEL: Record<string, string> = {
 
 const ZONES = ["left", "center", "right"] as const;
 
+// C1 — header.settings.height. Each render path keeps its own current
+// padding as the 'default'/absent case (the rows path and the classic
+// 3-zone grid never shared the same py-* to begin with), so an untouched
+// shop's padding is byte-identical either way.
+const HEADER_ROWS_PY: Record<string, string> = { compact: "py-1", default: "py-2", tall: "py-4" };
+const HEADER_CLASSIC_PY: Record<string, string> = { compact: "py-2", default: "py-3", tall: "py-5" };
+
 // Bug 5 fix: header_text's font size is now a real numeric px value (see
 // admin's HeaderTextElementSettings) - this legacy 3-step table is kept
 // only as a fallback for a block saved before that change, whose
@@ -108,6 +115,11 @@ export default function ThemeDrivenHeader({
   const { shopBasePath, previewMode, themeConfig } = useShop();
   const { openDrawer } = useCartDrawer();
   const sticky = !!config.settings.sticky;
+  const heightKey = (config.settings.height as string) || "default";
+  // C1 — header.settings.contentWidth: 'full' drops the max-width cap
+  // entirely; absent/'contained' (default) keeps today's var() cap.
+  const contentMaxWidth = config.settings.contentWidth === "full" ? undefined : "var(--theme-max-width, 80rem)";
+  const contentStyle: CSSProperties | undefined = contentMaxWidth ? { maxWidth: contentMaxWidth } : undefined;
 
   // Bug 9 fix: was solid-only (see backgroundStyle's own comment) - now
   // resolves gradient/image the same as every section does.
@@ -166,14 +178,23 @@ export default function ThemeDrivenHeader({
             key="search"
             {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "search_icon" })}
           >
-            <SearchBar iconStrokeWidth={iconStrokeWidth} iconOverrideStyle={resolveIconElementStyle(block.settings)} />
+            <SearchBar
+              iconStrokeWidth={iconStrokeWidth}
+              iconOverrideStyle={resolveIconElementStyle(block.settings)}
+              showLabel={block.settings.showLabel === true}
+            />
           </span>
         );
       case "cart_icon": {
         if (shop?.disableStoreCart) return null;
+        const cartShowLabel = block.settings.showLabel === true;
+        const cartClass = cartShowLabel
+          ? "relative flex items-center gap-1.5 h-9 px-3 rounded-full hover:bg-mouse-over/10 transition-colors"
+          : cartButtonClass;
         const cartContent = (
           <>
             <ShoppingCart className="size-5" {...iconProps} style={resolveIconElementStyle(block.settings)} />
+            {cartShowLabel && <span className="text-sm">Cart</span>}
             {count > 0 && (
               <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-accent text-accent-foreground text-[10px] font-medium">
                 {count}
@@ -183,27 +204,34 @@ export default function ThemeDrivenHeader({
         );
         const tagProps = editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "cart_icon" });
         return shop?.cartLayout === "drawer" ? (
-          <button key="cart" type="button" onClick={openDrawer} aria-label="Open cart" {...tagProps} className={`${cartButtonClass} cursor-pointer`}>
+          <button key="cart" type="button" onClick={openDrawer} aria-label="Open cart" {...tagProps} className={`${cartClass} cursor-pointer`}>
             {cartContent}
           </button>
         ) : (
-          <Link key="cart" href={`${shopBasePath}/cart`} {...tagProps} className={cartButtonClass}>
+          <Link key="cart" href={`${shopBasePath}/cart`} {...tagProps} className={cartClass}>
             {cartContent}
           </Link>
         );
       }
-      case "account_icon":
+      case "account_icon": {
+        const accountShowLabel = block.settings.showLabel === true;
         return (
           <Link
             key="account"
             href={customer ? `${shopBasePath}/account` : `${shopBasePath}/account/login`}
             title={customer ? `Signed in as ${customer.name}` : "Sign in"}
             {...editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "account_icon" })}
-            className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors"
+            className={
+              accountShowLabel
+                ? "flex items-center gap-1.5 h-9 px-3 rounded-full hover:bg-mouse-over/10 transition-colors"
+                : "flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors"
+            }
           >
             <User className="size-5" {...iconProps} style={resolveIconElementStyle(block.settings)} />
+            {accountShowLabel && <span className="text-sm">Account</span>}
           </Link>
         );
+      }
       case "image":
         return <ThemeImageBlock key={block.id} block={block} sectionId={HEADER_CHROME_ID} previewMode={previewMode} />;
       // Bug 5 fix: zone is now a real admin-editable control
@@ -344,8 +372,8 @@ export default function ThemeDrivenHeader({
             style={row.background ? { background: row.background } : undefined}
           >
             <div
-              className={`mx-auto px-4 py-2 flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"}`}
-              style={{ maxWidth: "var(--theme-max-width, 80rem)" }}
+              className={`mx-auto px-4 ${HEADER_ROWS_PY[heightKey] ?? HEADER_ROWS_PY.default} flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"}`}
+              style={contentStyle}
             >
               {applyLogoRelativePosition(row.blocks).map((b) => renderBlock(b))}
             </div>
@@ -357,7 +385,7 @@ export default function ThemeDrivenHeader({
 
   return (
     <div className={outerClass} style={style}>
-      <div className="mx-auto px-4 py-3 grid grid-cols-3 items-center gap-4" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+      <div className={`mx-auto px-4 ${HEADER_CLASSIC_PY[heightKey] ?? HEADER_CLASSIC_PY.default} grid grid-cols-3 items-center gap-4`} style={contentStyle}>
         {ZONES.map((zone) => (
           <div
             key={zone}

@@ -10,6 +10,7 @@ import type { ThemeEditorState } from "@/lib/useThemeEditor";
 const DEFAULT: FloatingElementsSettingsType = {
   whatsapp: { enabled: false, position: "bottom_right" },
   customButtons: [],
+  backToTop: { enabled: false },
 };
 
 function newButtonId(): string {
@@ -60,6 +61,20 @@ export default function FloatingElementsSettings({ editor }: { editor: ThemeEdit
             <option value="bottom_left">Bottom left</option>
           </Select>
         )}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Back-to-top button</span>
+          <Toggle
+            checked={!!settings.backToTop?.enabled}
+            onChange={(v) => commit({ backToTop: { enabled: v } })}
+          />
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          Appears once a visitor scrolls down. Fixed bottom-left corner, opposite the WhatsApp button&apos;s default
+          side.
+        </p>
       </div>
 
       <div>

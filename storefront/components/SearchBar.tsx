@@ -22,9 +22,13 @@ const DEBOUNCE_MS = 300;
 export default function SearchBar({
   iconStrokeWidth,
   iconOverrideStyle,
+  showLabel,
 }: {
   iconStrokeWidth?: number;
   iconOverrideStyle?: CSSProperties;
+  // C1 — header.blocks[].settings.showLabel on search_icon (default/absent
+  // false, today's icon-only trigger unchanged).
+  showLabel?: boolean;
 } = {}) {
   const { shopSlug, shopBasePath, shop } = useShop();
   const [open, setOpen] = useState(false);
@@ -84,9 +88,10 @@ export default function SearchBar({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="Search"
-        className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors cursor-pointer"
+        className={`flex items-center justify-center hover:bg-mouse-over/10 transition-colors cursor-pointer ${showLabel ? "gap-1.5 h-9 px-3 rounded-full" : "size-9 rounded-full"}`}
       >
         <Search className="size-5" {...iconProps} style={iconOverrideStyle} />
+        {showLabel && <span className="text-sm">Search</span>}
       </button>
 
       {open && (

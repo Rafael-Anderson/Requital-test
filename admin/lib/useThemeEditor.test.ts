@@ -187,6 +187,58 @@ describe("useThemeEditor — Home tab 'Templates' preset", () => {
   });
 });
 
+describe("useThemeEditor — header/footer layout presets (C1)", () => {
+  it("applyHeaderPreset replaces the whole header config wholesale", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.applyHeaderPreset("centered");
+    });
+
+    const logo = result.current.config!.header.blocks.find((b) => b.type === "logo");
+    expect(logo?.settings.zone).toBe("center");
+  });
+
+  it("applyFooterPreset replaces the whole footer config wholesale", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.applyFooterPreset("mega");
+    });
+
+    expect(result.current.config!.footer.settings.columns).toBe(5);
+    expect(result.current.config!.footer.blocks.filter((b) => b.type === "footer_column")).toHaveLength(4);
+  });
+
+  it("applyHeaderPreset saves immediately, same as applyHomepagePreset", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+
+    act(() => {
+      result.current.applyHeaderPreset("classic");
+    });
+
+    await waitFor(() => expect(updateThemeDraft).toHaveBeenCalledTimes(1));
+  });
+
+  it("ignores an unknown header/footer preset key rather than clearing the existing config", async () => {
+    const { result } = renderHook(() => useThemeEditor(1));
+    await waitFor(() => expect(result.current.config).not.toBeNull());
+    const beforeHeader = result.current.config!.header;
+    const beforeFooter = result.current.config!.footer;
+
+    act(() => {
+      result.current.applyHeaderPreset("not-a-real-preset");
+      result.current.applyFooterPreset("not-a-real-preset");
+    });
+
+    expect(result.current.config!.header).toBe(beforeHeader);
+    expect(result.current.config!.footer).toBe(beforeFooter);
+  });
+});
+
 describe("useThemeEditor — drag-and-drop reorder persists immediately on drop", () => {
   it("reorderSections saves right away instead of waiting for autosave/beforeunload", async () => {
     const { result } = renderHook(() => useThemeEditor(1));
