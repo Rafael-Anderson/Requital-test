@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
 import { resolveThemeCssVars } from "./theme-css-vars";
-import { applyMotionCssVars } from "./motion";
+import { applyMotionCssVars, applyScrollBehavior } from "./motion";
 import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
 import { applyDensityCssVars } from "./density";
 import { applyCardHoverCssVars } from "./card-hover";
@@ -389,6 +389,7 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
 // lib/motion.ts (unit-tested there, incl. the set-then-unset transition).
 function applyMotionOverrides(config: ThemeConfig | null) {
   applyMotionCssVars(document.documentElement.style, config?.globalSettings?.motion);
+  applyScrollBehavior(document.documentElement.style, config?.globalSettings?.motion); // §8.13.C item 8
 }
 
 // Phase B1 (design-token foundation) — writes the --theme-round-sm/-md/-lg

@@ -1363,6 +1363,10 @@ export interface BadgeSettings {
   soldOutSchemeId: string;
   font: "body" | "accent";
   case: TextCase;
+  // §8.13.C item 1 — optional shape variant; absent/"rectangle" ⇒ no-op.
+  style?: "pill" | "rectangle" | "ribbon" | "tag" | "circle";
+  // §8.13.C item 5 — optional; one-shot pop on badge mount.
+  entranceAnimation?: boolean;
 }
 
 // hoverEffect/pressEffect (§8.7 item 1) — OPTIONAL, mirrors backend

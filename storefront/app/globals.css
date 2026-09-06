@@ -457,6 +457,75 @@ body {
   animation: theme-scale-in var(--motion-duration-base, 300ms) var(--motion-ease, ease-out) forwards;
 }
 
+/* §8.13.C item 1 — badges.style shape variants on the product-card Sale /
+   Sold-out chip. `rectangle`/`pill` need no class (border-radius set inline
+   by resolveProductBadge). `circle`/`tag` own their own padding + geometry;
+   `ribbon` is a rotated corner banner that ignores the position inset and
+   pins to a corner via one of the --tl/--tr/--bl/--br variants (the parent
+   media wrapper is already `relative overflow-hidden`, so the banner clips
+   to the card). Geometry here is clip-path / transform / aspect-ratio —
+   deliberately NOT the --theme-round-* scale, which is for rounded-* shapes. */
+.theme-badge-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.3em;
+  min-width: 2.6em;
+  aspect-ratio: 1;
+  line-height: 1.05;
+  border-radius: 9999px;
+}
+.theme-badge-tag {
+  padding-block: 0.125rem;
+  padding-inline: 0.7em 0.45em;
+  /* a small triangular bite out of the trailing edge */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 0.45em) 50%, 100% 100%, 0 100%);
+}
+.theme-badge-ribbon {
+  padding-block: 0.15em;
+  width: 7em;
+  text-align: center;
+  border-radius: 0;
+}
+.theme-badge-ribbon--tr {
+  top: 1.4em;
+  right: -1.9em;
+  transform: rotate(45deg);
+}
+.theme-badge-ribbon--tl {
+  top: 1.4em;
+  left: -1.9em;
+  transform: rotate(-45deg);
+}
+.theme-badge-ribbon--br {
+  bottom: 1.4em;
+  right: -1.9em;
+  transform: rotate(-45deg);
+}
+.theme-badge-ribbon--bl {
+  bottom: 1.4em;
+  left: -1.9em;
+  transform: rotate(45deg);
+}
+
+/* §8.13.C item 5 — badges.entranceAnimation. One-shot pop on badge mount
+   (all product cards mount together on section render, so above-fold badges
+   pop on load, and product_tabs cards re-pop on tab switch). No observer —
+   a below-fold badge pops off-screen, the accepted stagger-without-entrance
+   tradeoff. The blanket prefers-reduced-motion rule neutralizes it. */
+@keyframes theme-badge-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.theme-badge-pop {
+  animation: theme-badge-pop var(--motion-duration-fast, 150ms) var(--motion-ease, ease-out) forwards;
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4

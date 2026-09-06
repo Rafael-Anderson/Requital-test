@@ -198,3 +198,16 @@ export function applyMotionCssVars(
     else root.removeProperty(name);
   }
 }
+
+// §8.13.C item 8 — motion.smoothScroll. Not a CSS custom property, so it's a
+// separate one-liner rather than part of applyMotionCssVars. Set/clear: ""
+// restores the browser default (`auto`). prefers-reduced-motion needs no
+// handling here — globals.css's blanket rule has `scroll-behavior: auto
+// !important`, and a stylesheet !important beats this non-important inline
+// style.
+export function applyScrollBehavior(
+  root: Pick<CSSStyleDeclaration, "scrollBehavior">,
+  motion: MotionSettings | null | undefined,
+): void {
+  root.scrollBehavior = motion?.smoothScroll ? "smooth" : "";
+}

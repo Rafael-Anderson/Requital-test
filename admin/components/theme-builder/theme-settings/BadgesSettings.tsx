@@ -2,6 +2,7 @@
 
 import Select from "@/components/ui/Select";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Toggle from "@/components/ui/Toggle";
 import Slider from "@/components/ui/Slider";
 import SchemePicker from "../SchemePicker";
 import type { BadgeSettings as BadgeSettingsType } from "@/lib/types";
@@ -35,7 +36,27 @@ export default function BadgesSettings({ editor }: { editor: ThemeEditorState })
           </option>
         ))}
       </Select>
+      <Select
+        label="Shape"
+        value={badges.style ?? "rectangle"}
+        onChange={(e) => update({ style: e.target.value === "rectangle" ? undefined : (e.target.value as BadgeSettingsType["style"]) })}
+      >
+        <option value="rectangle">Rectangle</option>
+        <option value="pill">Pill</option>
+        <option value="circle">Circle</option>
+        <option value="tag">Tag</option>
+        <option value="ribbon">Ribbon</option>
+      </Select>
       <Slider label="Corner radius" min={0} max={24} suffix="px" value={badges.cornerRadius} onChange={(v) => update({ cornerRadius: v })} />
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Pop-in animation
+          <span className="block text-xs font-normal text-zinc-500">
+            The badge scales in when the card first renders.
+          </span>
+        </span>
+        <Toggle checked={badges.entranceAnimation === true} onChange={(v) => update({ entranceAnimation: v || undefined })} />
+      </div>
 
       <div>
         <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Sale badge scheme</span>

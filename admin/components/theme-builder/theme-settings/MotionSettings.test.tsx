@@ -39,10 +39,33 @@ describe("MotionSettings", () => {
     expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { intensity: undefined });
   });
 
-  it("does not expose scrollMotion / hoverMotion / smoothScroll (no consumer in Phase A)", () => {
+  it("does not expose scrollMotion / hoverMotion (still no consumer)", () => {
     render(<MotionSettings editor={makeEditor({ intensity: "standard" })} />);
     expect(screen.queryByText(/scroll-triggered entrances/i)).toBeNull();
     expect(screen.queryByText(/hover micro-interactions/i)).toBeNull();
-    expect(screen.queryByText(/smooth scroll/i)).toBeNull();
+  });
+
+  it("exposes a Smooth scrolling toggle even when intensity is unset (independent of the token system)", () => {
+    render(<MotionSettings editor={makeEditor({})} />);
+    const row = screen.getByText("Smooth scrolling").closest("div")!;
+    expect(row.querySelector('[role="switch"]')).not.toBeChecked();
+  });
+
+  it("toggling Smooth scrolling on writes smoothScroll: true", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor({});
+    render(<MotionSettings editor={editor} />);
+    const row = screen.getByText("Smooth scrolling").closest("div")!;
+    await user.click(row.querySelector('[role="switch"]')!);
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { smoothScroll: true });
+  });
+
+  it("toggling Smooth scrolling off writes smoothScroll: undefined (the true no-op)", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor({ smoothScroll: true });
+    render(<MotionSettings editor={editor} />);
+    const row = screen.getByText("Smooth scrolling").closest("div")!;
+    await user.click(row.querySelector('[role="switch"]')!);
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { smoothScroll: undefined });
   });
 });
