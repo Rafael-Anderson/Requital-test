@@ -128,6 +128,23 @@ export default function ProductCardsSettings({ editor }: { editor: ThemeEditorSt
         <Toggle checked={!!productCards.showWishlist} onChange={(v) => update({ showWishlist: v })} />
       </div>
 
+      {productCards.showWishlist && (
+        <Select
+          label="Wishlist heart animation"
+          value={productCards.wishlistAnimation ?? "none"}
+          onChange={(e) =>
+            update({
+              wishlistAnimation: e.target
+                .value as ProductCardSettingsType["wishlistAnimation"],
+            })
+          }
+        >
+          <option value="none">None</option>
+          <option value="pop">Pop (scale bounce)</option>
+          <option value="burst">Burst (ring radiates)</option>
+        </Select>
+      )}
+
       <hr className="border-black/10 dark:border-white/10" />
 
       <div>

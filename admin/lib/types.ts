@@ -1457,6 +1457,9 @@ export interface ProductCardSettings {
   imageAspect?: ImageAspect;
   textAlign?: "left" | "center";
   density?: "comfortable" | "compact";
+  // §8.13.C item 4 — a one-shot animation on the wishlist heart when toggled
+  // ON. Absent/"none" ⇒ today's plain colour swap. `sweep` reserved, unbuilt.
+  wishlistAnimation?: "none" | "pop" | "burst" | "sweep";
 }
 
 export interface CollectionPageSettings {
