@@ -279,7 +279,8 @@ const market: ThemeConfig = (() => {
   g.motion = { intensity: 'standard', speed: 1.1, easing: 'snappy', scrollProgressBar: true }; // scrollProgressBar: §8.13.C item 14
   g.animations.cardHoverEffect = 'quick-add-slide';
   g.animations.imageLoad = 'fade';
-  g.animations.addToCart = false;
+  g.animations.addToCart = true; // §8.13.C item 16 — master switch for fly-to-cart
+  g.animations.addToCartStyle = 'fly'; // §8.13.C item 16
   g.animations.pageTransition = false;
   g.productCards.cardStyle = 'shadowed';
   g.productCards.imageAspect = 'square';
@@ -632,18 +633,19 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
 //           newsletter successAnimation §8.7 item 5; motion.smoothScroll
 //           §8.13.C item 8; hero kenBurns §8.13.C item 10 — 2026-09-05..06)
-// market:   fly-to-cart; product_tabs section (needs real collectionIds);
-//           product_vendor / product_stock card sub-blocks (header
-//           scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
-//           §8.7 item 3; newsletter successAnimation §8.7 item 5;
-//           badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
-//           buttons.secondary via the view_all_button + hoverEffect
-//           'border-fill' §8.13.C item 2; productCards.wishlistAnimation
-//           'pop' §8.13.C item 4; floatingElements.backToTop §8.13.C item 6;
-//           hero indicatorStyle 'progress' §8.13.C item 11; drawers.animation
-//           'slide-fade' + cart.itemAnimation + subtotalAnimation 'count'
-//           §8.13.C item 13; motion.scrollProgressBar §8.13.C item 14;
-//           inputFields.focusAnimation 'float-label' §8.13.C item 7 —
+// market:   product_tabs section (needs real collectionIds); product_vendor /
+//           product_stock card sub-blocks (header scrollBehavior 'shrink'
+//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
+//           successAnimation §8.7 item 5; badges.style 'tag' +
+//           entranceAnimation §8.13.C items 1/5; buttons.secondary via the
+//           view_all_button + hoverEffect 'border-fill' §8.13.C item 2;
+//           productCards.wishlistAnimation 'pop' §8.13.C item 4;
+//           floatingElements.backToTop §8.13.C item 6; hero indicatorStyle
+//           'progress' §8.13.C item 11; drawers.animation 'slide-fade' +
+//           cart.itemAnimation + subtotalAnimation 'count' §8.13.C item 13;
+//           motion.scrollProgressBar §8.13.C item 14;
+//           inputFields.focusAnimation 'float-label' §8.13.C item 7;
+//           animations.addToCartStyle 'fly' §8.13.C item 16 —
 //           2026-09-05..06)
 // bloom:    section separators; product_tabs section; announcement_bar
 //           marquee; the contrasting yellow badge colour scheme (a 3rd

@@ -108,9 +108,18 @@ describe.each(TEMPLATE_KEYS)('THEME_TEMPLATES.%s', (key) => {
     }
   });
 
-  it('leaves animations.addToCart / pageTransition off (deliberate — re-author when the consumer lands)', () => {
-    expect(template.globalSettings.animations.addToCart).toBe(false);
+  it('leaves animations.pageTransition off (no template wants route-content fade)', () => {
     expect(template.globalSettings.animations.pageTransition).toBe(false);
+  });
+
+  it('only opts into fly-to-cart on Market (§8.13.C item 16); the rest keep addToCart off', () => {
+    if (key === 'market') {
+      expect(template.globalSettings.animations.addToCart).toBe(true);
+      expect(template.globalSettings.animations.addToCartStyle).toBe('fly');
+    } else {
+      expect(template.globalSettings.animations.addToCart).toBe(false);
+      expect(template.globalSettings.animations.addToCartStyle).toBeUndefined();
+    }
   });
 
   it('only sets a currently-valid cardHoverEffect value', () => {

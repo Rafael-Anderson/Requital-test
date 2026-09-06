@@ -42,6 +42,21 @@ export default function AnimationsSettings({ editor }: { editor: ThemeEditorStat
         <span className="text-sm font-medium">Add to cart animation</span>
         <Toggle checked={animations.addToCart} onChange={(v) => update({ addToCart: v })} />
       </div>
+      {/* §8.13.C item 16 — the effect itself. "None" writes undefined so an
+          untouched theme is byte-identical. Hidden when the master toggle
+          above is off. */}
+      {animations.addToCart && (
+        <Select
+          label="Add to cart style"
+          value={animations.addToCartStyle ?? "none"}
+          onChange={(e) =>
+            update({ addToCartStyle: e.target.value === "none" ? undefined : (e.target.value as AnimationSettingsType["addToCartStyle"]) })
+          }
+        >
+          <option value="none">None</option>
+          <option value="fly">Fly to cart</option>
+        </Select>
+      )}
       <Select label="Card hover effect" value={animations.cardHoverEffect} onChange={(e) => update({ cardHoverEffect: e.target.value as AnimationSettingsType["cardHoverEffect"] })}>
         {HOVER_EFFECTS.map((opt) => (
           <option key={opt.value} value={opt.value}>

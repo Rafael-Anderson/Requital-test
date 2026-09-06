@@ -7,6 +7,7 @@ import { CartProvider, useCart } from "@/lib/cart";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { WishlistProvider } from "@/lib/wishlist";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
+import { FlyToCartProvider } from "@/lib/fly-to-cart";
 import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
 import MobileNav from "@/components/MobileNav";
@@ -22,6 +23,7 @@ import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
 import FloatingCustomButtons from "@/components/FloatingCustomButtons";
 import ScrollProgressBar from "@/components/ScrollProgressBar";
 import DecorativeParallax from "@/components/DecorativeParallax";
+import RouteTransition from "@/components/RouteTransition";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
@@ -221,7 +223,9 @@ function Body({ children }: { children: React.ReactNode }) {
       <ScrollProgressBar />
       <DecorativeParallax />
       <Header />
-      <main className={`flex-1 ${bottomBarSpacingClass}`}>{children}</main>
+      <main className={`flex-1 ${bottomBarSpacingClass}`}>
+        <RouteTransition>{children}</RouteTransition>
+      </main>
       <Footer />
       <WhatsAppFloatingButton />
       <FloatingCustomButtons />
@@ -254,7 +258,9 @@ export default function ShopLayoutClient({ children }: { children: React.ReactNo
                 TopBar.tsx) so the context must exist even for shops using the
                 full-page cart, where it's simply never opened. */}
             <CartDrawerProvider>
-              <Body>{children}</Body>
+              <FlyToCartProvider>
+                <Body>{children}</Body>
+              </FlyToCartProvider>
             </CartDrawerProvider>
           </CartProvider>
         </WishlistProvider>

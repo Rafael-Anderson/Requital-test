@@ -247,7 +247,7 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
           <Search className="size-5" />
           Search
         </button>
-        <button type="button" onClick={openDrawer} className={`${tabClass} relative cursor-pointer`}>
+        <button type="button" onClick={openDrawer} data-fly-to-cart-target className={`${tabClass} relative cursor-pointer`}>
           <ShoppingCart className="size-5" />
           {count > 0 && (
             <span className="absolute top-0.5 right-1/2 translate-x-3 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-accent text-accent-foreground text-[9px] font-medium">
