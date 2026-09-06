@@ -100,27 +100,34 @@ export default function ProductTabsSection({
         ))}
       </div>
 
-      {loading ? (
-        <div className={`grid ${columns} theme-grid-gap`}>
-          {Array.from({ length: Math.min(productLimit, 8) }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-square theme-round-lg animate-pulse"
-              style={{ background: "color-mix(in srgb, var(--foreground) 8%, transparent)" }}
-            />
-          ))}
-        </div>
-      ) : products.length === 0 ? (
-        <p className="text-sm text-price-main">No products in this collection yet.</p>
-      ) : (
-        <div className={`grid ${columns} theme-grid-gap`}>
-          {products.map((product, i) => (
-            <div key={product.id} className="theme-stagger-child" style={{ "--i": i } as CSSProperties}>
-              <ProductCard product={product} orientation="grid" />
-            </div>
-          ))}
-        </div>
-      )}
+      {/* §8.13.C item 3 — keyed on the active tab so it remounts on every
+          switch and the one-shot .theme-tab-panel crossfade plays once (same
+          mount-triggered pattern as .theme-newsletter-success). magic-line +
+          height-animate are deferred until a template ships a real
+          product_tabs section (blocked on hardcodable collectionIds). */}
+      <div key={activeId} className="theme-tab-panel">
+        {loading ? (
+          <div className={`grid ${columns} theme-grid-gap`}>
+            {Array.from({ length: Math.min(productLimit, 8) }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-square theme-round-lg animate-pulse"
+                style={{ background: "color-mix(in srgb, var(--foreground) 8%, transparent)" }}
+              />
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <p className="text-sm text-price-main">No products in this collection yet.</p>
+        ) : (
+          <div className={`grid ${columns} theme-grid-gap`}>
+            {products.map((product, i) => (
+              <div key={product.id} className="theme-stagger-child" style={{ "--i": i } as CSSProperties}>
+                <ProductCard product={product} orientation="grid" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

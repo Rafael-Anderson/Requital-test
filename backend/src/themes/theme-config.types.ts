@@ -452,6 +452,10 @@ export interface ProductCardSettings {
   // tile, and the /account/wishlist page. Absent/false ⇒ no wishlist UI at
   // all. Mirrored in admin/lib/types.ts + storefront/lib/theme-config-types.ts.
   showWishlist?: boolean;
+  // §8.13.C item 4 — a one-shot animation on the wishlist heart when toggled
+  // ON. Absent/"none" ⇒ today's plain colour swap. `sweep` reserved, unbuilt.
+  // Mirrored in admin/lib/types.ts + storefront/lib/theme-config-types.ts.
+  wishlistAnimation?: 'none' | 'pop' | 'burst' | 'sweep';
   // Phase B1 — all optional. `cardStyle` here is the DEFAULT for the
   // standalone collection-page ProductCard + a fallback for
   // product_grid/product_tabs sections (the section's own

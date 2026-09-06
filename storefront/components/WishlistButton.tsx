@@ -1,8 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { Heart } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useWishlist, wishlistEnabled } from "@/lib/wishlist";
+
+// §8.13.C item 4 — one-shot animation when the heart is toggled ON. The flag
+// is set in the click handler (not an effect — avoids the set-state-in-effect
+// lint shape) and cleared on animationend. `sweep` is in the schema but not
+// built yet; it falls through to no animation.
+const ANIM_CLASS: Record<string, string> = {
+  pop: "theme-wishlist-anim",
+  burst: "theme-wishlist-anim theme-wishlist-anim-burst",
+};
 
 // Rendered inside a product card's <Link> — every handler stops the click
 // from navigating. The feature gate lives here (not at each call site) so
@@ -10,10 +20,13 @@ import { useWishlist, wishlistEnabled } from "@/lib/wishlist";
 export default function WishlistButton({ productId }: { productId: number }) {
   const { themeConfig, previewMode } = useShop();
   const { has, toggle } = useWishlist();
+  const [adding, setAdding] = useState(false);
 
   if (!wishlistEnabled(themeConfig)) return null;
 
   const active = has(productId);
+  const animClass =
+    ANIM_CLASS[themeConfig?.globalSettings?.productCards?.wishlistAnimation ?? ""] ?? "";
 
   function onClick(e: React.MouseEvent) {
     e.preventDefault();
@@ -21,6 +34,7 @@ export default function WishlistButton({ productId }: { productId: number }) {
     // click bubble so PreviewInteraction can select the section instead.
     if (previewMode) return;
     e.stopPropagation();
+    if (!active && animClass) setAdding(true);
     toggle(productId);
   }
 
@@ -28,9 +42,12 @@ export default function WishlistButton({ productId }: { productId: number }) {
     <button
       type="button"
       onClick={onClick}
+      onAnimationEnd={() => setAdding(false)}
       aria-pressed={active}
       aria-label={active ? "Remove from wishlist" : "Add to wishlist"}
-      className="absolute top-2 left-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-background/90 text-product-name shadow-sm shadow-black/10 transition-colors hover:bg-background"
+      className={`absolute top-2 left-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-background/90 text-product-name shadow-sm shadow-black/10 transition-colors hover:bg-background${
+        adding && animClass ? ` ${animClass}` : ""
+      }`}
     >
       <Heart
         className={`h-4 w-4 ${active ? "fill-red-500 text-red-500" : ""}`}
