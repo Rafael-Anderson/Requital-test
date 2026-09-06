@@ -109,6 +109,18 @@ export default function MotionSettings({ editor }: { editor: ThemeEditorState })
         </span>
         <Toggle checked={motion.scrollProgressBar === true} onChange={(v) => update({ scrollProgressBar: v || undefined })} />
       </div>
+
+      {/* §8.13.C item 15 — capped at 5 elements, force-off on mobile /
+          reduced-motion, and off entirely when intensity is "None". */}
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Decorative parallax
+          <span className="block text-xs font-normal text-zinc-400">
+            A few soft shapes drifting behind the page on scroll. Desktop only; off under reduced motion.
+          </span>
+        </span>
+        <Toggle checked={motion.decorativeParallax === true} onChange={(v) => update({ decorativeParallax: v || undefined })} />
+      </div>
     </div>
   );
 }

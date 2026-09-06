@@ -84,4 +84,17 @@ describe("MotionSettings", () => {
     await user.click(screen.getByText("Scroll progress bar").closest("div")!.querySelector('[role="switch"]')!);
     expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { scrollProgressBar: undefined });
   });
+
+  it("toggling Decorative parallax writes true / undefined (§8.13.C item 15)", async () => {
+    const user = userEvent.setup();
+    const on = makeEditor({});
+    render(<MotionSettings editor={on} />);
+    await user.click(screen.getByText("Decorative parallax").closest("div")!.querySelector('[role="switch"]')!);
+    expect(on.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { decorativeParallax: true });
+
+    const off = makeEditor({ decorativeParallax: true });
+    render(<MotionSettings editor={off} />);
+    await user.click(screen.getAllByText("Decorative parallax").at(-1)!.closest("div")!.querySelector('[role="switch"]')!);
+    expect(off.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { decorativeParallax: undefined });
+  });
 });

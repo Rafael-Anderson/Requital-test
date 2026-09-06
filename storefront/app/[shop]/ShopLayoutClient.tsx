@@ -21,6 +21,7 @@ import Footer from "@/components/Footer";
 import WhatsAppFloatingButton from "@/components/WhatsAppFloatingButton";
 import FloatingCustomButtons from "@/components/FloatingCustomButtons";
 import ScrollProgressBar from "@/components/ScrollProgressBar";
+import DecorativeParallax from "@/components/DecorativeParallax";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
@@ -218,6 +219,7 @@ function Body({ children }: { children: React.ReactNode }) {
     <>
       <CustomCss />
       <ScrollProgressBar />
+      <DecorativeParallax />
       <Header />
       <main className={`flex-1 ${bottomBarSpacingClass}`}>{children}</main>
       <Footer />

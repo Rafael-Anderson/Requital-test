@@ -373,7 +373,7 @@ const bloom: ThemeConfig = (() => {
   g.typography.scale = 'spacious';
   g.radius = { preset: 'soft' };
   g.density = { preset: 'cozy' };
-  g.motion = { intensity: 'expressive', speed: 1, easing: 'overshoot' };
+  g.motion = { intensity: 'expressive', speed: 1, easing: 'overshoot', decorativeParallax: true }; // decorativeParallax: §8.13.C item 15
   g.animations.cardHoverEffect = 'tilt';
   g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
@@ -418,7 +418,7 @@ const bloom: ThemeConfig = (() => {
 
   c.sections = [
     announcement(0, 'Free gift wrap on every order'),
-    hero(1, 'Gifting made joyful', 'Start a gift', { entrance: 'blur-in', settings: { height: 'large', showSlideIndicators: true } }),
+    hero(1, 'Gifting made joyful', 'Start a gift', { entrance: 'blur-in', settings: { height: 'large', showSlideIndicators: true, parallax: true } }), // parallax: §8.13.C item 15
     featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
     imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up', schemeId: 'scheme-2' }),
     productGrid(4, { entrance: 'scale-in', settings: { columns: 3, cardStyle: 'elevated', imageAspect: 'portrait', motion: { entrance: 'scale-in', animateOnce: false } } }),
@@ -645,15 +645,15 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           §8.13.C item 13; motion.scrollProgressBar §8.13.C item 14;
 //           inputFields.focusAnimation 'float-label' §8.13.C item 7 —
 //           2026-09-05..06)
-// bloom:    hero parallax + decorativeParallax floating shapes; section
-//           separators; product_tabs section; announcement_bar marquee; the
-//           contrasting yellow badge colour scheme (a 3rd colorScheme +
-//           saleSchemeId re-point — colour, not shape) (header scrollBehavior
-//           'hide-on-scroll' §8.7 item 2; newsletter successAnimation §8.7
-//           item 5; badges.style 'circle' + entranceAnimation §8.13.C items
-//           1/5; productCards.wishlistAnimation 'burst' §8.13.C item 4;
-//           buttons.primary.pill §8.13.C item 9;
-//           floatingElements.backToTop §8.13.C item 6 — 2026-09-05..06)
+// bloom:    section separators; product_tabs section; announcement_bar
+//           marquee; the contrasting yellow badge colour scheme (a 3rd
+//           colorScheme + saleSchemeId re-point — colour, not shape) (header
+//           scrollBehavior 'hide-on-scroll' §8.7 item 2; newsletter
+//           successAnimation §8.7 item 5; badges.style 'circle' +
+//           entranceAnimation §8.13.C items 1/5; productCards.wishlistAnimation
+//           'burst' §8.13.C item 4; buttons.primary.pill §8.13.C item 9;
+//           floatingElements.backToTop §8.13.C item 6; hero parallax +
+//           motion.decorativeParallax §8.13.C item 15 — 2026-09-05..06)
 // heritage: (badges.style 'ribbon' §8.13.C item 1; buttons.secondary via
 //           the view_all_button, outline + pressEffect §8.13.C item 2 —
 //           2026-09-06; scrollBehavior deliberately left unset — not named

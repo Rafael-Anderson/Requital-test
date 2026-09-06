@@ -5,6 +5,8 @@ import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { useScrollValue } from "@/lib/use-scroll-value";
+import { useMinWidth } from "@/lib/use-min-width";
 import {
   resolveTextElementStyle,
   resolveButtonElementStyle,
@@ -70,6 +72,7 @@ function HeroSlideshow({
   showIndicators = false,
   kenBurns = false,
   indicatorStyle,
+  parallax = false,
 }: {
   images: HeroImage[];
   durationMs: number;
@@ -77,9 +80,13 @@ function HeroSlideshow({
   showIndicators?: boolean;
   // §8.13.C item 10 — slow zoom on the active slide. §8.13.C item 11 —
   // 'progress' swaps the dot row for a bar that fills over slideDuration.
-  // Both absent ⇒ today's render.
+  // §8.13.C item 15 — parallax: the whole backdrop layer lags the page on
+  // scroll (translateY via useScrollValue, NOT background-attachment: fixed).
+  // Mutually exclusive with kenBurns (§3.7 — one continuous transform per
+  // hero); parallax wins if both are set. All absent ⇒ today's render.
   kenBurns?: boolean;
   indicatorStyle?: string;
+  parallax?: boolean;
 }) {
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -110,13 +117,25 @@ function HeroSlideshow({
   const active = count > 0 ? index % count : 0;
   const activeLink = images[active]?.linkUrl || null;
   const resting = transition === "none" ? { opacity: 1 } : SLIDE_RESTING[transition];
-  const kenBurnsOn = kenBurns && !reducedMotion && count > 0;
+  // §8.13.C item 15 — parallax wins over kenBurns when both are set.
+  const wideEnough = useMinWidth(640);
+  const parallaxOn = parallax && !reducedMotion && count > 0 && wideEnough;
+  const kenBurnsOn = kenBurns && !parallaxOn && !reducedMotion && count > 0;
   const showDots = count > 1 && showIndicators && (!indicatorStyle || indicatorStyle === "dots");
   const showProgress = count > 1 && indicatorStyle === "progress" && !reducedMotion;
+
+  const { y: scrollY } = useScrollValue();
+  // The backdrop lags: as the page scrolls up by scrollY, the layer
+  // translates down (factor < 1), clamped so it never drifts past the
+  // scale(1.15) bleed room. Only computed when parallaxOn.
+  const parallaxStyle: CSSProperties = parallaxOn
+    ? { transform: `translateY(${Math.min(scrollY * 0.15, 40)}px) scale(1.15)`, willChange: "transform" }
+    : {};
 
   return (
     <div
       className="absolute inset-0 overflow-hidden"
+      style={parallaxStyle}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -213,6 +232,8 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
   // §8.13.C items 10/11 — both absent ⇒ HeroSlideshow renders exactly as before.
   const kenBurns = settings.kenBurns === true;
   const indicatorStyle = typeof settings.indicatorStyle === "string" ? settings.indicatorStyle : undefined;
+  // §8.13.C item 15 — hero.settings.parallax. Absent ⇒ no scroll transform.
+  const parallax = settings.parallax === true;
 
   const visible = [...blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
 
@@ -288,6 +309,7 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
           showIndicators={showSlideIndicators}
           kenBurns={kenBurns}
           indicatorStyle={indicatorStyle}
+          parallax={parallax}
         />
       )}
       <div className="relative z-10 max-w-2xl">{visible.map(renderBlock)}</div>

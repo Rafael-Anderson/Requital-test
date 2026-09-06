@@ -47,4 +47,19 @@ describe("HeroSettings — Phase 4 controls", () => {
     await user.click(screen.getAllByRole("switch")[1]);
     expect(onUpdate).toHaveBeenCalledWith("kenBurns", undefined);
   });
+
+  it("Parallax toggle writes true/undefined and is mutually exclusive with Ken Burns (§8.13.C item 15)", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    const { rerender } = render(<HeroSettings settings={{}} onUpdate={onUpdate} />);
+    const parallaxRow = screen.getByText("Parallax (backdrop lags on scroll)").closest("div")!;
+    await user.click(parallaxRow.querySelector('[role="switch"]')!);
+    expect(onUpdate).toHaveBeenCalledWith("parallax", true);
+
+    // when parallax is on, the Ken Burns toggle is disabled, and vice versa
+    rerender(<HeroSettings settings={{ parallax: true }} onUpdate={onUpdate} />);
+    expect(screen.getByText("Ken Burns effect (slow zoom on the photo)").closest("div")!.querySelector('[role="switch"]')).toBeDisabled();
+    rerender(<HeroSettings settings={{ kenBurns: true }} onUpdate={onUpdate} />);
+    expect(screen.getByText("Parallax (backdrop lags on scroll)").closest("div")!.querySelector('[role="switch"]')).toBeDisabled();
+  });
 });
