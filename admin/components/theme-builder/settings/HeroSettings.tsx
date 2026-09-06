@@ -91,7 +91,21 @@ export default function HeroSettings({
 
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Ken Burns effect (slow zoom on the photo)</span>
-        <Toggle checked={(settings.kenBurns as boolean) ?? false} onChange={(v) => onUpdate("kenBurns", v || undefined)} />
+        <Toggle
+          checked={(settings.kenBurns as boolean) ?? false}
+          disabled={settings.parallax === true}
+          onChange={(v) => onUpdate("kenBurns", v || undefined)}
+        />
+      </div>
+      {/* §8.13.C item 15 — one continuous transform per hero: parallax and
+          Ken Burns are mutually exclusive, so each disables the other. */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Parallax (backdrop lags on scroll)</span>
+        <Toggle
+          checked={(settings.parallax as boolean) ?? false}
+          disabled={settings.kenBurns === true}
+          onChange={(v) => onUpdate("parallax", v || undefined)}
+        />
       </div>
 
       <hr className="border-black/10 dark:border-white/10" />

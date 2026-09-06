@@ -1622,9 +1622,10 @@ motion.stagger` is no longer typed-but-unwired (§8.5) — remove it from the
 the original pass still need fixing: `buttons.pillCornerRadius` "B/D" → B never
 touched it; `prices.*` → RESOLVED in B1, remove; `search.*` "B/D" → B never
 touched it; typography `case`/`letterSpacing` → were already wired pre-B1,
-`pairing`/`scale` only add a shortcut; and `motion.smoothScroll` /
-`.scrollMotion` / `.hoverMotion` / `.parallax` / `.kenBurns` /
-`.decorativeParallax` / `.customCursor` are still typed-but-unwired.
+`pairing`/`scale` only add a shortcut; and `motion.smoothScroll` (§8.14),
+`.scrollProgressBar` (§8.18), `.decorativeParallax` (§8.22) are now wired.
+`.scrollMotion` / `.hoverMotion` / `.customCursor` remain typed-but-unwired
+(no consumer — `customCursor` re-confirmed 0/4).
 
 ### 8.4 Phase G0 — the four templates against A/B only (Flow A) — planning
 
@@ -2617,10 +2618,13 @@ template-specific. `customCursor` — 0/4, no template wants it.
     `scaleX` fill = `scrollY / (scrollHeight - innerHeight)` via
     `useScrollValue`. Not a motion flourish (no transition, just tracks) so
     it stays on under reduced motion.
-15. **Hero `parallax` + `decorativeParallax` — 1/4** (Bloom). Effort
-    **M** / **M–L**. `useScrollValue` helps the parallax math;
-    `decorativeParallax` (floating shapes) stays Bloom's signature
-    expensive flourish, §9.4-flagged.
+15. **Hero `parallax` + `decorativeParallax` — BUILT §8.22.** 1/4 (Bloom).
+    `hero.settings.parallax` ⇒ the `HeroSlideshow` backdrop lags on scroll
+    (`translateY` via `useScrollValue`, clamped inside a `scale(1.15)`
+    bleed; wins over `kenBurns`). `motion.decorativeParallax` ⇒
+    `DecorativeParallax.tsx` (5 fixed accent blobs drifting on scroll),
+    **hard-capped at 5**, returns `null` under `intensity:'none'` /
+    reduced-motion / sub-640px. New shared `lib/use-min-width.ts`.
 16. **Fly-to-cart — BUILT §8.20.** 1/4 (Market). Gated on a NEW opt-in
     `animations.addToCartStyle?: 'none' | 'fly'` (not `animations.addToCart`
     alone — that's a required boolean, `true` by default, so gating on it
@@ -3379,6 +3383,70 @@ Scratch themes deleted; seed shop clean.
 `vitest` 548/548 (+`RouteTransition` 3, `CartDrawer` chrome +2) + lint +0
 (33); admin `tsc` + `build` + `vitest` `ProductGridSettings` +2 + lint +0
 (77).
+
+---
+
+### 8.22 hero `parallax` + `motion.decorativeParallax` — BUILT (2026-09-06, `feat/hero-decorative-parallax`)
+
+§8.13.C item 15, Bloom only (1/4). Independent branch off `main` — the only
+overlap with §8.20/§8.21 is this file's section ordering just before §9.
+
+**Hero `parallax` (`hero.settings.parallax?: boolean`).** Free-form
+`SectionSettings` key (like `kenBurns`), no type change. `HeroSlideshow`'s
+backdrop layer (`div.absolute.inset-0.overflow-hidden`) gets an inline
+`transform: translateY(min(scrollY * 0.15, 40)px) scale(1.15)` — the page
+scrolls up, the backdrop lags (factor < 1), clamped at 40px inside the 15%
+scale bleed so no hero edge is ever revealed. `translateY` value via the
+shared `useScrollValue`; **not** `background-attachment: fixed` (iOS-broken).
+`parallaxOn = parallax && !reducedMotion && count > 0 && useMinWidth(640)` —
+new shared `lib/use-min-width.ts` is the JS equivalent of the Phase A
+sub-640px CSS tier (a media query can't gate a scrollY-driven transform).
+**Parallax wins over `kenBurns`** (§3.7 — one continuous transform per hero):
+`kenBurnsOn` now also requires `!parallaxOn`. Admin: a "Parallax" toggle in
+`HeroSettings.tsx`; it and the Ken Burns toggle each `disabled` the other.
+
+**`motion.decorativeParallax` (already typed, was dead).** New
+`DecorativeParallax.tsx`, mounted in `ShopLayoutClient` (like
+`ScrollProgressBar`). **Perf cap built in, not bolted on:**
+`DECORATIVE_COUNT = 5` is a hard constant, no merchant control widens it;
+the whole component returns `null` (no scroll listener, no DOM) under ANY of
+`motion.intensity === 'none'`, `useReducedMotion()`, or
+`!useMinWidth(640)`; each blob is `position: fixed` + `pointer-events: none`
++ `aria-hidden` + `z-index: 0` (behind content, never intercepts input, and
+being fixed is always on-screen so "off-screen pause" is moot — the cap +
+kill switches are the guard); transform is `translate3d(0, scrollY*rate,
+0)` only (compositor-only), rates all < 0.2, from the ONE shared
+`useScrollValue`. The blob look (`.theme-decorative-blob`: fixed, round,
+`radial-gradient(var(--color-accent))`, `blur(40px)`) is a CSS class; only
+position/size/opacity/translate are inline. Admin: a "Decorative parallax"
+toggle in `MotionSettings.tsx` (next to smooth-scroll / scroll-progress —
+not gated on `intensity` in the UI, but killed by `intensity: 'none'` at
+render).
+
+**Templates:** Bloom's hero gets `parallax: true`, `g.motion` gets
+`decorativeParallax: true`. No other template.
+
+**No-op proof.** `hero.settings.parallax` absent ⇒ `parallaxOn` false ⇒ the
+backdrop div's inline `style` is `{}` (byte-identical). `decorativeParallax`
+absent ⇒ `DecorativeParallax` renders `null`. No `DEFAULT_THEME_CONFIG`
+change, no validation change.
+
+**Scratch-shop pass (dev seed shop, puppeteer, scroll + computed-style
+sampling).** Bloom published (`hero.parallax: true`, `decorativeParallax:
+true`, `intensity: expressive`) with 2 injected `bannerImages`. Desktop
+(1280px, `no-preference`): the hero backdrop's computed transform goes
+`matrix(1.15,0,0,1.15,0,0)` → `matrix(1.15,0,0,1.15,0,40)` on scroll to
+600px — `scale(1.15)` throughout, `translateY` clamped at **40px**
+(600 × 0.15 = 90 → 40); **5** `.theme-decorative-blob`s, transforms change on
+scroll. `prefers-reduced-motion: reduce`: backdrop transform `none`, **0**
+blobs. Mobile (480px): backdrop `none`, **0** blobs (the sub-640 kill).
+No-op control (Atelier — neither key): backdrop `none`, 0 blobs. Zero
+console errors. Scratch themes deleted; seed shop clean.
+
+**Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 553/553 (+`HeroSection` parallax 6, `DecorativeParallax`
+5) + lint +0 (33); admin `tsc` + `build` + `vitest` `HeroSettings` +1 /
+`MotionSettings` +1 + lint +0 (77).
 
 ---
 
