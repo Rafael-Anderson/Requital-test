@@ -24,6 +24,18 @@ export default function InputFieldsSettings({ editor }: { editor: ThemeEditorSta
           </option>
         ))}
       </Select>
+      {/* §8.13.C item 7 — "None" writes undefined ⇒ today's plain input. Only
+          the newsletter email field consumes this today. */}
+      <Select
+        label="Focus animation"
+        value={inputFields.focusAnimation ?? "none"}
+        onChange={(e) =>
+          update({ focusAnimation: e.target.value === "none" ? undefined : (e.target.value as InputFieldSettingsType["focusAnimation"]) })
+        }
+      >
+        <option value="none">None</option>
+        <option value="float-label">Floating label</option>
+      </Select>
     </div>
   );
 }

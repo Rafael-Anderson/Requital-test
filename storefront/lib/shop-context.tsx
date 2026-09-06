@@ -331,14 +331,22 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     root.style.setProperty("--theme-button-border-width", `${g.buttons.primary.borderThickness}px`);
     root.style.setProperty("--theme-button-text-transform", g.buttons.primary.case === "uppercase" ? "uppercase" : "none");
     root.style.setProperty("--theme-button-font", g.buttons.primary.font === "accent" ? "var(--theme-accent-font, inherit)" : "var(--theme-body-font, inherit)");
+    // §8.13.C item 9 — pill buttons. Set only when opted in; cleared
+    // otherwise so switching away from a pill theme (or a preview that drops
+    // the flag) doesn't leave the var on :root. themeButtonBaseStyle reads it
+    // as a fallback between the legacy shape var and --theme-radius, so unset
+    // ⇒ today's radius exactly.
+    if (g.buttons.primary.pill === true) {
+      root.style.setProperty("--theme-button-pill-radius", `${g.buttons.pillCornerRadius ?? 9999}px`);
+    } else {
+      root.style.removeProperty("--theme-button-pill-radius");
+    }
   }
 
-  // buttons.pillCornerRadius still has no CSS var here — nothing renders a
-  // pill variant. buttons.secondary is now read directly by
-  // resolveSecondaryButtonStyle (§8.13.C item 2) at its one consumer
-  // (FeaturedCollectionsSection's view_all_button style: 'button'), so it
-  // needs no CSS var here either — it's a per-render-site resolver call, not
-  // a global var like buttons.primary's.
+  // buttons.secondary is read directly by resolveSecondaryButtonStyle
+  // (§8.13.C item 2) at its one consumer (FeaturedCollectionsSection's
+  // view_all_button style: 'button'), so it needs no CSS var here — it's a
+  // per-render-site resolver call, not a global var like buttons.primary's.
 
   // Icons: no CSS var here — lucide's strokeWidth is a numeric SVG prop,
   // not something a CSS custom property can feed into a React component

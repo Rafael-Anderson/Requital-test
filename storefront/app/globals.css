@@ -660,6 +660,36 @@ body {
   animation: theme-cart-subtotal-flash var(--motion-duration-slow, 600ms) var(--motion-ease, ease-out);
 }
 
+/* §8.13.C item 7 — inputFields.focusAnimation: 'float-label'. CSS-only: the
+   <span> sits over the placeholder (which is a single space so
+   :placeholder-shown works) and floats to the top border on focus or once
+   the field has a value. Blanket reduced-motion rule zeroes the transition
+   (label still ends up in the right place, just without the slide). */
+.theme-float-label {
+  position: relative;
+  display: block;
+}
+.theme-float-label > span {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.875rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  pointer-events: none;
+  transition: transform var(--motion-duration-fast, 150ms) var(--motion-ease, ease-out),
+    font-size var(--motion-duration-fast, 150ms) var(--motion-ease, ease-out),
+    color var(--motion-duration-fast, 150ms) var(--motion-ease, ease-out);
+}
+.theme-float-label > input:focus + span,
+.theme-float-label > input:not(:placeholder-shown) + span {
+  transform: translateY(-50%) translateY(-1.2rem) scale(0.82);
+  color: var(--color-accent);
+  background: var(--background);
+  padding-inline: 0.25rem;
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4

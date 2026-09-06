@@ -305,6 +305,7 @@ const market: ThemeConfig = (() => {
   g.drawers.animation = 'slide-fade'; // §8.13.C item 13
   g.cart.itemAnimation = true; // §8.13.C item 13
   g.cart.subtotalAnimation = 'count'; // §8.13.C item 13
+  g.inputFields.focusAnimation = 'float-label'; // §8.13.C item 7
 
   // C1/C2 re-author — Market's deferred header preset + mobileNav, closed
   // out. "Contact-bar + centered nav": a slim contact row, logo/icons on
@@ -381,8 +382,10 @@ const bloom: ThemeConfig = (() => {
   // the scratch-shop pass): --theme-radius is shared between buttons AND the
   // Featured/ImageText/ProductGrid section image containers (B1), so a
   // cornerRadius: 9999 meant only for pill buttons rendered every collection
-  // tile as an ellipse. Pill buttons need buttons.pillCornerRadius, a
-  // separate, still-dead field (see the deferred block) — not this one.
+  // tile as an ellipse. §8.13.C item 9 gave pills their own path:
+  // buttons.primary.pill (below) makes themeButtonBaseStyle read
+  // buttons.pillCornerRadius (default 9999) for the button radius only,
+  // never touching --theme-radius.
   g.productCards.cardStyle = 'elevated';
   g.productCards.imageAspect = 'portrait';
   g.productCards.density = 'comfortable';
@@ -397,6 +400,7 @@ const bloom: ThemeConfig = (() => {
   // 'shine' in its own deferred block). No pressEffect — Bloom's bounce
   // already comes from its expressive/overshoot motion profile.
   g.buttons.primary.hoverEffect = 'shine';
+  g.buttons.primary.pill = true; // §8.13.C item 9 — pill buttons (via buttons.pillCornerRadius, not --theme-radius)
   g.floatingElements = { whatsapp: { enabled: false, position: 'bottom_right' }, customButtons: [], backToTop: { enabled: true } }; // §8.13.C item 6
   // C1/C2 re-author — closes out Bloom's mobileNav + footer deferred items.
   c.header.settings.mobileNav = 'drawer';
@@ -628,26 +632,27 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
 //           newsletter successAnimation §8.7 item 5; motion.smoothScroll
 //           §8.13.C item 8; hero kenBurns §8.13.C item 10 — 2026-09-05..06)
-// market:   fly-to-cart; inputFields.focusAnimation 'float-label';
-//           product_tabs section (needs real collectionIds); product_vendor /
-//           product_stock card sub-blocks (header scrollBehavior 'shrink'
-//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
-//           successAnimation §8.7 item 5; badges.style 'tag' +
-//           entranceAnimation §8.13.C items 1/5; buttons.secondary via the
-//           view_all_button + hoverEffect 'border-fill' §8.13.C item 2;
-//           productCards.wishlistAnimation 'pop' §8.13.C item 4;
-//           floatingElements.backToTop §8.13.C item 6; hero indicatorStyle
-//           'progress' §8.13.C item 11; drawers.animation 'slide-fade' +
-//           cart.itemAnimation + subtotalAnimation 'count' §8.13.C item 13;
-//           motion.scrollProgressBar §8.13.C item 14 — 2026-09-05..06)
-// bloom:    hero parallax + decorativeParallax floating shapes;
-//           buttons.pillCornerRadius pills; section separators; product_tabs
-//           section; announcement_bar marquee; the contrasting yellow badge
-//           colour scheme (a 3rd colorScheme + saleSchemeId re-point —
-//           colour, not shape) (header scrollBehavior 'hide-on-scroll' §8.7
-//           item 2; newsletter successAnimation §8.7 item 5; badges.style
-//           'circle' + entranceAnimation §8.13.C items 1/5;
-//           productCards.wishlistAnimation 'burst' §8.13.C item 4;
+// market:   fly-to-cart; product_tabs section (needs real collectionIds);
+//           product_vendor / product_stock card sub-blocks (header
+//           scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
+//           §8.7 item 3; newsletter successAnimation §8.7 item 5;
+//           badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
+//           buttons.secondary via the view_all_button + hoverEffect
+//           'border-fill' §8.13.C item 2; productCards.wishlistAnimation
+//           'pop' §8.13.C item 4; floatingElements.backToTop §8.13.C item 6;
+//           hero indicatorStyle 'progress' §8.13.C item 11; drawers.animation
+//           'slide-fade' + cart.itemAnimation + subtotalAnimation 'count'
+//           §8.13.C item 13; motion.scrollProgressBar §8.13.C item 14;
+//           inputFields.focusAnimation 'float-label' §8.13.C item 7 —
+//           2026-09-05..06)
+// bloom:    hero parallax + decorativeParallax floating shapes; section
+//           separators; product_tabs section; announcement_bar marquee; the
+//           contrasting yellow badge colour scheme (a 3rd colorScheme +
+//           saleSchemeId re-point — colour, not shape) (header scrollBehavior
+//           'hide-on-scroll' §8.7 item 2; newsletter successAnimation §8.7
+//           item 5; badges.style 'circle' + entranceAnimation §8.13.C items
+//           1/5; productCards.wishlistAnimation 'burst' §8.13.C item 4;
+//           buttons.primary.pill §8.13.C item 9;
 //           floatingElements.backToTop §8.13.C item 6 — 2026-09-05..06)
 // heritage: (badges.style 'ribbon' §8.13.C item 1; buttons.secondary via
 //           the view_all_button, outline + pressEffect §8.13.C item 2 —

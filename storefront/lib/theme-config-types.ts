@@ -262,6 +262,12 @@ export interface ButtonStyleSettings {
   case: TextCase;
   hoverEffect?: ButtonHoverEffect;
   pressEffect?: boolean;
+  // §8.13.C item 9 (buttons.primary only) — when true, the button
+  // border-radius uses buttons.pillCornerRadius (default 9999) instead of
+  // --theme-radius. Absent ⇒ today's radius. Names overlap slightly with
+  // pillCornerRadius (that field holds the value, this gates its use) —
+  // minor schema untidiness, not worth touching the existing field.
+  pill?: boolean;
 }
 
 export interface ButtonSettings {
@@ -306,6 +312,10 @@ export interface InputFieldSettings {
   borderThickness: number;
   cornerRadius: number;
   textPreset: string;
+  // §8.13.C item 7 — the only assigned consumer of this category.
+  // 'float-label' is built (newsletter input); 'border'/'glow' reserved,
+  // unbuilt. Absent/'none' ⇒ today's plain input.
+  focusAnimation?: "none" | "border" | "glow" | "float-label";
 }
 
 export interface PopoverSettings {
