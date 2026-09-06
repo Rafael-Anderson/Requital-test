@@ -9,6 +9,7 @@ import { useCart } from "@/lib/cart";
 import { useFlyToCart } from "@/lib/fly-to-cart";
 import { getProductBySlug, listProducts, listCollections } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
+import { stockLabel } from "@/lib/stock-label";
 import { iconStyleProps } from "@/lib/icon-style";
 import { storeButtonClassName } from "@/lib/button-style";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
@@ -39,13 +40,6 @@ function findVariant(product: Product, selection: Selection): ProductVariant | u
   return product.variants.find((v) =>
     variantOptionValueIds(v).slice(0, selection.length).every((id, i) => id === selection[i]),
   );
-}
-
-function stockLabel(stock: number | null): { text: string; tone: "ok" | "low" | "out" } | null {
-  if (stock === null) return { text: "In stock", tone: "ok" };
-  if (stock <= 0) return { text: "Out of stock", tone: "out" };
-  if (stock <= 5) return { text: `Only ${stock} left`, tone: "low" };
-  return { text: "In stock", tone: "ok" };
 }
 
 function formatDeliveryEstimate(shop: Shop): string | null {

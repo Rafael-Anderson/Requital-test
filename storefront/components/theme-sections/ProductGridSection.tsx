@@ -11,6 +11,7 @@ import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillSty
 import { ArrowRight } from "lucide-react";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import { resolveProductBadge, type ResolvedProductBadge } from "@/lib/product-badge";
+import { stockLabel } from "@/lib/stock-label";
 import { cardDensity, cardTextAlignClass, resolveCardAspectClass, resolveCardStyleClass } from "@/lib/product-card-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import WishlistButton from "@/components/WishlistButton";
@@ -142,6 +143,8 @@ function GridProductCard({
   showMedia,
   showTitle,
   showPrice,
+  showVendor,
+  showStock,
   showCurrencyCode,
   shopCurrency,
   titleBlock,
@@ -171,6 +174,10 @@ function GridProductCard({
   showMedia: boolean;
   showTitle: boolean;
   showPrice: boolean;
+  // §8.13.C item 18 — opt-in card metadata sub-blocks (product_vendor /
+  // product_stock). Absent ⇒ false ⇒ nothing renders, card byte-identical.
+  showVendor: boolean;
+  showStock: boolean;
   showCurrencyCode: boolean;
   // globalSettings.badges-driven Sold out chip (Phase 1) — resolved in the
   // parent since this component has no useShop() of its own. null for an
@@ -229,6 +236,24 @@ function GridProductCard({
     </p>
   ) : null;
 
+  // §8.13.C item 18 — vendor (brand) sits above the title; stock status below
+  // the price. Both only render when the sub-block is present AND there's
+  // real data (a brand / a non-null stock).
+  const vendorEl =
+    showVendor && product.brand?.name ? (
+      <p className={`text-xs text-price-main truncate ${isOverlay ? "text-white/80" : ""} ${alignClass}`}>{product.brand.name}</p>
+    ) : null;
+  const stockInfo = showStock ? stockLabel(product.stockQuantity) : null;
+  const stockEl = stockInfo ? (
+    <p
+      className={`mt-1 text-xs font-medium ${alignClass} ${
+        stockInfo.tone === "out" ? "text-sale-price" : stockInfo.tone === "low" ? "text-amber-600" : "text-emerald-600"
+      }`}
+    >
+      {stockInfo.text}
+    </p>
+  ) : null;
+
   return (
     <Link
       href={`${shopBasePath}/products/${product.slug}`}
@@ -270,16 +295,20 @@ function GridProductCard({
           {/* Phase B1 — `overlay` card style: title + price in a gradient
               strip over the image (mirrors FeaturedCollectionsSection's
               overlayText). */}
-          {isOverlay && (titleEl || priceEl) && (
+          {isOverlay && (vendorEl || titleEl || priceEl || stockEl) && (
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2 pb-2 pt-6">
+              {vendorEl}
               {titleEl}
               {priceEl}
+              {stockEl}
             </div>
           )}
         </div>
       )}
+      {!isOverlay && vendorEl}
       {!isOverlay && titleEl}
       {!isOverlay && priceEl}
+      {!isOverlay && stockEl}
       {mobileQuickAdd}
     </Link>
   );
@@ -359,6 +388,10 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   const showMedia = subBlocks.length === 0 || subBlocks.some((b) => b.type === "product_media" && b.visible);
   const showTitle = subBlocks.length === 0 || !!titleBlock?.visible;
   const showPrice = subBlocks.length === 0 || !!priceBlock?.visible;
+  // §8.13.C item 18 — opt-in only: no `subBlocks.length === 0` fallback, so a
+  // card predating these sub-blocks renders byte-identically.
+  const showVendor = !!subBlocks.find((b) => b.type === "product_vendor")?.visible;
+  const showStock = !!subBlocks.find((b) => b.type === "product_stock")?.visible;
   // Defaults to shown, not hidden — every other price display in this app
   // (PDP, cart, checkout, the legacy ProductCard.tsx) always shows the
   // currency symbol unconditionally; this toggle only exists so a merchant
@@ -413,6 +446,8 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             showMedia={showMedia}
             showTitle={showTitle}
             showPrice={showPrice}
+            showVendor={showVendor}
+            showStock={showStock}
             showCurrencyCode={showCurrencyCode}
             shopCurrency={shop?.currency}
             titleBlock={titleBlock}

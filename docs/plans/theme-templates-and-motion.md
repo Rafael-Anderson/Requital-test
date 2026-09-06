@@ -1067,8 +1067,9 @@ look established" template.
 
 Capabilities used by **3 or more** templates ship first. **Updated 2026-09-05
 (post-C re-evaluation, §8.7) — ✅ rows are BUILT; the phase that closed each
-is noted.** Kept as the historical build-order signal; §8.7 is the current
-priority recommendation for what's left.
+is noted.** Kept as the historical build-order signal. **For what's left, use
+§8.13.C** (§8.7's items 6+ are themselves superseded — see the STALE banner
+above and §10.3).
 
 | Capability | Atelier | Market | Bloom | Heritage | count | Status |
 |---|:-:|:-:|:-:|:-:|:-:|---|
@@ -1106,7 +1107,8 @@ priority recommendation for what's left.
 | `brands.scrolling` (marquee) | ✗ | ✓ | ✗ | ✗ | 1 | ✅ batch 1 |
 | section separators (wave/angle) | ✗ | ✗ | ✓ | ✗ | 1 | open |
 | `inputFields.focusAnimation` | ✗ | ✓ | ✗ | ✗ | 1 | open |
-| card sub-blocks (`product_vendor` / `product_stock` / `product_swatches`) | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| card sub-blocks (`product_vendor` / `product_stock`) | ✗ | ✓ | ✗ | ✗ | 1 | ✅ §8.23 |
+| card sub-block `product_swatches` | ✗ | ✗ | ✗ | ✗ | 0 | deferred (no consumer) |
 
 Already shipped (theme-builder-expansion Phases 1–6), reused by all four:
 `featured_collections` column/aspect/overlay controls, hero inset + corner radius,
@@ -2638,9 +2640,12 @@ template-specific. `customCursor` — 0/4, no template wants it.
     so byte-identical). 0/4 templates — capability only, no re-author. View
     Transitions deliberately not layered on (Chromium-only, Next support
     still moving — §8.20 flag #2 stays a flag).
-18. **Card sub-blocks (`product_vendor`/`product_stock`/`product_swatches`)
-    — 1/4** (Market). A card-*content* feature more than a motion one;
-    wires the dead `swatches` category. Flag for a content-shaped PR.
+18. **Card sub-blocks (`product_vendor`/`product_stock`) — BUILT §8.23**
+    (2026-09-06, `feat/card-metadata-subblocks`). 1/4 (Market). Opt-in
+    child block types on `product_card`; a card without them is
+    byte-identical. **`product_swatches` deferred** — no template §6 table
+    asks for it, so the dead `swatches` category stays dead (don't build a
+    zero-consumer feature).
 19. **`icons.style: solid/duotone` — 2/4** (Market, Bloom). **Separate
     gated Phase I** (~100 hand-drawn SVGs + a glyph-list sign-off).
     Not a normal batch item; stays parked until explicitly greenlit.
@@ -3450,6 +3455,62 @@ console errors. Scratch themes deleted; seed shop clean.
 
 ---
 
+### 8.23 card metadata sub-blocks `product_vendor` + `product_stock` — BUILT (2026-09-06, `feat/card-metadata-subblocks`)
+
+§8.13.C item 18. Market §6.2 wants "sub-blocks `product_vendor` +
+`product_stock` visible" on `product_card`. 1/4.
+
+**Mechanism.** Two new leaf child block types under `product_card`:
+`product_vendor` (renders `product.brand.name`, muted, above the title) and
+`product_stock` (renders the shared "In stock / Only N left / Out of stock"
+line off `product.stockQuantity`, below the price — green / amber / sale-price
+colour by tone). Both are **opt-in**: `ProductGridSection` reads
+`showVendor` / `showStock` as `!!subBlocks.find(b => b.type === … )?.visible`
+with **no `subBlocks.length === 0` fallback** (unlike media/title/price), so a
+`product_card` authored before these types renders byte-identically. Each line
+also self-gates on real data — a `product_vendor` block on a product with no
+brand renders nothing; `product_stock` on `stockQuantity: null` shows the
+plain "In stock" state. Rendered in both the normal card and the `overlay`
+card-style branch.
+
+**`product_swatches` deferred.** `SwatchSettings` has renderable fields, but
+**no template §6 table asks for `product_swatches`** — building it would wire
+the `swatches.*` category purely to have a consumer. Same call as section
+separators and `customCursor`: don't build a zero-consumer feature. `swatches.*`
+stays dead; §9.3 updated.
+
+**Files.** `storefront/lib/stock-label.ts` (new — extracted verbatim from the
+PDP's local `stockLabel`, now shared by `ProductDetailClient` + the sub-block;
+`stock-label.test.ts` covers the 4 branches). `ProductGridSection.tsx`
+(`GridProductCard` gains `showVendor`/`showStock` props + `vendorEl`/`stockEl`;
+parent resolves the two flags). `backend/src/themes/constants.ts` +
+`admin/lib/types.ts` — `BLOCK_TYPE_LABELS` += `product_vendor: 'Vendor'` /
+`product_stock: 'Stock status'`, `CHILD_BLOCK_TYPES.product_card` += both
+(the two hand-mirrored copies; storefront has no such constant and
+`theme-config.validation.ts` is shallow, so no third mirror).
+`admin/.../BlockSettingsForm.tsx` — the two types fall through to the existing
+"shows live product data, use the eye icon" note. `backend/src/themes/templates.ts` —
+`productGrid()` gains an `extraCardBlocks: string[] = []` param; Market's call
+passes `['product_vendor', 'product_stock']`; Market deferred-block comment
+closed for this item.
+
+**No-op proof.** New optional child block types, absent ⇒ `showVendor` /
+`showStock` are `false` ⇒ nothing renders. No CSS var, no CSS class, no
+`DEFAULT_THEME_CONFIG` change, no validation change. Every existing published
+`product_card` (which has no vendor/stock sub-block) is untouched.
+
+**Scratch pass.** Published Market on the seed dev shop → `product_grid` cards
+show the brand line above the title and the stock line below the price;
+published Atelier as the no-op control → cards render neither. Zero console
+errors. Scratch themes deleted.
+
+**Gate.** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 550/550 (+`ProductGridSection` 3, `stock-label` 4) +
+lint +0 (33); admin `tsc` + `build` + `vitest` (+0 — form switch cases only) +
+lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3557,7 +3618,7 @@ avoids retouching every token later. Full table in §8.1.
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
 | `buttons.pillCornerRadius` | ✅ B1 radius scale + §8.19 `buttons.primary.pill` flag → `--theme-button-pill-radius` (Bloom); the field itself now has a live consumer | ✅ B1 / §8.19 |
 | `drawers.schemeId` + `drawers.*` | ✅ fully resolved — `drawers.animation` (§8.18) + `schemeId` → `--color-drawer*` / `bordersStyle` / `dropShadow` on `CartDrawer` (§8.21) | ✅ §8.18 + §8.21 |
-| `swatches.*` | the `product_swatches` card sub-block (F) | F |
+| `swatches.*` | was going to be the `product_swatches` card sub-block — **not built §8.23**: no template §6 table asks for `product_swatches`, so it stays a zero-consumer control (same call as section separators / `customCursor`) | deferred |
 | `inputFields.*` | ✅ `inputFields.focusAnimation: 'float-label'` on the newsletter input (§8.19); `borderThickness`/`textPreset` on other inputs still open | ✅ §8.19 / D open |
 | `prices.*` (beyond currency) | ✅ `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` | ✅ B1 |
 | `search.*` (corner radius / titleCase) | ✅ radius scale half done (B1); search-results theming itself still open | B1 ✅ / D open |
@@ -3616,3 +3677,228 @@ avoids retouching every token later. Full table in §8.1.
 - **Preview fidelity for "apply":** the builder relays `theme-config-update`
   already, so posting one big config on apply should just work. The legacy
   `legacy-theme-update` channel is separate and templates must not touch it (D4).
+
+---
+
+## 10. Engagement close-out (2026-09-06)
+
+This section wraps the theme-builder capability engagement that began with the
+generative audit (§1) and the four-template + motion/layout proposal (§2–§7).
+It is the permanent record: a reader with zero context on the working threads
+should be able to read §10.1 and know what the theme builder can do now that
+it couldn't before, read §10.2 and know exactly what was consciously left
+undone and why, and read §10.4 for the working rules this engagement
+established. **§10 is a summary, not a fresh plan** — nothing here is
+committed scope. If any deferred item is picked up, it gets its own plan-mode
+round (see §10.5).
+
+### 10.1 What shipped — inventory by phase
+
+Every row is merged to `main`. "No-op" throughout means: a shop that never
+adopts a template and never touches the new control renders byte-identically
+to before the phase (§10.4).
+
+#### Foundations
+
+| Phase | PR | What it added |
+|---|---|---|
+| **A — Motion foundation** | #88 | `globalSettings.motion` category (`intensity` / `speed` / `easing`, seeded `{}`) + the `--motion-*` CSS-variable token table (durations, travel distances, hover-scales, easings) with a sub-640px mobile tier. Every previously-hardcoded storefront animation value was rewritten as `var(--motion-*, <the exact old literal>)`, so unset ⇒ pixel-identical. One blanket `@media (prefers-reduced-motion: reduce)` rule (`0.01ms`, not `0`, so `transitionend` still fires) replaced five scattered per-class blocks. Shared `useScrollValue()` hook (one rAF-throttled scroll subscription). `ScrollAnimatedWrapper` extended for the `motion.entrance` vocabulary + `stagger` + `animateOnce` + `trigger` plumbing (plumbing only — no section wired stagger yet). |
+| **B1 — Design tokens: radius / type / cards** | #89 (+ hotfix #90) | `globalSettings.radius` (`{ preset?, applyToButtons? }`) → `--theme-round-sm/-md/-lg` driving every previously-hardcoded card radius. `typography.pairing` (7 named font bundles) + `typography.scale` (per-name px table, overrides `--text-h*-size` only; stored h1–h6 sizes never mutated) + `typography.baseFontSize`. `productCards.cardStyle` extended (`elevated` / `outlined-hover` / `filled` / `polaroid` / `overlay`) + `imageAspect` / `textAlign` / `density` + per-section `settings.imageAspect` / `settings.cardStyle`. `prices.salePriceColor` / `salePriceStyle` replacing the hardcoded `text-red-600`. **Hotfix #90:** B1 first named the radius tokens `--radius-sm/-md/-lg`, which collided with Tailwind v4's `rounded-*` utility scale and shifted ~88 unrelated call sites; renamed to `--theme-round-*` off every TW namespace. |
+| **B2 — Global density scale** | #91 | `globalSettings.density` (`{ preset?: compact/cozy/comfortable/spacious }`, seeded `{}`) → `--section-py` / `--grid-gap` / `--grid-gap-m` / `--section-heading-gap` via `.theme-section-py` / `.theme-grid-gap` / `.theme-heading-gap` on the standard body sections. `section.settings.spacing` unchanged (outer padding that stacks, not an override). |
+| *(docs)* | #92 | Storefront pre-PR checklist for theme-token work (the Tailwind-v4-namespace rule, full-swap-never-additive, JS-animations-self-gate-on-reduced-motion). |
+
+#### Templates + the first capability round
+
+| Phase | PR | What it added |
+|---|---|---|
+| **G0 — Four starter templates (Flow A)** | #93 | `backend/src/themes/templates.ts`'s `THEME_TEMPLATES` — Atelier / Market / Bloom / Heritage as four full, explicitly-typed `ThemeConfig` literals authored against **only** what A/B render. `POST /themes { fromTemplate }` (`CreateThemeDto`, `@IsIn(TEMPLATE_KEYS)`) → a new **unpublished** theme row via `cloneConfigWithFreshIds` (regenerates every id, remaps scheme refs). `GET /themes/templates` returns preview metadata only. The merchant's live theme is never read or written. **Flow B (apply-to-current-theme) deferred — see §10.2 / G1.** |
+| **Post-G0 batch 1** | #94 | Card-hover enum += `desaturate` / `quick-add-slide` / `overlay` / `shadow` / `tilt` (extracted to `lib/card-hover.ts`). `animations.imageLoad: 'fade'` (per-image `onLoad` crossfade). Stagger *wiring* — `.theme-stagger-child` + `--i` rendered by 6 list sections, capped by a pure-CSS `:nth-child(n+13 of …)` rule; admin toggle on the shared per-section `ScrollAnimationControl`. `section.settings.motion.entrance: 'rotate-in'`. `brands.settings.scrolling` marquee. All four templates updated from G0 stand-in values to real ones. Two G0 template-authoring bugs fixed first (Bloom's `cornerRadius: 9999` leaking into `--theme-radius`; no template actually using its `schemeId` plumbing). |
+| **C1 + C2 — Header/footer presets + mobile nav** | #95 | `header.settings` / `footer.settings` gain `height` / `contentWidth` / `separator` / `announcementPosition` and `columns` / `showPaymentIcons` / `waveEdge` / `bottomBarSeparate` (all optional, no new global CSS var). Client-side `HEADER_PRESETS` / `FOOTER_PRESETS` literals applied once via `applyHeaderPreset` / `applyFooterPreset` (apply-then-diverge, no stored preset identity). **`storefront/components/MobileNav.tsx`** — the storefront's first real mobile nav (`header.settings.mobileNav`: `scroll` default = untouched `MenuBar`, or `drawer` / `bottom-bar` / `fullscreen`). New shared `storefront/lib/use-reduced-motion.ts`. Two real bugs caught by the scratch Playwright pass: `cloneConfigWithFreshIds` not remapping `header.settings.rows[].blockIds`; `MobileNav`'s `setPointerCapture` suppressing synthesized clicks on nested buttons. `globalSettings.floatingElements.backToTop` also shipped this batch. |
+| *(docs)* | #96 | Post-C capability re-evaluation (§8.7) — the priority recommendation for the next round, recorded before picking up D/E/F. |
+
+#### §8.7 post-C items (five small capability wirings)
+
+| PR | §8 | What it added |
+|---|---|---|
+| #97 | §8.8 | `buttons.primary.hoverEffect` + `.pressEffect` — `lib/button-hover.ts` resolver; hover lift/grow/underline-icon + press scale-down, all `--motion-*`-tokened and reduced-motion-safe. |
+| #98 | §8.9 | `header.settings.scrollBehavior` (`static` / `sticky` / `shrink` / `reveal-on-scroll-up`) + `.transparentOverHero` wired to the real header via `use-header-scroll-state.ts`. |
+| #99 | §8.10 | `trust_bar` `rating_badge` count-up — `useCountUp()` (rAF, `--motion-*`, IntersectionObserver-triggered, its first real consumer). |
+| #100 | §8.11 | `globalSettings.icons.corners` (`rounded` / `sharp`) — per-icon `strokeLinecap` / `strokeLinejoin` on the header + search icons (a prop, not a CSS override). |
+| #101 | §8.12 | Newsletter `successAnimation` — `section.settings.successAnimation?: boolean`; form unmounts, success block scales in. |
+| *(docs)* | #102 | §8.13 post-§8.12 capability stock-take — re-derived the remaining-work list (§8.13.C) **against each template's own §6.1–6.4 table**, not the stale §6.5. Headline finding: `badges.style` is wanted 4/4 and was invisible to §8.7 because §8.7 was re-derived from §6.5, which had no row for it. |
+
+#### §8.13.C priority list — items 1 through 18 (the "post-C batch")
+
+Item numbers are §8.13.C's own. PRs #103–#113. All merged.
+
+| §8.13.C item(s) | PR | §8 | Mechanism (one line) |
+|---|---|---|---|
+| **1** `badges.style` + **5** `badges.entranceAnimation` + **8** `motion.smoothScroll` | #103 | §8.14 | Badge shape enum (`pill`/`rectangle`/`ribbon`/`tag`/`circle`) on `lib/product-badge.ts` (Market `tag`, Bloom `circle`, Heritage `ribbon`; Atelier `rectangle` = the no-op value, left unset). `entranceAnimation` = a mount-triggered pop (Market + Bloom). `smoothScroll` = a one-line `applyScrollBehavior()` in `lib/motion.ts` (Atelier). |
+| **2** `buttons.secondary` rendered variant | #104 / #105 | §8.15 | The first-ever render slot for a secondary button: `featured_collections`' `view_all_button` gains an opt-in "button" mode (`resolveSecondaryButtonStyle` + `resolveButtonHoverClass`). Market + Heritage. |
+| **3** `product_tabs` crossfade + **4** wishlist `pop`/`burst` | #106 | §8.16 | `product_tabs` tab-switch content crossfade (`.theme-tab-panel` keyed remount; resting render byte-identical). Wishlist heart click-burst — one-shot `@keyframes` in the click handler, cleared on `animationend` (Market `pop`, Bloom `burst`). **Magic-line + height-animate deferred — see §10.2.** |
+| **6** enable `floatingElements.backToTop` + **11** hero `kenBurns` + **12** hero `indicatorStyle: 'progress'` | #107 | §8.17 | `backToTop` template re-author on Market + Bloom (capability was built C1/C2). `.theme-ken-burns` scale-breathe on the active hero slide (Atelier). `.theme-hero-progress` bar replacing the dot row, keyed to slide rotation (Market). |
+| **13** `drawers.animation` + `cart.itemAnimation` / `subtotalAnimation` + **14** `scrollProgressBar` | #108 | §8.18 | Cart-drawer open-transition table (`slide` / `slide-fade` / `scale` / `none`); new-cart-row fade-in; subtotal tween via new `lib/use-animated-number.ts` (from→to) or one-shot flash. `ScrollProgressBar.tsx` in `ShopLayoutClient`, `scaleX` = scroll fraction (Market; stays on under reduced motion — it tracks, doesn't flourish). |
+| **7** `inputFields.focusAnimation` + **10** `buttons.primary.pill` | #109 | §8.19 | `NewsletterSection`'s email input gets a CSS-only float-label when `inputFields.focusAnimation === 'float-label'` (Market). `buttons.primary.pill?: boolean` → `--theme-button-pill-radius` checked between the legacy `--theme-btn-primary-radius` and `--theme-radius` in the fallback chain, set only when `pill === true` (Bloom). |
+| **16** Fly-to-cart | #110 | §8.20 | A cloned product `<img>` arcs (WAAPI, first storefront use) from the quick-add card / PDP gallery to the `data-fly-to-cart-target` header cart icon, then fades. Gated on a **new opt-in `animations.addToCartStyle?: 'none' \| 'fly'`** — not `animations.addToCart` alone, which is a required boolean `true` by default. `FlyToCartProvider` in `ShopLayoutClient`; **5-concurrent-clone cap** (rapid-click spam guard; a 6th call skips only the visual clone, `addItem` always runs); `onfinish` + `setTimeout` safety-net cleanup; provider-unmount SPA-leak sweep. Market only. |
+| **17** Route-content fade (+ two follow-ups) | #111 | §8.21 | `RouteTransition.tsx` — a `key={pathname}` wrapper replaying a one-shot fade+rise keyframe on nav; gated on `animations.pageTransition` (already `false` in DEFAULT + all templates, so no new field needed). 0/4 templates — capability only. **View Transitions deliberately not layered on — see §10.2.** Folded in: `ProductGridSection`'s own "View all" as a secondary button (`settings.viewAllStyle`); cart-drawer `schemeId` / `bordersStyle` / `dropShadow` theming (`--color-drawer*`, mirrors `popovers.schemeId`). |
+| **15** Hero `parallax` + `motion.decorativeParallax` | #112 | §8.22 | `hero.settings.parallax` → the `HeroSlideshow` backdrop lags on scroll (`translateY` via `useScrollValue`, clamped inside a `scale(1.15)` bleed; wins over `kenBurns`). `motion.decorativeParallax` → `DecorativeParallax.tsx` (5 fixed accent-tinted blobs drifting on scroll) — **hard-capped at `DECORATIVE_COUNT = 5`**, returns `null` (no DOM, no listener) under any of `intensity: 'none'`, reduced-motion, or sub-640px. New shared `lib/use-min-width.ts`. Bloom only. |
+| **18** Card metadata sub-blocks `product_vendor` + `product_stock` | #113 | §8.23 | Two opt-in leaf child block types under `product_card` — vendor (`brand.name`) above the title, stock line ("In stock / Only N left / Out of stock", shared `lib/stock-label.ts`) below the price. No `subBlocks.length === 0` fallback ⇒ a card predating these types is byte-identical. Market only. **`product_swatches` not built — see §10.2.** |
+
+Not in the table: **item 9 (section separators)** — skipped, 0/4-concrete
+(§10.2). **Item 3's magic-line + height-animate half** — deferred; only the
+tab-switch crossfade shipped (#106). **Item 19 (`icons.style`)** — Phase-I-gated.
+**Item 20 (`customCursor`)** — skipped, 0/4.
+
+### 10.2 Known gaps — consolidated, re-verified 2026-09-06
+
+Every entry re-checked against `templates.ts` and each template's own §6.1–6.4
+table this pass, not copied forward.
+
+| Gap | Status | Verified reason it's not done | What it would take |
+|---|---|---|---|
+| **`icons.style` (solid / duotone) — Phase I** | **Not started.** Gated on its own glyph-list sign-off round. | 2/4 (Market, Bloom) per §6.2/§6.3. Real cost is ~100 hand-drawn SVGs (a second icon dependency was rejected in §2). Not a normal batch item. | A glyph-list sign-off (which of the ~50 storefront icons need a solid + duotone variant), then the SVG work + an `icons.style` switch in the icon resolver. **Re-verify first:** how many icon call sites exist now (C1/C2 + the §8.x batches added several); whether `lib/icon-style.ts`'s current shape (built for `icons.corners` / `icons.stroke`) can carry a third axis. |
+| **`customCursor`** | **Skipped.** 0/4. | No `§6` table row on any template; no `g.motion.customCursor` in `templates.ts`. `MotionSettings.customCursor?` is typed-but-unwired. | Don't build it without a template that wants it. |
+| **`product_swatches` card sub-block** | **Deferred.** 0/4. | Market's §6.2 asks for `product_vendor` + `product_stock` only. No template §6 table names `product_swatches`. Building it would wire the dead `swatches.*` theme-settings category purely to have a consumer. | A template that actually wants variant-colour dots on the card, then a `product_swatches` leaf block reading `product.variants` + the `swatches.*` shape. `swatches.*` stays a zero-consumer category until then (§9.3). |
+| **Checkout-input `focusAnimation`** | **Deferred.** | The checkout `<input>`s use above-field `<label>`s + a shared `FIELD_CLASS` across 4+ files on a conversion-critical form. Converting them to the placeholder-based `.theme-float-label` (§8.19) is a real multi-file restructure, not a small extension. §8.19's float-label is newsletter-only (the one input a theme *section* renders). | A deliberate checkout-form pass: move every field to `placeholder=" "` + a floating span, verify no regression to validation / error display / autofill on the form that takes the money. |
+| **View Transitions on the route fade** | **Deferred.** | Chromium-only; Next 16 App Router VT support is still moving. Layering `startViewTransition` gating adds a second code path for a progressive enhancement. §9.4 flag #2. | A `'startViewTransition' in document` progressive-enhancement branch wrapped around the existing keyed fade — never a replacement for it, never a gate on `pageTransition`. Re-verify Next's VT API is stable first. |
+| **Section separators (wave / angle SVG edges)** | **Skipped.** 1/4 aspirational, **0/4 concrete.** | Bloom's §6.3 prose mentions "section separators (optional)" but Bloom's template literal sets `section.settings.separator` on zero sections — the same shape as `product_tabs` magic-line and `customCursor`: an intent no template can currently act on. (§8.13.C item 9's own text still says "1/4 (Bloom) … roughly unchanged" — that line is **stale**; the operative decision is item 20's cross-reference and the §8.13 recommendation prose: skipped as 0/4-concrete.) | A template that sets `separator` on real sections, then `section.settings.separator?: 'none' \| 'line' \| 'wave' \| 'angle' \| 'dots'` rendering a decorative inline SVG between sections. |
+| **`product_tabs` magic-line + height-animate** | **Blocked.** | 2/4 aspirational (Market + Bloom §6 tables name a `product_tabs` section with `activeIndicator: magic-line`), but **neither template contains one and can't** — a `product_tabs` section needs real `collectionIds`, which a template literal cannot hardcode (the templates' own deferred blocks say so). What shipped (#106) is the content crossfade only. The magic-line is also a pattern mismatch (`ProductTabsSection` uses solid-fill accent pills, not an underlinable nav). The height-animate is L-shaped (real `scrollHeight` JS measurement + transition + cleanup, not the `0fr→1fr` trick). | First solve "a template ships a real `product_tabs` section" (needs either hardcodable collection handles or a post-create binding step). Then the magic-line needs a pill restyle that doesn't break the byte-identical resting look, and the height-animate needs the real measure/transition/cleanup. |
+| **Hero `slideTransition: 'zoom-cross'`** (Market §6.2) | **Silent degrade, accepted.** | `HeroSection.tsx` reads `settings.slideTransition` but types it as `ScrollAnimation` (`fade-in` / `slide-*`), so `zoom-cross` falls back to `fade-in`. Acceptable substitute, lowest priority (§8.13.D). | Widen the `slideTransition` type + add a `zoom-cross` branch to the slideshow transition map. |
+| **Reserved-but-unbuilt enum values** | **Intentional stubs.** | Each falls through to the built default, is not offered in its admin control, and has no template consumer: hero `indicatorStyle: 'bars'` / `'fraction'` (§8.17), wishlist `sweep` (§8.16), `inputFields.focusAnimation: 'border'` / `'glow'` (§8.19), `drawers.animation` beyond what Market uses. | Only if a template wants one — add the branch + the admin option. |
+| **`inputFields` / `search` / `swatches` category tails** | **Partly open (§9.3).** | `inputFields.borderThickness` / `textPreset` on non-newsletter inputs, `search.*` results theming, `swatches.*` — none has a rendering surface in a theme section today. | Deferred to a hypothetical "D" content round; no template needs them. |
+| **G1 — `applyTemplate` (Flow B)** | **Never built.** This is **the one deferred item from the ORIGINAL plan** (§7 D1 "BOTH … Flow B also ships, secondary"), not a post-C addition. | G0 (#93) shipped Flow A only — "New theme from template" → a new unpublished row. The riskier half was always going to be its own round. | Replace `config.globalSettings` + `config.header` + `config.footer` + `config.sections` in one `updateConfig` call (one Ctrl+Z), with fresh ids throughout; **preserve only the merchant's uploaded logo / favicon** (`globalSettings.logo.defaultLogoUrl` / `inverseLogoUrl` / `faviconUrl`); a confirm modal with the standalone line *"Your custom CSS will be replaced."* (D3); **re-author all four `templates.ts` literals against everything shipped since G0** (A–F capabilities they were never written to use). Draft-only, one undo entry, no snapshot-pruning special case (D6). |
+
+### 10.3 §6.5 is frozen; §8.13.C is authoritative
+
+Confirmed still correct:
+
+- **§6.5** ("Cross-template capability dependency") carries the STALE banner
+  added in the §8.13 structural fix. Its ✅ rows remain accurate as history;
+  its open rows are **superseded by §8.13.C**. Do not add rows to §6.5 or use
+  it for planning. *(One nit corrected in this close-out: §6.5's post-banner
+  prose still said "§8.7 is the current priority recommendation" — §8.7's
+  items 6+ are themselves superseded by §8.13.C; the line now points at
+  §8.13.C.)*
+- **§8.13.C** is the live remaining-work list. It is cross-checked against
+  §6.1–6.4 + `templates.ts` directly, never re-derived from §6.5. Items 1–18
+  are addressed — built, except item 9 (section separators, skipped
+  0/4-concrete) and item 3's magic-line/height-animate half (deferred); 19
+  (`icons.style`) is Phase-I-gated; 20 (`customCursor`) is skipped. §10.2 is
+  the consolidated view of everything §8.13.C leaves open plus the
+  cross-section deferrals.
+- Any future stock-take **re-derives from §6.1–6.4 + `templates.ts` + a
+  "wired capabilities" read of the code** — never from a summary table. See
+  §10.4's last convention.
+
+### 10.4 Conventions this engagement established
+
+These held for every phase A→§8.23 and are the working rules for anyone
+picking this up.
+
+1. **Optional key in an existing container.** New capability data is an
+   optional key on an interface that already exists (`animations.imageLoad`,
+   `hero.settings.parallax`, `typography.pairing`), or a new small category
+   *nested under* `globalSettings` (never a new top-level `theme.config` key —
+   `assertValidThemeConfig`'s top-level allow-list stays untouched, and
+   `deepMergeDefaults` backfills the nested category once it's in
+   `DEFAULT_THEME_CONFIG`).
+
+2. **Byte-identical no-op is the non-negotiable default.** A shop that does
+   not adopt a template and does not touch the new control must render
+   pixel-for-pixel as it did before the PR. Proven per-PR with a parity table
+   and, where CSS vars are involved, computed-style assertions. **The trap:
+   gating on a *required* boolean that has a non-`false` default** (fly-to-cart
+   / `animations.addToCart`) — that flips the feature on for every non-template
+   shop on ship. The fix each time was a **new optional field** (`addToCartStyle`)
+   with the existing boolean kept as a master switch.
+
+3. **New `globalSettings` categories are always objects, seeded `{}` — never
+   bare enums or scalars.** `motion`, `radius`, `density` all ship as
+   `{ preset?: … }` / `{ intensity?: … }` objects with `DEFAULT_THEME_CONFIG.
+   globalSettings.<cat> = {}`. A bare scalar breaks `updateGlobalSettingsCategory`
+   + `deepMergeDefaults`.
+
+4. **Don't write a value identical to unset.** Where a template's intent
+   matches today's default (Atelier's `badges.style: 'rectangle'`, `icons.corners:
+   'rounded'`, Heritage's card `hoverEffect`, Bloom's `motion` near-baseline),
+   the template leaves the key **unset** rather than writing the equal value —
+   so "unset" stays the one provable no-op and a later default change doesn't
+   silently diverge from templates that pinned the old value.
+
+5. **New per-theme CSS vars get an SPA-leak clear.** Any `--motion-*` /
+   `--theme-*` / `--color-drawer*` var written from config must be *removed*
+   from `:root` when a theme without it loads (the storefront is a client SPA;
+   a theme switch mid-session otherwise leaves stale props). Pattern: a pure
+   `resolveXCssVars(config)` + an `applyXCssVars` that sets *and clears*, unit-
+   tested with a set-then-unset transition. Imperatively-created DOM (fly-to-cart
+   clones on `document.body`) gets the same treatment on provider unmount.
+
+6. **The scratch-shop Playwright pass is mandatory practice, not optional
+   polish.** Every phase ended with: create + publish each affected template on
+   the seed dev shop, drive the real storefront in headless Chromium, assert
+   the new behaviour *and* a no-op control template, confirm zero console
+   errors, then delete the scratch themes. It caught real bugs unit tests
+   structurally could not — `cloneConfigWithFreshIds` not remapping
+   `header.settings.rows[].blockIds` (C), `MobileNav`'s `setPointerCapture`
+   killing nested-button clicks (C), the fly-to-cart target marker being on the
+   wrong header component (F), Bloom's `cornerRadius: 9999` ellipse bug (post-G0).
+   Technique variants that evolved:
+   - **scroll-step sampling** for scroll-driven effects (parallax, progress
+     bar, decorative blobs) — step `window.scrollTo` in increments, read the
+     transform at each.
+   - **in-page rAF sampler** for timing-sensitive one-shots (fly-to-cart,
+     count-up) — a page-side `requestAnimationFrame` loop recording an
+     element's `getBoundingClientRect` every frame for ~1s, asserting the
+     trajectory (monotonic approach to the target, DOM removal after), *not* a
+     before/after snapshot.
+   - **`prefers-reduced-motion` forced** on a second pass so below-the-fold
+     scroll-triggered entrances don't read as false blank gaps in screenshots,
+     and to assert every JS animation self-gates.
+   - a **`.next` wipe + `next dev` restart** before the pass — turbopack's HMR
+     repeatedly failed to reprocess `globals.css` after consecutive edits,
+     showing stale CSS in dev while every `next build` was correct.
+
+7. **Per-template counts in any summary table drift — re-verify against each
+   template's own §6 text before trusting them.** §6.5 was wrong or imprecise
+   on 4 of the last 5 items it was consulted for, and was *missing entire rows*
+   (`badges.style`, 4/4). §8.7 inherited the error because it was re-derived
+   from §6.5. Every stock-take from §8.13 on reads §6.1–6.4 + `templates.ts`
+   directly. "2/4 (Market, Bloom)" in a table has twice meant "1/4 concrete,
+   1 aspirational" (`product_tabs` magic-line) or "0/4 concrete" (section
+   separators) once the templates' actual literals were checked.
+
+### 10.5 If this is picked back up later
+
+The two candidates are **G1 (`applyTemplate` / Flow B)** and **Phase I
+(`icons.style`)**. Both were last scoped against a much smaller codebase, so
+the first move for either is a re-verification pass, not a build:
+
+- **For G1:** re-read all four `templates.ts` literals against the current
+  `ThemeConfig` shape and the full A–§8.23 capability set — they were authored
+  for A/B only and every post-G0 batch added keys they don't set. Decide
+  per-template which new keys each *should* set (this is the bulk of the work,
+  and it needs the same per-template §6-table cross-check from §10.4
+  convention 7). Then confirm the builder's `updateConfig` + undo-snapshot
+  path can take one full-config replacement in a single entry (D6 assumed 20
+  snapshots × ≤ 200 KB; check `MAX_CONFIG_BYTES` hasn't moved), that the
+  preview `theme-config-update` channel relays a wholesale config swap
+  cleanly, and that `cloneConfigWithFreshIds` covers every id-bearing
+  sub-structure added since G0 (the `header.settings.rows[].blockIds` remap
+  bug from C is the precedent — new nested id references are the risk).
+  Finally, the confirm-modal UX (the standalone "Your custom CSS will be
+  replaced." line, D3) and the logo/favicon-preservation carve-out.
+
+- **For Phase I:** first count the real icon call sites — C1/C2 and the §8.x
+  batches added header/nav/mobile-nav/floating-button/trust-bar icons, so the
+  "~12 SVGs" estimate from §2 is stale. Confirm whether `lib/icon-style.ts`
+  (built for `icons.corners` + `icons.stroke`, both stroke-geometry props) can
+  carry a fill-based `style` axis at all, or needs a different mechanism
+  (swapping the icon component vs. a prop). Then the glyph-list sign-off:
+  which icons get a solid variant, which get duotone, which stay line-only —
+  and whether Market and Bloom actually differ enough on this axis to justify
+  the SVG work, or whether shipping `line`-only (both templates lose one
+  differentiator, explicitly called acceptable in §9.4 flag #3) closes it out.
+
+Everything else in §10.2 is genuinely inert — a zero-consumer control or a
+reserved enum value — and should be built only alongside a template (or a
+merchant request) that needs it.

@@ -114,7 +114,7 @@ function featuredCollections(order: number, title: string, opts: SectionOpts = {
   });
 }
 
-function productGrid(order: number, opts: SectionOpts = {}): ThemeSection {
+function productGrid(order: number, opts: SectionOpts = {}, extraCardBlocks: string[] = []): ThemeSection {
   return section('product_grid', order, {
     ...opts,
     blocks: [
@@ -122,6 +122,9 @@ function productGrid(order: number, opts: SectionOpts = {}): ThemeSection {
         block('product_media'),
         block('product_title'),
         block('product_price'),
+        // §8.13.C item 18 — optional metadata sub-blocks (Market opts into
+        // product_vendor + product_stock; the others don't).
+        ...extraCardBlocks.map((t) => block(t)),
       ]),
     ],
   });
@@ -350,7 +353,7 @@ const market: ThemeConfig = (() => {
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
-    productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }),
+    productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }, ['product_vendor', 'product_stock']), // §8.13.C item 18
     brands(5, { settings: { scrolling: true } }),
     newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
@@ -633,19 +636,19 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
 //           newsletter successAnimation §8.7 item 5; motion.smoothScroll
 //           §8.13.C item 8; hero kenBurns §8.13.C item 10 — 2026-09-05..06)
-// market:   product_tabs section (needs real collectionIds); product_vendor /
-//           product_stock card sub-blocks (header scrollBehavior 'shrink'
-//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
-//           successAnimation §8.7 item 5; badges.style 'tag' +
-//           entranceAnimation §8.13.C items 1/5; buttons.secondary via the
-//           view_all_button + hoverEffect 'border-fill' §8.13.C item 2;
-//           productCards.wishlistAnimation 'pop' §8.13.C item 4;
-//           floatingElements.backToTop §8.13.C item 6; hero indicatorStyle
-//           'progress' §8.13.C item 11; drawers.animation 'slide-fade' +
-//           cart.itemAnimation + subtotalAnimation 'count' §8.13.C item 13;
-//           motion.scrollProgressBar §8.13.C item 14;
+// market:   product_tabs section (needs real collectionIds) (header
+//           scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
+//           §8.7 item 3; newsletter successAnimation §8.7 item 5;
+//           badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
+//           buttons.secondary via the view_all_button + hoverEffect
+//           'border-fill' §8.13.C item 2; productCards.wishlistAnimation
+//           'pop' §8.13.C item 4; floatingElements.backToTop §8.13.C item 6;
+//           hero indicatorStyle 'progress' §8.13.C item 11; drawers.animation
+//           'slide-fade' + cart.itemAnimation + subtotalAnimation 'count'
+//           §8.13.C item 13; motion.scrollProgressBar §8.13.C item 14;
 //           inputFields.focusAnimation 'float-label' §8.13.C item 7;
-//           animations.addToCartStyle 'fly' §8.13.C item 16 —
+//           animations.addToCartStyle 'fly' §8.13.C item 16; product_vendor +
+//           product_stock card sub-blocks §8.13.C item 18 —
 //           2026-09-05..06)
 // bloom:    section separators; product_tabs section; announcement_bar
 //           marquee; the contrasting yellow badge colour scheme (a 3rd
