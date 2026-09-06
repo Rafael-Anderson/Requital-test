@@ -247,7 +247,7 @@ const atelier: ThemeConfig = (() => {
 
   c.sections = [
     announcementOff(0),
-    hero(1, 'Flowers for the occasions that matter', 'Enquire', { entrance: 'mask-reveal', settings: { contentPosition: 'bottom-left', height: 'large', heroLayout: 'full_bleed', showSlideIndicators: false } }),
+    hero(1, 'Flowers for the occasions that matter', 'Enquire', { entrance: 'mask-reveal', settings: { contentPosition: 'bottom-left', height: 'large', heroLayout: 'full_bleed', showSlideIndicators: false, kenBurns: true } }), // §8.13.C item 10
     richText(2, '<p>A studio practice. Seasonal stems, considered arrangements, and a small number of weddings and events each year.</p>', { entrance: 'fade-in', schemeId: 'scheme-2', settings: { contentWidth: 'narrow' } }),
     featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 2, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait', motion: { stagger: true } } }),
@@ -301,6 +301,7 @@ const market: ThemeConfig = (() => {
   g.buttons.primary.hoverEffect = 'icon-nudge';
   g.buttons.primary.pressEffect = true;
   g.buttons.secondary.hoverEffect = 'border-fill'; // §8.13.C item 2 (the view_all_button, now a real consumer)
+  g.floatingElements = { whatsapp: { enabled: false, position: 'bottom_right' }, customButtons: [], backToTop: { enabled: true } }; // §8.13.C item 6
 
   // C1/C2 re-author — Market's deferred header preset + mobileNav, closed
   // out. "Contact-bar + centered nav": a slim contact row, logo/icons on
@@ -330,7 +331,7 @@ const market: ThemeConfig = (() => {
 
   c.sections = [
     announcement(0, 'Same-day delivery before 6pm'),
-    hero(1, 'Fresh flowers, delivered today', 'Shop best sellers', { entrance: 'slide-up', settings: { height: 'medium', heroLayout: 'inset', cornerRadius: 12 } }),
+    hero(1, 'Fresh flowers, delivered today', 'Shop best sellers', { entrance: 'slide-up', settings: { height: 'medium', heroLayout: 'inset', cornerRadius: 12, indicatorStyle: 'progress' } }), // §8.13.C item 11
     trustBar(
       2,
       [
@@ -393,6 +394,7 @@ const bloom: ThemeConfig = (() => {
   // 'shine' in its own deferred block). No pressEffect — Bloom's bounce
   // already comes from its expressive/overshoot motion profile.
   g.buttons.primary.hoverEffect = 'shine';
+  g.floatingElements = { whatsapp: { enabled: false, position: 'bottom_right' }, customButtons: [], backToTop: { enabled: true } }; // §8.13.C item 6
   // C1/C2 re-author — closes out Bloom's mobileNav + footer deferred items.
   c.header.settings.mobileNav = 'drawer';
   // §8.7 item 2 — closes out Bloom's deferred scrollBehavior.
@@ -592,8 +594,8 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 // Atelier and Market's headers/footers otherwise match their deferred notes
 // below exactly (no header/footer preset was called for on Atelier; no
 // footer preset was called for on Market). `floatingElements.backToTop` is
-// also now real (built globally, not per-template) — none of the four
-// templates opts into it here; a future re-author may choose to.
+// enabled on Market + Bloom (§8.13.C item 6, 2026-09-06); Atelier + Heritage
+// deliberately stay without it (§6 tables).
 //
 // §8.7 item 1 batch (2026-09-05) shipped and adopted here:
 // buttons.primary.hoverEffect + .pressEffect. Atelier ('sweep' +
@@ -618,22 +620,22 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //     ButtonStyleSettings) but .secondary has no render path yet, so
 //     setting them now would be inert
 //
-// atelier:  hero kenBurns (badges.style 'rectangle' = the no-op value, left
-//           unset per precedent; header scrollBehavior 'reveal-on-hero' +
+// atelier:  (badges.style 'rectangle' = the no-op value, left unset per
+//           precedent; header scrollBehavior 'reveal-on-hero' +
 //           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
 //           newsletter successAnimation §8.7 item 5; motion.smoothScroll
-//           §8.13.C item 8 — 2026-09-05..06)
+//           §8.13.C item 8; hero kenBurns §8.13.C item 10 — 2026-09-05..06)
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; inputFields.focusAnimation
 //           'float-label'; motion.scrollProgressBar; product_tabs section
-//           (needs real collectionIds); hero indicatorStyle 'progress';
-//           product_vendor / product_stock card sub-blocks (header
-//           scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
-//           §8.7 item 3; newsletter successAnimation §8.7 item 5;
-//           badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
+//           (needs real collectionIds); product_vendor / product_stock card
+//           sub-blocks (header scrollBehavior 'shrink' §8.7 item 2; trust_bar
+//           rating count-up §8.7 item 3; newsletter successAnimation §8.7
+//           item 5; badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
 //           buttons.secondary via the view_all_button + hoverEffect
 //           'border-fill' §8.13.C item 2; productCards.wishlistAnimation
-//           'pop' §8.13.C item 4 — 2026-09-05..06)
+//           'pop' §8.13.C item 4; floatingElements.backToTop §8.13.C item 6;
+//           hero indicatorStyle 'progress' §8.13.C item 11 — 2026-09-05..06)
 // bloom:    hero parallax + decorativeParallax floating shapes;
 //           buttons.pillCornerRadius pills; section separators; product_tabs
 //           section; announcement_bar marquee; the contrasting yellow badge
@@ -641,8 +643,8 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           colour, not shape) (header scrollBehavior 'hide-on-scroll' §8.7
 //           item 2; newsletter successAnimation §8.7 item 5; badges.style
 //           'circle' + entranceAnimation §8.13.C items 1/5;
-//           productCards.wishlistAnimation 'burst' §8.13.C item 4 —
-//           2026-09-05..06)
+//           productCards.wishlistAnimation 'burst' §8.13.C item 4;
+//           floatingElements.backToTop §8.13.C item 6 — 2026-09-05..06)
 // heritage: (badges.style 'ribbon' §8.13.C item 1; buttons.secondary via
 //           the view_all_button, outline + pressEffect §8.13.C item 2 —
 //           2026-09-06; scrollBehavior deliberately left unset — not named
