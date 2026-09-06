@@ -212,7 +212,7 @@ const atelier: ThemeConfig = (() => {
   g.radius = { preset: 'sharp' };
   g.density = { preset: 'spacious' };
   g.icons.corners = 'sharp'; // §8.7 item 4
-  g.motion = { intensity: 'subtle', speed: 0.8, easing: 'gentle' };
+  g.motion = { intensity: 'subtle', speed: 0.8, easing: 'gentle', smoothScroll: true }; // smoothScroll: §8.13.C item 8
   g.animations.cardHoverEffect = 'desaturate';
   g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
@@ -288,6 +288,8 @@ const market: ThemeConfig = (() => {
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#C81E4A';
   g.badges.case = 'uppercase';
+  g.badges.style = 'tag'; // §8.13.C item 1
+  g.badges.entranceAnimation = true; // §8.13.C item 5
   // §8.7 item 1 — Market's deferred block didn't name a hoverEffect value
   // (border-fill was tied to the *secondary* button variant, out of scope
   // this round); icon-nudge's "let's go" affordance fits Market's dense/
@@ -379,7 +381,9 @@ const bloom: ThemeConfig = (() => {
   g.productCards.quickAdd = true;
   g.productCards.showWishlist = true;
   g.prices.salePriceStyle = 'color';
-  g.badges.cornerRadius = 9999;
+  g.badges.cornerRadius = 9999; // harmless once style: 'circle' owns geometry — the sane fallback if style is unset
+  g.badges.style = 'circle'; // §8.13.C item 1
+  g.badges.entranceAnimation = true; // §8.13.C item 5
   // §8.7 item 1 — closes out Bloom's deferred hoverEffect (explicitly named
   // 'shine' in its own deferred block). No pressEffect — Bloom's bounce
   // already comes from its expressive/overshoot motion profile.
@@ -454,6 +458,7 @@ const heritage: ThemeConfig = (() => {
   g.productCards.showWishlist = false;
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#8A3324';
+  g.badges.style = 'ribbon'; // §8.13.C item 1 (no entranceAnimation — Heritage is calm)
   // §8.7 item 1 — buttons.primary.hoverEffect deliberately left UNSET, not
   // an explicit 'none' string: matches Heritage's own "notably does NOT
   // need" restraint (§6.4), and demonstrates that unset and 'none' render
@@ -607,27 +612,30 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //     ButtonStyleSettings) but .secondary has no render path yet, so
 //     setting them now would be inert
 //
-// atelier:  hero kenBurns; motion smoothScroll; badges.style 'rectangle'
-//           (header scrollBehavior 'reveal-on-hero' + transparentOnHero
-//           closed out §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
-//           newsletter successAnimation §8.7 item 5 — all 2026-09-05)
+// atelier:  hero kenBurns (badges.style 'rectangle' = the no-op value, left
+//           unset per precedent; header scrollBehavior 'reveal-on-hero' +
+//           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
+//           newsletter successAnimation §8.7 item 5; motion.smoothScroll
+//           §8.13.C item 8 — 2026-09-05..06)
 // market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
 //           subtotalAnimation 'count'; inputFields.focusAnimation
 //           'float-label'; motion.scrollProgressBar; product_tabs section
 //           (needs real collectionIds); hero indicatorStyle 'progress';
 //           productCards.wishlistAnimation 'pop'; product_vendor /
 //           product_stock card sub-blocks; buttons.secondary rendered
-//           variant + hoverEffect 'border-fill'; badges.style 'tag' +
-//           entranceAnimation (header scrollBehavior 'shrink' closed out
-//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
-//           successAnimation §8.7 item 5 — all 2026-09-05)
+//           variant + hoverEffect 'border-fill' (header scrollBehavior
+//           'shrink' §8.7 item 2; trust_bar rating count-up §8.7 item 3;
+//           newsletter successAnimation §8.7 item 5; badges.style 'tag' +
+//           entranceAnimation §8.13.C items 1/5 — 2026-09-05..06)
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
 //           shapes; buttons.pillCornerRadius pills; section separators;
-//           product_tabs section; announcement_bar marquee; badges.style
-//           'circle' + entranceAnimation (header scrollBehavior
-//           'hide-on-scroll' closed out §8.7 item 2; newsletter
-//           successAnimation §8.7 item 5 — all 2026-09-05)
-// heritage: buttons.secondary rendered as outline CTAs; badges.style 'ribbon'
-//           (scrollBehavior deliberately left unset — not named in
-//           Heritage's own deferred note, matching its "notably does NOT
-//           need" restraint)
+//           product_tabs section; announcement_bar marquee; the contrasting
+//           yellow badge colour scheme (a 3rd colorScheme + saleSchemeId
+//           re-point — colour, not shape) (header scrollBehavior
+//           'hide-on-scroll' §8.7 item 2; newsletter successAnimation §8.7
+//           item 5; badges.style 'circle' + entranceAnimation §8.13.C items
+//           1/5 — 2026-09-05..06)
+// heritage: buttons.secondary rendered as outline CTAs (badges.style 'ribbon'
+//           §8.13.C item 1, 2026-09-06; scrollBehavior deliberately left
+//           unset — not named in Heritage's own deferred note, matching its
+//           "notably does NOT need" restraint)

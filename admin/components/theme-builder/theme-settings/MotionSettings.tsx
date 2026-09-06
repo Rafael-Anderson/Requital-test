@@ -2,6 +2,7 @@
 
 import Select from "@/components/ui/Select";
 import Slider from "@/components/ui/Slider";
+import Toggle from "@/components/ui/Toggle";
 import type { MotionSettings as MotionSettingsType } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
@@ -84,6 +85,18 @@ export default function MotionSettings({ editor }: { editor: ThemeEditorState })
             </option>
           ))}
         </Select>
+      </div>
+
+      {/* §8.13.C item 8 — independent of the intensity token system, so not
+          gated on `active`. */}
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Smooth scrolling
+          <span className="block text-xs font-normal text-zinc-400">
+            Animates in-page anchor jumps. Ignored under reduced motion.
+          </span>
+        </span>
+        <Toggle checked={motion.smoothScroll === true} onChange={(v) => update({ smoothScroll: v || undefined })} />
       </div>
     </div>
   );
