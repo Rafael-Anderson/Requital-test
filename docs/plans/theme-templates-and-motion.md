@@ -3228,7 +3228,17 @@ backdrop div's inline `style` is `{}` (byte-identical). `decorativeParallax`
 absent ⇒ `DecorativeParallax` renders `null`. No `DEFAULT_THEME_CONFIG`
 change, no validation change.
 
-**Scratch-shop pass.** [pending — run before opening the PR]
+**Scratch-shop pass (dev seed shop, puppeteer, scroll + computed-style
+sampling).** Bloom published (`hero.parallax: true`, `decorativeParallax:
+true`, `intensity: expressive`) with 2 injected `bannerImages`. Desktop
+(1280px, `no-preference`): the hero backdrop's computed transform goes
+`matrix(1.15,0,0,1.15,0,0)` → `matrix(1.15,0,0,1.15,0,40)` on scroll to
+600px — `scale(1.15)` throughout, `translateY` clamped at **40px**
+(600 × 0.15 = 90 → 40); **5** `.theme-decorative-blob`s, transforms change on
+scroll. `prefers-reduced-motion: reduce`: backdrop transform `none`, **0**
+blobs. Mobile (480px): backdrop `none`, **0** blobs (the sub-640 kill).
+No-op control (Atelier — neither key): backdrop `none`, 0 blobs. Zero
+console errors. Scratch themes deleted; seed shop clean.
 
 **Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
 `tsc` + `build` + `vitest` 553/553 (+`HeroSection` parallax 6, `DecorativeParallax`
