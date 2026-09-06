@@ -65,6 +65,10 @@ export const BLOCK_TYPE_LABELS: Record<string, string> = {
   product_media: 'Media',
   product_title: 'Product title',
   product_price: 'Price',
+  // §8.13.C item 18 — optional card metadata sub-blocks (opt-in; a
+  // product_card without them renders exactly as before).
+  product_vendor: 'Vendor',
+  product_stock: 'Stock status',
   testimonial: 'Testimonial',
   text: 'Text',
   image: 'Image',
@@ -120,7 +124,7 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
 // type absent here is a leaf (no nested "+ Add block").
 export const CHILD_BLOCK_TYPES: Record<string, string[]> = {
   collection_header: ['collection_title', 'view_all_button'],
-  product_card: ['product_media', 'product_title', 'product_price'],
+  product_card: ['product_media', 'product_title', 'product_price', 'product_vendor', 'product_stock'],
 };
 
 // Depth cap for the recursive block tree (section -> block -> sub-block),

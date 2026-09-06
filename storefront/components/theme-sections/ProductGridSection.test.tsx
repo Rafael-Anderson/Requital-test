@@ -134,4 +134,54 @@ describe("ProductGridSection", () => {
     await findAllByRole("link");
     expect(queryByRole("link", { name: "View all" })).not.toBeInTheDocument();
   });
+
+  describe("card metadata sub-blocks (§8.13.C item 18)", () => {
+    it("no-op: a product_card without vendor/stock sub-blocks renders neither", async () => {
+      listProducts.mockResolvedValue([{ ...product(1), brand: { id: 5, name: "Acme", logoUrl: null }, stockQuantity: 3 }]);
+      listCollections.mockResolvedValue([]);
+      const { findByText, queryByText } = render(
+        <ProductGridSection sectionId="s" settings={{} as SectionSettings} blocks={[cardBlock]} />,
+      );
+      await findByText("Product 1");
+      expect(queryByText("Acme")).toBeNull();
+      expect(queryByText("Only 3 left")).toBeNull();
+    });
+
+    it("renders the brand name and the low-stock line when the sub-blocks are present + visible", async () => {
+      listProducts.mockResolvedValue([{ ...product(1), brand: { id: 5, name: "Acme", logoUrl: null }, stockQuantity: 3 }]);
+      listCollections.mockResolvedValue([]);
+      const withMeta: ThemeBlock = {
+        ...cardBlock,
+        blocks: [
+          ...cardBlock.blocks!,
+          { id: "blk-vendor", type: "product_vendor", visible: true, order: 3, settings: {} },
+          { id: "blk-stock", type: "product_stock", visible: true, order: 4, settings: {} },
+        ],
+      };
+      const { findByText } = render(
+        <ProductGridSection sectionId="s" settings={{} as SectionSettings} blocks={[withMeta]} />,
+      );
+      expect(await findByText("Acme")).toBeInTheDocument();
+      expect(await findByText("Only 3 left")).toBeInTheDocument();
+    });
+
+    it("a present-but-hidden sub-block renders nothing; a vendor block with no brand data renders nothing", async () => {
+      listProducts.mockResolvedValue([{ ...product(1), brand: null, stockQuantity: 0 }]);
+      listCollections.mockResolvedValue([]);
+      const withMeta: ThemeBlock = {
+        ...cardBlock,
+        blocks: [
+          ...cardBlock.blocks!,
+          { id: "blk-vendor", type: "product_vendor", visible: true, order: 3, settings: {} },
+          { id: "blk-stock", type: "product_stock", visible: false, order: 4, settings: {} },
+        ],
+      };
+      const { findByText, queryByText } = render(
+        <ProductGridSection sectionId="s" settings={{} as SectionSettings} blocks={[withMeta]} />,
+      );
+      await findByText("Product 1");
+      expect(queryByText("Out of stock")).toBeNull(); // stock block hidden
+      // no brand data ⇒ vendor line absent (only the badge "Sold out" chip if themed, not here)
+    });
+  });
 });

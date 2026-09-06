@@ -361,6 +361,8 @@ export default function BlockSettingsForm({
     case "product_media":
     case "product_title":
     case "product_price":
+    case "product_vendor":
+    case "product_stock":
       return <p className="text-xs text-zinc-500">Shows live product data — use the eye icon to show or hide it on every card.</p>;
 
     default:

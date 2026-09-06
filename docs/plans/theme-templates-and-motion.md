@@ -1106,7 +1106,8 @@ priority recommendation for what's left.
 | `brands.scrolling` (marquee) | ✗ | ✓ | ✗ | ✗ | 1 | ✅ batch 1 |
 | section separators (wave/angle) | ✗ | ✗ | ✓ | ✗ | 1 | open |
 | `inputFields.focusAnimation` | ✗ | ✓ | ✗ | ✗ | 1 | open |
-| card sub-blocks (`product_vendor` / `product_stock` / `product_swatches`) | ✗ | ✓ | ✗ | ✗ | 1 | open |
+| card sub-blocks (`product_vendor` / `product_stock`) | ✗ | ✓ | ✗ | ✗ | 1 | ✅ §8.23 |
+| card sub-block `product_swatches` | ✗ | ✗ | ✗ | ✗ | 0 | deferred (no consumer) |
 
 Already shipped (theme-builder-expansion Phases 1–6), reused by all four:
 `featured_collections` column/aspect/overlay controls, hero inset + corner radius,
@@ -2625,9 +2626,12 @@ template-specific. `customCursor` — 0/4, no template wants it.
     an already-animating drawer. Unchanged cost — genuinely the big one.
 17. **Route-content fade + View Transitions — universal.** Effort **M**
     (plain fade) / **L** (VT layer). Unchanged.
-18. **Card sub-blocks (`product_vendor`/`product_stock`/`product_swatches`)
-    — 1/4** (Market). A card-*content* feature more than a motion one;
-    wires the dead `swatches` category. Flag for a content-shaped PR.
+18. **Card sub-blocks (`product_vendor`/`product_stock`) — BUILT §8.23**
+    (2026-09-06, `feat/card-metadata-subblocks`). 1/4 (Market). Opt-in
+    child block types on `product_card`; a card without them is
+    byte-identical. **`product_swatches` deferred** — no template §6 table
+    asks for it, so the dead `swatches` category stays dead (don't build a
+    zero-consumer feature).
 19. **`icons.style: solid/duotone` — 2/4** (Market, Bloom). **Separate
     gated Phase I** (~100 hand-drawn SVGs + a glyph-list sign-off).
     Not a normal batch item; stays parked until explicitly greenlit.
@@ -3179,6 +3183,62 @@ string updated) + lint +0 (33); admin `tsc` + `build` + `vitest`
 
 ---
 
+### 8.23 card metadata sub-blocks `product_vendor` + `product_stock` — BUILT (2026-09-06, `feat/card-metadata-subblocks`)
+
+§8.13.C item 18. Market §6.2 wants "sub-blocks `product_vendor` +
+`product_stock` visible" on `product_card`. 1/4.
+
+**Mechanism.** Two new leaf child block types under `product_card`:
+`product_vendor` (renders `product.brand.name`, muted, above the title) and
+`product_stock` (renders the shared "In stock / Only N left / Out of stock"
+line off `product.stockQuantity`, below the price — green / amber / sale-price
+colour by tone). Both are **opt-in**: `ProductGridSection` reads
+`showVendor` / `showStock` as `!!subBlocks.find(b => b.type === … )?.visible`
+with **no `subBlocks.length === 0` fallback** (unlike media/title/price), so a
+`product_card` authored before these types renders byte-identically. Each line
+also self-gates on real data — a `product_vendor` block on a product with no
+brand renders nothing; `product_stock` on `stockQuantity: null` shows the
+plain "In stock" state. Rendered in both the normal card and the `overlay`
+card-style branch.
+
+**`product_swatches` deferred.** `SwatchSettings` has renderable fields, but
+**no template §6 table asks for `product_swatches`** — building it would wire
+the `swatches.*` category purely to have a consumer. Same call as section
+separators and `customCursor`: don't build a zero-consumer feature. `swatches.*`
+stays dead; §9.3 updated.
+
+**Files.** `storefront/lib/stock-label.ts` (new — extracted verbatim from the
+PDP's local `stockLabel`, now shared by `ProductDetailClient` + the sub-block;
+`stock-label.test.ts` covers the 4 branches). `ProductGridSection.tsx`
+(`GridProductCard` gains `showVendor`/`showStock` props + `vendorEl`/`stockEl`;
+parent resolves the two flags). `backend/src/themes/constants.ts` +
+`admin/lib/types.ts` — `BLOCK_TYPE_LABELS` += `product_vendor: 'Vendor'` /
+`product_stock: 'Stock status'`, `CHILD_BLOCK_TYPES.product_card` += both
+(the two hand-mirrored copies; storefront has no such constant and
+`theme-config.validation.ts` is shallow, so no third mirror).
+`admin/.../BlockSettingsForm.tsx` — the two types fall through to the existing
+"shows live product data, use the eye icon" note. `backend/src/themes/templates.ts` —
+`productGrid()` gains an `extraCardBlocks: string[] = []` param; Market's call
+passes `['product_vendor', 'product_stock']`; Market deferred-block comment
+closed for this item.
+
+**No-op proof.** New optional child block types, absent ⇒ `showVendor` /
+`showStock` are `false` ⇒ nothing renders. No CSS var, no CSS class, no
+`DEFAULT_THEME_CONFIG` change, no validation change. Every existing published
+`product_card` (which has no vendor/stock sub-block) is untouched.
+
+**Scratch pass.** Published Market on the seed dev shop → `product_grid` cards
+show the brand line above the title and the stock line below the price;
+published Atelier as the no-op control → cards render neither. Zero console
+errors. Scratch themes deleted.
+
+**Gate.** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 550/550 (+`ProductGridSection` 3, `stock-label` 4) +
+lint +0 (33); admin `tsc` + `build` + `vitest` (+0 — form switch cases only) +
+lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3286,7 +3346,7 @@ avoids retouching every token later. Full table in §8.1.
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
 | `buttons.pillCornerRadius` | ✅ B1 radius scale + §8.19 `buttons.primary.pill` flag → `--theme-button-pill-radius` (Bloom); the field itself now has a live consumer | ✅ B1 / §8.19 |
 | `drawers.schemeId` + `drawers.*` | ✅ `drawers.animation` (§8.18, cart-drawer open transition); `schemeId`/`bordersStyle`/`dropShadow` cart-drawer theming still open (F) | ✅ §8.18 / F open |
-| `swatches.*` | the `product_swatches` card sub-block (F) | F |
+| `swatches.*` | was going to be the `product_swatches` card sub-block — **not built §8.23**: no template §6 table asks for `product_swatches`, so it stays a zero-consumer control (same call as section separators / `customCursor`) | deferred |
 | `inputFields.*` | ✅ `inputFields.focusAnimation: 'float-label'` on the newsletter input (§8.19); `borderThickness`/`textPreset` on other inputs still open | ✅ §8.19 / D open |
 | `prices.*` (beyond currency) | ✅ `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` | ✅ B1 |
 | `search.*` (corner radius / titleCase) | ✅ radius scale half done (B1); search-results theming itself still open | B1 ✅ / D open |

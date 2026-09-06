@@ -114,7 +114,7 @@ function featuredCollections(order: number, title: string, opts: SectionOpts = {
   });
 }
 
-function productGrid(order: number, opts: SectionOpts = {}): ThemeSection {
+function productGrid(order: number, opts: SectionOpts = {}, extraCardBlocks: string[] = []): ThemeSection {
   return section('product_grid', order, {
     ...opts,
     blocks: [
@@ -122,6 +122,9 @@ function productGrid(order: number, opts: SectionOpts = {}): ThemeSection {
         block('product_media'),
         block('product_title'),
         block('product_price'),
+        // §8.13.C item 18 — optional metadata sub-blocks (Market opts into
+        // product_vendor + product_stock; the others don't).
+        ...extraCardBlocks.map((t) => block(t)),
       ]),
     ],
   });
@@ -349,7 +352,7 @@ const market: ThemeConfig = (() => {
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
-    productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }),
+    productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }, ['product_vendor', 'product_stock']), // §8.13.C item 18
     brands(5, { settings: { scrolling: true } }),
     newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
@@ -632,9 +635,8 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
 //           newsletter successAnimation §8.7 item 5; motion.smoothScroll
 //           §8.13.C item 8; hero kenBurns §8.13.C item 10 — 2026-09-05..06)
-// market:   fly-to-cart; product_tabs section (needs real collectionIds);
-//           product_vendor / product_stock card sub-blocks (header
-//           scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
+// market:   fly-to-cart; product_tabs section (needs real collectionIds)
+//           (header scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
 //           §8.7 item 3; newsletter successAnimation §8.7 item 5;
 //           badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
 //           buttons.secondary via the view_all_button + hoverEffect
