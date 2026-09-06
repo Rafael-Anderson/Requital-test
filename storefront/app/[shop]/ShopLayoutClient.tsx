@@ -7,6 +7,7 @@ import { CartProvider, useCart } from "@/lib/cart";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { WishlistProvider } from "@/lib/wishlist";
 import { CartDrawerProvider } from "@/lib/cart-drawer";
+import { FlyToCartProvider } from "@/lib/fly-to-cart";
 import { resolveImageUrl } from "@/lib/api";
 import MenuBar from "@/components/MenuBar";
 import MobileNav from "@/components/MobileNav";
@@ -255,7 +256,9 @@ export default function ShopLayoutClient({ children }: { children: React.ReactNo
                 TopBar.tsx) so the context must exist even for shops using the
                 full-page cart, where it's simply never opened. */}
             <CartDrawerProvider>
-              <Body>{children}</Body>
+              <FlyToCartProvider>
+                <Body>{children}</Body>
+              </FlyToCartProvider>
             </CartDrawerProvider>
           </CartProvider>
         </WishlistProvider>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ShieldCheck, Truck, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
+import { useFlyToCart } from "@/lib/fly-to-cart";
 import { getProductBySlug, listProducts, listCollections } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { iconStyleProps } from "@/lib/icon-style";
@@ -57,6 +58,7 @@ export default function ProductDetailClient() {
   const router = useRouter();
   const { shopSlug, shopBasePath, shop, outlets, previewToken, autoDiscounts = [], themeConfig } = useShop();
   const { addItem, clear } = useCart();
+  const { flyToCart } = useFlyToCart();
   const defaultOutletId = outlets[0]?.id;
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -226,6 +228,9 @@ export default function ProductDetailClient() {
     addItem(buildCartItem(product), quantity, defaultOutletId);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
+    // §8.13.C item 16 — decorative only; no-ops unless the theme opts in.
+    // Not on the buy_now branch above (it navigates straight to checkout).
+    flyToCart(document.querySelector<HTMLElement>("[data-pdp-fly-source]"));
   }
 
   // Real "Buy Now" button (storefront-v2 Phase 3B) — only rendered

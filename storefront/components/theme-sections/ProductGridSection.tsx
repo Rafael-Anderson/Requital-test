@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
+import { useFlyToCart } from "@/lib/fly-to-cart";
 import { listProducts, listCollections } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, resolveButtonHoverClass, resolveSecondaryButtonStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
@@ -83,6 +84,7 @@ function QuickAddButton({
   tagProps: ReturnType<typeof editableAttrs>;
 }) {
   const { addItem } = useCart();
+  const { flyToCart } = useFlyToCart();
   if (outletId === undefined || product.hasVariants || product.isGiftCard) return null;
   return (
     <button
@@ -104,6 +106,8 @@ function QuickAddButton({
           1,
           outletId,
         );
+        // §8.13.C item 16 — decorative only; no-ops unless the theme opts in.
+        flyToCart(e.currentTarget.closest(".theme-product-card")?.querySelector<HTMLElement>(".theme-product-image") ?? null);
       }}
       style={{ ...resolveButtonFillStyle(fill), background, color, ...style }}
       className={className}
