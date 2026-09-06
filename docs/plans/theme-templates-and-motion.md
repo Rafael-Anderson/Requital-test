@@ -3267,7 +3267,24 @@ of scope.
 `data-pdp-fly-source` are inert markers. `FlyToCartProvider` mounting adds one
 context, no render output.
 
-**Scratch-shop pass.** [pending — run before the checkpoint report]
+**Scratch-shop pass (dev seed shop, puppeteer, page-side rAF sampling — the
+count-up round's technique, not before/after).** Market published
+(`addToCart:true`, `addToCartStyle:'fly'`). Quick-add, `no-preference`: a
+`[data-fly-to-cart-clone]` appears; sampled across 41 frames its centre moves
+from **1403px → 0px** distance to the `[data-fly-to-cart-target]` cart-icon
+centre (lands dead-on); removed from the DOM by the end; the cart badge goes
+`(none) → 1` immediately, not gated on the flight. `prefers-reduced-motion:
+reduce`: **no clone ever appears**; the badge still goes `→ 1`. Concurrent (3
+rapid quick-add clicks): peak 3 live clones (under the 5-cap), all cleaned up
+by ~1.6s. PDP "Add to cart": clone flies from `[data-pdp-fly-source]`, cleaned
+up, badge → 1. No-op control (Atelier, no `addToCartStyle`): no clone. Zero
+console errors throughout. Scratch theme + spec deleted; seed shop clean.
+**One bug caught + fixed:** the destination marker was first only on
+`TopBar.tsx` (the legacy Layout-mode header) — every published-theme shop
+uses `ThemeDrivenHeader.tsx`, so `resolveTarget()` found nothing and threw.
+Marker added to `ThemeDrivenHeader`'s `cart_icon` block **and** `MobileNav`'s
+bottom-bar cart button; `resolveTarget()` picks the first with a non-null
+`offsetParent`.
 
 **Gate:** backend `tsc` + `jest themes` 91/91 (+4 from the split spec) + lint
 +0 (261); storefront `tsc` + `build` + `vitest` 550/550 (+`fly-to-cart` 7) +
