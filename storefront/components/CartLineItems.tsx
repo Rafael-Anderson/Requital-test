@@ -9,13 +9,23 @@ import CurrencySymbol from "@/components/CurrencySymbol";
 // same theme.cartLayout preset system as checkout, same rule: one real
 // implementation of the item list, not two copies that can drift.
 export default function CartLineItems() {
-  const { shop } = useShop();
+  const { shop, themeConfig } = useShop();
   const { items, setQuantity, removeItem } = useCart();
+
+  // §8.13.C item 13 — cart.itemAnimation. Each row carries a mount-triggered
+  // one-shot fade (`.theme-cart-item-in`, plays once with no `forwards`), so a
+  // newly-added row animates in on its own mount. Rows that don't remount
+  // (quantity bumps) never replay it. Setting off ⇒ no class, byte-identical
+  // markup. The blanket reduced-motion rule neutralises it.
+  const animateItems = themeConfig?.globalSettings.cart?.itemAnimation === true;
 
   return (
     <div className="divide-y divide-black/5">
       {items.map((item) => (
-        <div key={`${item.productId}:${item.variantId ?? ""}`} className="flex items-center gap-3 py-4">
+        <div
+          key={`${item.productId}:${item.variantId ?? ""}`}
+          className={`flex items-center gap-3 py-4${animateItems ? " theme-cart-item-in" : ""}`}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.thumbnail} alt={item.name} className="size-14 rounded-lg object-cover bg-black/5 shrink-0" />
           <div className="flex-1 min-w-0">

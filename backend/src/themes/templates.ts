@@ -276,7 +276,7 @@ const market: ThemeConfig = (() => {
   g.typography.h6.case = 'uppercase';
   g.radius = { preset: 'rounded' };
   g.density = { preset: 'compact' };
-  g.motion = { intensity: 'standard', speed: 1.1, easing: 'snappy' };
+  g.motion = { intensity: 'standard', speed: 1.1, easing: 'snappy', scrollProgressBar: true }; // scrollProgressBar: §8.13.C item 14
   g.animations.cardHoverEffect = 'quick-add-slide';
   g.animations.imageLoad = 'fade';
   g.animations.addToCart = false;
@@ -302,6 +302,9 @@ const market: ThemeConfig = (() => {
   g.buttons.primary.pressEffect = true;
   g.buttons.secondary.hoverEffect = 'border-fill'; // §8.13.C item 2 (the view_all_button, now a real consumer)
   g.floatingElements = { whatsapp: { enabled: false, position: 'bottom_right' }, customButtons: [], backToTop: { enabled: true } }; // §8.13.C item 6
+  g.drawers.animation = 'slide-fade'; // §8.13.C item 13
+  g.cart.itemAnimation = true; // §8.13.C item 13
+  g.cart.subtotalAnimation = 'count'; // §8.13.C item 13
 
   // C1/C2 re-author — Market's deferred header preset + mobileNav, closed
   // out. "Contact-bar + centered nav": a slim contact row, logo/icons on
@@ -625,17 +628,18 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           transparentOnHero §8.7 item 2; icons.corners 'sharp' §8.7 item 4;
 //           newsletter successAnimation §8.7 item 5; motion.smoothScroll
 //           §8.13.C item 8; hero kenBurns §8.13.C item 10 — 2026-09-05..06)
-// market:   fly-to-cart; drawers.animation 'slide-fade'; cart.itemAnimation +
-//           subtotalAnimation 'count'; inputFields.focusAnimation
-//           'float-label'; motion.scrollProgressBar; product_tabs section
-//           (needs real collectionIds); product_vendor / product_stock card
-//           sub-blocks (header scrollBehavior 'shrink' §8.7 item 2; trust_bar
-//           rating count-up §8.7 item 3; newsletter successAnimation §8.7
-//           item 5; badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
-//           buttons.secondary via the view_all_button + hoverEffect
-//           'border-fill' §8.13.C item 2; productCards.wishlistAnimation
-//           'pop' §8.13.C item 4; floatingElements.backToTop §8.13.C item 6;
-//           hero indicatorStyle 'progress' §8.13.C item 11 — 2026-09-05..06)
+// market:   fly-to-cart; inputFields.focusAnimation 'float-label';
+//           product_tabs section (needs real collectionIds); product_vendor /
+//           product_stock card sub-blocks (header scrollBehavior 'shrink'
+//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
+//           successAnimation §8.7 item 5; badges.style 'tag' +
+//           entranceAnimation §8.13.C items 1/5; buttons.secondary via the
+//           view_all_button + hoverEffect 'border-fill' §8.13.C item 2;
+//           productCards.wishlistAnimation 'pop' §8.13.C item 4;
+//           floatingElements.backToTop §8.13.C item 6; hero indicatorStyle
+//           'progress' §8.13.C item 11; drawers.animation 'slide-fade' +
+//           cart.itemAnimation + subtotalAnimation 'count' §8.13.C item 13;
+//           motion.scrollProgressBar §8.13.C item 14 — 2026-09-05..06)
 // bloom:    hero parallax + decorativeParallax floating shapes;
 //           buttons.pillCornerRadius pills; section separators; product_tabs
 //           section; announcement_bar marquee; the contrasting yellow badge

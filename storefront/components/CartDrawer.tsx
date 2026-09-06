@@ -6,17 +6,43 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { storeButtonClassName } from "@/lib/button-style";
+import { useAnimatedNumber } from "@/lib/use-animated-number";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { iconStyleProps } from "@/lib/icon-style";
 import CartLineItems from "@/components/CartLineItems";
+
+// §8.13.C item 13 — drawers.animation open transitions. `slide` (and absent)
+// is today's exact treatment; the others swap which classes carry the
+// closed/open state. transitionDuration comes from --motion-duration-base as
+// before (so the blanket reduced-motion rule still zeroes it).
+const DRAWER_MOTION: Record<string, { transition: string; closed: string; open: string }> = {
+  slide: { transition: "transition-transform", closed: "translate-x-full", open: "translate-x-0" },
+  "slide-fade": {
+    transition: "transition-[transform,opacity]",
+    closed: "translate-x-full opacity-0",
+    open: "translate-x-0 opacity-100",
+  },
+  scale: {
+    transition: "origin-right transition-[transform,opacity]",
+    closed: "scale-95 opacity-0 pointer-events-none",
+    open: "scale-100 opacity-100",
+  },
+  none: { transition: "", closed: "translate-x-full", open: "translate-x-0" },
+};
 
 // The "drawer" cart layout preset — same items/subtotal/checkout affordance
 // as the full-page cart, in an overlay instead of a navigation. Only
 // mounted at all when theme.cartLayout === "drawer" (see ShopLayoutClient).
 export default function CartDrawer() {
-  const { shop, shopBasePath } = useShop();
+  const { shop, shopBasePath, themeConfig } = useShop();
   const { items, subtotal } = useCart();
   const { open, closeDrawer } = useCartDrawer();
+
+  const subtotalAnim = themeConfig?.globalSettings.cart?.subtotalAnimation;
+  const countedSubtotal = useAnimatedNumber(subtotal, subtotalAnim === "count");
+  const shownSubtotal = subtotalAnim === "count" ? countedSubtotal : subtotal;
+
+  const motion = DRAWER_MOTION[themeConfig?.globalSettings.drawers?.animation ?? "slide"] ?? DRAWER_MOTION.slide;
 
   return (
     <>
@@ -26,8 +52,8 @@ export default function CartDrawer() {
         aria-hidden={!open}
       />
       <div
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-header text-header-fg shadow-2xl flex flex-col transition-transform ${
-          open ? "translate-x-0" : "translate-x-full"
+        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-header text-header-fg shadow-2xl flex flex-col ${motion.transition} ${
+          open ? motion.open : motion.closed
         }`}
         style={{ transitionDuration: "var(--motion-duration-base, 300ms)" }}
         role="dialog"
@@ -56,8 +82,11 @@ export default function CartDrawer() {
             <div className="border-t border-stroke px-4 py-4 space-y-3 shrink-0">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-500">Subtotal</span>
-                <span className="font-medium">
-                  {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+                <span
+                  key={subtotalAnim === "flash" ? Math.round(subtotal * 100) : undefined}
+                  className={`font-medium${subtotalAnim === "flash" ? " theme-cart-subtotal-flash" : ""}`}
+                >
+                  {shownSubtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
               <Link
