@@ -12,6 +12,7 @@ function ButtonStyleFields({
   value,
   onChange,
   showEffects,
+  showPill,
 }: {
   label: string;
   value: ButtonStyleSettings;
@@ -20,6 +21,8 @@ function ButtonStyleFields({
   // both variants now: Primary (Hero CTA, Newsletter submit) and Secondary
   // (FeaturedCollections' view_all_button when set to "Secondary button").
   showEffects?: boolean;
+  // §8.13.C item 9 — the `pill` flag only exists for the primary button.
+  showPill?: boolean;
 }) {
   return (
     <details className="rounded-lg border border-black/10 p-3 dark:border-white/10" open>
@@ -43,6 +46,17 @@ function ButtonStyleFields({
           ]}
           onChange={(v) => onChange({ case: v })}
         />
+        {showPill && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">
+              Pill shape
+              <span className="block text-xs font-normal text-zinc-400">
+                Uses the pill corner radius below instead of the corner radius above.
+              </span>
+            </span>
+            <Toggle checked={!!value.pill} onChange={(v) => onChange({ pill: v || undefined })} />
+          </div>
+        )}
         {showEffects && (
           <>
             <Select
@@ -80,6 +94,7 @@ export default function ButtonsSettings({ editor }: { editor: ThemeEditorState }
         value={buttons.primary}
         onChange={(patch) => update({ primary: { ...buttons.primary, ...patch } })}
         showEffects
+        showPill
       />
       <ButtonStyleFields label="Secondary button" value={buttons.secondary} onChange={(patch) => update({ secondary: { ...buttons.secondary, ...patch } })} showEffects />
       <Slider label="Pill button corner radius" min={0} max={9999} suffix="px" value={buttons.pillCornerRadius} onChange={(v) => update({ pillCornerRadius: v })} />

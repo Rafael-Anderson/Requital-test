@@ -62,10 +62,24 @@ describe("ButtonsSettings — hoverEffect/pressEffect (§8.7 item 1 / §8.13.C i
     const user = userEvent.setup();
     const editor = makeEditor();
     render(<ButtonsSettings editor={editor} />);
-    await user.click(within(fieldset("Primary button")).getByRole("switch"));
+    const primary = within(fieldset("Primary button"));
+    await user.click(primary.getByText("Press effect").closest("div")!.querySelector('[role="switch"]')!);
     expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith(
       "buttons",
       expect.objectContaining({ primary: expect.objectContaining({ pressEffect: true }) }),
+    );
+  });
+
+  it("toggling Primary Pill shape merges { pill: true } (§8.13.C item 9), and it is absent from Secondary", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor();
+    render(<ButtonsSettings editor={editor} />);
+    expect(within(fieldset("Secondary button")).queryByText("Pill shape")).toBeNull();
+    const primary = within(fieldset("Primary button"));
+    await user.click(primary.getByText("Pill shape").closest("div")!.querySelector('[role="switch"]')!);
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith(
+      "buttons",
+      expect.objectContaining({ primary: expect.objectContaining({ pill: true }) }),
     );
   });
 });
