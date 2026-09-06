@@ -256,7 +256,7 @@ function GridProductCard({
               other effect (see globals.css). */}
           <span className="theme-product-hover-overlay absolute inset-0 pointer-events-none" aria-hidden />
           {badge && (
-            <span className={`absolute ${badge.positionClass} px-2 py-0.5 text-xs font-medium`} style={badge.style}>
+            <span className={badge.className} style={badge.style}>
               {badge.label}
             </span>
           )}
