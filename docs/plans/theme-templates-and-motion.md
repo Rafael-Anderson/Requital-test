@@ -1231,9 +1231,12 @@ fully parallel and gated on its own glyph-list sign-off.
 items 3 (crossfade only — magic-line/height-animate deferred) + 4 (§8.16
 wishlist pop/burst) + §8.13.C items 6 + 11 + 12 (§8.17 backToTop re-author +
 hero kenBurns + hero indicatorStyle: progress) + §8.13.C items 13 + 14 (§8.18
-drawers.animation + cart.itemAnimation/subtotalAnimation + scrollProgressBar)**,
-all built (items 3/4 in batch PR A, 6/11/12 in PR B, 13/14 in PR C, pending
-merge). The rest of §8.13.C (items 7-10, 15+) and
+drawers.animation + cart.itemAnimation/subtotalAnimation + scrollProgressBar)
++ §8.13.C items 7 + 10 (§8.19 inputFields.focusAnimation float-label +
+buttons.primary.pill)**, all built (batch PRs A = items 3/4, B = 6/11/12,
+C = 13/14, D = 7/10; pending merge). §8.13.C item 9 (section separators)
+stays skipped (0/4 concrete — no template can act on it). The rest of
+§8.13.C (items 15+) and
 D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
 remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
 (Flow A) + batch 1 + C + §8.8–§8.15 already deliver four visibly distinct
@@ -2557,10 +2560,16 @@ template-specific. `customCursor` — 0/4, no template wants it.
    true } }` on both templates (full assignment, not a property write — the
    category is optional in the type). `BackToTopButton.tsx` already consumes
    it (C1/C2). Atelier + Heritage deliberately stay without it.
-7. **`inputFields.focusAnimation` — 1/4** (Market `float-label`). Effort
-   **S**. Roughly unchanged — a CSS-only float-label on the newsletter +
-   checkout inputs; the dead `inputFields` category's only assigned
-   consumer.
+7. **`inputFields.focusAnimation` — BUILT §8.19.** 1/4 (Market
+   `float-label`). `NewsletterSection` wraps its email input in a
+   `.theme-float-label` `<label>` (CSS-only: `placeholder=" "` +
+   `:placeholder-shown`/`:focus` float the span to the border) when
+   `globalSettings.inputFields.focusAnimation === 'float-label'`; any other
+   value (incl. absent) ⇒ today's bare placeholder input. `'border'`/`'glow'`
+   reserved, unbuilt. Checkout inputs are not theme-section-driven, left as a
+   follow-up — the newsletter email is the only input a theme section
+   renders (this was the "dead `inputFields` category"'s only assigned
+   consumer).
 8. **`motion.smoothScroll` — BUILT §8.14** (folded into item 1). Confirmed
    XS: a new `applyScrollBehavior()` one-liner in `lib/motion.ts`, called
    from `applyMotionOverrides`. `!reducedMotion` gating turned out
@@ -2570,11 +2579,18 @@ template-specific. `customCursor` — 0/4, no template wants it.
 9. **Section separators (wave/angle SVG edges) — 1/4** (Bloom). Effort
    **S–M**. Roughly unchanged (decorative inline SVG between sections,
    `section.settings.separator`).
-10. **`buttons.pillCornerRadius` — 1/4** (Bloom). Effort **S**. **Cheaper
-    now** — `resolveThemeRadius` / the `--theme-radius` plumbing from B1
-    already exists; this is a `radius.applyToButtons`-style opt-in that
-    forces the pill value. Could ride with item 2 (both touch button
-    styling).
+10. **`buttons.pillCornerRadius` → `buttons.primary.pill` — BUILT §8.19.**
+    1/4 (Bloom). Chosen shape (asked + answered): a new
+    `buttons.primary.pill?: boolean` flag. When set, `themeButtonBaseStyle`
+    reads `--theme-button-pill-radius` (= `buttons.pillCornerRadius`, default
+    9999) as a fallback *between* the legacy `--theme-btn-primary-radius` and
+    `--theme-radius` — so `--theme-radius` and the section image containers
+    that share it are untouched, zero regression for any existing shop
+    (including one with a hand-set `cornerRadius`). `pill` unset ⇒ the var is
+    removed on `:root` (SPA-leak clear) ⇒ byte-identical to today. Leaves
+    `pillCornerRadius`'s name slightly redundant with the new boolean (field
+    = the value, boolean = whether it's used) — minor schema untidiness, not
+    worth touching the existing field.
 11. **Hero `kenBurns` — BUILT §8.17.** 1/4 (Atelier). `hero.settings.kenBurns?`
     ⇒ `.theme-ken-burns` on the active slide `<img>` (`scale(1)→1.08`,
     `alternate infinite`, `animation-duration` = the slide duration set
@@ -3091,6 +3107,59 @@ class (count mode). Zero console errors. Scratch theme + spec deleted;
 
 ---
 
+### 8.19 `inputFields.focusAnimation` + `buttons.primary.pill` — BUILT (2026-09-06, `feat/input-focus-pill-buttons`)
+
+§8.13.C items 7 + 9 (batch PR D). Both are new optional keys on existing
+type interfaces, mirrored across all three files.
+
+**Item 7 — `inputFields.focusAnimation: 'none' | 'border' | 'glow' |
+'float-label'`.** `NewsletterSection.tsx` — its email input is the only
+input a theme section renders. When `focusAnimation === 'float-label'` the
+input is wrapped in a `<label class="theme-float-label">` with a
+`placeholder=" "` and a `<span>Email address</span>`; the CSS floats the
+span to the top border via `:focus` / `:not(:placeholder-shown)` (the
+transition reads `--motion-duration-fast`, blanket reduced-motion rule
+zeroes it). Any other value (incl. absent) ⇒ the **exact prior bare
+`placeholder="you@example.com"` input**. `'border'`/`'glow'` reserved,
+unbuilt. Market. Checkout inputs (not theme-driven) left as a follow-up.
+Admin: "Focus animation" `<Select>` (None / Floating label) in
+`InputFieldsSettings.tsx`.
+
+**Item 9 — `buttons.primary.pill?: boolean`** (chosen over widening
+`--theme-radius`; asked + answered). When set, `applyThemeConfigOverrides`
+writes `--theme-button-pill-radius` = `buttons.pillCornerRadius` (default
+9999) and **removes it** otherwise (SPA-leak clear, in the always-run
+`g.buttons.primary` block). `themeButtonBaseStyle`'s `borderRadius` becomes
+`var(--theme-btn-primary-radius, var(--theme-button-pill-radius, var(--theme-radius, 8px)))`
+— the pill var sits between the legacy Layout-mode shape var (still wins)
+and `--theme-radius` (untouched, so the Featured/ImageText/ProductGrid image
+containers that share it, and the newsletter input, are unaffected). `pill`
+unset ⇒ var absent ⇒ byte-identical, including for a shop with a hand-set
+`cornerRadius`. Bloom sets `pill: true` (its earlier
+"can't set cornerRadius: 9999, it'd ellipse the tiles" note is now
+resolved). Note: `pillCornerRadius`'s name is now slightly redundant with
+the boolean (field = value, boolean = whether it's used) — accepted minor
+untidiness, not worth touching the existing field. Admin: "Pill shape"
+`<Toggle>` on the Primary button only (`showPill` prop) in
+`ButtonsSettings.tsx`.
+
+**No-op proof:** `focusAnimation` absent ⇒ `NewsletterSection` renders the
+untouched `<input>` branch; `pill` absent ⇒ `--theme-button-pill-radius`
+removed, `themeButtonBaseStyle` resolves to `var(--theme-radius, 8px)` as
+before. One test updated (`theme-element-style.test.ts`'s
+`themeButtonBaseStyle` borderRadius string). No `DEFAULT_THEME_CONFIG`
+change, no validation change.
+
+**Scratch-shop pass (dev seed shop, puppeteer, DOM + computed style,
+reduced-motion pass).** [pending — run before merge]
+
+**Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 543/543 (+`NewsletterSection` 3, `theme-element-style`
+string updated) + lint +0 (33); admin `tsc` + `build` + `vitest`
+`ButtonsSettings` +1 / `InputFieldsSettings` 2 + lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3196,10 +3265,10 @@ avoids retouching every token later. Full table in §8.1.
 | `animations.pageTransition` | route-content fade (F) | F |
 | `animations.addToCart` | fly-to-cart (F) | F |
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
-| `buttons.pillCornerRadius` | ✅ the `radius` scale half is done (B1); Bloom's pill buttons themselves still open (D) | B1 ✅ / D open |
+| `buttons.pillCornerRadius` | ✅ B1 radius scale + §8.19 `buttons.primary.pill` flag → `--theme-button-pill-radius` (Bloom); the field itself now has a live consumer | ✅ B1 / §8.19 |
 | `drawers.schemeId` + `drawers.*` | ✅ `drawers.animation` (§8.18, cart-drawer open transition); `schemeId`/`bordersStyle`/`dropShadow` cart-drawer theming still open (F) | ✅ §8.18 / F open |
 | `swatches.*` | the `product_swatches` card sub-block (F) | F |
-| `inputFields.*` | `inputFields.focusAnimation` + radius/border tokens on the newsletter input (D) | D |
+| `inputFields.*` | ✅ `inputFields.focusAnimation: 'float-label'` on the newsletter input (§8.19); `borderThickness`/`textPreset` on other inputs still open | ✅ §8.19 / D open |
 | `prices.*` (beyond currency) | ✅ `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` | ✅ B1 |
 | `search.*` (corner radius / titleCase) | ✅ radius scale half done (B1); search-results theming itself still open | B1 ✅ / D open |
 | `cart.*` (media fields) | ✅ `cart.itemAnimation` / `subtotalAnimation` (§8.18); media/scheme fields + checkout-behaviour flags still out of scope | ✅ §8.18 / F open |
