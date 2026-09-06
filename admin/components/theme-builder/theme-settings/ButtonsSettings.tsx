@@ -16,11 +16,9 @@ function ButtonStyleFields({
   label: string;
   value: ButtonStyleSettings;
   onChange: (patch: Partial<ButtonStyleSettings>) => void;
-  // §8.7 item 1 — hoverEffect/pressEffect only make sense to expose where a
-  // real render path exists (Hero CTA, Newsletter submit) — today that's
-  // Primary only; Secondary renders nowhere yet (see the plan doc's §9.3
-  // dead-control table), so surfacing these controls there would just be a
-  // new unused setting, not a fix.
+  // §8.7 item 1 / §8.13.C item 2 — hoverEffect/pressEffect are exposed for
+  // both variants now: Primary (Hero CTA, Newsletter submit) and Secondary
+  // (FeaturedCollections' view_all_button when set to "Secondary button").
   showEffects?: boolean;
 }) {
   return (
@@ -83,7 +81,7 @@ export default function ButtonsSettings({ editor }: { editor: ThemeEditorState }
         onChange={(patch) => update({ primary: { ...buttons.primary, ...patch } })}
         showEffects
       />
-      <ButtonStyleFields label="Secondary button" value={buttons.secondary} onChange={(patch) => update({ secondary: { ...buttons.secondary, ...patch } })} />
+      <ButtonStyleFields label="Secondary button" value={buttons.secondary} onChange={(patch) => update({ secondary: { ...buttons.secondary, ...patch } })} showEffects />
       <Slider label="Pill button corner radius" min={0} max={9999} suffix="px" value={buttons.pillCornerRadius} onChange={(v) => update({ pillCornerRadius: v })} />
     </div>
   );

@@ -100,13 +100,15 @@ function hero(order: number, heading: string, ctaLabel: string, opts: SectionOpt
   });
 }
 
-function featuredCollections(order: number, title: string, opts: SectionOpts = {}): ThemeSection {
+function featuredCollections(order: number, title: string, opts: SectionOpts = {}, viewAllAsButton = false): ThemeSection {
   return section('featured_collections', order, {
     ...opts,
     blocks: [
       block('collection_header', {}, [
         block('collection_title', { text: title }),
-        block('view_all_button', { label: 'View all' }),
+        // §8.13.C item 2 — style: 'button' opts the "View all" into the
+        // outline secondary button; absent ⇒ today's plain accent link.
+        block('view_all_button', { label: 'View all', ...(viewAllAsButton ? { style: 'button' } : {}) }),
       ]),
     ],
   });
@@ -297,6 +299,7 @@ const market: ThemeConfig = (() => {
   // variety across every non-'none' enum value.
   g.buttons.primary.hoverEffect = 'icon-nudge';
   g.buttons.primary.pressEffect = true;
+  g.buttons.secondary.hoverEffect = 'border-fill'; // §8.13.C item 2 (the view_all_button, now a real consumer)
 
   // C1/C2 re-author — Market's deferred header preset + mobileNav, closed
   // out. "Contact-bar + centered nav": a slim contact row, logo/icons on
@@ -339,7 +342,7 @@ const market: ThemeConfig = (() => {
       { rating: 4.8, label: '2,000+ reviews', countUp: true },
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
-    featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }),
+    featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
     productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }),
     brands(5, { settings: { scrolling: true } }),
     newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.', { settings: { successAnimation: true } }), // §8.7 item 5
@@ -463,6 +466,7 @@ const heritage: ThemeConfig = (() => {
   // an explicit 'none' string: matches Heritage's own "notably does NOT
   // need" restraint (§6.4), and demonstrates that unset and 'none' render
   // identically (resolveButtonHoverClass returns "" for both).
+  g.buttons.secondary.pressEffect = true; // §8.13.C item 2 — Heritage's §6.4: "button secondary (outline) + pressEffect"; no hoverEffect (calm)
 
   // C1/C2 re-author — closes out Heritage's header/footer/mobileNav
   // deferred items (Heritage was flagged as "notably does NOT need" most of
@@ -513,7 +517,7 @@ const heritage: ThemeConfig = (() => {
       { icon: 'truck', text: 'Nationwide delivery' },
       { icon: 'check', text: 'Corporate accounts welcome' },
     ], { rating: 4.9, label: 'Trusted by thousands' }, { entrance: 'fade-in' }),
-    featuredCollections(3, 'Our collections', { entrance: 'fade-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: false } }),
+    featuredCollections(3, 'Our collections', { entrance: 'fade-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: false } }, true), // §8.13.C item 2
     productGrid(4, { settings: { columns: 3, cardStyle: 'bordered', imageAspect: 'landscape' } }),
     imageText(5, 'A family business for four decades, serving homes, hotels, and offices across the country.', { entrance: 'none', schemeId: 'scheme-2' }),
     richText(6, '<p>Sympathy tributes, corporate contracts, and weekly office flowers. Speak to our team for bespoke arrangements.</p>', { entrance: 'fade-in' }),
@@ -622,11 +626,12 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           'float-label'; motion.scrollProgressBar; product_tabs section
 //           (needs real collectionIds); hero indicatorStyle 'progress';
 //           productCards.wishlistAnimation 'pop'; product_vendor /
-//           product_stock card sub-blocks; buttons.secondary rendered
-//           variant + hoverEffect 'border-fill' (header scrollBehavior
-//           'shrink' §8.7 item 2; trust_bar rating count-up §8.7 item 3;
-//           newsletter successAnimation §8.7 item 5; badges.style 'tag' +
-//           entranceAnimation §8.13.C items 1/5 — 2026-09-05..06)
+//           product_stock card sub-blocks (header scrollBehavior 'shrink'
+//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
+//           successAnimation §8.7 item 5; badges.style 'tag' +
+//           entranceAnimation §8.13.C items 1/5; buttons.secondary via the
+//           view_all_button + hoverEffect 'border-fill' §8.13.C item 2 —
+//           2026-09-05..06)
 // bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
 //           shapes; buttons.pillCornerRadius pills; section separators;
 //           product_tabs section; announcement_bar marquee; the contrasting
@@ -635,7 +640,8 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           'hide-on-scroll' §8.7 item 2; newsletter successAnimation §8.7
 //           item 5; badges.style 'circle' + entranceAnimation §8.13.C items
 //           1/5 — 2026-09-05..06)
-// heritage: buttons.secondary rendered as outline CTAs (badges.style 'ribbon'
-//           §8.13.C item 1, 2026-09-06; scrollBehavior deliberately left
-//           unset — not named in Heritage's own deferred note, matching its
-//           "notably does NOT need" restraint)
+// heritage: (badges.style 'ribbon' §8.13.C item 1; buttons.secondary via
+//           the view_all_button, outline + pressEffect §8.13.C item 2 —
+//           2026-09-06; scrollBehavior deliberately left unset — not named
+//           in Heritage's own deferred note, matching its "notably does NOT
+//           need" restraint)
