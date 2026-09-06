@@ -1230,9 +1230,10 @@ fully parallel and gated on its own glyph-list sign-off.
 + §8.13.C item 2 (§8.15 buttons.secondary via view_all_button) + §8.13.C
 items 3 (crossfade only — magic-line/height-animate deferred) + 4 (§8.16
 wishlist pop/burst) + §8.13.C items 6 + 11 + 12 (§8.17 backToTop re-author +
-hero kenBurns + hero indicatorStyle: progress)**, all built (items 3/4 in
-batch PR A, items 6/11/12 in batch PR B, pending merge). The rest of §8.13.C
-(items 7-10, 13+) and
+hero kenBurns + hero indicatorStyle: progress) + §8.13.C items 13 + 14 (§8.18
+drawers.animation + cart.itemAnimation/subtotalAnimation + scrollProgressBar)**,
+all built (items 3/4 in batch PR A, 6/11/12 in PR B, 13/14 in PR C, pending
+merge). The rest of §8.13.C (items 7-10, 15+) and
 D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
 remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
 (Flow A) + batch 1 + C + §8.8–§8.15 already deliver four visibly distinct
@@ -2585,12 +2586,20 @@ template-specific. `customCursor` — 0/4, no template wants it.
     reduced motion). `dots`/absent ⇒ today's `showSlideIndicators` dots;
     `bars`/`fraction` reserved, unbuilt (fall back to dots).
 13. **`drawers.animation` + `cart.itemAnimation`/`subtotalAnimation` —
-    1/4** (Market). Effort **S–M**. `subtotalAnimation: count` is
-    **much cheaper now** — `useCountUp` exists (§8.10), this is a second
-    consumer. Drawer easing is a `--motion-*`-driven transition swap.
-14. **`scrollProgressBar` — 1/4** (Market). Effort **S** — `useScrollValue`
-    now has real consumers (header scrollBehavior, BackToTop); a top-of-
-    page `scaleX` bar driven by `y / scrollHeight` is trivial.
+    BUILT §8.18.** 1/4 (Market). `drawers.animation: 'slide' | 'slide-fade'
+    | 'scale' | 'none'` swaps which closed/open classes the cart-drawer
+    panel carries (`slide`/absent = today's `translate-x`); `cart.itemAnimation`
+    fades a newly-added `CartLineItems` row in (first-seen key only, never
+    the initial mount); `cart.subtotalAnimation: 'count'` tweens the subtotal
+    via a new `lib/use-animated-number.ts` (from→to, distinct from
+    `useCountUp`'s 0→target), `'flash'` is a keyed one-shot highlight.
+    `'none'`/absent on any of them ⇒ today's instant render.
+14. **`scrollProgressBar` — BUILT §8.18.** 1/4 (Market). New
+    `ScrollProgressBar.tsx` (mounted in `ShopLayoutClient`), gated on
+    `globalSettings.motion.scrollProgressBar`; a fixed top bar whose
+    `scaleX` fill = `scrollY / (scrollHeight - innerHeight)` via
+    `useScrollValue`. Not a motion flourish (no transition, just tracks) so
+    it stays on under reduced motion.
 15. **Hero `parallax` + `decorativeParallax` — 1/4** (Bloom). Effort
     **M** / **M–L**. `useScrollValue` helps the parallax math;
     `decorativeParallax` (floating shapes) stays Bloom's signature
@@ -2999,6 +3008,89 @@ the *dev* CSS after a consecutive `globals.css` edit while present in every
 
 ---
 
+### 8.18 `drawers.animation` + `cart.itemAnimation`/`subtotalAnimation` + `scrollProgressBar` — BUILT (2026-09-06, `feat/cart-drawer-scrollbar`)
+
+§8.13.C items 13 + 14 (batch PR C), all Market. Three new optional keys on
+existing categories (`DrawerSettings.animation`, `CartSettings.itemAnimation`
+/ `subtotalAnimation`) + wiring for the pre-existing `MotionSettings.scrollProgressBar`.
+Mirrored across all three type files.
+
+**Item 13a — `drawers.animation: 'slide' | 'slide-fade' | 'scale' | 'none'`.**
+`CartDrawer.tsx`'s `DRAWER_MOTION` table maps the value to
+`{ transition, closed, open }` class sets. `slide` (and absent) is
+**byte-identical to today** — `transition-transform` + `translate-x-full` /
+`translate-x-0`. `slide-fade` adds an opacity transition; `scale` replaces
+the translate with `origin-right scale-95↔scale-100` + opacity (and
+`pointer-events-none` while closed, since it stays on-screen); `none` drops
+the transition class. `transitionDuration` still reads `--motion-duration-base`
+so the blanket reduced-motion rule zeroes it.
+
+**Item 13b — `cart.itemAnimation: boolean`.** `CartLineItems.tsx` puts a
+mount-triggered one-shot `.theme-cart-item-in` (fade + 6px slide,
+`--motion-duration-base`, no `forwards`) on every row `<div>` when the
+setting is on. Since the drawer stays mounted and rows are keyed by
+product/variant, a newly-added row animates on its own mount and a
+quantity bump never replays it; the whole list fades in once on the first
+mount of a cart page (a reasonable entrance). Setting off ⇒ **no class, no
+markup change**. (An earlier draft tracked seen keys in a `useRef<Set>` read
+during render — that trips the `react-hooks/refs` rule; the plain per-row
+class is simpler and lint-clean.)
+
+**Item 13c — `cart.subtotalAnimation: 'none' | 'flash' | 'count'`.** New
+`lib/use-animated-number.ts` — `useAnimatedNumber(value, enabled)` tweens
+from the currently-shown number to a new `value` on every change (a
+`displayRef` mirrors the on-screen value so a mid-tween change animates from
+where it is). Distinct from `useCountUp` (0→target on an external trigger,
+only dips once) — this tracks a live up-and-down number. Returns `value`
+verbatim on first render, when `enabled` is false, and under reduced motion;
+every `setState` is inside the rAF callback. `'count'` uses it; `'flash'` is
+a keyed one-shot `.theme-cart-subtotal-flash` highlight; `'none'`/absent ⇒
+plain `subtotal.toFixed(2)`.
+
+**Item 14 — `motion.scrollProgressBar: boolean`.** New `ScrollProgressBar.tsx`
+mounted in `ShopLayoutClient` (before `<Header>`), returns `null` unless
+`globalSettings.motion.scrollProgressBar`. A `fixed inset-x-0 top-0 h-0.5`
+bar; the inner `bg-accent origin-left` fill's `transform: scaleX()` =
+`scrollY / (scrollHeight - innerHeight)`, clamped, via the shared
+`useScrollValue`. Deliberately no transition (it's a position indicator, not
+a flourish) so it's correct and unaffected under reduced motion.
+
+**No-op proof:** every new key absent ⇒ the exact prior branch —
+`DRAWER_MOTION.slide` = today's classes; `itemAnimation` off ⇒ untouched row
+markup; `useAnimatedNumber(subtotal, false)` returns `subtotal`;
+`ScrollProgressBar` renders `null`. No new CSS var, no `DEFAULT_THEME_CONFIG`
+change, no validation change (`cart`/`drawers` fields shallow, `motion` is
+`?:`).
+
+Admin: "Cart drawer open animation" `<Select>` in `DrawersSettings.tsx`;
+"Animate newly added items" `<Toggle>` + "Subtotal change animation"
+`<Select>` in `CartSettings.tsx`; "Scroll progress bar" `<Toggle>` in
+`MotionSettings.tsx` (next to the §8.13.C item 8 smooth-scroll toggle,
+likewise not gated on `intensity`). Every "off" value writes `undefined`.
+
+**Scratch-shop pass (dev seed shop, puppeteer, DOM + computed style,
+reduced-motion pass).** Market published onto shop 1 with `theme.cartLayout`
+flipped to `drawer` and a 1-item cart seeded via `localStorage`.
+`scrollProgressBar`: the `.origin-left` fill's `transform` is `scaleX(0)` at
+the top and `scaleX(1)` scrolled to the bottom, in both motion states.
+`drawers.animation: 'slide-fade'`: the open panel carries `translate-x-0` +
+`opacity-100`, computed `transitionDuration: 0.352s` (`--motion-duration-base`
+× Market's `speed: 1.1`) and `~1e-05s` under `prefers-reduced-motion: reduce`.
+`cart.itemAnimation`: the drawer row carries `.theme-cart-item-in`.
+`cart.subtotalAnimation: 'count'`: bumping the line quantity 1→2 (subtotal
+120→240) sampled a smooth eased tween — `120.00 → 152.78 → 179.01 → 199.37 →
+214.61 → 225.46 → 232.67 → 236.98` — and no `.theme-cart-subtotal-flash`
+class (count mode). Zero console errors. Scratch theme + spec deleted;
+`cartLayout` restored to `full_page`. (Same turbopack dev-HMR staleness as
+§8.16/§8.17 — `.next` wipe + restart before the pass.)
+
+**Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 540/540 (+`CartDrawer` 5, `ScrollProgressBar` 3,
+`use-animated-number` 3) + lint +0 (33); admin `tsc` + `build` + `vitest`
+`MotionSettings` +2 / `CartDrawerAnimation` 3 + lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3105,12 +3197,12 @@ avoids retouching every token later. Full table in §8.1.
 | `animations.addToCart` | fly-to-cart (F) | F |
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
 | `buttons.pillCornerRadius` | ✅ the `radius` scale half is done (B1); Bloom's pill buttons themselves still open (D) | B1 ✅ / D open |
-| `drawers.schemeId` + `drawers.*` | `drawers.animation` + cart-drawer theming (F) | F |
+| `drawers.schemeId` + `drawers.*` | ✅ `drawers.animation` (§8.18, cart-drawer open transition); `schemeId`/`bordersStyle`/`dropShadow` cart-drawer theming still open (F) | ✅ §8.18 / F open |
 | `swatches.*` | the `product_swatches` card sub-block (F) | F |
 | `inputFields.*` | `inputFields.focusAnimation` + radius/border tokens on the newsletter input (D) | D |
 | `prices.*` (beyond currency) | ✅ `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` | ✅ B1 |
 | `search.*` (corner radius / titleCase) | ✅ radius scale half done (B1); search-results theming itself still open | B1 ✅ / D open |
-| `cart.*` (media fields) | drawer theming (F); the boolean feature-flags stay checkout-behaviour, out of scope — leave flagged | F |
+| `cart.*` (media fields) | ✅ `cart.itemAnimation` / `subtotalAnimation` (§8.18); media/scheme fields + checkout-behaviour flags still out of scope | ✅ §8.18 / F open |
 | Typography paragraph/heading `case`/`letterSpacing` | ✅ reachable via one `typography.pairing`/`scale` control | ✅ B1 |
 | `secondaryButtonLabel` (scheme) | consumed when a secondary button variant renders (D) | D |
 | `header.settings.rows` / footer named layout | ✅ named header/footer presets that seed both | ✅ C1 |
@@ -3128,6 +3220,8 @@ avoids retouching every token later. Full table in §8.1.
 | `product_tabs` tab-switch polish | ◑ crossfade only (`.theme-tab-panel` keyed remount); magic-line + height-animate deferred until a template ships a real `product_tabs` section (blocked on hardcodable `collectionIds`) | ◑ §8.16 |
 | hero `kenBurns` / `indicatorStyle: progress` (new keys) | ✅ `.theme-ken-burns` on the active slide (Atelier) / `.theme-hero-progress` bar replacing dots (Market) | ✅ §8.17 |
 | `floatingElements.backToTop` enabled on Market + Bloom | ✅ templates re-author (capability was already built C1/C2) | ✅ §8.17 |
+| `motion.scrollProgressBar` (typed since Phase A, no consumer) | ✅ `ScrollProgressBar.tsx` in `ShopLayoutClient` (Market) | ✅ §8.18 |
+| `cart.itemAnimation` / `cart.subtotalAnimation` / `drawers.animation` (new keys) | ✅ `.theme-cart-item-in` / `useAnimatedNumber` + `.theme-cart-subtotal-flash` / `CartDrawer` motion table (Market) | ✅ §8.18 |
 
 ### 9.4 Other risks
 

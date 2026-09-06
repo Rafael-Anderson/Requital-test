@@ -278,12 +278,20 @@ export interface CartSettings {
   emptyCartLink?: string;
   mediaBorderStyle: "none" | "solid";
   mediaCornerRadius: number;
+  // §8.13.C item 13 — optional. `itemAnimation` fades a newly-added cart-drawer
+  // row in; `subtotalAnimation` 'count' tweens the subtotal between values,
+  // 'flash' highlights it on change. Absent ⇒ today's instant render.
+  itemAnimation?: boolean;
+  subtotalAnimation?: "none" | "flash" | "count";
 }
 
 export interface DrawerSettings {
   schemeId: string;
   bordersStyle: "none" | "solid";
   dropShadow: boolean;
+  // §8.13.C item 13 — optional. The cart drawer's open transition. Absent /
+  // 'slide' ⇒ today's translate-x slide.
+  animation?: "slide" | "slide-fade" | "scale" | "none";
 }
 
 export interface IconSettings {

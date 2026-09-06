@@ -626,6 +626,40 @@ body {
   animation-fill-mode: both;
 }
 
+/* §8.13.C item 13 — cart.itemAnimation. A newly-added cart-drawer row fades +
+   nudges in on first appearance (CartLineItems adds the class only for a key
+   it hasn't seen, never on the initial mount). Blanket reduced-motion rule
+   neutralises it. */
+@keyframes theme-cart-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.theme-cart-item-in {
+  animation: theme-cart-item-in var(--motion-duration-base, 300ms) var(--motion-ease, ease-out);
+}
+
+/* §8.13.C item 13 — cart.subtotalAnimation: 'flash'. The subtotal <span> is
+   keyed on its value so it remounts on change and this highlight plays once.
+   ('count' is the JS tween in lib/use-animated-number.ts, not this.) */
+@keyframes theme-cart-subtotal-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.theme-cart-subtotal-flash {
+  border-radius: 0.25rem;
+  animation: theme-cart-subtotal-flash var(--motion-duration-slow, 600ms) var(--motion-ease, ease-out);
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4

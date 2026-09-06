@@ -98,6 +98,17 @@ export default function MotionSettings({ editor }: { editor: ThemeEditorState })
         </span>
         <Toggle checked={motion.smoothScroll === true} onChange={(v) => update({ smoothScroll: v || undefined })} />
       </div>
+
+      {/* §8.13.C item 14 — also independent of intensity. */}
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Scroll progress bar
+          <span className="block text-xs font-normal text-zinc-400">
+            A thin bar at the top of the page that fills as the visitor scrolls.
+          </span>
+        </span>
+        <Toggle checked={motion.scrollProgressBar === true} onChange={(v) => update({ scrollProgressBar: v || undefined })} />
+      </div>
     </div>
   );
 }

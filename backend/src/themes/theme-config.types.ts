@@ -378,12 +378,19 @@ export interface CartSettings {
   emptyCartLink?: string;
   mediaBorderStyle: 'none' | 'solid';
   mediaCornerRadius: number;
+  // §8.13.C item 13 — optional. Storefront-only render hints; absent ⇒
+  // today's instant cart-drawer render. Mirrored in the two frontend types.
+  itemAnimation?: boolean;
+  subtotalAnimation?: 'none' | 'flash' | 'count';
 }
 
 export interface DrawerSettings {
   schemeId: string;
   bordersStyle: 'none' | 'solid';
   dropShadow: boolean;
+  // §8.13.C item 13 — optional. Cart drawer open transition; absent /
+  // 'slide' ⇒ today's translate-x slide.
+  animation?: 'slide' | 'slide-fade' | 'scale' | 'none';
 }
 
 export interface IconSettings {
