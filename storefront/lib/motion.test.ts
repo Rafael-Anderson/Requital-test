@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyMotionCssVars, MOTION_CSS_VAR_NAMES, resolveMotionCssVars } from "./motion";
+import { applyMotionCssVars, applyScrollBehavior, MOTION_CSS_VAR_NAMES, resolveMotionCssVars } from "./motion";
 import type { MotionSettings } from "./theme-config-types";
 
 describe("resolveMotionCssVars", () => {
@@ -159,5 +159,25 @@ describe("applyMotionCssVars — the SPA-leak guard", () => {
     applyMotionCssVars(el.style, { intensity: "subtle" });
     expect(el.style.getPropertyValue("--motion-duration-base")).toBe("220ms"); // subtle, not 480
     expect(names(el.style).length).toBe(MOTION_CSS_VAR_NAMES.length); // no leftovers
+  });
+});
+
+describe("applyScrollBehavior (§8.13.C item 8)", () => {
+  it("sets 'smooth' when motion.smoothScroll is true", () => {
+    const el = document.createElement("div");
+    applyScrollBehavior(el.style, { smoothScroll: true });
+    expect(el.style.scrollBehavior).toBe("smooth");
+  });
+
+  it("clears (empty string ⇒ browser default) when unset, false, or motion absent", () => {
+    const el = document.createElement("div");
+    applyScrollBehavior(el.style, { smoothScroll: true });
+    applyScrollBehavior(el.style, { smoothScroll: false });
+    expect(el.style.scrollBehavior).toBe("");
+    applyScrollBehavior(el.style, { smoothScroll: true });
+    applyScrollBehavior(el.style, {});
+    expect(el.style.scrollBehavior).toBe("");
+    applyScrollBehavior(el.style, undefined);
+    expect(el.style.scrollBehavior).toBe("");
   });
 });
