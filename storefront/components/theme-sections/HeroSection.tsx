@@ -68,11 +68,18 @@ function HeroSlideshow({
   durationMs,
   transition,
   showIndicators = false,
+  kenBurns = false,
+  indicatorStyle,
 }: {
   images: HeroImage[];
   durationMs: number;
   transition: ScrollAnimation;
   showIndicators?: boolean;
+  // §8.13.C item 10 — slow zoom on the active slide. §8.13.C item 11 —
+  // 'progress' swaps the dot row for a bar that fills over slideDuration.
+  // Both absent ⇒ today's render.
+  kenBurns?: boolean;
+  indicatorStyle?: string;
 }) {
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -103,6 +110,9 @@ function HeroSlideshow({
   const active = count > 0 ? index % count : 0;
   const activeLink = images[active]?.linkUrl || null;
   const resting = transition === "none" ? { opacity: 1 } : SLIDE_RESTING[transition];
+  const kenBurnsOn = kenBurns && !reducedMotion && count > 0;
+  const showDots = count > 1 && showIndicators && (!indicatorStyle || indicatorStyle === "dots");
+  const showProgress = count > 1 && indicatorStyle === "progress" && !reducedMotion;
 
   return (
     <div
@@ -116,10 +126,13 @@ function HeroSlideshow({
           key={`${img.url}-${i}`}
           src={resolveImageUrl(img.url) ?? undefined}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full object-cover${kenBurnsOn && i === active ? " theme-ken-burns" : ""}`}
           style={{
             transition: transition === "none" ? undefined : `opacity ${SLIDE_TRANSITION}, transform ${SLIDE_TRANSITION}`,
             ...(i === active ? { opacity: 1, transform: "none" } : resting),
+            // The Ken Burns keyframe runs over the full slide duration; while
+            // it animates it overrides the inline transform above.
+            ...(kenBurnsOn && i === active ? { animationDuration: `${durationMs}ms` } : {}),
           }}
         />
       ))}
@@ -127,7 +140,7 @@ function HeroSlideshow({
       {/* Phase 4 — dot pagination (over the photo, so white/translucent is
           the universal convention, not a themeable surface). Sits above the
           hero link so a dot click never triggers the banner link. */}
-      {showIndicators && count > 1 && (
+      {showDots && (
         <div className="absolute inset-x-0 bottom-4 z-20 flex justify-center gap-2">
           {images.map((_, i) => (
             <button
@@ -139,6 +152,18 @@ function HeroSlideshow({
               className={`h-2 rounded-full transition-all ${i === active ? "w-6 bg-white" : "w-2 bg-white/50 hover:bg-white/75"}`}
             />
           ))}
+        </div>
+      )}
+      {/* §8.13.C item 11 — progress-bar indicator. The inner fill is keyed on
+          the active slide so it remounts and the scaleX keyframe restarts each
+          slide; pauses with the slideshow on hover. */}
+      {showProgress && (
+        <div className="absolute inset-x-0 bottom-0 z-20 h-0.5 bg-white/30">
+          <div
+            key={active}
+            className="theme-hero-progress h-full bg-white"
+            style={{ animationDuration: `${durationMs}ms`, animationPlayState: paused ? "paused" : "running" }}
+          />
         </div>
       )}
     </div>
@@ -185,6 +210,9 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
   const inset = settings.heroLayout === "inset";
   const cornerRadius = typeof settings.cornerRadius === "number" ? settings.cornerRadius : 0;
   const showSlideIndicators = settings.showSlideIndicators === true;
+  // §8.13.C items 10/11 — both absent ⇒ HeroSlideshow renders exactly as before.
+  const kenBurns = settings.kenBurns === true;
+  const indicatorStyle = typeof settings.indicatorStyle === "string" ? settings.indicatorStyle : undefined;
 
   const visible = [...blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
 
@@ -258,6 +286,8 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
           durationMs={slideDurationS * 1000}
           transition={slideTransition}
           showIndicators={showSlideIndicators}
+          kenBurns={kenBurns}
+          indicatorStyle={indicatorStyle}
         />
       )}
       <div className="relative z-10 max-w-2xl">{visible.map(renderBlock)}</div>

@@ -138,6 +138,50 @@ describe("HeroSection slideshow", () => {
       expect(hero.parentElement?.getAttribute("style") ?? "").toContain("theme-max-width");
     });
   });
+
+  describe("kenBurns + indicatorStyle (§8.13.C items 10/11)", () => {
+    it("no-op: no theme-ken-burns class and no progress bar when both keys are unset", () => {
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }, { url: IMG_B }], showSlideIndicators: true });
+      expect(container.querySelector(".theme-ken-burns")).toBeNull();
+      expect(container.querySelector(".theme-hero-progress")).toBeNull();
+      // the dot row still renders
+      expect(container.querySelectorAll("button[aria-label^='Go to slide']").length).toBe(2);
+    });
+
+    it("kenBurns: true adds theme-ken-burns to the active image with an inline animationDuration", () => {
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }, { url: IMG_B }], slideDuration: 4, kenBurns: true });
+      const active = container.querySelector("img.theme-ken-burns") as HTMLImageElement;
+      expect(active).not.toBeNull();
+      expect(active.style.animationDuration).toBe("4000ms");
+      // only the active image gets it
+      expect(container.querySelectorAll("img.theme-ken-burns").length).toBe(1);
+    });
+
+    it("kenBurns is skipped under prefers-reduced-motion", () => {
+      stubMatchMedia(true);
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }], kenBurns: true });
+      expect(container.querySelector(".theme-ken-burns")).toBeNull();
+    });
+
+    it("indicatorStyle: 'progress' renders the bar instead of dots (even with showSlideIndicators on)", () => {
+      const { container } = renderHero({
+        bannerImages: [{ url: IMG_A }, { url: IMG_B }],
+        slideDuration: 6,
+        showSlideIndicators: true,
+        indicatorStyle: "progress",
+      });
+      const bar = container.querySelector(".theme-hero-progress") as HTMLElement;
+      expect(bar).not.toBeNull();
+      expect(bar.style.animationDuration).toBe("6000ms");
+      expect(container.querySelectorAll("button[aria-label^='Go to slide']").length).toBe(0);
+    });
+
+    it("no progress bar under reduced motion", () => {
+      stubMatchMedia(true);
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }, { url: IMG_B }], indicatorStyle: "progress" });
+      expect(container.querySelector(".theme-hero-progress")).toBeNull();
+    });
+  });
 });
 
 describe("HeroSection CTA button hoverEffect/pressEffect (§8.7 item 1)", () => {

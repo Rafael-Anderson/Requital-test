@@ -584,6 +584,48 @@ body {
   animation: theme-fade-in var(--motion-duration-base, 300ms) var(--motion-ease, ease-out);
 }
 
+/* §8.13.C item 10 — hero kenBurns. A slow zoom on the active slide over the
+   full slide duration (set inline as animation-duration by HeroSlideshow).
+   `alternate infinite` so a single-image hero breathes in and out rather than
+   zooming once and stopping. While it runs it overrides the img's inline
+   `transform: none`. HeroSlideshow already skips the class under
+   prefers-reduced-motion; the blanket rule is the belt. */
+@keyframes theme-ken-burns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+.theme-ken-burns {
+  animation-name: theme-ken-burns;
+  animation-timing-function: var(--motion-ease, ease-out);
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-fill-mode: both;
+}
+
+/* §8.13.C item 11 — hero indicatorStyle: 'progress'. The fill scales from 0
+   to full width over the slide duration (set inline); keyed on the active
+   slide so it restarts each rotation. transform-origin left so it grows
+   left-to-right. Blanket reduced-motion rule zeroes it (and HeroSlideshow
+   doesn't render it under reduced motion anyway). */
+@keyframes theme-hero-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.theme-hero-progress {
+  transform-origin: left;
+  animation-name: theme-hero-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4
