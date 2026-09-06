@@ -1226,21 +1226,21 @@ complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
-§8.7 items 1-5 (§8.8 buttons hoverEffect/pressEffect, §8.9 header
-scrollBehavior, §8.10 trust_bar rating count-up, §8.11 icons.corners, §8.12
-newsletter successAnimation)**, all built and merged. The rest of §8.7's
-priority list (items 6+) and D/E/F/G1 more broadly are **not** committed
-scope — **see §8.7 for the current re-evaluation and priority order**
-(recorded 2026-09-05, supersedes §8.3's ordering the same way §8.3
-superseded the raw table below where they disagree). G0 (Flow A) + batch 1
-+ C + §8.8–§8.12 already deliver four visibly distinct starting points that
-pick up real card-hover effects, image-load fade, stagger, a brands marquee
-(Market), header/footer structure, a real mobile nav, button hover/press
-feedback, real header scroll behaviour, (Market only) a real animated
-trust-bar rating, sharp icon corners (Atelier + Heritage), and a newsletter
-success animation (Atelier + Market + Bloom); the remaining D/E/F
-flourishes each template wants are listed in its own deferred block (§8.12
-updated Atelier/Market/Bloom's) and re-prioritized in §8.7.
+§8.7 items 1-5 (§8.8–§8.12) + §8.13 stock-take + §8.13.C items 1/5/8
+(§8.14 badges.style + entranceAnimation + motion.smoothScroll)**, all built
+and merged. The rest of §8.13.C (items 2+, priority list §8.13.C) and
+D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
+remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
+(Flow A) + batch 1 + C + §8.8–§8.14 already deliver four visibly distinct
+starting points that pick up real card-hover effects, image-load fade,
+stagger, a brands marquee (Market), header/footer structure, a real mobile
+nav, button hover/press feedback, real header scroll behaviour, (Market
+only) a real animated trust-bar rating, sharp icon corners (Atelier +
+Heritage), a newsletter success animation (Atelier + Market + Bloom),
+shaped Sale/Sold-out badges + a pop (Market tag / Bloom circle / Heritage
+ribbon), and smooth in-page scrolling (Atelier); the remaining flourishes
+each template wants are in its own deferred block (§8.14 updated
+Market/Bloom/Heritage's) and prioritized in §8.13.C.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -2499,12 +2499,13 @@ template-specific. `customCursor` — 0/4, no template wants it.
 
 #### C. Re-derived priority order (real per-template count, highest first)
 
-1. **`badges.style` — 4/4.** Effort **S** (a shape enum → per-style CSS
-   class on the existing badge chip: `rectangle` = radius 0, `pill` =
-   9999, `circle` = 1:1 + full radius, `tag` = a notch via `clip-path`,
-   `ribbon` = a diagonal via `clip-path` + `::before`). `lib/product-badge.ts`
-   already returns a `ResolvedProductBadge` with a `style` object and a
-   `positionClass` — this slots straight in. **The clear next pick.**
+1. **`badges.style` — BUILT §8.14** (real committed scope 3/4: Atelier's
+   `rectangle` = the no-op value, left unset; Market `tag` / Bloom `circle`
+   / Heritage `ribbon`). **`badges.entranceAnimation` (item 5) and
+   `motion.smoothScroll` (item 8) folded into the same PR** — see §8.14 for
+   why. Bloom's "contrasting yellow badge colour scheme" (a 3rd
+   `colorScheme` + `saleSchemeId` re-point) is a newly-noted still-open
+   *colour* item, not shape.
 2. **`buttons.secondary` rendered variant — 2/4** (Market, Heritage).
    Effort **M** (a real secondary-button render path on the CTA block +
    `secondaryButtonLabel` scheme wiring — not just an enum). Unchanged
@@ -2521,10 +2522,11 @@ template-specific. `customCursor` — 0/4, no template wants it.
    already exists; this is a one-shot `@keyframes` on click (like
    §8.12's `.theme-newsletter-success`), reduced-motion covered by the
    blanket rule, reads `--motion-duration-fast`.
-5. **`badges.entranceAnimation` — 2/4** (Market, Bloom). Effort **S**,
-   and **naturally folds into item 1** (same `BadgeSettings` extension,
-   same file). A one-shot pop `@keyframes` when the card enters — the
-   card-entrance trigger already exists via `ScrollAnimatedWrapper`.
+5. **`badges.entranceAnimation` — BUILT §8.14** (folded into item 1). Note:
+   shipped as a *mount-triggered* pop, not scroll-into-view — the faithful
+   version needs the §8.10 observer pattern in both render components
+   (disjoint work); a below-fold badge pops off-screen, the accepted
+   stagger-without-entrance tradeoff. Market + Bloom.
 6. **Enable `floatingElements.backToTop` on Market + Bloom — 2/4**,
    re-author only, Effort **S**. Fold into any batch touching
    `templates.ts`.
@@ -2532,13 +2534,12 @@ template-specific. `customCursor` — 0/4, no template wants it.
    **S**. Roughly unchanged — a CSS-only float-label on the newsletter +
    checkout inputs; the dead `inputFields` category's only assigned
    consumer.
-8. **`motion.smoothScroll` — 1/4** (Atelier). Effort **XS** now — one
-   line in `shop-context.tsx`'s motion effect
-   (`document.documentElement.style.scrollBehavior = motion.smoothScroll
-   && !reducedMotion ? 'smooth' : ''`), SPA-leak-cleared like every other
-   motion override. **Much cheaper than it looks** — `applyMotionOverrides`
-   already runs on the merged `[shop, themeConfig]` effect with a
-   set/clear loop; this is one more property in it.
+8. **`motion.smoothScroll` — BUILT §8.14** (folded into item 1). Confirmed
+   XS: a new `applyScrollBehavior()` one-liner in `lib/motion.ts`, called
+   from `applyMotionOverrides`. `!reducedMotion` gating turned out
+   unnecessary — `globals.css`'s blanket `scroll-behavior: auto !important`
+   already beats the non-important inline `smooth` (verified in the scratch
+   pass). Atelier.
 9. **Section separators (wave/angle SVG edges) — 1/4** (Bloom). Effort
    **S–M**. Roughly unchanged (decorative inline SVG between sections,
    `section.settings.separator`).
@@ -2620,6 +2621,123 @@ out. Flagging, not recommending, that build-out.)
 **Not committed scope.** A recorded recommendation, same as §8.3 was
 before G0. Picking up item 1 (`badges.style`) — or any subset — still gets
 its own plan-mode round first.
+
+---
+
+### 8.14 `badges.style` + `badges.entranceAnimation` + `motion.smoothScroll` — BUILT (2026-09-06, `feat/badges-style`)
+
+§8.13.C items 1, 5, 8 in one PR. `badges.style` was the headline finding of
+the §8.13 stock-take: wanted by all four templates, invisible to every
+prior priority list because §6.5 had no row for it.
+
+**Scope: 3/4, not 4/4** — the icons.corners pattern a third time. Today's
+chip (`lib/product-badge.ts`) is a `cornerRadius`-respecting rounded
+rectangle, so `style: 'rectangle'` is byte-identical to unset. Per each
+template's §6 table: **Atelier `rectangle`** (the no-op — left unset,
+following the icons.corners `rounded` / Heritage `hoverEffect` precedent;
+Atelier still rides this PR via `smoothScroll`), **Market `tag`**, **Bloom
+`circle`**, **Heritage `ribbon`**.
+
+**Mechanism: `resolveProductBadge` returns a full `className` string** (the
+two hardcoded render-site template literals — `ProductCard.tsx`,
+`ProductGridSection.tsx` — collapse to `className={badge.className}`). For
+rectangle/unset the token order and inline `borderRadius` are byte-for-byte
+what they were; the existing `product-badge.test.ts` needed only the
+`positionClass` → `className` rename. `pill` → inline `9999px`, no class.
+`circle` / `tag` → a `.theme-badge-*` class owning padding + geometry
+(`aspect-ratio` / `clip-path`), no inline radius. Geometry is deliberately
+`clip-path` / `transform` / `aspect-ratio` — **not** the `--theme-round-*`
+scale (that's for `rounded-*` shapes); pill/circle use a `9999px` literal
+(there is no `--theme-round-pill`).
+
+**Ribbon is ~40% of the item, flagged not descoped** (Heritage needs it).
+It's a rotated corner banner, not a chip: `.theme-badge-ribbon` +
+one of `--tl/--tr/--bl/--br` (rotate ±45°, top/bottom pinning), and it
+**ignores the position inset class** — `resolveProductBadge` omits it for
+ribbon. The parent media wrapper is already `relative overflow-hidden`, so
+the rotated band clips to the card with no wrapper change. The other four
+shapes are position-agnostic in-place tweaks.
+
+**Circle + long text**: `aspect-ratio: 1` + flex-centre + `min-width` +
+normal wrapping. "Sale" → a true circle; "Sold out" wraps to two short
+lines inside it — an accepted cosmetic edge, no icon-only fallback (that
+would break `product-badge.ts`'s "no fallback branching beyond the null
+check" convention). Verified in the scratch pass.
+
+**`badges.entranceAnimation` (item 5) — folded in as a mount-triggered
+pop.** `.theme-badge-pop` (a dedicated `@keyframes theme-badge-pop`
+scale 0→1, `var(--motion-duration-fast)`) appended by the resolver. All
+product cards mount together on section render, so above-fold badges pop on
+load and `product_tabs` cards re-pop per tab switch. **No
+IntersectionObserver** — a below-the-fold badge pops off-screen, the same
+accepted tradeoff as `stagger`-without-a-real-entrance; the §8.10
+observer pattern is the documented upgrade. Not applied on `ribbon` (its
+`rotate()` and the pop's `scale()` `transform` would fight; no template
+combines them). Reduced motion: the blanket rule zeroes the duration —
+verified `1e-05s` in the scratch pass. Stock-take said "folds into #1" —
+true for the type + admin panel, but the *scroll-triggered* version would
+have been disjoint work; the mount-triggered version is what genuinely
+folded in cheaply.
+
+**`motion.smoothScroll` (item 8) — folded in, confirmed XS.** New
+`applyScrollBehavior(root, motion)` one-liner in `lib/motion.ts` (kept out
+of `applyMotionCssVars`, which is CSS-custom-props only), called from
+`shop-context.tsx`'s `applyMotionOverrides` in the same merged
+`[shop, themeConfig]` effect. `""` clears → browser default. **No
+`!reducedMotion` gate needed** — `globals.css`'s blanket
+`scroll-behavior: auto !important` beats the non-important inline `smooth`
+(scratch pass: computed `smooth` normally, `auto` under
+`reducedMotion: 'reduce'`, with the inline value still `smooth`).
+`MotionSettings.smoothScroll?` was already typed in all three mirrors (zero
+consumers until now).
+
+**Admin**: `BadgesSettings.tsx` — a "Shape" `<Select>` (Rectangle writes
+`style: undefined`, the true no-op) + a "Pop-in animation" `<Toggle>`.
+`MotionSettings.tsx` — a "Smooth scrolling" `<Toggle>`, **not** gated on the
+intensity `active` state (independent of the token system); its old
+"smoothScroll is hidden" test was updated.
+
+**Templates**: Market `style: 'tag'` + `entranceAnimation: true`; Bloom
+`style: 'circle'` + `entranceAnimation: true` (its pre-existing
+`cornerRadius: 9999` left — harmless once `circle` owns geometry, the sane
+fallback if `style` is unset); Heritage `style: 'ribbon'` (no
+`entranceAnimation` — Heritage is calm); Atelier `motion.smoothScroll:
+true` (no `badges.style`). Deferred-block comments updated; **Bloom's
+"contrasting yellow badge colour scheme" (a 3rd `colorScheme` +
+`saleSchemeId` re-point) noted as a still-open colour item — not shape.**
+
+**No-op**: `badges.style` absent/`'rectangle'` and `entranceAnimation`
+absent/`false` ⇒ the exact className string + `borderRadius` produced
+today; `resolveProductBadge(undefined)` still `null`. `motion.smoothScroll`
+absent/`false` ⇒ `scrollBehavior` cleared ⇒ browser default. No
+`DEFAULT_THEME_CONFIG` values.
+
+**Scratch-shop pass — visual + DOM-attribute, no scroll/timing machinery**
+(`entranceAnimation` is mount-triggered). Put a `compareAtPrice` on a seed
+product (restored after) so a Sale badge renders; published the real
+re-authored Market / Bloom / Heritage templates + Atelier as the
+`rectangle`/no-op control; read the badge `<span>`'s `className` +
+`getComputedStyle()` on the "Flowers" collection grid: Market
+`theme-badge-tag theme-badge-pop` + a `clip-path: polygon(...)` notch +
+`animationName: theme-badge-pop`; Bloom `theme-badge-circle` +
+`aspect-ratio: 1 / 1` + pop; Heritage `theme-badge-ribbon
+theme-badge-ribbon--tr` + `border-radius: 0` + a `rotate(45deg)` matrix +
+**no** `theme-badge-pop`; Atelier a plain `absolute … px-2 py-0.5 …` chip,
+no `theme-badge-*` class, `scroll-behavior` computed `smooth`. A
+reduced-motion pass: shapes still render, `theme-badge-pop`'s
+`animation-duration` computes `1e-05s`, Atelier's `scroll-behavior`
+computes `auto` (inline still `smooth`). Zero console errors. Scratch spec
+deleted + `playwright.config.ts` reverted.
+
+**Gate:** backend `tsc` + `jest` (themes, 87/87) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 514/514 + lint +0 (33); admin `tsc` + `build` +
+`vitest` (5 failures in `AccountSetup.test.tsx` — the pre-documented
+full-suite-only flakiness, 12/12 in isolation, untouched by this change) +
+lint +0 (77).
+
+**Note:** this PR also re-lands **§8.13** (the capability stock-take),
+which was stranded when its PR #102 merged into #101's branch instead of
+`main` and #101 then merged a snapshot without it.
 
 ---
 
@@ -2745,6 +2863,8 @@ avoids retouching every token later. Full table in §8.1.
 | `rating_badge.countUp` | ✅ `useCountUp()`, Market's trust_bar (only template that requested it) | ✅ §8.10 |
 | `icons.corners` | ✅ `resolveIconCorners()`, header + search icons (same narrow scope as `icons.stroke`) | ✅ §8.11 |
 | `section.settings.successAnimation` (newsletter) | ✅ `.theme-newsletter-success` scale-in on the success swap | ✅ §8.12 |
+| `badges.style` (+ `entranceAnimation`) | ✅ `resolveProductBadge` className + `.theme-badge-*` shape classes / `.theme-badge-pop` | ✅ §8.14 |
+| `motion.smoothScroll` | ✅ `applyScrollBehavior()` in `lib/motion.ts` | ✅ §8.14 |
 
 ### 9.4 Other risks
 
