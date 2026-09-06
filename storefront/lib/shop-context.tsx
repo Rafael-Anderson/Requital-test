@@ -264,6 +264,16 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     if (popoverScheme.border) root.style.setProperty("--color-popover-border", popoverScheme.border);
   }
 
+  // §8.18 follow-up — cart drawer surface (drawers.schemeId, previously dead).
+  // Same fallback-to-active-scheme shape as popovers, so a shop whose
+  // drawers.schemeId still points at the default active scheme is unchanged.
+  const drawerScheme = resolveScheme(g.drawers?.schemeId, g.colorSchemes) ?? scheme;
+  if (drawerScheme) {
+    root.style.setProperty("--color-drawer", drawerScheme.background);
+    root.style.setProperty("--color-drawer-fg", drawerScheme.text);
+    if (drawerScheme.border) root.style.setProperty("--color-drawer-border", drawerScheme.border);
+  }
+
   root.style.setProperty("--theme-max-width", PAGE_WIDTH_PX[g.pageLayout?.width ?? "normal"]);
 
   // Phase B1 — the discounted-price colour (ProductCard.tsx's PriceDisplay

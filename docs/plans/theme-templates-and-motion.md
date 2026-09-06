@@ -2629,16 +2629,22 @@ template-specific. `customCursor` — 0/4, no template wants it.
     on the header cart icon; 5-concurrent cap (rapid-click spam guard, cart
     correctness never affected); reduced-motion skips it; no badge bounce
     (there is none today). `FlyToCartProvider` in `ShopLayoutClient`.
-17. **Route-content fade + View Transitions — universal.** Effort **M**
-    (plain fade) / **L** (VT layer). Unchanged.
+17. **Route-content fade — BUILT §8.21.** Plain keyed fade wired on
+    `animations.pageTransition` (already `false` in DEFAULT + all templates,
+    so byte-identical). 0/4 templates — capability only, no re-author. View
+    Transitions deliberately not layered on (Chromium-only, Next support
+    still moving — §8.20 flag #2 stays a flag).
 18. **Card sub-blocks (`product_vendor`/`product_stock`/`product_swatches`)
     — 1/4** (Market). A card-*content* feature more than a motion one;
     wires the dead `swatches` category. Flag for a content-shaped PR.
 19. **`icons.style: solid/duotone` — 2/4** (Market, Bloom). **Separate
     gated Phase I** (~100 hand-drawn SVGs + a glyph-list sign-off).
     Not a normal batch item; stays parked until explicitly greenlit.
-20. **`customCursor` — 0/4.** Parked; revisit only if a future template
-    wants it.
+20. **`customCursor` — SKIPPED (re-confirmed 0/4, 2026-09-06).** No §6
+    table row on any template, no `g.motion.customCursor` in `templates.ts`.
+    `MotionSettings.customCursor?` stays typed-but-unwired. Not built — a
+    zero-consumer feature, same call as item 9 (section separators). Revisit
+    only if a future template wants it.
 
 #### D. Spec-vs-code mismatches spotted from the templates' own text (flagged now, not mid-build)
 
@@ -3293,6 +3299,89 @@ lint +0 (33); admin `tsc` + `build` + `vitest` `AnimationsSettings` +2 + lint
 
 ---
 
+### 8.21 route-content fade + `view_all` button on `product_grid` + cart-drawer theming — BUILT (2026-09-06, `feat/route-transition-followups`)
+
+§8.13.C item 17 + the two remaining §8.15/§8.18 follow-ups, one PR. Stacks
+conceptually after §8.20 (fly-to-cart) but is an independent branch off
+`main` — the only overlap is this file's section ordering right before §9.
+
+**Item 17 — route-content fade (`animations.pageTransition`).** No new field
+needed: `pageTransition` is a required boolean but **`false` in
+`DEFAULT_THEME_CONFIG`** and `false` in all 4 templates, so gating on
+`=== true` is byte-identical (default off). New `RouteTransition.tsx` wraps
+`<main>`'s children in `ShopLayoutClient`: when on, a `<div key={pathname}
+className="theme-route-transition">` remounts on every `usePathname()` change
+and replays a one-shot `theme-route-in` keyframe (fade + 8px rise,
+`--motion-duration-fast`); search-param-only changes don't count (correct —
+a sort/filter shouldn't full-fade the page). When off/absent ⇒
+`<>{children}</>`, **no wrapper at all**, DOM byte-identical. Blanket
+reduced-motion rule neutralises the keyframe. 0/4 templates — ships as a
+capability only, no re-author. The admin "Page transition" toggle already
+existed. **View Transitions deliberately not layered on** — Chromium-only,
+Next App Router support still moving; the plain keyed fade is the real
+feature (§8.20 flag #2 stays a flag).
+
+**§8.15 follow-up — `product_grid`'s "View all" as a secondary button.**
+`ProductGridSection`'s View all is a section setting (`showViewAllButton` /
+`viewAllLabel`), not a `view_all_button` block like `featured_collections` —
+so it gets its own `settings.viewAllStyle?: 'link' | 'button'` (free-form
+`SectionSettings` key, no type change). `'button'` renders the same outline
+secondary button `FeaturedCollectionsSection`'s `ViewAll` does
+(`resolveSecondaryButtonStyle` + `resolveButtonHoverClass` from §8.15);
+absent/`'link'` ⇒ today's exact `text-accent hover:underline` `<Link>`.
+Admin: a "View all display" `<Select>` in `ProductGridSettings.tsx`, shown
+only when a collection is scoped + the button is on; "Text link" writes
+`undefined`. No template re-author.
+
+**§8.18 follow-up — cart-drawer `schemeId` / `bordersStyle` / `dropShadow`
+theming** (the open half of the `drawers` category). Mirrors the
+`popovers.schemeId` wiring exactly: new `--color-drawer` / `--color-drawer-fg`
+/ `--color-drawer-border` in `globals.css` `@theme` (literal defaults =
+`--color-header`'s), written from `resolveScheme(g.drawers.schemeId,
+colorSchemes) ?? activeScheme` in `applyThemeConfigOverrides` (always
+present, like popovers — no SPA-leak clear needed). `CartDrawer.tsx`'s panel
+swaps `bg-header text-header-fg` → `bg-drawer text-drawer-fg`, and
+`bordersStyle: 'solid'` adds `border border-drawer-border`, `dropShadow:
+false` drops `shadow-2xl`. **Byte-identical no-op:** `DEFAULT`
+`drawers.schemeId === colorSchemes[0].id` for every shop + template, so
+`--color-drawer` === the active-scheme background === what `--color-header`
+resolves to; `bordersStyle: 'none'` + `dropShadow: true` are the defaults =
+today's panel. `DrawersSettings.tsx` already had the SchemePicker + the two
+toggles (dead until now) — no admin change.
+
+**Deferred:** checkout-input `focusAnimation` — the checkout `<input>`s use
+above-field `<label>`s + a shared `FIELD_CLASS` across 4+ files on a
+conversion-critical form; converting them to the placeholder-based
+`.theme-float-label` (§8.19) is a real multi-file restructure, not a small
+extension. Flagged, not built.
+
+**No-op proof.** `pageTransition` false (default) ⇒ no `RouteTransition`
+wrapper. `viewAllStyle` absent ⇒ the plain link. `drawers` defaults ⇒
+`--color-drawer` = active-scheme bg, no panel border, `shadow-2xl` kept. No
+`DEFAULT_THEME_CONFIG` change, no validation change.
+
+**Scratch-shop pass (dev seed shop, puppeteer).** Route fade (theme with
+`pageTransition: true`): `main > .theme-route-transition` present on load and
+after a client nav, computed `animationName: theme-route-in` / `0.165s`
+(`~1e-05s` under `prefers-reduced-motion`). No-op (no `pageTransition`): no
+wrapper. View-all (`viewAllStyle` on the `product_grid` scoped to "Flowers",
+disambiguated by the `/collections/…` href): unset ⇒ `class="text-sm
+font-medium text-accent hover:underline"` — the plain link, byte-identical;
+`'button'` ⇒ `class="inline-block px-5 py-2.5 text-sm font-medium
+theme-btn-border-fill"` (Market's secondary `border-fill`). Cart drawer
+(`cartLayout: 'drawer'`): default ⇒ `--color-drawer` = `--color-header` =
+`#FFFFFF`, panel `bg-drawer` + `shadow-2xl`, no border; `drawers.schemeId`
+→ scheme-2 (`#FDF1F3`) ⇒ `--color-drawer` = `#FDF1F3` ≠ `--color-header`,
+panel `border border-drawer-border`, `shadow-2xl` gone. Zero console errors.
+Scratch themes deleted; seed shop clean.
+
+**Gate:** backend n/a (no backend change); storefront `tsc` + `build` +
+`vitest` 548/548 (+`RouteTransition` 3, `CartDrawer` chrome +2) + lint +0
+(33); admin `tsc` + `build` + `vitest` `ProductGridSettings` +2 + lint +0
+(77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3395,11 +3484,11 @@ avoids retouching every token later. Full table in §8.1.
 
 | Dead control | Gets a consumer via | Phase |
 |---|---|---|
-| `animations.pageTransition` | route-content fade (F) | F |
+| `animations.pageTransition` | ✅ route-content fade — `RouteTransition.tsx`, keyed on pathname (§8.21) | ✅ §8.21 |
 | `animations.addToCart` | ✅ master switch for fly-to-cart (§8.20), which is selected by the new opt-in `animations.addToCartStyle: 'fly'` (Market) | ✅ §8.20 |
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
 | `buttons.pillCornerRadius` | ✅ B1 radius scale + §8.19 `buttons.primary.pill` flag → `--theme-button-pill-radius` (Bloom); the field itself now has a live consumer | ✅ B1 / §8.19 |
-| `drawers.schemeId` + `drawers.*` | ✅ `drawers.animation` (§8.18, cart-drawer open transition); `schemeId`/`bordersStyle`/`dropShadow` cart-drawer theming still open (F) | ✅ §8.18 / F open |
+| `drawers.schemeId` + `drawers.*` | ✅ fully resolved — `drawers.animation` (§8.18) + `schemeId` → `--color-drawer*` / `bordersStyle` / `dropShadow` on `CartDrawer` (§8.21) | ✅ §8.18 + §8.21 |
 | `swatches.*` | the `product_swatches` card sub-block (F) | F |
 | `inputFields.*` | ✅ `inputFields.focusAnimation: 'float-label'` on the newsletter input (§8.19); `borderThickness`/`textPreset` on other inputs still open | ✅ §8.19 / D open |
 | `prices.*` (beyond currency) | ✅ `prices.salePriceColor` / `salePriceStyle` replacing hardcoded `text-red-600` | ✅ B1 |
