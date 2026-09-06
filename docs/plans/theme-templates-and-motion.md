@@ -3246,7 +3246,20 @@ wrapper. `viewAllStyle` absent ⇒ the plain link. `drawers` defaults ⇒
 `--color-drawer` = active-scheme bg, no panel border, `shadow-2xl` kept. No
 `DEFAULT_THEME_CONFIG` change, no validation change.
 
-**Scratch-shop pass.** [pending — run before opening the PR]
+**Scratch-shop pass (dev seed shop, puppeteer).** Route fade (theme with
+`pageTransition: true`): `main > .theme-route-transition` present on load and
+after a client nav, computed `animationName: theme-route-in` / `0.165s`
+(`~1e-05s` under `prefers-reduced-motion`). No-op (no `pageTransition`): no
+wrapper. View-all (`viewAllStyle` on the `product_grid` scoped to "Flowers",
+disambiguated by the `/collections/…` href): unset ⇒ `class="text-sm
+font-medium text-accent hover:underline"` — the plain link, byte-identical;
+`'button'` ⇒ `class="inline-block px-5 py-2.5 text-sm font-medium
+theme-btn-border-fill"` (Market's secondary `border-fill`). Cart drawer
+(`cartLayout: 'drawer'`): default ⇒ `--color-drawer` = `--color-header` =
+`#FFFFFF`, panel `bg-drawer` + `shadow-2xl`, no border; `drawers.schemeId`
+→ scheme-2 (`#FDF1F3`) ⇒ `--color-drawer` = `#FDF1F3` ≠ `--color-header`,
+panel `border border-drawer-border`, `shadow-2xl` gone. Zero console errors.
+Scratch themes deleted; seed shop clean.
 
 **Gate:** backend n/a (no backend change); storefront `tsc` + `build` +
 `vitest` 548/548 (+`RouteTransition` 3, `CartDrawer` chrome +2) + lint +0
