@@ -1233,10 +1233,11 @@ wishlist pop/burst) + §8.13.C items 6 + 11 + 12 (§8.17 backToTop re-author +
 hero kenBurns + hero indicatorStyle: progress) + §8.13.C items 13 + 14 (§8.18
 drawers.animation + cart.itemAnimation/subtotalAnimation + scrollProgressBar)
 + §8.13.C items 7 + 10 (§8.19 inputFields.focusAnimation float-label +
-buttons.primary.pill)**, all built (batch PRs A = items 3/4, B = 6/11/12,
-C = 13/14, D = 7/10; pending merge). §8.13.C item 9 (section separators)
-stays skipped (0/4 concrete — no template can act on it). The rest of
-§8.13.C (items 15+) and
+buttons.primary.pill) + §8.13.C item 16 (§8.20 fly-to-cart via the new
+`animations.addToCartStyle: 'fly'`)**, all built and merged through PR
+#109; fly-to-cart is `feat/fly-to-cart` (its own checkpoint). §8.13.C item 9
+(section separators) stays skipped (0/4 concrete — no template can act on
+it). The rest of §8.13.C (items 15, 17-20) and
 D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
 remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
 (Flow A) + batch 1 + C + §8.8–§8.15 already deliver four visibly distinct
@@ -2620,9 +2621,14 @@ template-specific. `customCursor` — 0/4, no template wants it.
     **M** / **M–L**. `useScrollValue` helps the parallax math;
     `decorativeParallax` (floating shapes) stays Bloom's signature
     expensive flourish, §9.4-flagged.
-16. **Fly-to-cart (`animations.addToCart`) — 1/4** (Market). Effort **L**,
-    self-contained. Do after item 13 (drawers/cart) so the fly lands on
-    an already-animating drawer. Unchanged cost — genuinely the big one.
+16. **Fly-to-cart — BUILT §8.20.** 1/4 (Market). Gated on a NEW opt-in
+    `animations.addToCartStyle?: 'none' | 'fly'` (not `animations.addToCart`
+    alone — that's a required boolean, `true` by default, so gating on it
+    would have turned the effect on for every non-template shop). WAAPI
+    clone from the quick-add card / PDP gallery to `[data-fly-to-cart-target]`
+    on the header cart icon; 5-concurrent cap (rapid-click spam guard, cart
+    correctness never affected); reduced-motion skips it; no badge bounce
+    (there is none today). `FlyToCartProvider` in `ShopLayoutClient`.
 17. **Route-content fade + View Transitions — universal.** Effort **M**
     (plain fade) / **L** (VT layer). Unchanged.
 18. **Card sub-blocks (`product_vendor`/`product_stock`/`product_swatches`)
@@ -3179,6 +3185,97 @@ string updated) + lint +0 (33); admin `tsc` + `build` + `vitest`
 
 ---
 
+### 8.20 fly-to-cart (`animations.addToCartStyle: 'fly'`) — BUILT (2026-09-06, `feat/fly-to-cart`)
+
+§8.13.C item 16 — the catalog's flagged "single most complex item", built on
+its own checkpoint. Market only (1/4). A cloned product image arcs from the
+add-to-cart source to the header cart icon, then fades.
+
+**The gate problem + the opt-in field.** `animations.addToCart` is a *required
+`boolean`*, `true` in `DEFAULT_THEME_CONFIG` and backfilled to `true`
+(`backfillGlobalSettings`) for any theme missing it — so gating fly-to-cart on
+it directly would turn the effect ON for every non-template shop the instant
+it shipped (not byte-identical). **New `AnimationSettings.addToCartStyle?:
+'none' | 'fly'`** (optional, no `DEFAULT` value) mirrored across the three
+type files. Fly-to-cart fires only when
+`animations.addToCart === true && animations.addToCartStyle === 'fly'` —
+`addToCart` stays the master "animations allowed" switch, `addToCartStyle`
+selects the effect. Absent field ⇒ every existing shop, template or not,
+renders exactly as today. Market re-authors `addToCart: false → true` +
+`addToCartStyle: 'fly'`; the other three templates unchanged.
+`templates.spec.ts`'s 4/4 `addToCart === false` assertion is split so Market
+is the exception.
+
+**Mechanism (`storefront/lib/fly-to-cart.tsx`, new).** `FlyToCartProvider` +
+`useFlyToCart()` → `{ flyToCart(sourceEl) }`, mounted in `ShopLayoutClient`
+inside `CartProvider` (peer of `CartDrawerProvider`, pattern from
+`cart-drawer.tsx`). The caller has already run `addItem(...)` before calling
+`flyToCart`, so the cart count updates immediately regardless of the
+animation. `flyToCart`:
+- no-ops if the gate is off, reduced motion, no `sourceEl`, no visible
+  `[data-fly-to-cart-target]`, a zero-size source rect, or **≥ 5 live
+  clones** (see the cap below);
+- otherwise imperatively creates an `<img data-fly-to-cart-clone>` (fresh
+  `src` from the source's `currentSrc`, `position: fixed` at the source
+  rect, `border-radius: var(--theme-radius, 8px)`, `z-index: 2147483000`,
+  `pointer-events: none`), appends it to `document.body`, and runs one
+  **WAAPI** `element.animate` — 3 keyframes: start → mid arc (`dy*0.5 − 60px`
+  lift, `scale 0.6`) → destination (`translate(dx, dy) scale 0.15 opacity 0`).
+  Duration = parsed `--motion-duration-slow` (fallback 600), easing = parsed
+  `--motion-ease`.
+- Cleanup: `anim.onfinish` **and** a `setTimeout(duration + 250)` safety net
+  (a backgrounded tab can starve `onfinish` — the `use-scroll-value.ts`
+  lesson). Provider-unmount `useEffect` cleanup removes any stray
+  `[data-fly-to-cart-clone]` from `body` (SPA-leak guard — clones live on
+  `body`, not the provider subtree, so a shop switch mid-flight could
+  otherwise orphan one).
+
+**The 5-concurrent cap.** `liveClones` is a `useRef` counter in the provider,
+`+1` on append, `-1` on cleanup. It is a **rapid-click spam guard, not an
+arbitrary number**: a shopper who double/triple-clicks quick-add (same
+product, or several products in quick succession) would otherwise flood
+`document.body` with detached `<img>` nodes, each animating ~600ms. Five lets
+a genuine burst of a few adds all animate; a **6th concurrent call skips only
+the visual clone** — `addItem` has already run at the call site, so cart
+correctness is never affected by the cap. Concurrent clones (not a queue) —
+each is independent and self-cleaning.
+
+**Reduced motion.** `flyToCart` returns immediately; the item is still added
+(the call site's `addItem` already ran). "Neutralize, never break."
+
+**No cart badge bounce.** There is none today — `TopBar.tsx`'s
+`CartIconButton` renders a plain reactive `{count}` span, no animation class
+anywhere. The count updates the instant `addItem` runs, unchanged; **no
+bounce is added** (keeps fly-to-cart self-contained per the catalog — the
+clone's own fade + shrink at arrival is the finish).
+
+**Wiring (2 real surfaces — exhaustive).** `ProductGridSection.tsx`'s
+`QuickAddButton.onClick` (after `addItem`, still behind the
+`if (previewMode) return`) → `flyToCart(closest('.theme-product-card')
+.querySelector('.theme-product-image'))`. `ProductDetailClient.tsx`'s
+`handleAddToCart()` (the `cart`/default branch only — not `buy_now`, which
+`router.push`es away) → `flyToCart(document.querySelector('[data-pdp-fly-source]'))`,
+a marker on `ProductGallery.tsx`'s main image. `ProductCard.tsx` (collections
+page / related / search / `product_tabs`) has **no add-to-cart action** —
+nothing to wire. `AddonPrompt` (checkout) + `cart/recover` deliberately out
+of scope.
+
+**No-op proof.** `addToCartStyle` absent ⇒ `flyToCart` early-returns ⇒
+`addItem` still runs ⇒ byte-identical. No CSS var, no CSS class, no
+`DEFAULT_THEME_CONFIG` change, no `theme-config.validation.ts` change
+(`animations` isn't deep-validated). `data-fly-to-cart-target` /
+`data-pdp-fly-source` are inert markers. `FlyToCartProvider` mounting adds one
+context, no render output.
+
+**Scratch-shop pass.** [pending — run before the checkpoint report]
+
+**Gate:** backend `tsc` + `jest themes` 91/91 (+4 from the split spec) + lint
++0 (261); storefront `tsc` + `build` + `vitest` 550/550 (+`fly-to-cart` 7) +
+lint +0 (33); admin `tsc` + `build` + `vitest` `AnimationsSettings` +2 + lint
++0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3282,7 +3379,7 @@ avoids retouching every token later. Full table in §8.1.
 | Dead control | Gets a consumer via | Phase |
 |---|---|---|
 | `animations.pageTransition` | route-content fade (F) | F |
-| `animations.addToCart` | fly-to-cart (F) | F |
+| `animations.addToCart` | ✅ master switch for fly-to-cart (§8.20), which is selected by the new opt-in `animations.addToCartStyle: 'fly'` (Market) | ✅ §8.20 |
 | `buttons.secondary` | a rendered secondary button variant on the CTA block, used by Market + Heritage (D) | D |
 | `buttons.pillCornerRadius` | ✅ B1 radius scale + §8.19 `buttons.primary.pill` flag → `--theme-button-pill-radius` (Bloom); the field itself now has a live consumer | ✅ B1 / §8.19 |
 | `drawers.schemeId` + `drawers.*` | ✅ `drawers.animation` (§8.18, cart-drawer open transition); `schemeId`/`bordersStyle`/`dropShadow` cart-drawer theming still open (F) | ✅ §8.18 / F open |
