@@ -84,3 +84,29 @@ describe("NewsletterSection successAnimation (§8.7 item 5)", () => {
     expect(screen.queryByPlaceholderText("you@example.com")).toBeNull(); // form gone
   });
 });
+
+describe("NewsletterSection inputFields.focusAnimation (§8.13.C item 7)", () => {
+  it("no-op: unset ⇒ the bare placeholder input, no float-label wrapper", () => {
+    themeConfig = { globalSettings: { buttons: { primary: {} }, inputFields: {} } };
+    const { container } = renderNewsletter();
+    expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
+    expect(container.querySelector(".theme-float-label")).toBeNull();
+  });
+
+  it("'float-label' ⇒ a .theme-float-label <label> wrapping the input (placeholder is a space) + a floating span", () => {
+    themeConfig = { globalSettings: { buttons: { primary: {} }, inputFields: { focusAnimation: "float-label" } } };
+    const { container } = renderNewsletter();
+    const wrap = container.querySelector("label.theme-float-label");
+    expect(wrap).not.toBeNull();
+    expect(wrap!.querySelector('input[type="email"]')?.getAttribute("placeholder")).toBe(" ");
+    expect(wrap!.querySelector("span")?.textContent).toBe("Email address");
+    expect(screen.queryByPlaceholderText("you@example.com")).toBeNull();
+  });
+
+  it("an unbuilt value ('glow') falls through to the plain input", () => {
+    themeConfig = { globalSettings: { buttons: { primary: {} }, inputFields: { focusAnimation: "glow" } } };
+    const { container } = renderNewsletter();
+    expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
+    expect(container.querySelector(".theme-float-label")).toBeNull();
+  });
+});

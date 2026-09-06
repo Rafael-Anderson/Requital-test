@@ -50,8 +50,10 @@ export function themeButtonBaseStyle(): CSSProperties {
     // shop-context.tsx's applyLegacyThemeOverrides) takes precedence over
     // the new Buttons category's own cornerRadius (--theme-radius) here —
     // a deliberate, flagged precedence call (see that function's own
-    // comment), not an oversight.
-    borderRadius: "var(--theme-btn-primary-radius, var(--theme-radius, 8px))",
+    // comment), not an oversight. --theme-button-pill-radius (§8.13.C item 9,
+    // set only when buttons.primary.pill is on) sits between them: it wins
+    // over --theme-radius but still yields to the legacy shape setting.
+    borderRadius: "var(--theme-btn-primary-radius, var(--theme-button-pill-radius, var(--theme-radius, 8px)))",
     borderWidth: "var(--theme-button-border-width, 0px)",
     borderStyle: "solid",
     borderColor: "currentColor",

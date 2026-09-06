@@ -46,6 +46,11 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
   // instant text swap below, byte-identical to today.
   const successAnimation = settings.successAnimation === true;
 
+  // §8.13.C item 7 — inputFields.focusAnimation. 'float-label' wraps the email
+  // input in a CSS-only floating-label field; anything else (incl. absent) ⇒
+  // today's bare placeholder input.
+  const floatLabel = themeConfig?.globalSettings.inputFields?.focusAnimation === "float-label";
+
   const headingBlock = blocks.find((b) => b.type === "heading" && b.visible);
   const textBlock = blocks.find((b) => b.type === "text" && b.visible);
   const formBlock = blocks.find((b) => b.type === "email_form" && b.visible);
@@ -104,15 +109,30 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
         )
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="flex-1 h-10 px-3 text-sm border border-stroke bg-transparent"
-            style={{ borderRadius: "var(--theme-radius, 8px)" }}
-          />
+          {floatLabel ? (
+            <label className="theme-float-label flex-1 text-left">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder=" "
+                className="w-full h-10 px-3 text-sm border border-stroke bg-transparent"
+                style={{ borderRadius: "var(--theme-radius, 8px)" }}
+              />
+              <span>Email address</span>
+            </label>
+          ) : (
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="flex-1 h-10 px-3 text-sm border border-stroke bg-transparent"
+              style={{ borderRadius: "var(--theme-radius, 8px)" }}
+            />
+          )}
           <button
             type="submit"
             disabled={status === "submitting"}
