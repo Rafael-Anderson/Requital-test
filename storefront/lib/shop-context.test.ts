@@ -190,8 +190,8 @@ describe("resolveSchemeCssVars", () => {
     expect(vars["--color-accent"]).toBe("#069494");
   });
 
-  it("does not map secondaryButtonLabel — no secondary button variant renders", () => {
+  it("maps secondaryButtonLabel → --color-secondary-button-label (§8.13.C item 2 — the view_all_button secondary button reads it)", () => {
     const vars = resolveSchemeCssVars({ ...DEFAULT_SCHEME, secondaryButtonLabel: "#ff00ff" });
-    expect(Object.values(vars)).not.toContain("#ff00ff");
+    expect(vars["--color-secondary-button-label"]).toBe("#ff00ff");
   });
 });

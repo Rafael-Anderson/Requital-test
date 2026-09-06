@@ -4,7 +4,26 @@ import FeaturedCollectionsSection from "./FeaturedCollectionsSection";
 import type { Collection } from "@/lib/types";
 import type { SectionSettings } from "@/lib/theme-config-types";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  themeConfig = undefined;
+});
+
+function headerWithViewAll(viewAllSettings: Record<string, unknown>) {
+  return [
+    {
+      id: "hdr",
+      type: "collection_header",
+      visible: true,
+      order: 0,
+      settings: {},
+      blocks: [
+        { id: "vt", type: "collection_title", visible: true, order: 0, settings: { text: "Shop" } },
+        { id: "va", type: "view_all_button", visible: true, order: 1, settings: { label: "View all", ...viewAllSettings } },
+      ],
+    },
+  ] as unknown as Parameters<typeof FeaturedCollectionsSection>[0]["blocks"];
+}
 
 const listCollections = vi.fn();
 vi.mock("@/lib/api", () => ({
@@ -12,8 +31,9 @@ vi.mock("@/lib/api", () => ({
   resolveImageUrl: (path: string | null) => path,
 }));
 
+let themeConfig: unknown = undefined;
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shopSlug: "test-shop", shopBasePath: "", previewToken: undefined, previewMode: false }),
+  useShop: () => ({ shopSlug: "test-shop", shopBasePath: "", previewToken: undefined, previewMode: false, themeConfig }),
 }));
 
 function collection(id: number): Collection {
@@ -67,6 +87,44 @@ describe("FeaturedCollectionsSection", () => {
 
     const links = await findAllByRole("link");
     expect(links).toHaveLength(1);
+  });
+
+  describe("view_all_button (§8.13.C item 2)", () => {
+    it("no-op: unset style ⇒ the plain accent text link, no border, no theme-btn-*", async () => {
+      listCollections.mockResolvedValue([collection(1)]);
+      const { findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={{} as SectionSettings} blocks={headerWithViewAll({})} />,
+      );
+      const el = await findByText("View all");
+      expect(el.tagName).toBe("A");
+      expect(el.className).toContain("text-accent");
+      expect(el.className).toContain("hover:underline");
+      expect(el.className).not.toMatch(/theme-btn-/);
+      expect(el.getAttribute("style") ?? "").not.toContain("border");
+    });
+
+    it("style: 'button' ⇒ an outline secondary button with border + no hover:underline", async () => {
+      listCollections.mockResolvedValue([collection(1)]);
+      const { findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={{} as SectionSettings} blocks={headerWithViewAll({ style: "button" })} />,
+      );
+      const el = await findByText("View all");
+      expect(el.tagName).toBe("A");
+      expect(el.className).not.toContain("hover:underline");
+      expect(el.className).toContain("inline-block");
+      expect(el.getAttribute("style") ?? "").toContain("border-style: solid");
+      expect(el.getAttribute("style") ?? "").not.toContain("background");
+    });
+
+    it("style: 'button' + buttons.secondary.hoverEffect 'border-fill' ⇒ theme-btn-border-fill in the class", async () => {
+      themeConfig = { globalSettings: { buttons: { secondary: { hoverEffect: "border-fill" } } } };
+      listCollections.mockResolvedValue([collection(1)]);
+      const { findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={{} as SectionSettings} blocks={headerWithViewAll({ style: "button" })} />,
+      );
+      const el = await findByText("View all");
+      expect(el.className).toContain("theme-btn-border-fill");
+    });
   });
 
   describe("tile grid controls (Phase 4)", () => {

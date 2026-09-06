@@ -11,6 +11,7 @@ import {
   resolveIconElementStyle,
   themeButtonBaseStyle,
   resolveButtonFillStyle,
+  resolveSecondaryButtonStyle,
   resolveButtonHoverClass,
   themeTextPresetStyle,
 } from "./theme-element-style";
@@ -233,6 +234,27 @@ describe("resolveButtonFillStyle", () => {
     expect(style.color).toBe("var(--color-accent)");
     expect(style.borderColor).toBe("transparent");
     expect(style.borderWidth).toBe("0px");
+  });
+});
+
+describe("resolveSecondaryButtonStyle (§8.13.C item 2)", () => {
+  it("unset ⇒ sensible outline defaults, and NO inline background (so .theme-btn-border-fill:hover can fill)", () => {
+    const style = resolveSecondaryButtonStyle(undefined);
+    expect(style.background).toBeUndefined();
+    expect(style.color).toBe("var(--color-secondary-button-label, var(--color-accent))");
+    expect(style.borderStyle).toBe("solid");
+    expect(style.borderColor).toBe("var(--color-accent)");
+    expect(style.borderWidth).toBe("1px");
+    expect(style.borderRadius).toBe("var(--theme-radius, 8px)");
+    expect(style.textTransform).toBe("none");
+  });
+
+  it("reads the secondary category's own cornerRadius / borderThickness / case / font", () => {
+    const style = resolveSecondaryButtonStyle({ cornerRadius: 4, borderThickness: 2, case: "uppercase", font: "accent" });
+    expect(style.borderRadius).toBe("4px");
+    expect(style.borderWidth).toBe("2px");
+    expect(style.textTransform).toBe("uppercase");
+    expect(style.fontFamily).toBe("var(--theme-accent-font, inherit)");
   });
 });
 

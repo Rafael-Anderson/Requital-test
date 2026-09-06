@@ -203,10 +203,10 @@ function loadGoogleFont(family: string | undefined) {
 //   buttonLabel → --color-accent-foreground              (text on those buttons)
 //   background  → --background / --color-header           (page canvas + header base)
 //   text        → --foreground / --color-header-fg / --color-product-name  (main text)
-// secondaryButtonLabel is deliberately left unmapped — no "secondary" button
-// variant renders anywhere in theme-sections/* (same status as
-// globalSettings.buttons.secondary / pillCornerRadius, already flagged in
-// applyThemeConfigOverrides below).
+// secondaryButtonLabel → --color-secondary-button-label (§8.13.C item 2):
+// read only by resolveSecondaryButtonStyle for the outline "secondary
+// button" (the view_all_button style: 'button' consumer). A brand-new var
+// nothing else reads, so mapping it is inert for every existing surface.
 // --color-header is the LOWEST-priority header input: ThemeDrivenHeader's
 // `header.settings.background` and ShopLayoutClient's
 // `nav_menu.settings.headerBackgroundColor` are inline styles that shadow
@@ -219,6 +219,7 @@ export function resolveSchemeCssVars(scheme: ColorScheme | null | undefined): Re
     "--color-accent": scheme.button,
     "--color-accent-hover": scheme.button,
     "--color-accent-foreground": scheme.buttonLabel,
+    "--color-secondary-button-label": scheme.secondaryButtonLabel,
     "--background": scheme.background,
     "--color-header": scheme.background,
     "--foreground": scheme.text,
@@ -332,13 +333,12 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
     root.style.setProperty("--theme-button-font", g.buttons.primary.font === "accent" ? "var(--theme-accent-font, inherit)" : "var(--theme-body-font, inherit)");
   }
 
-  // buttons.secondary and buttons.pillCornerRadius have no CSS var here —
-  // confirmed via grep, no button anywhere in the theme sections renders a
-  // "secondary" or "pill" variant (Hero's CTA and Newsletter's submit are
-  // the only two themeButtonBaseStyle() consumers, and both are always
-  // primary-styled). Setting vars nothing reads would be dead code; flagged
-  // here rather than fabricated, same as the pre-existing transparentOnHero
-  // note in ThemeDrivenHeader.tsx.
+  // buttons.pillCornerRadius still has no CSS var here — nothing renders a
+  // pill variant. buttons.secondary is now read directly by
+  // resolveSecondaryButtonStyle (§8.13.C item 2) at its one consumer
+  // (FeaturedCollectionsSection's view_all_button style: 'button'), so it
+  // needs no CSS var here either — it's a per-render-site resolver call, not
+  // a global var like buttons.primary's.
 
   // Icons: no CSS var here — lucide's strokeWidth is a numeric SVG prop,
   // not something a CSS custom property can feed into a React component
