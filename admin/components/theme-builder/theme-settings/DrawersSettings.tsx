@@ -1,6 +1,7 @@
 "use client";
 
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Select from "@/components/ui/Select";
 import Toggle from "@/components/ui/Toggle";
 import SchemePicker from "../SchemePicker";
 import type { DrawerSettings as DrawerSettingsType } from "@/lib/types";
@@ -42,6 +43,20 @@ export default function DrawersSettings({ editor }: { editor: ThemeEditorState }
         <span className="text-sm font-medium">Drop shadow</span>
         <Toggle checked={drawers.dropShadow} onChange={(v) => update({ dropShadow: v })} />
       </div>
+
+      {/* §8.13.C item 13 — cart drawer open transition. "Slide" is today's. */}
+      <Select
+        label="Cart drawer open animation"
+        value={drawers.animation ?? "slide"}
+        onChange={(e) =>
+          update({ animation: e.target.value === "slide" ? undefined : (e.target.value as DrawerSettingsType["animation"]) })
+        }
+      >
+        <option value="slide">Slide in</option>
+        <option value="slide-fade">Slide + fade</option>
+        <option value="scale">Scale in</option>
+        <option value="none">None (instant)</option>
+      </Select>
     </div>
   );
 }

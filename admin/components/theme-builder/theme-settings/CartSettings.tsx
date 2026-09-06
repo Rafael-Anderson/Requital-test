@@ -2,6 +2,7 @@
 
 import Toggle from "@/components/ui/Toggle";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Slider from "@/components/ui/Slider";
 import type { CartSettings as CartSettingsType } from "@/lib/types";
@@ -44,6 +45,25 @@ export default function CartSettings({ editor }: { editor: ThemeEditorState }) {
         onChange={(v) => update({ mediaBorderStyle: v })}
       />
       <Slider label="Media corner radius" min={0} max={40} suffix="px" value={cart.mediaCornerRadius} onChange={(v) => update({ mediaCornerRadius: v })} />
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      {/* §8.13.C item 13 — cart-drawer motion. Off / "None" ⇒ today's instant render. */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Animate newly added items</span>
+        <Toggle checked={cart.itemAnimation === true} onChange={(v) => update({ itemAnimation: v || undefined })} />
+      </div>
+      <Select
+        label="Subtotal change animation"
+        value={cart.subtotalAnimation ?? "none"}
+        onChange={(e) =>
+          update({ subtotalAnimation: e.target.value === "none" ? undefined : (e.target.value as CartSettingsType["subtotalAnimation"]) })
+        }
+      >
+        <option value="none">None</option>
+        <option value="flash">Flash on change</option>
+        <option value="count">Count up/down</option>
+      </Select>
     </div>
   );
 }

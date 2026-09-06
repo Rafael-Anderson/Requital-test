@@ -68,4 +68,20 @@ describe("MotionSettings", () => {
     await user.click(row.querySelector('[role="switch"]')!);
     expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { smoothScroll: undefined });
   });
+
+  it("toggling Scroll progress bar on writes scrollProgressBar: true (§8.13.C item 14)", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor({});
+    render(<MotionSettings editor={editor} />);
+    await user.click(screen.getByText("Scroll progress bar").closest("div")!.querySelector('[role="switch"]')!);
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { scrollProgressBar: true });
+  });
+
+  it("toggling Scroll progress bar off writes scrollProgressBar: undefined", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor({ scrollProgressBar: true });
+    render(<MotionSettings editor={editor} />);
+    await user.click(screen.getByText("Scroll progress bar").closest("div")!.querySelector('[role="switch"]')!);
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("motion", { scrollProgressBar: undefined });
+  });
 });
