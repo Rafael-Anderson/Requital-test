@@ -27,7 +27,24 @@ describe("HeroSettings — Phase 4 controls", () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn();
     render(<HeroSettings settings={{}} onUpdate={onUpdate} />);
-    await user.click(screen.getByRole("switch"));
+    // "Show slideshow dots" is the first switch; the Ken Burns toggle is the second.
+    await user.click(screen.getAllByRole("switch")[0]);
     expect(onUpdate).toHaveBeenCalledWith("showSlideIndicators", true);
+  });
+
+  it("indicator-style select writes undefined for 'dots', the value otherwise (§8.13.C item 11)", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(<HeroSettings settings={{ indicatorStyle: "progress" }} onUpdate={onUpdate} />);
+    await user.selectOptions(screen.getByLabelText("Slide indicator style"), "dots");
+    expect(onUpdate).toHaveBeenCalledWith("indicatorStyle", undefined);
+  });
+
+  it("Ken Burns toggle writes undefined when turned off (§8.13.C item 10)", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(<HeroSettings settings={{ kenBurns: true }} onUpdate={onUpdate} />);
+    await user.click(screen.getAllByRole("switch")[1]);
+    expect(onUpdate).toHaveBeenCalledWith("kenBurns", undefined);
   });
 });

@@ -80,6 +80,20 @@ export default function HeroSettings({
         <Toggle checked={(settings.showSlideIndicators as boolean) ?? false} onChange={(v) => onUpdate("showSlideIndicators", v)} />
       </div>
 
+      <Select
+        label="Slide indicator style"
+        value={(settings.indicatorStyle as string) ?? "dots"}
+        onChange={(e) => onUpdate("indicatorStyle", e.target.value === "dots" ? undefined : e.target.value)}
+      >
+        <option value="dots">Dots (uses the toggle above)</option>
+        <option value="progress">Progress bar</option>
+      </Select>
+
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Ken Burns effect (slow zoom on the photo)</span>
+        <Toggle checked={(settings.kenBurns as boolean) ?? false} onChange={(v) => onUpdate("kenBurns", v || undefined)} />
+      </div>
+
       <hr className="border-black/10 dark:border-white/10" />
 
       <Input
