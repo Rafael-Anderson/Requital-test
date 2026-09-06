@@ -33,3 +33,28 @@ describe("BlockSettingsForm — rating_badge countUp (§8.7 item 3)", () => {
     expect(onUpdate).toHaveBeenCalledWith("countUp", true);
   });
 });
+
+const VIEW_ALL_BLOCK: ThemeBlock = { id: "va-0", type: "view_all_button", visible: true, order: 0, settings: { label: "View all" } };
+
+describe("BlockSettingsForm — view_all_button Display as (§8.13.C item 2)", () => {
+  it("defaults the Display as select to Text link", () => {
+    render(<BlockSettingsForm block={VIEW_ALL_BLOCK} onUpdate={vi.fn()} />);
+    expect((screen.getByLabelText("Display as") as HTMLSelectElement).value).toBe("link");
+  });
+
+  it("picking Secondary button writes style: 'button'", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(<BlockSettingsForm block={VIEW_ALL_BLOCK} onUpdate={onUpdate} />);
+    await user.selectOptions(screen.getByLabelText("Display as"), "button");
+    expect(onUpdate).toHaveBeenCalledWith("style", "button");
+  });
+
+  it("picking Text link writes style: undefined (the no-op)", async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(<BlockSettingsForm block={{ ...VIEW_ALL_BLOCK, settings: { label: "View all", style: "button" } }} onUpdate={onUpdate} />);
+    await user.selectOptions(screen.getByLabelText("Display as"), "link");
+    expect(onUpdate).toHaveBeenCalledWith("style", undefined);
+  });
+});

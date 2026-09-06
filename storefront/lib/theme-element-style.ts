@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { resolveLetterSpacing, resolveLineHeight } from "./theme-typography";
-import type { ButtonHoverEffect, TextLetterSpacing, TextLineHeight } from "./theme-config-types";
+import type { ButtonHoverEffect, ButtonStyleSettings, TextLetterSpacing, TextLineHeight } from "./theme-config-types";
 
 // Pure per-block style resolution for the theme builder's in-preview
 // element editing (ElementSettingsPanel, admin-side) — a block's settings
@@ -114,6 +114,31 @@ export function resolveButtonFillStyle(fill: string | undefined): CSSProperties 
     };
   }
   return {};
+}
+
+// §8.13.C item 2 — the outline "secondary button" base, read from
+// globalSettings.buttons.secondary (which had NO render consumer until now —
+// see §9.3). Shape follows resolveButtonFillStyle('outline') (transparent
+// bg, accent border+text) but reads the secondary category's own
+// cornerRadius/borderThickness/case/font, and its text colour from the
+// active scheme's secondaryButtonLabel (mapped to --color-secondary-button-label
+// in shop-context.tsx's resolveSchemeCssVars, falling back to --color-accent).
+// Only ever called when a consumer opts in (view_all_button style: 'button'),
+// so a shop that never sets that is untouched.
+export function resolveSecondaryButtonStyle(s: ButtonStyleSettings | undefined): CSSProperties {
+  return {
+    // No `background` here on purpose: an <a>/button has no background by
+    // default (= the transparent outline look), and setting it inline would
+    // beat .theme-btn-border-fill:hover's `background-color` (inline wins
+    // over a stylesheet rule) — the fill effect would never show.
+    color: "var(--color-secondary-button-label, var(--color-accent))",
+    borderStyle: "solid",
+    borderWidth: `${typeof s?.borderThickness === "number" ? s.borderThickness : 1}px`,
+    borderColor: "var(--color-accent)",
+    borderRadius: typeof s?.cornerRadius === "number" ? `${s.cornerRadius}px` : "var(--theme-radius, 8px)",
+    textTransform: (s?.case === "uppercase" ? "uppercase" : "none") as CSSProperties["textTransform"],
+    fontFamily: s?.font === "accent" ? "var(--theme-accent-font, inherit)" : "var(--theme-body-font, inherit)",
+  };
 }
 
 export interface ButtonElementSettings {

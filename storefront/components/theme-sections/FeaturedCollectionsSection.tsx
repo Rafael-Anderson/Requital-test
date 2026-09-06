@@ -2,13 +2,20 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolveButtonElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import {
+  resolveTextElementStyle,
+  resolveButtonElementStyle,
+  resolveSecondaryButtonStyle,
+  resolveButtonHoverClass,
+  themeTextPresetStyle,
+} from "@/lib/theme-element-style";
 import { selectTiles } from "@/components/home-layouts/FeaturedGrid";
 import type { Collection } from "@/lib/types";
-import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
+import type { ButtonStyleSettings, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Tailwind's JIT scanner needs literal class strings. Mobile stays 2-up.
 const GRID_COLS: Record<number, string> = {
@@ -31,7 +38,7 @@ const ASPECT_CLASS: Record<string, string> = {
 // so "view all" links home, where CollectionNav already lists every
 // collection as a pill row.
 export default function FeaturedCollectionsSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, shopBasePath, previewToken, previewMode } = useShop();
+  const { shopSlug, shopBasePath, previewToken, previewMode, themeConfig } = useShop();
   const [collections, setCollections] = useState<Collection[]>([]);
 
   useEffect(() => {
@@ -83,19 +90,7 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
               {heading}
             </h2>
           )}
-          {viewAllBlock?.visible && (
-            <Link
-              href={shopBasePath || "/"}
-              {...editableAttrs(previewMode, { id: viewAllBlock.id, sectionId, type: "view_all_button" })}
-              className="text-sm font-medium text-accent hover:underline"
-              style={{
-                textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
-                ...resolveButtonElementStyle(viewAllBlock.settings),
-              }}
-            >
-              {viewAllLabel}
-            </Link>
-          )}
+          {viewAllBlock?.visible && <ViewAll block={viewAllBlock} label={viewAllLabel} href={shopBasePath || "/"} sectionId={sectionId} previewMode={previewMode} secondary={themeConfig?.globalSettings.buttons.secondary} />}
         </div>
       )}
       <div className={`grid ${gridCols} gap-3`}>
@@ -130,5 +125,54 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
         ))}
       </div>
     </div>
+  );
+}
+
+// §8.13.C item 2 — the view_all_button. `style: 'button'` renders it as the
+// outline secondary button (globalSettings.buttons.secondary + border-fill /
+// press from §8.8's resolveButtonHoverClass); anything else ⇒ today's exact
+// plain accent link, byte-for-byte.
+function ViewAll({
+  block,
+  label,
+  href,
+  sectionId,
+  previewMode,
+  secondary,
+}: {
+  block: ThemeBlock;
+  label: string;
+  href: string;
+  sectionId: string;
+  previewMode: boolean;
+  secondary: ButtonStyleSettings | undefined;
+}) {
+  const attrs = editableAttrs(previewMode, { id: block.id, sectionId, type: "view_all_button" });
+  if (block.settings.style === "button") {
+    const hover = resolveButtonHoverClass(secondary?.hoverEffect, secondary?.pressEffect);
+    return (
+      <a
+        href={href}
+        {...attrs}
+        className={`inline-block px-5 py-2.5 text-sm font-medium ${hover.className}`}
+        style={{ ...resolveSecondaryButtonStyle(secondary), ...resolveButtonElementStyle(block.settings) }}
+      >
+        {label}
+        {hover.showIcon && <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />}
+      </a>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      {...attrs}
+      className="text-sm font-medium text-accent hover:underline"
+      style={{
+        textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
+        ...resolveButtonElementStyle(block.settings),
+      }}
+    >
+      {label}
+    </Link>
   );
 }

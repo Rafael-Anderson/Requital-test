@@ -1226,21 +1226,22 @@ complete but is structurally independent (the create/apply flow). Phase I is
 fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
-§8.7 items 1-5 (§8.8–§8.12) + §8.13 stock-take + §8.13.C items 1/5/8
-(§8.14 badges.style + entranceAnimation + motion.smoothScroll)**, all built
-and merged. The rest of §8.13.C (items 2+, priority list §8.13.C) and
+§8.7 items 1-5 (§8.8–§8.12) + §8.13 stock-take + §8.13.C items 1/5/8 (§8.14)
++ §8.13.C item 2 (§8.15 buttons.secondary via view_all_button)**, all built
+and merged. The rest of §8.13.C (items 3+, priority list §8.13.C) and
 D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
 remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
-(Flow A) + batch 1 + C + §8.8–§8.14 already deliver four visibly distinct
+(Flow A) + batch 1 + C + §8.8–§8.15 already deliver four visibly distinct
 starting points that pick up real card-hover effects, image-load fade,
 stagger, a brands marquee (Market), header/footer structure, a real mobile
 nav, button hover/press feedback, real header scroll behaviour, (Market
 only) a real animated trust-bar rating, sharp icon corners (Atelier +
 Heritage), a newsletter success animation (Atelier + Market + Bloom),
 shaped Sale/Sold-out badges + a pop (Market tag / Bloom circle / Heritage
-ribbon), and smooth in-page scrolling (Atelier); the remaining flourishes
-each template wants are in its own deferred block (§8.14 updated
-Market/Bloom/Heritage's) and prioritized in §8.13.C.
+ribbon), smooth in-page scrolling (Atelier), and an outline secondary
+button on "View all" (Market + Heritage); the remaining flourishes each
+template wants are in its own deferred block (§8.15 updated Market/Heritage's)
+and prioritized in §8.13.C.
 
 ### 8.1 Phase A — detailed plan (approved 2026-09-04, with three amendments) — BUILT
 
@@ -2506,10 +2507,13 @@ template-specific. `customCursor` — 0/4, no template wants it.
    why. Bloom's "contrasting yellow badge colour scheme" (a 3rd
    `colorScheme` + `saleSchemeId` re-point) is a newly-noted still-open
    *colour* item, not shape.
-2. **`buttons.secondary` rendered variant — 2/4** (Market, Heritage).
-   Effort **M** (a real secondary-button render path on the CTA block +
-   `secondaryButtonLabel` scheme wiring — not just an enum). Unchanged
-   cost.
+2. **`buttons.secondary` rendered variant — BUILT §8.15.** No render slot
+   existed anywhere; the chosen slot (asked + answered) is
+   `featured_collections`' `view_all_button` with an opt-in "button" mode —
+   not a hero 2nd CTA (which would have meant authoring hero content §6
+   doesn't specify). `secondaryButtonLabel` scheme wiring folded in.
+   Market + Heritage. `ProductGridSection`'s own "View all" left as a
+   follow-up.
 3. **`product_tabs` magic-line + crossfade + height-animate — 2/4**
    (Market, Bloom). Effort **M**. **Cheaper now**: `useScrollValue`'s
    rAF-throttle pattern and the `--motion-*` token table exist; the
@@ -2741,6 +2745,97 @@ which was stranded when its PR #102 merged into #101's branch instead of
 
 ---
 
+### 8.15 `buttons.secondary` rendered variant — BUILT (2026-09-06, `feat/secondary-button`)
+
+§8.13.C item 2. `globalSettings.buttons.secondary` (schema since B1;
+`hoverEffect`/`pressEffect` since §8.8) and `ColorScheme.secondaryButtonLabel`
+had **rendered nowhere** — dead in §9.3 since Phase A.
+
+**Different in kind from §8.8–§8.14 — a content-model question, not a style
+tweak.** Investigation confirmed: the hero has *one* `cta` block (styled
+primary), newsletter submit is primary, and both "View all"s
+(`FeaturedCollectionsSection`, `ProductGridSection`) are plain
+`text-accent hover:underline` links. **Neither Market's nor Heritage's §6
+table names a section or CTA where a secondary button appears** — the
+`buttons.secondary: rendered …` rows are `globalSettings` entries with no
+location. Options were put to the user (AskUserQuestion): a hero 2nd-CTA
+slot (needs authoring hero labels/links §6 doesn't specify), the
+`view_all_button` as a button (no invented content — "View all" exists), or
+defer. **Answer: `view_all_button` as a button.**
+
+**The styling was ~90% pre-built.** `resolveButtonFillStyle('outline')`
+already produced the outline look; `resolveButtonHoverClass(hoverEffect,
+pressEffect)` (§8.8) already takes generic params so `border-fill` (Market)
+and `pressEffect` (Heritage) work as-is —
+`.theme-btn-border-fill:hover` fills with `--color-accent`,
+`.theme-btn-press:active` translateY(1px). **Zero new CSS.** This round is a
+render-slot + `secondaryButtonLabel` mapping.
+
+- **`resolveSecondaryButtonStyle(s)`** (`theme-element-style.ts`): the
+  outline base, reading `buttons.secondary`'s own `cornerRadius`/
+  `borderThickness`/`case`/`font`, colour from
+  `--color-secondary-button-label` (fallback `--color-accent`). **No inline
+  `background`** on purpose — an `<a>` is transparent by default, and an
+  inline `background` would beat `.theme-btn-border-fill:hover`'s
+  `background-color` (inline > stylesheet), so the fill effect would never
+  show. **This same latent issue exists in the primary button's
+  `resolveButtonFillStyle('outline')`** (it does set `background:
+  "transparent"` inline) — noted, out of scope; no template combines
+  primary outline + `border-fill`, and §8.8 already documented `border-fill`
+  as inert on a solid primary.
+- **`resolveSchemeCssVars`** gains `--color-secondary-button-label` from
+  `scheme.secondaryButtonLabel` — a brand-new var nothing else reads, inert
+  for every existing surface. Its `shop-context.test.ts` case flips from
+  "does not map" to "maps".
+- **`FeaturedCollectionsSection.tsx`** — a `ViewAll` sub-component.
+  `viewAllBlock.settings.style === "button"` ⇒ an `<a>` with
+  `resolveSecondaryButtonStyle` + `resolveButtonHoverClass(secondary?.hoverEffect,
+  secondary?.pressEffect)` + the trailing `ArrowRight` for `icon-nudge`
+  (matching the hero CTA); anything else ⇒ **today's exact `<Link
+  className="text-sm font-medium text-accent hover:underline">`**,
+  byte-for-byte. The `href` stays `shopBasePath || "/"` (the pre-existing
+  no-all-collections-route quirk).
+- **Admin**: `BlockSettingsForm.tsx`'s `view_all_button` gains a "Display
+  as" `<Select>` ("Text link" writes `style: undefined`). `ButtonsSettings.tsx`
+  passes `showEffects` to the Secondary `<ButtonStyleFields>` now that it
+  has a render path.
+- **Templates**: Market's `featuredCollections('Shop by occasion')` →
+  `viewAllAsButton` + `g.buttons.secondary.hoverEffect = 'border-fill'`;
+  Heritage's `featuredCollections('Our collections')` → `viewAllAsButton` +
+  `g.buttons.secondary.pressEffect = true` (no hoverEffect — Heritage is
+  calm). **2/4 confirmed** against each §6 table — Atelier sets
+  `buttons.secondary.cornerRadius` defensively but has no §6
+  `buttons.secondary` row (stays a link); Bloom has none.
+- **Follow-up flagged**: `ProductGridSection`'s "View all" is a *section
+  setting* (`showViewAllButton`), a different mechanism — not touched this
+  round; a `viewAllStyle` setting there would give it the same treatment.
+
+**No-op**: `view_all_button.settings.style` absent/`'link'` ⇒ the current
+link, byte-for-byte. `resolveSecondaryButtonStyle` is only ever *called*
+when `style: 'button'` is set, so a shop that never opts in is untouched.
+`--color-secondary-button-label` reads nowhere else. No `DEFAULT_THEME_CONFIG`
+change.
+
+**Scratch-shop pass — visual + DOM.** Published the real Market and
+Heritage templates + Atelier as the link/no-op control; the seed shop's
+homepage renders a `featured_collections` with tiles + a "View all". Market:
+an `<a>` with `theme-btn-border-fill`, `border-style: solid`,
+`border-width: 1px`, transparent background — and on `page.hover()` the
+`background-color` becomes the accent (the border-fill effect). Heritage:
+`theme-btn-press` + the outline, no `border-fill`. Atelier: still the plain
+`<a … text-accent hover:underline>`, no border. Reduced-motion pass: the
+border-fill transition computes at `~0.001s` (blanket rule). Zero real
+console errors (one transient publish-race 500 on a re-run, gone on the
+next). Scratch spec deleted + `playwright.config.ts` reverted.
+
+**Gate:** backend `tsc` + `jest` (themes, 87/87) + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 519/519 + lint +0 (33); admin `tsc` + `build` +
+`vitest` (9 failures across `AccountSetup.test.tsx` / `login/page.test.tsx`
+/ `PreviewFrame.test.tsx` — the pre-documented full-suite-only flaky set,
+31/31 in isolation, untouched by this change) + lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -2865,6 +2960,7 @@ avoids retouching every token later. Full table in §8.1.
 | `section.settings.successAnimation` (newsletter) | ✅ `.theme-newsletter-success` scale-in on the success swap | ✅ §8.12 |
 | `badges.style` (+ `entranceAnimation`) | ✅ `resolveProductBadge` className + `.theme-badge-*` shape classes / `.theme-badge-pop` | ✅ §8.14 |
 | `motion.smoothScroll` | ✅ `applyScrollBehavior()` in `lib/motion.ts` | ✅ §8.14 |
+| `buttons.secondary` + `secondaryButtonLabel` (scheme) | ✅ `resolveSecondaryButtonStyle()` + `--color-secondary-button-label`, consumed by `featured_collections`' `view_all_button` in "button" mode | ✅ §8.15 |
 
 ### 9.4 Other risks
 
