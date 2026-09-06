@@ -1227,8 +1227,10 @@ fully parallel and gated on its own glyph-list sign-off.
 
 **Current commitment:** Phases **A + B + G0 + §8.3 batch 1 (items 1-5) + C +
 §8.7 items 1-5 (§8.8–§8.12) + §8.13 stock-take + §8.13.C items 1/5/8 (§8.14)
-+ §8.13.C item 2 (§8.15 buttons.secondary via view_all_button)**, all built
-and merged. The rest of §8.13.C (items 3+, priority list §8.13.C) and
++ §8.13.C item 2 (§8.15 buttons.secondary via view_all_button) + §8.13.C
+items 3 (crossfade only — magic-line/height-animate deferred) + 4 (§8.16
+wishlist pop/burst)**, all built (items 3/4 in batch PR A, pending merge).
+The rest of §8.13.C (items 6+, priority list §8.13.C) and
 D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
 remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
 (Flow A) + batch 1 + C + §8.8–§8.15 already deliver four visibly distinct
@@ -2514,18 +2516,34 @@ template-specific. `customCursor` — 0/4, no template wants it.
    doesn't specify). `secondaryButtonLabel` scheme wiring folded in.
    Market + Heritage. `ProductGridSection`'s own "View all" left as a
    follow-up.
-3. **`product_tabs` magic-line + crossfade + height-animate — 2/4**
-   (Market, Bloom). Effort **M**. **Cheaper now**: `useScrollValue`'s
-   rAF-throttle pattern and the `--motion-*` token table exist; the
-   magic-line is a `transform`/`width` transition reading `--motion-duration-base`,
-   the crossfade is `@keyframes theme-fade-in` (already in `globals.css`),
-   the height-animate is the `grid-template-rows: 0fr→1fr` trick (still
-   unbuilt but small).
-4. **Wishlist animation (`pop`/`burst`/`sweep`) — 2/4** (Market `pop`,
-   Bloom `burst`). Effort **S–M**. **Cheaper now**: `WishlistButton`
-   already exists; this is a one-shot `@keyframes` on click (like
-   §8.12's `.theme-newsletter-success`), reduced-motion covered by the
-   blanket rule, reads `--motion-duration-fast`.
+3. **`product_tabs` crossfade shipped §8.16; magic-line + height-animate
+   deferred — blocked on `collectionIds`, not template count.** The
+   "2/4 (Market, Bloom)" is aspirational: both templates' §6 tables name a
+   `product_tabs` section with `activeIndicator: magic-line`, but **neither
+   template contains one and can't** (a `product_tabs` section needs real
+   `collectionIds`, which a template literal can't hardcode — their own
+   deferred blocks say so). So the full mechanism would be scope for a
+   consumer that doesn't exist — the same shape as item 9 (section
+   separators) being skipped as 0/4: the deferred-block text describes an
+   intent no template can currently act on. **What shipped:** the content
+   crossfade only (`.theme-tab-panel`, a keyed-remount one-shot
+   `theme-fade-in` — resting render byte-identical, only the tab-switch
+   transition changed). **Deferred until a template has a real
+   `product_tabs` section:** the magic-line (also a pattern mismatch —
+   `ProductTabsSection` uses solid-fill accent pills, not an underlinable
+   nav; "active pill slides" needs a pill restyle that breaks the
+   byte-identical resting look, or a fiddly behind-the-pills illusion) and
+   the height-animate (L-shaped: real `scrollHeight` JS measurement +
+   transition + cleanup, not the hand-waved `0fr→1fr` trick, which is
+   collapse↔expand, not height-between-two-contents).
+4. **Wishlist animation (`pop`/`burst`) — BUILT §8.16.** 2/4 (Market
+   `pop`, Bloom `burst`). One-shot `@keyframes` set in `WishlistButton`'s
+   click handler (not an effect — dodges the `set-state-in-effect` lint
+   shape), cleared on `animationend`; `--motion-duration-base`,
+   reduced-motion covered by the blanket rule. `burst` adds an expanding
+   `::after` ring. `sweep` is reserved in the type enum (all 3 mirrors) but
+   unbuilt — falls through to no animation, not offered in the admin
+   dropdown.
 5. **`badges.entranceAnimation` — BUILT §8.14** (folded into item 1). Note:
    shipped as a *mount-triggered* pop, not scroll-into-view — the faithful
    version needs the §8.10 observer pattern in both render components
@@ -2836,6 +2854,61 @@ next). Scratch spec deleted + `playwright.config.ts` reverted.
 
 ---
 
+### 8.16 wishlist `pop`/`burst` + `product_tabs` crossfade — BUILT (2026-09-06, `feat/tabs-wishlist-polish`)
+
+§8.13.C items 3 + 4 in one PR (batch PR A). Both are one-shot CSS keyframes
+on an existing element; neither adds a CSS var, so there is no SPA-leak
+clear to write.
+
+**Item 4 — `productCards.wishlistAnimation` (`'none' | 'pop' | 'burst' |
+'sweep'`).** New optional key on `ProductCardSettings`, mirrored across all
+three type files. `WishlistButton.tsx` sets an `adding` flag **in the click
+handler** (only when `!active` — i.e. toggling ON) and clears it on
+`animationend`; the flag adds `theme-wishlist-anim` (`pop`: a
+`theme-wishlist-pop` scale bounce) or that plus `theme-wishlist-anim-burst`
+(`burst`: an expanding, fading `::after` ring), both `--motion-duration-base`.
+The flag lives in the handler rather than an effect specifically to avoid
+the `set-state-in-effect` lint shape. `sweep` is reserved in the enum for
+mirror consistency with §3.6 but **not implemented** — it falls through to
+no class, and is not offered in the admin dropdown. Admin: a "Wishlist heart
+animation" `<Select>` in `ProductCardsSettings.tsx`, shown only when
+`showWishlist` is on. Templates: Market `pop`, Bloom `burst`.
+
+- **No-op proof:** absent key ⇒ `ANIM_CLASS[""]` ⇒ `""`, byte-identical to
+  today's plain colour swap. No `DEFAULT_THEME_CONFIG` change, no validation
+  change (`productCards` sub-keys are deliberately unvalidated, per the
+  file's own "shallow beyond structure" comment).
+- **Test note:** the `onAnimationEnd` clear path can't be exercised in
+  jsdom — React 19 + jsdom doesn't wire `animationend` into the synthetic
+  event system (verified with a probe: neither `fireEvent.animationEnd` nor
+  a native `dispatchEvent` reaches an `onAnimationEnd` handler). The
+  `WishlistButton.test.tsx` cases cover the config→class mapping; the clear
+  is verified in the scratch pass.
+
+**Item 3 — `product_tabs` content crossfade only.** `ProductTabsSection.tsx`
+wraps its loading/empty/grid states in one `<div key={activeId}
+className="theme-tab-panel">`; the key remounts the wrapper on every tab
+switch, so the one-shot `theme-fade-in` (already in `globals.css`) plays
+once per switch. Resting render is byte-identical — only the previously
+instant content swap now fades. **Magic-line + height-animate deferred**
+(see the §8.13.C item 3 entry for the full reasoning): no template can ship
+a `product_tabs` section yet (needs hardcodable `collectionIds`), the
+magic-line pattern fights the section's solid-fill pills, and the
+height-animate is L-shaped. Same discipline as item 9 (separators) skipped
+as 0/4 — not building a mechanism ahead of any consumer that can use it. No
+dedicated `ProductTabsSection` component test added (a keyed wrapper + one
+class); `globals.css.test.ts` covers the stylesheet parsing.
+
+**Scratch-shop pass (dev seed shop, Playwright, visual + DOM + computed
+style, reduced-motion pass).** [pending — run before merge]
+
+**Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` 524/524 (+5 `WishlistButton.test.tsx`) + lint +0
+(33); admin `tsc` + `build` + `vitest` `ProductCardsSettings` 4/4 (+2) +
+lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -2961,6 +3034,8 @@ avoids retouching every token later. Full table in §8.1.
 | `badges.style` (+ `entranceAnimation`) | ✅ `resolveProductBadge` className + `.theme-badge-*` shape classes / `.theme-badge-pop` | ✅ §8.14 |
 | `motion.smoothScroll` | ✅ `applyScrollBehavior()` in `lib/motion.ts` | ✅ §8.14 |
 | `buttons.secondary` + `secondaryButtonLabel` (scheme) | ✅ `resolveSecondaryButtonStyle()` + `--color-secondary-button-label`, consumed by `featured_collections`' `view_all_button` in "button" mode | ✅ §8.15 |
+| `productCards.wishlistAnimation` (new key, never a "dead control") | ✅ `.theme-wishlist-anim` / `-burst` one-shot on `WishlistButton`, click-handler flag; `sweep` reserved-unbuilt | ✅ §8.16 |
+| `product_tabs` tab-switch polish | ◑ crossfade only (`.theme-tab-panel` keyed remount); magic-line + height-animate deferred until a template ships a real `product_tabs` section (blocked on hardcodable `collectionIds`) | ◑ §8.16 |
 
 ### 9.4 Other risks
 
