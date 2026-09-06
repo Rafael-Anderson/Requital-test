@@ -2899,8 +2899,24 @@ as 0/4 — not building a mechanism ahead of any consumer that can use it. No
 dedicated `ProductTabsSection` component test added (a keyed wrapper + one
 class); `globals.css.test.ts` covers the stylesheet parsing.
 
-**Scratch-shop pass (dev seed shop, Playwright, visual + DOM + computed
-style, reduced-motion pass).** [pending — run before merge]
+**Scratch-shop pass (dev seed shop, puppeteer, DOM + computed style,
+reduced-motion pass).** Published Market (`pop`) onto shop 1 with an injected
+`product_tabs` section (Flowers/Gifts tabs). Wishlist, `no-preference`:
+resting heart has no `theme-wishlist-*` class; on toggle-on the class appears
+with computed `animationName: theme-wishlist-pop`; after `animationend` the
+class is cleared (real-browser confirmation of the `onAnimationEnd`
+`setAdding(false)` path jsdom can't exercise); zero console errors. Wishlist,
+`prefers-reduced-motion: reduce`: resting no class; toggle-on is functionally
+instant (blanket rule zeroes the duration, class added + cleared faster than
+a 10ms poll) — no visible motion, correct. `product_tabs`: `.theme-tab-panel`
+present; clicking the "Gifts" tab yields computed `animationName:
+theme-fade-in` / `duration: 0.352s` on the keyed remount; zero console
+errors. Scratch theme + spec deleted; seed shop back to no published theme.
+**One dev-server artifact, not a code bug:** turbopack's `next dev` HMR
+didn't fully reprocess `globals.css` after the second consecutive edit —
+`.theme-tab-panel` was missing from the *dev* CSS while present in every
+`next build` output and passing `globals.css.test.ts`; a `.next` wipe + dev
+restart fixed it.
 
 **Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
 `tsc` + `build` + `vitest` 524/524 (+5 `WishlistButton.test.tsx`) + lint +0
