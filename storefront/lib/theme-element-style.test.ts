@@ -183,7 +183,7 @@ describe("themeButtonBaseStyle", () => {
   it("returns the CSS-var-driven defaults every primary button starts from, legacy Layout mode's button shape taking precedence over the new Buttons category's own corner radius", () => {
     const style = themeButtonBaseStyle();
     expect(style.borderRadius).toBe(
-      "var(--theme-btn-primary-radius, var(--theme-button-pill-radius, var(--theme-radius, 8px)))",
+      "var(--theme-button-pill-radius, var(--theme-btn-primary-radius, var(--theme-radius, 8px)))",
     );
     expect(style.borderWidth).toBe("var(--theme-button-border-width, 0px)");
     expect(style.borderStyle).toBe("solid");
