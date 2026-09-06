@@ -6,7 +6,8 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { listProducts, listCollections } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
-import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
+import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, resolveButtonHoverClass, resolveSecondaryButtonStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
+import { ArrowRight } from "lucide-react";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
 import { resolveProductBadge, type ResolvedProductBadge } from "@/lib/product-badge";
 import { cardDensity, cardTextAlignClass, resolveCardAspectClass, resolveCardStyleClass } from "@/lib/product-card-style";
@@ -303,6 +304,12 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   // gated on collectionSlug resolving below regardless of this setting.
   const showViewAll = settings.showViewAllButton !== false;
   const viewAllLabel = (typeof settings.viewAllLabel === "string" && settings.viewAllLabel.trim()) || "View all";
+  // §8.15 follow-up — settings.viewAllStyle 'button' opts this section's "View
+  // all" into the outline secondary button (mirrors FeaturedCollectionsSection's
+  // view_all_button); absent/'link' ⇒ today's exact plain accent link.
+  const viewAllAsButton = settings.viewAllStyle === "button";
+  const secondaryBtn = themeConfig?.globalSettings.buttons.secondary;
+  const viewAllHover = resolveButtonHoverClass(secondaryBtn?.hoverEffect, secondaryBtn?.pressEffect);
 
   useEffect(() => {
     listProducts(shopSlug, outletId, collectionId, undefined, previewToken)
@@ -370,11 +377,21 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
               {sectionTitle}
             </h2>
           )}
-          {showViewAll && collectionSlug && (
-            <Link href={`${shopBasePath}/collections/${collectionSlug}`} className="text-sm font-medium text-accent hover:underline">
-              {viewAllLabel}
-            </Link>
-          )}
+          {showViewAll && collectionSlug &&
+            (viewAllAsButton ? (
+              <Link
+                href={`${shopBasePath}/collections/${collectionSlug}`}
+                className={`inline-block px-5 py-2.5 text-sm font-medium ${viewAllHover.className}`}
+                style={resolveSecondaryButtonStyle(secondaryBtn)}
+              >
+                {viewAllLabel}
+                {viewAllHover.showIcon && <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />}
+              </Link>
+            ) : (
+              <Link href={`${shopBasePath}/collections/${collectionSlug}`} className="text-sm font-medium text-accent hover:underline">
+                {viewAllLabel}
+              </Link>
+            ))}
         </div>
       )}
       <div className={`grid ${columns} theme-grid-gap`}>

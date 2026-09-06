@@ -73,3 +73,23 @@ describe("CartDrawer cart.subtotalAnimation (§8.13.C item 13)", () => {
     expect(getByText(/120\.50/).className).toContain("theme-cart-subtotal-flash");
   });
 });
+
+describe("CartDrawer drawers chrome (§8.18 follow-up)", () => {
+  it("no-op: unset drawers ⇒ bg-drawer + shadow-2xl, no panel border", () => {
+    themeConfig = { globalSettings: {} };
+    const { container } = render(<CartDrawer />);
+    const p = panel(container);
+    expect(p.className).toContain("bg-drawer");
+    expect(p.className).toContain("text-drawer-fg");
+    expect(p.className).toContain("shadow-2xl");
+    expect(p.className).not.toMatch(/\bborder\b/);
+  });
+
+  it("bordersStyle 'solid' ⇒ a drawer-scheme border; dropShadow false ⇒ no shadow", () => {
+    themeConfig = { globalSettings: { drawers: { bordersStyle: "solid", dropShadow: false } } };
+    const { container } = render(<CartDrawer />);
+    const p = panel(container);
+    expect(p.className).toContain("border border-drawer-border");
+    expect(p.className).not.toContain("shadow-2xl");
+  });
+});

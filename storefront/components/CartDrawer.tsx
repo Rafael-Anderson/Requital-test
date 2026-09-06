@@ -42,7 +42,14 @@ export default function CartDrawer() {
   const countedSubtotal = useAnimatedNumber(subtotal, subtotalAnim === "count");
   const shownSubtotal = subtotalAnim === "count" ? countedSubtotal : subtotal;
 
-  const motion = DRAWER_MOTION[themeConfig?.globalSettings.drawers?.animation ?? "slide"] ?? DRAWER_MOTION.slide;
+  const drawers = themeConfig?.globalSettings.drawers;
+  const motion = DRAWER_MOTION[drawers?.animation ?? "slide"] ?? DRAWER_MOTION.slide;
+  // §8.18 follow-up — bordersStyle 'none' (default) + dropShadow true
+  // (default) reproduce today's panel exactly; 'solid' adds a 1px drawer-
+  // scheme border, dropShadow false drops the shadow.
+  const drawerChrome = `${drawers?.bordersStyle === "solid" ? "border border-drawer-border" : ""} ${
+    drawers?.dropShadow === false ? "" : "shadow-2xl"
+  }`;
 
   return (
     <>
@@ -52,7 +59,7 @@ export default function CartDrawer() {
         aria-hidden={!open}
       />
       <div
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-header text-header-fg shadow-2xl flex flex-col ${motion.transition} ${
+        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-drawer text-drawer-fg ${drawerChrome} flex flex-col ${motion.transition} ${
           open ? motion.open : motion.closed
         }`}
         style={{ transitionDuration: "var(--motion-duration-base, 300ms)" }}
