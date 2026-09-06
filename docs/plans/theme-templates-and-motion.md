@@ -3130,12 +3130,17 @@ Admin: "Focus animation" `<Select>` (None / Floating label) in
 writes `--theme-button-pill-radius` = `buttons.pillCornerRadius` (default
 9999) and **removes it** otherwise (SPA-leak clear, in the always-run
 `g.buttons.primary` block). `themeButtonBaseStyle`'s `borderRadius` becomes
-`var(--theme-btn-primary-radius, var(--theme-button-pill-radius, var(--theme-radius, 8px)))`
-— the pill var sits between the legacy Layout-mode shape var (still wins)
-and `--theme-radius` (untouched, so the Featured/ImageText/ProductGrid image
-containers that share it, and the newsletter input, are unaffected). `pill`
-unset ⇒ var absent ⇒ byte-identical, including for a shop with a hand-set
-`cornerRadius`. Bloom sets `pill: true` (its earlier
+`var(--theme-button-pill-radius, var(--theme-btn-primary-radius, var(--theme-radius, 8px)))`
+— the pill var is checked **first** so an opted-in pill wins over the legacy
+Layout-mode shape var too (the scratch pass caught the first cut, which put
+it after the legacy var: `applyLegacyThemeOverrides` *always* sets
+`--theme-btn-primary-radius` to `8px` for the "rounded" default, so the pill
+value never won). `--theme-radius` is untouched (the
+Featured/ImageText/ProductGrid image containers that share it, and the
+newsletter input, are unaffected). `pill` unset ⇒ var absent ⇒ the chain is
+`var(--theme-btn-primary-radius, var(--theme-radius, 8px))` — byte-identical
+to before, including for a shop with a hand-set `cornerRadius`. Bloom sets
+`pill: true` (its earlier
 "can't set cornerRadius: 9999, it'd ellipse the tiles" note is now
 resolved). Note: `pillCornerRadius`'s name is now slightly redundant with
 the boolean (field = value, boolean = whether it's used) — accepted minor
@@ -3151,7 +3156,21 @@ before. One test updated (`theme-element-style.test.ts`'s
 change, no validation change.
 
 **Scratch-shop pass (dev seed shop, puppeteer, DOM + computed style,
-reduced-motion pass).** [pending — run before merge]
+reduced-motion pass).** Market + Bloom published onto shop 1. float-label
+(Market): the newsletter input is inside `label.theme-float-label` with
+`placeholder=" "` and a `<span>Email address</span>`; no bare
+`placeholder="you@example.com"` input; focusing the input moves the span's
+computed `transform` from `translateY(-7px)` to `scale(0.82)
+translateY(-26.2px)` (and it lands there under `prefers-reduced-motion` too —
+end state kept, transition zeroed). Pill (Bloom): `buttons.primary.pill`
+publishes `true`, `--theme-button-pill-radius: 9999px` on `:root`,
+`--theme-radius` still `8px`, the primary button's computed `border-radius`
+is `9999px` while a `--theme-radius` section tile stays at its small value.
+Zero console errors. Scratch themes + spec deleted; seed shop clean. **One
+bug caught + fixed:** the pill var was first placed *after*
+`--theme-btn-primary-radius` (which `applyLegacyThemeOverrides` always sets),
+so pill buttons still rendered at 8px — reordered to check the pill var
+first.
 
 **Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
 `tsc` + `build` + `vitest` 543/543 (+`NewsletterSection` 3, `theme-element-style`
