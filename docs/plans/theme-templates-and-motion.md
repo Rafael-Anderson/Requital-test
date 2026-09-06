@@ -1229,8 +1229,10 @@ fully parallel and gated on its own glyph-list sign-off.
 §8.7 items 1-5 (§8.8–§8.12) + §8.13 stock-take + §8.13.C items 1/5/8 (§8.14)
 + §8.13.C item 2 (§8.15 buttons.secondary via view_all_button) + §8.13.C
 items 3 (crossfade only — magic-line/height-animate deferred) + 4 (§8.16
-wishlist pop/burst)**, all built (items 3/4 in batch PR A, pending merge).
-The rest of §8.13.C (items 6+, priority list §8.13.C) and
+wishlist pop/burst) + §8.13.C items 6 + 11 + 12 (§8.17 backToTop re-author +
+hero kenBurns + hero indicatorStyle: progress)**, all built (items 3/4 in
+batch PR A, items 6/11/12 in batch PR B, pending merge). The rest of §8.13.C
+(items 7-10, 13+) and
 D/E/F/G1 more broadly are **not** committed scope — **§8.13.C is the live
 remaining-work list** (§6.5 is frozen; §8.7's items 6+ are superseded). G0
 (Flow A) + batch 1 + C + §8.8–§8.15 already deliver four visibly distinct
@@ -2549,9 +2551,11 @@ template-specific. `customCursor` — 0/4, no template wants it.
    version needs the §8.10 observer pattern in both render components
    (disjoint work); a below-fold badge pops off-screen, the accepted
    stagger-without-entrance tradeoff. Market + Bloom.
-6. **Enable `floatingElements.backToTop` on Market + Bloom — 2/4**,
-   re-author only, Effort **S**. Fold into any batch touching
-   `templates.ts`.
+6. **Enable `floatingElements.backToTop` on Market + Bloom — BUILT §8.17.**
+   2/4, re-author only. `g.floatingElements = { …, backToTop: { enabled:
+   true } }` on both templates (full assignment, not a property write — the
+   category is optional in the type). `BackToTopButton.tsx` already consumes
+   it (C1/C2). Atelier + Heritage deliberately stay without it.
 7. **`inputFields.focusAnimation` — 1/4** (Market `float-label`). Effort
    **S**. Roughly unchanged — a CSS-only float-label on the newsletter +
    checkout inputs; the dead `inputFields` category's only assigned
@@ -2570,12 +2574,16 @@ template-specific. `customCursor` — 0/4, no template wants it.
     already exists; this is a `radius.applyToButtons`-style opt-in that
     forces the pill value. Could ride with item 2 (both touch button
     styling).
-11. **Hero `kenBurns` — 1/4** (Atelier). Effort **S** — a slow `scale()`
-    `@keyframes` on the hero image, `--motion-duration-slow` ×N,
-    reduced-motion covered. **Cheaper now.**
-12. **Hero `indicatorStyle: progress` — 1/4** (Market). Effort **S–M** —
-    the slideshow already tracks the active index; a progress bar is a
-    `transform: scaleX()` transition per slide duration.
+11. **Hero `kenBurns` — BUILT §8.17.** 1/4 (Atelier). `hero.settings.kenBurns?`
+    ⇒ `.theme-ken-burns` on the active slide `<img>` (`scale(1)→1.08`,
+    `alternate infinite`, `animation-duration` = the slide duration set
+    inline). `HeroSlideshow` skips the class under reduced motion.
+12. **Hero `indicatorStyle: progress` — BUILT §8.17.** 1/4 (Market).
+    `hero.settings.indicatorStyle?: 'dots' | 'bars' | 'progress' | 'fraction'`;
+    `'progress'` swaps the dot row for a `scaleX` bar keyed on the active
+    slide (fills over the slide duration, pauses on hover, not rendered under
+    reduced motion). `dots`/absent ⇒ today's `showSlideIndicators` dots;
+    `bars`/`fraction` reserved, unbuilt (fall back to dots).
 13. **`drawers.animation` + `cart.itemAnimation`/`subtotalAnimation` —
     1/4** (Market). Effort **S–M**. `subtotalAnimation: count` is
     **much cheaper now** — `useCountUp` exists (§8.10), this is a second
@@ -2925,6 +2933,72 @@ lint +0 (77).
 
 ---
 
+### 8.17 hero `kenBurns` + `indicatorStyle: progress` + `backToTop` re-author — BUILT (2026-09-06, `feat/hero-motion-backtotop`)
+
+§8.13.C items 6 + 11 + 12 (batch PR B). Two new optional `hero.settings`
+keys (`SectionSettings` is free-form `[key: string]: unknown`, so no type
+mirror) + a two-line templates re-author for item 6.
+
+**Item 11 — `hero.settings.kenBurns?: boolean`.** `HeroSlideshow` adds
+`.theme-ken-burns` to the active slide `<img>` when `kenBurns && !reducedMotion`,
+with `animationDuration` set inline to the slide duration. Keyframe:
+`scale(1) → scale(1.08)`, `animation-direction: alternate`,
+`animation-iteration-count: infinite` — a single-image hero breathes in/out
+rather than zooming once and stopping; on a multi-slide hero each slide's
+zoom restarts as it becomes active (the class toggles off→on on the reused
+`<img>` node). While it runs it overrides the img's inline `transform: none`.
+Reduced motion: the class isn't applied at all (belt: the blanket rule).
+Atelier only.
+
+**Item 12 — `hero.settings.indicatorStyle?: 'dots' | 'bars' | 'progress' |
+'fraction'`.** `'progress'` renders a thin bottom bar whose fill (`scaleX`,
+`transform-origin: left`, `animation-timing-function: linear`, duration =
+slide duration inline) is keyed on the active slide so it restarts each
+rotation; `animation-play-state: paused` while the slideshow is hover-paused;
+not rendered under reduced motion (no rotation to track). `'dots'`/absent ⇒
+today's `showSlideIndicators` dot row unchanged. `'bars'`/`'fraction'`
+reserved in the enum, unbuilt — fall through to dots. Market only. Admin:
+"Slide indicator style" `<Select>` (Dots / Progress bar; "dots" writes
+`undefined`) + a "Ken Burns effect" `<Toggle>` in `HeroSettings.tsx`.
+
+**Item 6 — enable `floatingElements.backToTop` on Market + Bloom.**
+`g.floatingElements = { whatsapp: {…}, customButtons: [], backToTop: { enabled:
+true } }` (full assignment mirroring the `g.motion`/`g.radius` re-author
+style — the category is `?:` in the type even though `DEFAULT_THEME_CONFIG`
+seeds it, so a bare `g.floatingElements.backToTop = …` fails `tsc`).
+`BackToTopButton.tsx` already reads it (C1/C2). Atelier + Heritage stay
+without it per their §6 tables.
+
+**No-op proof:** `kenBurns`/`indicatorStyle` absent ⇒ `HeroSlideshow` takes
+the exact prior branch (`kenBurnsOn` false ⇒ no class / no inline
+`animationDuration`; `showDots` = the old `showIndicators && count > 1`
+condition; `showProgress` false). New CSS classes are inert until applied.
+No CSS var, no `DEFAULT_THEME_CONFIG` change, no validation change
+(`hero.settings` shallow-validated).
+
+**Scratch-shop pass (dev seed shop, puppeteer, DOM + computed style,
+reduced-motion pass).** Atelier + Market published onto shop 1 with two
+injected hero `bannerImages` (`slideDuration: 6`). kenBurns, `no-preference`:
+exactly one `img.theme-ken-burns` (the active slide), computed
+`animationName: theme-ken-burns`, inline `animation-duration: 6000ms`; under
+`prefers-reduced-motion: reduce` the class is absent. indicatorStyle
+`progress`, `no-preference`: `.theme-hero-progress` present, computed
+`animationName: theme-hero-progress`, inline `6000ms`, **zero** dot buttons
+(bar replaced dots); under reduced motion the bar is not rendered. Back-to-top
+button in the DOM after scrolling on the Market theme; published
+`theme-config.globalSettings.floatingElements.backToTop.enabled === true` on
+both Market and Bloom. Zero console errors throughout. Scratch themes + spec
+deleted; seed shop back to no published theme. (Same turbopack dev-HMR
+staleness as §8.16 — `.theme-ken-burns` / `.theme-hero-progress` missing from
+the *dev* CSS after a consecutive `globals.css` edit while present in every
+`next build`; `.next` wipe + restart before the pass.)
+
+**Gate:** backend `tsc` + `jest themes` 87/87 + lint +0 (261); storefront
+`tsc` + `build` + `vitest` `HeroSection`/`globals.css` 23/23 (+6) + lint +0
+(33); admin `tsc` + `build` + `vitest` `HeroSettings` 5/5 (+2) + lint +0 (77).
+
+---
+
 ## 9. Risks, performance budget, config-shape flags
 
 ### 9.1 Config-shape flags
@@ -3052,6 +3126,8 @@ avoids retouching every token later. Full table in §8.1.
 | `buttons.secondary` + `secondaryButtonLabel` (scheme) | ✅ `resolveSecondaryButtonStyle()` + `--color-secondary-button-label`, consumed by `featured_collections`' `view_all_button` in "button" mode | ✅ §8.15 |
 | `productCards.wishlistAnimation` (new key, never a "dead control") | ✅ `.theme-wishlist-anim` / `-burst` one-shot on `WishlistButton`, click-handler flag; `sweep` reserved-unbuilt | ✅ §8.16 |
 | `product_tabs` tab-switch polish | ◑ crossfade only (`.theme-tab-panel` keyed remount); magic-line + height-animate deferred until a template ships a real `product_tabs` section (blocked on hardcodable `collectionIds`) | ◑ §8.16 |
+| hero `kenBurns` / `indicatorStyle: progress` (new keys) | ✅ `.theme-ken-burns` on the active slide (Atelier) / `.theme-hero-progress` bar replacing dots (Market) | ✅ §8.17 |
+| `floatingElements.backToTop` enabled on Market + Bloom | ✅ templates re-author (capability was already built C1/C2) | ✅ §8.17 |
 
 ### 9.4 Other risks
 
