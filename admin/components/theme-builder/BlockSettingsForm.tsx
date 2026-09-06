@@ -81,12 +81,22 @@ export default function BlockSettingsForm({
 
     case "view_all_button":
       return (
-        <Input
-          label="Button label"
-          placeholder="View all"
-          value={(block.settings.label as string) ?? ""}
-          onChange={(e) => onUpdate("label", e.target.value)}
-        />
+        <div className="space-y-3">
+          <Input
+            label="Button label"
+            placeholder="View all"
+            value={(block.settings.label as string) ?? ""}
+            onChange={(e) => onUpdate("label", e.target.value)}
+          />
+          <Select
+            label="Display as"
+            value={(block.settings.style as string) === "button" ? "button" : "link"}
+            onChange={(e) => onUpdate("style", e.target.value === "button" ? "button" : undefined)}
+          >
+            <option value="link">Text link</option>
+            <option value="button">Secondary button (outline)</option>
+          </Select>
+        </div>
       );
 
     case "testimonial": {
