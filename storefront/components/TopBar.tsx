@@ -78,15 +78,23 @@ function CartIconButton({ shop, count }: { shop: Shop | null; count: number }) {
     </>
   );
 
+  // data-fly-to-cart-target: the destination marker for the fly-to-cart
+  // animation (lib/fly-to-cart.tsx). Inert — nothing styles off it.
   if (shop?.cartLayout === "drawer") {
     return (
-      <button type="button" onClick={openDrawer} aria-label="Open cart" className={`${className} cursor-pointer`}>
+      <button
+        type="button"
+        onClick={openDrawer}
+        aria-label="Open cart"
+        data-fly-to-cart-target
+        className={`${className} cursor-pointer`}
+      >
         {content}
       </button>
     );
   }
   return (
-    <Link href={`${shopBasePath}/cart`} className={className}>
+    <Link href={`${shopBasePath}/cart`} data-fly-to-cart-target className={className}>
       {content}
     </Link>
   );
