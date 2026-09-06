@@ -47,6 +47,9 @@ export default function ProductGallery({
         <img
           src={active}
           alt={productName}
+          // data-pdp-fly-source: the fly-to-cart animation's source element
+          // (lib/fly-to-cart.tsx). Inert marker.
+          data-pdp-fly-source
           className="w-full h-full object-cover transition-transform duration-150 ease-out"
           style={hoverPos ? { transform: "scale(1.7)", transformOrigin: `${hoverPos.x}% ${hoverPos.y}%` } : undefined}
         />

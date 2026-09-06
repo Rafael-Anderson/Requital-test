@@ -7,12 +7,20 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   themeConfig = null;
+  scrollY = 0;
+  minWidthMatch = true;
 });
 
 let themeConfig: unknown = null;
 vi.mock("@/lib/shop-context", () => ({
   useShop: () => ({ previewMode: false, shop: null, themeConfig }),
 }));
+
+// §8.13.C item 15 parallax deps — controllable per test.
+let scrollY = 0;
+let minWidthMatch = true;
+vi.mock("@/lib/use-scroll-value", () => ({ useScrollValue: () => ({ y: scrollY, direction: "down" }) }));
+vi.mock("@/lib/use-min-width", () => ({ useMinWidth: () => minWidthMatch }));
 
 // jsdom has no real matchMedia — default to "motion allowed" so rotation runs;
 // individual tests override matches for the reduced-motion case.
@@ -180,6 +188,49 @@ describe("HeroSection slideshow", () => {
       stubMatchMedia(true);
       const { container } = renderHero({ bannerImages: [{ url: IMG_A }, { url: IMG_B }], indicatorStyle: "progress" });
       expect(container.querySelector(".theme-hero-progress")).toBeNull();
+    });
+  });
+
+  describe("parallax (§8.13.C item 15)", () => {
+    function backdrop(container: HTMLElement) {
+      return container.querySelector("div.absolute.inset-0.overflow-hidden") as HTMLElement;
+    }
+
+    it("no-op: parallax unset ⇒ no transform on the backdrop layer", () => {
+      scrollY = 400;
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }] });
+      expect(backdrop(container).style.transform).toBe("");
+    });
+
+    it("parallax on ⇒ the backdrop layer gets translateY(scrollY*0.15) scale(1.15)", () => {
+      scrollY = 200;
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }], parallax: true });
+      expect(backdrop(container).style.transform).toBe("translateY(30px) scale(1.15)");
+    });
+
+    it("clamps the translate at 40px", () => {
+      scrollY = 5000;
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }], parallax: true });
+      expect(backdrop(container).style.transform).toBe("translateY(40px) scale(1.15)");
+    });
+
+    it("skipped under reduced motion and on a sub-640px viewport", () => {
+      scrollY = 300;
+      stubMatchMedia(true); // reduced motion
+      const { container: c1 } = renderHero({ bannerImages: [{ url: IMG_A }], parallax: true });
+      expect(backdrop(c1).style.transform).toBe("");
+      cleanup();
+      stubMatchMedia(false);
+      minWidthMatch = false; // narrow viewport
+      const { container: c2 } = renderHero({ bannerImages: [{ url: IMG_A }], parallax: true });
+      expect(backdrop(c2).style.transform).toBe("");
+    });
+
+    it("parallax wins over kenBurns when both are set (no .theme-ken-burns)", () => {
+      scrollY = 100;
+      const { container } = renderHero({ bannerImages: [{ url: IMG_A }], parallax: true, kenBurns: true });
+      expect(container.querySelector(".theme-ken-burns")).toBeNull();
+      expect(backdrop(container).style.transform).toContain("translateY");
     });
   });
 });

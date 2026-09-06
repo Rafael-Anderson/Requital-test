@@ -21,6 +21,10 @@ vi.mock("@/lib/cart", () => ({
   useCart: () => ({ addItem: vi.fn() }),
 }));
 
+vi.mock("@/lib/fly-to-cart", () => ({
+  useFlyToCart: () => ({ flyToCart: vi.fn() }),
+}));
+
 // No themeConfig (productCards is undefined) — QuickAddButton never renders,
 // so only the collectionId/productLimit plumbing this suite is exercising
 // matters, matching FeaturedGrid.render.test.tsx's own "mock the minimum the

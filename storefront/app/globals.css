@@ -186,6 +186,13 @@
   --color-popover: #ffffff;
   --color-popover-fg: #18181b;
   --color-popover-border: #e4e4e7;
+  /* §8.18 follow-up — the cart drawer surface, resolved per-shop from
+     globalSettings.drawers.schemeId in applyThemeConfigOverrides (same as
+     --color-popover*). Literal defaults match --color-header so a shop whose
+     drawers.schemeId is still the default active scheme is unchanged. */
+  --color-drawer: #ffffff;
+  --color-drawer-fg: #171717;
+  --color-drawer-border: #e4e4e7;
   --color-footer-bg: #18181b;
   --color-footer-fg: #f4f4f5;
   --color-product-name: #171717;
@@ -584,6 +591,25 @@ body {
   animation: theme-fade-in var(--motion-duration-base, 300ms) var(--motion-ease, ease-out);
 }
 
+/* §8.13.C item 17 — route-content fade. The wrapper div is keyed on the
+   pathname (RouteTransition.tsx), so it remounts on every navigation and
+   this one-shot fade + 8px rise plays once. Only present when
+   animations.pageTransition is on — absent ⇒ no wrapper at all. Blanket
+   prefers-reduced-motion rule neutralises it. */
+@keyframes theme-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.theme-route-transition {
+  animation: theme-route-in var(--motion-duration-fast, 150ms) var(--motion-ease, ease-out);
+}
+
 /* §8.13.C item 10 — hero kenBurns. A slow zoom on the active slide over the
    full slide duration (set inline as animation-duration by HeroSlideshow).
    `alternate infinite` so a single-image hero breathes in and out rather than
@@ -624,6 +650,19 @@ body {
   animation-name: theme-hero-progress;
   animation-timing-function: linear;
   animation-fill-mode: both;
+}
+
+/* §8.13.C item 15 — motion.decorativeParallax blobs (DecorativeParallax.tsx,
+   capped at 5, gated off on mobile / reduced-motion / intensity:none). Soft
+   accent-tinted circle; position/size/opacity + the scroll translate come
+   from inline style. No animation here — the drift is a React-driven
+   transform. */
+.theme-decorative-blob {
+  position: fixed;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, var(--color-accent), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
 }
 
 /* §8.13.C item 13 — cart.itemAnimation. A newly-added cart-drawer row fades +

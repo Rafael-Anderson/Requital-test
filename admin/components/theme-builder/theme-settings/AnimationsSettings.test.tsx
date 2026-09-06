@@ -44,4 +44,23 @@ describe("AnimationsSettings — post-G0 batch additions", () => {
     await user.selectOptions(screen.getByLabelText("Product image load"), "fade");
     expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("animations", { imageLoad: "fade" });
   });
+
+  describe("add-to-cart style (§8.13.C item 16)", () => {
+    it("is hidden while the 'Add to cart animation' master toggle is off", () => {
+      render(<AnimationsSettings editor={makeEditor({ ...base, addToCart: false })} />);
+      expect(screen.queryByLabelText("Add to cart style")).toBeNull();
+    });
+
+    it("appears when addToCart is on; 'fly' writes the value, 'none' writes undefined", async () => {
+      const user = userEvent.setup();
+      const editor = makeEditor({ ...base, addToCart: true, addToCartStyle: "fly" });
+      render(<AnimationsSettings editor={editor} />);
+      const select = screen.getByLabelText("Add to cart style");
+      expect(screen.queryByRole("option", { name: /fly to cart/i })).toBeInTheDocument();
+      await user.selectOptions(select, "none");
+      expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("animations", { addToCartStyle: undefined });
+      await user.selectOptions(select, "fly");
+      expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("animations", { addToCartStyle: "fly" });
+    });
+  });
 });

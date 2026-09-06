@@ -1354,6 +1354,9 @@ export interface AnimationSettings {
   cardHoverEffect: "none" | "zoom" | "rise" | "swap" | "desaturate" | "quick-add-slide" | "overlay" | "shadow" | "tilt";
   // Post-G0 batch — see backend theme-config.types.ts.
   imageLoad?: "none" | "fade";
+  // §8.13.C item 16 — fly-to-cart. Optional opt-in; absent/"none" ⇒ no
+  // add-to-cart animation. Fires only when `addToCart` (master switch) is on.
+  addToCartStyle?: "none" | "fly";
 }
 
 export interface BadgeSettings {

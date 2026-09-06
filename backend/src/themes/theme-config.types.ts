@@ -331,6 +331,13 @@ export interface AnimationSettings {
   // decoded). 'blur-up' needs a stored tiny preview per upload (no resize
   // endpoint exists today) — deliberately not built; only 'fade' ships.
   imageLoad?: 'none' | 'fade';
+  // §8.13.C item 16 — fly-to-cart. OPTIONAL opt-in: absent/'none' ⇒ no
+  // add-to-cart animation (byte-identical to today), because `addToCart` is a
+  // required boolean that's `true` by default and would otherwise turn the
+  // effect on for every non-template shop. `addToCart` stays the master
+  // "animations allowed" switch; 'fly' additionally selects the effect.
+  // Mirrored in the two frontend type files.
+  addToCartStyle?: 'none' | 'fly';
 }
 
 export interface BadgeSettings {

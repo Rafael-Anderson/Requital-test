@@ -227,12 +227,14 @@ export default function ThemeDrivenHeader({
           </>
         );
         const tagProps = editableAttrs(previewMode, { id: block.id, sectionId: HEADER_CHROME_ID, type: "cart_icon" });
+        // data-fly-to-cart-target: destination marker for the fly-to-cart
+        // animation (lib/fly-to-cart.tsx). Inert.
         return shop?.cartLayout === "drawer" ? (
-          <button key="cart" type="button" onClick={openDrawer} aria-label="Open cart" {...tagProps} className={`${cartClass} cursor-pointer`}>
+          <button key="cart" type="button" onClick={openDrawer} aria-label="Open cart" data-fly-to-cart-target {...tagProps} className={`${cartClass} cursor-pointer`}>
             {cartContent}
           </button>
         ) : (
-          <Link key="cart" href={`${shopBasePath}/cart`} {...tagProps} className={cartClass}>
+          <Link key="cart" href={`${shopBasePath}/cart`} data-fly-to-cart-target {...tagProps} className={cartClass}>
             {cartContent}
           </Link>
         );

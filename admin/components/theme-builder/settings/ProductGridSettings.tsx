@@ -74,12 +74,23 @@ export default function ProductGridSettings({
             <Toggle checked={(settings.showViewAllButton as boolean) ?? true} onChange={(v) => onUpdate("showViewAllButton", v)} />
           </div>
           {settings.showViewAllButton !== false && (
-            <Input
-              label="View all button label"
-              value={(settings.viewAllLabel as string) ?? ""}
-              placeholder="View all"
-              onChange={(e) => onUpdate("viewAllLabel", e.target.value)}
-            />
+            <>
+              <Input
+                label="View all button label"
+                value={(settings.viewAllLabel as string) ?? ""}
+                placeholder="View all"
+                onChange={(e) => onUpdate("viewAllLabel", e.target.value)}
+              />
+              {/* §8.15 follow-up — "Link" writes undefined ⇒ today's plain link. */}
+              <Select
+                label="View all display"
+                value={(settings.viewAllStyle as string) ?? "link"}
+                onChange={(e) => onUpdate("viewAllStyle", e.target.value === "link" ? undefined : e.target.value)}
+              >
+                <option value="link">Text link</option>
+                <option value="button">Button</option>
+              </Select>
+            </>
           )}
         </>
       )}
