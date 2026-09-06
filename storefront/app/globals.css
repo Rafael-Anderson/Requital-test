@@ -526,6 +526,64 @@ body {
   animation: theme-badge-pop var(--motion-duration-fast, 150ms) var(--motion-ease, ease-out) forwards;
 }
 
+/* §8.13.C item 4 — wishlistAnimation. A one-shot on the wishlist button the
+   moment the heart is toggled ON (WishlistButton adds the class in its click
+   handler, drops it on animationend). `pop` = a scale bounce; `burst` = the
+   same bounce plus one expanding, fading ring from ::after (same duration, so
+   both animationend events land together). Reads --motion-*; the blanket
+   prefers-reduced-motion rule neutralises both (animationend still fires at
+   0.01ms, so the class clears). `sweep` is unbuilt — no class, no animation. */
+@keyframes theme-wishlist-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.35);
+  }
+  70% {
+    transform: scale(0.85);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes theme-wishlist-ring {
+  from {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.2);
+  }
+}
+.theme-wishlist-anim {
+  animation: theme-wishlist-pop var(--motion-duration-base, 300ms) var(--motion-ease, ease-out);
+}
+.theme-wishlist-anim-burst::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: theme-wishlist-ring var(--motion-duration-base, 300ms) var(--motion-ease, ease-out) forwards;
+}
+
+/* §8.13.C item 3 — product_tabs content crossfade. The panel div is keyed on
+   the active tab id, so it remounts on every switch and this one-shot fade
+   plays once (same mount-triggered pattern as .theme-newsletter-success).
+   magic-line + height-animate are deferred: no template can ship a
+   product_tabs section yet (blocked on hardcodable collectionIds), so the
+   full mechanism would be scope for a consumer that doesn't exist. Blanket
+   prefers-reduced-motion rule neutralises this. */
+.theme-tab-panel {
+  animation: theme-fade-in var(--motion-duration-base, 300ms) var(--motion-ease, ease-out);
+}
+
 /* Phase B1 — the radius scale, applied by class (avoids a
    `rounded-[var(--x,y)]` Tailwind arbitrary value with a `,` in it). The
    custom-property name is `--theme-round-*`, NOT `--radius-*`: in Tailwind v4

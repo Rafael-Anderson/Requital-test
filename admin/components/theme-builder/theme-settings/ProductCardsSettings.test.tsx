@@ -41,4 +41,21 @@ describe("ProductCardsSettings — wishlist toggle", () => {
       showWishlist: true,
     });
   });
+
+  it("hides the animation Select until showWishlist is on", () => {
+    render(<ProductCardsSettings editor={makeEditor({ ...base, showWishlist: false })} />);
+    expect(screen.queryByLabelText("Wishlist heart animation")).not.toBeInTheDocument();
+  });
+
+  it("with showWishlist on, selecting an option writes wishlistAnimation (no 'sweep' offered)", async () => {
+    const user = userEvent.setup();
+    const editor = makeEditor({ ...base, showWishlist: true });
+    render(<ProductCardsSettings editor={editor} />);
+    const select = screen.getByLabelText("Wishlist heart animation");
+    expect(screen.queryByRole("option", { name: /sweep/i })).not.toBeInTheDocument();
+    await user.selectOptions(select, "burst");
+    expect(editor.updateGlobalSettingsCategory).toHaveBeenCalledWith("productCards", {
+      wishlistAnimation: "burst",
+    });
+  });
 });

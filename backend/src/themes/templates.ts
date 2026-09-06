@@ -287,6 +287,7 @@ const market: ThemeConfig = (() => {
   g.productCards.quickAdd = true;
   g.productCards.mobileQuickAdd = true;
   g.productCards.showWishlist = true;
+  g.productCards.wishlistAnimation = 'pop'; // §8.13.C item 4
   g.prices.salePriceStyle = 'color';
   g.prices.salePriceColor = '#C81E4A';
   g.badges.case = 'uppercase';
@@ -383,6 +384,7 @@ const bloom: ThemeConfig = (() => {
   g.productCards.density = 'comfortable';
   g.productCards.quickAdd = true;
   g.productCards.showWishlist = true;
+  g.productCards.wishlistAnimation = 'burst'; // §8.13.C item 4
   g.prices.salePriceStyle = 'color';
   g.badges.cornerRadius = 9999; // harmless once style: 'circle' owns geometry — the sane fallback if style is unset
   g.badges.style = 'circle'; // §8.13.C item 1
@@ -625,21 +627,22 @@ export function isTemplateKey(v: unknown): v is TemplateKey {
 //           subtotalAnimation 'count'; inputFields.focusAnimation
 //           'float-label'; motion.scrollProgressBar; product_tabs section
 //           (needs real collectionIds); hero indicatorStyle 'progress';
-//           productCards.wishlistAnimation 'pop'; product_vendor /
-//           product_stock card sub-blocks (header scrollBehavior 'shrink'
-//           §8.7 item 2; trust_bar rating count-up §8.7 item 3; newsletter
-//           successAnimation §8.7 item 5; badges.style 'tag' +
-//           entranceAnimation §8.13.C items 1/5; buttons.secondary via the
-//           view_all_button + hoverEffect 'border-fill' §8.13.C item 2 —
+//           product_vendor / product_stock card sub-blocks (header
+//           scrollBehavior 'shrink' §8.7 item 2; trust_bar rating count-up
+//           §8.7 item 3; newsletter successAnimation §8.7 item 5;
+//           badges.style 'tag' + entranceAnimation §8.13.C items 1/5;
+//           buttons.secondary via the view_all_button + hoverEffect
+//           'border-fill' §8.13.C item 2; productCards.wishlistAnimation
+//           'pop' §8.13.C item 4 — 2026-09-05..06)
+// bloom:    hero parallax + decorativeParallax floating shapes;
+//           buttons.pillCornerRadius pills; section separators; product_tabs
+//           section; announcement_bar marquee; the contrasting yellow badge
+//           colour scheme (a 3rd colorScheme + saleSchemeId re-point —
+//           colour, not shape) (header scrollBehavior 'hide-on-scroll' §8.7
+//           item 2; newsletter successAnimation §8.7 item 5; badges.style
+//           'circle' + entranceAnimation §8.13.C items 1/5;
+//           productCards.wishlistAnimation 'burst' §8.13.C item 4 —
 //           2026-09-05..06)
-// bloom:    wishlist 'burst'; hero parallax + decorativeParallax floating
-//           shapes; buttons.pillCornerRadius pills; section separators;
-//           product_tabs section; announcement_bar marquee; the contrasting
-//           yellow badge colour scheme (a 3rd colorScheme + saleSchemeId
-//           re-point — colour, not shape) (header scrollBehavior
-//           'hide-on-scroll' §8.7 item 2; newsletter successAnimation §8.7
-//           item 5; badges.style 'circle' + entranceAnimation §8.13.C items
-//           1/5 — 2026-09-05..06)
 // heritage: (badges.style 'ribbon' §8.13.C item 1; buttons.secondary via
 //           the view_all_button, outline + pressEffect §8.13.C item 2 —
 //           2026-09-06; scrollBehavior deliberately left unset — not named
