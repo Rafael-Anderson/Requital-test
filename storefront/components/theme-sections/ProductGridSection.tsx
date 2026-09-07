@@ -406,7 +406,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   if (!products || products.length === 0) return null;
 
   return (
-    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="theme-gutter-x theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(sectionTitle || (showViewAll && collectionSlug)) && (
         <div className="flex items-center justify-between theme-heading-gap">
           {sectionTitle && (

@@ -30,14 +30,16 @@ const PRESETS: readonly DensityPreset[] = ["compact", "cozy", "comfortable", "sp
 //   gridGap     → .theme-grid-gap    gap  >=640px    (was sm:gap-6 = 1.5rem)
 //   gridGapM    → .theme-grid-gap    gap  <640px     (was gap-4 = 1rem)
 //   headingGap  → .theme-heading-gap margin-bottom   (was mb-4 = 1rem)
+//   gutterX     → .theme-gutter-x    padding-inline <640px  (was px-4 = 1rem)
+//   gutterXLg   → .theme-gutter-x    padding-inline >=640px (was sm:px-6 = 1.5rem)
 const DENSITY_SCALE: Record<
   DensityPreset,
-  { sectionPy: string; gridGap: string; gridGapM: string; headingGap: string }
+  { sectionPy: string; gridGap: string; gridGapM: string; headingGap: string; gutterX: string; gutterXLg: string }
 > = {
-  compact: { sectionPy: "1.5rem", gridGap: "1rem", gridGapM: "0.75rem", headingGap: "0.75rem" },
-  cozy: { sectionPy: "2rem", gridGap: "1.5rem", gridGapM: "1rem", headingGap: "1rem" },
-  comfortable: { sectionPy: "2.75rem", gridGap: "2rem", gridGapM: "1.25rem", headingGap: "1.25rem" },
-  spacious: { sectionPy: "3.5rem", gridGap: "2.5rem", gridGapM: "1.5rem", headingGap: "1.5rem" },
+  compact: { sectionPy: "1.5rem", gridGap: "1rem", gridGapM: "0.75rem", headingGap: "0.75rem", gutterX: "0.75rem", gutterXLg: "1rem" },
+  cozy: { sectionPy: "2rem", gridGap: "1.5rem", gridGapM: "1rem", headingGap: "1rem", gutterX: "1rem", gutterXLg: "1.5rem" },
+  comfortable: { sectionPy: "2.75rem", gridGap: "2rem", gridGapM: "1.25rem", headingGap: "1.25rem", gutterX: "1.25rem", gutterXLg: "2rem" },
+  spacious: { sectionPy: "3.5rem", gridGap: "2.5rem", gridGapM: "1.5rem", headingGap: "1.5rem", gutterX: "1.5rem", gutterXLg: "2.5rem" },
 };
 
 export const DENSITY_CSS_VAR_NAMES: readonly string[] = [
@@ -45,6 +47,8 @@ export const DENSITY_CSS_VAR_NAMES: readonly string[] = [
   "--grid-gap",
   "--grid-gap-m",
   "--section-heading-gap",
+  "--gutter-x",
+  "--gutter-x-lg",
 ];
 
 function isKnownPreset(v: unknown): v is DensityPreset {
@@ -60,6 +64,8 @@ export function resolveDensityCssVars(density: DensitySettings | null | undefine
     "--grid-gap": s.gridGap,
     "--grid-gap-m": s.gridGapM,
     "--section-heading-gap": s.headingGap,
+    "--gutter-x": s.gutterX,
+    "--gutter-x-lg": s.gutterXLg,
   };
 }
 

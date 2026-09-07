@@ -42,6 +42,18 @@
   --grid-gap: 1.5rem; /* = sm:gap-6 (the >=640px value) */
   --grid-gap-m: 1rem; /* = gap-4 (the <640px value) */
   --section-heading-gap: 1rem; /* = mb-4 */
+  /* Vertical padding for a full-bleed scheme-tinted "statement band"
+     (SectionWrapper applies it as padding-block on <section> when
+     settings.schemeId is set; the child section then drops its own
+     theme-section-py). A tinted band needs more presence than a regular
+     white section or it reads as a squeezed strip. Not density-scaled —
+     the band's whole point is deliberate emphasis. */
+  --section-band-py: 3.5rem;
+  /* Horizontal page gutter. Was a hardcoded `px-4 sm:px-6` on every themed
+     section's inner wrapper; now density-scaled via .theme-gutter-x (below).
+     Literals = the exact pre-change values so `density` unset is byte-identical. */
+  --gutter-x: 1rem; /* = px-4 (the <640px value) */
+  --gutter-x-lg: 1.5rem; /* = sm:px-6 (the >=640px value) */
 }
 
 /* Phase A (motion foundation) — ONE blanket prefers-reduced-motion rule,
@@ -658,7 +670,13 @@ body {
    from inline style. No animation here — the drift is a React-driven
    transform. */
 .theme-decorative-blob {
-  position: fixed;
+  /* position: absolute, NOT fixed — the parent wrapper (DecorativeParallax.tsx)
+     is `fixed inset-0 overflow-hidden`, so an absolute child is still
+     viewport-anchored AND actually clipped by the wrapper. A `fixed` child
+     escapes `overflow: hidden` entirely, so a blob deliberately placed past a
+     viewport edge (e.g. left: -4%) used to extend document.scrollWidth and
+     produce a phantom horizontal scrollbar with shapes bleeding off-screen. */
+  position: absolute;
   border-radius: 9999px;
   background: radial-gradient(circle at 35% 35%, var(--color-accent), transparent 70%);
   filter: blur(40px);
@@ -771,6 +789,19 @@ body {
 @media (max-width: 639px) {
   .theme-grid-gap {
     gap: var(--grid-gap-m, 1rem);
+  }
+}
+/* Density-scaled horizontal page gutter — replaces the hardcoded
+   `px-4 sm:px-6` on themed section inner wrappers. Same inverted cascade as
+   .theme-grid-gap: the >=640px value is the base, one @media (max-width:639px)
+   block overrides with the smaller value. Fallbacks = px-4 / sm:px-6 exactly,
+   so `density` unset is byte-identical. */
+.theme-gutter-x {
+  padding-inline: var(--gutter-x-lg, 1.5rem);
+}
+@media (max-width: 639px) {
+  .theme-gutter-x {
+    padding-inline: var(--gutter-x, 1rem);
   }
 }
 

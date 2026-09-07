@@ -212,12 +212,19 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
   const { previewMode, shop, themeConfig } = useShop();
   const primaryButton = themeConfig?.globalSettings.buttons.primary;
   const buttonHover = resolveButtonHoverClass(primaryButton?.hoverEffect, primaryButton?.pressEffect);
-  const height = HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium;
   const position = POSITION_CLASS[settings.contentPosition as string] ?? POSITION_CLASS["center-center"];
 
   const bannerImages: HeroImage[] = Array.isArray(settings.bannerImages)
     ? (settings.bannerImages as HeroImage[]).filter((img) => img && typeof img.url === "string" && img.url)
     : [];
+  // With no banner image the configured height (up to 560px / 100vh) is just
+  // an empty band — the text sits in a sea of blank canvas. Fall back to a
+  // modest content-sized floor so an image-less hero reads as a heading
+  // block, not dead space. A hero WITH a backdrop keeps its configured height.
+  const height =
+    bannerImages.length > 0
+      ? (HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium)
+      : "min-h-[300px]";
   const slideDurationS =
     typeof settings.slideDuration === "number" && settings.slideDuration >= MIN_SLIDE_DURATION_S
       ? settings.slideDuration

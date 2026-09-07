@@ -186,6 +186,7 @@ export default function HeaderSettings({
                     value={row.align ?? "left"}
                     onChange={(e) => updateRow(i, { align: e.target.value as HeaderRow["align"] })}
                   >
+                    <option value="zones">Zones (logo / nav / icons)</option>
                     <option value="left">Left</option>
                     <option value="center">Center</option>
                     <option value="right">Right</option>

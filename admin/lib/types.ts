@@ -1249,7 +1249,7 @@ export interface ThemeSection {
 export interface HeaderRow {
   id: string;
   blockIds: string[];
-  align?: "left" | "center" | "right" | "between";
+  align?: "left" | "center" | "right" | "between" | "zones";
   background?: string;
 }
 

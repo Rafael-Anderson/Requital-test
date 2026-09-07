@@ -78,7 +78,7 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
   const overlayText = settings.overlayText === true;
 
   return (
-    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="theme-gutter-x theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
         <div className="flex items-center justify-between theme-heading-gap">
           {titleBlock?.visible !== false && (
@@ -101,7 +101,11 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
             className="group overflow-hidden border border-stroke theme-stagger-child"
             style={{ borderRadius: "var(--theme-radius, 8px)", "--i": i } as CSSProperties}
           >
-            <div className={`relative ${aspect} bg-black/5 overflow-hidden`}>
+            {/* max-h caps the tile: a "shop by X" strip is navigation, not a
+                hero — square/portrait aspects at 2-4 columns otherwise make
+                each tile 300-850px tall. object-cover keeps the crop; only
+                extreme configs are clamped. */}
+            <div className={`relative ${aspect} max-h-[360px] bg-black/5 overflow-hidden`}>
               {c.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

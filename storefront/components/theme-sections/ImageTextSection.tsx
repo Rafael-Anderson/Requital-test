@@ -19,8 +19,31 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
 
   if (!imageUrl && !text) return null;
 
+  // Inside a scheme-tinted band the wrapper supplies --section-band-py; the
+  // section drops its own theme-section-py so the two don't stack.
+  const vPad = settings.schemeId ? "" : "theme-section-py";
+
+  // A scheme-banded image_text with NO image is a statement strip (Bloom's
+  // "Pick it. Personalise it.", Heritage's "A family business…"), not a
+  // half-and-half layout — render it full-width, centred, at a readable size
+  // instead of a squeezed left-half column. Only when banded: a non-banded
+  // text-only image_text keeps today's exact rendering.
+  if (settings.schemeId && !imageUrl && text && textBlock) {
+    return (
+      <div className={`theme-gutter-x ${vPad} max-w-3xl mx-auto text-center`}>
+        <p
+          {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
+          className="whitespace-pre-line leading-relaxed"
+          style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
+        >
+          {text}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className={`theme-gutter-x ${vPad} mx-auto`} style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       <div className={`flex flex-col sm:flex-row items-center gap-8 ${imageOnRight ? "sm:flex-row-reverse" : ""}`}>
         {imageUrl && imageBlock && (
           <div

@@ -35,15 +35,19 @@ describe("ScrollProgressBar (§8.13.C item 14)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders the bar and its fill scales with scroll depth when enabled", () => {
+  it("renders the bar; the fill appears only once scrolled and scales with depth", () => {
     themeConfig = { globalSettings: { motion: { scrollProgressBar: true } } };
     Object.defineProperty(document.documentElement, "scrollHeight", { value: 2000, configurable: true });
     Object.defineProperty(window, "innerHeight", { value: 1000, configurable: true });
     const { container } = render(<ScrollProgressBar />);
-    const fill = container.querySelector(".origin-left") as HTMLElement;
-    expect(fill).not.toBeNull();
-    expect(fill.style.transform).toBe("scaleX(0)");
+    // The outer bar container is always present…
+    expect(container.querySelector(".fixed.inset-x-0.top-0")).not.toBeNull();
+    // …but at rest (pct ~ 0) the accent fill is not painted at all — no
+    // stray full-width line across the top of the page.
+    expect(container.querySelector(".origin-left")).toBeNull();
     act(() => setScrollY(500)); // halfway through the 1000px scrollable range
     expect((container.querySelector(".origin-left") as HTMLElement).style.transform).toBe("scaleX(0.5)");
+    act(() => setScrollY(0));
+    expect(container.querySelector(".origin-left")).toBeNull();
   });
 });

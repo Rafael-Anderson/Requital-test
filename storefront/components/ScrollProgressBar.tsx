@@ -22,11 +22,14 @@ export default function ScrollProgressBar() {
   const pct = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
 
   return (
-    <div className="fixed inset-x-0 top-0 z-[60] h-0.5 bg-transparent" aria-hidden="true">
-      <div
-        className="h-full bg-accent origin-left"
-        style={{ transform: `scaleX(${pct})` }}
-      />
+    <div className="fixed inset-x-0 top-0 z-[60] h-0.5 bg-transparent pointer-events-none" aria-hidden="true">
+      {/* Only paint the fill once there's real scroll depth. At rest (y 0) or
+          on the first paint (scrollHeight not yet settled) pct is ~0, so the
+          fill isn't rendered at all — no stray full-width accent line across
+          the top of the page, which is what the flaw report described. */}
+      {pct > 0.001 && (
+        <div className="h-full bg-accent origin-left" style={{ transform: `scaleX(${pct})` }} />
+      )}
     </div>
   );
 }

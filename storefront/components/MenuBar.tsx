@@ -8,6 +8,7 @@ import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveNavElementStyle, resolveMenuBarBackground, FONT_WEIGHT_VALUE } from "@/lib/theme-element-style";
+import { resolveNavLinkStyle } from "@/lib/nav-menu-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
 
@@ -192,9 +193,15 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   const navRowBackground =
     (typeof navBlock?.settings.navRowBackgroundColor === "string" && navBlock.settings.navRowBackgroundColor) ||
     resolveMenuBarBackground(themeConfig?.header.settings);
+  // nav_menu.settings.style (flaw A): per-theme link treatment. Absent /
+  // 'pill' → the exact pre-existing rounded-full / text-zinc-600 look, no
+  // font override (byte-identical). Other treatments follow --theme-round-*,
+  // the header scheme colours, and the pairing's heading font.
+  const navLinkStyle = resolveNavLinkStyle(navBlock?.settings.style as string | undefined);
   const navStyle = {
     ...(navBlock ? resolveNavElementStyle(navBlock.settings) : {}),
     ...(navRowBackground ? { background: navRowBackground } : {}),
+    ...(navLinkStyle.useHeadingFont ? { fontFamily: "var(--theme-heading-font, inherit)" } : {}),
   };
   const showOnMobile = navBlock?.settings.showOnMobile !== false;
   const menuAnimation = (themeConfig?.header.settings.menuAnimation as "fade" | "slide" | "none" | undefined) ?? "fade";
@@ -202,7 +209,7 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   // "Enable hover animation" toggle). Off ⇒ static hover only (the existing
   // bg tint + "Hover color" behaviour), driven purely by .theme-nav-link.
   const hoverAnimationClass = navBlock?.settings.hoverAnimation === false ? "" : "theme-nav-link--anim";
-  const linkClass = `theme-nav-link ${hoverAnimationClass} px-3 py-1.5 rounded-full whitespace-nowrap text-zinc-600 hover:bg-mouse-over/10 transition-colors`;
+  const linkClass = `theme-nav-link ${hoverAnimationClass} whitespace-nowrap ${navLinkStyle.className}`;
   // Nav row alignment (Phase 3) — only affects the below-header bar; an
   // inline nav is aligned by its header row's own justify setting.
   const navAlign = navBlock?.settings.align;

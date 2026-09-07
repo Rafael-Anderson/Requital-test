@@ -119,6 +119,14 @@ export default function SectionWrapper({
     visibility === "desktop" ? "hidden md:block" : visibility === "mobile" ? "block md:hidden" : "";
   const scheme = resolveScheme(settings.schemeId, themeConfig?.globalSettings.colorSchemes ?? []);
   const schemeStyle: CSSProperties = scheme ? { background: scheme.background, color: scheme.text } : {};
+  // A full-bleed scheme-tinted band needs deliberate vertical presence or it
+  // reads as a squeezed strip (the child section's standard theme-section-py
+  // — or, for trust_bar, near-nothing — isn't enough). Apply a generous
+  // padding-block on the <section> itself when a scheme is set; the banded
+  // child sections (RichText / ImageText / TrustBar) drop their own
+  // theme-section-py so it doesn't stack. `settings.spacing` still overrides.
+  // No scheme ⇒ no padding here, byte-identical.
+  const bandPad = scheme ? "var(--section-band-py, 3.5rem)" : undefined;
 
   const sectionRef = useRef<HTMLElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -262,8 +270,8 @@ export default function SectionWrapper({
       className={`${visibilityClass} ${previewMode ? "group relative cursor-pointer" : ""} ${dragging ? "opacity-60 outline outline-2 outline-offset-[-2px] outline-[#2563eb]" : ""}`}
       onClick={previewMode ? handleClick : undefined}
       style={{
-        paddingTop: spacing.top !== undefined ? `${spacing.top}px` : undefined,
-        paddingBottom: spacing.bottom !== undefined ? `${spacing.bottom}px` : undefined,
+        paddingTop: spacing.top !== undefined ? `${spacing.top}px` : bandPad,
+        paddingBottom: spacing.bottom !== undefined ? `${spacing.bottom}px` : bandPad,
         paddingLeft: spacing.left !== undefined ? `${spacing.left}px` : undefined,
         paddingRight: spacing.right !== undefined ? `${spacing.right}px` : undefined,
         ...schemeStyle,

@@ -76,7 +76,7 @@ export default function ProductTabsSection({
   const loading = products === undefined;
 
   return (
-    <div className="px-4 sm:px-6 theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="theme-gutter-x theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {sectionTitle && (
         <h2 className="text-xl font-semibold theme-heading-gap" style={themeTextPresetStyle("h2")}>
           {sectionTitle}

@@ -10,6 +10,7 @@ import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth, resolveIconCorners } from "@/lib/theme-element-style";
 import { resolveHeaderRows } from "@/lib/header-rows";
+import { getReadableTextColor } from "@/lib/color-contrast";
 import { useHeaderScrollState } from "@/lib/use-header-scroll-state";
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
@@ -389,20 +390,57 @@ export default function ThemeDrivenHeader({
   // the multi-row branch.
   const rows = resolveHeaderRows(config.settings, blocks);
   if (rows) {
+    const rowsPy = HEADER_ROWS_PY[heightKey] ?? HEADER_ROWS_PY.default;
     return (
       <div className={outerClass} style={style}>
         {rows.map((row, i) => (
           <div
             key={row.id}
             className={`${i > 0 ? "border-t border-stroke/60" : ""}`}
-            style={row.background ? { background: row.background } : undefined}
+            // A row with its own background needs its own readable text
+            // colour — the header's default text (from the active scheme /
+            // legacy fields) is picked for the header base, not for an
+            // arbitrary per-row colour, so logo/nav/icons on a dark band
+            // (Heritage's deep green) would otherwise sit at low contrast.
+            style={
+              row.background
+                ? { background: row.background, color: getReadableTextColor(row.background) }
+                : undefined
+            }
           >
-            <div
-              className={`mx-auto px-4 ${HEADER_ROWS_PY[heightKey] ?? HEADER_ROWS_PY.default} flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"} ${shrinkTransitionClass}`}
-              style={contentStyle}
-            >
-              {applyLogoRelativePosition(row.blocks).map((b) => renderBlock(b))}
-            </div>
+            {row.align === "zones" ? (
+              // flaw D — the classic 3-column left/center/right grid, per row.
+              // Each block sits in its own settings.zone (default left), the
+              // same model the no-rows header uses — so logo-left / nav-centre
+              // / icons-right actually group instead of `justify-between`
+              // spreading every block edge to edge.
+              <div
+                className={`mx-auto px-4 ${rowsPy} grid grid-cols-3 items-center gap-4 ${shrinkTransitionClass}`}
+                style={contentStyle}
+              >
+                {ZONES.map((zone) => (
+                  <div
+                    key={zone}
+                    className={`flex items-center gap-1 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
+                  >
+                    {applyLogoRelativePosition(
+                      row.blocks.filter(
+                        (b) =>
+                          (b.settings.zone as string | undefined) === zone ||
+                          (zone === "left" && !b.settings.zone),
+                      ),
+                    ).map((b) => renderBlock(b))}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                className={`mx-auto px-4 ${rowsPy} flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"} ${shrinkTransitionClass}`}
+                style={contentStyle}
+              >
+                {applyLogoRelativePosition(row.blocks).map((b) => renderBlock(b))}
+              </div>
+            )}
           </div>
         ))}
       </div>

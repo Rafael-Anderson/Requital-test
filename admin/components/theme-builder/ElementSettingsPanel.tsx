@@ -277,6 +277,16 @@ function NavElementSettings({ block, onUpdate }: FamilyProps) {
         <option value="center">Center</option>
         <option value="right">Right</option>
       </Select>
+      <Select label="Link style" value={(s.style as string) ?? "pill"} onChange={(e) => onUpdate("style", e.target.value)}>
+        <option value="pill">Pill (hover tint)</option>
+        <option value="pill-solid">Pill (filled)</option>
+        <option value="underline">Underline on hover</option>
+        <option value="caps">Letterspaced caps</option>
+        <option value="bordered">Bordered</option>
+      </Select>
+      <p className="-mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+        Every style except &ldquo;Pill (hover tint)&rdquo; follows the theme&rsquo;s corner radius, header colours, and heading font.
+      </p>
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Header background color</span>
         <div className="flex items-center gap-1">

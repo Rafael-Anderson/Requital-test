@@ -1,8 +1,14 @@
 import type { ThemeBlock } from "./theme-config-types";
 
 export interface ResolvedHeaderRow {
+  // "zones" (flaw D) lays the row out as the classic 3-column
+  // left/center/right grid, placing each block by its own `settings.zone`
+  // (default left) — the same model the no-rows header uses. The other
+  // values keep the flat single-alignment flex row. `align` is never
+  // genuinely absent in a resolved row (coerced to "left"), so a row saved
+  // before "zones" existed is unchanged.
   id: string;
-  align: "left" | "center" | "right" | "between";
+  align: "left" | "center" | "right" | "between" | "zones";
   background?: string;
   blocks: ThemeBlock[];
 }
@@ -52,7 +58,8 @@ export function resolveHeaderRows(
     }
     rows.push({
       id,
-      align: align === "center" || align === "right" || align === "between" ? align : "left",
+      align:
+        align === "center" || align === "right" || align === "between" || align === "zones" ? align : "left",
       background: typeof background === "string" && background ? background : undefined,
       blocks: rowBlocks,
     });
