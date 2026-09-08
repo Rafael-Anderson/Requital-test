@@ -76,6 +76,16 @@ export class UpdateProductDto {
   @IsPositive()
   compareAtPrice?: number;
 
+  // "New" badge — see CreateProductDto's own comment. `newUntil: null`
+  // clears the expiry; omitted leaves both fields untouched.
+  @IsOptional()
+  @IsBoolean()
+  isNew?: boolean;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'newUntil must be a YYYY-MM-DD date' })
+  newUntil?: string | null;
+
   @IsOptional()
   @IsString()
   barcode?: string;
