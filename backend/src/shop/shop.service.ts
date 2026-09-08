@@ -242,6 +242,9 @@ export class ShopService {
       estimatedDeliveryTimeFrom: dto.estimatedDeliveryTimeFrom,
       estimatedDeliveryTimeTo: dto.estimatedDeliveryTimeTo,
       estimatedDeliveryTimeUnit: dto.estimatedDeliveryTimeUnit,
+      // #13 — null clears (buildSetClause passes null through); undefined
+      // is filtered out and leaves the column untouched.
+      sameDayCutoffTime: dto.sameDayCutoffTime,
       pickupTimeSlotGapMinutes: dto.pickupTimeSlotGapMinutes,
       pickupPreparationTimeMinutes: dto.pickupPreparationTimeMinutes,
       pickupPreparationPlusTimeMinutes: dto.pickupPreparationPlusTimeMinutes,

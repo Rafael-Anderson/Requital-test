@@ -513,6 +513,11 @@ export interface CollectionPageSettings {
   // used to hardcode a single mobile column regardless of this setting;
   // this lets a merchant override that mapping explicitly.
   mobileColumns?: 1 | 2;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line (byte-identical). When on,
+  // each collection-page product card shows an "Earliest Delivery: Today
+  // / Tomorrow" line resolved from shop.sameDayCutoffTime in the shop's
+  // timezone. Renders nothing when the shop has no cutoff configured.
+  showDeliveryEstimate?: boolean;
 }
 
 // Governs the PDP's stock/delivery/pickup status line
@@ -529,6 +534,10 @@ export interface ProductPageSettings {
   showStockIndicator: boolean;
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. When on, the PDP shows the
+  // same "Earliest Delivery: Today / Tomorrow" line as the collection
+  // card, from shop.sameDayCutoffTime in the shop's timezone.
+  showEarliestDelivery?: boolean;
   // The "Buy Now Pay Later!" card (Tabby/Tamara installment-promo widgets)
   // under the price. The card only renders at all when at least one of those
   // providers is enabled + has a public key; this lets a merchant hide it

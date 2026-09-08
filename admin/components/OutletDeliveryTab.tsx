@@ -47,6 +47,8 @@ export default function OutletDeliveryTab({
   const [estimatedFrom, setEstimatedFrom] = useState(30);
   const [estimatedTo, setEstimatedTo] = useState(60);
   const [estimatedUnit, setEstimatedUnit] = useState<"minutes" | "hours">("minutes");
+  // #13 — "HH:MM" shop-level same-day cutoff; "" means off.
+  const [sameDayCutoff, setSameDayCutoff] = useState("");
   const [savingBusinessSettings, setSavingBusinessSettings] = useState(false);
 
   const toast = useToast();
@@ -66,6 +68,7 @@ export default function OutletDeliveryTab({
       setEstimatedFrom(s.estimatedDeliveryTimeFrom);
       setEstimatedTo(s.estimatedDeliveryTimeTo);
       setEstimatedUnit(s.estimatedDeliveryTimeUnit);
+      setSameDayCutoff(s.sameDayCutoffTime ?? "");
     });
   }, []);
 
@@ -96,6 +99,7 @@ export default function OutletDeliveryTab({
         estimatedDeliveryTimeFrom: estimatedFrom,
         estimatedDeliveryTimeTo: estimatedTo,
         estimatedDeliveryTimeUnit: estimatedUnit,
+        sameDayCutoffTime: sameDayCutoff || null,
       });
       toast("Delivery settings saved");
     } catch (err) {
@@ -201,6 +205,21 @@ export default function OutletDeliveryTab({
                         { value: "minutes", label: "Minutes" },
                         { value: "hours", label: "Hours" },
                       ]}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Same-day order cutoff</h3>
+                  <p className="text-xs text-text-faint mb-2">
+                    Orders placed by this time (shop timezone) can be delivered the same day. Leave blank to turn off the &ldquo;Earliest Delivery&rdquo; estimate. Enable the display per surface under Theme &gt; Collection page / Product page.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Input
+                      label="Cutoff time"
+                      type="time"
+                      value={sameDayCutoff}
+                      onChange={(e) => setSameDayCutoff(e.target.value)}
                     />
                   </div>
                 </div>
