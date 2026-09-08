@@ -1,29 +1,26 @@
-import { describe, expect, it, afterEach, vi } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import BnplWidgetCard from "./BnplWidgetCard";
 
 afterEach(cleanup);
 
-// Both provider widgets pull an external SDK via loadScriptOnce — stub it so
-// the test never touches the network.
-vi.mock("@/lib/load-script", () => ({
-  loadScriptOnce: () => new Promise(() => {}),
-}));
-
 describe("BnplWidgetCard", () => {
-  it("renders the card title and a row per provider that has a key", () => {
-    const { container } = render(
-      <BnplWidgetCard price={199} currency="AED" tabbyKey="pk_tabby" tamaraKey="pk_tamara" />,
-    );
+  it("renders the card title and a row per available provider, with our own copy", () => {
+    render(<BnplWidgetCard tabby tamara />);
     expect(screen.getByText("Buy Now Pay Later!")).toBeInTheDocument();
-    expect(container.querySelector("#tabby-promo")).toBeTruthy();
+    expect(screen.getByText("Pay in 4 interest-free payments!")).toBeInTheDocument();
+    expect(screen.getByText("Split your bill into 3 payments. Interest-free!")).toBeInTheDocument();
+    expect(screen.getAllByText("Learn More")).toHaveLength(2);
   });
 
-  it("omits the Tabby row when only Tamara has a key", () => {
-    const { container } = render(
-      <BnplWidgetCard price={199} currency="AED" tabbyKey={null} tamaraKey="pk_tamara" />,
-    );
-    expect(screen.getByText("Buy Now Pay Later!")).toBeInTheDocument();
-    expect(container.querySelector("#tabby-promo")).toBeNull();
+  it("omits the Tabby row when only Tamara is available", () => {
+    render(<BnplWidgetCard tabby={false} tamara />);
+    expect(screen.queryByText("Pay in 4 interest-free payments!")).toBeNull();
+    expect(screen.getByText("Split your bill into 3 payments. Interest-free!")).toBeInTheDocument();
+  });
+
+  it("renders nothing when no provider is available", () => {
+    const { container } = render(<BnplWidgetCard tabby={false} tamara={false} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
