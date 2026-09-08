@@ -69,6 +69,10 @@ export function useProductForm(initialProduct: Product | undefined) {
 
   const [price, setPrice] = useState(product?.price ?? "");
   const [compareAtPrice, setCompareAtPrice] = useState(product?.compareAtPrice ?? "");
+  // "New" badge (stakeholder #6). newUntil is a 'YYYY-MM-DD' string bound
+  // to an <input type="date">; "" means no expiry.
+  const [isNew, setIsNew] = useState(product?.isNew ?? false);
+  const [newUntil, setNewUntil] = useState(product?.newUntil ?? "");
   const [costPrice, setCostPrice] = useState("");
   const [chargeTax, setChargeTax] = useState(product?.chargeTax ?? true);
   const [isCheckoutAddon, setIsCheckoutAddon] = useState(product?.isCheckoutAddon ?? false);
@@ -271,6 +275,10 @@ export function useProductForm(initialProduct: Product | undefined) {
         price: isGiftCard ? giftCardPricePlaceholder : Number(price),
         compareAtPrice: compareAtPrice ? Number(compareAtPrice) : undefined,
         costPrice: costPrice ? Number(costPrice) : undefined,
+        isNew,
+        // "" → null on edit (explicit clear); the backend leaves the column
+        // untouched only when the key is absent, so always send it.
+        newUntil: newUntil || null,
         chargeTax,
         isCheckoutAddon,
         isGiftCard,
@@ -357,6 +365,8 @@ export function useProductForm(initialProduct: Product | undefined) {
     images, setImages,
     price, setPrice,
     compareAtPrice, setCompareAtPrice,
+    isNew, setIsNew,
+    newUntil, setNewUntil,
     costPrice, setCostPrice,
     chargeTax, setChargeTax,
     isCheckoutAddon, setIsCheckoutAddon,
