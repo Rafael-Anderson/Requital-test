@@ -643,6 +643,13 @@ export interface Product {
   usesIngredients: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
+  // "New" badge merchandising metadata (stakeholder #6). isNew: merchant
+  // flag driving the storefront NEW badge. newUntil: optional 'YYYY-MM-DD'
+  // expiry (the API returns it DATE_FORMAT'd to a string), null = no
+  // expiry. Optional here only so existing test fixtures need no change —
+  // the API always returns both.
+  isNew?: boolean;
+  newUntil?: string | null;
   isGiftCard: boolean;
   giftCardDenominations: number[];
   // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
@@ -1370,6 +1377,16 @@ export interface BadgeSettings {
   style?: "pill" | "rectangle" | "ribbon" | "tag" | "circle";
   // §8.13.C item 5 — optional; one-shot pop on badge mount.
   entranceAnimation?: boolean;
+  // Stakeholder #6 — all OPTIONAL, absent ⇒ today's behaviour. newLabel:
+  // per-product "NEW" badge text (default "NEW"). saleLabel: discount
+  // badge template, "{percent}" is substituted with the computed % (default
+  // "-{percent}%"; a placeholder-free string is used verbatim). newSchemeId:
+  // colour scheme for the NEW badge (falls back to saleSchemeId).
+  // ribbonColor: solid hex for the "ribbon" shape only (default "#dc2626").
+  newLabel?: string;
+  saleLabel?: string;
+  newSchemeId?: string;
+  ribbonColor?: string;
 }
 
 // hoverEffect/pressEffect (§8.7 item 1) — OPTIONAL, mirrors backend

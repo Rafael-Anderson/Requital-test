@@ -4,6 +4,8 @@ import Select from "@/components/ui/Select";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import Slider from "@/components/ui/Slider";
+import Input from "@/components/ui/Input";
+import ColorPicker from "@/components/ui/ColorPicker";
 import SchemePicker from "../SchemePicker";
 import type { BadgeSettings as BadgeSettingsType } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -47,6 +49,13 @@ export default function BadgesSettings({ editor }: { editor: ThemeEditorState })
         <option value="tag">Tag</option>
         <option value="ribbon">Ribbon</option>
       </Select>
+      {badges.style === "ribbon" && (
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Ribbon color</span>
+          <ColorPicker value={badges.ribbonColor ?? "#dc2626"} onChange={(hex) => update({ ribbonColor: hex })} />
+          <p className="mt-1 text-xs text-zinc-500">The diagonal ribbon uses this solid color; the schemes below drive every other shape.</p>
+        </div>
+      )}
       <Slider label="Corner radius" min={0} max={24} suffix="px" value={badges.cornerRadius} onChange={(v) => update({ cornerRadius: v })} />
       <div className="flex items-center justify-between gap-4">
         <span className="text-sm font-medium">
@@ -58,9 +67,35 @@ export default function BadgesSettings({ editor }: { editor: ThemeEditorState })
         <Toggle checked={badges.entranceAnimation === true} onChange={(v) => update({ entranceAnimation: v || undefined })} />
       </div>
 
+      <Input
+        label="Discount badge text"
+        placeholder="-{percent}%"
+        value={badges.saleLabel ?? ""}
+        onChange={(e) => update({ saleLabel: e.target.value || undefined })}
+      />
+      <p className="-mt-2 text-xs text-zinc-500">
+        Use {"{percent}"} for the calculated discount (e.g. &ldquo;-{"{percent}"}%&rdquo; renders &ldquo;-20%&rdquo;). Plain text like &ldquo;SALE&rdquo; is shown as-is.
+      </p>
+      <Input
+        label="New badge text"
+        placeholder="NEW"
+        value={badges.newLabel ?? ""}
+        onChange={(e) => update({ newLabel: e.target.value || undefined })}
+      />
+
       <div>
         <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Sale badge scheme</span>
         <SchemePicker schemes={schemes} value={badges.saleSchemeId} onChange={(id) => update({ saleSchemeId: id })} onAddScheme={editor.addColorScheme} onEditScheme={editScheme} />
+      </div>
+      <div>
+        <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">New badge scheme</span>
+        <SchemePicker
+          schemes={schemes}
+          value={badges.newSchemeId ?? badges.saleSchemeId}
+          onChange={(id) => update({ newSchemeId: id })}
+          onAddScheme={editor.addColorScheme}
+          onEditScheme={editScheme}
+        />
       </div>
       <div>
         <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Sold out badge scheme</span>
