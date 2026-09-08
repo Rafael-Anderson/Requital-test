@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveProductBadge } from "./product-badge";
+import { resolveCardBadges, resolveProductBadge } from "./product-badge";
 import type { BadgeSettings, ColorScheme } from "./theme-config-types";
 
 const SCHEMES: ColorScheme[] = [
@@ -105,5 +105,74 @@ describe("resolveProductBadge — entranceAnimation (§8.13.C item 5)", () => {
   it("skips theme-badge-pop on ribbon (its rotate() would fight the pop's scale())", () => {
     const b = resolveProductBadge("sale", { ...BADGES, style: "ribbon", entranceAnimation: true }, SCHEMES);
     expect(b!.className).not.toContain("theme-badge-pop");
+  });
+});
+
+describe("resolveProductBadge — NEW + discount labels (stakeholder #6)", () => {
+  it("NEW badge: default label, falls back to saleSchemeId when newSchemeId is unset", () => {
+    const b = resolveProductBadge("new", BADGES, SCHEMES);
+    expect(b!.label).toBe("NEW");
+    expect(b!.style.background).toBe("#dc2626"); // s2.button (BADGES.saleSchemeId)
+  });
+
+  it("NEW badge: merchant newLabel + its own newSchemeId win", () => {
+    const b = resolveProductBadge("new", { ...BADGES, newLabel: "Just in", newSchemeId: "s1", case: "default" }, SCHEMES);
+    expect(b!.label).toBe("Just in");
+    expect(b!.style.background).toBe("#069494"); // s1.button
+  });
+
+  it("discount badge: substitutes the computed percent into the default template", () => {
+    const b = resolveProductBadge("sale", { ...BADGES, case: "default" }, SCHEMES, { discountPercent: 20 });
+    expect(b!.label).toBe("-20%");
+  });
+
+  it("discount badge: a placeholder-free saleLabel is used verbatim", () => {
+    const b = resolveProductBadge("sale", { ...BADGES, saleLabel: "Deal", case: "default" }, SCHEMES, { discountPercent: 20 });
+    expect(b!.label).toBe("Deal");
+  });
+
+  it("discount badge: template wanting a percent it lacks falls back to 'Sale'", () => {
+    const b = resolveProductBadge("sale", { ...BADGES, case: "default" }, SCHEMES);
+    expect(b!.label).toBe("Sale");
+  });
+
+  it("ribbon: solid red by default, ribbonColor overrides, scheme is ignored", () => {
+    const red = resolveProductBadge("sale", { ...BADGES, style: "ribbon" }, SCHEMES, { discountPercent: 30 });
+    expect(red!.style.background).toBe("#dc2626");
+    expect(red!.style.color).toBe("#ffffff");
+    const custom = resolveProductBadge("sale", { ...BADGES, style: "ribbon", ribbonColor: "#0a0a0a" }, SCHEMES);
+    expect(custom!.style.background).toBe("#0a0a0a");
+  });
+});
+
+describe("resolveCardBadges (stakeholder #6)", () => {
+  const base = { soldOut: false, isNew: false, onSale: false, discountPercent: null };
+
+  it("returns {null, null} for an un-themed shop", () => {
+    expect(resolveCardBadges({ ...base, isNew: true }, undefined, SCHEMES)).toEqual({ primary: null, secondary: null });
+  });
+
+  it("sold out wins outright — no secondary even if new + on sale", () => {
+    const r = resolveCardBadges({ soldOut: true, isNew: true, onSale: true, discountPercent: 20 }, BADGES, SCHEMES);
+    expect(r.primary!.label).toBe("SOLD OUT");
+    expect(r.secondary).toBeNull();
+  });
+
+  it("discount is primary, NEW steps down to a small secondary chip diagonally opposite", () => {
+    const r = resolveCardBadges({ ...base, isNew: true, onSale: true, discountPercent: 25 }, { ...BADGES, case: "default", position: "top_left" }, SCHEMES);
+    expect(r.primary!.label).toBe("-25%");
+    expect(r.secondary!.label).toBe("NEW");
+    expect(r.secondary!.className).toContain("text-[10px]");
+    expect(r.secondary!.className).toContain("bottom-2 left-2"); // vertical-flipped from top_left
+  });
+
+  it("NEW alone gets the full primary treatment, no secondary", () => {
+    const r = resolveCardBadges({ ...base, isNew: true }, BADGES, SCHEMES);
+    expect(r.primary!.label).toBe("NEW");
+    expect(r.secondary).toBeNull();
+  });
+
+  it("nothing applies ⇒ {null, null}", () => {
+    expect(resolveCardBadges(base, BADGES, SCHEMES)).toEqual({ primary: null, secondary: null });
   });
 });

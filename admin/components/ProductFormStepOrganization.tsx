@@ -4,6 +4,7 @@ import { useState } from "react";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import Toggle from "@/components/ui/Toggle";
 import Combobox from "@/components/ui/Combobox";
 import MultiCombobox from "@/components/ui/MultiCombobox";
 import Modal from "@/components/ui/Modal";
@@ -181,6 +182,41 @@ export default function ProductFormStepOrganization({
             placeholder="Add a tag and press Enter"
             className="w-full border border-border dark:border-white/15 rounded px-2.5 py-1.5 text-sm dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
           />
+        </div>
+
+        {/* "New" badge (stakeholder #6). Storefront cards show a NEW badge
+            while this is on and the optional expiry has not passed (checked
+            in the shop's timezone server-side). */}
+        <div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400">
+              Mark as new
+              <span className="block text-xs font-normal text-text-faint">
+                Shows a &ldquo;NEW&rdquo; badge on storefront product cards.
+              </span>
+            </label>
+            <Toggle checked={form.isNew} onChange={form.setIsNew} />
+          </div>
+          {form.isNew && (
+            <div className="mt-3">
+              <Input
+                type="date"
+                label="New until (optional)"
+                value={form.newUntil ?? ""}
+                onChange={(e) => form.setNewUntil(e.target.value)}
+              />
+              {form.newUntil && form.newUntil < new Date().toISOString().slice(0, 10) ? (
+                <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-500">
+                  This date has passed, so the badge is no longer showing. Clear the
+                  date or pick a later one to show it again.
+                </p>
+              ) : (
+                <p className="mt-1.5 text-xs text-text-faint">
+                  Leave blank to keep the badge until you turn this off.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
