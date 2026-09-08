@@ -12,20 +12,38 @@ import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
+import type { BlockContainerRef, ThemeEditorState } from "@/lib/useThemeEditor";
 import type { Collection, ScrollAnimation, SectionVisibility } from "@/lib/types";
 
-// Heading and "View all" button text now live on this section's Header
-// block's collection_title/view_all_button sub-blocks — expand the section
-// in the tree to edit them.
+// The "View all" button text still lives on the Header block's
+// view_all_button sub-block (expand the section in the tree). The section
+// heading is surfaced here directly (writing through to the same
+// collection_title sub-block) since drilling into a nested block for a
+// rename wasn't discoverable — #9/#14.
 export default function FeaturedCollectionsSettings({
   settings,
   onUpdate,
+  editor,
 }: {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
+  editor?: ThemeEditorState;
 }) {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [addId, setAddId] = useState("");
+
+  // Reach the section's own collection_title sub-block for the heading
+  // field below. editor.selection is this section whenever this panel is
+  // shown; guarded so the component still renders without an editor (tests).
+  const section = editor?.selection?.kind === "section" ? editor.selection.section : null;
+  const titleBlock = section?.blocks
+    .find((b) => b.type === "collection_header")
+    ?.blocks?.find((b) => b.type === "collection_title");
+  const titleContainer: BlockContainerRef | null = section
+    ? { kind: "section", sectionId: section.id, sectionType: section.type }
+    : null;
+
+  const displayStyle = (settings.displayStyle as string) === "quick_icons" ? "quick_icons" : "tiles";
 
   useEffect(() => {
     listCollections().then(setCollections).catch(() => setCollections([]));
@@ -57,6 +75,22 @@ export default function FeaturedCollectionsSettings({
 
   return (
     <div className="space-y-4">
+      {titleBlock && titleContainer && editor && (
+        <div>
+          <Input
+            label="Heading"
+            placeholder="Featured Collections"
+            value={(titleBlock.settings.text as string) ?? ""}
+            onChange={(e) => editor.updateBlockSetting(titleContainer, titleBlock.id, "text", e.target.value)}
+          />
+          {titleBlock.visible === false && (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+              The heading is hidden. Toggle it back on from the section tree to show it.
+            </p>
+          )}
+        </div>
+      )}
+
       <div>
         <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Collections to show</span>
         {collectionIds.length > 0 && (
@@ -135,22 +169,39 @@ export default function FeaturedCollectionsSettings({
 
       <hr className="border-black/10 dark:border-white/10" />
 
-      <Select label="Columns" value={String((settings.columns as number) ?? 4)} onChange={(e) => onUpdate("columns", Number(e.target.value))}>
-        {[2, 3, 4, 5, 6].map((n) => (
-          <option key={n} value={n}>
-            {n}
-          </option>
-        ))}
+      <Select
+        label="Display style"
+        value={displayStyle}
+        onChange={(e) => onUpdate("displayStyle", e.target.value === "quick_icons" ? "quick_icons" : undefined)}
+      >
+        <option value="tiles">Large tiles</option>
+        <option value="quick_icons">Quick icons (scrollable row)</option>
       </Select>
-      <Select label="Tile shape" value={(settings.aspectRatio as string) ?? "square"} onChange={(e) => onUpdate("aspectRatio", e.target.value)}>
-        <option value="square">Square</option>
-        <option value="portrait">Portrait</option>
-        <option value="landscape">Landscape</option>
-      </Select>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Name over the image</span>
-        <Toggle checked={(settings.overlayText as boolean) ?? false} onChange={(v) => onUpdate("overlayText", v)} />
-      </div>
+
+      {displayStyle === "tiles" ? (
+        <>
+          <Select label="Columns" value={String((settings.columns as number) ?? 4)} onChange={(e) => onUpdate("columns", Number(e.target.value))}>
+            {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </Select>
+          <Select label="Tile shape" value={(settings.aspectRatio as string) ?? "square"} onChange={(e) => onUpdate("aspectRatio", e.target.value)}>
+            <option value="square">Square</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </Select>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Name over the image</span>
+            <Toggle checked={(settings.overlayText as boolean) ?? false} onChange={(v) => onUpdate("overlayText", v)} />
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-zinc-500">
+          A horizontal strip of small circular category icons with a caption, up to 20. Column and tile-shape controls do not apply.
+        </p>
+      )}
 
       <hr className="border-black/10 dark:border-white/10" />
 

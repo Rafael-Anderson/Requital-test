@@ -203,6 +203,13 @@ export interface ProductRow {
   usesIngredients: boolean;
   chargeTax: boolean;
   isCheckoutAddon: boolean;
+  // "New" badge (stakeholder #6). isNew: merchant flag. newUntil: read via
+  // `DATE_FORMAT(newUntil, '%Y-%m-%d') AS newUntil` in every SELECT that
+  // needs it, so it arrives as a 'YYYY-MM-DD' string (or null), never a
+  // timezone-ambiguous mysql2 Date. A raw `SELECT *` would give a Date —
+  // callers that don't alias it must not rely on this field.
+  isNew: boolean;
+  newUntil: string | null;
   showVariants: boolean;
   showAttributes: boolean;
   showFaqs: boolean;
@@ -353,6 +360,10 @@ export interface ShopRow {
   country: string | null;
   address: string | null;
   timezone: string;
+  // Same-day delivery cutoff (stakeholder #13). "HH:MM" wall-clock in the
+  // shop's timezone, or null when the shop doesn't advertise a same-day
+  // earliest-delivery estimate. See storefront/lib/earliest-delivery.ts.
+  sameDayCutoffTime: string | null;
   notifyWhatsapp: boolean;
   notifyCustomersWhatsapp: boolean;
   notifyEmail: boolean;

@@ -42,6 +42,18 @@ export default function ProductPageSettings({ editor }: { editor: ThemeEditorSta
         </span>
         <Toggle checked={settings.showBnplWidget} onChange={(v) => update({ showBnplWidget: v })} />
       </div>
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Show earliest-delivery estimate
+          <span className="block text-xs font-normal text-zinc-500">
+            An &ldquo;Earliest Delivery: Today / Tomorrow&rdquo; line. Needs a same-day cutoff set under Delivery Settings.
+          </span>
+        </span>
+        <Toggle
+          checked={settings.showEarliestDelivery === true}
+          onChange={(v) => update({ showEarliestDelivery: v || undefined })}
+        />
+      </div>
 
       <hr className="border-black/10 dark:border-white/10" />
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { stripHtmlToText } from "@/lib/sanitize-html";
 import { productCardNameStyle } from "@/lib/theme-element-style";
-import { resolveProductBadge } from "@/lib/product-badge";
+import { resolveCardBadges } from "@/lib/product-badge";
 import { cardDensity, cardTextAlignClass, resolveCardAspectClass, resolveCardStyleClass } from "@/lib/product-card-style";
 import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
 import type { PriceSettings } from "@/lib/theme-config-types";
@@ -61,19 +61,42 @@ function cardExcerpt(product: Product): string | null {
   return null;
 }
 
-export default function ProductCard({ product, orientation }: { product: Product; orientation: "grid" | "list" }) {
+export default function ProductCard({
+  product,
+  orientation,
+  deliveryEstimate,
+}: {
+  product: Product;
+  orientation: "grid" | "list";
+  // #13 — "Today" / "Tomorrow" from the collection page (shop-level cutoff,
+  // resolved once there); undefined/null on every other surface (search,
+  // related, product_tabs) so no line renders.
+  deliveryEstimate?: "Today" | "Tomorrow" | null;
+}) {
   const { shop, shopBasePath, themeConfig, autoDiscounts = [] } = useShop();
   const discounted = computeAutoDiscountedPrice(product, autoDiscounts);
   const outOfStock = product.stockQuantity !== null && product.stockQuantity <= 0;
   const excerpt = cardExcerpt(product);
   const productCards = themeConfig?.globalSettings.productCards;
   const cardHoverEffect = themeConfig?.globalSettings.animations.cardHoverEffect;
-  // globalSettings.badges wiring (Phase 1) — sold-out wins over sale. null
-  // for an un-themed shop (no themeConfig ⇒ no badges), where the legacy
-  // "Out of stock" pill still renders below.
-  const badge =
-    (outOfStock ? resolveProductBadge("sold_out", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes) : null) ||
-    (discounted ? resolveProductBadge("sale", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes) : null);
+  // globalSettings.badges wiring — sold-out wins; else a discount is the
+  // primary badge and NEW steps down to a small secondary chip; NEW alone
+  // gets the primary treatment. {null, null} for an un-themed shop, where
+  // the legacy "Out of stock" pill still renders below. "On sale" here is
+  // an auto-discount OR a merchant compare-at markdown (stakeholder #6).
+  const compareAt = product.compareAtPrice ? Number(product.compareAtPrice) : 0;
+  const markdown = compareAt > Number(product.price);
+  const onSale = !!discounted || markdown;
+  const discountPercent = discounted
+    ? Math.round((1 - Number(discounted.discountedPrice) / Number(discounted.originalPrice)) * 100)
+    : markdown
+      ? Math.round((1 - Number(product.price) / compareAt) * 100)
+      : null;
+  const { primary: badge, secondary: secondaryBadge } = resolveCardBadges(
+    { soldOut: outOfStock, isNew: product.isNew, onSale, discountPercent },
+    themeConfig?.globalSettings.badges,
+    themeConfig?.globalSettings.colorSchemes,
+  );
   const images = product.images.length > 0 ? product.images.map((i) => i.url) : [product.thumbnail];
   // Post-G0 batch — animations.imageLoad: 'fade'. Each image starts invisible
   // and crossfades in once its own onLoad fires; unset (the default) skips
@@ -94,6 +117,14 @@ export default function ProductCard({ product, orientation }: { product: Product
   const alignClass = cardTextAlignClass(productCards?.textAlign);
   const saleStyle = themeConfig?.globalSettings.prices?.salePriceStyle;
 
+  // #13 — same-day earliest-delivery line, only when the collection page
+  // passed a resolved label (feature on + shop cutoff configured).
+  const deliveryLine = deliveryEstimate ? (
+    <p className={`text-xs text-price-main mt-0.5 ${orientation === "grid" ? alignClass : ""}`}>
+      Earliest Delivery: <span className="font-medium text-product-name">{deliveryEstimate}</span>
+    </p>
+  ) : null;
+
   if (orientation === "list") {
     return (
       <Link
@@ -109,6 +140,7 @@ export default function ProductCard({ product, orientation }: { product: Product
             <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} saleStyle={saleStyle} />
           </p>
           {outOfStock && <p className="text-xs text-red-600 mt-0.5">Out of stock</p>}
+          {deliveryLine}
         </div>
       </Link>
     );
@@ -153,6 +185,11 @@ export default function ProductCard({ product, orientation }: { product: Product
             Out of stock
           </span>
         ) : null}
+        {secondaryBadge && (
+          <span className={secondaryBadge.className} style={secondaryBadge.style}>
+            {secondaryBadge.label}
+          </span>
+        )}
         <WishlistButton productId={product.id} />
       </div>
       {/* Single-line ellipsis so long bouquet/gift names never wrap and break
@@ -161,6 +198,7 @@ export default function ProductCard({ product, orientation }: { product: Product
       <p className={`text-sm font-semibold mt-1 text-product-name ${alignClass}`}>
         <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} saleStyle={saleStyle} />
       </p>
+      {deliveryLine}
       {productCards?.showProductDescriptions && density.showExcerpt && excerpt && (
         <p className="mt-1 text-xs leading-snug line-clamp-2 text-price-main">{excerpt}</p>
       )}

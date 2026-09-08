@@ -252,6 +252,16 @@ export interface BadgeSettings {
   style?: "pill" | "rectangle" | "ribbon" | "tag" | "circle";
   // §8.13.C item 5 — optional; a one-shot pop on badge mount.
   entranceAnimation?: boolean;
+  // Stakeholder #6 — all OPTIONAL, absent ⇒ today's behaviour. newLabel:
+  // per-product "NEW" badge text (default "NEW"). saleLabel: discount badge
+  // template, "{percent}" is substituted with the computed % (default
+  // "-{percent}%"; a placeholder-free string is used verbatim). newSchemeId:
+  // colour scheme for the NEW badge (falls back to saleSchemeId). ribbonColor:
+  // solid hex for the "ribbon" shape only (default "#dc2626" red).
+  newLabel?: string;
+  saleLabel?: string;
+  newSchemeId?: string;
+  ribbonColor?: string;
 }
 
 // hoverEffect/pressEffect (§8.7 item 1) — OPTIONAL, mirrors backend
@@ -377,6 +387,10 @@ export interface CollectionPageSettings {
   columns: 2 | 3 | 4 | 5 | 6;
   // Undefined = automatic (desktopColumns <= 2 ? 1 : 2).
   mobileColumns?: 1 | 2;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. Shows an "Earliest Delivery:
+  // Today / Tomorrow" line on each collection-page product card, resolved
+  // from shop.sameDayCutoffTime in the shop's timezone.
+  showDeliveryEstimate?: boolean;
 }
 
 // Governs the PDP's stock/delivery/pickup status line — see backend
@@ -386,6 +400,9 @@ export interface ProductPageSettings {
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
   showBnplWidget: boolean;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. The PDP counterpart of
+  // collectionPage.showDeliveryEstimate.
+  showEarliestDelivery?: boolean;
   inStockColor: string;
   lowStockColor: string;
   outOfStockColor: string;

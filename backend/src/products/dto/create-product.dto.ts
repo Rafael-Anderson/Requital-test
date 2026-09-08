@@ -144,6 +144,18 @@ export class CreateProductDto {
   @IsPositive()
   compareAtPrice?: number;
 
+  // "New" badge merchandising metadata (stakeholder #6). isNew: show the
+  // badge on storefront cards. newUntil: optional 'YYYY-MM-DD' expiry —
+  // null/omitted means "until isNew is turned off". The storefront
+  // resolves it in the shop's timezone (see product-is-new.ts).
+  @IsOptional()
+  @IsBoolean()
+  isNew?: boolean;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'newUntil must be a YYYY-MM-DD date' })
+  newUntil?: string | null;
+
   @IsOptional()
   @IsString()
   barcode?: string;

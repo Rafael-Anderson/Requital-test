@@ -4,6 +4,7 @@ import Select from "@/components/ui/Select";
 import Input from "@/components/ui/Input";
 import ColorPicker from "@/components/ui/ColorPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import Toggle from "@/components/ui/Toggle";
 import RichTextBlockEditor from "../RichTextBlockEditor";
 import type { CollectionPageSettings as CollectionPageSettingsType } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -119,6 +120,21 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
             { value: "2", label: "2" },
           ]}
           onChange={(v) => update({ mobileColumns: v === "auto" ? undefined : (Number(v) as 1 | 2) })}
+        />
+      </div>
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-medium">
+          Show earliest-delivery estimate
+          <span className="block text-xs font-normal text-zinc-500">
+            An &ldquo;Earliest Delivery: Today / Tomorrow&rdquo; line on each product card. Needs a same-day cutoff set under Delivery Settings.
+          </span>
+        </span>
+        <Toggle
+          checked={settings.showDeliveryEstimate === true}
+          onChange={(v) => update({ showDeliveryEstimate: v || undefined })}
         />
       </div>
     </div>

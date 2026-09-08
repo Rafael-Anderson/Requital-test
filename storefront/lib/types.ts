@@ -34,6 +34,11 @@ export interface Shop {
   estimatedDeliveryTimeFrom: number;
   estimatedDeliveryTimeTo: number;
   estimatedDeliveryTimeUnit: string;
+  // #13 — shop timezone + optional "HH:MM" same-day cutoff. The storefront
+  // resolves the "Earliest Delivery: Today / Tomorrow" label from these
+  // (lib/earliest-delivery.ts); null cutoff ⇒ the feature is off.
+  timezone: string;
+  sameDayCutoffTime: string | null;
   pickupPreparationTimeMinutes: number;
   deliveryPreparationTimeMinutes: number;
   businessHours: DayHours | null;
@@ -356,6 +361,14 @@ export interface Product {
   longSummary: string | null;
   thumbnail: string;
   price: string;
+  // Product-level "was" price for a merchant markdown — struck through on
+  // the PDP and drives the discount badge on cards (stakeholder #6).
+  // Display only, never part of order-total math.
+  compareAtPrice: string | null;
+  // Resolved server-side in the shop's timezone (see backend
+  // product-is-new.ts) — a plain boolean, the raw expiry date is not
+  // exposed. Drives the storefront "NEW" badge.
+  isNew: boolean;
   sku: string;
   status: string;
   trackInventory: boolean;

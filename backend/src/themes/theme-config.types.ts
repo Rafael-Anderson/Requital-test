@@ -352,6 +352,19 @@ export interface BadgeSettings {
   style?: 'pill' | 'rectangle' | 'ribbon' | 'tag' | 'circle';
   // §8.13.C item 5 — optional; a one-shot pop on badge mount.
   entranceAnimation?: boolean;
+  // Stakeholder #6 — all OPTIONAL, absent ⇒ today's behaviour.
+  // newLabel: text for the merchant "Mark as new" per-product badge
+  //   (default 'NEW'). saleLabel: template for the discount badge —
+  //   '{percent}' is substituted with the computed discount %; default
+  //   '-{percent}%'. A literal string with no placeholder (e.g. 'SALE')
+  //   is used verbatim. newSchemeId: colour scheme for the NEW badge
+  //   (falls back to saleSchemeId when absent). ribbonColor: solid hex
+  //   for the `ribbon` shape only (default '#dc2626' red) — the colour
+  //   schemes drive every non-ribbon shape as before.
+  newLabel?: string;
+  saleLabel?: string;
+  newSchemeId?: string;
+  ribbonColor?: string;
 }
 
 // hoverEffect/pressEffect (§8.7 item 1, 2026-09-05) — OPTIONAL, no
@@ -513,6 +526,11 @@ export interface CollectionPageSettings {
   // used to hardcode a single mobile column regardless of this setting;
   // this lets a merchant override that mapping explicitly.
   mobileColumns?: 1 | 2;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line (byte-identical). When on,
+  // each collection-page product card shows an "Earliest Delivery: Today
+  // / Tomorrow" line resolved from shop.sameDayCutoffTime in the shop's
+  // timezone. Renders nothing when the shop has no cutoff configured.
+  showDeliveryEstimate?: boolean;
 }
 
 // Governs the PDP's stock/delivery/pickup status line
@@ -529,6 +547,10 @@ export interface ProductPageSettings {
   showStockIndicator: boolean;
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. When on, the PDP shows the
+  // same "Earliest Delivery: Today / Tomorrow" line as the collection
+  // card, from shop.sameDayCutoffTime in the shop's timezone.
+  showEarliestDelivery?: boolean;
   // The "Buy Now Pay Later!" card (Tabby/Tamara installment-promo widgets)
   // under the price. The card only renders at all when at least one of those
   // providers is enabled + has a public key; this lets a merchant hide it
