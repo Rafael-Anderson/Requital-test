@@ -63,7 +63,10 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
       return (
         <div
           key={block.id}
-          className={`whitespace-pre-line leading-relaxed${width.center ? " text-center" : ""}`}
+          // #15 — the editor is now a full WYSIWYG (headings, lists,
+          // alignment, inline colour/size/font); Tailwind preflight resets
+          // list markers + heading sizes, so restore them here.
+          className={`whitespace-pre-line leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold${width.center ? " text-center" : ""}`}
           {...editableAttrs(previewMode, { id: block.id, sectionId, type: "body_text" })}
           style={{ ...themeTextPresetStyle("paragraph"), ...typographyStyle(settings.typography), ...resolveTextElementStyle(block.settings) }}
           dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(html) }}

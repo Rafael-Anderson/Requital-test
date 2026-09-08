@@ -62,17 +62,21 @@ const TEXT_CONTENT_KEY: Record<string, string | undefined> = {
   product_title: undefined,
 };
 
-// The rich_text section's own "text" block gets the contenteditable
-// bold/italic/underline editor (RichTextBlockEditor) instead of a plain
-// Textarea — every other TEXT_TYPES member (heading/subheading/
-// collection_title/footer_copyright, and "text" blocks belonging to
-// image_text/newsletter, which share the same block *type* but aren't rich
-// text) keeps the existing plain-text field. `container.sectionType` is
-// what disambiguates "text" here, since block.type alone can't: it's the
-// shared child type of three different sections (backend constants.ts's
+// The rich_text AND image_text sections' "text" block gets the full
+// WYSIWYG editor (RichTextBlockEditor / TipTap) instead of a plain
+// Textarea. Every other TEXT_TYPES member (heading/subheading/
+// collection_title/footer_copyright, and a newsletter section's "text"
+// block, which shares the same block *type* but isn't rich text) keeps
+// the plain-text field. `container.sectionType` is what disambiguates
+// "text" here, since block.type alone can't: it's the shared child type
+// of three different sections (backend constants.ts's
 // BLOCK_TYPES.rich_text/image_text/newsletter).
 function isRichTextBlock(block: ThemeBlock, container?: BlockContainerRef): boolean {
-  return block.type === "text" && container?.kind === "section" && container.sectionType === "rich_text";
+  return (
+    block.type === "text" &&
+    container?.kind === "section" &&
+    (container.sectionType === "rich_text" || container.sectionType === "image_text")
+  );
 }
 
 function TextElementSettings({ block, onUpdate, container }: FamilyProps) {
