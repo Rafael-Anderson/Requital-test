@@ -356,6 +356,14 @@ export interface Product {
   longSummary: string | null;
   thumbnail: string;
   price: string;
+  // Product-level "was" price for a merchant markdown — struck through on
+  // the PDP and drives the discount badge on cards (stakeholder #6).
+  // Display only, never part of order-total math.
+  compareAtPrice: string | null;
+  // Resolved server-side in the shop's timezone (see backend
+  // product-is-new.ts) — a plain boolean, the raw expiry date is not
+  // exposed. Drives the storefront "NEW" badge.
+  isNew: boolean;
   sku: string;
   status: string;
   trackInventory: boolean;

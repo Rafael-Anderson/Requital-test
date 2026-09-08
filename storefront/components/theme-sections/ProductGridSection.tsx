@@ -10,7 +10,8 @@ import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, resolveButtonHoverClass, resolveSecondaryButtonStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
 import { ArrowRight } from "lucide-react";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
-import { resolveProductBadge, type ResolvedProductBadge } from "@/lib/product-badge";
+import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
+import { resolveCardBadges, type ResolvedProductBadge } from "@/lib/product-badge";
 import { stockLabel } from "@/lib/stock-label";
 import { cardDensity, cardTextAlignClass, resolveCardAspectClass, resolveCardStyleClass } from "@/lib/product-card-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
@@ -158,6 +159,7 @@ function GridProductCard({
   mobileQuickAdd,
   nameStyle,
   badge,
+  secondaryBadge,
 }: {
   product: Product;
   // Post-G0 batch — this card's position in the grid, for the stagger
@@ -179,10 +181,12 @@ function GridProductCard({
   showVendor: boolean;
   showStock: boolean;
   showCurrencyCode: boolean;
-  // globalSettings.badges-driven Sold out chip (Phase 1) — resolved in the
-  // parent since this component has no useShop() of its own. null for an
-  // in-stock product or an un-themed shop.
+  // globalSettings.badges — resolved in the parent (this component has no
+  // useShop()). `badge` is the primary (sold-out / discount / NEW);
+  // `secondaryBadge` is the small NEW chip shown alongside a discount.
+  // Both null for an un-themed shop or when nothing applies.
   badge: ResolvedProductBadge | null;
+  secondaryBadge: ResolvedProductBadge | null;
   // Bug 7 fix: holds the raw currency CODE (e.g. "AED") now, not a
   // pre-computed text symbol - rendered via <CurrencySymbol /> below so
   // AED gets the real glyph instead of being stuck as plain text.
@@ -290,6 +294,11 @@ function GridProductCard({
               {badge.label}
             </span>
           )}
+          {secondaryBadge && (
+            <span className={secondaryBadge.className} style={secondaryBadge.style}>
+              {secondaryBadge.label}
+            </span>
+          )}
           <WishlistButton productId={product.id} />
           {desktopQuickAdd}
           {/* Phase B1 — `overlay` card style: title + price in a gradient
@@ -321,7 +330,7 @@ function GridProductCard({
 // three when no product_card block exists (a theme predating this rework
 // would have none, per the breaking-migration note in the plan).
 export default function ProductGridSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
-  const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, previewMode } = useShop();
+  const { shopSlug, shopBasePath, shop, outlets, themeConfig, previewToken, previewMode, autoDiscounts = [] } = useShop();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const outletId = outlets[0]?.id;
@@ -432,7 +441,31 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
         </div>
       )}
       <div className={`grid ${columns} theme-grid-gap`}>
-        {products.map((product, index) => (
+        {products.map((product, index) => {
+          // globalSettings.badges — sold-out wins; else a discount is the
+          // primary badge and NEW steps down to a small secondary chip
+          // (stakeholder #6). "On sale" is an auto-discount OR a merchant
+          // compare-at markdown, matching ProductCard so the badge % is
+          // the same product on any surface (an auto-discount wins).
+          const discounted = computeAutoDiscountedPrice(product, autoDiscounts);
+          const compareAt = product.compareAtPrice ? Number(product.compareAtPrice) : 0;
+          const markdown = compareAt > Number(product.price);
+          const discountPercent = discounted
+            ? Math.round((1 - Number(discounted.discountedPrice) / Number(discounted.originalPrice)) * 100)
+            : markdown
+              ? Math.round((1 - Number(product.price) / compareAt) * 100)
+              : null;
+          const cardBadges = resolveCardBadges(
+            {
+              soldOut: product.stockQuantity !== null && product.stockQuantity <= 0,
+              isNew: product.isNew,
+              onSale: !!discounted || markdown,
+              discountPercent,
+            },
+            themeConfig?.globalSettings.badges,
+            themeConfig?.globalSettings.colorSchemes,
+          );
+          return (
           <GridProductCard
             key={product.id}
             index={index}
@@ -458,11 +491,8 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             imageLoad={themeConfig?.globalSettings.animations.imageLoad}
             showCarousel={!!productCards?.showCarousel}
             nameStyle={productCards ? productCardNameStyle(productCards) : {}}
-            badge={
-              product.stockQuantity !== null && product.stockQuantity <= 0
-                ? resolveProductBadge("sold_out", themeConfig?.globalSettings.badges, themeConfig?.globalSettings.colorSchemes)
-                : null
-            }
+            badge={cardBadges.primary}
+            secondaryBadge={cardBadges.secondary}
             desktopQuickAdd={
               shopCartUsable && productCards.quickAdd ? (
                 <QuickAddButton
@@ -503,7 +533,8 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
               ) : null
             }
           />
-        ))}
+          );
+        })}
       </div>
     </div>
   );
