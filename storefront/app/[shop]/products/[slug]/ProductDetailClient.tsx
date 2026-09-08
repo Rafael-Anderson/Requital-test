@@ -353,23 +353,6 @@ export default function ProductDetailClient() {
             )}
           </div>
 
-          {/* "Buy Now Pay Later!" card — Tabby/Tamara installment-promo
-              widgets, separate from actual BNPL checkout (they only need
-              price/currency/a public key). Each row is that provider's own
-              official on-site-messaging widget. Hidden entirely by the
-              theme's Product page > "Show Buy Now Pay Later card" toggle, or
-              when neither provider has a key. shop is necessarily non-null
-              when a key resolved (tabbyWidgetPublicKey only returns one when
-              shop?.tabbyPublicKey does — TS can't narrow across the call). */}
-          {showBnplWidget && (tabbyKey || tamaraKey) && (
-            <BnplWidgetCard
-              price={autoDiscounted ? autoDiscounted.discountedPrice : Number(displayPrice)}
-              currency={shop!.currency}
-              tabbyKey={tabbyKey}
-              tamaraKey={tamaraKey}
-            />
-          )}
-
           {product.shortSummary && <p className="text-zinc-600 mt-3">{product.shortSummary}</p>}
 
           {product.hasVariants && (
@@ -517,6 +500,15 @@ export default function ProductDetailClient() {
             )}
             {primaryCtaElement("flex-1 h-12 font-semibold text-[15px] shadow-sm shadow-black/10")}
           </div>
+
+          {/* "Buy Now Pay Later!" card — static Tabby/Tamara instalment copy
+              (no provider SDK, renders with no key), under the CTA row.
+              Hidden by the theme's Product page > "Show Buy Now Pay Later
+              card" toggle, or when neither provider is enabled + configured
+              (tabbyKey/tamaraKey resolve to null otherwise). */}
+          {showBnplWidget && (tabbyKey || tamaraKey) && (
+            <BnplWidgetCard tabby={!!tabbyKey} tamara={!!tamaraKey} />
+          )}
 
           {cartMode !== "contact" && (
             <input
