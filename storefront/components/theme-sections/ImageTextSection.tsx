@@ -4,6 +4,7 @@ import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { resolveTextElementStyle, resolveImageElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // image/text content now each live on their own block (see backend
@@ -31,13 +32,16 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
   if (settings.schemeId && !imageUrl && text && textBlock) {
     return (
       <div className={`theme-gutter-x ${vPad} max-w-3xl mx-auto text-center`}>
-        <p
+        {/* #16 — HTML, not plain text (the admin editor is now a TipTap
+            WYSIWYG). Sanitised with the same allowlist as rich_text /
+            product descriptions; whitespace-pre-line kept so a legacy
+            plain-text block's line breaks still render. */}
+        <div
           {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
-          className="whitespace-pre-line leading-relaxed"
+          className="whitespace-pre-line leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline"
           style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
-        >
-          {text}
-        </p>
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
+        />
       </div>
     );
   }
@@ -57,13 +61,13 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
         )}
         {text && textBlock && (
           <div className="w-full sm:w-1/2">
-            <p
+            {/* #16 — see the banded branch above. */}
+            <div
               {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
-              className="whitespace-pre-line text-sm leading-relaxed opacity-80"
+              className="whitespace-pre-line text-sm leading-relaxed opacity-80 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline"
               style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
-            >
-              {text}
-            </p>
+              dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
+            />
           </div>
         )}
       </div>
