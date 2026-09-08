@@ -3962,3 +3962,101 @@ passes in isolation) + lint +0 (77). `check-page-width` clean. Puppeteer
 re-pass on all four templates across every real route, both viewports, at
 rest / scrolled / reduced-motion: every listed flaw gone, zero console
 errors, zero horizontal overflow.
+
+---
+
+## 12. Legacy button-path fix — primary CTAs follow the published theme (2026-09-08, `fix/legacy-button-theme`)
+
+Every primary CTA outside the homepage theme sections rendered the legacy
+Appearance-Color teal on a shop with a published Sections theme: the PDP
+add-to-cart / buy-now, the cart + drawer checkout buttons, all three checkout
+submit paths (single-page + stepped), the account dashboard + addresses form,
+all four auth forms, order tracking, and the post-purchase survey — 14
+surfaces. Root cause: `storeButtonClassName()` and `form-styles.ts`'s
+`BUTTON_PRIMARY_CLASS` resolve to `--color-button` / `--color-add-to-cart-*`
+(from `shop.colors`, default `#069494`), which `applyThemeConfigOverrides`
+never remapped onto the theme accent.
+
+### 12.1 The plumbing — a CSS-var remap, not 14 call-site edits
+
+Both chokepoints stay unchanged. `applyThemeConfigOverrides` (shop-context.tsx),
+which already runs last in the merged `[shop, themeConfig]` effect and
+early-returns when no theme is published, now also sets:
+
+- `--color-button` / `--color-add-to-cart-button` ← the active scheme's
+  `button` (= `--color-accent`)
+- `--color-button-foreground` / `--color-add-to-cart-text` ← the scheme's
+  `buttonLabel` (= `--color-accent-foreground`)
+- `--font-sans` ← the pairing's body font (non-section pages — account /
+  cart / checkout / auth / tracking / survey — render in `--font-sans`, not
+  the pairing)
+
+`applyTheme()` resets all of these from the legacy fields first every effect
+run, so **a shop with no published theme never enters this block — byte-identical.**
+`ClassicHero` (the legacy Layout-mode homepage hero) deliberately keeps
+`storeButtonClassName` untouched: it only renders when no Sections theme is
+published, so `--color-button` is always the legacy value there.
+
+### 12.2 Pre-paint flash fix (SSR)
+
+`app/[shop]/layout.tsx` emits the theme vars as a pre-paint `<style>` block
+(the un-white-flash mechanism). It only fetched `shop`, so a themed shop's
+buttons — and every `bg-accent` element — flashed the legacy colour on cold
+load before hydration. It now fetches the published theme config in parallel
+(`getThemeConfig(shopSlug, { preview: false })`) and runs
+`resolveThemeVarsWithScheme(shop, themeConfig)` — the legacy base overlaid
+with the scheme colours + the same button / font remap as
+`applyThemeConfigOverrides`, so hydration finds identical values. This also
+removes the pre-existing `bg-accent` flash for every themed element.
+
+`resolveSchemeCssVars` moved from `shop-context.tsx` (a `"use client"`
+module) to `theme-css-vars.ts` (pure, non-client) so the Server Component
+can use it; re-exported from `shop-context.tsx` for existing importers.
+
+### 12.3 Contrast — checked per the checkout rigour
+
+Each template's active scheme `button` / `buttonLabel` pair (already the basis
+for every `bg-accent` themed button; this fix extends the same pair to the
+legacy-path CTAs):
+
+| Template | pair | contrast | note |
+|---|---|---|---|
+| Atelier | `#5A6B54` / `#FBFAF7` | 5.49 | AA ✓ |
+| Market | `#E24A6A` / `#FFFFFF` | 3.87 | AA-large only — pre-existing brand colour, visually legible; left as-is |
+| Bloom | `#7C5CFF` / `#FFFFFF` | 4.35 | AA-large only — same |
+| Heritage | `#B08D3F` / **`#2B2B2B`** | **4.54** | was `#B08D3F` / `#F6F3EC` = **2.82 (fails AA even for large text)** — a genuine pre-existing bug on every gold button; scheme `buttonLabel` changed to Heritage's own ink. AA ✓ |
+
+Heritage's fix is a 1-value change to its `templates.ts` scheme-1 —
+byte-identical for the other three templates, and it repairs the gold hero
+CTA / view-all / secondary buttons too, not just the newly-remapped ones.
+
+### 12.4 Checkout flow verification
+
+Walked cart → checkout → steps → submit for **both** `single_page` and
+`step_by_step` layouts on Heritage (the template whose scheme changed):
+
+- Every button along the path renders the gold accent with the dark ink
+  label (`Continue to checkout`, `Continue`, `Place order`).
+- The step-gating disabled state, the native required-field validation
+  popup, the payment-method chips, and the calendar all behave exactly as
+  before — the fix is CSS-var only, `useCheckoutForm` is untouched.
+- No layout shift, no console errors (only the pre-existing
+  `BillingNotEnabledMapError` from Google Maps, unrelated).
+
+### 12.5 Second sweep
+
+The only new behaviour is the `--font-sans` remap. Heritage's non-section
+pages (account / cart / order-tracking) now render in **Lato** (its pairing
+body font) instead of Inter — verified zero horizontal overflow and zero
+console errors on every route, both viewports (Lato's metrics are close
+enough to Inter that nothing reflows). Atelier / Market / Bloom pairings all
+use Inter as their body font, so `--font-sans` is unchanged for those.
+
+### 12.6 Gate
+
+backend `tsc` + `jest themes` 91/91 + lint +0 (261); storefront `tsc` +
+`next build` + `vitest` 580/580 (+3 `resolveThemeVarsWithScheme` cases,
+`resolveSchemeCssVars` move covered by the re-export) + lint +0 (33); admin
+untouched, lint +0 (77); `check-page-width` clean. Puppeteer: 14 CTA
+surfaces × 4 templates × 2 viewports all render the theme accent; an
+un-themed shop's buttons + body font are byte-identical (`#069494` / Inter).

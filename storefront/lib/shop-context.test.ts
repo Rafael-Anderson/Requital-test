@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveThemeCssVars, resolveSchemeCssVars } from "./shop-context";
-import type { ColorScheme } from "./theme-config-types";
+import { resolveThemeVarsWithScheme } from "./theme-css-vars";
+import type { ColorScheme, ThemeConfig } from "./theme-config-types";
 import type { Shop } from "./types";
 
 function shop(overrides: Partial<Shop>): Shop {
@@ -193,5 +194,42 @@ describe("resolveSchemeCssVars", () => {
   it("maps secondaryButtonLabel → --color-secondary-button-label (§8.13.C item 2 — the view_all_button secondary button reads it)", () => {
     const vars = resolveSchemeCssVars({ ...DEFAULT_SCHEME, secondaryButtonLabel: "#ff00ff" });
     expect(vars["--color-secondary-button-label"]).toBe("#ff00ff");
+  });
+});
+
+describe("resolveThemeVarsWithScheme — pre-paint SSR vars", () => {
+  const legacyShop = { fontFamily: null, brandColor: null, secondaryColor: null, colors: null } as Shop;
+
+  function themed(over: Partial<ColorScheme> = {}, pairing?: string): ThemeConfig {
+    return {
+      globalSettings: {
+        colorSchemes: [
+          { id: "s1", name: "S1", background: "#0b1020", text: "#eef", button: "#7C5CFF", buttonLabel: "#ffffff", secondaryButtonLabel: "#7C5CFF", ...over },
+        ],
+        ...(pairing ? { typography: { pairing } } : {}),
+      },
+    } as unknown as ThemeConfig;
+  }
+
+  it("no published theme ⇒ exactly the legacy base (byte-identical)", () => {
+    const base = resolveThemeCssVars(legacyShop);
+    expect(resolveThemeVarsWithScheme(legacyShop, null)).toEqual(base);
+  });
+
+  it("legacy-path CTA vars are remapped onto the theme accent when a theme is published", () => {
+    const v = resolveThemeVarsWithScheme(legacyShop, themed());
+    expect(v["--color-button"]).toBe("#7C5CFF");
+    expect(v["--color-add-to-cart-button"]).toBe("#7C5CFF");
+    expect(v["--color-button-foreground"]).toBe("#ffffff");
+    expect(v["--color-add-to-cart-text"]).toBe("#ffffff");
+    // and the scheme's own surface vars are present too
+    expect(v["--color-accent"]).toBe("#7C5CFF");
+    expect(v["--background"]).toBe("#0b1020");
+  });
+
+  it("a typography pairing remaps --font-sans + --theme-body-font to the pairing body font", () => {
+    const v = resolveThemeVarsWithScheme(legacyShop, themed({}, "bold-display")); // Archivo Black / Inter body
+    expect(v["--font-sans"]).toBe('"Inter", sans-serif');
+    expect(v["--theme-body-font"]).toBe('"Inter", sans-serif');
   });
 });

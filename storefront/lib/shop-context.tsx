@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
-import { resolveThemeCssVars } from "./theme-css-vars";
+import { resolveSchemeCssVars, resolveThemeCssVars } from "./theme-css-vars";
 import { applyMotionCssVars, applyScrollBehavior } from "./motion";
 import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
 import { applyDensityCssVars } from "./density";
@@ -196,37 +196,10 @@ function loadGoogleFont(family: string | undefined) {
   document.head.appendChild(link);
 }
 
-// The active color scheme (globalSettings.colorSchemes[0]) → the CSS custom
-// properties every storefront surface already reads. Pure + exported so
-// shop-context.test.ts can assert the mapping without a DOM.
-//   button      → --color-accent / --color-accent-hover  (bg-accent buttons)
-//   buttonLabel → --color-accent-foreground              (text on those buttons)
-//   background  → --background / --color-header           (page canvas + header base)
-//   text        → --foreground / --color-header-fg / --color-product-name  (main text)
-// secondaryButtonLabel → --color-secondary-button-label (§8.13.C item 2):
-// read only by resolveSecondaryButtonStyle for the outline "secondary
-// button" (the view_all_button style: 'button' consumer). A brand-new var
-// nothing else reads, so mapping it is inert for every existing surface.
-// --color-header is the LOWEST-priority header input: ThemeDrivenHeader's
-// `header.settings.background` and ShopLayoutClient's
-// `nav_menu.settings.headerBackgroundColor` are inline styles that shadow
-// it, so on a shop that sets its header background either of those ways the
-// scheme background won't visibly move the header — page canvas / body text
-// / product names still update.
-export function resolveSchemeCssVars(scheme: ColorScheme | null | undefined): Record<string, string> {
-  if (!scheme) return {};
-  return {
-    "--color-accent": scheme.button,
-    "--color-accent-hover": scheme.button,
-    "--color-accent-foreground": scheme.buttonLabel,
-    "--color-secondary-button-label": scheme.secondaryButtonLabel,
-    "--background": scheme.background,
-    "--color-header": scheme.background,
-    "--foreground": scheme.text,
-    "--color-header-fg": scheme.text,
-    "--color-product-name": scheme.text,
-  };
-}
+// resolveSchemeCssVars now lives in lib/theme-css-vars.ts (non-"use client")
+// so app/[shop]/layout.tsx's Server Component can use it for the pre-paint
+// <style>. Re-exported here for existing importers / shop-context.test.ts.
+export { resolveSchemeCssVars };
 
 // New visual theme builder's global settings — applied as a second, smaller
 // layer on top of applyTheme() above (not folded into resolveThemeCssVars,
@@ -245,8 +218,28 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   // still reference a different scheme by id via its own schemeId (see
   // theme-color-scheme.ts's resolveScheme, used at those call sites).
   const scheme = resolveScheme(g.colorSchemes[0]?.id, g.colorSchemes);
-  for (const [name, value] of Object.entries(resolveSchemeCssVars(scheme))) {
+  const schemeVars = resolveSchemeCssVars(scheme);
+  for (const [name, value] of Object.entries(schemeVars)) {
     root.style.setProperty(name, value);
+  }
+
+  // Legacy-path CTA colour + font. `storeButtonClassName()` and
+  // `form-styles.ts`'s `BUTTON_PRIMARY_CLASS` (PDP add-to-cart / buy-now,
+  // cart + drawer checkout buttons, all three checkout submit paths,
+  // account/auth forms, order tracking, the survey) resolve to
+  // --color-button* / --color-add-to-cart-*; non-section pages render in
+  // --font-sans. Those are the legacy Appearance-Color / shop.fontFamily
+  // fields — on a published Sections theme the primary CTA and body text
+  // should be the theme's, not the legacy defaults. applyTheme() re-runs in
+  // the same merged effect and always resets all of these from the legacy
+  // fields first, so a shop with NO published theme is byte-identical (this
+  // block never runs — `g` is undefined). See resolveThemeVarsWithScheme()
+  // in theme-css-vars.ts for the matching pre-paint SSR values.
+  if (schemeVars["--color-accent"]) {
+    root.style.setProperty("--color-button", schemeVars["--color-accent"]);
+    root.style.setProperty("--color-add-to-cart-button", schemeVars["--color-accent"]);
+    root.style.setProperty("--color-button-foreground", schemeVars["--color-accent-foreground"]);
+    root.style.setProperty("--color-add-to-cart-text", schemeVars["--color-accent-foreground"]);
   }
 
   // Popovers/modals surface — mega-menu flyout, nav dropdown panel, header
@@ -292,6 +285,12 @@ function applyThemeConfigOverrides(config: ThemeConfig | null) {
   if (bodyFontName) {
     loadGoogleFont(bodyFontName);
     root.style.setProperty("--theme-body-font", `"${bodyFontName}", sans-serif`);
+    // Non-section pages (account / cart / checkout / auth / tracking /
+    // survey) render in --font-sans, not the pairing. Point it at the
+    // pairing's body font so those pages match the themed sections.
+    // applyTheme() resets --font-sans from shop.fontFamily first, so a
+    // shop with no published theme is unchanged.
+    root.style.setProperty("--font-sans", `"${bodyFontName}", sans-serif`);
   }
   if (headingFontName) {
     loadGoogleFont(headingFontName);

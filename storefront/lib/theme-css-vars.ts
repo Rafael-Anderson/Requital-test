@@ -13,7 +13,10 @@
 // OS preference the shop never opted into.
 import { getReadableTextColor } from "./color-contrast";
 import { parseJsonField } from "./notification-text";
+import { resolveScheme } from "./theme-color-scheme";
 import { WIRED_THEME_COLOR_FIELDS } from "./theme-colors";
+import { resolveTypographyPairing } from "./theme-typography";
+import type { ColorScheme, ThemeConfig } from "./theme-config-types";
 import type { Shop } from "./types";
 
 const DEFAULT_ACCENT = "#069494";
@@ -73,4 +76,67 @@ export function resolveThemeCssVars(shop: Shop | null): Record<string, string> {
   vars["--color-button-foreground"] = getReadableTextColor(buttonColor);
 
   return vars;
+}
+
+// The active color scheme (globalSettings.colorSchemes[0]) → the CSS custom
+// properties every storefront surface already reads. Pure + exported so
+// shop-context.test.ts can assert the mapping without a DOM. (Moved here
+// from shop-context.tsx — a "use client" module — so layout.tsx's Server
+// Component can use it for the pre-paint <style>; re-exported from
+// shop-context.tsx for existing importers.)
+//   button      → --color-accent / --color-accent-hover  (bg-accent buttons)
+//   buttonLabel → --color-accent-foreground              (text on those buttons)
+//   background  → --background / --color-header           (page canvas + header base)
+//   text        → --foreground / --color-header-fg / --color-product-name  (main text)
+// --color-header is the LOWEST-priority header input: ThemeDrivenHeader's
+// header.settings.background and ShopLayoutClient's
+// nav_menu.settings.headerBackgroundColor are inline styles that shadow it.
+export function resolveSchemeCssVars(scheme: ColorScheme | null | undefined): Record<string, string> {
+  if (!scheme) return {};
+  return {
+    "--color-accent": scheme.button,
+    "--color-accent-hover": scheme.button,
+    "--color-accent-foreground": scheme.buttonLabel,
+    "--color-secondary-button-label": scheme.secondaryButtonLabel,
+    "--background": scheme.background,
+    "--color-header": scheme.background,
+    "--foreground": scheme.text,
+    "--color-header-fg": scheme.text,
+    "--color-product-name": scheme.text,
+  };
+}
+
+// Pre-paint vars for a shop that has a published Sections theme: the legacy
+// `resolveThemeCssVars(shop)` base, overlaid with the active scheme's
+// colours AND the legacy-path CTA / body-font vars remapped onto the theme
+// (matching applyThemeConfigOverrides in shop-context.tsx, so hydration
+// finds identical values and nothing flashes). `themeConfig` null ⇒ the
+// plain legacy base, byte-identical to before.
+export function resolveThemeVarsWithScheme(
+  shop: Shop | null,
+  themeConfig: ThemeConfig | null,
+): Record<string, string> {
+  const base = resolveThemeCssVars(shop);
+  const g = themeConfig?.globalSettings;
+  if (!g) return base;
+
+  const merged = { ...base, ...resolveSchemeCssVars(resolveScheme(g.colorSchemes?.[0]?.id, g.colorSchemes ?? [])) };
+
+  const accent = merged["--color-accent"];
+  const accentFg = merged["--color-accent-foreground"];
+  if (accent && accentFg) {
+    merged["--color-button"] = accent;
+    merged["--color-add-to-cart-button"] = accent;
+    merged["--color-button-foreground"] = accentFg;
+    merged["--color-add-to-cart-text"] = accentFg;
+  }
+
+  const pairing = resolveTypographyPairing(g.typography?.pairing);
+  const bodyFontName = pairing?.bodyFont ?? g.typography?.bodyFont;
+  if (bodyFontName) {
+    merged["--theme-body-font"] = `"${bodyFontName}", sans-serif`;
+    merged["--font-sans"] = `"${bodyFontName}", sans-serif`;
+  }
+
+  return merged;
 }

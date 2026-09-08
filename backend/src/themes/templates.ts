@@ -458,7 +458,12 @@ const heritage: ThemeConfig = (() => {
   const g = c.globalSettings;
 
   g.colorSchemes = [
-    scheme('scheme-1', 'Cream', { background: '#F6F3EC', text: '#2B2B2B', button: '#B08D3F', buttonLabel: '#F6F3EC', secondaryButtonLabel: '#1E3A2F' }),
+    // buttonLabel is Heritage's own ink (#2B2B2B), not cream — cream on the
+    // #B08D3F gold is 2.82:1 (fails WCAG AA even for large text). #2B2B2B is
+    // 4.54:1. This pair drives every gold button on the theme (hero CTA,
+    // view-all, and — after the legacy-button-path fix — the PDP / cart /
+    // checkout CTAs), so it has to be legible.
+    scheme('scheme-1', 'Cream', { background: '#F6F3EC', text: '#2B2B2B', button: '#B08D3F', buttonLabel: '#2B2B2B', secondaryButtonLabel: '#1E3A2F' }),
     scheme('scheme-2', 'Deep green', { background: '#1E3A2F', text: '#F6F3EC', button: '#F6F3EC', buttonLabel: '#1E3A2F', secondaryButtonLabel: '#F6F3EC' }),
   ];
   g.typography.pairing = 'classic';
