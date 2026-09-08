@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { getShop, resolveImageUrl } from "@/lib/api";
-import { resolveThemeCssVars } from "@/lib/theme-css-vars";
+import { getShop, getThemeConfig, resolveImageUrl } from "@/lib/api";
+import { resolveThemeVarsWithScheme } from "@/lib/theme-css-vars";
 import { buildShopMetadata } from "@/lib/seo";
 import ShopLayoutClient from "./ShopLayoutClient";
 
@@ -51,8 +51,16 @@ export default async function ShopLayout({
   // memoizes it within the request.
   let themeVars = "";
   try {
-    const shop = await getShop(shopSlug);
-    themeVars = Object.entries(resolveThemeCssVars(shop))
+    // Both are cheap public GETs; fetch in parallel. The theme config is
+    // needed here too (not just client-side) so the pre-paint vars carry the
+    // published Sections theme's scheme colours + its legacy-path CTA / font
+    // remap — otherwise a themed shop's primary buttons (and every bg-accent
+    // element) flash the legacy colour on cold load before hydration.
+    const [shop, themeConfig] = await Promise.all([
+      getShop(shopSlug),
+      getThemeConfig(shopSlug, { preview: false }).catch(() => null),
+    ]);
+    themeVars = Object.entries(resolveThemeVarsWithScheme(shop, themeConfig))
       .map(([k, v]) => `${k}:${v}`)
       .join(";");
   } catch {

@@ -44,6 +44,13 @@ export default function ClassicHero({ bannerUrl, heroText }: { bannerUrl: string
         <p className="mt-4 text-sm sm:text-base text-zinc-500 max-w-md mx-auto">
           {shop.description || "Thoughtfully curated, delivered to your door."}
         </p>
+        {/* Deliberately still on the legacy button colour (--color-button):
+            this whole component is part of the legacy Layout-mode homepage
+            dispatch (app/[shop]/page.tsx), which only ever renders when NO
+            Sections theme is published — so --color-button is always the
+            legacy Appearance Color here, and there's no theme to defer to.
+            (The other storeButtonClassName call sites — PDP / cart / checkout
+            / account — DO get remapped, via applyThemeConfigOverrides.) */}
         <Link
           href={`${shopBasePath || "/"}#shop`}
           className={`inline-flex items-center justify-center h-11 px-6 mt-8 font-medium ${storeButtonClassName(shop)}`}
