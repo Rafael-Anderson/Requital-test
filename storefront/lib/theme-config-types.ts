@@ -252,6 +252,16 @@ export interface BadgeSettings {
   style?: "pill" | "rectangle" | "ribbon" | "tag" | "circle";
   // §8.13.C item 5 — optional; a one-shot pop on badge mount.
   entranceAnimation?: boolean;
+  // Stakeholder #6 — all OPTIONAL, absent ⇒ today's behaviour. newLabel:
+  // per-product "NEW" badge text (default "NEW"). saleLabel: discount badge
+  // template, "{percent}" is substituted with the computed % (default
+  // "-{percent}%"; a placeholder-free string is used verbatim). newSchemeId:
+  // colour scheme for the NEW badge (falls back to saleSchemeId). ribbonColor:
+  // solid hex for the "ribbon" shape only (default "#dc2626" red).
+  newLabel?: string;
+  saleLabel?: string;
+  newSchemeId?: string;
+  ribbonColor?: string;
 }
 
 // hoverEffect/pressEffect (§8.7 item 1) — OPTIONAL, mirrors backend

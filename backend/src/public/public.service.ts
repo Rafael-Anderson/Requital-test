@@ -10,6 +10,7 @@ import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
+import { resolveProductIsNew } from '../products/product-is-new';
 import { generateValidTimeSlots } from './time-slots';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import { createLogger } from '../common/logging/logger';
@@ -868,9 +869,14 @@ export class PublicService {
       variants,
       shadowStock,
       brands,
+      shopRows,
     ] = await Promise.all([
       this.db.query<(ProductRow & RowDataPacket)[]>(
-        `SELECT * FROM product WHERE id IN (${idList}) AND shopId = ? AND status = 'Available'`,
+        // DATE_FORMAT alias shadows the raw `newUntil` from `*` so it's a
+        // 'YYYY-MM-DD' string (or null), never a timezone-ambiguous Date —
+        // resolveProductIsNew compares it against today's date-key in the
+        // shop's timezone below.
+        `SELECT *, DATE_FORMAT(newUntil, '%Y-%m-%d') AS newUntil FROM product WHERE id IN (${idList}) AND shopId = ? AND status = 'Available'`,
         [...productIds, shopId],
       ),
       this.db.query<RowDataPacket[]>(
@@ -930,7 +936,15 @@ export class PublicService {
          WHERE p.id IN (${idList})`,
         productIds,
       ),
+      // Shop timezone for the "is this product still New" expiry check —
+      // must be the SHOP's tz, not the server's (stakeholder #6).
+      this.db.query<RowDataPacket[]>(
+        `SELECT timezone FROM shop WHERE id = ?`,
+        [shopId],
+      ),
     ]);
+    const shopTimezone =
+      (shopRows[0]?.timezone as string | undefined) || 'Asia/Dubai';
     const brandById = new Map(
       brands.map((b) => [
         b.id,
@@ -1033,6 +1047,14 @@ export class PublicService {
         ...p,
         price: trimDecimal(p.price),
         compareAtPrice: trimDecimal(p.compareAtPrice),
+        // Resolved server-side (shop timezone) so the storefront just gets
+        // a boolean — the raw newUntil date is not exposed publicly.
+        isNew: resolveProductIsNew(
+          Boolean(p.isNew),
+          (p.newUntil as string | null) ?? null,
+          shopTimezone,
+        ),
+        newUntil: undefined,
         costPrice: trimDecimal(p.costPrice),
         weight: trimDecimal(p.weight),
         giftCardCustomAmountMin: trimDecimal(p.giftCardCustomAmountMin),

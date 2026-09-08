@@ -352,6 +352,19 @@ export interface BadgeSettings {
   style?: 'pill' | 'rectangle' | 'ribbon' | 'tag' | 'circle';
   // §8.13.C item 5 — optional; a one-shot pop on badge mount.
   entranceAnimation?: boolean;
+  // Stakeholder #6 — all OPTIONAL, absent ⇒ today's behaviour.
+  // newLabel: text for the merchant "Mark as new" per-product badge
+  //   (default 'NEW'). saleLabel: template for the discount badge —
+  //   '{percent}' is substituted with the computed discount %; default
+  //   '-{percent}%'. A literal string with no placeholder (e.g. 'SALE')
+  //   is used verbatim. newSchemeId: colour scheme for the NEW badge
+  //   (falls back to saleSchemeId when absent). ribbonColor: solid hex
+  //   for the `ribbon` shape only (default '#dc2626' red) — the colour
+  //   schemes drive every non-ribbon shape as before.
+  newLabel?: string;
+  saleLabel?: string;
+  newSchemeId?: string;
+  ribbonColor?: string;
 }
 
 // hoverEffect/pressEffect (§8.7 item 1, 2026-09-05) — OPTIONAL, no

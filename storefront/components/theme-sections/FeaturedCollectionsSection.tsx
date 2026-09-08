@@ -18,13 +18,21 @@ import type { Collection } from "@/lib/types";
 import type { ButtonStyleSettings, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 // Tailwind's JIT scanner needs literal class strings. Mobile stays 2-up.
+// 2-6 was the original range; 7-8 added for #9/#14 (large tiles stay
+// capped here — the "up to 20 in one row" ask is the quick_icons style,
+// which is a scroll row with no column grid).
 const GRID_COLS: Record<number, string> = {
   2: "grid-cols-2 sm:grid-cols-2",
   3: "grid-cols-2 sm:grid-cols-3",
   4: "grid-cols-2 sm:grid-cols-4",
   5: "grid-cols-2 sm:grid-cols-5",
   6: "grid-cols-2 sm:grid-cols-6",
+  7: "grid-cols-2 sm:grid-cols-7",
+  8: "grid-cols-2 sm:grid-cols-8",
 };
+// quick_icons ceiling — a scrollable strip of small circular category
+// icons; more than this in one row stops being scannable.
+const QUICK_ICONS_MAX = 20;
 const ASPECT_CLASS: Record<string, string> = {
   square: "aspect-square",
   portrait: "aspect-[3/4]",
@@ -76,23 +84,65 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
   const gridCols = GRID_COLS[settings.columns as number] ?? GRID_COLS[4];
   const aspect = ASPECT_CLASS[settings.aspectRatio as string] ?? ASPECT_CLASS.square;
   const overlayText = settings.overlayText === true;
+  // #9/#14 — "quick_icons": a compact scrollable row of small circular
+  // category icons with a caption, instead of the large tile grid. Absent
+  // / "tiles" ⇒ byte-identical to before.
+  const quickIcons = settings.displayStyle === "quick_icons";
+
+  const header = (titleBlock?.visible !== false || viewAllBlock?.visible) && (
+    <div className="flex items-center justify-between theme-heading-gap">
+      {titleBlock?.visible !== false && (
+        <h2
+          className="text-xl font-semibold"
+          {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "section_heading" }) : {})}
+          style={{ ...themeTextPresetStyle("h2"), ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
+        >
+          {heading}
+        </h2>
+      )}
+      {viewAllBlock?.visible && <ViewAll block={viewAllBlock} label={viewAllLabel} href={shopBasePath || "/"} sectionId={sectionId} previewMode={previewMode} secondary={themeConfig?.globalSettings.buttons.secondary} />}
+    </div>
+  );
+
+  if (quickIcons) {
+    return (
+      <div className="theme-gutter-x theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+        {header}
+        {/* Horizontal scroll, never wraps — the negative margin + padding
+            lets the row bleed to the screen edge on mobile so a partial
+            icon hints "scroll for more". */}
+        <div className="flex gap-4 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 snap-x">
+          {tiles.slice(0, QUICK_ICONS_MAX).map((c, i) => (
+            <Link
+              key={c.id}
+              href={`${shopBasePath}/collections/${c.slug}`}
+              className="group shrink-0 snap-start flex flex-col items-center gap-1.5 w-20 theme-stagger-child"
+              style={{ "--i": i } as CSSProperties}
+            >
+              <div className="size-16 rounded-full overflow-hidden bg-black/5">
+                {c.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={resolveImageUrl(c.image) ?? undefined} alt="" className="w-full h-full object-cover theme-hover-zoom" />
+                ) : (
+                  <span
+                    className="w-full h-full flex items-center justify-center text-lg font-semibold uppercase"
+                    style={{ background: "color-mix(in srgb, var(--color-accent) 12%, var(--background))" }}
+                  >
+                    {c.name.charAt(0)}
+                  </span>
+                )}
+              </div>
+              <span className="text-xs font-medium text-center leading-tight line-clamp-2">{c.name}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="theme-gutter-x theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
-      {(titleBlock?.visible !== false || viewAllBlock?.visible) && (
-        <div className="flex items-center justify-between theme-heading-gap">
-          {titleBlock?.visible !== false && (
-            <h2
-              className="text-xl font-semibold"
-              {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "section_heading" }) : {})}
-              style={{ ...themeTextPresetStyle("h2"), ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
-            >
-              {heading}
-            </h2>
-          )}
-          {viewAllBlock?.visible && <ViewAll block={viewAllBlock} label={viewAllLabel} href={shopBasePath || "/"} sectionId={sectionId} previewMode={previewMode} secondary={themeConfig?.globalSettings.buttons.secondary} />}
-        </div>
-      )}
+      {header}
       <div className={`grid ${gridCols} gap-3`}>
         {tiles.map((c, i) => (
           <Link

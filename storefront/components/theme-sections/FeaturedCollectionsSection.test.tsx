@@ -152,5 +152,41 @@ describe("FeaturedCollectionsSection", () => {
       expect(container.querySelector("p.truncate")).toBeNull();
       expect(container.querySelector("span.text-white")?.textContent).toBe("Collection 1");
     });
+
+    it("supports up to 8 columns for the large-tile grid", async () => {
+      listCollections.mockResolvedValue([{ ...collection(1), image: "/img.jpg" }]);
+      const settings = { columns: 8 } as unknown as SectionSettings;
+      const { container, findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={settings} blocks={[]} />,
+      );
+      await findByText("Collection 1");
+      expect(container.querySelector(".grid.sm\\:grid-cols-8")).not.toBeNull();
+    });
+  });
+
+  describe("quick_icons display style (#9/#14)", () => {
+    it("renders a scrollable circular-icon row, not the tile grid, and caps at 20", async () => {
+      listCollections.mockResolvedValue(
+        Array.from({ length: 25 }, (_, i) => ({ ...collection(i + 1), image: `/img-${i}.jpg` })),
+      );
+      const settings = { displayStyle: "quick_icons" } as unknown as SectionSettings;
+      const { container, findAllByRole } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={settings} blocks={[]} />,
+      );
+      const links = await findAllByRole("link");
+      expect(links).toHaveLength(20); // QUICK_ICONS_MAX
+      expect(container.querySelector(".grid")).toBeNull(); // no tile grid
+      expect(container.querySelector(".overflow-x-auto")).not.toBeNull();
+      expect(container.querySelector(".rounded-full")).not.toBeNull();
+    });
+
+    it("falls back to a first-letter monogram circle when a collection has no image", async () => {
+      listCollections.mockResolvedValue([{ ...collection(1), name: "Roses", image: null }]);
+      const settings = { displayStyle: "quick_icons" } as unknown as SectionSettings;
+      const { findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={settings} blocks={[]} />,
+      );
+      expect((await findByText("R")).className).toContain("uppercase");
+    });
   });
 });

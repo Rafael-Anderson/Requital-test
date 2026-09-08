@@ -291,19 +291,21 @@ export class ProductsService {
       productId = await this.db.transaction(async (conn) => {
         const [result] = await conn.query(
           `INSERT INTO product (
-            shopId, name, price, compareAtPrice, thumbnail, sku, barcode, slug,
+            shopId, name, price, compareAtPrice, isNew, newUntil, thumbnail, sku, barcode, slug,
             metaTitle, metaDescription, description, shortSummary, longSummary,
             costPrice, status, trackInventory, continueSellingOutOfStock, chargeTax,
             isCheckoutAddon, showVariants, showAttributes, showFaqs, usesIngredients,
             vendor, productType, physicalProduct, weight, weightUnit, dimensions,
             isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax,
             additionalInfo, brandId
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
             dto.price,
             dto.compareAtPrice ?? null,
+            dto.isNew ?? false,
+            dto.newUntil ?? null,
             thumbnail,
             dto.sku,
             dto.barcode ?? null,
@@ -759,6 +761,10 @@ export class ProductsService {
           name: dto.name,
           price: dto.price,
           compareAtPrice: dto.compareAtPrice,
+          isNew: dto.isNew,
+          // `null` (explicit clear) is passed through by buildSetClause;
+          // `undefined` (omitted) is filtered out — leaves the column as-is.
+          newUntil: dto.newUntil,
           thumbnail,
           sku: dto.sku,
           barcode: dto.barcode,
@@ -2881,7 +2887,14 @@ export class ProductsService {
       variants,
       productIngredients,
     ] = await Promise.all([
-      this.db.query<RowDataPacket[]>(`SELECT * FROM product WHERE id IN (${idList})`, productIds),
+      this.db.query<RowDataPacket[]>(
+        // DATE_FORMAT alias shadows the raw `newUntil` from `*` (mysql2
+        // keeps the last same-named column), so it arrives as a
+        // 'YYYY-MM-DD' string the editor's <input type="date"> binds
+        // directly — never a timezone-ambiguous Date.
+        `SELECT *, DATE_FORMAT(newUntil, '%Y-%m-%d') AS newUntil FROM product WHERE id IN (${idList})`,
+        productIds,
+      ),
       this.db.query<RowDataPacket[]>(
         `SELECT pc.productId, c.* FROM productcollection pc JOIN collection c ON c.id = pc.collectionId WHERE pc.productId IN (${idList})`,
         productIds,
