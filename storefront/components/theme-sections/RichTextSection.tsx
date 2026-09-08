@@ -32,6 +32,16 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
 // field. 'image' blocks (storefront-v2 Phase 4B) render in the same
 // document order alongside it — this used to only ever look for the single
 // text block; now it walks every visible block like HeroSection does.
+// contentWidth (Atelier sets "narrow" for its manifesto strip; free-form
+// SectionSettings key). "narrow" is a centred, tighter column — an opening
+// statement, not a paragraph block. Absent ⇒ today's exact max-w-3xl,
+// left-aligned (byte-identical for every existing rich_text section).
+const CONTENT_WIDTH: Record<string, { maxW: string; center: boolean }> = {
+  narrow: { maxW: "max-w-2xl", center: true },
+  medium: { maxW: "max-w-3xl", center: false },
+  wide: { maxW: "max-w-5xl", center: false },
+};
+
 export default function RichTextSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
   const { previewMode } = useShop();
   const visible = [...blocks].filter((b) => b.visible).sort((a, b) => a.order - b.order);
@@ -40,6 +50,12 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
   );
   if (!hasContent) return null;
 
+  const width = CONTENT_WIDTH[settings.contentWidth as string] ?? CONTENT_WIDTH.medium;
+  // Inside a scheme-tinted band the wrapper (SectionWrapper) supplies the
+  // generous --section-band-py; the section drops its own theme-section-py so
+  // the two don't stack. Not banded ⇒ theme-section-py exactly as before.
+  const vPad = settings.schemeId ? "" : "theme-section-py";
+
   function renderBlock(block: ThemeBlock): ReactNode {
     if (block.type === "text") {
       const html = typeof block.settings.text === "string" ? block.settings.text : "";
@@ -47,7 +63,7 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
       return (
         <div
           key={block.id}
-          className="whitespace-pre-line leading-relaxed"
+          className={`whitespace-pre-line leading-relaxed${width.center ? " text-center" : ""}`}
           {...editableAttrs(previewMode, { id: block.id, sectionId, type: "body_text" })}
           style={{ ...themeTextPresetStyle("paragraph"), ...typographyStyle(settings.typography), ...resolveTextElementStyle(block.settings) }}
           dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(html) }}
@@ -61,6 +77,6 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
   }
 
   return (
-    <div className="px-4 sm:px-6 theme-section-py max-w-3xl mx-auto space-y-4">{visible.map(renderBlock)}</div>
+    <div className={`theme-gutter-x ${vPad} ${width.maxW} mx-auto space-y-4`}>{visible.map(renderBlock)}</div>
   );
 }

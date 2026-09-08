@@ -82,7 +82,7 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
   }
 
   return (
-    <div className="mx-auto px-4 sm:px-6 theme-section-py" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className="mx-auto theme-gutter-x theme-section-py" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {heading && (
         <h2 className="text-xl font-semibold mb-5 text-center" style={themeTextPresetStyle("h2")}>
           {heading}

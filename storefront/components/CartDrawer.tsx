@@ -52,14 +52,21 @@ export default function CartDrawer() {
   }`;
 
   return (
-    <>
+    // A single fixed, viewport-sized, overflow-clipped shell holds both the
+    // backdrop and the panel. The closed panel sits at translate-x-full
+    // (off-screen right) — as a bare `fixed` element its in-flow content used
+    // to extend document.scrollWidth by the panel width, giving every page a
+    // phantom horizontal scrollbar on a `cartLayout: drawer` shop. Clipping
+    // it here (the shell is exactly the viewport, pointer-events-none so it
+    // never blocks the page) removes that without touching the open layout.
+    <div className="fixed inset-0 z-50 overflow-hidden pointer-events-none">
       <div
-        className={`fixed inset-0 z-50 bg-black/40 transition-opacity ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+        className={`absolute inset-0 bg-black/40 transition-opacity ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
         onClick={closeDrawer}
         aria-hidden={!open}
       />
       <div
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-sm bg-drawer text-drawer-fg ${drawerChrome} flex flex-col ${motion.transition} ${
+        className={`absolute top-0 right-0 h-full w-full max-w-sm bg-drawer text-drawer-fg ${drawerChrome} flex flex-col ${open ? "pointer-events-auto " : ""}${motion.transition} ${
           open ? motion.open : motion.closed
         }`}
         style={{ transitionDuration: "var(--motion-duration-base, 300ms)" }}
@@ -110,6 +117,6 @@ export default function CartDrawer() {
           </>
         )}
       </div>
-    </>
+    </div>
   );
 }

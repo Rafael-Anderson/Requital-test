@@ -247,12 +247,15 @@ const atelier: ThemeConfig = (() => {
   // the hero, solid once scrolled past it.
   c.header.settings.scrollBehavior = 'reveal-on-hero';
   c.header.settings.transparentOnHero = true;
+  // Nav treatment (flaw A) — editorial underline-on-hover, in Atelier's
+  // display serif (the pairing's heading font).
+  c.header.blocks.find((b) => b.type === 'nav_menu')!.settings.style = 'underline';
 
   c.sections = [
     announcementOff(0),
     hero(1, 'Flowers for the occasions that matter', 'Enquire', { entrance: 'mask-reveal', settings: { contentPosition: 'bottom-left', height: 'large', heroLayout: 'full_bleed', showSlideIndicators: false, kenBurns: true } }), // §8.13.C item 10
     richText(2, '<p>A studio practice. Seasonal stems, considered arrangements, and a small number of weddings and events each year.</p>', { entrance: 'fade-in', schemeId: 'scheme-2', settings: { contentWidth: 'narrow' } }),
-    featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 2, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
+    featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 3, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait', motion: { stagger: true } } }),
     imageText(5, 'Every arrangement is made to order in our studio the morning of delivery.', { entrance: 'slide-left' }),
     newsletter(6, 'Seasonal notes', 'Occasional letters on what is in season.', { settings: { successAnimation: true } }), // §8.7 item 5
@@ -317,11 +320,11 @@ const market: ThemeConfig = (() => {
   // admin/lib/header-footer-presets.ts's 'contact-bar-centered-nav' preset.
   {
     const contact = block('contact_bar_item', { kind: 'phone', value: '+971 4 000 0000', label: 'Call us' });
-    const logo = block('logo');
-    const search = block('search_icon');
-    const cart = block('cart_icon');
-    const account = block('account_icon');
-    const nav = block('nav_menu');
+    const logo = block('logo', { zone: 'left' });
+    const search = block('search_icon', { zone: 'right' });
+    const cart = block('cart_icon', { zone: 'right' });
+    const account = block('account_icon', { zone: 'right' });
+    const nav = block('nav_menu', { style: 'bordered' }); // flaw A — outlined tabs, modern sans
     c.header = {
       settings: {
         mobileNav: 'bottom-bar',
@@ -329,7 +332,9 @@ const market: ThemeConfig = (() => {
         scrollBehavior: 'shrink',
         rows: [
           headerRow([contact.id], 'right'),
-          headerRow([logo.id, search.id, cart.id, account.id], 'between'),
+          // 'zones' (flaw D) — logo left, icons right, actually grouped
+          // (was 'between', which spread all four edge to edge).
+          headerRow([logo.id, search.id, cart.id, account.id], 'zones'),
           headerRow([nav.id], 'center'),
         ],
       },
@@ -352,7 +357,7 @@ const market: ThemeConfig = (() => {
       { rating: 4.8, label: '2,000+ reviews', countUp: true },
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
-    featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'square', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
+    featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
     productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }, ['product_vendor', 'product_stock']), // §8.13.C item 18
     brands(5, { settings: { scrolling: true } }),
     newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.', { settings: { successAnimation: true } }), // §8.7 item 5
@@ -410,6 +415,8 @@ const bloom: ThemeConfig = (() => {
   c.header.settings.mobileNav = 'drawer';
   // §8.7 item 2 — closes out Bloom's deferred scrollBehavior.
   c.header.settings.scrollBehavior = 'hide-on-scroll';
+  // Nav treatment (flaw A) — filled pills, in Bloom's Archivo Black display face.
+  c.header.blocks.find((b) => b.type === 'nav_menu')!.settings.style = 'pill-solid';
   {
     const cta = block('footer_column', {
       title: 'Ready to send something joyful?',
@@ -423,7 +430,7 @@ const bloom: ThemeConfig = (() => {
   c.sections = [
     announcement(0, 'Free gift wrap on every order'),
     hero(1, 'Gifting made joyful', 'Start a gift', { entrance: 'blur-in', settings: { height: 'large', showSlideIndicators: true, parallax: true } }), // parallax: §8.13.C item 15
-    featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'portrait', overlayText: true, motion: { stagger: true } } }),
+    featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }),
     imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up', schemeId: 'scheme-2' }),
     productGrid(4, { entrance: 'scale-in', settings: { columns: 3, cardStyle: 'elevated', imageAspect: 'portrait', motion: { entrance: 'scale-in', animateOnce: false } } }),
     testimonials(5, [
@@ -493,17 +500,20 @@ const heritage: ThemeConfig = (() => {
   {
     const contact = block('contact_bar_item', { kind: 'phone', value: '+971 4 000 0000', label: 'Call us' });
     const social = block('social_row', { links: [] });
-    const logo = block('logo');
-    const nav = block('nav_menu');
-    const search = block('search_icon');
-    const cart = block('cart_icon');
-    const account = block('account_icon');
+    const logo = block('logo', { zone: 'left' });
+    const nav = block('nav_menu', { zone: 'center', style: 'caps' }); // flaw A — letterspaced caps in Cormorant
+    const search = block('search_icon', { zone: 'right' });
+    const cart = block('cart_icon', { zone: 'right' });
+    const account = block('account_icon', { zone: 'right' });
     c.header = {
       settings: {
         mobileNav: 'drawer',
         rows: [
-          headerRow([contact.id, social.id], 'right', '#1E3A2F'),
-          headerRow([logo.id, nav.id, search.id, cart.id, account.id], 'between'),
+          // flaw #9 — the "colored band" is the MAIN row (logo/nav/icons),
+          // not the thin contact strip. The old config put the green on the
+          // contact row (a ~36px sliver), leaving logo/nav on cream.
+          headerRow([contact.id, social.id], 'right'),
+          headerRow([logo.id, nav.id, search.id, cart.id, account.id], 'zones', '#1E3A2F'),
         ],
       },
       blocks: [contact, social, logo, nav, search, cart, account],

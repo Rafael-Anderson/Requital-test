@@ -21,6 +21,7 @@ const TRUST_ICON: Record<string, LucideIcon> = {
 // Purely presentational — no data fetching. Renders nothing when there is
 // no visible content.
 export default function TrustBarSection({
+  settings,
   blocks,
 }: {
   sectionId: string;
@@ -36,34 +37,61 @@ export default function TrustBarSection({
 
   if (items.length === 0 && rating === null && !heading) return null;
 
+  const banded = !!settings.schemeId;
+  // Inside a scheme band the wrapper supplies --section-band-py and the tint
+  // is the divider; otherwise keep today's exact `border-y` + `py-5`.
+  const outerClass = banded ? "" : "border-y border-stroke";
+  const vPad = banded ? "" : "py-5";
+  // Rating badge layout. DEFAULT "stacked" is byte-identical (rating on its
+  // own line under the trust items). "inline" folds it into the same wrap
+  // row. When stacked with items above it, a hairline + top spacing make the
+  // two tiers read as deliberate, not an accidental wrap.
+  const ratingInline = settings.ratingLayout === "inline";
+
+  const itemEls = items.map((b, i) => {
+    const Icon = TRUST_ICON[(b.settings.icon as string) ?? "check"] ?? Check;
+    return (
+      <span key={b.id} className="inline-flex items-center gap-2 text-sm theme-stagger-child" style={{ "--i": i } as CSSProperties}>
+        <Icon className="size-4 shrink-0 text-accent" aria-hidden="true" />
+        {b.settings.text as string}
+      </span>
+    );
+  });
+
+  const ratingEl =
+    rating !== null ? (
+      <RatingBadge
+        rating={rating}
+        label={typeof ratingBlock?.settings.label === "string" ? ratingBlock.settings.label : ""}
+        url={typeof ratingBlock?.settings.url === "string" ? ratingBlock.settings.url : ""}
+        countUp={ratingBlock?.settings.countUp === true}
+      />
+    ) : null;
+
   return (
-    <div className="border-y border-stroke">
-      <div className="mx-auto px-4 sm:px-6 py-5 flex flex-col items-center gap-3 text-center" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+    <div className={outerClass}>
+      <div className={`mx-auto theme-gutter-x ${vPad} flex flex-col items-center gap-3 text-center`} style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         {heading && (
           <h2 className="text-lg font-semibold" style={themeTextPresetStyle("h3")}>
             {heading}
           </h2>
         )}
-        {items.length > 0 && (
+        {ratingInline ? (
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-            {items.map((b, i) => {
-              const Icon = TRUST_ICON[(b.settings.icon as string) ?? "check"] ?? Check;
-              return (
-                <span key={b.id} className="inline-flex items-center gap-2 text-sm theme-stagger-child" style={{ "--i": i } as CSSProperties}>
-                  <Icon className="size-4 shrink-0 text-accent" aria-hidden="true" />
-                  {b.settings.text as string}
-                </span>
-              );
-            })}
+            {itemEls}
+            {ratingEl}
           </div>
-        )}
-        {rating !== null && (
-          <RatingBadge
-            rating={rating}
-            label={typeof ratingBlock?.settings.label === "string" ? ratingBlock.settings.label : ""}
-            url={typeof ratingBlock?.settings.url === "string" ? ratingBlock.settings.url : ""}
-            countUp={ratingBlock?.settings.countUp === true}
-          />
+        ) : (
+          <>
+            {itemEls.length > 0 && (
+              <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">{itemEls}</div>
+            )}
+            {ratingEl && itemEls.length > 0 ? (
+              <div className="mt-1 pt-3 border-t border-current/10 w-full max-w-xs flex justify-center">{ratingEl}</div>
+            ) : (
+              ratingEl
+            )}
+          </>
         )}
       </div>
     </div>

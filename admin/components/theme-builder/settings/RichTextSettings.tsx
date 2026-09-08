@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/Select";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
@@ -18,6 +19,15 @@ export default function RichTextSettings({
 }) {
   return (
     <div className="space-y-4">
+      <Select
+        label="Content width"
+        value={(settings.contentWidth as string) ?? "medium"}
+        onChange={(e) => onUpdate("contentWidth", e.target.value === "medium" ? undefined : e.target.value)}
+      >
+        <option value="medium">Medium (default)</option>
+        <option value="narrow">Narrow &mdash; centred statement</option>
+        <option value="wide">Wide</option>
+      </Select>
       <TypographyControls
         value={settings.typography as TypographyValue}
         onChange={(v) => onUpdate("typography", v)}

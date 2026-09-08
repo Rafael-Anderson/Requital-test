@@ -167,19 +167,24 @@ export const HEADER_PRESETS: HeaderPreset[] = [
     build: () => {
       const contact = block("contact_bar_item", 0, { kind: "phone", value: "+971 4 000 0000", label: "Call us" });
       const social = block("social_row", 1, { links: [] });
-      const logo = block("logo", 2);
-      const nav = block("nav_menu", 3);
-      const search = block("search_icon", 4);
-      const cart = block("cart_icon", 5);
-      const account = block("account_icon", 6);
+      const logo = block("logo", 2, { zone: "left" });
+      const nav = block("nav_menu", 3, { zone: "center" });
+      const search = block("search_icon", 4, { zone: "right" });
+      const cart = block("cart_icon", 5, { zone: "right" });
+      const account = block("account_icon", 6, { zone: "right" });
       return {
         settings: {
-          // A visible placeholder colour — a merchant applying this preset
-          // is expected to swap it for their own brand colour via the same
-          // row background ColorPicker HeaderSettings.tsx already exposes.
+          // The band colour goes on the MAIN row (logo / nav / icons) — the
+          // visually dominant one — not the thin contact strip above it.
+          // A visible placeholder colour: a merchant applying this preset is
+          // expected to swap it for their own brand colour via the row
+          // background ColorPicker HeaderSettings.tsx already exposes.
+          // "zones" lays each row out as the classic left/center/right grid,
+          // placing blocks by their own zone — so logo-left / nav-centre /
+          // icons-right actually group instead of spreading edge to edge.
           rows: [
-            row([contact.id, social.id], "right", "#2f4a3d"),
-            row([logo.id, nav.id, search.id, cart.id, account.id], "between"),
+            row([contact.id, social.id], "right"),
+            row([logo.id, nav.id, search.id, cart.id, account.id], "zones", "#2f4a3d"),
           ],
         },
         blocks: [contact, social, logo, nav, search, cart, account],

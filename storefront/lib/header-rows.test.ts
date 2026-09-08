@@ -51,6 +51,11 @@ describe("resolveHeaderRows — valid rows", () => {
     expect(rows![1].blocks.map((b) => b.id)).toEqual(["logo"]); // phone already used
   });
 
+  it("passes through the 'zones' align (the classic 3-column per-row layout)", () => {
+    const rows = resolveHeaderRows({ rows: [{ id: "r1", blockIds: ["logo"], align: "zones" }] }, MIN);
+    expect(rows![0].align).toBe("zones");
+  });
+
   it("appends unplaced blocks (except nav_menu) to the last row so nothing is dropped", () => {
     const rows = resolveHeaderRows({ rows: [{ id: "r1", blockIds: ["logo"] }] }, BLOCKS);
     const lastIds = rows![rows!.length - 1].blocks.map((b) => b.id);

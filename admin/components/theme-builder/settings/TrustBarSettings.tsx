@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/Select";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
@@ -22,6 +23,14 @@ export default function TrustBarSettings({
       <p className="text-xs text-zinc-500">
         Add Trust item / Rating badge blocks to this section in the tree on the left.
       </p>
+      <Select
+        label="Rating badge layout"
+        value={(settings.ratingLayout as string) ?? "stacked"}
+        onChange={(e) => onUpdate("ratingLayout", e.target.value === "stacked" ? undefined : e.target.value)}
+      >
+        <option value="stacked">Its own row (below the trust items)</option>
+        <option value="inline">Inline with the trust items</option>
+      </Select>
       <SpacingControls value={settings.spacing as SpacingValue} onChange={(v) => onUpdate("spacing", v)} />
       <BackgroundControls value={settings.background as BackgroundValue} onChange={(v) => onUpdate("background", v)} />
       <ScrollAnimationControl

@@ -175,7 +175,7 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
       subheadingFont: 'Inter',
       headingFont: 'Inter',
       accentFont: 'Inter',
-      paragraph: { size: 14, lineHeight: 'normal' },
+      paragraph: { size: 15, lineHeight: 'normal' },
       h1: { font: 'heading', size: 48, lineHeight: 'tight', letterSpacing: 'normal', case: 'default' },
       h2: { font: 'heading', size: 36, lineHeight: 'tight', letterSpacing: 'normal', case: 'default' },
       h3: { font: 'heading', size: 28, lineHeight: 'normal', letterSpacing: 'normal', case: 'default' },

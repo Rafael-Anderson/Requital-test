@@ -3902,3 +3902,63 @@ the first move for either is a re-verification pass, not a build:
 Everything else in §10.2 is genuinely inert — a zero-consumer control or a
 reserved enum value — and should be built only alongside a template (or a
 merchant request) that needs it.
+
+---
+
+## 11. Template visual-flaws fix round (2026-09-07, `fix/theme-visual-flaws`)
+
+A dedicated fix batch after the four G0 templates were live on the seed shop
+and reviewed. Puppeteer/Playwright inspection of the real rendered
+storefronts (computed styles + bounding boxes + DOM, desktop + mobile, at
+rest / scrolled / `prefers-reduced-motion`, across home / collection / PDP /
+cart / account). Not a feature batch.
+
+### 11.1 What shipped
+
+| Item | Root cause | Fix |
+|---|---|---|
+| **Squeezed scheme-tinted bands** (Atelier manifesto, Market trust strip, Bloom "Pick it…", Heritage "A family business…") | `SectionWrapper` paints `schemeId`'s bg on the full-bleed `<section>` but adds no padding of its own; the child provides only the standard `theme-section-py` (or, for `trust_bar`, ~nothing). | New `--section-band-py` (`:root`, 3.5rem). `SectionWrapper` applies it as `padding-block` on the `<section>` **only when `settings.schemeId` is set** (overridable by `settings.spacing`). `RichTextSection` / `ImageTextSection` / `TrustBarSection` drop their own `theme-section-py` when banded so it doesn't stack. |
+| **Rich-text / image-text statement bands not centred** | `RichTextSection` hard-coded `max-w-3xl` + left-aligned, ignoring `settings.contentWidth`; a text-only `image_text` rendered a squeezed left-half column. | `RichTextSection` honours `contentWidth` (`narrow` ⇒ `max-w-2xl` + `text-center`; absent ⇒ today's `max-w-3xl` left). A **banded** `image_text` with no image renders full-width, centred. New admin "Content width" select. |
+| **Trust-bar rating badge reads as an accidental wrap** | `TrustBarSection` is `flex-col`: items row, then the rating on its own line — a designed two-tier that looks unintentional. | New `settings.ratingLayout` (`stacked` default = byte-identical, plus a hairline + spacing so the two tiers read as deliberate; `inline` folds the rating into the items' wrap row). New admin "Rating badge layout" select. |
+| **Nav menu is the same grey pill on every template** | `MenuBar` hard-coded `rounded-full … text-zinc-600` on every nav link. | New free-form `nav_menu.settings.style` (`pill` default = byte-identical; `pill-solid` / `underline` / `caps` / `bordered`). Non-pill styles follow `--theme-round-*`, colour from `currentColor` (readable on any header row), and the pairing's **heading font**. `lib/nav-menu-style.ts` (pure resolver + test). Templates: Atelier `underline` (Fraunces), Market `bordered` (Inter), Bloom `pill-solid` (Archivo Black), Heritage `caps` (Cormorant). New admin "Link style" select. |
+| **Multi-row header spreads icons across the full width** (Market, Heritage) | The `rows` path renders each row's blocks as a flat `justify-*` flex list — no left/center/right zones. `align: 'between'` + 4-5 flat blocks ⇒ edge-to-edge. | New `HeaderRow.align: 'zones'` (all 3 type mirrors). `ThemeDrivenHeader` renders a `zones` row as the classic 3-column grid, placing blocks by `settings.zone` (default left) — same model as the no-rows header. Existing `align` values unchanged (byte-identical). A row with a `background` now also gets `getReadableTextColor(bg)` so logo/nav/icons on a dark band aren't low-contrast. Templates + the `colored-band` preset opt into `zones`. |
+| **Heritage green header band renders as a ~36px sliver** | The template (and the shipped `colored-band` preset) put `background` on `rows[0]` = contact bar + social (a thin strip), not `rows[1]` = logo/nav/icons. | Move the band to the main content row in both Heritage's template and `admin/lib/header-footer-presets.ts`'s `colored-band` preset. |
+| **Market rose line under the header at rest** | `ScrollProgressBar` paints its `bg-accent` fill unconditionally; on first paint `document.scrollHeight` can be too small, so `y / max` briefly clamps toward 1. | The fill is not rendered at all while `pct <= 0.001` — at rest / first paint there's simply no element. `pointer-events-none` added to the bar. |
+| **Bloom horizontal overflow / shapes off the left edge** | `.theme-decorative-blob` was `position: fixed`, which escapes the wrapper's `overflow: hidden`; blobs placed past a viewport edge (`left: -4%`) extended `document.scrollWidth`. | `.theme-decorative-blob` → `position: absolute` (the wrapper is already `fixed inset-0 overflow-hidden`, so blobs stay viewport-anchored **and** get clipped; the scroll-driven `translate3d` is unaffected). |
+| **Closed cart drawer causes horizontal overflow** (pre-existing, any `cartLayout: drawer` shop) | The `fixed top-0 right-0 translate-x-full` closed panel's in-flow content sat at x=[viewportW, viewportW+384] and grew `document.scrollWidth`. | Wrap the backdrop + panel in one `fixed inset-0 overflow-hidden pointer-events-none` shell; panel becomes `absolute` within it (identical open position). |
+| **"General spacing feels tight"** | Body text pinned at 14px; the `px-4 sm:px-6` gutter never density-scaled. | `DEFAULT_THEME_CONFIG.typography.paragraph.size` 14 → **15** (new themes + all four templates; existing published themes keep their stored 14 — no migration, per the reset-not-migrated convention). New `--gutter-x` / `--gutter-x-lg` density vars + `.theme-gutter-x` class; `px-4 sm:px-6` swapped for it on the 8 standard body-section wrappers. |
+| **Oversized `featured_collections` tiles** (all four) | `aspectRatio: square`/`portrait` at 2-4 columns ⇒ 300-850px tall tiles for a "shop by X" nav strip. | `max-h-[360px]` cap on the tile image box (object-cover keeps the crop); templates → `aspectRatio: 'landscape'` (Atelier also `columns` 2 → 3). |
+| **Empty-hero dead space** (no banner image) | The configured `height` (up to 560px / 100vh) is a blank band when there's no backdrop. | `HeroSection` falls back to `min-h-[300px]` when `bannerImages` is empty. A hero with a backdrop keeps its configured height. |
+
+Not fixed (flagged as separate concerns): the **AedGlyph** reading as a
+bitcoin symbol at card size — it is the intentional `AedGlyph` component, not
+a currency bug, but is a real product question independent of theme work; the
+**PDP "Add to cart" / "Buy Now" CTAs** are legacy Layout-mode
+(`storeButtonClassName` / `shop.buttonFill`), not `globalSettings.buttons` —
+a known architectural boundary. The **cart drawer itself was NOT broken** on a
+fresh dev server (the "transparent panel" report was stale turbopack CSS —
+`storefront/CLAUDE.md` gained a troubleshooting entry + `dev:clean` scripts in
+both Next apps).
+
+### 11.2 Second sweep (post-fix) — new flaws found + fixed
+
+1. **Dark text on Heritage's green header row** — moving the band to the main
+   row (fixing the sliver) put dark `text-header-fg` logo/nav/icons on
+   `#1E3A2F`. Fixed by `getReadableTextColor(row.background)` on the row +
+   `currentColor` for the non-pill nav styles.
+2. **Closed cart drawer overflow** — surfaced by the same overflow probe that
+   caught the decorative blobs (both flagged; the blob was already fixed, the
+   drawer was pre-existing). Fixed with the shell wrapper.
+3. **`underline` nav style underline misaligned** — `.theme-nav-link--anim::after`
+   assumes `px-3`; the first draft used `px-1`. Fixed to `px-3`.
+
+### 11.3 Gate
+
+backend `tsc` + `jest themes` 91/91 + lint +0 (261); storefront `tsc` +
+`next build` + `vitest` 572/572 (+`nav-menu-style` 4, +`header-rows` 1;
+`density` / `ScrollProgressBar` tests updated) + lint +0 (33); admin `tsc` +
+`next build` + `vitest` (1 pre-existing `AccountSetup` parallel-load flake,
+passes in isolation) + lint +0 (77). `check-page-width` clean. Puppeteer
+re-pass on all four templates across every real route, both viewports, at
+rest / scrolled / reduced-motion: every listed flaw gone, zero console
+errors, zero horizontal overflow.
