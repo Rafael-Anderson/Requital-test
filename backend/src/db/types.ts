@@ -360,6 +360,10 @@ export interface ShopRow {
   country: string | null;
   address: string | null;
   timezone: string;
+  // Same-day delivery cutoff (stakeholder #13). "HH:MM" wall-clock in the
+  // shop's timezone, or null when the shop doesn't advertise a same-day
+  // earliest-delivery estimate. See storefront/lib/earliest-delivery.ts.
+  sameDayCutoffTime: string | null;
   notifyWhatsapp: boolean;
   notifyCustomersWhatsapp: boolean;
   notifyEmail: boolean;

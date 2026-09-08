@@ -34,6 +34,11 @@ export interface Shop {
   estimatedDeliveryTimeFrom: number;
   estimatedDeliveryTimeTo: number;
   estimatedDeliveryTimeUnit: string;
+  // #13 — shop timezone + optional "HH:MM" same-day cutoff. The storefront
+  // resolves the "Earliest Delivery: Today / Tomorrow" label from these
+  // (lib/earliest-delivery.ts); null cutoff ⇒ the feature is off.
+  timezone: string;
+  sameDayCutoffTime: string | null;
   pickupPreparationTimeMinutes: number;
   deliveryPreparationTimeMinutes: number;
   businessHours: DayHours | null;

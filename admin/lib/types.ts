@@ -985,6 +985,8 @@ export interface Shop {
   estimatedDeliveryTimeFrom: number;
   estimatedDeliveryTimeTo: number;
   estimatedDeliveryTimeUnit: "minutes" | "hours";
+  // #13 — "HH:MM" same-day cutoff (shop timezone), or null when off.
+  sameDayCutoffTime: string | null;
   pickupTimeSlotGapMinutes: number;
   pickupPreparationTimeMinutes: number;
   pickupPreparationPlusTimeMinutes: number;
@@ -1509,6 +1511,9 @@ export interface CollectionPageSettings {
   columns: 2 | 3 | 4 | 5 | 6;
   // Undefined = automatic (desktopColumns <= 2 ? 1 : 2).
   mobileColumns?: 1 | 2;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. Per-card "Earliest Delivery:
+  // Today / Tomorrow" from shop.sameDayCutoffTime.
+  showDeliveryEstimate?: boolean;
 }
 
 // Governs the PDP's stock/delivery/pickup status line — see backend
@@ -1517,6 +1522,9 @@ export interface ProductPageSettings {
   showStockIndicator: boolean;
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line (PDP counterpart of
+  // collectionPage.showDeliveryEstimate).
+  showEarliestDelivery?: boolean;
   showBnplWidget: boolean;
   inStockColor: string;
   lowStockColor: string;

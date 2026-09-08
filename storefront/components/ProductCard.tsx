@@ -61,7 +61,18 @@ function cardExcerpt(product: Product): string | null {
   return null;
 }
 
-export default function ProductCard({ product, orientation }: { product: Product; orientation: "grid" | "list" }) {
+export default function ProductCard({
+  product,
+  orientation,
+  deliveryEstimate,
+}: {
+  product: Product;
+  orientation: "grid" | "list";
+  // #13 — "Today" / "Tomorrow" from the collection page (shop-level cutoff,
+  // resolved once there); undefined/null on every other surface (search,
+  // related, product_tabs) so no line renders.
+  deliveryEstimate?: "Today" | "Tomorrow" | null;
+}) {
   const { shop, shopBasePath, themeConfig, autoDiscounts = [] } = useShop();
   const discounted = computeAutoDiscountedPrice(product, autoDiscounts);
   const outOfStock = product.stockQuantity !== null && product.stockQuantity <= 0;
@@ -106,6 +117,14 @@ export default function ProductCard({ product, orientation }: { product: Product
   const alignClass = cardTextAlignClass(productCards?.textAlign);
   const saleStyle = themeConfig?.globalSettings.prices?.salePriceStyle;
 
+  // #13 — same-day earliest-delivery line, only when the collection page
+  // passed a resolved label (feature on + shop cutoff configured).
+  const deliveryLine = deliveryEstimate ? (
+    <p className={`text-xs text-price-main mt-0.5 ${orientation === "grid" ? alignClass : ""}`}>
+      Earliest Delivery: <span className="font-medium text-product-name">{deliveryEstimate}</span>
+    </p>
+  ) : null;
+
   if (orientation === "list") {
     return (
       <Link
@@ -121,6 +140,7 @@ export default function ProductCard({ product, orientation }: { product: Product
             <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} saleStyle={saleStyle} />
           </p>
           {outOfStock && <p className="text-xs text-red-600 mt-0.5">Out of stock</p>}
+          {deliveryLine}
         </div>
       </Link>
     );
@@ -178,6 +198,7 @@ export default function ProductCard({ product, orientation }: { product: Product
       <p className={`text-sm font-semibold mt-1 text-product-name ${alignClass}`}>
         <PriceDisplay product={product} currency={shop?.currency} discounted={discounted} saleStyle={saleStyle} />
       </p>
+      {deliveryLine}
       {productCards?.showProductDescriptions && density.showExcerpt && excerpt && (
         <p className="mt-1 text-xs leading-snug line-clamp-2 text-price-main">{excerpt}</p>
       )}

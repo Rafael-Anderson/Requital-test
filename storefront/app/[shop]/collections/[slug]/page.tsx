@@ -7,6 +7,7 @@ import { Check, ChevronDown, Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { getCollectionBySlug, listBrands, listCollections, resolveImageUrl } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
+import { resolveEarliestDeliveryLabel } from "@/lib/earliest-delivery";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import type { Brand, CollectionDetail, Collection, Product } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
@@ -241,6 +242,11 @@ export default function CollectionPage() {
 
   const collectionPageSettings = themeConfig?.globalSettings.collectionPage;
   const loadMoreStyle = collectionPageSettings?.loadMoreStyle ?? "infinite";
+  // #13 — shop-level cutoff, resolved once here (same value on every card;
+  // null unless the theme opts in AND the shop configured a cutoff).
+  const deliveryEstimate = collectionPageSettings?.showDeliveryEstimate
+    ? resolveEarliestDeliveryLabel(shop?.sameDayCutoffTime, shop?.timezone)
+    : null;
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visibleProducts =
     loadMoreStyle === "pagination" ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : filtered.slice(0, visibleCount);
@@ -434,13 +440,13 @@ export default function CollectionPage() {
         ) : listOrientation ? (
           <div className="max-w-2xl">
             {visibleProducts.map((p) => (
-              <ProductCard key={p.id} product={p} orientation="list" />
+              <ProductCard key={p.id} product={p} orientation="list" deliveryEstimate={deliveryEstimate} />
             ))}
           </div>
         ) : (
           <div className={`grid ${MOBILE_COLS_CLASS[mobileColumns]} ${DESKTOP_COLS_CLASS[columns]} gap-6`}>
             {visibleProducts.map((p) => (
-              <ProductCard key={p.id} product={p} orientation="grid" />
+              <ProductCard key={p.id} product={p} orientation="grid" deliveryEstimate={deliveryEstimate} />
             ))}
           </div>
         )}

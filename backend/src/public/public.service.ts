@@ -323,6 +323,10 @@ export class PublicService {
       estimatedDeliveryTimeFrom: shop.estimatedDeliveryTimeFrom,
       estimatedDeliveryTimeTo: shop.estimatedDeliveryTimeTo,
       estimatedDeliveryTimeUnit: shop.estimatedDeliveryTimeUnit,
+      // #13 — the storefront resolves the "Today / Tomorrow" earliest-
+      // delivery label against these two, in the shop's timezone.
+      timezone: shop.timezone,
+      sameDayCutoffTime: shop.sameDayCutoffTime,
       pickupPreparationTimeMinutes: shop.pickupPreparationTimeMinutes,
       deliveryPreparationTimeMinutes: shop.deliveryPreparationTimeMinutes,
       businessHours: shop.businessHours,

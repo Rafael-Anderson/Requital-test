@@ -387,6 +387,10 @@ export interface CollectionPageSettings {
   columns: 2 | 3 | 4 | 5 | 6;
   // Undefined = automatic (desktopColumns <= 2 ? 1 : 2).
   mobileColumns?: 1 | 2;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. Shows an "Earliest Delivery:
+  // Today / Tomorrow" line on each collection-page product card, resolved
+  // from shop.sameDayCutoffTime in the shop's timezone.
+  showDeliveryEstimate?: boolean;
 }
 
 // Governs the PDP's stock/delivery/pickup status line — see backend
@@ -396,6 +400,9 @@ export interface ProductPageSettings {
   showDeliveryIndicator: boolean;
   showPickupIndicator: boolean;
   showBnplWidget: boolean;
+  // #13 — OPTIONAL, absent ⇒ false ⇒ no line. The PDP counterpart of
+  // collectionPage.showDeliveryEstimate.
+  showEarliestDelivery?: boolean;
   inStockColor: string;
   lowStockColor: string;
   outOfStockColor: string;

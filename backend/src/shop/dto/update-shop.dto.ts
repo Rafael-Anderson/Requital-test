@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Matches,
   Max,
   Min,
   MaxLength,
@@ -289,6 +290,13 @@ export class UpdateShopDto {
   @IsOptional()
   @IsIn(['minutes', 'hours'])
   estimatedDeliveryTimeUnit?: string;
+
+  // #13 — "HH:MM" same-day cutoff, or null to turn the earliest-delivery
+  // estimate off. @IsOptional() skips both null and undefined, so null
+  // (clear) passes and reaches the UPDATE; undefined leaves it untouched.
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'sameDayCutoffTime must be HH:MM (24-hour)' })
+  sameDayCutoffTime?: string | null;
 
   @IsOptional()
   @Type(() => Number)

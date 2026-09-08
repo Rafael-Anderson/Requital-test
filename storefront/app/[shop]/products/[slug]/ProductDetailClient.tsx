@@ -14,6 +14,7 @@ import { iconStyleProps } from "@/lib/icon-style";
 import { storeButtonClassName } from "@/lib/button-style";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
 import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
+import { resolveEarliestDeliveryLabel } from "@/lib/earliest-delivery";
 import ProductGallery from "@/components/ProductGallery";
 import RelatedProducts from "@/components/RelatedProducts";
 import NotifyMeForm from "@/components/NotifyMeForm";
@@ -165,6 +166,11 @@ export default function ProductDetailClient() {
   const showDeliveryIndicator = productPageSettings?.showDeliveryIndicator ?? true;
   const showPickupIndicator = productPageSettings?.showPickupIndicator ?? true;
   const showBnplWidget = productPageSettings?.showBnplWidget ?? true;
+  // #13 — same "Earliest Delivery: Today / Tomorrow" line as the collection
+  // card; opt-in (default off), null unless the shop configured a cutoff.
+  const earliestDelivery = productPageSettings?.showEarliestDelivery
+    ? resolveEarliestDeliveryLabel(shop?.sameDayCutoffTime, shop?.timezone)
+    : null;
   const fulfillmentTextColor = productPageSettings?.fulfillmentTextColor || undefined;
   const stockToneColor: Record<"ok" | "low" | "out", string> = {
     ok: productPageSettings?.inStockColor || "#15803d",
@@ -472,6 +478,13 @@ export default function ProductDetailClient() {
                 </span>
               )}
             </div>
+          )}
+
+          {!product.isGiftCard && earliestDelivery && (
+            <p className="mt-2 text-sm" style={fulfillmentTextColor ? { color: fulfillmentTextColor } : undefined}>
+              <span className={fulfillmentTextColor ? undefined : "text-zinc-500"}>Earliest Delivery: </span>
+              <span className="font-medium text-product-name">{earliestDelivery}</span>
+            </p>
           )}
 
           <div ref={ctaRef} className="mt-5 flex items-center gap-3">
