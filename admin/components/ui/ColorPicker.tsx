@@ -19,6 +19,15 @@ interface ColorPickerProps {
   onChange: (hex: string) => void;
   swatchSize?: "sm" | "md";
   className?: string;
+  // Which edge of the swatch the popover is pinned to. Default "right"
+  // (popover extends left) suits a control at the right edge of a settings
+  // panel — every existing call site. "left" (extends right) is for a
+  // swatch near the left edge, e.g. the rich-text toolbar.
+  align?: "left" | "right";
+  // Optional swatch row pinned to the top of the popover — the theme's own
+  // scheme colours, so "make this run of text my brand colour" is one
+  // click. Absent ⇒ no preset row, every existing call site unchanged.
+  presets?: { label: string; value: string }[];
 }
 
 const SWATCH_SIZE_CLASS: Record<NonNullable<ColorPickerProps["swatchSize"]>, string> = {
@@ -27,6 +36,30 @@ const SWATCH_SIZE_CLASS: Record<NonNullable<ColorPickerProps["swatchSize"]>, str
 };
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+// Recent colours are shared across every ColorPicker in the admin (one
+// merchant per browser session), persisted so a merchant's palette
+// survives a reload. Best-effort: a private window / blocked storage just
+// means no history, never a crash.
+const RECENT_KEY = "requital_admin_recent_colors";
+const RECENT_MAX = 8;
+function readRecent(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string" && HEX_RE.test(x)).slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+function pushRecent(hex: string): string[] {
+  const next = [hex, ...readRecent().filter((c) => c.toLowerCase() !== hex.toLowerCase())].slice(0, RECENT_MAX);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    /* storage unavailable — history just won't persist */
+  }
+  return next;
+}
 
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
@@ -89,8 +122,40 @@ function hsvToHex(h: number, s: number, v: number): string {
   return `#${toByte(r)}${toByte(g)}${toByte(b)}`;
 }
 
-export default function ColorPicker({ value, onChange, swatchSize = "md", className = "" }: ColorPickerProps) {
+function SwatchRow({
+  label,
+  colors,
+  onPick,
+  className = "",
+}: {
+  label: string;
+  colors: { label: string; value: string }[];
+  onPick: (hex: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <p className="mb-1 text-[11px] font-medium text-zinc-500">{label}</p>
+      <div className="grid grid-cols-8 gap-1">
+        {colors.map((c, i) => (
+          <button
+            key={`${c.value}-${i}`}
+            type="button"
+            title={c.label}
+            aria-label={c.label}
+            onClick={() => onPick(c.value)}
+            className="size-5 rounded border border-black/15 dark:border-white/20 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            style={{ background: c.value }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function ColorPicker({ value, onChange, swatchSize = "md", className = "", presets, align = "right" }: ColorPickerProps) {
   const [open, setOpen] = useState(false);
+  const [recent, setRecent] = useState<string[]>(readRecent);
   const [hexDraft, setHexDraft] = useState(value);
   // Resets the editable draft whenever `value` changes from outside (a
   // spectrum/hue drag, or the parent resetting the field) without clobbering
@@ -103,6 +168,15 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
     setPrevValue(value);
     setHexDraft(value);
   }
+  // Re-read the persisted recent list each time the popover opens (another
+  // ColorPicker on the page may have pushed to it). Adjusted during render
+  // on the open transition, not in an effect — same pattern as hexDraft
+  // above, avoids the extra render an effect-based sync causes.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) setRecent(readRecent());
+  }
   const rootRef = useRef<HTMLDivElement>(null);
   const svRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<null | "sv" | "hue">(null);
@@ -110,6 +184,13 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
 
   const safeHex = normalizeHex(value) ?? "#000000";
   const { h, s, v } = hexToHsv(safeHex);
+
+  // A deliberate pick (a preset/recent swatch, a committed hex, the end of
+  // a spectrum/hue drag) goes into history; a mid-drag value does not.
+  function remember(hex: string) {
+    const normalized = normalizeHex(hex);
+    if (normalized) setRecent(pushRecent(normalized));
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -129,8 +210,15 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
 
   function commitHexDraft() {
     const normalized = normalizeHex(hexDraft);
-    if (normalized) onChange(normalized);
-    else setHexDraft(value);
+    if (normalized) {
+      onChange(normalized);
+      remember(normalized);
+    } else setHexDraft(value);
+  }
+
+  function pickSwatch(hex: string) {
+    onChange(hex);
+    remember(hex);
   }
 
   function setFromSvEvent(clientX: number, clientY: number) {
@@ -152,6 +240,7 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
       if (draggingRef.current === "sv") setFromSvEvent(e.clientX, e.clientY);
     }
     function handleUp() {
+      if (draggingRef.current === "sv") remember(normalizeHex(value) ?? "#000000");
       draggingRef.current = null;
     }
     window.addEventListener("mousemove", handleMove);
@@ -182,8 +271,20 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
           id={panelId}
           role="dialog"
           aria-label="Color picker"
-          className="popover-in absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg shadow-black/10 p-3"
+          className={`popover-in absolute ${align === "left" ? "left-0" : "right-0"} top-full z-50 mt-2 w-56 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg shadow-black/10 p-3`}
         >
+          {presets && presets.length > 0 && (
+            <SwatchRow label="Theme colors" colors={presets} onPick={pickSwatch} className="mb-2" />
+          )}
+          {recent.length > 0 && (
+            <SwatchRow
+              label="Recent"
+              colors={recent.map((c) => ({ label: c, value: c }))}
+              onPick={pickSwatch}
+              className="mb-3"
+            />
+          )}
+
           {/* Saturation/value spectrum for the current hue */}
           <div
             ref={svRef}
@@ -235,6 +336,7 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
               function handleUp() {
                 window.removeEventListener("mousemove", handleMove);
                 window.removeEventListener("mouseup", handleUp);
+                remember(normalizeHex(value) ?? "#000000");
               }
               window.addEventListener("mousemove", handleMove);
               window.addEventListener("mouseup", handleUp);

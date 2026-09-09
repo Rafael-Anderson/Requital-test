@@ -39,6 +39,8 @@ interface FamilyProps {
   onUpdate: (key: string, value: unknown) => void;
   onToggleVisibility: () => void;
   container?: BlockContainerRef;
+  // Theme colour-scheme swatches for the rich-text toolbar's colour picker.
+  colorPresets?: { label: string; value: string }[];
 }
 
 const FONT_WEIGHTS = [
@@ -79,14 +81,19 @@ function isRichTextBlock(block: ThemeBlock, container?: BlockContainerRef): bool
   );
 }
 
-function TextElementSettings({ block, onUpdate, container }: FamilyProps) {
+function TextElementSettings({ block, onUpdate, container, colorPresets }: FamilyProps) {
   const s = block.settings;
   const contentKey = TEXT_CONTENT_KEY[block.type];
   const richText = isRichTextBlock(block, container);
   return (
     <div className="space-y-4">
       {contentKey && richText ? (
-        <RichTextBlockEditor blockId={block.id} value={(s[contentKey] as string) ?? ""} onChange={(html) => onUpdate(contentKey, html)} />
+        <RichTextBlockEditor
+          blockId={block.id}
+          value={(s[contentKey] as string) ?? ""}
+          onChange={(html) => onUpdate(contentKey, html)}
+          colorPresets={colorPresets}
+        />
       ) : (
         contentKey && (
           <Textarea
@@ -96,6 +103,14 @@ function TextElementSettings({ block, onUpdate, container }: FamilyProps) {
             onChange={(e) => onUpdate(contentKey, e.target.value)}
           />
         )
+      )}
+      {richText && (
+        <div className="border-t border-border pt-3 dark:border-white/10">
+          <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Block defaults</p>
+          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            Applies to the whole block. The toolbar above styles only the text you select.
+          </p>
+        </div>
       )}
       <Slider label="Font size" min={10} max={96} value={(s.fontSize as number) ?? 16} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
       <Select label="Font weight" value={(s.fontWeight as string) ?? "400"} onChange={(e) => onUpdate("fontWeight", e.target.value)}>
@@ -466,8 +481,8 @@ function IconElementSettings({ block, onUpdate, onToggleVisibility }: FamilyProp
   );
 }
 
-export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibility, container }: FamilyProps) {
-  if (TEXT_TYPES.has(block.type)) return <TextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} container={container} />;
+export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibility, container, colorPresets }: FamilyProps) {
+  if (TEXT_TYPES.has(block.type)) return <TextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} container={container} colorPresets={colorPresets} />;
   if (IMAGE_TYPES.has(block.type)) return <ImageElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (BUTTON_TYPES.has(block.type)) return <ButtonElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (NAV_TYPES.has(block.type)) return <NavElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
