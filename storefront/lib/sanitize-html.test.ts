@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeDescriptionHtml, sanitizeStyleAttribute, stripHtmlToText } from "./sanitize-html";
+import { escapeStrayLt, sanitizeDescriptionHtml, sanitizeStyleAttribute, stripHtmlToText } from "./sanitize-html";
 
 describe("sanitizeDescriptionHtml", () => {
   it("keeps tags the rich-text editor can actually produce", () => {
@@ -91,6 +91,38 @@ describe("sanitizeStyleAttribute — rejection cases (#15/#16 security commit)",
 
   it("returns '' for an all-disallowed attribute (caller then drops it)", () => {
     expect(sanitizeStyleAttribute("position:absolute;z-index:99")).toBe("");
+  });
+});
+
+// Phase 2 rich-text rollout: a "<" + letter with no closing ">" would make
+// the HTML parser swallow a legacy plain-text heading from that point to
+// end-of-string. escapeStrayLt rescues those without weakening sanitising.
+describe("escapeStrayLt / stray '<' in legacy plain text", () => {
+  it("preserves words after a '<' + letter that never closes", () => {
+    expect(sanitizeDescriptionHtml("Prices <from AED 20")).toBe("Prices &lt;from AED 20");
+    expect(sanitizeDescriptionHtml("Sale <off 50%")).toBe("Sale &lt;off 50%");
+    expect(sanitizeDescriptionHtml("Under <b100 dirhams")).toBe("Under &lt;b100 dirhams");
+    expect(sanitizeDescriptionHtml("Ends <soon")).toBe("Ends &lt;soon");
+  });
+
+  it("still keeps '<' + digit / space content (already-correct case)", () => {
+    expect(sanitizeDescriptionHtml("Gifts <100 off")).toBe("Gifts &lt;100 off");
+    expect(sanitizeDescriptionHtml("3 < 5 always")).toBe("3 &lt; 5 always");
+    expect(sanitizeDescriptionHtml("Deals < AED 100 only")).toBe("Deals &lt; AED 100 only");
+  });
+
+  it("leaves real editor HTML untouched", () => {
+    expect(escapeStrayLt("Everything <b>bold</b> and <span>styled</span>")).toBe(
+      "Everything <b>bold</b> and <span>styled</span>",
+    );
+    expect(escapeStrayLt("<p>Para</p>")).toBe("<p>Para</p>");
+  });
+
+  it("does NOT turn a terminated disallowed tag into visible text — DOMPurify still drops it", () => {
+    const scriptOut = sanitizeDescriptionHtml("<script>alert(1)</script>Hello");
+    expect(scriptOut).not.toContain("alert(1)");
+    expect(scriptOut).toBe("Hello");
+    expect(sanitizeDescriptionHtml('<img src=x onerror="alert(1)">Safe')).not.toContain("onerror");
   });
 });
 

@@ -74,9 +74,47 @@ function ensureStyleHook(): void {
   });
 }
 
+// Escape ONLY a "<" that opens a tag-like run which never closes — e.g. the
+// "<from AED 20" in a legacy plain-text heading "Prices <from AED 20".
+// Left as-is, the HTML parser opens a tag at "<from", never finds its ">",
+// and silently drops everything from the "<" to end-of-string, so the
+// heading just vanishes after the "<". This is the only lossy case:
+//   - "<" + digit / whitespace / EOF ("< AED", "<100")  -> handed through;
+//     DOMPurify escapes it and keeps the content already.
+//   - "<" + letter/"/" that IS terminated by ">" before the next "<"
+//     ("<b>", "<script>…</script>", "<img …/>") -> handed through so
+//     DOMPurify keeps allowed tags and strips the rest, exactly as today
+//     (malicious payloads still get dropped, not shown as text).
+//   - "<" + letter/"/" that is NOT terminated -> escaped, so the words
+//     survive.
+// Runs before DOMPurify, which still sanitises the result — not a security
+// relaxation, purely a "don't eat the merchant's words" guard.
+export function escapeStrayLt(html: string): string {
+  if (html.indexOf("<") === -1) return html;
+  let out = "";
+  for (let i = 0; i < html.length; i++) {
+    if (html[i] !== "<") {
+      out += html[i];
+      continue;
+    }
+    const next = html[i + 1];
+    const tagLike = next !== undefined && /[a-zA-Z/]/.test(next);
+    if (!tagLike) {
+      out += "<";
+      continue;
+    }
+    const rest = html.slice(i);
+    const gt = rest.indexOf(">");
+    const nextLt = rest.indexOf("<", 1);
+    const terminated = gt !== -1 && (nextLt === -1 || gt < nextLt);
+    out += terminated ? "<" : "&lt;";
+  }
+  return out;
+}
+
 export function sanitizeDescriptionHtml(html: string): string {
   ensureStyleHook();
-  return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
+  return DOMPurify.sanitize(escapeStrayLt(html), { ALLOWED_TAGS, ALLOWED_ATTR });
 }
 
 // Plain-text excerpt for contexts that can't render HTML (product card
