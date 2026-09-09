@@ -55,15 +55,27 @@ export function sanitizeStyleAttribute(raw: string): string {
   return kept.join("; ");
 }
 
-// One module-level hook — sanitize-html.ts is the app's only DOMPurify
-// consumer, so a global hook is fine and simpler than a lazy guard.
-DOMPurify.addHook("uponSanitizeAttribute", (_node, data) => {
-  if (data.attrName !== "style") return;
-  data.attrValue = sanitizeStyleAttribute(data.attrValue);
-  if (!data.attrValue) data.keepAttr = false;
-});
+// The style-attribute hook is installed lazily on first sanitize, NOT at
+// module load. `dompurify`'s default export is a ready instance only in a
+// browser; imported into a Node/SSR module graph (which now happens — the
+// theme header/footer/sections import this file) it's a bare factory with
+// no `.addHook` / `.sanitize`, so a module-level `addHook(...)` throws at
+// import time. Every real consumer is a client component, so the first
+// actual sanitize call always runs in the browser where the instance is
+// live; the module just has to *load* without touching DOMPurify.
+let hookInstalled = false;
+function ensureStyleHook(): void {
+  if (hookInstalled) return;
+  hookInstalled = true;
+  DOMPurify.addHook("uponSanitizeAttribute", (_node, data) => {
+    if (data.attrName !== "style") return;
+    data.attrValue = sanitizeStyleAttribute(data.attrValue);
+    if (!data.attrValue) data.keepAttr = false;
+  });
+}
 
 export function sanitizeDescriptionHtml(html: string): string {
+  ensureStyleHook();
   return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
 }
 

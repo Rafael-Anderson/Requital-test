@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Check, Clock, Heart, Leaf, Shield, Star, Truck, type LucideIcon } from "lucide-react";
 import { themeTextPresetStyle } from "@/lib/theme-element-style";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { useCountUp } from "@/lib/use-count-up";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -72,9 +73,11 @@ export default function TrustBarSection({
     <div className={outerClass}>
       <div className={`mx-auto theme-gutter-x ${vPad} flex flex-col items-center gap-3 text-center`} style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
         {heading && (
-          <h2 className="text-lg font-semibold" style={themeTextPresetStyle("h3")}>
-            {heading}
-          </h2>
+          <h2
+            className="text-lg font-semibold"
+            style={themeTextPresetStyle("h3")}
+            dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(heading) }}
+          />
         )}
         {ratingInline ? (
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">

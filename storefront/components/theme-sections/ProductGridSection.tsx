@@ -7,6 +7,7 @@ import { useCart } from "@/lib/cart";
 import { useFlyToCart } from "@/lib/fly-to-cart";
 import { listProducts, listCollections } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { resolveTextElementStyle, resolvePriceElementStyle, resolveButtonFillStyle, resolveButtonHoverClass, resolveSecondaryButtonStyle, themeTextPresetStyle, productCardNameStyle } from "@/lib/theme-element-style";
 import { ArrowRight } from "lucide-react";
 import { useProductCardImageIndex } from "@/lib/use-product-card-image-index";
@@ -419,9 +420,11 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
       {(sectionTitle || (showViewAll && collectionSlug)) && (
         <div className="flex items-center justify-between theme-heading-gap">
           {sectionTitle && (
-            <h2 className="text-xl font-semibold" style={themeTextPresetStyle("h2")}>
-              {sectionTitle}
-            </h2>
+            <h2
+              className="text-xl font-semibold"
+              style={themeTextPresetStyle("h2")}
+              dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(sectionTitle) }}
+            />
           )}
           {showViewAll && collectionSlug &&
             (viewAllAsButton ? (

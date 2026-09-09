@@ -5,6 +5,7 @@ import Toggle from "@/components/ui/Toggle";
 import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import ColorPicker from "@/components/ui/ColorPicker";
+import RichTextBlockEditor from "../RichTextBlockEditor";
 import type { AnnouncementBarConfig } from "@/lib/types";
 
 // The PERSISTENT chrome announcement bar (theme-builder-expansion Phase 5,
@@ -15,9 +16,11 @@ import type { AnnouncementBarConfig } from "@/lib/types";
 export default function AnnouncementBarChromeSettings({
   value,
   onChange,
+  colorPresets,
 }: {
   value: AnnouncementBarConfig | undefined;
   onChange: (next: AnnouncementBarConfig) => void;
+  colorPresets?: { label: string; value: string }[];
 }) {
   const cfg: AnnouncementBarConfig = value ?? { enabled: false, messages: [] };
   const messages = Array.isArray(cfg.messages) ? cfg.messages : [];
@@ -39,19 +42,22 @@ export default function AnnouncementBarChromeSettings({
         <>
           <div className="space-y-2">
             {messages.map((m, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <input
-                  aria-label={`Message ${i + 1}`}
-                  value={m}
-                  onChange={(e) => setMessages(messages.map((x, idx) => (idx === i ? e.target.value : x)))}
-                  placeholder="Free delivery on orders over AED 200 🚚"
-                  className="flex-1 h-9 rounded-[10px] border border-border bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 dark:border-white/15 dark:bg-zinc-900"
-                />
+              <div key={i} className="flex items-start gap-1.5">
+                <div className="flex-1">
+                  <RichTextBlockEditor
+                    blockId={`chrome-announcement-${i}`}
+                    label={`Message ${i + 1}`}
+                    mode="inline"
+                    value={m}
+                    onChange={(html) => setMessages(messages.map((x, idx) => (idx === i ? html : x)))}
+                    colorPresets={colorPresets}
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => setMessages(messages.filter((_, idx) => idx !== i))}
                   aria-label="Remove message"
-                  className="shrink-0 text-zinc-400 hover:text-red-500"
+                  className="mt-7 shrink-0 text-zinc-400 hover:text-red-500"
                 >
                   <Trash2 className="size-4" />
                 </button>

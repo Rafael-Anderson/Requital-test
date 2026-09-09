@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { parseNotificationMessages } from "@/lib/notification-text";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { announcementDismissKey, useAnnouncementRotation } from "@/lib/announcement-rotation";
 import type { AnnouncementBarConfig } from "@/lib/theme-config-types";
 
@@ -85,6 +86,9 @@ function ThemedAnnouncementBar({
   const useAccentFallback = !cfg.background && !cfg.textColor;
   const joined = cfg.messages.join("   •   ");
   const displayText = cfg.scrolling || !rotating ? joined : cfg.messages[index];
+  // Messages carry inline rich-text HTML (Phase 2). Legacy plain strings
+  // pass through sanitize unchanged.
+  const displayHtml = { __html: sanitizeDescriptionHtml(displayText) };
 
   function dismiss() {
     setDismissed(true);
@@ -113,10 +117,8 @@ function ThemedAnnouncementBar({
         style={style}
       >
         <div className="inline-block marquee-track">
-          <span className="px-4">{displayText}</span>
-          <span className="px-4" aria-hidden="true">
-            {displayText}
-          </span>
+          <span className="px-4" dangerouslySetInnerHTML={displayHtml} />
+          <span className="px-4" aria-hidden="true" dangerouslySetInnerHTML={displayHtml} />
         </div>
         {dismissBtn}
       </div>
@@ -128,7 +130,10 @@ function ThemedAnnouncementBar({
       className={`relative text-xs text-center py-1.5 px-8 ${useAccentFallback ? "bg-accent text-accent-foreground" : ""}`}
       style={style}
     >
-      <span style={rotating ? { transition: "opacity var(--motion-duration-base, 0.4s)", opacity: faded ? 0 : 1 } : undefined}>{displayText}</span>
+      <span
+        style={rotating ? { transition: "opacity var(--motion-duration-base, 0.4s)", opacity: faded ? 0 : 1 } : undefined}
+        dangerouslySetInnerHTML={displayHtml}
+      />
       {dismissBtn}
     </div>
   );

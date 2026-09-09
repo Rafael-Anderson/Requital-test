@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import {
   resolveTextElementStyle,
   resolveButtonElementStyle,
@@ -96,9 +97,8 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
           className="text-xl font-semibold"
           {...(titleBlock ? editableAttrs(previewMode, { id: titleBlock.id, sectionId, type: "section_heading" }) : {})}
           style={{ ...themeTextPresetStyle("h2"), ...(titleBlock ? resolveTextElementStyle(titleBlock.settings) : {}) }}
-        >
-          {heading}
-        </h2>
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(heading) }}
+        />
       )}
       {viewAllBlock?.visible && <ViewAll block={viewAllBlock} label={viewAllLabel} href={shopBasePath || "/"} sectionId={sectionId} previewMode={previewMode} secondary={themeConfig?.globalSettings.buttons.secondary} />}
     </div>

@@ -23,11 +23,13 @@ export default function HeaderSettings({
   blocks,
   onUpdate,
   onApplyPreset,
+  colorPresets,
 }: {
   settings: Record<string, unknown>;
   blocks: ThemeBlock[];
   onUpdate: (key: string, value: unknown) => void;
   onApplyPreset: (key: string) => void;
+  colorPresets?: { label: string; value: string }[];
 }) {
   const rows: HeaderRow[] = Array.isArray(settings.rows) ? (settings.rows as HeaderRow[]) : [];
   const blockLabel = (id: string) => {
@@ -247,6 +249,7 @@ export default function HeaderSettings({
       <AnnouncementBarChromeSettings
         value={settings.announcementBar as AnnouncementBarConfig | undefined}
         onChange={(v) => onUpdate("announcementBar", v)}
+        colorPresets={colorPresets}
       />
 
       <hr className="border-black/10 dark:border-white/10" />

@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
 import { paymentBadges } from "@/lib/payment-badges";
@@ -146,9 +147,8 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
           ? editableAttrs(previewMode, { id: copyrightBlock.id, sectionId: FOOTER_CHROME_ID, type: "copyright_text" })
           : {})}
         style={copyrightBlock ? resolveTextElementStyle(copyrightBlock.settings) : undefined}
-      >
-        {copyrightText}
-      </p>
+        dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(copyrightText) }}
+      />
       {badges.length > 0 && (
         <div className="flex items-center gap-2">
           {badges.map(({ key, label, Icon }) => (

@@ -10,6 +10,15 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 
+// The heading write-through field is now an inline rich-text editor
+// (TipTap). Stub it with a labelled textarea so the write-through
+// assertions stay meaningful without driving a contenteditable.
+vi.mock("../RichTextBlockEditor", () => ({
+  default: ({ label, value, onChange }: { label?: string; value: string; onChange: (v: string) => void }) => (
+    <textarea aria-label={label ?? "Text"} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+
 describe("FeaturedCollectionsSettings — Phase 4 tile controls", () => {
   it("renders Columns, Tile shape, and the name-overlay toggle", () => {
     render(<FeaturedCollectionsSettings settings={{}} onUpdate={vi.fn()} />);

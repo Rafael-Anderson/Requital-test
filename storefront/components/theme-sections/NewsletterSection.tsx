@@ -5,6 +5,7 @@ import { ArrowRight, Check } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { subscribeNewsletter } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import {
   resolveTextElementStyle,
   resolveButtonElementStyle,
@@ -85,18 +86,16 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
           {...editableAttrs(previewMode, { id: headingBlock.id, sectionId, type: "heading", reorderable: true })}
           className="text-xl font-semibold mb-2"
           style={{ ...themeTextPresetStyle("h2"), ...typographyStyle(settings.typography), ...resolveTextElementStyle(headingBlock.settings) }}
-        >
-          {heading}
-        </h2>
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(heading) }}
+        />
       )}
       {subtext && textBlock && (
-        <p
+        <div
           {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "subtext", reorderable: true })}
-          className="text-sm opacity-70 mb-5"
+          className="text-sm opacity-70 mb-5 [&_p]:m-0"
           style={{ ...themeTextPresetStyle("paragraph"), ...typographyStyle(settings.typography), ...resolveTextElementStyle(textBlock.settings) }}
-        >
-          {subtext}
-        </p>
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(subtext) }}
+        />
       )}
       {status === "success" ? (
         successAnimation ? (
