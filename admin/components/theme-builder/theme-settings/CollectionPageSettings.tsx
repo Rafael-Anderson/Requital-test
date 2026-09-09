@@ -6,6 +6,7 @@ import ColorPicker from "@/components/ui/ColorPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import RichTextBlockEditor from "../RichTextBlockEditor";
+import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import type { CollectionPageSettings as CollectionPageSettingsType } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
@@ -22,6 +23,7 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
     editor.updateGlobalSettingsCategory("collectionPage", patch);
   }
   const isPresetFont = (FONT_PRESETS as readonly string[]).includes(settings.fontFamily) || settings.fontFamily === "";
+  const colorPresets = schemeColorPresets(editor.config!.globalSettings.colorSchemes);
 
   return (
     <div className="space-y-4">
@@ -30,12 +32,14 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
         label="Text above products"
         value={settings.textAboveProducts}
         onChange={(html) => update({ textAboveProducts: html })}
+        colorPresets={colorPresets}
       />
       <RichTextBlockEditor
         blockId="collection-page-text-below"
         label="Text below products"
         value={settings.textBelowProducts}
         onChange={(html) => update({ textBelowProducts: html })}
+        colorPresets={colorPresets}
       />
 
       <hr className="border-black/10 dark:border-white/10" />
@@ -72,7 +76,7 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
 
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Text color</span>
-        <ColorPicker value={settings.textColor || "#1B1F1E"} onChange={(hex) => update({ textColor: hex })} />
+        <ColorPicker value={settings.textColor || "#1B1F1E"} onChange={(hex) => update({ textColor: hex })} presets={colorPresets} />
       </div>
 
       <hr className="border-black/10 dark:border-white/10" />

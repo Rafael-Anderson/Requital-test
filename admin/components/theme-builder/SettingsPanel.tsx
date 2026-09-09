@@ -56,6 +56,7 @@ import {
   ButtonFillSetting,
 } from "./LayoutSettings";
 import { SECTION_TYPE_LABELS, type ThemeSectionType } from "@/lib/types";
+import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import { THEME_SETTINGS_CATEGORY_LABELS } from "@/lib/theme-settings-categories";
 import { THEME_LAYOUT_CATEGORY_LABELS } from "@/lib/theme-layout-categories";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -326,6 +327,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
       <ElementSettingsPanel
         block={block}
         container={container}
+        colorPresets={schemeColorPresets(config.globalSettings.colorSchemes)}
         onUpdate={(key, value) => editor.updateBlockSetting(container, block.id, key, value)}
         onToggleVisibility={() => editor.toggleBlockVisibility(container, block.id)}
       />
