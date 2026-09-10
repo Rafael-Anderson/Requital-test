@@ -4892,12 +4892,36 @@ which **9 are dead** and **22 are shop-wide settings rendered inside an outlet p
 
 `OutletBasicInfoTab`, `OutletDeliveryTab` and `OutletPickupTab` each call **both**
 `updateOutlet()` and `updateShop()`. Four, eleven and seven shop-wide fields
-respectively. Nothing in the UI indicates which is which.
+respectively.
+
+> **Corrected 2026-09-10** (found while building the `fix/shop-wide-scope-warning`
+> stopgap). An earlier draft of this paragraph said *"Nothing in the UI indicates which
+> is which."* **That was wrong.** Three of the five cards carrying these fields already
+> render a static hint: *"These apply shop-wide, across every outlet, not just this
+> one."* — `OutletBasicInfoTab`'s "Order Setting", `OutletDeliveryTab`'s "Delivery
+> Settings" and `OutletPickupTab`'s "Pickup Settings". `OutletBasicInfoTab` carries a
+> second, separate hint for the four read-only shop mirrors.
+>
+> The accurate finding is narrower and more useful: **the coverage is partial, and it
+> is partial in the worst possible way.** Two of the five cards have **no hint at all**
+> — `OutletDeliveryTab`'s "Operation Settings" (8 of that tab's 11 shop-wide fields:
+> time slot gap, preparation time, preparation + delivery time, the three
+> estimated-delivery-time inputs, and the same-day cutoff) and `OutletPickupTab`'s
+> "Preparation Time Settings" (3 of its 7). Each of those unhinted cards sits directly
+> below a hinted one **and shares its Save button**. So a merchant who reads carefully
+> learns that payment methods and hours are shop-wide, and reasonably concludes that
+> the prep times in the next card down are not.
+>
+> Two further weaknesses in the hint that survive the correction: it is `text-xs
+> text-text-faint`, the faintest style in the design system, placed above a long card;
+> and it is passive — it never fires at the moment of the change.
 
 Concrete consequences:
 
 - A merchant with three outlets sees the VAT rate on three pages. Changing it on one
-  changes it everywhere. There is no warning.
+  changes it everywhere. **The VAT rate's own card is one of the three that does carry
+  the static hint** — which is precisely why the hint is not sufficient on its own: it
+  was present, and the problem was still worth a dedicated fix.
 - The same is true of delivery hours, prep times, estimated delivery windows, the
   same-day cutoff and every accepted payment method. A branch manager "adjusting their
   branch's prep time" silently changes it for every branch.
@@ -4909,8 +4933,19 @@ Concrete consequences:
   of one decision are in two different sections.**
 
 The code is honest about this in one place — the `sameDayCutoffTime` migration comment
-explains the shop-level choice and even names the future per-outlet path — but the *UI*
-is not.
+explains the shop-level choice and even names the future per-outlet path — and the UI
+is honest on three of five cards. Neither reaches the two unhinted cards, and neither
+speaks at the moment a value actually changes.
+
+**Partly mitigated (`fix/shop-wide-scope-warning`, 2026-09-10).** A confirm dialog now
+fires on any save from an outlet page that would change one of the 22, naming exactly
+what is about to change shop-wide, across all 22 fields and therefore across the two
+previously unhinted cards. It fires only when a value genuinely changed, so an
+outlet-only save is unaffected. **This is a strengthening of partial coverage, not a
+fill of total absence, and it is explicitly a stopgap** — it warns about the
+misplacement rather than correcting it. The fix is §14.4's reorganisation, which moves
+these fields to Settings → Selling → Money & Tax and Settings → Fulfilment and deletes
+the dialog along with `admin/lib/shop-wide-fields.ts`.
 
 ### P2 · Payment methods and payment gateways are two halves of one decision, in two apps
 

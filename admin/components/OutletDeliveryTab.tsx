@@ -13,6 +13,8 @@ import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
 import OutletDeliveryAreaTab from "@/components/OutletDeliveryAreaTab";
+import ShopWideChangeModal from "@/components/ShopWideChangeModal";
+import { diffShopWideChanges } from "@/lib/shop-wide-fields";
 import { useToast } from "@/components/ui/Toast";
 
 const TIME_SLOT_PRESETS = [
@@ -50,6 +52,11 @@ export default function OutletDeliveryTab({
   // #13 — "HH:MM" shop-level same-day cutoff; "" means off.
   const [sameDayCutoff, setSameDayCutoff] = useState("");
   const [savingBusinessSettings, setSavingBusinessSettings] = useState(false);
+  // The shop-wide payload as loaded, for the "this changes every outlet"
+  // confirm (lib/shop-wide-fields.ts). Re-baselined after a successful save
+  // so a second save of the same values does not re-prompt.
+  const [shopBaseline, setShopBaseline] = useState<Record<string, unknown> | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<string[] | null>(null);
 
   const toast = useToast();
 
@@ -69,6 +76,19 @@ export default function OutletDeliveryTab({
       setEstimatedTo(s.estimatedDeliveryTimeTo);
       setEstimatedUnit(s.estimatedDeliveryTimeUnit);
       setSameDayCutoff(s.sameDayCutoffTime ?? "");
+      setShopBaseline({
+        deliveryPaymentCardOnline: s.deliveryPaymentCardOnline,
+        deliveryPaymentCashOnDelivery: s.deliveryPaymentCashOnDelivery,
+        deliveryPaymentCardOnDelivery: s.deliveryPaymentCardOnDelivery,
+        deliveryHours: mergeBusinessHours(s.deliveryHours),
+        deliveryTimeSlotGapMinutes: s.deliveryTimeSlotGapMinutes,
+        deliveryPreparationTimeMinutes: s.deliveryPreparationTimeMinutes,
+        deliveryPreparationPlusDeliveryTimeMinutes: s.deliveryPreparationPlusDeliveryTimeMinutes,
+        estimatedDeliveryTimeFrom: s.estimatedDeliveryTimeFrom,
+        estimatedDeliveryTimeTo: s.estimatedDeliveryTimeTo,
+        estimatedDeliveryTimeUnit: s.estimatedDeliveryTimeUnit,
+        sameDayCutoffTime: s.sameDayCutoffTime ?? null,
+      });
     });
   }, []);
 
@@ -85,22 +105,41 @@ export default function OutletDeliveryTab({
     }
   }
 
+  function buildShopPayload() {
+    return {
+      deliveryPaymentCardOnline: paymentMethods.cardOnline,
+      deliveryPaymentCashOnDelivery: paymentMethods.cashOnFulfillment,
+      deliveryPaymentCardOnDelivery: paymentMethods.cardOnFulfillment,
+      deliveryHours: hours,
+      deliveryTimeSlotGapMinutes: timeSlotGapMinutes,
+      deliveryPreparationTimeMinutes: preparationTimeMinutes,
+      deliveryPreparationPlusDeliveryTimeMinutes: preparationPlusDeliveryTimeMinutes,
+      estimatedDeliveryTimeFrom: estimatedFrom,
+      estimatedDeliveryTimeTo: estimatedTo,
+      estimatedDeliveryTimeUnit: estimatedUnit,
+      sameDayCutoffTime: sameDayCutoff || null,
+    };
+  }
+
+  // Both cards below this button are entirely shop-wide, so a save that
+  // changes one of their values confirms first. Nothing changed = save
+  // straight through, unchanged from before this guard existed.
+  function requestSaveBusinessSettings() {
+    const changes = diffShopWideChanges(shopBaseline, buildShopPayload());
+    if (changes.length === 0) {
+      void handleSaveBusinessSettings();
+      return;
+    }
+    setPendingChanges(changes);
+  }
+
   async function handleSaveBusinessSettings() {
     setSavingBusinessSettings(true);
     try {
-      await updateShop({
-        deliveryPaymentCardOnline: paymentMethods.cardOnline,
-        deliveryPaymentCashOnDelivery: paymentMethods.cashOnFulfillment,
-        deliveryPaymentCardOnDelivery: paymentMethods.cardOnFulfillment,
-        deliveryHours: hours,
-        deliveryTimeSlotGapMinutes: timeSlotGapMinutes,
-        deliveryPreparationTimeMinutes: preparationTimeMinutes,
-        deliveryPreparationPlusDeliveryTimeMinutes: preparationPlusDeliveryTimeMinutes,
-        estimatedDeliveryTimeFrom: estimatedFrom,
-        estimatedDeliveryTimeTo: estimatedTo,
-        estimatedDeliveryTimeUnit: estimatedUnit,
-        sameDayCutoffTime: sameDayCutoff || null,
-      });
+      const payload = buildShopPayload();
+      await updateShop(payload);
+      setShopBaseline(payload);
+      setPendingChanges(null);
       toast("Delivery settings saved");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save delivery settings", "error");
@@ -227,11 +266,21 @@ export default function OutletDeliveryTab({
             </Card>
           </div>
 
-          <Button variant="primary" onClick={handleSaveBusinessSettings} disabled={savingBusinessSettings}>
+          <Button variant="primary" onClick={requestSaveBusinessSettings} disabled={savingBusinessSettings}>
             <Check className="size-4 inline -mt-0.5 mr-1" />
             Save changes
           </Button>
         </>
+      )}
+
+      {pendingChanges && (
+        <ShopWideChangeModal
+          outletName={outlet.name}
+          changes={pendingChanges}
+          saving={savingBusinessSettings}
+          onConfirm={() => void handleSaveBusinessSettings()}
+          onCancel={() => setPendingChanges(null)}
+        />
       )}
     </div>
   );

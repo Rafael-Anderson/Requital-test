@@ -13,6 +13,8 @@ import Toggle from "@/components/ui/Toggle";
 import Card from "@/components/ui/Card";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
+import ShopWideChangeModal from "@/components/ShopWideChangeModal";
+import { diffShopWideChanges } from "@/lib/shop-wide-fields";
 import { useToast } from "@/components/ui/Toast";
 
 const LANGUAGE_LABELS: Record<string, string> = { en: "English", ar: "Arabic" };
@@ -52,6 +54,11 @@ export default function OutletBasicInfoTab({
   const [taxRate, setTaxRate] = useState("0");
   const [taxInclusive, setTaxInclusive] = useState(true);
   const [savingOrderSettings, setSavingOrderSettings] = useState(false);
+  // The shop-wide payload as loaded, for the "this changes every outlet"
+  // confirm (lib/shop-wide-fields.ts). Re-baselined after a successful save
+  // so a second save of the same values does not re-prompt.
+  const [shopBaseline, setShopBaseline] = useState<Record<string, unknown> | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<string[] | null>(null);
 
   const toast = useToast();
 
@@ -63,6 +70,12 @@ export default function OutletBasicInfoTab({
         setAllowNextDayOrders(s.allowNextDayOrders);
         setTaxRate(s.taxRate);
         setTaxInclusive(s.taxInclusive);
+        setShopBaseline({
+          allowSameDayOrders: s.allowSameDayOrders,
+          allowNextDayOrders: s.allowNextDayOrders,
+          taxRate: Number(s.taxRate) || 0,
+          taxInclusive: s.taxInclusive,
+        });
       })
       .catch(() => {});
   }, []);
@@ -92,15 +105,34 @@ export default function OutletBasicInfoTab({
     }
   }
 
+  function buildShopPayload() {
+    return {
+      allowSameDayOrders,
+      allowNextDayOrders,
+      taxRate: Number(taxRate) || 0,
+      taxInclusive,
+    };
+  }
+
+  // Every field on this card is shop-wide, so a save that changes one of them
+  // confirms first. Nothing changed = save straight through, unchanged from
+  // before this guard existed.
+  function requestSaveOrderSettings() {
+    const changes = diffShopWideChanges(shopBaseline, buildShopPayload());
+    if (changes.length === 0) {
+      void handleSaveOrderSettings();
+      return;
+    }
+    setPendingChanges(changes);
+  }
+
   async function handleSaveOrderSettings() {
     setSavingOrderSettings(true);
     try {
-      await updateShop({
-        allowSameDayOrders,
-        allowNextDayOrders,
-        taxRate: Number(taxRate) || 0,
-        taxInclusive,
-      });
+      const payload = buildShopPayload();
+      await updateShop(payload);
+      setShopBaseline(payload);
+      setPendingChanges(null);
       toast("Order settings saved");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save order settings", "error");
@@ -217,7 +249,7 @@ export default function OutletBasicInfoTab({
             </Field>
           </div>
 
-          <Button variant="primary" onClick={handleSaveOrderSettings} disabled={savingOrderSettings}>
+          <Button variant="primary" onClick={requestSaveOrderSettings} disabled={savingOrderSettings}>
             <Check className="size-4 inline -mt-0.5 mr-1" />
             Save changes
           </Button>
@@ -228,6 +260,16 @@ export default function OutletBasicInfoTab({
         <Check className="size-4 inline -mt-0.5 mr-1" />
         Save changes
       </Button>
+
+      {pendingChanges && (
+        <ShopWideChangeModal
+          outletName={outlet.name}
+          changes={pendingChanges}
+          saving={savingOrderSettings}
+          onConfirm={() => void handleSaveOrderSettings()}
+          onCancel={() => setPendingChanges(null)}
+        />
+      )}
     </div>
   );
 }
