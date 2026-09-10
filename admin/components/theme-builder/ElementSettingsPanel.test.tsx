@@ -12,6 +12,17 @@ vi.mock("@/lib/api", () => ({
   uploadThemeImage: vi.fn(),
 }));
 
+// The rich-text editor is a TipTap contenteditable — not meaningfully
+// driveable in jsdom and not what these dispatch tests are about. Stub it
+// with a labelled textarea so "which control shows / does onUpdate fire"
+// stays testable; TipTap itself is covered by RichTextBlockEditor.test.tsx
+// and the scratch-shop pass.
+vi.mock("./RichTextBlockEditor", () => ({
+  default: ({ label, value, onChange }: { label?: string; value: string; onChange: (v: string) => void }) => (
+    <textarea aria-label={label ?? "Text"} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+
 function block(type: string, settings: Record<string, unknown> = {}): ThemeBlock {
   return { id: `blk-${type}`, type, visible: true, order: 0, settings };
 }

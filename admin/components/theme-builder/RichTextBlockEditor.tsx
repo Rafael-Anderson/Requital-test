@@ -23,8 +23,7 @@ import {
 } from "lucide-react";
 import ColorPicker from "@/components/ui/ColorPicker";
 
-// Rich-text field for a theme text block (the rich_text section's "text"
-// block and, since #16, the image_text section's). A real WYSIWYG (TipTap /
+// Rich-text field for a theme text block. A real WYSIWYG (TipTap /
 // ProseMirror, headless) so a merchant can select a run of text and change
 // its COLOUR / SIZE / FONT / style — not just the whole block. The stored
 // value is the editor's HTML; the storefront renders it via
@@ -32,14 +31,27 @@ import ColorPicker from "@/components/ui/ColorPicker";
 // allowlist is scoped to exactly what this toolbar emits: colour /
 // font-size / font-family / text-align).
 //
-// Same prop contract as the old contenteditable version so every call site
-// (ElementSettingsPanel, AdditionalInfoSection, CollectionPageSettings) is
-// unchanged. `value` is pushed into the editor only when `blockId` changes,
-// never on every keystroke, so the caret is never reset mid-typing.
+// Two modes, one implementation (Phase 2 of the rich-text rollout):
+//   "full"   — body prose. Full 2-row toolbar (formatting / headings /
+//              lists / alignment / colour / size / font / link). Stores
+//              block HTML (<p>…</p><ul>…). Rendered into a <div> wrapper.
+//   "inline" — headings and one-line body. Constrained toolbar
+//              (bold / italic / underline / strike · colour · link · clear),
+//              NO headings-in-headings, NO lists, NO block alignment, and
+//              single-line enforced (Enter is a no-op, newlines are
+//              stripped on paste). Stores BARE inline HTML (`Welcome
+//              <strong>our</strong> store` — the outer <p> the editor
+//              schema needs is stripped in onChange), so the storefront can
+//              drop it straight inside the existing <h2>/<p> tag without
+//              invalid nesting. A legacy plain-text value round-trips
+//              byte-identical (ProseMirror wraps loose text in a paragraph
+//              on load; strip removes it again on save).
 //
-// Toolbar is a deliberate 2-row layout (formatting / structure on row 1,
-// colour / size / font / link on row 2) with group dividers, sized to hold
-// at the settings-panel width without ragged re-wrapping.
+// Same prop contract as the old contenteditable version so every call site
+// is unchanged. `value` is pushed into the editor only when `blockId`
+// changes, never on every keystroke, so the caret is never reset mid-typing.
+
+type EditorMode = "full" | "inline";
 
 const FONT_SIZES = ["12px", "14px", "16px", "18px", "20px", "24px", "30px", "36px"];
 const FONT_FAMILIES: { label: string; value: string }[] = [
@@ -49,6 +61,18 @@ const FONT_FAMILIES: { label: string; value: string }[] = [
   { label: "Mono", value: "'SFMono-Regular', Menlo, monospace" },
   { label: "Playfair", value: "'Playfair Display', serif" },
 ];
+
+// The editor schema still needs a top-level block, so "inline" mode content
+// is a single <p>. Strip that one wrapper on the way out so the stored
+// value is bare inline HTML. Only unwraps a lone paragraph — if a paste
+// somehow produced more (it can't: Enter is blocked, block nodes are
+// disabled), the value is left intact rather than silently flattened.
+// Exported for unit testing.
+export function stripOuterParagraph(html: string): string {
+  const m = html.match(/^\s*<p>([\s\S]*)<\/p>\s*$/i);
+  if (m && !/<(p|div|ul|ol|li|h[1-6])[\s>]/i.test(m[1])) return m[1];
+  return html;
+}
 
 function ToolbarButton({
   onClick,
@@ -93,38 +117,96 @@ const SELECT_CLS =
   "rounded border border-border bg-surface px-1 py-1 text-xs dark:border-white/15 dark:bg-zinc-900";
 const ICON_CLS = "size-4";
 
+function FormattingGroup({ editor }: { editor: Editor }) {
+  return (
+    <Group first>
+      <ToolbarButton label="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <Bold className={ICON_CLS} />
+      </ToolbarButton>
+      <ToolbarButton label="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <Italic className={ICON_CLS} />
+      </ToolbarButton>
+      <ToolbarButton label="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+        <UnderlineIcon className={ICON_CLS} />
+      </ToolbarButton>
+      <ToolbarButton label="Strikethrough" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
+        <Strikethrough className={ICON_CLS} />
+      </ToolbarButton>
+    </Group>
+  );
+}
+
+function ColorControl({ editor, colorPresets }: { editor: Editor; colorPresets?: { label: string; value: string }[] }) {
+  const currentColor = (editor.getAttributes("textStyle").color as string) || "#000000";
+  return (
+    <ColorPicker
+      value={currentColor}
+      onChange={(hex) => editor.chain().focus().setColor(hex).run()}
+      presets={colorPresets}
+      swatchSize="sm"
+      align="left"
+    />
+  );
+}
+
+function LinkClearGroup({ editor }: { editor: Editor }) {
+  return (
+    <Group>
+      <ToolbarButton
+        label="Add link"
+        active={editor.isActive("link")}
+        onClick={() => {
+          const prev = (editor.getAttributes("link").href as string) || "";
+          const url = window.prompt("Link URL", prev);
+          if (url === null) return;
+          if (url === "") editor.chain().focus().extendMarkRange("link").unsetLink().run();
+          else editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+        }}
+      >
+        <Link2 className={ICON_CLS} />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Clear formatting"
+        onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+      >
+        <RemoveFormatting className={ICON_CLS} />
+      </ToolbarButton>
+    </Group>
+  );
+}
+
 function Toolbar({
   editor,
+  mode,
   colorPresets,
 }: {
   editor: Editor;
+  mode: EditorMode;
   colorPresets?: { label: string; value: string }[];
 }) {
   // Subscribe to selection/transaction changes so active states re-render.
   const tick = editor.state.selection.from + editor.state.selection.to + editor.state.doc.content.size;
   void tick;
 
-  const currentColor = (editor.getAttributes("textStyle").color as string) || "#000000";
+  if (mode === "inline") {
+    // One compact row: formatting · colour · link / clear. No headings,
+    // lists, or alignment — this field renders as a heading or a single
+    // line of body text, not a paragraph editor.
+    return (
+      <div className="flex flex-wrap items-center gap-1 rounded-t-[10px] border border-b-0 border-border bg-surface p-1 dark:border-white/15 dark:bg-zinc-900">
+        <FormattingGroup editor={editor} />
+        <ColorControl editor={editor} colorPresets={colorPresets} />
+        <LinkClearGroup editor={editor} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1 rounded-t-[10px] border border-b-0 border-border bg-surface p-1 dark:border-white/15 dark:bg-zinc-900">
       {/* Row 1 — text formatting · headings · lists · alignment. Groups
           never split; a too-narrow panel breaks between them, not inside. */}
       <div className="flex flex-wrap items-center gap-y-1">
-        <Group first>
-          <ToolbarButton label="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
-            <Bold className={ICON_CLS} />
-          </ToolbarButton>
-          <ToolbarButton label="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}>
-            <Italic className={ICON_CLS} />
-          </ToolbarButton>
-          <ToolbarButton label="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}>
-            <UnderlineIcon className={ICON_CLS} />
-          </ToolbarButton>
-          <ToolbarButton label="Strikethrough" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}>
-            <Strikethrough className={ICON_CLS} />
-          </ToolbarButton>
-        </Group>
+        <FormattingGroup editor={editor} />
 
         <Group>
           <ToolbarButton label="Heading 1" active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
@@ -162,16 +244,7 @@ function Toolbar({
 
       {/* Row 2 — colour · size · font family · link · clear */}
       <div className="flex flex-wrap items-center gap-1">
-        {/* Per-selection colour — a real <span style="color"> mark. Custom
-            in-app picker (palette + hex + recents + theme presets), never
-            the OS colour dialog that <input type="color"> delegates to. */}
-        <ColorPicker
-          value={currentColor}
-          onChange={(hex) => editor.chain().focus().setColor(hex).run()}
-          presets={colorPresets}
-          swatchSize="sm"
-          align="left"
-        />
+        <ColorControl editor={editor} colorPresets={colorPresets} />
 
         <select
           aria-label="Font size"
@@ -208,43 +281,55 @@ function Toolbar({
           ))}
         </select>
 
-        <Group>
-          <ToolbarButton
-            label="Add link"
-            active={editor.isActive("link")}
-            onClick={() => {
-              const prev = (editor.getAttributes("link").href as string) || "";
-              const url = window.prompt("Link URL", prev);
-              if (url === null) return;
-              if (url === "") editor.chain().focus().extendMarkRange("link").unsetLink().run();
-              else editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-            }}
-          >
-            <Link2 className={ICON_CLS} />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Clear formatting"
-            onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
-          >
-            <RemoveFormatting className={ICON_CLS} />
-          </ToolbarButton>
-        </Group>
+        <LinkClearGroup editor={editor} />
       </div>
     </div>
   );
 }
+
+const FULL_EXTENSIONS = [
+  StarterKit.configure({ link: { openOnClick: false } }),
+  TextStyleKit,
+  TextAlign.configure({ types: ["heading", "paragraph"] }),
+];
+
+// "inline" — heading/list/blockquote/code/rule nodes disabled so a paste of
+// structured HTML can't smuggle them into a field that renders inside an
+// <h2>. Paragraph + Text stay (the schema needs one block; stripped on
+// save). No TextAlign.
+const INLINE_EXTENSIONS = [
+  StarterKit.configure({
+    link: { openOnClick: false },
+    heading: false,
+    bulletList: false,
+    orderedList: false,
+    listItem: false,
+    blockquote: false,
+    codeBlock: false,
+    code: false,
+    horizontalRule: false,
+  }),
+  TextStyleKit,
+];
+
+const FULL_CLASS =
+  "min-h-24 w-full rounded-b-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-accent [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_a]:underline";
+const INLINE_CLASS =
+  "w-full rounded-b-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-accent whitespace-nowrap overflow-x-auto [&_p]:m-0 [&_a]:underline";
 
 export default function RichTextBlockEditor({
   blockId,
   value,
   onChange,
   label = "Text",
+  mode = "full",
   colorPresets,
 }: {
   blockId: string;
   value: string;
   onChange: (html: string) => void;
   label?: string;
+  mode?: EditorMode;
   colorPresets?: { label: string; value: string }[];
 }) {
   const syncedBlockId = useRef<string | null>(null);
@@ -252,19 +337,30 @@ export default function RichTextBlockEditor({
   const editor = useEditor({
     // Next 16 / RSC — render on the client only to avoid a hydration mismatch.
     immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
-      TextStyleKit,
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-    ],
+    extensions: mode === "inline" ? INLINE_EXTENSIONS : FULL_EXTENSIONS,
     content: value || "",
     editorProps: {
-      attributes: {
-        class:
-          "min-h-24 w-full rounded-b-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-accent [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_a]:underline",
-      },
+      attributes: { class: mode === "inline" ? INLINE_CLASS : FULL_CLASS },
+      ...(mode === "inline"
+        ? {
+            // Single-line: Enter never splits, pasted newlines collapse to
+            // spaces so a multi-line paste lands as one line.
+            handleKeyDown: (_view, event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                return true;
+              }
+              return false;
+            },
+            transformPastedText: (text: string) => text.replace(/\s*\n\s*/g, " "),
+            transformPastedHTML: (html: string) => html.replace(/\s*\n\s*/g, " "),
+          }
+        : {}),
     },
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      onChange(mode === "inline" ? stripOuterParagraph(html) : html);
+    },
   });
 
   // Push external `value` in only when the selected block actually changes
@@ -278,7 +374,7 @@ export default function RichTextBlockEditor({
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">{label}</label>
-      {editor && <Toolbar editor={editor} colorPresets={colorPresets} />}
+      {editor && <Toolbar editor={editor} mode={mode} colorPresets={colorPresets} />}
       <EditorContent editor={editor} />
     </div>
   );

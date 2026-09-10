@@ -3,6 +3,7 @@
 import { type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { resolveTextElementStyle } from "@/lib/theme-element-style";
 import { useAnnouncementRotation } from "@/lib/announcement-rotation";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -60,24 +61,25 @@ export default function AnnouncementBarSectionThemed({ sectionId, settings, bloc
   const hasCustomBackground = !!(settings.background && typeof settings.background === "object" && settings.background.type);
   const bgClass = hasCustomBackground ? "" : "bg-accent";
 
+  const displayHtml = { __html: sanitizeDescriptionHtml(displayText) };
+
   if (settings.scrolling) {
     return (
       <div className={`overflow-hidden whitespace-nowrap text-accent-foreground text-xs py-1.5 ${bgClass}`}>
         <div className="inline-block marquee-track">
-          <span className="px-4" {...tagProps} style={textStyle}>
-            {displayText}
-          </span>
-          <span className="px-4" aria-hidden="true" style={textStyle}>
-            {displayText}
-          </span>
+          <span className="px-4" {...tagProps} style={textStyle} dangerouslySetInnerHTML={displayHtml} />
+          <span className="px-4" aria-hidden="true" style={textStyle} dangerouslySetInnerHTML={displayHtml} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`text-accent-foreground text-xs text-center py-1.5 px-4 ${bgClass}`} {...tagProps} style={{ ...textStyle, ...fadeStyle }}>
-      {displayText}
-    </div>
+    <div
+      className={`text-accent-foreground text-xs text-center py-1.5 px-4 ${bgClass}`}
+      {...tagProps}
+      style={{ ...textStyle, ...fadeStyle }}
+      dangerouslySetInnerHTML={displayHtml}
+    />
   );
 }

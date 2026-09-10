@@ -3,6 +3,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AnnouncementBarChromeSettings from "./AnnouncementBarChromeSettings";
 
+// Each message is now an inline rich-text editor (TipTap). Stub it with a
+// labelled textarea so these tests stay about the list behaviour.
+vi.mock("../RichTextBlockEditor", () => ({
+  default: ({ label, value, onChange }: { label?: string; value: string; onChange: (v: string) => void }) => (
+    <textarea aria-label={label ?? "Text"} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+
 describe("AnnouncementBarChromeSettings", () => {
   it("shows only the enable toggle + hint when disabled", () => {
     render(<AnnouncementBarChromeSettings value={undefined} onChange={vi.fn()} />);

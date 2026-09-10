@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import Combobox from "@/components/ui/Combobox";
-import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import { listBrands } from "@/lib/api";
+import RichTextBlockEditor from "../RichTextBlockEditor";
+import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
+import type { ThemeEditorState } from "@/lib/useThemeEditor";
 import type { Brand, ScrollAnimation, SectionVisibility } from "@/lib/types";
 
 const LOGOS_PER_ROW = [3, 4, 5, 6, 7, 8] as const;
@@ -23,12 +25,16 @@ const LOGOS_PER_ROW = [3, 4, 5, 6, 7, 8] as const;
 export default function BrandsSettings({
   settings,
   onUpdate,
+  editor,
 }: {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
+  editor?: ThemeEditorState;
 }) {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [addId, setAddId] = useState("");
+  const colorPresets = schemeColorPresets(editor?.config?.globalSettings.colorSchemes);
+  const sectionId = editor?.selection?.kind === "section" ? editor.selection.section.id : "brands";
 
   useEffect(() => {
     listBrands().then(setBrands).catch(() => setBrands([]));
@@ -61,11 +67,13 @@ export default function BrandsSettings({
 
   return (
     <div className="space-y-4">
-      <Input
+      <RichTextBlockEditor
+        blockId={`brands-heading-${sectionId}`}
         label="Heading (optional)"
+        mode="inline"
         value={(settings.heading as string) ?? ""}
-        onChange={(e) => onUpdate("heading", e.target.value)}
-        placeholder="Shop by brand"
+        onChange={(html) => onUpdate("heading", html)}
+        colorPresets={colorPresets}
       />
 
       <div>

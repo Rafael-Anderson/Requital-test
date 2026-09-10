@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { useScrollValue } from "@/lib/use-scroll-value";
 import { useMinWidth } from "@/lib/use-min-width";
 import {
@@ -255,9 +256,8 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
             {...editableAttrs(previewMode, { id: block.id, sectionId, type: "heading", reorderable: true })}
             className="text-3xl sm:text-4xl font-bold"
             style={{ ...themeTextPresetStyle("h1"), ...typographyStyle(settings.typography), ...resolveTextElementStyle(block.settings) }}
-          >
-            {text}
-          </h1>
+            dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
+          />
         );
       }
       case "subheading": {
@@ -269,9 +269,8 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
             {...editableAttrs(previewMode, { id: block.id, sectionId, type: "subheading", reorderable: true })}
             className="mt-3 text-lg opacity-80"
             style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(block.settings) }}
-          >
-            {text}
-          </p>
+            dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
+          />
         );
       }
       case "cta": {
@@ -332,7 +331,12 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
       ) : (
         heroInner
       )}
-      {heroText && <p className="bg-homepage-info px-4 py-3 text-center text-sm text-zinc-600">{heroText}</p>}
+      {heroText && (
+        <p
+          className="bg-homepage-info px-4 py-3 text-center text-sm text-zinc-600"
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(heroText) }}
+        />
+      )}
     </>
   );
 }

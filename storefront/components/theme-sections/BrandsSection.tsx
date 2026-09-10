@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { listBrands, resolveImageUrl } from "@/lib/api";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { Brand } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -84,9 +85,11 @@ export default function BrandsSection({ settings }: { sectionId: string; setting
   return (
     <div className="mx-auto theme-gutter-x theme-section-py" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {heading && (
-        <h2 className="text-xl font-semibold mb-5 text-center" style={themeTextPresetStyle("h2")}>
-          {heading}
-        </h2>
+        <h2
+          className="text-xl font-semibold mb-5 text-center"
+          style={themeTextPresetStyle("h2")}
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(heading) }}
+        />
       )}
       {scrolling ? (
         // Doubled logo list so the -50% translateX loop seams seamlessly

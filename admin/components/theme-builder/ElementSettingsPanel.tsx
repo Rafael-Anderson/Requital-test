@@ -64,32 +64,41 @@ const TEXT_CONTENT_KEY: Record<string, string | undefined> = {
   product_title: undefined,
 };
 
-// The rich_text AND image_text sections' "text" block gets the full
-// WYSIWYG editor (RichTextBlockEditor / TipTap) instead of a plain
-// Textarea. Every other TEXT_TYPES member (heading/subheading/
-// collection_title/footer_copyright, and a newsletter section's "text"
-// block, which shares the same block *type* but isn't rich text) keeps
-// the plain-text field. `container.sectionType` is what disambiguates
-// "text" here, since block.type alone can't: it's the shared child type
-// of three different sections (backend constants.ts's
-// BLOCK_TYPES.rich_text/image_text/newsletter).
-function isRichTextBlock(block: ThemeBlock, container?: BlockContainerRef): boolean {
-  return (
-    block.type === "text" &&
-    container?.kind === "section" &&
-    (container.sectionType === "rich_text" || container.sectionType === "image_text")
-  );
+// Which WYSIWYG treatment a TEXT_TYPES block gets (Phase 2 of the rich-text
+// rollout). `null` ⇒ the plain field. `container.sectionType` disambiguates
+// "text", which is the shared child type of three sections (backend
+// constants.ts's BLOCK_TYPES.rich_text/image_text/newsletter).
+//   "full"   — body prose: rich_text / image_text / newsletter "text" block.
+//   "inline" — a heading (heading / subheading / collection_title) or a
+//              one-line body field (footer_copyright): constrained toolbar,
+//              single line, no headings-in-headings or lists.
+function resolveEditorMode(block: ThemeBlock, container?: BlockContainerRef): "full" | "inline" | null {
+  if (
+    block.type === "heading" ||
+    block.type === "subheading" ||
+    block.type === "collection_title" ||
+    block.type === "footer_copyright"
+  ) {
+    return "inline";
+  }
+  if (block.type === "text" && container?.kind === "section") {
+    const st = container.sectionType;
+    if (st === "rich_text" || st === "image_text" || st === "newsletter") return "full";
+  }
+  return null;
 }
 
 function TextElementSettings({ block, onUpdate, container, colorPresets }: FamilyProps) {
   const s = block.settings;
   const contentKey = TEXT_CONTENT_KEY[block.type];
-  const richText = isRichTextBlock(block, container);
+  const editorMode = contentKey ? resolveEditorMode(block, container) : null;
   return (
     <div className="space-y-4">
-      {contentKey && richText ? (
+      {contentKey && editorMode ? (
         <RichTextBlockEditor
           blockId={block.id}
+          label="Text content"
+          mode={editorMode}
           value={(s[contentKey] as string) ?? ""}
           onChange={(html) => onUpdate(contentKey, html)}
           colorPresets={colorPresets}
@@ -104,7 +113,7 @@ function TextElementSettings({ block, onUpdate, container, colorPresets }: Famil
           />
         )
       )}
-      {richText && (
+      {editorMode && (
         <div className="border-t border-border pt-3 dark:border-white/10">
           <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Block defaults</p>
           <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
@@ -398,13 +407,20 @@ const HEADER_TEXT_FONT_FAMILIES = [
   { value: "monospace", label: "Monospace" },
 ] as const;
 
-function HeaderTextElementSettings({ block, onUpdate }: FamilyProps) {
+function HeaderTextElementSettings({ block, onUpdate, colorPresets }: FamilyProps) {
   const s = block.settings;
   const legacyPreset: Record<string, number> = { small: 13, medium: 15, large: 18 };
   const fontSizePx = typeof s.fontSize === "number" ? s.fontSize : (legacyPreset[s.fontSize as string] ?? 15);
   return (
     <div className="space-y-4">
-      <Input label="Text content" value={(s.text as string) ?? ""} onChange={(e) => onUpdate("text", e.target.value)} />
+      <RichTextBlockEditor
+        blockId={block.id}
+        label="Text content"
+        mode="inline"
+        value={(s.text as string) ?? ""}
+        onChange={(html) => onUpdate("text", html)}
+        colorPresets={colorPresets}
+      />
       <Slider label="Font size" min={10} max={48} value={fontSizePx} onChange={(v) => onUpdate("fontSize", v)} suffix="px" />
       <Select label="Font weight" value={(s.fontWeight as string) ?? "400"} onChange={(e) => onUpdate("fontWeight", e.target.value)}>
         {FONT_WEIGHTS.map((w) => (
@@ -488,6 +504,6 @@ export default function ElementSettingsPanel({ block, onUpdate, onToggleVisibili
   if (NAV_TYPES.has(block.type)) return <NavElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (PRICE_TYPES.has(block.type)) return <PriceElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
   if (ICON_TYPES.has(block.type)) return <IconElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
-  if (HEADER_TEXT_TYPES.has(block.type)) return <HeaderTextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} />;
-  return <BlockSettingsForm block={block} onUpdate={onUpdate} />;
+  if (HEADER_TEXT_TYPES.has(block.type)) return <HeaderTextElementSettings block={block} onUpdate={onUpdate} onToggleVisibility={onToggleVisibility} colorPresets={colorPresets} />;
+  return <BlockSettingsForm block={block} onUpdate={onUpdate} colorPresets={colorPresets} />;
 }

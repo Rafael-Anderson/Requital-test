@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { resolveTextElementStyle, themeTextPresetStyle } from "@/lib/theme-element-style";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
@@ -57,9 +58,8 @@ export default function TestimonialsSection({ sectionId, blocks }: { sectionId: 
           className="text-xl font-semibold theme-heading-gap text-center"
           {...editableAttrs(previewMode, { id: headingBlock.id, sectionId, type: "heading", reorderable: true })}
           style={{ ...themeTextPresetStyle("h2"), ...resolveTextElementStyle(headingBlock.settings) }}
-        >
-          {heading}
-        </h2>
+          dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(heading) }}
+        />
       )}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {testimonials.map((t, i) => {
@@ -67,13 +67,16 @@ export default function TestimonialsSection({ sectionId, blocks }: { sectionId: 
           return (
             <div key={t.id} className="p-4 border border-stroke theme-round-md theme-stagger-child" style={{ "--i": i } as CSSProperties}>
               {typeof t.settings.rating === "number" && <StarRating rating={t.settings.rating} />}
-              <p
-                className="text-sm leading-relaxed"
+              {/* Quote is a full rich-text field (T1). The decorative
+                  curly quotes stay as CSS pseudo-elements so a legacy
+                  plain-text quote still renders exactly as "…"; `[&_p]:inline`
+                  keeps the editor's paragraph wrapper hugging them. */}
+              <div
+                className="text-sm leading-relaxed [&_p]:m-0 [&_p]:inline before:content-['“'] after:content-['”']"
                 {...editableAttrs(previewMode, { id: t.id, sectionId, type: "testimonial_text" })}
                 style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(t.settings as Record<string, unknown>) }}
-              >
-                &ldquo;{t.settings.quote}&rdquo;
-              </p>
+                dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml((t.settings.quote as string) ?? "") }}
+              />
               {t.settings.author && (
                 // Quote/author/photo/rating all share the same block/
                 // settings — there's no separate style field for the author

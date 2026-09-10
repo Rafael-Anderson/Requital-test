@@ -8,6 +8,7 @@ import { useShop } from "@/lib/shop-context";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { resolveImageUrl } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
+import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { resolveImageElementStyle, resolveIconElementStyle, resolveIconStrokeWidth, resolveIconCorners } from "@/lib/theme-element-style";
 import { resolveHeaderRows } from "@/lib/header-rows";
 import { getReadableTextColor } from "@/lib/color-contrast";
@@ -285,9 +286,8 @@ export default function ThemeDrivenHeader({
               color: (block.settings.color as string) ?? "#1B1F1E",
             }}
             className="truncate"
-          >
-            {text}
-          </span>
+            dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
+          />
         );
       }
       // theme-builder-expansion Phase 3 — header utility blocks. Render in

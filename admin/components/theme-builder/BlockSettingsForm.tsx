@@ -8,6 +8,7 @@ import Select from "@/components/ui/Select";
 import Toggle from "@/components/ui/Toggle";
 import Button from "@/components/ui/Button";
 import ImageDropzone from "@/components/ui/ImageDropzone";
+import RichTextBlockEditor from "./RichTextBlockEditor";
 import { uploadThemeImage, resolveImageUrl } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import type { ThemeBlock } from "@/lib/types";
@@ -28,9 +29,13 @@ const ZONE_OPTIONS = ["left", "center", "right"] as const;
 export default function BlockSettingsForm({
   block,
   onUpdate,
+  colorPresets,
 }: {
   block: ThemeBlock;
   onUpdate: (key: string, value: unknown) => void;
+  // Theme colour-scheme swatches for the rich-text colour picker (the
+  // testimonial quote / announcement text fields). Optional.
+  colorPresets?: { label: string; value: string }[];
 }) {
   const toast = useToast();
   const [uploading, setUploading] = useState(false);
@@ -52,7 +57,16 @@ export default function BlockSettingsForm({
       );
 
     case "announcement":
-      return <Input label="Text" value={(block.settings.text as string) ?? ""} onChange={(e) => onUpdate("text", e.target.value)} />;
+      return (
+        <RichTextBlockEditor
+          blockId={block.id}
+          label="Text"
+          mode="inline"
+          value={(block.settings.text as string) ?? ""}
+          onChange={(html) => onUpdate("text", html)}
+          colorPresets={colorPresets}
+        />
+      );
 
     case "heading":
       return (
@@ -114,7 +128,14 @@ export default function BlockSettingsForm({
       const rating = (block.settings.rating as number) ?? 0;
       return (
         <div className="space-y-3">
-          <Textarea label="Quote" rows={3} value={(block.settings.quote as string) ?? ""} onChange={(e) => onUpdate("quote", e.target.value)} />
+          <RichTextBlockEditor
+            blockId={block.id}
+            label="Quote"
+            mode="full"
+            value={(block.settings.quote as string) ?? ""}
+            onChange={(html) => onUpdate("quote", html)}
+            colorPresets={colorPresets}
+          />
           <Input label="Author" value={(block.settings.author as string) ?? ""} onChange={(e) => onUpdate("author", e.target.value)} />
           <ImageDropzone
             preview={resolveImageUrl((block.settings.photoUrl as string) ?? null)}

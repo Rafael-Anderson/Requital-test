@@ -8,6 +8,8 @@ import Select from "@/components/ui/Select";
 import Toggle from "@/components/ui/Toggle";
 import Button from "@/components/ui/Button";
 import { listCollections } from "@/lib/api";
+import RichTextBlockEditor from "../RichTextBlockEditor";
+import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
@@ -77,11 +79,13 @@ export default function FeaturedCollectionsSettings({
     <div className="space-y-4">
       {titleBlock && titleContainer && editor && (
         <div>
-          <Input
+          <RichTextBlockEditor
+            blockId={`fc-heading-${section?.id ?? "section"}`}
             label="Heading"
-            placeholder="Featured Collections"
+            mode="inline"
             value={(titleBlock.settings.text as string) ?? ""}
-            onChange={(e) => editor.updateBlockSetting(titleContainer, titleBlock.id, "text", e.target.value)}
+            onChange={(html) => editor.updateBlockSetting(titleContainer, titleBlock.id, "text", html)}
+            colorPresets={schemeColorPresets(editor.config?.globalSettings.colorSchemes)}
           />
           {titleBlock.visible === false && (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">

@@ -4,6 +4,8 @@ import Select from "@/components/ui/Select";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import BannerImageGallery from "@/components/BannerImageGallery";
+import RichTextBlockEditor from "../RichTextBlockEditor";
+import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import NineZoneGridPicker from "./shared/NineZoneGridPicker";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
@@ -27,11 +29,17 @@ const DEFAULT_SLIDE_DURATION = 5;
 export default function HeroSettings({
   settings,
   onUpdate,
+  editor,
 }: {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
   editor?: ThemeEditorState;
 }) {
+  const colorPresets = schemeColorPresets(editor?.config?.globalSettings.colorSchemes);
+  // Stable per-section id so the rich-text editor re-syncs its content when
+  // the merchant switches between two Hero sections (mirrors how a block's
+  // blockId drives that sync).
+  const sectionId = editor?.selection?.kind === "section" ? editor.selection.section.id : "hero";
   const bannerImages = Array.isArray(settings.bannerImages) ? (settings.bannerImages as BannerImage[]) : [];
   const slideDuration =
     typeof settings.slideDuration === "number" && settings.slideDuration >= MIN_SLIDE_DURATION
@@ -110,11 +118,13 @@ export default function HeroSettings({
 
       <hr className="border-black/10 dark:border-white/10" />
 
-      <Input
+      <RichTextBlockEditor
+        blockId={`hero-text-${sectionId}`}
         label="Hero banner text"
+        mode="inline"
         value={(settings.heroText as string) ?? ""}
-        onChange={(e) => onUpdate("heroText", e.target.value)}
-        placeholder="Fresh flowers, delivered same-day"
+        onChange={(html) => onUpdate("heroText", html)}
+        colorPresets={colorPresets}
       />
       <BannerImageGallery images={bannerImages} onChange={(v) => onUpdate("bannerImages", v)} />
       <Input

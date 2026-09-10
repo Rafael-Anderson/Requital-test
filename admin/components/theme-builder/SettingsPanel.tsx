@@ -286,6 +286,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
           blocks={config.header.blocks}
           onUpdate={editor.updateHeaderSetting}
           onApplyPreset={editor.applyHeaderPreset}
+          colorPresets={schemeColorPresets(config.globalSettings.colorSchemes)}
         />
       </FilterableSettingsBody>
     );

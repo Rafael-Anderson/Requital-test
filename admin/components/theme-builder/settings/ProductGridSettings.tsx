@@ -6,10 +6,13 @@ import Combobox from "@/components/ui/Combobox";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import { listCollections } from "@/lib/api";
+import RichTextBlockEditor from "../RichTextBlockEditor";
+import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import VisibilityControl from "./shared/VisibilityControl";
+import type { ThemeEditorState } from "@/lib/useThemeEditor";
 import type { Collection, ScrollAnimation, SectionVisibility } from "@/lib/types";
 
 // Phase B1 — extended card style set (shared shape with globalSettings.productCards.cardStyle).
@@ -39,11 +42,15 @@ const DEFAULT_PRODUCT_LIMIT = 8;
 export default function ProductGridSettings({
   settings,
   onUpdate,
+  editor,
 }: {
   settings: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
+  editor?: ThemeEditorState;
 }) {
   const [collections, setCollections] = useState<Collection[]>([]);
+  const colorPresets = schemeColorPresets(editor?.config?.globalSettings.colorSchemes);
+  const sectionId = editor?.selection?.kind === "section" ? editor.selection.section.id : "product_grid";
 
   useEffect(() => {
     listCollections().then(setCollections).catch(() => setCollections([]));
@@ -51,11 +58,13 @@ export default function ProductGridSettings({
 
   return (
     <div className="space-y-4">
-      <Input
+      <RichTextBlockEditor
+        blockId={`product-grid-title-${sectionId}`}
         label="Section title"
+        mode="inline"
         value={(settings.sectionTitle as string) ?? ""}
-        placeholder="Our Products"
-        onChange={(e) => onUpdate("sectionTitle", e.target.value)}
+        onChange={(html) => onUpdate("sectionTitle", html)}
+        colorPresets={colorPresets}
       />
       <div>
         <span className="mb-1.5 block text-sm font-medium text-zinc-600 dark:text-zinc-400">Show products from</span>
