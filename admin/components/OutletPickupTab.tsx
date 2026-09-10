@@ -12,6 +12,8 @@ import Card from "@/components/ui/Card";
 import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
+import ShopWideChangeModal from "@/components/ShopWideChangeModal";
+import { diffShopWideChanges } from "@/lib/shop-wide-fields";
 import { useToast } from "@/components/ui/Toast";
 
 const TIME_SLOT_PRESETS = [
@@ -44,6 +46,11 @@ export default function OutletPickupTab({
   const [preparationTimeMinutes, setPreparationTimeMinutes] = useState(15);
   const [preparationPlusTimeMinutes, setPreparationPlusTimeMinutes] = useState(30);
   const [savingBusinessSettings, setSavingBusinessSettings] = useState(false);
+  // The shop-wide payload as loaded, for the "this changes every outlet"
+  // confirm (lib/shop-wide-fields.ts). Re-baselined after a successful save
+  // so a second save of the same values does not re-prompt.
+  const [shopBaseline, setShopBaseline] = useState<Record<string, unknown> | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<string[] | null>(null);
 
   const toast = useToast();
 
@@ -59,6 +66,15 @@ export default function OutletPickupTab({
       setTimeSlotGapMinutes(s.pickupTimeSlotGapMinutes);
       setPreparationTimeMinutes(s.pickupPreparationTimeMinutes);
       setPreparationPlusTimeMinutes(s.pickupPreparationPlusTimeMinutes);
+      setShopBaseline({
+        pickupPaymentCardOnline: s.pickupPaymentCardOnline,
+        pickupPaymentCashOnPickup: s.pickupPaymentCashOnPickup,
+        pickupPaymentCardOnPickup: s.pickupPaymentCardOnPickup,
+        pickupHours: mergeBusinessHours(s.pickupHours),
+        pickupTimeSlotGapMinutes: s.pickupTimeSlotGapMinutes,
+        pickupPreparationTimeMinutes: s.pickupPreparationTimeMinutes,
+        pickupPreparationPlusTimeMinutes: s.pickupPreparationPlusTimeMinutes,
+      });
     });
   }, []);
 
@@ -75,18 +91,37 @@ export default function OutletPickupTab({
     }
   }
 
+  function buildShopPayload() {
+    return {
+      pickupPaymentCardOnline: paymentMethods.cardOnline,
+      pickupPaymentCashOnPickup: paymentMethods.cashOnFulfillment,
+      pickupPaymentCardOnPickup: paymentMethods.cardOnFulfillment,
+      pickupHours: hours,
+      pickupTimeSlotGapMinutes: timeSlotGapMinutes,
+      pickupPreparationTimeMinutes: preparationTimeMinutes,
+      pickupPreparationPlusTimeMinutes: preparationPlusTimeMinutes,
+    };
+  }
+
+  // Both cards below this button are entirely shop-wide, so a save that
+  // changes one of their values confirms first. Nothing changed = save
+  // straight through, unchanged from before this guard existed.
+  function requestSaveBusinessSettings() {
+    const changes = diffShopWideChanges(shopBaseline, buildShopPayload());
+    if (changes.length === 0) {
+      void handleSaveBusinessSettings();
+      return;
+    }
+    setPendingChanges(changes);
+  }
+
   async function handleSaveBusinessSettings() {
     setSavingBusinessSettings(true);
     try {
-      await updateShop({
-        pickupPaymentCardOnline: paymentMethods.cardOnline,
-        pickupPaymentCashOnPickup: paymentMethods.cashOnFulfillment,
-        pickupPaymentCardOnPickup: paymentMethods.cardOnFulfillment,
-        pickupHours: hours,
-        pickupTimeSlotGapMinutes: timeSlotGapMinutes,
-        pickupPreparationTimeMinutes: preparationTimeMinutes,
-        pickupPreparationPlusTimeMinutes: preparationPlusTimeMinutes,
-      });
+      const payload = buildShopPayload();
+      await updateShop(payload);
+      setShopBaseline(payload);
+      setPendingChanges(null);
       toast("Pickup settings saved");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save pickup settings", "error");
@@ -164,11 +199,21 @@ export default function OutletPickupTab({
             </Card>
           </div>
 
-          <Button variant="primary" onClick={handleSaveBusinessSettings} disabled={savingBusinessSettings}>
+          <Button variant="primary" onClick={requestSaveBusinessSettings} disabled={savingBusinessSettings}>
             <Check className="size-4 inline -mt-0.5 mr-1" />
             Save changes
           </Button>
         </>
+      )}
+
+      {pendingChanges && (
+        <ShopWideChangeModal
+          outletName={outlet.name}
+          changes={pendingChanges}
+          saving={savingBusinessSettings}
+          onConfirm={() => void handleSaveBusinessSettings()}
+          onCancel={() => setPendingChanges(null)}
+        />
       )}
     </div>
   );
