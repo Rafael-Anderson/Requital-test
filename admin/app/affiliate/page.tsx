@@ -9,6 +9,7 @@ import { TableSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
 import AffiliateFormModal from "@/components/AffiliateFormModal";
 import PageShell from "@/components/ui/PageShell";
@@ -136,7 +137,7 @@ export default function AffiliatePage() {
         )}
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

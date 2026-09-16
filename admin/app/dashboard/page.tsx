@@ -18,6 +18,7 @@ import BranchBar from "@/components/BranchBar";
 import Card from "@/components/ui/Card";
 import PageShell from "@/components/ui/PageShell";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 
 const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] = [
   { key: "placed", label: "Placed" },
@@ -64,7 +65,7 @@ export default function DashboardPage() {
     return Math.max(1, ...STAGES.map((s) => summary.ordersByStage[s.key]));
   }, [summary]);
 
-  if (error) return <p className="text-red-600">{error}</p>;
+  if (error) return <InlineErrorMessage>{error}</InlineErrorMessage>;
 
   if (isSimple) {
     return (

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ImportConfirmResult, ImportPreviewResult, ImportRowResult } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
@@ -106,7 +107,7 @@ export default function CsvImportModal({
           className="block w-full text-sm mb-4 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-black/5 dark:file:bg-white/10 file:text-sm file:cursor-pointer cursor-pointer"
         />
 
-        {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+        {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
         {preview && (
           <div className="border border-border rounded-lg dark:border-white/10 overflow-hidden mb-4">

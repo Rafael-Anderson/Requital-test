@@ -16,6 +16,7 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatusBadge from "@/components/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
@@ -84,7 +85,7 @@ export default function CustomerDetailPage() {
       <BackButton href="/customers" />
       <h1 className="text-2xl font-semibold mb-4">{customer?.name ?? "Customer"}</h1>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       {!customer && !error ? (
         <div className="space-y-4">

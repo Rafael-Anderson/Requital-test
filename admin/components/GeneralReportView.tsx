@@ -7,6 +7,7 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 
@@ -52,7 +53,7 @@ export default function GeneralReportView({
 
   return (
     <>
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {!summary ? (

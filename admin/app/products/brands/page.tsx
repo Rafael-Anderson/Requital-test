@@ -8,6 +8,7 @@ import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -69,7 +70,7 @@ export default function BrandsPage() {
         Group products by brand or manufacturer. Shoppers can filter your storefront by brand.
       </p>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       {brands !== null && brands.length > 0 && (
         <div className="relative w-full sm:w-72 mb-3">

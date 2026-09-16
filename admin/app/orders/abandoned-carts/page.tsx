@@ -6,6 +6,7 @@ import type { AbandonedCart } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import OrdersTabs from "@/components/OrdersTabs";
@@ -39,7 +40,7 @@ export default function AbandonedCartsPage() {
         Business Information.
       </p>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

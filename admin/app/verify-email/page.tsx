@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { verifyEmail } from "@/lib/api";
 import AuthCard from "@/components/auth/AuthCard";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -31,7 +32,7 @@ function VerifyEmailContent() {
       <div className="text-center space-y-4">
         {status === "pending" && <p className="text-text-muted dark:text-zinc-400">Verifying…</p>}
         {status === "success" && <p className="text-text-secondary dark:text-zinc-400">Your email is verified.</p>}
-        {status === "error" && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        {status === "error" && <InlineErrorMessage>{error}</InlineErrorMessage>}
         <Link href="/" className="inline-block text-accent hover:underline">
           Continue to Requital
         </Link>

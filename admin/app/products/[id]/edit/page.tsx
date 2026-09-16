@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getProduct } from "@/lib/api";
 import type { Product } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
 import ProductForm from "@/components/ProductForm";
 import PageShell from "@/components/ui/PageShell";
@@ -26,7 +27,7 @@ export default function EditProductPage() {
     <PageShell>
       <BackButton href="/products" />
       <h1 className="text-2xl font-semibold mb-4">Edit product</h1>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
       {!product && !error ? (
         <div className="max-w-2xl space-y-4">
           <Skeleton className="h-8 w-full" />

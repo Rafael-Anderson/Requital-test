@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
 import ReportsFilterBar from "@/components/ReportsFilterBar";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
@@ -91,7 +92,7 @@ export default function ExternalDeliveryOrdersTabPage() {
         />
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <div className="flex items-center justify-end mb-3">
         <div className="relative w-full sm:w-72">

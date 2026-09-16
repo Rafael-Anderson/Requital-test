@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ApiError } from "@/lib/api";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import AuthCard from "@/components/auth/AuthCard";
 import { AUTH_INPUT_CLASS } from "@/components/auth/auth-input-class";
 
@@ -105,14 +106,7 @@ export default function LoginPage() {
             aria-invalid={error ? true : undefined}
             className={`${AUTH_INPUT_CLASS} ${error ? ERROR_INPUT_CLASS : ""}`}
           />
-          {error && (
-            <div
-              role="alert"
-              className="mt-2 rounded-md border border-red-400 bg-red-100 px-3 py-2 text-[13px] text-red-700 dark:border-red-500 dark:bg-red-950 dark:text-red-400"
-            >
-              {error}
-            </div>
-          )}
+          {error && <InlineErrorMessage className="mt-2">{error}</InlineErrorMessage>}
         </div>
         <p className="text-right -mt-2">
           <Link href="/forgot-password" className="text-sm text-accent hover:underline">

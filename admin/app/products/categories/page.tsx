@@ -7,6 +7,7 @@ import { buildCollectionTree, flattenCollectionTree, type Collection } from "@/l
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import CollectionFormModal from "@/components/CollectionFormModal";
@@ -90,7 +91,7 @@ export default function CollectionsPage() {
         </Button>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <div className="rounded-lg border border-border dark:border-white/10 overflow-hidden">
         {collections === null ? (
