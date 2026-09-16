@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cancelSliderDelivery, dispatchSliderDelivery, getSliderQuote, getSliderSettings } from "@/lib/api";
-import type { Order, SliderQuote, SliderSettings, SliderVehicleType } from "@/lib/types";
+import { cancelSliderDelivery, getSliderSettings } from "@/lib/api";
+import type { Order, SliderSettings } from "@/lib/types";
 import { waLink } from "@/lib/validators";
 import Button from "@/components/ui/Button";
-import Select from "@/components/ui/Select";
 import StatusBadge from "@/components/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import ManageDeliveryModal from "@/components/ManageDeliveryModal";
 
 const TERMINAL_STATUSES = ["delivered", "cancelled"];
 
@@ -30,10 +30,7 @@ export default function SliderDeliveryPanel({
   compact?: boolean;
 }) {
   const toast = useToast();
-  const [quote, setQuote] = useState<SliderQuote | null>(null);
-  const [quoting, setQuoting] = useState(false);
-  const [vehicleType, setVehicleType] = useState<SliderVehicleType>("any");
-  const [dispatching, setDispatching] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [sliderStatus, setSliderStatus] = useState<SliderSettings["status"] | null>(null);
 
@@ -57,31 +54,6 @@ export default function SliderDeliveryPanel({
   // Slider dispatch isn't offered on top of it (the backend's own
   // one-record-per-order unique constraint would reject it anyway).
   if (delivery && delivery.provider !== "slider") return null;
-
-  async function handleGetQuote() {
-    setQuoting(true);
-    try {
-      setQuote(await getSliderQuote(order.id));
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to get a Slider quote", "error");
-    } finally {
-      setQuoting(false);
-    }
-  }
-
-  async function handleDispatch() {
-    setDispatching(true);
-    try {
-      await dispatchSliderDelivery(order.id, { vehicleType });
-      toast("Sent to Slider");
-      setQuote(null);
-      onChanged();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to dispatch to Slider", "error");
-    } finally {
-      setDispatching(false);
-    }
-  }
 
   async function handleCancel() {
     if (!confirm("Cancel this Slider delivery?")) return;
@@ -158,38 +130,14 @@ export default function SliderDeliveryPanel({
     );
   }
 
-  if (quote) {
-    return (
-      <div className="space-y-2">
-        <p className="text-xs text-text-muted">
-          {quote.distanceKm.toFixed(1)} km · ~{quote.durationMinutes} min
-        </p>
-        <Select value={vehicleType} onChange={(e) => setVehicleType(e.target.value as SliderVehicleType)}>
-          {quote.vehicles
-            .filter((v) => v.vehicleType !== "any")
-            .map((v) => (
-              <option key={v.vehicleType} value={v.vehicleType} disabled={!v.isAvailable}>
-                {v.vehicleType} — {v.deliveryFee.toFixed(2)} AED
-                {!v.isAvailable ? ` (${v.unavailableReason ?? "unavailable"})` : ""}
-              </option>
-            ))}
-          <option value="any">any (recommended — Slider optimises)</option>
-        </Select>
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setQuote(null)}>
-            Cancel
-          </Button>
-          <Button variant="primary" size="sm" onClick={handleDispatch} disabled={dispatching} loading={dispatching}>
-            {dispatching ? "Sending…" : "Confirm & send"}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <Button variant="secondary" size="sm" onClick={handleGetQuote} disabled={quoting} loading={quoting}>
-      {quoting ? "Getting quote…" : "Send to Slider"}
-    </Button>
+    <>
+      <Button variant="primary" size="sm" onClick={() => setModalOpen(true)}>
+        Manage Delivery
+      </Button>
+      {modalOpen && (
+        <ManageDeliveryModal order={order} onClose={() => setModalOpen(false)} onChanged={onChanged} />
+      )}
+    </>
   );
 }
