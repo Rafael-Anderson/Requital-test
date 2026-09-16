@@ -6,6 +6,7 @@ import { getDashboardSummary, getTopProducts } from "@/lib/api";
 import type { DashboardSummary, TopProduct } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { defaultDateRange } from "@/components/ui/DateRangePicker";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 
@@ -33,7 +34,7 @@ export default function SimpleDashboard() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
   }, [selectedOutletId]);
 
-  if (error) return <p className="text-red-600">{error}</p>;
+  if (error) return <InlineErrorMessage>{error}</InlineErrorMessage>;
 
   if (!summary || !topProducts) {
     return (

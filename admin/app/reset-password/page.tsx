@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { resetPassword } from "@/lib/api";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import AuthCard from "@/components/auth/AuthCard";
 import { AUTH_INPUT_CLASS } from "@/components/auth/auth-input-class";
 
@@ -64,7 +65,7 @@ function ResetPasswordForm() {
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
             <Input
               label="New password"
               type="password"

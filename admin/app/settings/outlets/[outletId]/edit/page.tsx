@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { getOutlet, updateOutlet } from "@/lib/api";
 import type { Outlet } from "@/lib/types";
 import Skeleton from "@/components/ui/Skeleton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 import OutletEditSidebar, { type OutletEditTab } from "@/components/OutletEditSidebar";
 import OutletBasicInfoTab from "@/components/OutletBasicInfoTab";
@@ -50,7 +51,7 @@ export default function EditOutletPage() {
 
   return (
     <PageShell>
-      {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
+      {error && <InlineErrorMessage className="mb-4">{error}</InlineErrorMessage>}
 
       {!outlet && !error ? (
         <div className="space-y-4">

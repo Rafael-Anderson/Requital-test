@@ -8,6 +8,7 @@ import { DRAFT_ORDER_STATUS_LABELS, type DraftOrder } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import DraftOrderBuilder from "@/components/DraftOrderBuilder";
@@ -90,7 +91,7 @@ export default function DraftOrderDetailPage() {
   return (
     <div>
       <BackButton href="/orders/draft-orders" />
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       {!draft ? (
         <PageShell variant="form">

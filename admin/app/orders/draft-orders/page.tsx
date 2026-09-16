@@ -10,6 +10,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
@@ -52,7 +53,7 @@ export default function DraftOrdersPage() {
       </div>
       <OrdersTabs />
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

@@ -17,6 +17,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
@@ -164,7 +165,7 @@ export default function IngredientsPage() {
         These items do not appear for sale
       </p>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

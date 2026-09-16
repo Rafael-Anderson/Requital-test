@@ -5,6 +5,7 @@ import { changePassword, resendVerification } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 
@@ -79,7 +80,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
           </div>
         ) : (
           <>
-            {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
+            {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
             <div className="space-y-3.5">
               <Input

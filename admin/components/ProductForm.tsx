@@ -5,6 +5,7 @@ import type { Product } from "@/lib/types";
 import { FIELD_STEP, useProductForm } from "@/lib/useProductForm";
 import { useUnsavedChangesGuard } from "@/lib/useUnsavedChangesGuard";
 import Button from "@/components/ui/Button";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import Stepper, { type StepperStep } from "@/components/ui/Stepper";
 import { useToast } from "@/components/ui/Toast";
@@ -160,7 +161,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
           </nav>
 
           <div className="flex-1 min-w-0 space-y-4">
-            {form.error && <p className="text-red-600 text-sm">{form.error}</p>}
+            {form.error && <InlineErrorMessage>{form.error}</InlineErrorMessage>}
 
             <div id="basics" className="space-y-4 scroll-mt-6">
               <ProductFormStepBasics form={form} />
@@ -250,7 +251,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
           <Stepper steps={steps} onStepClick={handleStepperClick} />
         </div>
 
-        {form.error && <p className="text-red-600 text-sm">{form.error}</p>}
+        {form.error && <InlineErrorMessage>{form.error}</InlineErrorMessage>}
 
         <div
           key={currentStep}

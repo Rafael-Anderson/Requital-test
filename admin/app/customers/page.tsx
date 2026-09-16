@@ -15,6 +15,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import BulkActionBar from "@/components/ui/BulkActionBar";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
@@ -129,7 +130,7 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       {!isSimple && (
         <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>

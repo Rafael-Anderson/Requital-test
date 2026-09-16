@@ -17,6 +17,7 @@ import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
 import Card from "@/components/ui/Card";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
@@ -110,7 +111,7 @@ export default function OrderDetailPage() {
     }
   }
 
-  if (error) return <p className="text-red-600">{error}</p>;
+  if (error) return <InlineErrorMessage>{error}</InlineErrorMessage>;
   if (!order) {
     return (
       <div className="max-w-3xl space-y-4">

@@ -9,6 +9,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import DiscountFormModal from "@/components/DiscountFormModal";
@@ -90,7 +91,7 @@ export default function DiscountsPage() {
         </Button>
       </div>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

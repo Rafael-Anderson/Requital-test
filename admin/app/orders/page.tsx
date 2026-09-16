@@ -9,6 +9,7 @@ import { useOutletFilter } from "@/lib/outlet-context";
 import { useShopMode } from "@/lib/useShopMode";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
@@ -153,7 +154,7 @@ function OrdersPageContent() {
       <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Orders</h1>
       <OrdersTabs />
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <div className="flex gap-4 overflow-x-auto pb-2">
         {orders === null

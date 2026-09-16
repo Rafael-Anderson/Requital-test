@@ -6,6 +6,7 @@ import type { WebhookEvent } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -62,7 +63,7 @@ export default function WebhooksIntegrationsPage() {
         payment update actually arrived.
       </p>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

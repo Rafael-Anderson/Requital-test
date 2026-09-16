@@ -8,6 +8,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 
 const PAGE_SIZE = 25;
@@ -129,7 +130,7 @@ export default function ActivityLogPage() {
           </select>
         </div>
       </div>
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

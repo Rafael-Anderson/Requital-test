@@ -16,6 +16,7 @@ import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import DateTimePicker, { formatDateTimeDisplay } from "@/components/ui/DateTimePicker";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 
 type CompanyId = "slider";
@@ -175,7 +176,7 @@ export default function ManageDeliveryModal({
           )}
         </div>
 
-        {quoteError && <p className="text-sm text-danger-text">{quoteError}</p>}
+        {quoteError && <InlineErrorMessage>{quoteError}</InlineErrorMessage>}
 
         {quote && selectedVehicle && (
           <div className="space-y-4">
@@ -201,9 +202,9 @@ export default function ManageDeliveryModal({
             </div>
 
             {!selectedVehicle.isAvailable && (
-              <p className="text-sm text-danger-text">
+              <InlineErrorMessage>
                 {vehicleType} unavailable{selectedVehicle.unavailableReason ? `: ${selectedVehicle.unavailableReason}` : ""}
-              </p>
+              </InlineErrorMessage>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -275,7 +276,7 @@ export default function ManageDeliveryModal({
               <DateTimePicker label="Scheduled for" value={scheduleAt} onChange={setScheduleAt} />
             )}
 
-            {dispatchError && <p className="text-sm text-danger-text">{dispatchError}</p>}
+            {dispatchError && <InlineErrorMessage>{dispatchError}</InlineErrorMessage>}
 
             <div className="flex justify-end">
               <Button variant="primary" onClick={handleCreateDelivery} disabled={!canCreate} loading={dispatching}>

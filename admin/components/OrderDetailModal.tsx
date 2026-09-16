@@ -20,6 +20,7 @@ import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Combobox from "@/components/ui/Combobox";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
@@ -254,7 +255,7 @@ export default function OrderDetailModal({
           : undefined
       }
     >
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
 
         {!order ? (
           <div className="space-y-4 pb-6">

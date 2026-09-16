@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getTemplate } from "@/lib/api";
 import type { Template } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
 import TemplateForm from "@/components/TemplateForm";
 import PageShell from "@/components/ui/PageShell";
@@ -26,7 +27,7 @@ export default function EditTemplatePage() {
     return (
       <PageShell>
         <BackButton href="/products/templates" />
-        <p className="text-red-600 text-sm">{error}</p>
+        <InlineErrorMessage>{error}</InlineErrorMessage>
       </PageShell>
     );
   }

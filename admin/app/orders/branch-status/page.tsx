@@ -7,6 +7,7 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import Toggle from "@/components/ui/Toggle";
 import BackButton from "@/components/ui/BackButton";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
@@ -73,7 +74,7 @@ export default function BranchStatusPage() {
       <h1 className="text-2xl font-semibold mb-1">Branch Status</h1>
       <OrdersTabs />
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>

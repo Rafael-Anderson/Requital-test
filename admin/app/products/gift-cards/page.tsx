@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import EmptyState from "@/components/ui/EmptyState";
+import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
@@ -98,7 +99,7 @@ export default function GiftCardsPage() {
         </div>
       </Card>
 
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <Table>
         <THead>
