@@ -219,6 +219,19 @@ body {
   }
 }
 
+/* ManageDeliveryModal.tsx's "Calculate" button while a Slider quote is in
+   flight — a small scale pulse on top of Button.tsx's own spinner, so the
+   loading state reads as more than a static spinner. */
+@keyframes btn-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
 /* Every keyframe-driven entrance/exit in this app is gated behind
    prefers-reduced-motion so motion-sensitive users get an instant state
    change instead — per-class opacity/transform still apply (so content
@@ -253,6 +266,9 @@ body {
   }
   .step-enter-backward {
     animation: step-enter-backward 0.2s ease-out;
+  }
+  .btn-pulse {
+    animation: btn-pulse 0.6s ease-in-out infinite;
   }
 }
 
