@@ -226,6 +226,24 @@ export class PaymentSettingsService {
     return key?.trim() ? key : null;
   }
 
+  // TabbyPromo's widget constructor needs `merchantCode` alongside
+  // `publicKey` — a genuinely distinct value per Tabby's own docs ("based on
+  // your store currency"), not just the public key under another name. Most
+  // shops won't have filled in the optional Merchant Code field, so this
+  // falls back to the public key rather than resolving to null and hiding
+  // the whole Tabby widget row for them — same gate (enabled + a real key)
+  // as resolvePublicWidgetKey, since a merchant code with no public key (or
+  // Tabby disabled) is meaningless on its own.
+  async resolveTabbyMerchantCode(shopId: number): Promise<string | null> {
+    if (!(await this.isEnabled(shopId, 'tabby'))) return null;
+    const credentials = await this.resolveCredentials(shopId, 'tabby');
+    const key =
+      credentials?.merchantCode?.trim() ||
+      credentials?.publicKey?.trim() ||
+      process.env.TABBY_PUBLIC_KEY;
+    return key?.trim() ? key : null;
+  }
+
   // Whether `provider` (an online-payment provider, not cod) should be
   // treated as available for checkout right now — used by
   // PublicService.assertPaymentMethodAvailable/createOrder, mirroring

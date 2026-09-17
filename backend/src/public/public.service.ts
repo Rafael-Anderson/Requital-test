@@ -243,6 +243,7 @@ export class PublicService {
       banners,
       publishedPolicyPages,
       tabbyPublicKey,
+      tabbyMerchantCode,
       tamaraPublicKey,
     ] = await Promise.all([
       Promise.all(
@@ -266,6 +267,7 @@ export class PublicService {
       // PDP's Tabby/Tamara installment-promo widgets, entirely separate from
       // enabledPaymentProviders above (checkout method availability).
       this.paymentSettingsService.resolvePublicWidgetKey(shop.id, 'tabby'),
+      this.paymentSettingsService.resolveTabbyMerchantCode(shop.id),
       this.paymentSettingsService.resolvePublicWidgetKey(shop.id, 'tamara'),
     ]);
     // Only the types a merchant has actually written content for — the
@@ -341,6 +343,7 @@ export class PublicService {
       cardProcessorEnabled,
       enabledPaymentProviders,
       tabbyPublicKey,
+      tabbyMerchantCode,
       tamaraPublicKey,
       brandColor: theme?.brandColor ?? null,
       secondaryColor: theme?.secondaryColor ?? null,

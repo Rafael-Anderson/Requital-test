@@ -514,13 +514,19 @@ export default function ProductDetailClient() {
             {primaryCtaElement("flex-1 h-12 font-semibold text-[15px] shadow-sm shadow-black/10")}
           </div>
 
-          {/* "Buy Now Pay Later!" card — static Tabby/Tamara instalment copy
-              (no provider SDK, renders with no key), under the CTA row.
-              Hidden by the theme's Product page > "Show Buy Now Pay Later
-              card" toggle, or when neither provider is enabled + configured
-              (tabbyKey/tamaraKey resolve to null otherwise). */}
-          {showBnplWidget && (tabbyKey || tamaraKey) && (
-            <BnplWidgetCard tabby={!!tabbyKey} tamara={!!tamaraKey} />
+          {/* "Buy Now Pay Later!" card — each configured provider's own
+              real widget (see BnplWidgetCard's own comment), under the CTA
+              row. Hidden by the theme's Product page > "Show Buy Now Pay
+              Later card" toggle, or when neither provider is enabled +
+              configured (tabbyKey/tamaraKey resolve to null otherwise). */}
+          {showBnplWidget && (tabbyKey || tamaraKey) && shop && (
+            <BnplWidgetCard
+              tabbyPublicKey={tabbyKey}
+              tabbyMerchantCode={shop.tabbyMerchantCode}
+              tamaraPublicKey={tamaraKey}
+              price={String(displayPrice)}
+              currency={shop.currency}
+            />
           )}
 
           {cartMode !== "contact" && (

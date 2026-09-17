@@ -125,6 +125,11 @@ export interface Shop {
   // all; entirely separate from enabledPaymentProviders above (checkout
   // method availability).
   tabbyPublicKey: string | null;
+  // Distinct from tabbyPublicKey per Tabby's own TabbyPromo widget docs —
+  // see backend PaymentSettingsService.resolveTabbyMerchantCode. Only ever
+  // non-null alongside tabbyPublicKey (falls back to it when a merchant
+  // hasn't set a separate merchant code).
+  tabbyMerchantCode: string | null;
   tamaraPublicKey: string | null;
 }
 
