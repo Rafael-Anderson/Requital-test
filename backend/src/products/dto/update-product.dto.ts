@@ -86,6 +86,23 @@ export class UpdateProductDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'newUntil must be a YYYY-MM-DD date' })
   newUntil?: string | null;
 
+  // Per-product estimated-delivery-time override — see CreateProductDto's
+  // own comment. `null` clears the override (reverts to shop default);
+  // omitted leaves it untouched.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDeliveryTimeFrom?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDeliveryTimeTo?: number | null;
+
+  @IsOptional()
+  @IsIn(['minutes', 'hours', 'days'])
+  estimatedDeliveryTimeUnit?: string | null;
+
   @IsOptional()
   @IsString()
   barcode?: string;

@@ -10,6 +10,7 @@ import { useFlyToCart } from "@/lib/fly-to-cart";
 import { getProductBySlug, listProducts, listCollections } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { stockLabel } from "@/lib/stock-label";
+import { resolveDeliveryTimeEstimate, formatDeliveryTimeLabel } from "@/lib/delivery-time";
 import { iconStyleProps } from "@/lib/icon-style";
 import { storeButtonClassName } from "@/lib/button-style";
 import { buildWhatsAppUrl } from "@/lib/whatsapp-button";
@@ -41,11 +42,6 @@ function findVariant(product: Product, selection: Selection): ProductVariant | u
   return product.variants.find((v) =>
     variantOptionValueIds(v).slice(0, selection.length).every((id, i) => id === selection[i]),
   );
-}
-
-function formatDeliveryEstimate(shop: Shop): string | null {
-  if (!shop.estimatedDeliveryTimeFrom || !shop.estimatedDeliveryTimeTo) return null;
-  return `${shop.estimatedDeliveryTimeFrom}–${shop.estimatedDeliveryTimeTo} ${shop.estimatedDeliveryTimeUnit ?? ""}`.trim();
 }
 
 export default function ProductDetailClient() {
@@ -151,7 +147,13 @@ export default function ProductDetailClient() {
 
   const deliveryAvailable = outlets.some((o) => o.deliveryEnabled);
   const pickupAvailable = outlets.some((o) => o.pickupEnabled);
-  const deliveryEstimate = shop ? formatDeliveryEstimate(shop) : null;
+  // Replaces the old stock-status text (● In stock / Only N left) — see
+  // the stock+fulfillment line below. Out of stock keeps its own message
+  // instead; a delivery estimate is meaningless for something unavailable.
+  const deliveryTimeLabel =
+    shop && !product.isGiftCard && !outOfStock
+      ? formatDeliveryTimeLabel(resolveDeliveryTimeEstimate(product, shop))
+      : null;
   const tabbyKey = tabbyWidgetPublicKey(product, shop);
   const tamaraKey = tamaraWidgetPublicKey(product, shop);
 
@@ -458,13 +460,23 @@ export default function ProductDetailClient() {
           {/* Stock + fulfillment visibility — real data only (per-outlet
               delivery/pickup flags, per-variant stock when tracked), never
               fabricated messaging. Doesn't apply to a gift card (no stock,
-              no physical fulfillment) — see the trust row below instead. */}
+              no physical fulfillment) — see the trust row below instead.
+              Out of stock keeps its own message; any other state shows the
+              resolved delivery-time estimate instead of raw stock text
+              (product override if set, else the shop default — see
+              lib/delivery-time.ts). */}
           {!product.isGiftCard && (
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-              {showStockIndicator && stock && (
-                <span className="font-medium" style={{ color: stockToneColor[stock.tone] }}>
+              {showStockIndicator && outOfStock && stock && (
+                <span className="font-medium" style={{ color: stockToneColor.out }}>
                   {"● "}
                   {stock.text}
+                </span>
+              )}
+              {showStockIndicator && !outOfStock && deliveryTimeLabel && (
+                <span className="font-medium" style={{ color: stockToneColor.ok }}>
+                  {"● "}
+                  {deliveryTimeLabel}
                 </span>
               )}
               {showDeliveryIndicator && deliveryAvailable && (
@@ -610,7 +622,11 @@ export default function ProductDetailClient() {
                 {deliveryAvailable && (
                   <div className="flex items-center gap-1.5">
                     <Truck className="size-3.5 shrink-0" {...iconStyleProps(shop?.iconStyle, 2)} />
-                    <span>{deliveryEstimate ? `Delivery in ${deliveryEstimate}` : "Delivery available at checkout"}</span>
+                    {/* The resolved delivery-time estimate is now the stock
+                        + fulfillment line's job (above) — this row stays a
+                        plain "delivery exists" fact so the two don't repeat
+                        the same "how fast" text twice on one page. */}
+                    <span>Delivery available at checkout</span>
                   </div>
                 )}
                 {pickupAvailable && (

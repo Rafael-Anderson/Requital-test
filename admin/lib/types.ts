@@ -650,6 +650,12 @@ export interface Product {
   // the API always returns both.
   isNew?: boolean;
   newUntil?: string | null;
+  // Per-product override of Shop.estimatedDeliveryTime{From,To,Unit} (PDP
+  // "Delivered in X" line). All three null/omitted = use the shop default.
+  // Optional here for the same existing-fixture reason as isNew above.
+  estimatedDeliveryTimeFrom?: number | null;
+  estimatedDeliveryTimeTo?: number | null;
+  estimatedDeliveryTimeUnit?: "minutes" | "hours" | "days" | null;
   isGiftCard: boolean;
   giftCardDenominations: number[];
   // Per-product opt-in gating the Variants/Attributes/FAQs sections of the
@@ -984,7 +990,7 @@ export interface Shop {
   deliveryPreparationPlusDeliveryTimeMinutes: number;
   estimatedDeliveryTimeFrom: number;
   estimatedDeliveryTimeTo: number;
-  estimatedDeliveryTimeUnit: "minutes" | "hours";
+  estimatedDeliveryTimeUnit: "minutes" | "hours" | "days";
   // #13 — "HH:MM" same-day cutoff (shop timezone), or null when off.
   sameDayCutoffTime: string | null;
   pickupTimeSlotGapMinutes: number;

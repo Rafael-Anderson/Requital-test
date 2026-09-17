@@ -275,6 +275,11 @@ export class ProductsService {
     if (dto.ingredients) {
       await this.assertIngredientLinksValid(ctx, dto.ingredients);
     }
+    this.assertDeliveryTimeOverrideFields({
+      estimatedDeliveryTimeFrom: dto.estimatedDeliveryTimeFrom,
+      estimatedDeliveryTimeTo: dto.estimatedDeliveryTimeTo,
+      estimatedDeliveryTimeUnit: dto.estimatedDeliveryTimeUnit,
+    });
     const tagIds = dto.tags?.length
       ? await this.resolveTagIds(ctx, dto.tags)
       : [];
@@ -291,14 +296,16 @@ export class ProductsService {
       productId = await this.db.transaction(async (conn) => {
         const [result] = await conn.query(
           `INSERT INTO product (
-            shopId, name, price, compareAtPrice, isNew, newUntil, thumbnail, sku, barcode, slug,
+            shopId, name, price, compareAtPrice, isNew, newUntil,
+            estimatedDeliveryTimeFrom, estimatedDeliveryTimeTo, estimatedDeliveryTimeUnit,
+            thumbnail, sku, barcode, slug,
             metaTitle, metaDescription, description, shortSummary, longSummary,
             costPrice, status, trackInventory, continueSellingOutOfStock, chargeTax,
             isCheckoutAddon, showVariants, showAttributes, showFaqs, usesIngredients,
             vendor, productType, physicalProduct, weight, weightUnit, dimensions,
             isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax,
             additionalInfo, brandId
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
@@ -306,6 +313,9 @@ export class ProductsService {
             dto.compareAtPrice ?? null,
             dto.isNew ?? false,
             dto.newUntil ?? null,
+            dto.estimatedDeliveryTimeFrom ?? null,
+            dto.estimatedDeliveryTimeTo ?? null,
+            dto.estimatedDeliveryTimeUnit ?? null,
             thumbnail,
             dto.sku,
             dto.barcode ?? null,
@@ -635,6 +645,11 @@ export class ProductsService {
     if (dto.brandId != null) {
       await this.assertBrandBelongsToShop(ctx, dto.brandId);
     }
+    this.assertDeliveryTimeOverrideFields({
+      estimatedDeliveryTimeFrom: dto.estimatedDeliveryTimeFrom,
+      estimatedDeliveryTimeTo: dto.estimatedDeliveryTimeTo,
+      estimatedDeliveryTimeUnit: dto.estimatedDeliveryTimeUnit,
+    });
     // Toggle-flip bookkeeping — see the shadow-provisioning methods below.
     // "current" is this product's state before this save; "next" is what it
     // will be once this save lands (dto field omitted = unchanged). Same
@@ -765,6 +780,9 @@ export class ProductsService {
           // `null` (explicit clear) is passed through by buildSetClause;
           // `undefined` (omitted) is filtered out — leaves the column as-is.
           newUntil: dto.newUntil,
+          estimatedDeliveryTimeFrom: dto.estimatedDeliveryTimeFrom,
+          estimatedDeliveryTimeTo: dto.estimatedDeliveryTimeTo,
+          estimatedDeliveryTimeUnit: dto.estimatedDeliveryTimeUnit,
           thumbnail,
           sku: dto.sku,
           barcode: dto.barcode,
@@ -2772,6 +2790,28 @@ export class ProductsService {
     if (!images || images.length === 0) return fallback;
     const sorted = [...images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return sorted[0].url;
+  }
+
+  // The per-product estimated-delivery-time override is all-or-nothing:
+  // From/To/Unit must be set together (an override with no unit, or a unit
+  // with no value, is meaningless) or all left unset/null (use the shop
+  // default). Same "cross-field guard lives in the service, not the DTO"
+  // shape as DiscountsService.assertDiscountKindFields.
+  private assertDeliveryTimeOverrideFields(fields: {
+    estimatedDeliveryTimeFrom?: number | null;
+    estimatedDeliveryTimeTo?: number | null;
+    estimatedDeliveryTimeUnit?: string | null;
+  }) {
+    const provided = [
+      fields.estimatedDeliveryTimeFrom,
+      fields.estimatedDeliveryTimeTo,
+      fields.estimatedDeliveryTimeUnit,
+    ].filter((v) => v !== undefined && v !== null);
+    if (provided.length !== 0 && provided.length !== 3) {
+      throw new BadRequestException(
+        'estimatedDeliveryTimeFrom/To/Unit must all be set together, or all left unset, to override the shop default',
+      );
+    }
   }
 
   private async assertBrandBelongsToShop(ctx: TenantContext, brandId: number) {
