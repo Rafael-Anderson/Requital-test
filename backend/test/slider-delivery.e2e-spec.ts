@@ -81,6 +81,11 @@ function cookieHeader(cookies: Record<string, string>): string {
 // single test can flip it to exceed the bike cap.
 let distanceKm = 5;
 let sliderOrderCounter = 100;
+// Lets one test force the mocked /deliveries POST to behave like a real
+// Slider-side rejection (e.g. an address outside the account's serviceable
+// area) instead of the usual 201 — see the "surfaces the real Slider error
+// message" test below.
+let forceCreateDeliveryError: { status: number; body: unknown } | null = null;
 
 function jsonRes(status: number, data: unknown) {
   return {
@@ -167,6 +172,12 @@ describe('Slider delivery integration (e2e)', () => {
           }) as unknown as Response;
         }
         if (url.includes('/deliveries') && method === 'POST') {
+          if (forceCreateDeliveryError) {
+            return jsonRes(
+              forceCreateDeliveryError.status,
+              forceCreateDeliveryError.body,
+            ) as unknown as Response;
+          }
           sliderOrderCounter += 1;
           return jsonRes(201, {
             order_number: sliderOrderCounter,
@@ -393,6 +404,41 @@ describe('Slider delivery integration (e2e)', () => {
     expect(body<OrderDetailBody>(fetched).externaldelivery?.provider).toBe(
       'slider',
     );
+  });
+
+  // Regression for the ManageDeliveryModal "Create Delivery" 422 bug: a real
+  // Slider-side rejection (e.g. a cross-emirate/out-of-service-area dropoff
+  // address, the kind "Al Taawun, Sharjah, Dubai" data can produce) used to
+  // reach the admin as a useless "Request failed (422)" because sliderFetch
+  // threw `new HttpException(aBareString, 422)`, whose getResponse() is the
+  // bare string itself — AllExceptionsFilter ships that as the JSON body,
+  // and the admin's apiFetch() (which reads body?.message) found nothing to
+  // read off a string and fell back to the generic message. Fixed by
+  // constructing the exception with a real { statusCode, message } object.
+  it('a real Slider 422 rejection surfaces its own message, not "Request failed (422)"', async () => {
+    distanceKm = 5;
+    const orderId = await createOrder('cash_on_delivery');
+    forceCreateDeliveryError = {
+      status: 422,
+      body: {
+        message:
+          'dropoff address is outside the serviceable area for this account_id',
+      },
+    };
+    try {
+      const res = await request(app.getHttpServer())
+        .post(`/orders/${orderId}/slider-delivery`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vehicleType: 'bike' })
+        .expect(422);
+      expect(typeof res.body).toBe('object');
+      expect(messageContains(res, 'validation failed')).toBe(true);
+      expect(
+        messageContains(res, 'dropoff address is outside the serviceable area'),
+      ).toBe(true);
+    } finally {
+      forceCreateDeliveryError = null;
+    }
   });
 
   it('rejects a bike dispatch over the 35km distance cap', async () => {
