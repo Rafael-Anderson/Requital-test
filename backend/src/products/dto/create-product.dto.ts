@@ -156,6 +156,27 @@ export class CreateProductDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'newUntil must be a YYYY-MM-DD date' })
   newUntil?: string | null;
 
+  // Per-product override of shop.estimatedDeliveryTime{From,To,Unit} (PDP
+  // "Delivered in X" line, replacing stock-status text). Omitted/all-null
+  // means "use the shop default" — see storefront/lib/delivery-time.ts.
+  // Must be set together or all left unset — enforced in
+  // ProductsService.assertDeliveryTimeOverrideFields, not here (the same
+  // "cross-field guard lives in the service" shape
+  // DiscountsService.assertDiscountKindFields already establishes).
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDeliveryTimeFrom?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDeliveryTimeTo?: number | null;
+
+  @IsOptional()
+  @IsIn(['minutes', 'hours', 'days'])
+  estimatedDeliveryTimeUnit?: string | null;
+
   @IsOptional()
   @IsString()
   barcode?: string;

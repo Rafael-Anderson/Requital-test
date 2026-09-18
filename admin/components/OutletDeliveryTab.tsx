@@ -48,7 +48,7 @@ export default function OutletDeliveryTab({
   const [preparationPlusDeliveryTimeMinutes, setPreparationPlusDeliveryTimeMinutes] = useState(45);
   const [estimatedFrom, setEstimatedFrom] = useState(30);
   const [estimatedTo, setEstimatedTo] = useState(60);
-  const [estimatedUnit, setEstimatedUnit] = useState<"minutes" | "hours">("minutes");
+  const [estimatedUnit, setEstimatedUnit] = useState<"minutes" | "hours" | "days">("minutes");
   // #13 — "HH:MM" shop-level same-day cutoff; "" means off.
   const [sameDayCutoff, setSameDayCutoff] = useState("");
   const [savingBusinessSettings, setSavingBusinessSettings] = useState(false);
@@ -220,7 +220,10 @@ export default function OutletDeliveryTab({
 
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Estimated Delivery Time</h3>
-                  <p className="text-xs text-text-faint mb-2">Shown to customers on the order-tracking page.</p>
+                  <p className="text-xs text-text-faint mb-2">
+                    The default shown on the order-tracking page and on a product page for any product with no
+                    delivery-time override of its own.
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Input
                       label="From"
@@ -239,10 +242,11 @@ export default function OutletDeliveryTab({
                     <Combobox
                       label="Type"
                       value={estimatedUnit}
-                      onChange={(value) => setEstimatedUnit(value as "minutes" | "hours")}
+                      onChange={(value) => setEstimatedUnit(value as "minutes" | "hours" | "days")}
                       options={[
                         { value: "minutes", label: "Minutes" },
                         { value: "hours", label: "Hours" },
+                        { value: "days", label: "Days" },
                       ]}
                     />
                   </div>

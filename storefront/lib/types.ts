@@ -369,6 +369,11 @@ export interface Product {
   // product-is-new.ts) — a plain boolean, the raw expiry date is not
   // exposed. Drives the storefront "NEW" badge.
   isNew: boolean;
+  // Per-product override of Shop.estimatedDeliveryTime{From,To,Unit} — see
+  // lib/delivery-time.ts. All three null = use the shop default.
+  estimatedDeliveryTimeFrom: number | null;
+  estimatedDeliveryTimeTo: number | null;
+  estimatedDeliveryTimeUnit: string | null;
   sku: string;
   status: string;
   trackInventory: boolean;

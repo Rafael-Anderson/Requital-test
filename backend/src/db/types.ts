@@ -210,6 +210,13 @@ export interface ProductRow {
   // callers that don't alias it must not rely on this field.
   isNew: boolean;
   newUntil: string | null;
+  // Per-product override of shop.estimatedDeliveryTime{From,To,Unit} (PDP
+  // "Delivered in X" line). All three null = use the shop default; all
+  // three must be set together (enforced at the DTO layer, not here) —
+  // see storefront/lib/delivery-time.ts's resolveDeliveryTimeEstimate.
+  estimatedDeliveryTimeFrom: number | null;
+  estimatedDeliveryTimeTo: number | null;
+  estimatedDeliveryTimeUnit: string | null;
   showVariants: boolean;
   showAttributes: boolean;
   showFaqs: boolean;

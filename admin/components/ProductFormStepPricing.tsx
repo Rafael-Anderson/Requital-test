@@ -3,6 +3,7 @@
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Combobox from "@/components/ui/Combobox";
+import Select from "@/components/ui/Select";
 import Toggle from "@/components/ui/Toggle";
 import Button from "@/components/ui/Button";
 import Tooltip from "@/components/ui/Tooltip";
@@ -11,6 +12,19 @@ import IngredientRecipeEditor from "@/components/IngredientRecipeEditor";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
 import { WEIGHT_UNITS, type WeightUnit } from "@/lib/types";
 import type { ProductFormState } from "@/lib/useProductForm";
+
+// Quick presets for the per-product delivery-time override — same
+// preset-Select-plus-custom-inputs juxtaposition OutletDeliveryTab.tsx's
+// TIME_SLOT_PRESETS already establishes. "custom" isn't itself an entry
+// here — any value/unit pair not matching one of these renders the custom
+// value+unit inputs instead.
+const DELIVERY_TIME_PRESETS = [
+  { key: "30-minutes", value: 30, unit: "minutes" as const, label: "30 minutes" },
+  { key: "1-hours", value: 1, unit: "hours" as const, label: "1 hour" },
+  { key: "2-hours", value: 2, unit: "hours" as const, label: "2 hours" },
+  { key: "1-days", value: 1, unit: "days" as const, label: "Next day" },
+  { key: "2-days", value: 2, unit: "days" as const, label: "2 days" },
+];
 
 export default function ProductFormStepPricing({ form }: { form: ProductFormState }) {
   return (
@@ -164,6 +178,73 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
             </Card>
           )}
         </>
+      )}
+
+      {/* Not offered for a gift card — see the storefront PDP's own
+          "Delivered by email, no shipping required" carve-out for the same
+          reason (no physical fulfillment to estimate). Shown regardless of
+          hasVariants/usesIngredients — a made-to-order or ready-stock
+          product can have variants or a recipe and still want this. */}
+      {!form.isGiftCard && (
+        <Card className="space-y-4">
+          <h3 className="text-sm font-semibold">Estimated Delivery Time</h3>
+          <div className="flex items-center gap-2">
+            <Toggle
+              checked={form.deliveryTimeOverride}
+              onChange={form.setDeliveryTimeOverride}
+              tooltip="Shown on the product page instead of the shop's default estimated delivery time — e.g. next day for a made-to-order item, or 30 minutes for a ready-stock item."
+            />
+            <span className="text-sm">Override the shop&apos;s estimated delivery time for this product</span>
+          </div>
+          {form.deliveryTimeOverride && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select
+                label="Delivery time"
+                value={
+                  DELIVERY_TIME_PRESETS.find(
+                    (p) => p.value === form.deliveryTimeValue && p.unit === form.deliveryTimeUnit,
+                  )?.key ?? "custom"
+                }
+                onChange={(e) => {
+                  const preset = DELIVERY_TIME_PRESETS.find((p) => p.key === e.target.value);
+                  if (preset) {
+                    form.setDeliveryTimeValue(preset.value);
+                    form.setDeliveryTimeUnit(preset.unit);
+                  }
+                }}
+              >
+                {DELIVERY_TIME_PRESETS.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.label}
+                  </option>
+                ))}
+                <option value="custom">Custom</option>
+              </Select>
+              {!DELIVERY_TIME_PRESETS.some(
+                (p) => p.value === form.deliveryTimeValue && p.unit === form.deliveryTimeUnit,
+              ) && (
+                <div className="flex gap-2">
+                  <Input
+                    label="Value"
+                    type="number"
+                    min="1"
+                    value={form.deliveryTimeValue}
+                    onChange={(e) => form.setDeliveryTimeValue(Math.max(1, Number(e.target.value)))}
+                  />
+                  <Select
+                    label="Unit"
+                    value={form.deliveryTimeUnit}
+                    onChange={(e) => form.setDeliveryTimeUnit(e.target.value as "minutes" | "hours" | "days")}
+                  >
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
       )}
 
       <ProductFeatureSection

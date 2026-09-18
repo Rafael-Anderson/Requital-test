@@ -73,6 +73,18 @@ export function useProductForm(initialProduct: Product | undefined) {
   // to an <input type="date">; "" means no expiry.
   const [isNew, setIsNew] = useState(product?.isNew ?? false);
   const [newUntil, setNewUntil] = useState(product?.newUntil ?? "");
+  // Estimated-delivery-time override (PDP "Delivered in X" line) — off by
+  // default means "use the shop default"; deliveryTimeValue/Unit only ever
+  // reach the submit payload while deliveryTimeOverride is on. A single
+  // value (From === To), not a range — ranges stay a shop-default-only
+  // capability.
+  const [deliveryTimeOverride, setDeliveryTimeOverride] = useState(
+    product?.estimatedDeliveryTimeFrom != null,
+  );
+  const [deliveryTimeValue, setDeliveryTimeValue] = useState(product?.estimatedDeliveryTimeFrom ?? 30);
+  const [deliveryTimeUnit, setDeliveryTimeUnit] = useState<"minutes" | "hours" | "days">(
+    product?.estimatedDeliveryTimeUnit ?? "minutes",
+  );
   const [costPrice, setCostPrice] = useState("");
   const [chargeTax, setChargeTax] = useState(product?.chargeTax ?? true);
   const [isCheckoutAddon, setIsCheckoutAddon] = useState(product?.isCheckoutAddon ?? false);
@@ -279,6 +291,12 @@ export function useProductForm(initialProduct: Product | undefined) {
         // "" → null on edit (explicit clear); the backend leaves the column
         // untouched only when the key is absent, so always send it.
         newUntil: newUntil || null,
+        // All three sent together (or all null) — the backend rejects a
+        // partial triple. Always sent so toggling the override off actually
+        // clears a previously-saved value on edit.
+        estimatedDeliveryTimeFrom: deliveryTimeOverride ? deliveryTimeValue : null,
+        estimatedDeliveryTimeTo: deliveryTimeOverride ? deliveryTimeValue : null,
+        estimatedDeliveryTimeUnit: deliveryTimeOverride ? deliveryTimeUnit : null,
         chargeTax,
         isCheckoutAddon,
         isGiftCard,
@@ -367,6 +385,9 @@ export function useProductForm(initialProduct: Product | undefined) {
     compareAtPrice, setCompareAtPrice,
     isNew, setIsNew,
     newUntil, setNewUntil,
+    deliveryTimeOverride, setDeliveryTimeOverride,
+    deliveryTimeValue, setDeliveryTimeValue,
+    deliveryTimeUnit, setDeliveryTimeUnit,
     costPrice, setCostPrice,
     chargeTax, setChargeTax,
     isCheckoutAddon, setIsCheckoutAddon,
