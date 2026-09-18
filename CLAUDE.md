@@ -109,6 +109,50 @@ npm test
 
 Each run seeds a fresh shop via the real backend API (`global-setup.ts` → `seed.ts`) with a timestamp-suffixed subdomain, so repeated runs never collide. Tests run serially (`workers: 1`) — the kanban spec advances the one seeded order's own status, so parallel workers would race. See `e2e/README.md` for the per-spec breakdown.
 
+## VPS deploy
+
+Production runs on a single Hostinger VPS. Connection details live in `deploy/.env` (gitignored, not committed — see `deploy/.env`'s own header comment; recreate it from this section on a fresh machine): `VPS_HOST`, `VPS_SSH_USER`, `VPS_SSH_KEY`, `VPS_APP_USER`, `VPS_APP_DIR`, `VPS_PM2_{BACKEND,ADMIN,STOREFRONT}`, `VPS_PORT_{BACKEND,ADMIN,STOREFRONT}`.
+
+- **Connecting**: SSH in as `VPS_SSH_USER` (root) with `VPS_SSH_KEY`, then run app commands as `VPS_APP_USER` (`deploy`) via `sudo -u deploy` — the app's files/processes are owned by `deploy`, not root.
+  ```bash
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246
+  ```
+- **Always check git status before pulling** — real hotfixes and real merchant-uploaded data have both been found sitting uncommitted on this box; never blindly `pull`/`reset` over it.
+  ```bash
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 \
+    'sudo -u deploy git -C /home/deploy/requital status'
+  ```
+- **Deploying**: pull, migrate (if `backend/prisma/migrations/` has new folders since the VPS's current commit — `git diff <vps-commit>..origin/main --stat -- backend/prisma/migrations/` locally tells you), `npm ci` + build whichever app(s) actually changed (diff the commit range the same way — a storefront-only PR needs no backend/admin rebuild), then `pm2 restart` just those processes.
+  ```bash
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 '
+    sudo -u deploy git -C /home/deploy/requital fetch origin main &&
+    sudo -u deploy git -C /home/deploy/requital status &&
+    sudo -u deploy git -C /home/deploy/requital pull origin main
+  '
+
+  # Backend, only if backend/ changed or a new migration folder landed:
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 '
+    cd /home/deploy/requital/backend &&
+    sudo -u deploy npm run db:migrate &&
+    sudo -u deploy npm ci &&
+    sudo -u deploy npm run build
+  '
+
+  # Admin / storefront, only whichever changed (npm ci, not npm install — see Commands):
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 '
+    cd /home/deploy/requital/admin && sudo -u deploy npm ci && sudo -u deploy npm run build
+  '
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 '
+    cd /home/deploy/requital/storefront && sudo -u deploy npm ci && sudo -u deploy npm run build
+  '
+
+  # Restart only the process(es) whose app actually rebuilt:
+  ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 \
+    'sudo -u deploy pm2 restart requital-backend requital-admin requital-storefront'
+  ```
+- **Verify after restarting**: `sudo -u deploy pm2 list` (all three should show `online` with a fresh `uptime`/low `↺` restart count, not crash-looping) and `sudo -u deploy pm2 logs <name> --lines 50 --nostream` for each restarted process, checking for a clean startup with no thrown errors.
+- See the "backend/ (NestJS)" Commands section above for the `dist/` wipe-cache gotcha (`rm -rf dist` if a build reports success but `dist/main.js` is missing) and the migration-ordering gotcha; `docs/runbook.md` for backup/restore and the per-migration rollback reference before any destructive DB operation; `deploy/README.md` for Caddy-specific deploys (TLS/routing config, a separate manual copy+reload flow, not part of this app deploy).
+
 ## Backend architecture
 
 - **Database access is plain `mysql2`, not an ORM (migrated off Prisma).** Prisma's Rust query engine crashed on the shared-hosting deploy target — CloudLinux's per-account thread cap couldn't accommodate the engine's own thread spawning. `DatabaseModule` (`src/database/`) is `@Global()`; `DatabaseService` wraps a `mysql2` pool with `.query<T>(sql, params)` (SELECT), `.execute(sql, params)` (INSERT/UPDATE/DELETE, returns `ResultSetHeader`), and `.transaction(async (conn) => {...})`. `src/db/types.ts` has a hand-maintained `<Model>Row` interface per table — no code generation, update it by hand alongside any migration that changes a column. `src/database/upsert.util.ts`'s `upsert()` wraps `INSERT ... ON DUPLICATE KEY UPDATE` for composite-key models. `src/database/mysql-errors.ts`'s `isDuplicateKeyError`/`isLockConflict` check errno 1062/1213/1205. `src/database/decimal.util.ts`'s `trimDecimal()` trims mysql2's full-precision `DECIMAL(65,30)` string output back to a plain string at API response boundaries — only needed for *unannotated*-scale decimal columns, not fixed-scale ones. The batch-load-then-assemble pattern (parallel `WHERE...IN` queries + a JS `Map` grouping step, replacing a Prisma nested `include`) recurs wherever a list endpoint fetches several relations — see `ProductsService.loadProductsWithRelations`/`PublicService.loadPublicProductsWithRelations` as the pattern to follow for a new one. TINYINT(1) and JSON columns come back already the right JS shape (real booleans, parsed objects/arrays) via the pool config — **but this is keyed off the column's real MySQL type, not "is this JSON-shaped data"**: a `LONGTEXT` column with only a `CHECK (json_valid(...))` constraint is *not* a real JSON column and does not get auto-parsed. This bug class has hit twice for real — `job.payload` (fixed by `JobsService.parseJobRow()`) and `themesettings.notificationText`/`contactNumbers`/`colors` (fixed by converting the columns to real `JSON` type, sanitizing any non-JSON-valid existing value to `NULL` *before* the `ALTER` since MySQL validates on `MODIFY COLUMN ... JSON`). If a future column follows this same LONGTEXT-plus-CHECK pattern, it needs an explicit `JSON.parse` at its own read sites — the auto-parsing guarantee doesn't extend to it for free.
