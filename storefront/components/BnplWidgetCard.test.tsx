@@ -35,17 +35,19 @@ const baseProps = {
 };
 
 describe("BnplWidgetCard", () => {
-  it("renders the card title and both providers' widgets when both are configured", () => {
+  it("renders the card title and the Tabby widget when both providers are configured", () => {
     render(<BnplWidgetCard {...baseProps} />);
     expect(screen.getByText("Buy Now Pay Later!")).toBeInTheDocument();
     expect(screen.getByText("tabby-widget")).toBeInTheDocument();
-    expect(screen.getByText("tamara-widget")).toBeInTheDocument();
   });
 
-  it("only renders the Tamara widget when only Tamara is configured", () => {
-    render(<BnplWidgetCard {...baseProps} tabbyPublicKey={null} />);
-    expect(screen.queryByText("tabby-widget")).not.toBeInTheDocument();
-    expect(screen.getByText("tamara-widget")).toBeInTheDocument();
+  // TAMARA_WIDGET_ENABLED kill switch (see BnplWidgetCard.tsx) — Tamara was
+  // never visually verified against a real key, so it must stay hidden even
+  // when a shop has tamaraPublicKey configured, not just when it's absent.
+  it("never renders the Tamara widget while TAMARA_WIDGET_ENABLED is off, even when only Tamara is configured", () => {
+    const { container } = render(<BnplWidgetCard {...baseProps} tabbyPublicKey={null} />);
+    expect(screen.queryByText("tamara-widget")).not.toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("only renders the Tabby widget when only Tabby is configured", () => {
@@ -59,23 +61,12 @@ describe("BnplWidgetCard", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("hides just the Tabby row (keeping Tamara) when Tabby's widget fails to load", async () => {
-    const user = userEvent.setup();
-    render(<BnplWidgetCard {...baseProps} />);
-
-    await user.click(screen.getByRole("button", { name: "fail tabby" }));
-
-    expect(screen.queryByText("tabby-widget")).not.toBeInTheDocument();
-    expect(screen.getByText("tamara-widget")).toBeInTheDocument();
-    expect(screen.getByText("Buy Now Pay Later!")).toBeInTheDocument();
-  });
-
-  it("hides the whole card when every configured provider's widget fails to load", async () => {
+  it("hides the whole card when Tabby's widget fails to load (Tamara already gated off)", async () => {
     const user = userEvent.setup();
     const { container } = render(<BnplWidgetCard {...baseProps} />);
 
+    expect(screen.queryByText("tamara-widget")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "fail tabby" }));
-    await user.click(screen.getByRole("button", { name: "fail tamara" }));
 
     expect(container).toBeEmptyDOMElement();
   });

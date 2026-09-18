@@ -21,6 +21,19 @@ import { useCallback, useState } from "react";
 import TabbyPromoWidget from "./TabbyPromoWidget";
 import TamaraWidget from "./TamaraWidget";
 
+// TEMPORARY kill switch — the Tamara widget shipped (PR #129) verified only
+// via doc-matching + a live-script identifier check (cdn.tamara.co/widget-v2/tamara-widget.js
+// does contain tamaraWidgetConfig/tamara-widget/tamara-summary/publicKey),
+// never an actual rendered confirmation — Tamara issues sandbox keys
+// per-merchant by email/support, no shared public test key exists, so this
+// couldn't be visually verified before merge. Forces the Tamara row to
+// behave as if unconfigured, independent of tamaraPublicKey, until a real
+// sandbox key is obtained and the widget is confirmed to actually render.
+// Flip back to true once that happens — do not remove/rebuild this gate,
+// the Tabby row and all Tamara code are untouched and intentionally still
+// present underneath it.
+const TAMARA_WIDGET_ENABLED = false;
+
 export default function BnplWidgetCard({
   tabbyPublicKey,
   tabbyMerchantCode,
@@ -43,7 +56,7 @@ export default function BnplWidgetCard({
   const onTamaraError = useCallback(() => setTamaraFailed(true), []);
 
   const showTabby = !!tabbyPublicKey && !tabbyFailed;
-  const showTamara = !!tamaraPublicKey && !tamaraFailed;
+  const showTamara = TAMARA_WIDGET_ENABLED && !!tamaraPublicKey && !tamaraFailed;
   if (!showTabby && !showTamara) return null;
 
   return (
