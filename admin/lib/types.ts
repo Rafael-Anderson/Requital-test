@@ -2061,6 +2061,10 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, Credenti
     { key: "publicKey", label: "Public Key" },
     { key: "secretKey", label: "Secret Key" },
     { key: "webhookSecret", label: "Webhook Secret" },
+    // Optional — the TabbyPromo PDP widget needs this alongside publicKey;
+    // falls back to publicKey when left blank (see backend
+    // PaymentSettingsService.resolveTabbyMerchantCode).
+    { key: "merchantCode", label: "Merchant Code (for the BNPL widget)" },
   ],
   tamara: [
     // Not used by the real checkout integration (that only needs apiToken,

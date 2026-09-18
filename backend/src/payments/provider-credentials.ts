@@ -35,14 +35,16 @@ export interface CredentialFieldDef {
 //   (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) exactly, now sourceable
 //   per-shop instead of only from the platform env var.
 // - tabby/tamara: now real integrations (see providers/tabby-payment.provider.ts
-//   / tamara-payment.provider.ts) — publicKey/secretKey/webhookSecret and
-//   publicKey/apiUrl/apiToken/notificationToken respectively, matching those
-//   providers' own env var fallbacks (TABBY_PUBLIC_KEY/TABBY_SECRET_KEY/
-//   TABBY_WEBHOOK_SECRET, TAMARA_PUBLIC_KEY/TAMARA_API_URL/TAMARA_TOKEN/
+//   / tamara-payment.provider.ts) — publicKey/secretKey/webhookSecret/
+//   merchantCode and publicKey/apiUrl/apiToken/notificationToken
+//   respectively, matching those providers' own env var fallbacks
+//   (TABBY_PUBLIC_KEY/TABBY_SECRET_KEY/TABBY_WEBHOOK_SECRET,
+//   TAMARA_PUBLIC_KEY/TAMARA_API_URL/TAMARA_TOKEN/
 //   TAMARA_NOTIFICATION_TOKEN). Was a single-field placeholder from the
-//   earlier structural-stub task. Tamara's publicKey is unused by the real
-//   checkout integration (see that field's own comment below) — it's solely
-//   for the PDP's client-side installment-promo widget.
+//   earlier structural-stub task. Tamara's publicKey and Tabby's
+//   merchantCode are unused by the real checkout integration (see each
+//   field's own comment below) — they're solely for the PDP's client-side
+//   installment-promo widgets.
 // - paypal: standard PayPal REST API OAuth2 client-credentials shape
 //   (clientId/clientSecret), plus webhookId — the Webhook ID PayPal issues
 //   per registered webhook, required by their remote
@@ -72,6 +74,13 @@ export const PROVIDER_CREDENTIAL_FIELDS: Record<
     { key: 'publicKey', label: 'Public Key' },
     { key: 'secretKey', label: 'Secret Key' },
     { key: 'webhookSecret', label: 'Webhook Secret' },
+    // Optional — the TabbyPromo on-site-messaging widget (PDP BNPL card,
+    // see PaymentSettingsService.resolveTabbyMerchantCode) needs this
+    // alongside publicKey; Tabby's own docs describe it as a distinct,
+    // currency-tied identifier, not the same value as the public key.
+    // Falls back to publicKey when left blank, so no existing shop
+    // regresses by not filling this in.
+    { key: 'merchantCode', label: 'Merchant Code (for the BNPL widget)' },
   ],
   tamara: [
     // publicKey has no bearing on the real checkout integration (that only
