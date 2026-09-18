@@ -187,7 +187,7 @@ describe('SliderDeliveryProvider', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
-    it.each([
+    it.each<[number, string]>([
       [400, 'Slider rejected the request as malformed'],
       [401, 'Slider rejected the API key configured for this shop'],
       [402, 'insufficient balance'],
@@ -246,8 +246,68 @@ describe('SliderDeliveryProvider', () => {
         }
         expect(caught).toBeInstanceOf(HttpException);
         expect((caught as HttpException).getStatus()).toBe(status);
+        // Regression: getResponse() must be a real { statusCode, message }
+        // object, not a bare string — AllExceptionsFilter ships
+        // getResponse() as-is, and a bare string loses its own .message
+        // property once JSON-parsed by the admin's apiFetch(), which falls
+        // back to the generic "Request failed (N)" instead of ever showing
+        // this message. See ManageDeliveryModal's "Create Delivery" bug.
+        const response = (caught as HttpException).getResponse();
+        expect(typeof response).toBe('object');
+        expect(response).toMatchObject({
+          statusCode: status,
+          message: expect.stringMatching(new RegExp(messageFragment, 'i')),
+        });
       },
     );
+
+    it("a real Slider 422 (e.g. a dropoff address outside the account's serviceable area) surfaces its own detail message, not just the generic category text", async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        jsonResponse(422, {
+          message:
+            'dropoff address is outside the serviceable area for this account_id',
+        }),
+      );
+
+      const provider = new SliderDeliveryProvider();
+      let caught: unknown;
+      try {
+        await provider.createDelivery({
+          orderId: 13,
+          vehicleType: 'bike',
+          scheduleAt: null,
+          pickup: {
+            address: 'Outlet',
+            latitude: 25.2,
+            longitude: 55.3,
+            contactNumber: '1',
+          },
+          dropoff: {
+            address: 'Al Taawun, Sharjah, Dubai',
+            latitude: 25.35,
+            longitude: 55.4,
+            contactNumber: '2',
+          },
+          credentials,
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(HttpException);
+      const response = (caught as HttpException).getResponse() as {
+        statusCode: number;
+        message: string;
+      };
+      expect(response.statusCode).toBe(422);
+      // Both the category text AND Slider's own real detail must be present
+      // — this is the exact shape ManageDeliveryModal's dispatchError now
+      // renders instead of "Request failed (422)".
+      expect(response.message).toContain('validation failed');
+      expect(response.message).toContain(
+        'dropoff address is outside the serviceable area for this account_id',
+      );
+    });
 
     it('a 500 that never recovers (two failed attempts) still surfaces as a 500', async () => {
       global.fetch = jest

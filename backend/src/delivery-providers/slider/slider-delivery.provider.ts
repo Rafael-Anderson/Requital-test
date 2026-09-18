@@ -94,7 +94,18 @@ async function sliderFetch<T>(
     } catch {
       // Non-JSON error body — the generic message above is all we get.
     }
-    throw new HttpException(`${message}${detail}`, res.status);
+    // Passing a bare string here would make HttpException#getResponse()
+    // return that string verbatim (Nest only wraps it into
+    // { statusCode, message } for a string constructor arg on its own
+    // built-in subclasses like BadRequestException, not on the base
+    // HttpException) — AllExceptionsFilter ships that raw string as the
+    // JSON body, and the admin's apiFetch() (which reads `body?.message`)
+    // silently falls back to "Request failed (N)". An explicit object body
+    // is what actually gets the real message to the merchant.
+    throw new HttpException(
+      { statusCode: res.status, message: `${message}${detail}` },
+      res.status,
+    );
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
