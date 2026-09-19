@@ -59,6 +59,10 @@ export default function StoreConfigurationPage() {
   const [birthdayDiscountEnabled, setBirthdayDiscountEnabled] = useState(false);
   const [customerSurveyEnabled, setCustomerSurveyEnabled] = useState(false);
   const [dynamicThemeBuilderEnabled, setDynamicThemeBuilderEnabled] = useState(false);
+  // Moved here from Business Information: it is read by nothing, so it
+  // belongs with the other Coming Soon preferences rather than beside the
+  // real email-notification toggle that does send mail.
+  const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
   const [disableStoreCart, setDisableStoreCart] = useState(false);
   const [cartDisabledMode, setCartDisabledMode] = useState<"buy_now" | "contact_to_order">("buy_now");
   const [saving, setSaving] = useState(false);
@@ -84,6 +88,7 @@ export default function StoreConfigurationPage() {
       setBirthdayDiscountEnabled(s.birthdayDiscountEnabled);
       setCustomerSurveyEnabled(s.customerSurveyEnabled);
       setDynamicThemeBuilderEnabled(s.dynamicThemeBuilderEnabled);
+      setNotifyWhatsapp(s.notifyWhatsapp);
       setDisableStoreCart(s.disableStoreCart);
       setCartDisabledMode(s.cartDisabledMode);
     });
@@ -110,6 +115,7 @@ export default function StoreConfigurationPage() {
         birthdayDiscountEnabled,
         customerSurveyEnabled,
         dynamicThemeBuilderEnabled,
+        notifyWhatsapp,
         disableStoreCart,
         cartDisabledMode,
       });
@@ -217,16 +223,6 @@ export default function StoreConfigurationPage() {
                     checked={showCollectionMenu}
                     onChange={(e) => setShowCollectionMenu(e.target.checked)}
                   />
-                  <Checkbox
-                    label="Allow pre-orders"
-                    checked={allowPreOrders}
-                    onChange={(e) => setAllowPreOrders(e.target.checked)}
-                  />
-                  <Checkbox
-                    label="Customer confirmation required for order"
-                    checked={customerConfirmationRequired}
-                    onChange={(e) => setCustomerConfirmationRequired(e.target.checked)}
-                  />
                 </div>
               </div>
             </Card>
@@ -251,21 +247,11 @@ export default function StoreConfigurationPage() {
                   checked={externalDeliveryEnabled}
                   onChange={(e) => setExternalDeliveryEnabled(e.target.checked)}
                 />
-                <Checkbox
-                  label='"As soon as possible" delivery option enabled'
-                  checked={asapDeliveryEnabled}
-                  onChange={(e) => setAsapDeliveryEnabled(e.target.checked)}
-                />
-                <Checkbox
-                  label="Enable delivery calendar / timeslots"
-                  checked={deliveryCalendarEnabled}
-                  onChange={(e) => setDeliveryCalendarEnabled(e.target.checked)}
-                />
               </div>
             </Card>
 
             <Card>
-              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Engagement</h3>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Messaging</h3>
               <div className="space-y-3">
                 <p className="text-xs text-text-faint">
                   The WhatsApp floating button moved to{" "}
@@ -274,16 +260,6 @@ export default function StoreConfigurationPage() {
                   </Link>
                   , alongside your WhatsApp number and notification settings.
                 </p>
-                <div>
-                  <Checkbox
-                    label="Birthday discount enabled"
-                    checked={birthdayDiscountEnabled}
-                    onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
-                  />
-                  <p className="text-xs text-text-faint mt-1">
-                    Saved as a preference only. Not yet active. No discount engine is connected to it yet.
-                  </p>
-                </div>
               </div>
             </Card>
 
@@ -342,11 +318,43 @@ export default function StoreConfigurationPage() {
                 Saves a preference now, but the feature behind it doesn&apos;t exist yet. Toggling has no effect
                 until it&apos;s built.
               </p>
-              <Checkbox
-                label="Dynamic theme builder enabled"
-                checked={dynamicThemeBuilderEnabled}
-                onChange={(e) => setDynamicThemeBuilderEnabled(e.target.checked)}
-              />
+              <div className="space-y-2">
+                <Checkbox
+                  label="Allow pre-orders"
+                  checked={allowPreOrders}
+                  onChange={(e) => setAllowPreOrders(e.target.checked)}
+                />
+                <Checkbox
+                  label="Allow WhatsApp Notifications"
+                  checked={notifyWhatsapp}
+                  onChange={(e) => setNotifyWhatsapp(e.target.checked)}
+                />
+                <Checkbox
+                  label='"As soon as possible" delivery option enabled'
+                  checked={asapDeliveryEnabled}
+                  onChange={(e) => setAsapDeliveryEnabled(e.target.checked)}
+                />
+                <Checkbox
+                  label="Birthday discount enabled"
+                  checked={birthdayDiscountEnabled}
+                  onChange={(e) => setBirthdayDiscountEnabled(e.target.checked)}
+                />
+                <Checkbox
+                  label="Customer confirmation required for order"
+                  checked={customerConfirmationRequired}
+                  onChange={(e) => setCustomerConfirmationRequired(e.target.checked)}
+                />
+                <Checkbox
+                  label="Dynamic theme builder enabled"
+                  checked={dynamicThemeBuilderEnabled}
+                  onChange={(e) => setDynamicThemeBuilderEnabled(e.target.checked)}
+                />
+                <Checkbox
+                  label="Enable delivery calendar / timeslots"
+                  checked={deliveryCalendarEnabled}
+                  onChange={(e) => setDeliveryCalendarEnabled(e.target.checked)}
+                />
+              </div>
             </Card>
           </div>
         </div>

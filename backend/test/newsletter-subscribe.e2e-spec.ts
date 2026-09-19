@@ -53,8 +53,7 @@ describe('Newsletter subscribe (e2e)', () => {
         subdomain: slug,
       })
       .expect(201);
-    void body<AuthResponse>(signup);
-    return { slug };
+    return { slug, token: body<AuthResponse>(signup).accessToken };
   }
 
   it('subscribes an email and rejects a duplicate with 409', async () => {
@@ -85,6 +84,68 @@ describe('Newsletter subscribe (e2e)', () => {
       .post(`/public/${slug}/newsletter-subscribe`)
       .send({ email: 'not-an-email' })
       .expect(400);
+  });
+
+  // The read side (GET /newsletter-subscribers) landed 2026-09-19; until then
+  // these rows were written and never read by anything.
+  it('lists what the public widget captured, and only for the owning shop', async () => {
+    const shopA = await setupShop('e2e-newsletter-list-a');
+    const shopB = await setupShop('e2e-newsletter-list-b');
+    const email = `list-${runId}@example.com`;
+
+    await request(app.getHttpServer())
+      .post(`/public/${shopA.slug}/newsletter-subscribe`)
+      .send({ email })
+      .expect(201);
+
+    const mine = await request(app.getHttpServer())
+      .get('/newsletter-subscribers')
+      .set('Authorization', `Bearer ${shopA.token}`)
+      .expect(200);
+    const minePage = body<{
+      data: { email: string; source: string }[];
+      total: number;
+    }>(mine);
+    expect(minePage.data.map((r) => r.email)).toContain(email);
+    expect(minePage.data[0].source).toBe('newsletter_widget');
+    expect(minePage.total).toBeGreaterThanOrEqual(1);
+
+    // The other shop's admin must not see it - these are contactable email
+    // addresses, the most directly exfiltratable thing in the schema.
+    const theirs = await request(app.getHttpServer())
+      .get('/newsletter-subscribers')
+      .set('Authorization', `Bearer ${shopB.token}`)
+      .expect(200);
+    expect(
+      body<{ data: { email: string }[] }>(theirs).data.map((r) => r.email),
+    ).not.toContain(email);
+  });
+
+  it('filters the subscriber list by the search term', async () => {
+    const shop = await setupShop('e2e-newsletter-search');
+    const wanted = `needle-${runId}@example.com`;
+    const other = `haystack-${runId}@example.com`;
+    for (const email of [wanted, other]) {
+      await request(app.getHttpServer())
+        .post(`/public/${shop.slug}/newsletter-subscribe`)
+        .send({ email })
+        .expect(201);
+    }
+
+    const res = await request(app.getHttpServer())
+      .get('/newsletter-subscribers?search=needle')
+      .set('Authorization', `Bearer ${shop.token}`)
+      .expect(200);
+    const emails = body<{ data: { email: string }[] }>(res).data.map(
+      (r) => r.email,
+    );
+    expect(emails).toEqual([wanted]);
+  });
+
+  it('requires authentication to read the subscriber list', async () => {
+    await request(app.getHttpServer())
+      .get('/newsletter-subscribers')
+      .expect(401);
   });
 
   it('the same email can subscribe independently at two different shops', async () => {

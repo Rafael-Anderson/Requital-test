@@ -4,6 +4,7 @@ import type {
 } from './error-tracking.interface';
 import { redact } from '../logging/redact';
 import { createLogger } from '../logging/logger';
+import { buildWebhookBody } from './webhook-payload';
 
 const logger = createLogger('ErrorTracking');
 
@@ -27,7 +28,9 @@ export class HttpErrorTrackingProvider implements ErrorTrackingProvider {
     fetch(this.webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      // Slack and Discord incoming webhooks reject the generic object; see
+      // webhook-payload.ts. Any other destination still gets it verbatim.
+      body: JSON.stringify(buildWebhookBody(this.webhookUrl, payload)),
     }).catch((err: unknown) => {
       logger.warn('failed to deliver captured exception to error-tracking webhook', {
         error: err instanceof Error ? err.message : String(err),

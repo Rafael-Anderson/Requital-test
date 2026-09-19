@@ -19,6 +19,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
+import CustomersTabs from "@/components/CustomersTabs";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -117,8 +118,9 @@ export default function CustomersPage() {
   return (
     <PageShell>
       <BackButton href="/" />
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Customers</h1>
+      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Customers</h1>
+      <CustomersTabs />
+      <div className="flex items-center justify-end mb-6 flex-wrap gap-2">
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
           <input

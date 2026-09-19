@@ -115,13 +115,89 @@ Measured, not estimated, from the 2026-09-19 drill on a 136 KB compressed dump:
 
 - **RPO (worst-case data loss): up to 24 hours,** plus however long a failed run goes unnoticed. One scheduled snapshot a day and no binlog shipping means everything written since the last 03:00 Gulf-time dump is gone. A merchant placing orders at 22:00 loses a full day's orders in a total-loss scenario.
 - **RTO (time to a serving database): a few minutes** — 3 seconds of `mysql` restore, plus fetching the dump from object storage (seconds at this size), plus the pm2 stop/start and a look at the logs. The restore itself is not the bottleneck at this data size and will not be for a long time; deciding to restore is.
-- **Failure detection is the weak link and is not solved here.** A failed run writes `FAILED:` to `/home/deploy/backups/backup.log` and exits non-zero, but nothing pages anyone — cron mail is not configured on this box. Until the error-tracking webhook work lands (audit item OPS-2), "are backups working?" is answered by reading that log, not by being told. Check it after any VPS work:
+- **Failure detection depends on one env var being set.** A failed run writes `FAILED:` to `/home/deploy/backups/backup.log`, exits non-zero, and posts to `ERROR_TRACKING_WEBHOOK_URL` if that is configured in `backend/.env` (see **Error alerting** below). Cron mail is not configured on this box, so with that var unset the log is the only signal. Check it after any VPS work:
   ```bash
   ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> 'tail -20 /home/deploy/backups/backup.log'
   ```
 - Retention gives **14 daily + 8 weekly** restore points, so the oldest recoverable state is roughly two months back.
 
 Not covered by this, deliberately: uploaded images and other files on the VPS disk (the app still uses local storage, not S3, for uploads), and point-in-time recovery between snapshots.
+
+## Error alerting
+
+Two independent things can fail quietly on this box: the API throwing 5xx, and the nightly backup job. Both now post to **one** webhook URL, set once.
+
+### The env var
+
+`ERROR_TRACKING_WEBHOOK_URL` in **`/home/deploy/requital/backend/.env`** on the VPS (the same file that holds `DATABASE_URL`). Optional: unset means the app logs unhandled exceptions to its own structured log and nothing else, which is the behaviour this had until 2026-09-19.
+
+```bash
+ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST>
+sudo -u deploy tee -a /home/deploy/requital/backend/.env <<'EOF'
+ERROR_TRACKING_WEBHOOK_URL=https://hooks.slack.com/services/T000/B000/xxxxxxxx
+EOF
+sudo -u deploy pm2 restart requital-backend
+```
+
+The restart is required for the API half: `resolveErrorTrackingProvider()` reads the var once at bootstrap. The backup job reads the file on every run, so it needs no restart.
+
+### Getting a URL, whichever chat app you already use
+
+**Slack** — api.slack.com/apps → Create New App → From scratch → pick the workspace → Incoming Webhooks → toggle on → "Add New Webhook to Workspace" → choose the channel. Copy the `https://hooks.slack.com/services/...` URL. No paid plan, no marketplace review, works on a free workspace.
+
+**Discord** — Server Settings → Integrations → Webhooks → New Webhook → pick the channel → Copy Webhook URL. You get `https://discord.com/api/webhooks/...`.
+
+Use a channel someone actually watches. A webhook posting into a muted channel is the same as no webhook.
+
+### What gets sent
+
+`HttpErrorTrackingProvider` builds one payload per captured error:
+
+```json
+{
+  "message": "Cannot read properties of undefined (reading id)",
+  "stack": "TypeError: ...\n    at OrdersService.confirm (...)",
+  "requestId": "a1b2c3d4",
+  "shopId": 12,
+  "route": "/orders/:id/status",
+  "method": "PATCH",
+  "capturedAt": "2026-09-19T12:00:00.000Z"
+}
+```
+
+Message and stack both go through `redact()` first. There is deliberately **no request body** in the payload (see `error-tracking.interface.ts` — a body can carry a password or payment field, so the interface has nowhere to put one).
+
+Slack and Discord both reject that object: Slack needs a `text` key and answers `invalid_payload`, Discord needs `content` and answers 400. So `webhook-payload.ts` detects those two destinations **from the URL hostname** and sends a rendered message instead:
+
+```
+🚨 Requital backend error
+PATCH /orders/:id/status  |  shop 12  |  req a1b2c3d4
+Cannot read properties of undefined (reading id)
+```
+```
+    at OrdersService.confirm (/app/dist/orders/orders.service.js:214:33)
+    ...
+```
+
+Any **other** host still receives the raw JSON object, unchanged — that is what Sentry's generic ingestion, PagerDuty's Events API or a custom collector want, and nothing about pointing this at one of those has changed. A Slack webhook proxied through your own domain is the case hostname detection cannot see; it would fall back to the JSON shape, which is the safe direction to be wrong in.
+
+### What triggers a send
+
+Only a genuinely unhandled exception or a 5xx (`AllExceptionsFilter`). A routine 400/401/404 is expected traffic and is not an incident, so it is never forwarded. Delivery is fire-and-forget: a failed POST to the webhook logs a warning and never affects the request that triggered it.
+
+The nightly backup (`tools/backup-cron.sh`) reads the same var out of `backend/.env` and posts a one-line failure message through the same Slack/Discord/generic branch. It fires only on a `FAILED:` path, never on a successful run, and `curl` is capped at 10 seconds so a hung webhook cannot hang the cron job. A missing off-host bucket is a `WARNING`, not a failure, so it does **not** alert — that state is visible in `backup.log` and is expected until the bucket exists.
+
+### Checking it works
+
+There is no "send test alert" command. The honest test is to point it at your own channel and confirm the next real 5xx shows up; failing that, a manual POST proves the URL itself:
+
+```bash
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"text":"Requital webhook test","content":"Requital webhook test"}' \
+  "$ERROR_TRACKING_WEBHOOK_URL"
+```
+
+(That test payload carries both keys on purpose so the one command works against Slack or Discord. The app itself always sends exactly one.)
 
 ## Migration rollback reference
 
