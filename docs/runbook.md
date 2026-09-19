@@ -4,52 +4,128 @@ Phase 4 (ops foundations). Covers backup/restore and the per-migration rollback 
 
 ## Backup
 
-`tools/backup-db.sh` is a runnable `mysqldump`-based backup script. It reads `DATABASE_URL` (the same connection string the app itself uses — see `common/env-validation.ts`), parses out host/port/user/password/db, and writes a gzip-compressed SQL dump.
+### What runs, and when
+
+`/etc/cron.d/requital-backup` on the production VPS runs `tools/backup-cron.sh` **daily at 23:00 UTC = 03:00 Asia/Dubai** as the `deploy` user, appending one line per run to `/home/deploy/backups/backup.log`. The live cron file is mirrored in the repo at **`deploy/requital-backup.cron`** (same convention as `deploy/Caddyfile`); install or update it with:
 
 ```bash
-DATABASE_URL="mysql://user:pass@host:port/dbname" tools/backup-db.sh [output-dir]
-# output-dir defaults to ./backups
+scp deploy/requital-backup.cron root@<VPS_HOST>:/etc/cron.d/requital-backup
+ssh root@<VPS_HOST> 'chown root:root /etc/cron.d/requital-backup && chmod 644 /etc/cron.d/requital-backup'
 ```
 
-- Uses `--single-transaction` (a consistent snapshot without locking tables — every table in this schema is InnoDB) and `--routines --triggers` (there are none today, but this makes the dump complete if any are added later).
-- The password is passed to `mysqldump` via the `MYSQL_PWD` environment variable, not a `--password=...` flag, so it never appears in `ps`/shell history.
-- Output filename: `requital-<dbname>-<YYYYMMDDHHMMSS>.sql.gz`.
-- Verified against the local dev database while writing this runbook: produces a valid gzip archive containing a full `mysqldump` (confirmed 65 `CREATE TABLE` statements — every table plus `_prisma_migrations`).
+The live filename must have **no extension** — cron ignores anything in `/etc/cron.d` whose name contains a dot. Plain cron, not a systemd timer: `cron` is already active on this box, nothing else here is a systemd unit (the app itself runs under PM2), and a `/etc/cron.d` file is the one shape that is both greppable on the box and diffable in the repo.
 
-Run this on a schedule (cron, a CI scheduled workflow, or your hosting provider's own managed-backup feature if using one) and store the output somewhere durable and access-controlled (not committed to the repo, not left on the app server's own disk only) — this script only produces the artifact, it doesn't handle retention/off-host storage, which is an infra decision for wherever this actually deploys.
+03:00 Gulf time is the merchants' overnight trough, not ours — the VPS clock is UTC, so the crontab hour is 23.
+
+### What each run does
+
+1. `tools/backup-db.sh` dumps the database (`mysqldump`, see below) into `/home/deploy/backups`.
+2. `gzip -t` on the result — a truncated dump is caught here rather than at restore time.
+3. `rclone copy` of every `*.sql.gz` in that directory to `<bucket>/daily/`. Copying the whole directory rather than only tonight's file means a run whose upload failed is caught up by the next one, at no cost (rclone skips what is already there).
+4. On Sundays only, tonight's dump is **also** copied to `<bucket>/weekly/`.
+5. `rclone delete --min-age 14d <bucket>/daily` and `--min-age 56d <bucket>/weekly`.
+6. Only then, local dumps older than 7 days are deleted. **A dump is never deleted from the only place it exists** — if the off-host copy failed, the run exits non-zero and prunes nothing.
+
+Every failure path logs `FAILED: <reason>` and exits non-zero. If `BACKUP_S3_BUCKET` is not configured the run logs `WARNING:` three times, keeps the local dump, prunes nothing, and exits 0.
+
+### Credentials
+
+The DB password is **not** duplicated anywhere: `backup-cron.sh` reads `DATABASE_URL` out of the app's own `backend/.env`, so a rotation is a one-file change.
+
+Off-host credentials live in **`/home/deploy/.requital-backup.env`** (owned by `deploy`, mode 600, not in the repo), in the same env-var shape as the app's storage provider (`backend/src/storage/storage-provider.factory.ts`) but under deliberately separate `BACKUP_S3_*` names, because this is a **separate bucket with its own key** — the app must not be able to delete the backups, and a leak on either side must not reach the other:
+
+```bash
+BACKUP_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+BACKUP_S3_BUCKET=requital-db-backups
+BACKUP_S3_REGION=auto            # optional, defaults to auto
+BACKUP_S3_ACCESS_KEY_ID=...
+BACKUP_S3_SECRET_ACCESS_KEY=...
+BACKUP_S3_PROVIDER=Other         # optional; rclone's S3 provider hint
+```
+
+`rclone` (apt, already installed on the VPS) does the transfer, configured entirely from the environment — there is no `rclone.conf`, and no credential ever appears in `ps`. The key needs Put/List/Delete on that one bucket and nothing else; it does **not** need CreateBucket (`NO_CHECK_BUCKET` is set).
+
+`BACKUP_S3_TYPE` exists only to point the same code path at a local directory (`BACKUP_S3_TYPE=local`, bucket = a path) for a dry run without touching real object storage. Leave it unset in production.
+
+### The dump itself
+
+`tools/backup-db.sh` is unchanged in shape: it parses `DATABASE_URL`, writes `requital-<dbname>-<YYYYMMDDHHMMSS>.sql.gz`, passes the password via `MYSQL_PWD` (never a `--password=` flag, so it stays out of `ps`/shell history), and uses `--single-transaction` (consistent snapshot, no table locks — every table is InnoDB) plus `--routines --triggers` (none exist today; this keeps the dump complete if any are added).
+
+- **`--no-tablespaces` was added 2026-09-19.** The app's DB user (`shop_app`) has no `PROCESS` privilege, so without it every otherwise-successful run printed `mysqldump: Error: 'Access denied; you need (at least one of) the PROCESS privilege(s)' ... when trying to dump tablespaces` to stderr while still exiting 0 with a complete dump. Verified byte-identical output with and without the flag against production. It matters now that this runs unattended: a job that prints `Error:` every night is a job nobody can read a real failure out of.
+- Verified against production 2026-09-19: 76 `CREATE TABLE` statements, including `_migrations` (the tracking table `scripts/migrate.ts` uses). There is no `_prisma_migrations` table any more.
+- Run it by hand any time: `DATABASE_URL="mysql://user:pass@host:port/dbname" tools/backup-db.sh [output-dir]` (output-dir defaults to `./backups`).
 
 ## Restore
 
-Restoring is the inverse of the backup: decompress and pipe into `mysql`. There is no separate script for this — it's a single, uneventful command, parameterized the same way:
+### Drill (restore into a scratch database)
+
+`tools/restore-db.sh` restores a dump into a **scratch** database and then prints row counts, so the drill verifies itself. Run it after any change to the backup path, and periodically regardless — a backup nobody has restored is a hypothesis, not a backup.
 
 ```bash
-# 1. Confirm the target database is the one you actually intend to overwrite.
-#    This is destructive — every existing row in every table is replaced.
-echo "$DATABASE_URL"
-
-# 2. Restore. Same DATABASE_URL shape as the backup script; MYSQL_PWD keeps
-#    the password out of shell history the same way.
-url="${DATABASE_URL#mysql://}"; credentials="${url%%@*}"; rest="${url#*@}"
-DB_USER="${credentials%%:*}"; DB_PASSWORD="${credentials#*:}"
-hostport="${rest%%/*}"; DB_NAME="${rest#*/}"
-DB_HOST="${hostport%%:*}"; DB_PORT="${hostport#*:}"
-
-MYSQL_PWD="$DB_PASSWORD" gunzip -c requital-<dbname>-<timestamp>.sql.gz \
-  | mysql --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" "$DB_NAME"
-
-# 3. Reconcile Prisma's own migration bookkeeping with what the restored
-#    dump actually contains — the dump includes _prisma_migrations as a
-#    real table, so this is usually a no-op, but always confirm:
-cd backend && npx prisma migrate status
+ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> 'sudo -u deploy bash -lc "
+  DBURL=\$(grep -m1 ^DATABASE_URL= /home/deploy/requital/backend/.env | cut -d= -f2-)
+  DUMP=\$(ls -t /home/deploy/backups/*.sql.gz | head -1)
+  DATABASE_URL=\$DBURL RESTORE_DATABASE_URL=\${DBURL%/*}/shop_manager_drill \
+    /home/deploy/requital/tools/restore-db.sh \$DUMP
+"'
 ```
 
-If `prisma migrate status` reports pending migrations after a restore (the dump predates some migrations that have since been added), run `npx prisma migrate deploy` to bring the restored database up to the current schema — this is exactly the same command CI uses against a clean database, and works identically against a freshly-restored one.
+- The target database is created if absent. `shop_app` was granted rights on **`shop_manager_drill`** specifically (2026-09-19, `GRANT ALL PRIVILEGES ON \`shop_manager_drill\`.* TO \`shop_app\`@\`localhost\``) so the drill needs no root MySQL access; it holds no rights on any other database, so a typo'd target name fails instead of creating something.
+- The script **refuses** to run when the target database name matches the one the app is configured to use, unless `ALLOW_PRODUCTION_RESTORE=yes` is also set. That is the one deliberate difference between a drill and the real thing.
+- Compare its output against production before calling the drill passed:
+  ```bash
+  MYSQL_PWD=... mysql --table -u shop_app -h 127.0.0.1 shop_manager -e "
+    SELECT (SELECT COUNT(*) FROM \`_migrations\`) migrations, (SELECT COUNT(*) FROM \`shop\`) shops,
+           (SELECT COUNT(*) FROM \`order\`) orders, (SELECT COUNT(*) FROM \`product\`) products;"
+  ```
+- Drop the scratch database when finished (the script prints the command).
+
+**Last drill: 2026-09-19.** A 136 KB dump restored in **3 seconds**; `tables/migrations/shops/outlets/orders/customers/products` came back `76/97/11/11/13/3/32`, identical to production, newest migration `20260917120000_product_estimated_delivery_time_override`, and the first four `shop` rows matched by name/subdomain.
+
+### The real thing (restoring over production)
+
+```bash
+# 1. Confirm what you are about to overwrite. This is destructive — every table
+#    in the dump is dropped and recreated.
+echo "$DATABASE_URL"
+
+# 2. Stop the app first, so nothing writes into a half-restored schema.
+sudo -u deploy pm2 stop requital-backend
+
+# 3. Restore. Same script, same parsing, with the guard explicitly waived.
+ALLOW_PRODUCTION_RESTORE=yes RESTORE_DATABASE_URL="$DATABASE_URL" \
+  /home/deploy/requital/tools/restore-db.sh /home/deploy/backups/requital-<db>-<timestamp>.sql.gz
+
+# 4. Reconcile the migration state. The dump contains `_migrations` as a real
+#    table, so this is normally a no-op — but if the dump predates migrations
+#    that have since landed, this applies them.
+cd /home/deploy/requital/backend && sudo -u deploy npm run db:migrate
+
+# 5. Start the app and check it.
+sudo -u deploy pm2 start requital-backend && sudo -u deploy pm2 logs requital-backend --lines 50 --nostream
+```
+
+**There is no Prisma here.** Migrations are hand-authored SQL applied by `npm run db:migrate` (`backend/scripts/migrate.ts`), tracked in a plain `_migrations` table — `npx prisma migrate status` / `prisma migrate deploy` do not exist in this project and never should be run against it (this section used to say otherwise; corrected 2026-09-19).
 
 **Never** restore into a database with `--shadow-database-url` involved anywhere in the same session — see CLAUDE.md's existing warning; that flag is unrelated to restore but has previously caused real data loss in this project when confused with a normal connection string.
 
+### RPO / RTO — what this setup actually gives us
+
+Measured, not estimated, from the 2026-09-19 drill on a 136 KB compressed dump:
+
+- **RPO (worst-case data loss): up to 24 hours,** plus however long a failed run goes unnoticed. One scheduled snapshot a day and no binlog shipping means everything written since the last 03:00 Gulf-time dump is gone. A merchant placing orders at 22:00 loses a full day's orders in a total-loss scenario.
+- **RTO (time to a serving database): a few minutes** — 3 seconds of `mysql` restore, plus fetching the dump from object storage (seconds at this size), plus the pm2 stop/start and a look at the logs. The restore itself is not the bottleneck at this data size and will not be for a long time; deciding to restore is.
+- **Failure detection is the weak link and is not solved here.** A failed run writes `FAILED:` to `/home/deploy/backups/backup.log` and exits non-zero, but nothing pages anyone — cron mail is not configured on this box. Until the error-tracking webhook work lands (audit item OPS-2), "are backups working?" is answered by reading that log, not by being told. Check it after any VPS work:
+  ```bash
+  ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> 'tail -20 /home/deploy/backups/backup.log'
+  ```
+- Retention gives **14 daily + 8 weekly** restore points, so the oldest recoverable state is roughly two months back.
+
+Not covered by this, deliberately: uploaded images and other files on the VPS disk (the app still uses local storage, not S3, for uploads), and point-in-time recovery between snapshots.
+
 ## Migration rollback reference
 
-This project's migrations are hand-authored `migration.sql` files applied via `prisma migrate deploy` (see CLAUDE.md) — there is no `prisma migrate dev`-generated down migration for any of them, and Prisma itself has no built-in "rollback" command. The table below is the manual down-path for every migration currently in the repo, so a rollback is a deliberate, reviewed action rather than a guess made under pressure.
+This project's migrations are hand-authored `migration.sql` files applied by `npm run db:migrate` (`backend/scripts/migrate.ts`, see CLAUDE.md) — nothing generates a down migration for any of them, and the runner has no "rollback" command. The table below is the manual down-path for every migration currently in the repo, so a rollback is a deliberate, reviewed action rather than a guess made under pressure.
 
 **Reversibility key:**
 - **Schema-only** — a plain `ADD COLUMN`/`CREATE TABLE` with nothing else; reverting is a plain `DROP COLUMN`/`DROP TABLE`. Data loss is limited to whatever was actually stored in the reverted column/table since it was added — there is no way to reconstruct it from the database alone (only from a backup taken before the revert).
