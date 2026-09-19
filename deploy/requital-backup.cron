@@ -1,0 +1,20 @@
+# Nightly database backup. Mirror of the live /etc/cron.d/requital-backup on
+# the VPS — same "the repo holds a copy of the box's config" convention as
+# deploy/Caddyfile. Install with:
+#
+#   scp deploy/requital-backup.cron root@<VPS_HOST>:/etc/cron.d/requital-backup
+#   ssh root@<VPS_HOST> 'chown root:root /etc/cron.d/requital-backup &&
+#                        chmod 644 /etc/cron.d/requital-backup'
+#
+# The live filename has no extension on purpose: cron ignores anything in
+# /etc/cron.d whose name contains a dot.
+#
+# 23:00 UTC = 03:00 Asia/Dubai. The VPS clock is UTC and the merchants this
+# serves are UAE-timezone, so this is their overnight trough, not ours.
+#
+# Runs as `deploy` (not root): it owns the app directory and backend/.env, so
+# the job needs no privilege it cannot get by owning its own files.
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+0 23 * * * deploy /home/deploy/requital/tools/backup-cron.sh >> /home/deploy/backups/backup.log 2>&1

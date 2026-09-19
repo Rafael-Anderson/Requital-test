@@ -56,6 +56,14 @@ echo "Backing up database '$DB_NAME' from $DB_HOST:$DB_PORT to $OUTPUT_FILE ..."
 # table in this schema is InnoDB, the Prisma/MySQL default).
 # --set-gtid-purged=OFF: avoids a GTID mismatch error restoring into a
 # server with replication/GTIDs configured differently than the source.
+# --no-tablespaces: the app's DB user has no PROCESS privilege, so without
+# this flag mysqldump printed "Error: 'Access denied; you need (at least
+# one of) the PROCESS privilege(s)' ... when trying to dump tablespaces" on
+# every otherwise-successful run (exit code still 0, dump still complete).
+# Verified byte-identical output with and without it against production -
+# nothing in this schema uses an explicit tablespace. It matters because this
+# now runs unattended: a job that prints "Error:" every night is a job
+# nobody can read a real failure out of.
 MYSQL_PWD="$DB_PASSWORD" mysqldump \
   --host="$DB_HOST" \
   --port="$DB_PORT" \
@@ -64,6 +72,7 @@ MYSQL_PWD="$DB_PASSWORD" mysqldump \
   --routines \
   --triggers \
   --set-gtid-purged=OFF \
+  --no-tablespaces \
   "$DB_NAME" | gzip > "$OUTPUT_FILE"
 
 echo "Backup written to $OUTPUT_FILE"
