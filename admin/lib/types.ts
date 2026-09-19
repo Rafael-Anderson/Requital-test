@@ -321,6 +321,23 @@ export interface CustomerListItem {
   lastOrderDate: string | null;
 }
 
+export interface NewsletterSubscriber {
+  id: number;
+  email: string;
+  // Always 'newsletter_widget' today - the storefront widget is the only
+  // writer. Surfaced anyway so a second capture point (a checkout opt-in,
+  // an import) is distinguishable the day one exists.
+  source: string;
+  createdAt: string;
+}
+
+export interface PaginatedNewsletterSubscribers {
+  data: NewsletterSubscriber[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface PaginatedCustomers {
   data: CustomerListItem[];
   page: number;

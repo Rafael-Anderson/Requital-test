@@ -27,7 +27,20 @@ export class PlatformAdminService {
     private readonly platformAuditLogService: PlatformAuditLogService,
   ) {}
 
-  async listShops(query: { q?: string; status?: ShopStatus }) {
+  // Paginated because this is the one platform list that was genuinely
+  // unbounded, and a dev database with 26k leftover shops (repeated e2e runs)
+  // has crashed a verification script trying to enumerate it. Returns the
+  // same { data, page, pageSize, total } envelope CustomersService.findAll
+  // does. The two sibling lists (webhook-log, audit-log) were already
+  // hard-capped at 100 rows server-side, so neither can produce this.
+  async listShops(query: {
+    q?: string;
+    status?: ShopStatus;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
     const conditions: string[] = [];
     const params: QueryParam[] = [];
     if (query.q) {
@@ -46,10 +59,19 @@ export class PlatformAdminService {
               (SELECT MAX(o.createdAt) FROM \`order\` o WHERE o.shopId = s.id) AS lastOrderAt
        FROM shop s
        ${where}
-       ORDER BY s.createdAt DESC`,
+       ORDER BY s.createdAt DESC
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
+
+    // Counted without the two correlated order subqueries the page itself
+    // needs - COUNT(*) over `shop` alone, so the total does not pay for them.
+    const totalRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM shop s ${where}`,
       params,
     );
-    return rows.map((r) => ({
+
+    const data = rows.map((r) => ({
       id: r.id as number,
       name: r.name as string,
       subdomain: r.subdomain as string,
@@ -59,6 +81,8 @@ export class PlatformAdminService {
       orderCount: Number(r.orderCount),
       lastActivityAt: (r.lastOrderAt as Date | null) ?? (r.createdAt as Date),
     }));
+
+    return { data, page, pageSize, total: Number(totalRows[0].total) };
   }
 
   async getShopDetail(shopId: number) {

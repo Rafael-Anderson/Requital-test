@@ -1556,7 +1556,7 @@ first one is not optional if this is a business.
 | PLT-13 | Developer documentation site and an OpenAPI spec generated from the Nest DTOs | S | infra | TABLE STAKES | PLT-4 | `@nestjs/swagger` decorators | **YES** |
 | PLT-14 | Platform status page and incident communication | S | infra | TABLE STAKES | OPS monitoring | a public status endpoint | **YES** |
 | PLT-15 | Merchant-facing changelog and in-app release notes | S | feature | TABLE STAKES | none | a static content surface | **YES** |
-| PLT-16 | Pagination on `GET /platform-admin/shops` and every other unbounded platform list | S | infra | TABLE STAKES | none | the platform-admin service | **YES — now** |
+| ~~PLT-16~~ **DONE 2026-09-19** | Pagination on `GET /platform-admin/shops` (the only unbounded one; see D-12) | S | infra | TABLE STAKES | none | the platform-admin service | **YES — now** |
 
 ### PLT-1 — Billing, in detail
 
@@ -3133,7 +3133,22 @@ multi-currency) are unbuilt and now §6 blockers. Either restore the SRS with a
 superseded-decisions banner or retire `BUILD_BRIEF.md` — a pointer to a missing
 document is worse than neither.
 
-### D-10 · `db/types.ts` is missing two tables it is supposed to be the source of truth for
+### D-10 · ~~`db/types.ts` is missing two tables~~ WITHDRAWN, THE FINDING WAS WRONG
+
+> **Corrected 2026-09-19.** Withdrawn rather than deleted. `outletstock` and
+> `outletvariantstock` **do not exist**: both were `DROP TABLE`d by
+> `20260808120000_ingredient_backed_stock`, which retired them in favour of
+> `outletingredientstock`. The "queried in five services" claim came from miscounting
+> six *comments* that mention the old names historically; there is no SQL against
+> either table anywhere in `backend/src`. Adding the two row types would have
+> documented tables that are not there.
+>
+> Re-checked against production instead of by grep: 75 live tables (excluding
+> `_migrations`), 75 `<Name>Row` interfaces, exact 1:1 with no gap in either
+> direction. **`db/types.ts` has no missing types at all.** What was genuinely stale
+> was `CLAUDE.md`, which still described `outletstock` as the live stock table in four
+> places (fixed in the same pass). Nothing to build.
+
 `OutletstockRow` and `OutletvariantstockRow` do not exist in
 `backend/src/db/types.ts`, despite the file's header declaring it the hand-maintained
 source of truth for every table's row shape, and despite both tables being queried in
@@ -3152,8 +3167,17 @@ the file where a mistake is most likely and hardest to review. Splitting it — 
 operations, import, BoM/ingredients, catalog — is a mechanical M with real ongoing
 payoff.
 
-### D-12 · No pagination on platform lists
-`GET /platform-admin/shops` returns every row. Already documented in `CLAUDE.md` as a
+### D-12 · ~~No pagination on platform lists~~ DONE 2026-09-19
+
+> **Done 2026-09-19.** `GET /platform-admin/shops` now takes `page`/`pageSize`
+> (default 20, `Max(100)`) and returns the `{ data, page, pageSize, total }` envelope
+> the merchant-side lists already use, with an e2e case asserting the cap holds.
+> Scope note: it was the **only** unbounded platform list. `webhook-log` and
+> `audit-log` were already hard-capped at 100 rows server-side, so neither could
+> produce this crash; they are un-paginated rather than unbounded, which is a
+> separate (smaller) gap — you cannot reach an older page.
+
+`GET /platform-admin/shops` returned every row. Already documented in `CLAUDE.md` as a
 known gap and has already crashed a verification script against the dev DB's ~26,000
 leftover shops. Harmless at the current live-merchant count and not harmless at 10x. S.
 
@@ -3344,7 +3368,7 @@ block later phases exist in draft.
 | PLT-6 rename the Integrations "Webhooks" tab | S | One label, removes a real misconception |
 | MKT-7 newsletter subscriber list + export | S | Data collected and currently unusable |
 | D-8 fix `docs/runbook.md`'s stale Prisma restore instructions | S | The document read during an incident |
-| D-10 add the two missing row types to `db/types.ts` | S | Hygiene on a file declared source-of-truth |
+| ~~D-10 add the two missing row types to `db/types.ts`~~ **WITHDRAWN, see §7.3** | — | False finding: both tables were dropped in 2026-08. `db/types.ts` is complete, 75/75. |
 | PLT-16 / D-12 pagination on platform lists | S | Already caused a real failure |
 | STF-14 + OPS-10 email verification gate, signup velocity limits | S | Open signup with no gate |
 | **§13 ToS revision drafted** (benchmarking + recipient data) | S | *New.* Blocks NOV-2 (Phase 4) and NOV-4 (Phase 8). Drafting is free; legal review has a lead time, so start it now. |

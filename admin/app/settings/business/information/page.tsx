@@ -142,7 +142,6 @@ export default function BusinessInformationPage() {
   const [countryLocked, setCountryLocked] = useState(false);
   const [address, setAddress] = useState("");
   const [timezone, setTimezone] = useState("Asia/Dubai");
-  const [notifyWhatsapp, setNotifyWhatsapp] = useState(false);
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [notifyAbandonedCart, setNotifyAbandonedCart] = useState(false);
   const [abandonedCartWindowMinutes, setAbandonedCartWindowMinutes] = useState(60);
@@ -167,7 +166,6 @@ export default function BusinessInformationPage() {
       setCountryLocked(!!s.country);
       setAddress(s.address ?? "");
       setTimezone(s.timezone);
-      setNotifyWhatsapp(s.notifyWhatsapp);
       setNotifyEmail(s.notifyEmail);
       setNotifyAbandonedCart(s.notifyAbandonedCart);
       setAbandonedCartWindowMinutes(s.abandonedCartWindowMinutes);
@@ -208,7 +206,6 @@ export default function BusinessInformationPage() {
         country,
         address,
         timezone,
-        notifyWhatsapp,
         notifyEmail,
         notifyAbandonedCart,
         abandonedCartWindowMinutes,
@@ -339,19 +336,13 @@ export default function BusinessInformationPage() {
         </p>
         <p className="text-xs text-text-faint mb-3">
           &quot;Allow Email Notifications&quot; sends real order-confirmation and delivery/pickup updates to
-          customers. &quot;Allow WhatsApp Notifications&quot; only saves a preference; it doesn&apos;t control
-          customer messaging — see{" "}
+          customers. For WhatsApp, see{" "}
           <Link href="/integrations/messaging" className="text-accent-text dark:text-accent hover:underline">
             Integrations &gt; Messaging
           </Link>{" "}
           for the real WhatsApp number, credentials, and customer-notification toggle.
         </p>
         <div className="space-y-2">
-          <Checkbox
-            label="Allow WhatsApp Notifications"
-            checked={notifyWhatsapp}
-            onChange={(e) => setNotifyWhatsapp(e.target.checked)}
-          />
           <Checkbox
             label="Allow Email Notifications"
             checked={notifyEmail}

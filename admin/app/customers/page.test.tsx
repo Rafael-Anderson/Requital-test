@@ -16,6 +16,9 @@ vi.mock("@/lib/auth-context", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  // The page renders CustomersTabs, and the shared Tabs component reads the
+  // current path to decide which tab is active.
+  usePathname: () => "/customers",
 }));
 
 const customer: CustomerListItem = {
