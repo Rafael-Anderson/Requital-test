@@ -141,12 +141,29 @@ export interface PlatformShopDetail {
   };
 }
 
-export function listPlatformShops(query: { q?: string; status?: ShopStatus }) {
+export interface PaginatedPlatformShops {
+  data: PlatformShopListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+// Paginated server-side (the endpoint used to return every row; a dev DB with
+// 26k shops made that a real problem). Same { data, page, pageSize, total }
+// envelope as the merchant-side list endpoints.
+export function listPlatformShops(query: {
+  q?: string;
+  status?: ShopStatus;
+  page?: number;
+  pageSize?: number;
+}) {
   const params = new URLSearchParams();
   if (query.q) params.set("q", query.q);
   if (query.status) params.set("status", query.status);
+  if (query.page) params.set("page", String(query.page));
+  if (query.pageSize) params.set("pageSize", String(query.pageSize));
   const qs = params.toString();
-  return platformFetch<PlatformShopListItem[]>(
+  return platformFetch<PaginatedPlatformShops>(
     `/platform-admin/shops${qs ? `?${qs}` : ""}`,
   );
 }

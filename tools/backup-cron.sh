@@ -30,8 +30,32 @@ LOCAL_KEEP_DAYS="${LOCAL_KEEP_DAYS:-7}"
 cd /
 
 log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"; }
+
+# A backup that fails silently is the failure mode this whole job exists to
+# prevent, and cron mail is not configured on this box. So a failure also goes
+# to the app's OWN error-tracking webhook (ERROR_TRACKING_WEBHOOK_URL in
+# backend/.env) — one URL to configure for both the API's 5xx alerts and this.
+# Unset ⇒ no alert, exactly as before. Mirrors the flavour detection in
+# backend/src/common/error-tracking/webhook-payload.ts; keep the two in step.
+alert() {
+  local url text body
+  url=$(grep -m1 '^ERROR_TRACKING_WEBHOOK_URL=' "$APP_DIR/backend/.env" 2>/dev/null | cut -d= -f2-) || return 0
+  [ -n "$url" ] || return 0
+  # Strip what would break the hand-built JSON below. Every caller passes a
+  # literal, so this is a belt, not the mechanism.
+  text="Requital DB backup FAILED on $(hostname): $(printf '%s' "$*" | tr -d '"\\' | tr '\n' ' ')"
+  case "$url" in
+    *hooks.slack.com*) body="{\"text\": \"$text\"}" ;;
+    *discord.com*| *discordapp.com*) body="{\"content\": \"$text\"}" ;;
+    *) body="{\"message\": \"$text\", \"source\": \"backup-cron\"}" ;;
+  esac
+  curl -sS --max-time 10 -o /dev/null -X POST -H 'Content-Type: application/json' \
+    -d "$body" "$url" || log "WARNING: could not deliver the failure alert to the webhook"
+}
+
 die() {
   log "FAILED: $*"
+  alert "$*"
   exit 1
 }
 

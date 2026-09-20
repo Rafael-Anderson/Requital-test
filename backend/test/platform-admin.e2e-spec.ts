@@ -23,6 +23,12 @@ interface PlatformShop {
   id: number;
   status: 'active' | 'suspended';
 }
+interface PaginatedPlatformShops {
+  data: PlatformShop[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
 interface PlatformShopDetail {
   integrations: { whatsappConfigured: boolean };
 }
@@ -191,12 +197,45 @@ describe('Platform admin (e2e)', () => {
   describe('shops list/detail', () => {
     it('lists the seeded shop and reveals no secret values', async () => {
       const res = await request(app.getHttpServer())
-        .get('/platform-admin/shops')
+        .get('/platform-admin/shops?pageSize=100')
         .set('Cookie', platformCookie)
         .expect(200);
-      const shops = body<PlatformShop[]>(res);
-      expect(shops.some((s) => s.id === shopId)).toBe(true);
+      const page = body<PaginatedPlatformShops>(res);
+      expect(page.data.some((s) => s.id === shopId)).toBe(true);
       expect(JSON.stringify(res.body)).not.toMatch(/password/i);
+    });
+
+    // The endpoint used to return every shop row. Against a database with a
+    // real shop count that is a crash, not a slow page, so the cap is asserted
+    // rather than assumed: pageSize is honoured, total counts past the page,
+    // and page 2 is a different slice than page 1.
+    it('paginates rather than returning every shop', async () => {
+      const first = await request(app.getHttpServer())
+        .get('/platform-admin/shops?page=1&pageSize=1')
+        .set('Cookie', platformCookie)
+        .expect(200);
+      const firstPage = body<PaginatedPlatformShops>(first);
+      expect(firstPage.data).toHaveLength(1);
+      expect(firstPage.page).toBe(1);
+      expect(firstPage.pageSize).toBe(1);
+      expect(firstPage.total).toBeGreaterThanOrEqual(1);
+
+      if (firstPage.total > 1) {
+        const second = await request(app.getHttpServer())
+          .get('/platform-admin/shops?page=2&pageSize=1')
+          .set('Cookie', platformCookie)
+          .expect(200);
+        const secondPage = body<PaginatedPlatformShops>(second);
+        expect(secondPage.data).toHaveLength(1);
+        expect(secondPage.data[0].id).not.toBe(firstPage.data[0].id);
+      }
+    });
+
+    it('rejects a pageSize above the cap instead of silently honouring it', async () => {
+      await request(app.getHttpServer())
+        .get('/platform-admin/shops?pageSize=5000')
+        .set('Cookie', platformCookie)
+        .expect(400);
     });
 
     it('shop detail shows integration status by name only, never credential values', async () => {

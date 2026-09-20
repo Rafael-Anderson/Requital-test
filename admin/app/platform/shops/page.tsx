@@ -23,20 +23,43 @@ const STATUS_STYLES: Record<ShopStatus, string> = {
 const ICON_BUTTON =
   "rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100 transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400";
 
+const PAGE_BUTTON =
+  "rounded-lg border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-slate-900";
+
+const PAGE_SIZE = 20;
+
 export default function PlatformShopsPage() {
   const [shops, setShops] = useState<PlatformShopListItem[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | ShopStatus>("");
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const refresh = useCallback(() => {
-    listPlatformShops({ q: q || undefined, status: status || undefined }).then(setShops);
+    listPlatformShops({
+      q: q || undefined,
+      status: status || undefined,
+      page,
+      pageSize: PAGE_SIZE,
+    }).then((result) => {
+      setShops(result.data);
+      setTotal(result.total);
+    });
+  }, [q, status, page]);
+
+  // A filter change can leave the current page past the end of the new result
+  // set, which would render an empty table with no obvious cause.
+  useEffect(() => {
+    setPage(1);
   }, [q, status]);
 
   useEffect(() => {
     const t = setTimeout(refresh, 250);
     return () => clearTimeout(t);
   }, [refresh]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   async function toggleSuspend(shop: PlatformShopListItem) {
     if (shop.status === "active" && !confirmSuspend()) return;
@@ -166,6 +189,29 @@ export default function PlatformShopsPage() {
           <div className="p-8 text-center text-sm text-slate-500">No shops match.</div>
         )}
       </div>
+
+      {shops !== null && shops.length > 0 && (
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+          </span>
+          <div className="flex items-center gap-2">
+            <button className={PAGE_BUTTON} disabled={page <= 1} onClick={() => setPage((pv) => pv - 1)}>
+              Previous
+            </button>
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              className={PAGE_BUTTON}
+              disabled={page >= totalPages}
+              onClick={() => setPage((pv) => pv + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

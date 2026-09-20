@@ -56,6 +56,7 @@ import type {
   PaginatedCustomers,
   PaginatedExternalDeliveries,
   PaginatedGeneralReportOrders,
+  PaginatedNewsletterSubscribers,
   PaginatedOrders,
   PaginatedProductSales,
   PaymentProviderSettings,
@@ -1427,6 +1428,23 @@ export function listCustomers(params: ListCustomersParams = {}) {
   return apiFetch<PaginatedCustomers>(`/customers?${query.toString()}`);
 }
 
+export interface ListNewsletterSubscribersParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
+// Admin + viewer server-side (see backend NewsletterController). The matching
+// write is the public storefront widget, not an admin action - there is no
+// create/delete here on purpose.
+export function listNewsletterSubscribers(params: ListNewsletterSubscribersParams = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+  if (params.search) query.set("search", params.search);
+  return apiFetch<PaginatedNewsletterSubscribers>(`/newsletter-subscribers?${query.toString()}`);
+}
+
 export function getCustomer(id: number) {
   return apiFetch<CustomerDetail>(`/customers/${id}`);
 }
@@ -1587,7 +1605,7 @@ export function cancelSliderDelivery(orderId: number) {
   return apiFetch<Order>(`/orders/${orderId}/slider-delivery`, { method: "DELETE" });
 }
 
-// Integrations > Webhooks — read-only diagnostics, last 20 for this shop.
+// Integrations > Incoming Webhooks — read-only diagnostics, last 20 for this shop.
 export function getWebhookLog() {
   return apiFetch<WebhookEvent[]>("/webhook-log");
 }
