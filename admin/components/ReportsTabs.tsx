@@ -10,6 +10,7 @@ const TABS = [
   { href: "/reports/monthly", label: "Monthly Report", exact: false },
   { href: "/reports/product-sales", label: "Product Sale Report", exact: false },
   { href: "/reports/external-delivery", label: "External Delivery Report", exact: false },
+  { href: "/reports/prep-time", label: "Prep Time", exact: false },
 ];
 
 export default function ReportsTabs() {

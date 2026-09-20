@@ -5,6 +5,7 @@ import type { QueryParam } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { ReportsFilterQueryDto } from './dto/reports-filter-query.dto';
+import { bucketPrepTimes, type PrepTimeSample } from './prep-time';
 import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
 import { ListProductSalesQueryDto } from './dto/list-product-sales-query.dto';
 import { MonthlyReportFilterDto } from './dto/monthly-report-filter.dto';
@@ -87,6 +88,99 @@ export class ReportsService {
       params.push(new Date(filters.dateTo));
     }
     return { sql: conditions.join(' AND '), params };
+  }
+
+  // NOV-12 prep-time truth. shop.deliveryPreparationTimeMinutes and its
+  // siblings are merchant-guessed constants - and, checked while building
+  // this, constants that nothing in the codebase actually reads: not slot
+  // generation, not the storefront. They are a promise nobody measures. This
+  // reports what the orders actually did, next to what the merchant
+  // configured, and deliberately changes nothing.
+  //
+  // The only record of status transitions is `auditlog`: there are no
+  // per-status timestamp columns and no status-history table. OrdersService.
+  // getHistory already reads the same rows for a single order, so this is the
+  // same source, aggregated. Two consequences worth knowing, both surfaced in
+  // the response rather than hidden:
+  //   - Only transitions that went through the staff endpoint are logged, so
+  //     an order advanced by a webhook (a Slider `delivered` callback, a BNPL
+  //     approval) contributes nothing.
+  //   - An order still in progress, or one that skipped straight to
+  //     delivered, has no pair and is excluded.
+  // `ordersConsidered` vs `ordersMeasured` is what makes that visible: a big
+  // gap means the sample is not the business.
+  async getPrepTimeTruth(ctx: TenantContext, filters: ReportsFilterQueryDto) {
+    const { sql, params } = this.buildOrderWhere(ctx, filters, 'o');
+
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT timezone, deliveryPreparationTimeMinutes, pickupPreparationTimeMinutes
+         FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const shop = shopRows[0];
+    const timezone = (shop?.timezone as string) ?? 'Asia/Dubai';
+
+    // MIN() per status rather than a join per status: a join would multiply
+    // rows if an order ever carried two log entries for the same status, and
+    // the first transition is the real one either way.
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT o.id,
+              o.outletId,
+              ou.name AS outletName,
+              MIN(CASE WHEN al.after->>'$.status' = 'confirmed' THEN al.createdAt END) AS confirmedAt,
+              MIN(CASE WHEN al.after->>'$.status' = 'preparing' THEN al.createdAt END) AS preparingAt,
+              MIN(CASE WHEN al.after->>'$.status' = 'out_for_delivery' THEN al.createdAt END) AS readyAt
+         FROM \`order\` o
+         JOIN outlet ou ON ou.id = o.outletId
+         JOIN auditlog al
+           ON al.shopId = o.shopId
+          AND al.entityType = 'order'
+          AND al.entityId = o.id
+          AND al.action = 'order.status_changed'
+        WHERE ${sql}
+        GROUP BY o.id, o.outletId, ou.name
+       HAVING confirmedAt IS NOT NULL AND readyAt IS NOT NULL AND readyAt > confirmedAt`,
+      params,
+    );
+
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM \`order\` o WHERE ${sql}`,
+      params,
+    );
+
+    const samples: PrepTimeSample[] = rows.map((r) => {
+      const confirmedAt = r.confirmedAt as Date;
+      const readyAt = r.readyAt as Date;
+      const preparingAt = r.preparingAt as Date | null;
+      return {
+        outletId: r.outletId as number,
+        outletName: r.outletName as string,
+        confirmedAt,
+        totalMinutes: (readyAt.getTime() - confirmedAt.getTime()) / 60000,
+        handsOnMinutes:
+          preparingAt && readyAt > preparingAt
+            ? (readyAt.getTime() - preparingAt.getTime()) / 60000
+            : null,
+      };
+    });
+
+    return {
+      // What the merchant configured, for the side-by-side. Both are exposed
+      // because the measured span mixes delivery and pickup orders unless the
+      // caller filters by orderType.
+      configured: {
+        deliveryPreparationTimeMinutes: Number(
+          shop?.deliveryPreparationTimeMinutes ?? 0,
+        ),
+        pickupPreparationTimeMinutes: Number(
+          shop?.pickupPreparationTimeMinutes ?? 0,
+        ),
+      },
+      timezone,
+      ordersConsidered: Number(countRows[0].c),
+      ordersMeasured: samples.length,
+      buckets: bucketPrepTimes(samples, timezone),
+    };
   }
 
   async getGeneralSummary(ctx: TenantContext, filters: ReportsFilterQueryDto) {
@@ -218,16 +312,25 @@ export class ReportsService {
     // order_manager — resolveOutletFilter is the same forcing rule every
     // other outlet-scoped read already goes through, applied here so a
     // branch user can't omit outletId and see every outlet's deliveries.
-    const { sql: orderWhereSql, params: orderWhereParams } = this.buildOrderWhere(
-      ctx,
-      { ...query, outletId: resolveOutletFilter(ctx, query.outletId) },
-      'o',
-    );
+    const { sql: orderWhereSql, params: orderWhereParams } =
+      this.buildOrderWhere(
+        ctx,
+        { ...query, outletId: resolveOutletFilter(ctx, query.outletId) },
+        'o',
+      );
     let sql = orderWhereSql;
     const params = [...orderWhereParams];
     if (search) {
-      const orParts = ['ed.carrier LIKE ?', 'o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
-      const orParams: QueryParam[] = [`%${search}%`, `%${search}%`, `%${search}%`];
+      const orParts = [
+        'ed.carrier LIKE ?',
+        'o.customerName LIKE ?',
+        'o.customerPhone LIKE ?',
+      ];
+      const orParams: QueryParam[] = [
+        `%${search}%`,
+        `%${search}%`,
+        `%${search}%`,
+      ];
       if (searchAsId !== undefined) {
         orParts.push('ed.orderId = ?');
         orParams.push(searchAsId);
@@ -292,7 +395,7 @@ export class ReportsService {
       PRODUCT_SALES_SORT_COLUMN[query.sortBy ?? 'totalSalePrice'];
     const sortDir = query.sortDir === 'asc' ? 'ASC' : 'DESC';
 
-    const conditions = ["o.shopId = ?", "o.status != 'cancelled'"];
+    const conditions = ['o.shopId = ?', "o.status != 'cancelled'"];
     const params: QueryParam[] = [ctx.shopId];
     if (query.outletId !== undefined) {
       conditions.push('o.outletId = ?');

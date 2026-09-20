@@ -2710,6 +2710,33 @@ export const POLICY_PAGE_LABELS: Record<PolicyPageType, string> = {
   SHIPPING: "Shipping & Delivery Policy",
 };
 
+export interface PrepTimeBucket {
+  outletId: number;
+  outletName: string;
+  // 0 = Sunday, resolved in the shop's own timezone (not the browser's).
+  dayOfWeek: number;
+  orderCount: number;
+  medianMinutes: number;
+  averageMinutes: number;
+  p90Minutes: number;
+  // Null when no order in that bucket ever passed through "preparing".
+  handsOnMedianMinutes: number | null;
+}
+
+export interface PrepTimeReport {
+  configured: {
+    deliveryPreparationTimeMinutes: number;
+    pickupPreparationTimeMinutes: number;
+  };
+  timezone: string;
+  // Orders matching the filters at all, vs. orders that had both a confirmed
+  // and an out_for_delivery transition recorded. A wide gap is the signal
+  // that the sample is not the whole business.
+  ordersConsidered: number;
+  ordersMeasured: number;
+  buckets: PrepTimeBucket[];
+}
+
 export interface PolicyPage {
   type: PolicyPageType;
   content: string | null;

@@ -21,6 +21,17 @@ import type { TenantContext } from '../common/tenant-context';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  // NOV-12: measured prep time vs the configured constant. Reuses the
+  // shared filter DTO (date range, outlet, orderType) rather than adding a
+  // fourth near-identical one.
+  @Get('prep-time')
+  getPrepTimeTruth(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ReportsFilterQueryDto,
+  ) {
+    return this.reportsService.getPrepTimeTruth(ctx, query);
+  }
+
   @Get('general/summary')
   getGeneralSummary(
     @CurrentUser() ctx: TenantContext,
