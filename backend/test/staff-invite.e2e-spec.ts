@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import { hashToken } from '../src/common/token-hash';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface TokenPair {
   accessToken: string;
@@ -79,6 +80,10 @@ describe('Staff invite flow (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (res.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     return { email, ...body<SignupResponse>(res) };
   }
 

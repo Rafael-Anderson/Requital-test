@@ -10,6 +10,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -23,6 +24,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { RequiresVerifiedEmail } from './decorators/requires-verified-email.decorator';
+import { VerifiedEmailGuard } from './guards/verified-email.guard';
 import { Public } from './decorators/public.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -75,7 +78,13 @@ export class AuthController {
   // or enumeration-sensitive endpoint below — 5/min/IP is generous for a
   // genuine user (a typo or two) but meaningfully slows down scripted
   // brute-force/credential-stuffing/token-guessing attempts.
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  // Two windows, not one: 5/min stops a burst, 20/hour stops a script that
+  // stays politely under it all day. Open self-signup means this endpoint is
+  // the platform's front door for shop creation.
+  @Throttle({
+    default: { limit: 5, ttl: 60000 },
+    signupHourly: { limit: 20, ttl: 3600000 },
+  })
   @Public()
   @Post('signup')
   async signup(
@@ -221,7 +230,12 @@ export class AuthController {
     return this.authService.changePassword(ctx, dto);
   }
 
+  // Verification-gated: this sends a Requital-branded invite email to an
+  // address the account holder types in, which is a spam vector from an
+  // account that has not proven it controls its own inbox.
   @Roles('admin')
+  @UseGuards(VerifiedEmailGuard)
+  @RequiresVerifiedEmail({ action: 'inviting staff' })
   @Post('branch-users')
   createBranchUser(
     @CurrentUser() ctx: TenantContext,

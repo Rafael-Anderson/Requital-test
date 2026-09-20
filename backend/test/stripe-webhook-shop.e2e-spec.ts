@@ -16,6 +16,7 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import Stripe from 'stripe';
 import { AppModule } from '../src/app.module';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
@@ -99,6 +100,10 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signup.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     const auth = body<AuthResponse>(signup);
     const adminToken = auth.accessToken;
     const shopId = auth.user.shopId;

@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import { hashToken } from '../src/common/token-hash';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface TokenPair {
   accessToken: string;
@@ -77,7 +78,11 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     await app.close();
   });
 
-  async function signupShop(slugPrefix: string) {
+  // `verify` defaults to true because that is what a real merchant is by the
+  // time they do anything: several actions are gated on it (see
+  // VerifiedEmailGuard). The tests that are specifically ABOUT the
+  // unverified state opt out.
+  async function signupShop(slugPrefix: string, verify = true) {
     const email = `${slugPrefix}-${runId}@test.com`;
     const res = await request(app.getHttpServer())
       .post('/auth/signup')
@@ -89,6 +94,12 @@ describe('Auth security: refresh rotation, password reset, email verification, p
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
+    if (verify) {
+      await verifySignupEmail(
+        app.getHttpServer(),
+        (res.body as { devVerificationLink?: string }).devVerificationLink,
+      );
+    }
     return { email, ...body<SignupResponse>(res) };
   }
 
@@ -286,7 +297,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
 
   describe('email verification gates Change Password', () => {
     it('rejects change-password for an unverified account', async () => {
-      const signup = await signupShop('unverified');
+      const signup = await signupShop('unverified', false);
       const res = await request(app.getHttpServer())
         .post('/auth/change-password')
         .set('Authorization', `Bearer ${signup.accessToken}`)
@@ -296,7 +307,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it('allows change-password once the account is verified via the emailed (dev-stubbed) link', async () => {
-      const signup = await signupShop('verified');
+      const signup = await signupShop('verified', false);
       await request(app.getHttpServer())
         .post('/auth/verify-email')
         .send({ token: tokenFromDevLink(signup.devVerificationLink!) })
@@ -310,7 +321,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it('a verification token is single-use', async () => {
-      const signup = await signupShop('verify-once');
+      const signup = await signupShop('verify-once', false);
       const token = tokenFromDevLink(signup.devVerificationLink!);
       await request(app.getHttpServer())
         .post('/auth/verify-email')
@@ -324,7 +335,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it('resend-verification is a no-op (not an error) once already verified', async () => {
-      const signup = await signupShop('resend-after-verified');
+      const signup = await signupShop('resend-after-verified', false);
       await request(app.getHttpServer())
         .post('/auth/verify-email')
         .send({ token: tokenFromDevLink(signup.devVerificationLink!) })
@@ -340,7 +351,7 @@ describe('Auth security: refresh rotation, password reset, email verification, p
     });
 
     it('changing the password revokes every existing refresh token', async () => {
-      const signup = await signupShop('pwchange-revokes');
+      const signup = await signupShop('pwchange-revokes', false);
       await request(app.getHttpServer())
         .post('/auth/verify-email')
         .send({ token: tokenFromDevLink(signup.devVerificationLink!) })

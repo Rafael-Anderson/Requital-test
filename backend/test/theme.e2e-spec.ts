@@ -7,6 +7,7 @@ import { App } from 'supertest/types';
 import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
@@ -105,6 +106,10 @@ describe('Theme (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signup.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     return {
       adminToken: body<AuthResponse>(signup).accessToken,
       slug: `${slugPrefix}-${runId}`,

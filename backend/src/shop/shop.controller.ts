@@ -7,6 +7,7 @@ import {
   Post,
   UploadedFile,
   UseInterceptors,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
@@ -14,6 +15,8 @@ import { ShopService } from './shop.service';
 import { CustomDomainVerificationService } from './custom-domain-verification.service';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { UpdateShopDomainDto } from './dto/update-shop-domain.dto';
+import { RequiresVerifiedEmail } from '../auth/decorators/requires-verified-email.decorator';
+import { VerifiedEmailGuard } from '../auth/guards/verified-email.guard';
 import { createImageUploadOptions } from '../common/image-upload.config';
 import { StorageService } from '../storage/storage.service';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -55,6 +58,15 @@ export class ShopController {
     return this.shopService.getDomainConfig(ctx);
   }
 
+  // Verification-gated, but only for the `custom` branch: connecting a
+  // domain drives cert issuance against a third party. Switching back to a
+  // plain subdomain is a de-escalation and stays open, so nobody can be
+  // locked into a custom domain they can no longer disconnect.
+  @UseGuards(VerifiedEmailGuard)
+  @RequiresVerifiedEmail({
+    action: 'connecting a custom domain',
+    whenBodyType: 'custom',
+  })
   @Patch('domain')
   updateDomain(
     @CurrentUser() ctx: TenantContext,
