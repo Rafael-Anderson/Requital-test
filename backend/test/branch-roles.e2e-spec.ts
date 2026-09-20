@@ -5,6 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 // Several tests here set up two full shops for cross-tenant checks, and
 // every signup/branch-user-creation attempts a real Resend API call before
@@ -79,6 +80,10 @@ describe('Branch roles: bundle/assignment CRUD, restrict-only enforcement, tenan
         subdomain: slug,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signup.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     const adminToken = body<AuthResponse>(signup).accessToken;
     const me = await request(app.getHttpServer())
       .get('/auth/me')

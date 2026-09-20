@@ -107,6 +107,14 @@ export default function DomainSettingsPage() {
       setInputError(CONFLICT_MESSAGE);
       return;
     }
+    // The email-verification gate (VerifiedEmailGuard) answers 403 with a
+    // message naming the action. Shown against the field rather than as a
+    // toast: it is about what was just typed, and it needs to stay on
+    // screen long enough to read.
+    if (err instanceof ApiError && err.status === 403) {
+      setInputError(err.message);
+      return;
+    }
     toast(err instanceof Error ? err.message : fallback, "error");
   }
 

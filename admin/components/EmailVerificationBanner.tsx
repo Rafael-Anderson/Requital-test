@@ -10,10 +10,15 @@ import * as api from "@/lib/api";
 
 // Per-session, not permanent: sessionStorage clears on tab close, so a
 // dismissed banner reappears next visit rather than being silently
-// forgotten forever. The conservative enforcement point this backs is
-// shop.published (see ShopService.getPublishReadiness) — an unverified
-// account can otherwise use the whole admin panel freely; this is just a
-// reminder, not a second gate.
+// forgotten forever.
+//
+// What it backs (STF-14, 2026-09-20): publishing the shop
+// (ShopService.getPublishReadiness) plus the three actions behind
+// VerifiedEmailGuard — connecting a payment gateway, inviting staff and
+// connecting a custom domain. Everything else in the admin stays open on
+// purpose, so this is still a reminder rather than the enforcement: each
+// gated endpoint returns its own 403 naming the action, which the calling
+// page surfaces at the point of the attempt.
 const DISMISS_KEY = "requital_email_verify_banner_dismissed";
 
 export default function EmailVerificationBanner() {
@@ -50,7 +55,8 @@ export default function EmailVerificationBanner() {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-6 py-2.5 text-sm text-amber-800 dark:text-amber-300">
       <span>
-        Verify your email address. You won&apos;t be able to publish your shop until you do.
+        Verify your email address. Until you do, you can&apos;t publish your shop, connect a
+        payment gateway, invite staff, or connect a custom domain.
       </span>
       <div className="flex items-center gap-2 shrink-0">
         <Button variant="secondary" size="sm" loading={sending} onClick={resend}>

@@ -9,6 +9,7 @@ import { DatabaseService } from '../src/database/database.service';
 import { DnsResolver } from '../src/shop/dns-resolver';
 import { CustomDomainVerificationService } from '../src/shop/custom-domain-verification.service';
 import type { RowDataPacket } from 'mysql2/promise';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
@@ -90,6 +91,10 @@ describe('Custom domain ownership verification (e2e)', () => {
         subdomain: `${prefix}-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (res.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     const b = body<AuthResponse>(res);
     return {
       token: b.accessToken,

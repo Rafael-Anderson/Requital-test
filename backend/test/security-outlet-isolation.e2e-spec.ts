@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import { getShadowStockQuantity } from './helpers/stock';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 // supertest types response bodies as `any` — these describe just enough of
 // each JSON shape this file reads to satisfy the strict no-unsafe-* lint
@@ -122,6 +123,10 @@ describe('Outlet & shop isolation (e2e)', () => {
         subdomain: `sec-test-a-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signupA.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     shopAAdminToken = body<AuthResponse>(signupA).accessToken;
 
     // Signup auto-creates one default outlet — that's outletA1.
@@ -238,6 +243,10 @@ describe('Outlet & shop isolation (e2e)', () => {
         subdomain: `sec-test-b-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signupB.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     shopBAdminToken = body<AuthResponse>(signupB).accessToken;
 
     const outletsB = await request(app.getHttpServer())

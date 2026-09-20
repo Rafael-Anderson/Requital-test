@@ -8,6 +8,7 @@ import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { OrderRow as DbOrderRow } from '../src/db/types';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
@@ -74,6 +75,10 @@ describe('Order internal notes (e2e)', () => {
         subdomain: slug,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signup.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     const adminToken = body<AuthResponse>(signup).accessToken;
 
     const outlets = await request(app.getHttpServer())

@@ -5,6 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
@@ -57,6 +58,10 @@ describe('Shop domain configuration (e2e)', () => {
         subdomain: `${slugPrefix}-${runId}`,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signup.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     const res = body<AuthResponse>(signup);
     return {
       adminToken: res.accessToken,

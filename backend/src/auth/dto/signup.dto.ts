@@ -16,6 +16,7 @@ import {
   normalizeTrn,
   normalizeWebsiteUrl,
 } from '../../common/normalize';
+import { IsNotDisposableEmail } from '../../common/validators/is-not-disposable-email.validator';
 
 export const BUSINESS_TYPES = ['Retail', 'F&B', 'Services', 'Other'] as const;
 export const OPERATING_MODELS = [
@@ -33,6 +34,7 @@ export class SignupDto {
 
   @IsEmail()
   @MaxLength(255)
+  @IsNotDisposableEmail()
   email: string;
 
   @IsString()

@@ -5,6 +5,7 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
   accessToken: string;
@@ -85,6 +86,10 @@ describe('Bulk actions: products + orders (e2e)', () => {
         subdomain: slug,
       })
       .expect(201);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      (signup.body as { devVerificationLink?: string }).devVerificationLink,
+    );
     const adminToken = body<AuthResponse>(signup).accessToken;
 
     const outlets = await request(app.getHttpServer())

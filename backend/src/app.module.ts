@@ -85,9 +85,25 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
     // same in-process supertest client, which the 5/min auth limits below
     // would otherwise reject with 429s that have nothing to do with the
     // behavior those tests are actually checking.
+    // `signupHourly` is a second, longer window used by POST /auth/signup
+    // ONLY (see auth.controller.ts). A named throttler with no @Throttle
+    // entry on a route does not apply to it, so declaring it here is inert
+    // everywhere else. 5/min stops a burst; 20/hour is what stops a script
+    // patiently creating shops all day just under the per-minute limit.
+    //
+    // THROTTLE_IN_TESTS is a test-only seam: it can only ever ENABLE
+    // throttling that NODE_ENV=test would otherwise skip, never disable any
+    // in production. One e2e spec sets it to prove the signup limits
+    // actually fire, because a limit nobody has watched reject a request is
+    // a configuration value, not a protection.
     ThrottlerModule.forRoot({
-      throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
-      skipIf: () => process.env.NODE_ENV === 'test',
+      throttlers: [
+        { name: 'default', ttl: 60000, limit: 100 },
+        { name: 'signupHourly', ttl: 3600000, limit: 20 },
+      ],
+      skipIf: () =>
+        process.env.NODE_ENV === 'test' &&
+        process.env.THROTTLE_IN_TESTS !== '1',
     }),
     DatabaseModule,
     AuthModule,
