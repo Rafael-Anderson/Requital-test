@@ -56,6 +56,7 @@ import type {
   BrandRow,
   SurveyresponseRow,
 } from '../db/types';
+import { resolveCanonicalOrigin } from './canonical-origin';
 
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
@@ -288,6 +289,11 @@ export class PublicService {
       // checkout) is still hard-gated server-side via assertPublished,
       // regardless of what this field says client-side.
       published: shop.published,
+      // The single host this shop's pages are canonicalised to (SEO); see
+      // canonical-origin.ts for why an unverified custom domain does not
+      // count. Resolved server-side so the storefront never has to know the
+      // root domain or the verification rules.
+      canonicalOrigin: resolveCanonicalOrigin(shop),
       name: shop.name,
       displayName: shop.displayName,
       // Footer bottom-bar copyright line and (for policy content authorship

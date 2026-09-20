@@ -12,6 +12,10 @@ export interface Shop {
   email: string | null;
   logoUrl: string | null;
   description: string | null;
+  // The single host this shop is canonicalised to for SEO, resolved
+  // server-side (backend public/canonical-origin.ts). Null-safe: every
+  // consumer omits the canonical tag rather than guessing an origin.
+  canonicalOrigin: string | null;
   currency: string;
   defaultLanguage: string;
   whatsappCountryCode: string | null;
