@@ -65,6 +65,7 @@ export const PRODUCT_CARDS_SENTINEL_ID = "__product-cards__";
 
 function QuickAddButton({
   product,
+  price,
   outletId,
   className,
   style,
@@ -76,6 +77,13 @@ function QuickAddButton({
   tagProps,
 }: {
   product: Product;
+  // The price the card is DISPLAYING, auto-discount already applied - not
+  // product.price. The server charges the auto-discounted price
+  // (ProductsService.resolveOrderItems), so adding the catalog price here
+  // quotes a cart total that the order will not match. Computed once in the
+  // card's own scope and passed down rather than recomputed, so the number on
+  // the card and the number in the cart cannot drift apart.
+  price: number;
   outletId: number | undefined;
   className: string;
   style?: CSSProperties;
@@ -105,7 +113,7 @@ function QuickAddButton({
         if (previewMode) return;
         e.stopPropagation();
         addItem(
-          { productId: product.id, name: product.name, price: Number(product.price), thumbnail: product.thumbnail, maxStock: product.stockQuantity },
+          { productId: product.id, name: product.name, price, thumbnail: product.thumbnail, maxStock: product.stockQuantity },
           1,
           outletId,
         );
@@ -151,6 +159,7 @@ function GridProductCard({
   shopCurrency,
   titleBlock,
   priceBlock,
+  discounted,
   previewMode,
   sectionId,
   cardHoverEffect,
@@ -194,6 +203,12 @@ function GridProductCard({
   shopCurrency: string | undefined;
   titleBlock: ThemeBlock | undefined;
   priceBlock: ThemeBlock | undefined;
+  // The best matching auto-discount for this product, or null. Computed once
+  // in the grid's own scope and shared with QuickAddButton, so the price on
+  // the card, the percentage on the badge and the price added to the cart are
+  // all the same arithmetic. This card used to render product.price while
+  // showing a -25% badge next to it.
+  discounted: ReturnType<typeof computeAutoDiscountedPrice>;
   previewMode: boolean;
   sectionId: string;
   cardHoverEffect: string | undefined;
@@ -212,6 +227,12 @@ function GridProductCard({
     swapOnHover: cardHoverEffect === "swap",
   });
   const isOverlay = cardStyleKey === "overlay";
+  const currencyPrefix =
+    showCurrencyCode && shopCurrency ? (
+      <>
+        <CurrencySymbol code={shopCurrency} />{" "}
+      </>
+    ) : null;
 
   const titleEl = showTitle ? (
     <p
@@ -230,14 +251,28 @@ function GridProductCard({
       {...(priceBlock ? editableAttrs(previewMode, { id: priceBlock.id, sectionId, type: "product_price" }) : {})}
       style={priceBlock ? resolvePriceElementStyle(priceBlock.settings) : undefined}
     >
-      {showCurrencyCode && shopCurrency ? (
+      {discounted ? (
         <>
-          <CurrencySymbol code={shopCurrency} />{" "}
+          <span className="line-through text-price-main font-normal mr-1.5">
+            {currencyPrefix}
+            {discounted.originalPrice}
+          </span>
+          {/* ponytail: the colour token only, not prices.salePriceStyle's
+              `strikethrough-only` variant that ProductCard also honours -
+              that would mean threading globalSettings.prices through this
+              card's already-long prop list for one enum. --color-sale-price
+              (which salePriceColor sets) applies either way. */}
+          <span className="text-sale-price">
+            {currencyPrefix}
+            {discounted.discountedPrice}
+          </span>
         </>
       ) : (
-        ""
+        <>
+          {currencyPrefix}
+          {product.price}
+        </>
       )}
-      {product.price}
     </p>
   ) : null;
 
@@ -488,6 +523,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
             shopCurrency={shop?.currency}
             titleBlock={titleBlock}
             priceBlock={priceBlock}
+            discounted={discounted}
             previewMode={previewMode}
             sectionId={sectionId}
             cardHoverEffect={themeConfig?.globalSettings.animations.cardHoverEffect}
@@ -500,6 +536,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
               shopCartUsable && productCards.quickAdd ? (
                 <QuickAddButton
                   product={product}
+                  price={discounted?.discountedPrice ?? Number(product.price)}
                   outletId={outletId}
                   background={productCards.quickAddBackground}
                   color={productCards.quickAddText}
@@ -524,6 +561,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
               shopCartUsable && productCards.mobileQuickAdd ? (
                 <QuickAddButton
                   product={product}
+                  price={discounted?.discountedPrice ?? Number(product.price)}
                   outletId={outletId}
                   background={productCards.quickAddBackground}
                   color={productCards.quickAddText}

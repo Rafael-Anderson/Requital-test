@@ -616,6 +616,28 @@ describe('Discounts (e2e)', () => {
       expect(Number(itemRows[0].priceAtPurchase)).toBe(80);
       expect(Number(itemRows[0].autoDiscountAmount)).toBe(20);
 
+      // ...and the markdown reaches the ORDER total, not just the line. The
+      // line price feeding a subtotal that ignored it would be a mis-charge
+      // this test would otherwise pass straight over (added 2026-09-20 with
+      // the quick-add fix, since the storefront quotes this number back to
+      // the shopper before they ever submit).
+      // `order` stores no subtotal column, so it is recovered from the total
+      // by removing the two additive parts. Had the subtotal been built from
+      // the undiscounted 100, this reads 100.
+      const orderRows = await db.query<
+        (RowDataPacket & {
+          total: string;
+          deliveryFee: string | null;
+          taxAmount: string | null;
+        })[]
+      >(`SELECT total, deliveryFee, taxAmount FROM \`order\` WHERE id = ?`, [
+        order.id,
+      ]);
+      const o = orderRows[0];
+      expect(
+        Number(o.total) - Number(o.deliveryFee ?? 0) - Number(o.taxAmount ?? 0),
+      ).toBeCloseTo(80, 2);
+
       // A product with no matching auto-discount is unaffected.
       const otherProduct = await request(app.getHttpServer())
         .post('/products')

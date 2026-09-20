@@ -1128,7 +1128,7 @@ discount, no free-gift, and no stacking policy.
 
 | ID | Proposal | Effort | Type | Class | Depends on | Touches | Ship |
 |---|---|---|---|---|---|---|---|
-| **DSC-1** | **Finish auto-apply: redeem it at order creation, not just display it** | **S** | feature | TABLE STAKES | none | `PublicService.createOrder` consults `listActiveAutoDiscounts` | **YES — first** |
+| ~~**DSC-1**~~ **RESOLVED 2026-09-20** | ~~Finish auto-apply: redeem it at order creation~~ Already charged server-side since `b2736eb` (2026-08-22); the finding was written off a stale `CLAUDE.md`. See the detail section below. | — | — | — | — | — | — |
 | DSC-2 | Buy X get Y (same or different product, N free or % off) | M | feature | TABLE STAKES | none | a discount rule shape, cart evaluation, order line allocation | **YES** |
 | DSC-3 | Tiered / volume discounts (spend 200 save 10%, spend 500 save 20%) | S | feature | TABLE STAKES | none | discount tiers table, cart evaluation | **YES** |
 | DSC-4 | Free-gift promotions (add a product at 0 when a condition is met) | S | feature | TABLE STAKES | DSC-2 machinery | cart injection, stock decrement | **YES** |
@@ -1145,12 +1145,35 @@ discount, no free-gift, and no stacking policy.
 | DSC-15 | Auto-markdown rules driven by expiry (INV-4) or age of stock | M | feature | DIFFERENTIATOR | INV-4 | a rule engine on top of `discount.discountType = 'auto'` | **YES** |
 | DSC-16 | Price-per-unit display and multi-buy pricing on the PDP | S | feature | TABLE STAKES | DSC-3 | PDP price block | LATER |
 
-### DSC-1 — In detail, because it is a live defect
+### DSC-1 — ~~In detail, because it is a live defect~~ RESOLVED, THE FINDING WAS STALE
+
+> **Resolved 2026-09-20.** Struck through rather than deleted, same treatment as D-10.
+> **`createOrder` already charges the auto-discount** and had done for three weeks before
+> this document was written. `ProductsService.resolveOrderItems` — the shared item resolver
+> behind `PublicService.createOrder`, `OrdersService` and draft orders — calls
+> `listActiveAutoDiscounts`, applies `findBestAutoDiscountAmount` per line and persists
+> `orderitem.autoDiscountAmount`. It landed **2026-08-22 in `b2736eb`** ("fix: auto-discounts
+> actually charged server-side").
+>
+> This finding came from `CLAUDE.md`'s "Deliberate scope boundary" paragraph, which was
+> never updated after that commit, rather than from the code. That paragraph has now been
+> rewritten to say the opposite, loudly, because **building what this entry asked for would
+> have double-applied every auto-discount.**
+>
+> There *was* one real display/charge mismatch left, in a place this entry never looked:
+> `ProductGridSection`'s quick-add button put the **undiscounted** catalog price into the
+> cart while the card directly above it rendered the discounted one, so the cart and
+> checkout quoted more than the server charged. Fixed 2026-09-20 with a regression test at
+> all three layers (storefront unit, backend e2e, Playwright). The recommendation below
+> that a typed code should *replace* a better auto-discount was **not** adopted — see DSC-5
+> and `CLAUDE.md`: the two stack today, display and charge agree on that, and switching to
+> best-wins would reintroduce a display/charge divergence unless the storefront also
+> re-rendered every line price on code entry.
 
 `GET /public/:shopSlug/discounts/auto` exists. `storefront/lib/auto-discounts.ts`'s
 `computeAutoDiscountedPrice` mirrors the backend's amount math and picks the single
 best matching discount. Product cards and the PDP render the discounted price.
-`PublicService.createOrder` charges the undiscounted one.
+~~`PublicService.createOrder` charges the undiscounted one.~~ It does not; see above.
 
 `CLAUDE.md` documents this as a deliberate scope boundary, and as an engineering
 statement it is accurate — the work genuinely was scoped to display. As a product
@@ -3009,7 +3032,13 @@ are producing wrong behaviour today, not just carrying risk.*
 
 ## 7.1 Correctness — money, tax and pricing
 
-### D-1 · **CORRECTNESS** · Auto-apply discounts are displayed but never charged
+### D-1 · ~~**CORRECTNESS** · Auto-apply discounts are displayed but never charged~~ RESOLVED
+
+> **Resolved 2026-09-20.** Same correction as DSC-1 above: `createOrder` charges them via
+> `ProductsService.resolveOrderItems` and has since `b2736eb` (2026-08-22). The real
+> remaining mismatch was `ProductGridSection`'s quick-add adding the undiscounted price to
+> the cart; fixed 2026-09-20. The test gap this entry names was real and is now closed at
+> three layers.
 `backend/src/public/public.service.ts` (`createOrder`) · `storefront/lib/auto-discounts.ts`
 
 The storefront computes and displays an auto-discounted price on product cards and the
@@ -3363,7 +3392,7 @@ block later phases exist in draft.
 |---|---|---|
 | OPS-1 scheduled off-host backups + a real restore drill | S | The single highest-consequence gap in the product |
 | OPS-2 point `ERROR_TRACKING_WEBHOOK_URL` at something that pages a human | S | The abstraction is built; nothing is listening |
-| **DSC-1 charge the auto-discount that is displayed** | S | Live mis-pricing (§7 D-1) |
+| ~~**DSC-1 charge the auto-discount that is displayed**~~ **RESOLVED 2026-09-20** | — | Already charged since `b2736eb`; the stale-doc-driven finding is withdrawn. The real bug (quick-add put the undiscounted price in the cart) is fixed with tests at three layers. |
 | §7.2 move the six dead toggles under Coming Soon | S | Stops the product lying to merchants |
 | PLT-6 rename the Integrations "Webhooks" tab | S | One label, removes a real misconception |
 | MKT-7 newsletter subscriber list + export | S | Data collected and currently unusable |
@@ -3876,8 +3905,11 @@ still a separate legal deliverable.
 providers' own messaging widgets. Get sign-off, revert, or accept knowingly.
 
 **D11 · Consumer price display.**
-DSC-1 is Phase 0. Separate acknowledgment that displaying one price and charging another
-has a regulatory dimension, not only a product one.
+~~DSC-1 is Phase 0.~~ DSC-1 turned out to be already fixed (`b2736eb`), and the one real
+display/charge mismatch left (quick-add) was fixed 2026-09-20. The acknowledgment still
+stands on its own: displaying one price and charging another has a regulatory dimension,
+not only a product one, which is why the regression test now runs at three layers rather
+than one.
 
 ### Vendors and integrations
 
