@@ -96,6 +96,23 @@ describe('Signup velocity limits (e2e)', () => {
     expect(statuses[statuses.length - 1]).toBe(429);
   });
 
+  // REGRESSION (2026-09-20): a named throttler in ThrottlerModule.forRoot's
+  // `throttlers` array applies to EVERY route, not only the ones that name it
+  // in @Throttle. Adding `signupHourly` therefore capped the whole API at 20
+  // requests/hour/IP, which took out the Playwright suite on main and would
+  // have taken out any real merchant's admin session after 20 requests. The
+  // per-throttler skipIf is what scopes it back to signup; this is the check
+  // that it stays scoped.
+  it('does not apply the hourly signup window to the rest of the API', async () => {
+    const statuses: number[] = [];
+    for (let n = 0; n < 30; n++) {
+      const res = await request(app.getHttpServer()).get('/health');
+      statuses.push(res.status);
+    }
+    expect(statuses.filter((s) => s === 429)).toHaveLength(0);
+    expect(statuses.every((s) => s === 200)).toBe(true);
+  });
+
   // The hourly window cannot be observed firing without either 20 successful
   // signups or an hour of waiting, so what is asserted here is that it is
   // actually WIRED to this route - the failure mode worth guarding is someone

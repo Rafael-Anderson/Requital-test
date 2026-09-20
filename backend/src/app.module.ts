@@ -7,6 +7,8 @@ import {
 import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import type { ExecutionContext } from '@nestjs/common';
+import type { Request } from 'express';
 import cookieParser from 'cookie-parser';
 import { RequestContextMiddleware } from './common/logging/request-context.middleware';
 import { platformCsrf } from './platform-auth/platform-auth.constants';
@@ -66,6 +68,29 @@ import { NewsletterModule } from './newsletter/newsletter.module';
 import { PlatformAuthModule } from './platform-auth/platform-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 
+// Throttling is skipped wholesale under Jest: dozens of e2e specs
+// legitimately call /auth/signup or /auth/login many times in quick
+// succession from one in-process supertest client, and 429s there would have
+// nothing to do with what those tests check. THROTTLE_IN_TESTS=1 is a
+// test-only seam that can only ever re-ENABLE throttling, never disable it
+// in production - test/signup-limits.e2e-spec.ts uses it to watch the signup
+// limits actually reject a request.
+function skipThrottling(): boolean {
+  return (
+    process.env.NODE_ENV === 'test' && process.env.THROTTLE_IN_TESTS !== '1'
+  );
+}
+
+// What scopes `signupHourly` to the one route it is meant for. Matches on
+// originalUrl rather than req.path for the same reason skipCsrfProtection
+// does (see common/csrf.ts): under a global mount, req.path is not the route.
+function isSignupRequest(context: ExecutionContext): boolean {
+  if (context.getType() !== 'http') return false;
+  const request = context.switchToHttp().getRequest<Request>();
+  const path = (request.originalUrl ?? request.url ?? '').split('?')[0];
+  return request.method === 'POST' && path === '/auth/signup';
+}
+
 @Module({
   imports: [
     // Powers @Cron() in LowStockDigestService and AbandonedCartsService —
@@ -78,32 +103,32 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
     // limit via @Throttle(...) — see auth.controller.ts, customer-auth.
     // controller.ts, and public.controller.ts.
     //
-    // skipIf disables enforcement under Jest (NODE_ENV=test, set
-    // automatically by Jest itself — confirmed, not assumed) rather than in
-    // production: dozens of existing e2e specs legitimately call
-    // /auth/signup or /auth/login many times in quick succession from the
-    // same in-process supertest client, which the 5/min auth limits below
-    // would otherwise reject with 429s that have nothing to do with the
-    // behavior those tests are actually checking.
-    // `signupHourly` is a second, longer window used by POST /auth/signup
-    // ONLY (see auth.controller.ts). A named throttler with no @Throttle
-    // entry on a route does not apply to it, so declaring it here is inert
-    // everywhere else. 5/min stops a burst; 20/hour is what stops a script
-    // patiently creating shops all day just under the per-minute limit.
+    // `signupHourly` is a second, longer window for POST /auth/signup:
+    // 5/min stops a burst, 20/hour stops a script patiently creating shops
+    // all day just under the per-minute limit.
     //
-    // THROTTLE_IN_TESTS is a test-only seam: it can only ever ENABLE
-    // throttling that NODE_ENV=test would otherwise skip, never disable any
-    // in production. One e2e spec sets it to prove the signup limits
-    // actually fire, because a limit nobody has watched reject a request is
-    // a configuration value, not a protection.
+    // **Every throttler in this array applies to EVERY route.** @Throttle on
+    // a handler only overrides a named throttler's numbers there; it does not
+    // scope the throttler to that handler. Declaring `signupHourly` without
+    // the skipIf below therefore capped the WHOLE API at 20 requests per hour
+    // per IP - which broke the Playwright suite on main and would have frozen
+    // any real merchant's admin session after 20 requests. Scoping it is the
+    // skipIf, nothing else.
+    //
+    // Note that a per-throttler skipIf REPLACES the common one rather than
+    // composing with it (throttler.guard.js: `namedThrottler.skipIf ||
+    // this.commonOptions.skipIf`), so each one below has to re-apply the
+    // test-environment skip itself. That is why it is a shared function.
     ThrottlerModule.forRoot({
       throttlers: [
-        { name: 'default', ttl: 60000, limit: 100 },
-        { name: 'signupHourly', ttl: 3600000, limit: 20 },
+        { name: 'default', ttl: 60000, limit: 100, skipIf: skipThrottling },
+        {
+          name: 'signupHourly',
+          ttl: 3600000,
+          limit: 20,
+          skipIf: (context) => skipThrottling() || !isSignupRequest(context),
+        },
       ],
-      skipIf: () =>
-        process.env.NODE_ENV === 'test' &&
-        process.env.THROTTLE_IN_TESTS !== '1',
     }),
     DatabaseModule,
     AuthModule,
