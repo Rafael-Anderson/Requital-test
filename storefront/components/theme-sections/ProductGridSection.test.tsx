@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import ProductGridSection from "./ProductGridSection";
 import type { Product } from "@/lib/types";
 import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
@@ -7,6 +7,7 @@ import type { SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  shopContext = { ...DEFAULT_SHOP_CONTEXT };
 });
 
 const listProducts = vi.fn();
@@ -17,28 +18,33 @@ vi.mock("@/lib/api", () => ({
   resolveImageUrl: (path: string | null) => path,
 }));
 
+const addItem = vi.fn();
 vi.mock("@/lib/cart", () => ({
-  useCart: () => ({ addItem: vi.fn() }),
+  useCart: () => ({ addItem: (...args: unknown[]) => addItem(...args) as unknown }),
 }));
 
 vi.mock("@/lib/fly-to-cart", () => ({
   useFlyToCart: () => ({ flyToCart: vi.fn() }),
 }));
 
-// No themeConfig (productCards is undefined) — QuickAddButton never renders,
-// so only the collectionId/productLimit plumbing this suite is exercising
-// matters, matching FeaturedGrid.render.test.tsx's own "mock the minimum the
-// component actually branches on" convention.
+// Defaults to no themeConfig (productCards undefined) — QuickAddButton never
+// renders, so only the collectionId/productLimit plumbing most of this suite
+// exercises matters, matching FeaturedGrid.render.test.tsx's own "mock the
+// minimum the component actually branches on" convention. The quick-add
+// pricing test below overrides these fields and restores them afterwards.
+const DEFAULT_SHOP_CONTEXT = {
+  shopSlug: "test-shop",
+  shopBasePath: "",
+  shop: { currency: "AED", buttonFill: "solid" },
+  outlets: [{ id: 7 }],
+  themeConfig: null as unknown,
+  previewToken: undefined,
+  previewMode: false,
+  autoDiscounts: [] as unknown[],
+};
+let shopContext = { ...DEFAULT_SHOP_CONTEXT };
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({
-    shopSlug: "test-shop",
-    shopBasePath: "",
-    shop: { currency: "AED", buttonFill: "solid" },
-    outlets: [{ id: 7 }],
-    themeConfig: null,
-    previewToken: undefined,
-    previewMode: false,
-  }),
+  useShop: () => shopContext,
 }));
 
 function product(id: number): Product {
@@ -190,5 +196,82 @@ describe("ProductGridSection", () => {
       expect(queryByText("Out of stock")).toBeNull(); // stock block hidden
       // no brand data ⇒ vendor line absent (only the badge "Sold out" chip if themed, not here)
     });
+  });
+});
+
+// The bug this guards: the card rendered the auto-discounted price while the
+// quick-add button next to it put the full catalog price into the cart, so the
+// cart and checkout quoted a total the server would never charge (the server
+// applies auto-discounts in ProductsService.resolveOrderItems). Asserting the
+// two numbers are the SAME number is the check that was missing; asserting the
+// button "works" would have passed throughout.
+describe("ProductGridSection quick-add pricing (DSC-1)", () => {
+  const AUTO_DISCOUNT = {
+    id: 1,
+    type: "PERCENTAGE",
+    value: "25",
+    appliesTo: "SPECIFIC_PRODUCTS",
+    productIds: [1],
+    collectionIds: [],
+  };
+
+  function withQuickAdd(autoDiscounts: unknown[]) {
+    shopContext = {
+      ...DEFAULT_SHOP_CONTEXT,
+      autoDiscounts,
+      themeConfig: {
+        globalSettings: {
+          productCards: { quickAdd: true, mobileQuickAdd: false },
+          animations: {},
+          buttons: {},
+          badges: undefined,
+          colorSchemes: [],
+        },
+      } as unknown,
+    };
+  }
+
+  it("adds the price the card displays, not the catalog price", async () => {
+    withQuickAdd([AUTO_DISCOUNT]);
+    listProducts.mockResolvedValue([product(1)]);
+    const settings = {} as unknown as SectionSettings;
+
+    const { container, findByRole } = render(
+      <ProductGridSection sectionId="sec-1" settings={settings} blocks={[cardBlock]} />,
+    );
+
+    // 10.00 catalog, 25% off => 7.50. The card prints the struck original next
+    // to the discounted price, the same treatment ProductCard already uses on
+    // the collection page. Queried by class rather than by text because the
+    // currency symbol is a sibling SVG element inside the same span.
+    const button = await findByRole("button", { name: /add/i });
+    const struck = container.querySelector(".line-through");
+    const sale = container.querySelector(".text-sale-price");
+    // computeAutoDiscountedPrice returns numbers, so the struck original reads
+    // "10" rather than the catalog string "10.00" - same as ProductCard today.
+    expect(struck?.textContent?.trim()).toBe("10");
+    expect(sale?.textContent).toContain("7.5");
+
+    // The assertion that matters: the number in the cart is the number on the
+    // card, not the catalog price.
+    fireEvent.click(button);
+    expect(addItem).toHaveBeenCalledTimes(1);
+    const [item] = addItem.mock.calls[0] as [{ price: number }];
+    expect(item.price).toBe(7.5);
+    expect(String(item.price)).toBe(sale?.textContent?.trim());
+  });
+
+  it("adds the catalog price when no auto-discount applies", async () => {
+    withQuickAdd([]);
+    listProducts.mockResolvedValue([product(1)]);
+    const settings = {} as unknown as SectionSettings;
+
+    const { findByRole } = render(
+      <ProductGridSection sectionId="sec-1" settings={settings} blocks={[cardBlock]} />,
+    );
+    fireEvent.click(await findByRole("button", { name: /add/i }));
+
+    const [item] = addItem.mock.calls[0] as [{ price: number }];
+    expect(item.price).toBe(10);
   });
 });

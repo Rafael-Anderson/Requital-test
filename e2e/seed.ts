@@ -50,7 +50,7 @@ export interface AdminSession {
   csrfToken: string;
 }
 
-function sessionFromResponse(res: Response): AdminSession {
+export function sessionFromResponse(res: Response): AdminSession {
   const cookie = res.headers
     .getSetCookie()
     .map((line) => line.split(';')[0])
@@ -59,7 +59,7 @@ function sessionFromResponse(res: Response): AdminSession {
   return { cookie, csrfToken };
 }
 
-async function api<T>(
+export async function api<T>(
   path: string,
   init: RequestInit = {},
   session?: AdminSession,
