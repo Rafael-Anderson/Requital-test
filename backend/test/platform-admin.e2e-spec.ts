@@ -209,26 +209,57 @@ describe('Platform admin (e2e)', () => {
     // real shop count that is a crash, not a slow page, so the cap is asserted
     // rather than assumed: pageSize is honoured, total counts past the page,
     // and page 2 is a different slice than page 1.
+    // GET /platform-admin/shops lists EVERY shop on the platform, ordered by
+    // createdAt DESC, and the suite runs specs concurrently - every setupShop
+    // anywhere signs up another shop. An offset-paged view of a table that is
+    // being appended to is not stable across two requests: one insert between
+    // page 1 and page 2 shifts every row down, so page 2 returns what page 1
+    // just returned. Demonstrated: with a single interleaved signup, both
+    // pages came back as shop id 45876.
+    //
+    // So the paging assertion is scoped with `q` to shops this test created
+    // and named itself. No concurrent spec can match that marker, which makes
+    // the window deterministic rather than merely usually-correct.
     it('paginates rather than returning every shop', async () => {
-      const first = await request(app.getHttpServer())
-        .get('/platform-admin/shops?page=1&pageSize=1')
-        .set('Cookie', platformCookie)
-        .expect(200);
-      const firstPage = body<PaginatedPlatformShops>(first);
-      expect(firstPage.data).toHaveLength(1);
-      expect(firstPage.page).toBe(1);
-      expect(firstPage.pageSize).toBe(1);
-      expect(firstPage.total).toBeGreaterThanOrEqual(1);
-
-      if (firstPage.total > 1) {
-        const second = await request(app.getHttpServer())
-          .get('/platform-admin/shops?page=2&pageSize=1')
-          .set('Cookie', platformCookie)
-          .expect(200);
-        const secondPage = body<PaginatedPlatformShops>(second);
-        expect(secondPage.data).toHaveLength(1);
-        expect(secondPage.data[0].id).not.toBe(firstPage.data[0].id);
+      const marker = `pgmark${runId}`;
+      for (const n of [1, 2]) {
+        await request(app.getHttpServer())
+          .post('/auth/signup')
+          .send({
+            name: 'Pagination Fixture',
+            email: `${marker}-${n}@test.com`,
+            password: 'password123',
+            shopName: `${marker} Shop ${n}`,
+            subdomain: `${marker}-${n}`,
+          })
+          .expect(201);
       }
+
+      const page = async (n: number) =>
+        body<PaginatedPlatformShops>(
+          await request(app.getHttpServer())
+            .get(`/platform-admin/shops?q=${marker}&page=${n}&pageSize=1`)
+            .set('Cookie', platformCookie)
+            .expect(200),
+        );
+
+      const first = await page(1);
+      expect(first.data).toHaveLength(1);
+      expect(first.page).toBe(1);
+      expect(first.pageSize).toBe(1);
+      // The marker is unique to this test, so the count is exact rather than
+      // "at least" - which also proves pageSize really limited the rows
+      // instead of the filter happening to match one.
+      expect(first.total).toBe(2);
+
+      const second = await page(2);
+      expect(second.data).toHaveLength(1);
+      expect(second.data[0].id).not.toBe(first.data[0].id);
+
+      // Past the end: an empty page, not a wrapped-around repeat of page 1.
+      const third = await page(3);
+      expect(third.data).toHaveLength(0);
+      expect(third.total).toBe(2);
     });
 
     it('rejects a pageSize above the cap instead of silently honouring it', async () => {

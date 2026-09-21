@@ -191,6 +191,40 @@ describe('Post-purchase survey (e2e)', () => {
     return body<OrderRow>(res);
   }
 
+  // OrdersService.updateStatus deliberately does NOT await
+  // notifySurveyRequest - "a slow or down email/WhatsApp provider must
+  // never delay or fail an already-committed status change". The
+  // surveyresponse INSERT therefore lands shortly AFTER the PATCH returns,
+  // so reading the row once, immediately, is a race: it passes on an idle
+  // machine and fails under CI load. That is what broke main on
+  // 2026-09-21. Poll for it instead of sleeping a fixed amount, which
+  // would either be flaky or slow.
+  async function waitForSurveyRow(
+    orderId: number,
+    timeoutMs = 5000,
+  ): Promise<(SurveyresponseRow & RowDataPacket) | null> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const rows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
+        `SELECT * FROM surveyresponse WHERE orderId = ?`,
+        [orderId],
+      );
+      if (rows[0]) return rows[0];
+      if (Date.now() > deadline) return null;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  // The inverse assertion cannot be proved by a single early read either:
+  // "no row yet" and "no row ever" look identical the instant the PATCH
+  // returns, so the old check would have passed even if the toggle were
+  // broken. Waiting a bounded window first does not make it a proof, but
+  // it does make the test capable of failing.
+  async function expectNoSurveyRow(orderId: number, settleMs = 1500) {
+    const row = await waitForSurveyRow(orderId, settleMs);
+    expect(row).toBeNull();
+  }
+
   async function driveToDelivered(adminToken: string, orderId: number) {
     for (const status of [
       'confirmed',
@@ -224,11 +258,7 @@ describe('Post-purchase survey (e2e)', () => {
 
     await driveToDelivered(adminToken, order.id);
 
-    const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
-      `SELECT * FROM surveyresponse WHERE orderId = ?`,
-      [order.id],
-    );
-    const survey = surveyRows[0] ?? null;
+    const survey = await waitForSurveyRow(order.id);
     expect(survey).not.toBeNull();
     expect(survey?.respondedAt).toBeNull();
 
@@ -255,11 +285,7 @@ describe('Post-purchase survey (e2e)', () => {
     const order = await createOrder(adminToken, outletId, productId, {});
     await driveToDelivered(adminToken, order.id);
 
-    const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
-      `SELECT * FROM surveyresponse WHERE orderId = ?`,
-      [order.id],
-    );
-    expect(surveyRows[0] ?? null).toBeNull();
+    await expectNoSurveyRow(order.id);
   });
 
   it('creates the survey row but sends no email when notifyEmail is off at the moment of delivery', async () => {
@@ -275,11 +301,7 @@ describe('Post-purchase survey (e2e)', () => {
 
     await driveToDelivered(adminToken, order.id);
 
-    const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
-      `SELECT * FROM surveyresponse WHERE orderId = ?`,
-      [order.id],
-    );
-    expect(surveyRows[0] ?? null).not.toBeNull();
+    expect(await waitForSurveyRow(order.id)).not.toBeNull();
     const job = await findJobByIdempotencyKey(
       `order:${order.id}:survey-email`,
     );
@@ -348,11 +370,7 @@ describe('Post-purchase survey (e2e)', () => {
       );
       const order = await createOrder(adminToken, outletId, productId, {});
       await driveToDelivered(adminToken, order.id);
-      const surveyRows = await db.query<(SurveyresponseRow & RowDataPacket)[]>(
-        `SELECT * FROM surveyresponse WHERE orderId = ?`,
-        [order.id],
-      );
-      const survey = surveyRows[0];
+      const survey = await waitForSurveyRow(order.id);
       if (!survey) throw new Error('surveyresponse not found');
       return { adminToken, order, token: survey.token };
     }
