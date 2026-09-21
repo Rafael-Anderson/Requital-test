@@ -40,6 +40,60 @@ const PRODUCT_SALES_SORT_COLUMN: Record<string, string> = {
   totalSalePrice: 'totalSalePrice',
 };
 
+export type MarginDimension =
+  | 'product'
+  | 'collection'
+  | 'channel'
+  | 'outlet'
+  | 'order';
+
+// keyExpr/labelExpr are fixed strings chosen by the dimension enum, never
+// interpolated from user input - the DTO validates against this key set, so
+// there is no path from a query string into the SQL.
+const MARGIN_DIMENSIONS: Record<
+  MarginDimension,
+  { keyExpr: string; labelExpr: string; joins: string }
+> = {
+  product: {
+    keyExpr: 'oi.productId',
+    // productName is the snapshot taken at order time; preferring it over the
+    // live product row keeps a renamed or deleted product readable in a
+    // historical report.
+    labelExpr: 'oi.productName',
+    joins: '',
+  },
+  collection: {
+    keyExpr: 'c.id',
+    labelExpr: 'c.name',
+    joins:
+      'LEFT JOIN productcollection pc ON pc.productId = oi.productId ' +
+      'LEFT JOIN collection c ON c.id = pc.collectionId',
+  },
+  channel: { keyExpr: 'o.channel', labelExpr: 'o.channel', joins: '' },
+  outlet: {
+    keyExpr: 'o.outletId',
+    labelExpr: 'ou.name',
+    joins: 'JOIN outlet ou ON ou.id = o.outletId',
+  },
+  order: { keyExpr: 'o.id', labelExpr: 'CAST(o.id AS CHAR)', joins: '' },
+};
+
+function marginShape(revenue: number, cost: number) {
+  const margin = revenue - cost;
+  return {
+    revenue: round2(revenue),
+    cost: round2(cost),
+    margin: round2(margin),
+    // Null rather than 0 when there is no costed revenue: 0% and "nothing to
+    // measure" are different answers.
+    marginPercent: revenue > 0 ? round2((margin / revenue) * 100) : null,
+  };
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly db: DatabaseService) {}
@@ -181,6 +235,88 @@ export class ReportsService {
       ordersMeasured: samples.length,
       buckets: bucketPrepTimes(samples, timezone),
     };
+  }
+
+  // Gross margin, computed over orderitem.unitCost - the cost captured AT
+  // ORDER TIME (migration 20260921120000), never product.costPrice read now.
+  // Reading today's cost against a historical sale silently rewrites every
+  // past report the moment a merchant edits a cost; that is the whole reason
+  // the column exists.
+  //
+  // Queries, not a rollup table: rollups are a separate piece of work, and
+  // this has to be correct before it can be pre-aggregated.
+  //
+  // Lines with a NULL unitCost are excluded from the margin arithmetic and
+  // counted separately, because there are two genuinely different reasons a
+  // line has no cost and a merchant needs to tell them apart:
+  //   - the order predates the migration, and never will have one; or
+  //   - the product (or one of its ingredients) has no cost set, which the
+  //     merchant can fix.
+  // Folding either into the totals as 0 would report 100% margin on it.
+  async getMarginSummary(ctx: TenantContext, filters: ReportsFilterQueryDto) {
+    const { sql, params } = this.buildOrderWhere(ctx, filters, 'o');
+
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT
+         COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
+                           THEN oi.quantity * oi.priceAtPurchase END), 0) AS revenue,
+         COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
+                           THEN oi.quantity * oi.unitCost END), 0) AS cost,
+         COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost,
+         COUNT(*) AS lineCount
+       FROM orderitem oi
+       JOIN \`order\` o ON o.id = oi.orderId
+       WHERE ${sql}`,
+      params,
+    );
+
+    const revenue = Number(rows[0].revenue);
+    const cost = Number(rows[0].cost);
+    return {
+      ...marginShape(revenue, cost),
+      linesCosted:
+        Number(rows[0].lineCount) - Number(rows[0].linesWithoutCost),
+      linesWithoutCost: Number(rows[0].linesWithoutCost),
+    };
+  }
+
+  // The same arithmetic grouped four ways. One method rather than four
+  // near-identical ones: the only thing that varies is the GROUP BY key and
+  // its label, and four copies of a money aggregate is four places for the
+  // CASE WHEN unitCost IS NOT NULL guard to be forgotten.
+  async getMarginBreakdown(
+    ctx: TenantContext,
+    filters: ReportsFilterQueryDto,
+    dimension: MarginDimension,
+  ) {
+    const { sql, params } = this.buildOrderWhere(ctx, filters, 'o');
+    const dim = MARGIN_DIMENSIONS[dimension];
+
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT ${dim.keyExpr} AS groupKey,
+              ${dim.labelExpr} AS label,
+              COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
+                                THEN oi.quantity * oi.priceAtPurchase END), 0) AS revenue,
+              COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
+                                THEN oi.quantity * oi.unitCost END), 0) AS cost,
+              COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost
+         FROM orderitem oi
+         JOIN \`order\` o ON o.id = oi.orderId
+         ${dim.joins}
+        WHERE ${sql}
+        GROUP BY ${dim.keyExpr}, ${dim.labelExpr}
+        HAVING revenue > 0 OR linesWithoutCost > 0
+        ORDER BY (revenue - cost) DESC
+        LIMIT 200`,
+      params,
+    );
+
+    return rows.map((r) => ({
+      key: r.groupKey as string | number | null,
+      label: (r.label as string | null) ?? 'Unattributed',
+      ...marginShape(Number(r.revenue), Number(r.cost)),
+      linesWithoutCost: Number(r.linesWithoutCost),
+    }));
   }
 
   async getGeneralSummary(ctx: TenantContext, filters: ReportsFilterQueryDto) {

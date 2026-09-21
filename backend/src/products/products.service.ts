@@ -48,6 +48,7 @@ import {
   parseImportNumber,
   splitList,
 } from './products-import';
+import { resolveUnitCost } from './product-cost';
 
 interface BrandLiteRow extends RowDataPacket {
   id: number;
@@ -894,13 +895,26 @@ export class ProductsService {
           await this.syncShadowMeta(
             conn,
             { shadowProductId: id },
-            { name: dto.name, thumbnail, trackInventory: dto.trackInventory },
+            {
+              name: dto.name,
+              thumbnail,
+              trackInventory: dto.trackInventory,
+              costPrice: dto.costPrice,
+            },
           );
           if (variantIds.length > 0) {
+            // A variant shadow mirrors the PARENT product's cost -
+            // productvariant has no costPrice column of its own, and this is
+            // the same value provisionShadowForVariant seeds it with.
             await this.syncShadowMeta(
               conn,
               { shadowVariantIdIn: variantIds },
-              { name: dto.name, thumbnail, trackInventory: dto.trackInventory },
+              {
+                name: dto.name,
+                thumbnail,
+                trackInventory: dto.trackInventory,
+                costPrice: dto.costPrice,
+              },
             );
           }
         }
@@ -1680,15 +1694,45 @@ export class ProductsService {
   // changed, and a no-op when no shadow exists for `where` (e.g. called for
   // a product with zero variants against a shadowVariantId filter that
   // matches nothing).
+  // Keeps a shadow ingredient's own columns in step with the product (or
+  // variant) it mirrors. Every field here is a *projection* of the product:
+  // a shadow has no independent identity, so letting one drift is a silent
+  // data bug rather than a difference of opinion.
+  //
+  // costPerUnit was missing from this list until 2026-09-21, so a shadow's
+  // cost was a snapshot frozen at provisioning time that never moved again
+  // when the merchant edited product.costPrice. Nothing merchant-visible
+  // read it (IngredientsService excludes shadows from both list and detail),
+  // and the margin work deliberately computes a plain product's cost from
+  // product.costPrice rather than from here - but that was containment, not
+  // a fix: any future reader of a shadow's costPerUnit would have inherited
+  // the staleness. Now it tracks.
+  //
+  // undefined means "this save did not touch that field" (buildSetClause
+  // drops it), so passing dto.costPrice through only writes when a cost was
+  // actually submitted.
   private async syncShadowMeta(
     conn: PoolConnection,
     where: { shadowProductId: number } | { shadowVariantIdIn: number[] },
-    meta: { name?: string; thumbnail?: string; trackInventory?: boolean },
+    meta: {
+      name?: string;
+      thumbnail?: string;
+      trackInventory?: boolean;
+      costPrice?: string | number | null;
+    },
   ): Promise<void> {
     const set = buildSetClause({
       name: meta.name,
       image: meta.thumbnail,
       trackInventory: meta.trackInventory,
+      // Same column the provisioning INSERTs above populate from the very
+      // same product.costPrice, so the two cannot disagree about units.
+      costPerUnit:
+        meta.costPrice === undefined
+          ? undefined
+          : meta.costPrice === null
+            ? null
+            : String(meta.costPrice),
     });
     if (!set) return;
     if ('shadowProductId' in where) {
@@ -2366,6 +2410,7 @@ export class ProductsService {
               name: group.data.name,
               thumbnail: group.data.thumbnail,
               trackInventory: group.data.trackInventory,
+              costPrice: group.data.costPrice,
             },
           );
         }
@@ -3480,6 +3525,24 @@ export class ProductsService {
       collectionIdsByProduct.set(pid, list);
     }
 
+    // Recipes for the cost capture below. One batched query for the whole
+    // order, same batch-load-then-assemble shape as the collection lookup
+    // above - not one query per line. Only recipe-backed products need it;
+    // a plain product's cost is its own column.
+    const recipeProductIds = products
+      .filter((p) => p.usesIngredients)
+      .map((p) => p.id as number);
+    const recipeRows = recipeProductIds.length
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT pi.productId, pi.variantId, pi.ingredientId, pi.quantityPerUnit,
+                  ing.costPerUnit
+             FROM productingredient pi
+             JOIN ingredient ing ON ing.id = pi.ingredientId
+            WHERE pi.productId IN (${recipeProductIds.map(() => '?').join(', ')})`,
+          recipeProductIds,
+        )
+      : [];
+
     const variantIds = [
       ...new Set(
         items.filter((i) => i.variantId !== undefined).map((i) => i.variantId!),
@@ -3497,6 +3560,23 @@ export class ProductsService {
         )
       : [];
     const variantsById = new Map(variants.map((v) => [v.id as number, v]));
+
+    // A recipe line applies to this order line when it is either
+    // product-wide (variantId null) or written for the exact variant being
+    // ordered. Read as the recipe stands RIGHT NOW, which is the point -
+    // the same ERP discipline priceAtPurchase follows.
+    const recipeFor = (productId: number, variantId: number | null) =>
+      recipeRows
+        .filter(
+          (r) =>
+            r.productId === productId &&
+            (r.variantId === null || r.variantId === variantId),
+        )
+        .map((r) => ({
+          ingredientId: r.ingredientId as number,
+          quantityPerUnit: Number(r.quantityPerUnit),
+          costPerUnit: r.costPerUnit as string | null,
+        }));
 
     return items.map((item) => {
       const product = productsById.get(item.productId)!;
@@ -3569,12 +3649,25 @@ export class ProductsService {
         }
       }
 
+      // What this line cost US, frozen now for exactly the same reason
+      // `price` is: reading product.costPrice at report time would report
+      // today's cost against a historical sale, and would silently rewrite
+      // every past margin figure the moment a merchant edits a cost. An
+      // admin priceOverride changes what was charged, not what it cost, so
+      // the cost is captured for those lines too.
+      const unitCost = resolveUnitCost({
+        usesIngredients: !!product.usesIngredients,
+        costPrice: product.costPrice as string | null,
+        recipe: recipeFor(item.productId, variant?.id ?? null),
+      });
+
       return {
         product,
         variant,
         quantity: item.quantity,
         price,
         autoDiscountAmount,
+        unitCost,
         variantLabel: variant
           ? buildVariantLabel([
               variant.optionValue1Value as string | undefined,

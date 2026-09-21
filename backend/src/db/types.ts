@@ -130,6 +130,15 @@ export interface OrderitemRow {
   quantity: number;
   priceAtPurchase: string;
   autoDiscountAmount: string | null;
+  // What this line COST at order time, captured alongside the price it
+  // sold for. NULL for every order placed before 20260921120000 and for
+  // any line whose cost could not be determined (an ingredient with no
+  // costPerUnit, a product with no costPrice) - 'unknown' rather than 0,
+  // because a 0 cost reads as 100% margin.
+  unitCost: string | null;
+  // Always 'AED' today; exists so the captured cost is unambiguous once
+  // multi-currency lands (audit D6) instead of needing a guess-migration.
+  unitCostCurrency: string;
   note: string | null;
 }
 

@@ -6,6 +6,7 @@ import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -925,4 +926,172 @@ describe('Reports (e2e)', () => {
       expect(otherOutlet.ordersMeasured).toBe(0);
     });
   });
+
+  // Part A: cost captured at order time, and the margin built from it.
+  describe('Margin Report: costs are captured at order time, not read now', () => {
+    interface MarginSummaryBody {
+      revenue: number;
+      cost: number;
+      margin: number;
+      marginPercent: number | null;
+      linesCosted: number;
+      linesWithoutCost: number;
+    }
+    interface MarginRow {
+      key: string | number | null;
+      label: string;
+      revenue: number;
+      cost: number;
+      margin: number;
+      marginPercent: number | null;
+      linesWithoutCost: number;
+    }
+
+    async function setCost(adminToken: string, productId: number, costPrice: number) {
+      await request(app.getHttpServer())
+        .patch(`/products/${productId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ costPrice })
+        .expect(200);
+    }
+
+    // THE test this whole column exists for. Two orders for the same product
+    // either side of a cost change must carry two different captured costs,
+    // and the first one must not move when the cost changes underneath it.
+    it('captures the cost as it stood at each order, and never rewrites it', async () => {
+      const shop = await setupShop('margin-capture');
+      await setCost(shop.adminToken, shop.productId, 5);
+
+      const cheap = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .expect(201);
+
+      await setCost(shop.adminToken, shop.productId, 9);
+
+      const dear = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .expect(201);
+
+      const costOf = async (orderId: number) => {
+        const rows = await db.query<
+          (RowDataPacket & { unitCost: string | null; unitCostCurrency: string })[]
+        >('SELECT unitCost, unitCostCurrency FROM orderitem WHERE orderId = ?', [
+          orderId,
+        ]);
+        return rows[0];
+      };
+
+      const first = await costOf(body<IdRow>(cheap).id);
+      const second = await costOf(body<IdRow>(dear).id);
+      expect(Number(first.unitCost)).toBe(5);
+      expect(Number(second.unitCost)).toBe(9);
+      // The currency marker is populated for every new row even though the
+      // app is single-currency today.
+      expect(first.unitCostCurrency).toBe('AED');
+
+      // Change it a third time: the two captured rows must be untouched.
+      await setCost(shop.adminToken, shop.productId, 100);
+      expect(Number((await costOf(body<IdRow>(cheap).id)).unitCost)).toBe(5);
+      expect(Number((await costOf(body<IdRow>(dear).id)).unitCost)).toBe(9);
+    });
+
+    it('computes margin from the captured cost', async () => {
+      const shop = await setupShop('margin-math');
+      await setCost(shop.adminToken, shop.productId, 8);
+      // setupShop's product sells at 20; 2 units => revenue 40, cost 16.
+      await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 2))
+        .expect(201);
+
+      const summary = body<MarginSummaryBody>(
+        await request(app.getHttpServer())
+          .get('/reports/margin/summary')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .expect(200),
+      );
+      expect(summary.revenue).toBe(40);
+      expect(summary.cost).toBe(16);
+      expect(summary.margin).toBe(24);
+      expect(summary.marginPercent).toBe(60);
+      expect(summary.linesCosted).toBe(1);
+      expect(summary.linesWithoutCost).toBe(0);
+
+      const byProduct = body<MarginRow[]>(
+        await request(app.getHttpServer())
+          .get('/reports/margin/breakdown?dimension=product')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .expect(200),
+      );
+      expect(byProduct).toHaveLength(1);
+      expect(byProduct[0].margin).toBe(24);
+    });
+
+    // A product with no cost set is the common case on real data. It must be
+    // reported as uncosted, never folded in as zero cost / 100% margin.
+    it('excludes uncosted lines from the maths and counts them instead', async () => {
+      const shop = await setupShop('margin-uncosted');
+      await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .expect(201);
+
+      const summary = body<MarginSummaryBody>(
+        await request(app.getHttpServer())
+          .get('/reports/margin/summary')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .expect(200),
+      );
+      expect(summary.linesWithoutCost).toBe(1);
+      expect(summary.linesCosted).toBe(0);
+      expect(summary.revenue).toBe(0);
+      // Not 100, and not 0: there is nothing to measure.
+      expect(summary.marginPercent).toBeNull();
+    });
+
+    it('groups by every supported dimension and stays shop-scoped', async () => {
+      const shop = await setupShop('margin-dims');
+      const other = await setupShop('margin-other');
+      await setCost(shop.adminToken, shop.productId, 4);
+      await setCost(other.adminToken, other.productId, 4);
+      await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${other.adminToken}`)
+        .send(orderPayload(other.outletAId, other.productId, 3))
+        .expect(201);
+
+      for (const dimension of ['product', 'collection', 'channel', 'outlet', 'order']) {
+        const rows = body<MarginRow[]>(
+          await request(app.getHttpServer())
+            .get(`/reports/margin/breakdown?dimension=${dimension}`)
+            .set('Authorization', `Bearer ${shop.adminToken}`)
+            .expect(200),
+        );
+        // 1 unit at 20, cost 4 -> margin 16. The other shop's 3-unit order
+        // must not appear in any grouping.
+        const total = rows.reduce((sum, r) => sum + r.margin, 0);
+        expect(total).toBe(16);
+      }
+    });
+
+    it('rejects an unknown dimension rather than falling back silently', async () => {
+      const shop = await setupShop('margin-baddim');
+      await request(app.getHttpServer())
+        .get('/reports/margin/breakdown?dimension=; DROP TABLE orderitem')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(400);
+    });
+  });
+
 });

@@ -854,4 +854,100 @@ describe('Products / variants (e2e)', () => {
       expect(messageContains(res, 'variant')).toBe(true);
     });
   });
+
+  // A shadow ingredient is a projection of the product it mirrors, so every
+  // field it copies has to keep tracking. costPerUnit did not: it was frozen
+  // at provisioning time and never moved again when the merchant edited the
+  // product's cost. Nothing merchant-visible read it (IngredientsService
+  // excludes shadows), which is exactly why it could drift unnoticed.
+  describe('shadow ingredient cost stays in step with the product', () => {
+    async function shadowFor(productId: number) {
+      const rows = await db.query<(IngredientRow & RowDataPacket)[]>(
+        'SELECT * FROM ingredient WHERE shadowProductId = ?',
+        [productId],
+      );
+      return rows[0] ?? null;
+    }
+
+    it("updates the shadow's costPerUnit when the product's cost changes", async () => {
+      const shop = await setupShop('shadow-cost');
+      const product = await createProduct(shop.adminToken, shop.collectionId, {
+        costPrice: 40,
+      });
+
+      expect(Number((await shadowFor(product.id))!.costPerUnit)).toBe(40);
+
+      await request(app.getHttpServer())
+        .patch(`/products/${product.id}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ costPrice: 55 })
+        .expect(200);
+
+      expect(Number((await shadowFor(product.id))!.costPerUnit)).toBe(55);
+    });
+
+    it('leaves the cost alone on a save that does not touch it', async () => {
+      const shop = await setupShop('shadow-cost-untouched');
+      const product = await createProduct(shop.adminToken, shop.collectionId, {
+        costPrice: 40,
+      });
+
+      await request(app.getHttpServer())
+        .patch(`/products/${product.id}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ name: 'Renamed, same cost' })
+        .expect(200);
+
+      const shadow = await shadowFor(product.id);
+      expect(Number(shadow!.costPerUnit)).toBe(40);
+      expect(shadow!.name).toBe('Renamed, same cost');
+    });
+
+    // The fix only ever writes the ingredient table's CURRENT value. An
+    // orderitem row already written carries its own captured numbers and is
+    // not reachable from here - asserted rather than assumed, because
+    // "editing a setting rewrote history" is the exact failure the
+    // capture-at-order-time work exists to prevent.
+    it('does not touch orders already placed', async () => {
+      const shop = await setupShop('shadow-cost-history');
+      const product = await createProduct(shop.adminToken, shop.collectionId, {
+        costPrice: 40,
+      });
+      const order = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({
+          customerName: 'History Customer',
+          customerPhone: '0501230009',
+          customerAddress: 'Pickup',
+          emirate: 'Dubai',
+          outletId: shop.outletId,
+          orderType: 'pickup',
+          items: [{ productId: product.id, quantity: 1 }],
+        })
+        .expect(201);
+      const orderId = body<IdRow>(order).id;
+
+      const before = await db.query<(OrderitemRow & RowDataPacket)[]>(
+        'SELECT * FROM orderitem WHERE orderId = ?',
+        [orderId],
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/products/${product.id}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ costPrice: 999 })
+        .expect(200);
+
+      const after = await db.query<(OrderitemRow & RowDataPacket)[]>(
+        'SELECT * FROM orderitem WHERE orderId = ?',
+        [orderId],
+      );
+      expect(after).toEqual(before);
+      // The shadow itself did move - proving the cost edit really happened
+      // and the untouched order line is not a false negative.
+      expect(Number((await shadowFor(product.id))!.costPerUnit)).toBe(999);
+    });
+  });
+
 });

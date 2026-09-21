@@ -2710,6 +2710,32 @@ export const POLICY_PAGE_LABELS: Record<PolicyPageType, string> = {
   SHIPPING: "Shipping & Delivery Policy",
 };
 
+export type MarginDimension = "product" | "collection" | "channel" | "outlet" | "order";
+
+export interface MarginSummary {
+  revenue: number;
+  cost: number;
+  margin: number;
+  // Null when nothing costed was sold in the range: 0% and "nothing to
+  // measure" are different answers and must not look the same.
+  marginPercent: number | null;
+  linesCosted: number;
+  // Order lines with no captured cost. Either the order predates the
+  // unitCost migration (never recoverable) or the product has no cost set
+  // (the merchant can fix it).
+  linesWithoutCost: number;
+}
+
+export interface MarginRow {
+  key: string | number | null;
+  label: string;
+  revenue: number;
+  cost: number;
+  margin: number;
+  marginPercent: number | null;
+  linesWithoutCost: number;
+}
+
 export interface PrepTimeBucket {
   outletId: number;
   outletName: string;
