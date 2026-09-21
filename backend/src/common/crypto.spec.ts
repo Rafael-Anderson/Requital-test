@@ -34,7 +34,19 @@ describe('crypto (credential encryption)', () => {
   it('rejects a tampered ciphertext instead of silently returning garbage', () => {
     const encrypted = encrypt('sk_live_abc123');
     const [iv, authTag, ciphertext] = encrypted.split(':');
-    const tampered = `${iv}:${authTag}:${ciphertext.slice(0, -2)}00`;
+    // Flip the last byte rather than overwriting it with a constant.
+    // This previously appended '00', which is a NO-OP whenever the
+    // ciphertext already ends in 00 - the value then decrypts fine and
+    // this expectation fails. The ciphertext is random per run (random
+    // IV), so that was a 1-in-256 failure on every CI run, measured at
+    // 0.388% over 200k samples. It fired on main on 2026-09-21.
+    const lastByte = parseInt(ciphertext.slice(-2), 16);
+    const flipped = (lastByte ^ 0xff).toString(16).padStart(2, '0');
+    const tampered = `${iv}:${authTag}:${ciphertext.slice(0, -2)}${flipped}`;
+    // The guard that makes the flake structurally impossible rather than
+    // merely unlikely: if the 'tampering' ever stops changing anything,
+    // this fails loudly instead of silently asserting nothing.
+    expect(tampered).not.toBe(encrypted);
     expect(() => decrypt(tampered)).toThrow();
   });
 
