@@ -57,6 +57,7 @@ import type {
   PaginatedExternalDeliveries,
   PaginatedGeneralReportOrders,
   PaginatedNewsletterSubscribers,
+  PrepTimeReport,
   PaginatedOrders,
   PaginatedProductSales,
   PaymentProviderSettings,
@@ -1485,6 +1486,12 @@ export function listGeneralReportOrders(
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
   if (params.search) query.set("search", params.search);
   return apiFetch<PaginatedGeneralReportOrders>(`/reports/general/orders?${query.toString()}`);
+}
+
+// NOV-12 prep-time truth: what orders actually took, next to the configured
+// constant. Same filter bar as every other report.
+export function getPrepTimeReport(filters: ReportsFilters) {
+  return apiFetch<PrepTimeReport>(`/reports/prep-time?${reportsFilterQuery(filters).toString()}`);
 }
 
 export function listProductSales(

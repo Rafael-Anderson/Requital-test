@@ -805,4 +805,124 @@ describe('Reports (e2e)', () => {
       ).not.toContain(orderBId);
     });
   });
+
+  // NOV-12 prep-time truth. The measurement comes from auditlog rows written
+  // by the status endpoint - there are no per-status timestamp columns - so
+  // this drives a real order through the real transitions rather than
+  // inserting log rows by hand.
+  describe('Prep Time Report: measures real status transitions', () => {
+    interface PrepTimeBody {
+      configured: {
+        deliveryPreparationTimeMinutes: number;
+        pickupPreparationTimeMinutes: number;
+      };
+      ordersConsidered: number;
+      ordersMeasured: number;
+      buckets: {
+        outletId: number;
+        outletName: string;
+        dayOfWeek: number;
+        orderCount: number;
+        medianMinutes: number;
+        handsOnMedianMinutes: number | null;
+      }[];
+    }
+
+    it('measures an order that went confirmed -> preparing -> out_for_delivery, and ignores one that did not', async () => {
+      const shop = await setupShop('prep-time');
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ deliveryPreparationTimeMinutes: 45 })
+        .expect(200);
+
+      const measured = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .expect(201);
+      const measuredId = body<IdRow>(measured).id;
+
+      for (const status of ['confirmed', 'preparing', 'out_for_delivery']) {
+        await request(app.getHttpServer())
+          .patch(`/orders/${measuredId}/status`)
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ status })
+          .expect(200);
+      }
+
+      // Confirmed only: no out_for_delivery, so no span to measure.
+      const unfinished = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .expect(201);
+      await request(app.getHttpServer())
+        .patch(`/orders/${body<IdRow>(unfinished).id}/status`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ status: 'confirmed' })
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get('/reports/prep-time')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      const report = body<PrepTimeBody>(res);
+
+      expect(report.configured.deliveryPreparationTimeMinutes).toBe(45);
+      expect(report.ordersConsidered).toBe(2);
+      // Only the finished one is measurable; the gap between these two
+      // numbers is what tells a merchant the sample is partial.
+      expect(report.ordersMeasured).toBe(1);
+      expect(report.buckets).toHaveLength(1);
+      expect(report.buckets[0].outletId).toBe(shop.outletAId);
+      expect(report.buckets[0].orderCount).toBe(1);
+      // The transitions happen within the same second in a test, so the span
+      // is ~0 - what matters is that it was measured at all, and that the
+      // hands-on leg was captured separately.
+      expect(report.buckets[0].medianMinutes).toBeGreaterThanOrEqual(0);
+      expect(report.buckets[0].handsOnMedianMinutes).not.toBeNull();
+    });
+
+    it('scopes to one shop and honours the outlet filter', async () => {
+      const shop = await setupShop('prep-scope');
+      const other = await setupShop('prep-other');
+
+      for (const s of [shop, other]) {
+        const created = await request(app.getHttpServer())
+          .post('/orders')
+          .set('Authorization', `Bearer ${s.adminToken}`)
+          .send(orderPayload(s.outletAId, s.productId, 1))
+          .expect(201);
+        for (const status of ['confirmed', 'preparing', 'out_for_delivery']) {
+          await request(app.getHttpServer())
+            .patch(`/orders/${body<IdRow>(created).id}/status`)
+            .set('Authorization', `Bearer ${s.adminToken}`)
+            .send({ status })
+            .expect(200);
+        }
+      }
+
+      const mine = body<PrepTimeBody>(
+        await request(app.getHttpServer())
+          .get('/reports/prep-time')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .expect(200),
+      );
+      expect(mine.ordersMeasured).toBe(1);
+      expect(mine.buckets.every((b) => b.outletId === shop.outletAId)).toBe(
+        true,
+      );
+
+      // An outlet with no orders yields no buckets rather than a zero row.
+      const otherOutlet = body<PrepTimeBody>(
+        await request(app.getHttpServer())
+          .get(`/reports/prep-time?outletId=${shop.outletBId}`)
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .expect(200),
+      );
+      expect(otherOutlet.buckets).toHaveLength(0);
+      expect(otherOutlet.ordersMeasured).toBe(0);
+    });
+  });
 });
