@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { getShop, getThemeConfig, resolveImageUrl } from "@/lib/api";
 import { resolveThemeVarsWithScheme } from "@/lib/theme-css-vars";
-import { buildShopMetadata } from "@/lib/seo";
+import { buildShopMetadata, canonicalUrlFor } from "@/lib/seo";
+import { organizationJsonLd } from "@/lib/structured-data";
+import JsonLd from "@/components/JsonLd";
 import ShopLayoutClient from "./ShopLayoutClient";
 
 // Server Component specifically so this can export generateMetadata for
@@ -50,6 +52,10 @@ export default async function ShopLayout({
   // flicker). Same getShop() the metadata block above already fetched — Next
   // memoizes it within the request.
   let themeVars = "";
+  // Organization markup for the shop itself, emitted once at the root so it
+  // covers every page below it. Built from the same getShop() the metadata
+  // block above already fetched (Next memoizes it within the request).
+  let organization: ReturnType<typeof organizationJsonLd> | null = null;
   try {
     // Both are cheap public GETs; fetch in parallel. The theme config is
     // needed here too (not just client-side) so the pre-paint vars carry the
@@ -63,6 +69,8 @@ export default async function ShopLayout({
     themeVars = Object.entries(resolveThemeVarsWithScheme(shop, themeConfig))
       .map(([k, v]) => `${k}:${v}`)
       .join(";");
+    const url = canonicalUrlFor(shop, "/");
+    if (url) organization = organizationJsonLd(shop, { url });
   } catch {
     // Unknown/unreachable shop — the client renders the real error state; a
     // missing pre-paint style block just means the old light-default behavior.
@@ -71,6 +79,7 @@ export default async function ShopLayout({
   return (
     <>
       {themeVars && <style dangerouslySetInnerHTML={{ __html: `:root{${themeVars}}` }} />}
+      {organization && <JsonLd data={organization} />}
       <ShopLayoutClient>{children}</ShopLayoutClient>
     </>
   );

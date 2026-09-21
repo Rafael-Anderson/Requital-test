@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildBioPageMetadata, buildBrandMetadata, buildProductMetadata, buildShopMetadata } from "./seo";
+import {
+  buildBioPageMetadata,
+  buildBrandMetadata,
+  buildCollectionMetadata,
+  buildProductMetadata,
+  buildShopMetadata,
+  canonicalUrlFor,
+} from "./seo";
 import type { BioPageConfig, Product, Shop } from "./types";
 
 // Only the fields these functions actually read are filled in — the rest
@@ -123,5 +130,91 @@ describe("buildBioPageMetadata", () => {
     expect(
       buildBioPageMetadata(shop({ description: "A lovely flower shop." }), bioPageConfig({})).description,
     ).toBe("A lovely flower shop.");
+  });
+});
+
+// Canonical / Twitter / OG-price additions (Phase 1 SEO basics).
+describe("canonicalUrlFor", () => {
+  it("joins the resolved origin with a parameter-free path", () => {
+    expect(
+      canonicalUrlFor({ canonicalOrigin: "https://s.requital.io" }, "/products/widget"),
+    ).toBe("https://s.requital.io/products/widget");
+  });
+
+  it("collapses the root path so the canonical has no trailing slash artefact", () => {
+    expect(canonicalUrlFor({ canonicalOrigin: "https://s.requital.io" }, "/")).toBe(
+      "https://s.requital.io",
+    );
+  });
+
+  // Guessing an origin is worse than omitting the tag: a wrong canonical
+  // actively points crawlers at a URL that may not serve this content.
+  it("returns undefined rather than guessing when the origin is missing", () => {
+    expect(canonicalUrlFor({ canonicalOrigin: null }, "/products/widget")).toBeUndefined();
+  });
+});
+
+describe("buildProductMetadata canonical and price tags", () => {
+  const withShop = shop({ canonicalOrigin: "https://s.requital.io", currency: "AED" } as Partial<Shop>);
+
+  it("sets the canonical and mirrors it on og:url", () => {
+    const meta = buildProductMetadata(product({ slug: "widget" }), withShop);
+    expect(meta.alternates?.canonical).toBe("https://s.requital.io/products/widget");
+    expect((meta.openGraph as { url?: string }).url).toBe(
+      "https://s.requital.io/products/widget",
+    );
+  });
+
+  it("emits the charged price, not the catalog price, when one is given", () => {
+    const meta = buildProductMetadata(product({ price: "120.00" } as Partial<Product>), withShop, {
+      price: 90,
+    });
+    expect(meta.other?.["product:price:amount"]).toBe("90.00");
+    expect(meta.other?.["product:price:currency"]).toBe("AED");
+  });
+
+  it("adds a Twitter card sized to whether an image exists", () => {
+    const card = (meta: ReturnType<typeof buildProductMetadata>) =>
+      (meta.twitter as { card?: string } | null)?.card;
+    expect(card(buildProductMetadata(product({}), withShop))).toBe(
+      "summary_large_image",
+    );
+    expect(
+      card(
+        buildProductMetadata(
+          product({ thumbnail: "" } as Partial<Product>),
+          withShop,
+        ),
+      ),
+    ).toBe("summary");
+  });
+
+  // The old one-argument call shape is what the PDP falls back to when the
+  // shop cannot be resolved; it must still produce the title/description it
+  // always did.
+  it("still works with no shop, omitting only the canonical and price tags", () => {
+    const meta = buildProductMetadata(product({}));
+    expect(meta.title).toBe("Widget");
+    expect(meta.alternates).toBeUndefined();
+    expect(meta.other).toBeUndefined();
+  });
+});
+
+describe("buildCollectionMetadata", () => {
+  it("composes a per-collection title and canonical", () => {
+    const meta = buildCollectionMetadata(
+      shop({ name: "Petals", canonicalOrigin: "https://s.requital.io" } as Partial<Shop>),
+      { name: "Roses", slug: "roses" },
+    );
+    expect(meta.title).toBe("Roses | Petals");
+    expect(meta.alternates?.canonical).toBe("https://s.requital.io/collections/roses");
+  });
+
+  it("falls back to a composed description when the collection has none", () => {
+    const meta = buildCollectionMetadata(
+      shop({ name: "Petals" } as Partial<Shop>),
+      { name: "Roses", slug: "roses" },
+    );
+    expect(meta.description).toBe("Shop Roses at Petals.");
   });
 });

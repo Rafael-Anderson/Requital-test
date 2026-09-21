@@ -7,19 +7,106 @@ import { resolveImageUrl } from "./api";
 // [shop]/products/[slug]/layout.tsx) so the title/description/OG-image
 // fallback chains are directly testable without rendering a route.
 
+// The same page is reachable at several hosts (the /{slug}/... path form,
+// {subdomain}.requital.io, a verified custom domain) and with arbitrary query
+// strings on top. `shop.canonicalOrigin` is resolved server-side into the one
+// host this shop should be indexed under (backend public/canonical-origin.ts);
+// `path` is the parameter-free path within it.
+//
+// Returns undefined when the origin is missing rather than guessing a host: a
+// canonical pointing at the wrong origin is worse than none at all, because it
+// actively tells crawlers to index a URL that may not serve this content.
+export function canonicalUrlFor(
+  shop: Pick<Shop, "canonicalOrigin">,
+  path: string,
+): string | undefined {
+  if (!shop.canonicalOrigin) return undefined;
+  const suffix = path === "/" ? "" : path;
+  return `${shop.canonicalOrigin}${suffix}`;
+}
+
 // Product-level metaTitle/metaDescription are already fallback-resolved
 // server-side (see backend PublicService.toProductResponse) — this just
 // shapes them into Next's Metadata format, including the OG image WhatsApp
 // and other link-preview surfaces need to render anything at all.
-export function buildProductMetadata(product: Product): Metadata {
+// `shop` is optional so the existing call shape keeps working for a page that
+// cannot resolve the shop (the PDP's own catch branch); without it the result
+// is exactly what it was before canonical/price tags existed.
+//
+// og:price:amount / og:price:currency have no typed home in Next's Metadata
+// (its OpenGraphType union has no 'product'), so they go through `other`,
+// which emits them as plain <meta property>. The price passed in is the one
+// actually charged, auto-discount included - a link preview quoting a price
+// checkout will not honour is the same class of mis-pricing as DSC-1.
+export function buildProductMetadata(
+  product: Product,
+  shop?: Pick<Shop, "canonicalOrigin" | "currency">,
+  options?: { price?: number },
+): Metadata {
   const image = resolveImageUrl(product.thumbnail);
+  const images = image ? [{ url: image }] : undefined;
+  const canonical = shop
+    ? canonicalUrlFor(shop, `/products/${product.slug}`)
+    : undefined;
+  const price = options?.price ?? Number(product.price);
   return {
     title: product.metaTitle,
     description: product.metaDescription ?? undefined,
+    ...(canonical ? { alternates: { canonical } } : {}),
     openGraph: {
       title: product.metaTitle,
       description: product.metaDescription ?? undefined,
+      images,
+      ...(canonical ? { url: canonical } : {}),
+      type: "website",
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: product.metaTitle,
+      description: product.metaDescription ?? undefined,
+      images: image ? [image] : undefined,
+    },
+    ...(shop?.currency && Number.isFinite(price)
+      ? {
+          other: {
+            "product:price:amount": price.toFixed(2),
+            "product:price:currency": shop.currency,
+          },
+        }
+      : {}),
+  };
+}
+
+// Collection pages had no generateMetadata at all before this - they
+// inherited the shop-level title, so every collection shared one title and
+// one canonical-less URL. No collection-level SEO fields exist in the data
+// model, so the title/description are composed, same shape as
+// buildBrandMetadata below.
+export function buildCollectionMetadata(
+  shop: Shop,
+  collection: { name: string; slug: string; description?: string | null },
+): Metadata {
+  const name = shop.displayName ?? shop.name;
+  const title = `${collection.name} | ${name}`;
+  const description =
+    collection.description ?? `Shop ${collection.name} at ${name}.`;
+  const image = resolveImageUrl(shop.ogImage);
+  const canonical = canonicalUrlFor(shop, `/collections/${collection.slug}`);
+  return {
+    title,
+    description,
+    ...(canonical ? { alternates: { canonical } } : {}),
+    openGraph: {
+      title,
+      description,
       images: image ? [{ url: image }] : undefined,
+      ...(canonical ? { url: canonical } : {}),
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
     },
   };
 }
@@ -35,13 +122,22 @@ export function buildShopMetadata(shop: Shop): Metadata {
   const title = shop.metaTitle ?? shop.displayName ?? shop.name;
   const description = shop.metaDescription ?? shop.description ?? undefined;
   const image = resolveImageUrl(shop.ogImage);
+  const canonical = canonicalUrlFor(shop, "/");
   return {
     title,
     description,
+    ...(canonical ? { alternates: { canonical } } : {}),
     openGraph: {
       title,
       description,
       images: image ? [{ url: image }] : undefined,
+      ...(canonical ? { url: canonical } : {}),
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
     },
   };
 }
