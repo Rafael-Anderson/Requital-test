@@ -193,6 +193,36 @@ describe('Reports (e2e)', () => {
     it('summary and order list respect outlet, orderType, channel, dateRange, and status filters', async () => {
       const shop = await setupShop('general');
 
+      // This test searches the order list by a bare order id (below), and
+      // /reports/general/orders deliberately ORs `o.id = ?` with
+      // `o.customerPhone LIKE '%search%'` so a merchant can search a partial
+      // phone. With a NUMERIC fixture phone those two branches collide: when
+      // the order id happens to be a substring of the phone, the phone branch
+      // matches every order sharing that phone and "found exactly one" sees
+      // all three instead.
+      //
+      // That is what broke CI on #141. CI's own order id is not in the log,
+      // but the phone branch is the only path to Received: 3: the query is
+      // shopId-scoped (so 3 is this shop's own three orders), customerName
+      // holds no digits, and `o.id = ?` matches at most one row. Proven by
+      // injection rather than inferred: forcing `order` AUTO_INCREMENT to
+      // 23000 against the old fixture phone '0501230001' ('23000' is a
+      // substring of it) reproduced this exact assertion failing with
+      // Received: 3, while 24000 passed.
+      //
+      // It is a lottery weighted against a fresh CI database, where ids are
+      // small enough to be short substrings (1, 12, 123, 1230, 23, 230, 2300,
+      // 3000, 5, 50, 501 ... all match '0501230001'), and ANY change to how
+      // many orders the suite inserts before this test reshuffles the draw.
+      //
+      // A digit-free phone removes the collision by construction, so the
+      // search term can only ever match by id (the suite already does this in
+      // order-notifications.e2e-spec.ts's 'not-a-real-number'). The guard
+      // asserts the premise, so putting a numeric phone back here fails
+      // immediately and loudly instead of going back to being a lottery.
+      const searchSafePhone = 'report-filters-no-digits';
+      expect(searchSafePhone).not.toMatch(/[0-9]/);
+
       const o1 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -201,6 +231,7 @@ describe('Reports (e2e)', () => {
             orderType: 'delivery',
             deliveryFee: 0,
             channel: 'Google Ads',
+            customerPhone: searchSafePhone,
           }),
         )
         .expect(201);
@@ -212,6 +243,7 @@ describe('Reports (e2e)', () => {
             orderType: 'pickup',
             deliveryFee: 0,
             channel: 'Manual',
+            customerPhone: searchSafePhone,
           }),
         )
         .expect(201);
@@ -223,6 +255,7 @@ describe('Reports (e2e)', () => {
             orderType: 'delivery',
             deliveryFee: 0,
             channel: 'Google Ads',
+            customerPhone: searchSafePhone,
           }),
         )
         .expect(201);
@@ -310,11 +343,58 @@ describe('Reports (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
       const listBody = body<GeneralOrdersBody>(list);
+      // Exactly one, and it can only have come from the `o.id = ?` branch:
+      // searchSafePhone has no digits for the LIKE branch to match.
       expect(listBody.total).toBe(1);
       expect(listBody.data[0].id).toBe(body<IdRow>(o1).id);
       expect(listBody.data[0].outletName).toBeTruthy();
 
       void o3;
+    });
+
+    // The other half of that OR, pinned on purpose: a numeric search is ALSO a
+    // partial-phone search. That is a real merchant feature and not the bug
+    // above - the bug was a fixture whose phone could satisfy it by accident.
+    // Asserted by identity rather than by a count, so this test cannot itself
+    // become an id-collision lottery.
+    it('matches a partial customer phone, not just an exact order id', async () => {
+      const shop = await setupShop('general-phone');
+
+      const target = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(
+          orderPayload(shop.outletAId, shop.productId, 1, {
+            customerPhone: '0509876543',
+          }),
+        )
+        .expect(201);
+      const other = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send(
+          orderPayload(shop.outletAId, shop.productId, 1, {
+            customerPhone: '0551112222',
+          }),
+        )
+        .expect(201);
+
+      const term = '98765';
+      const targetId = body<IdRow>(target).id;
+      const otherId = body<IdRow>(other).id;
+      // Premise: the term is a fragment of the target's phone only, and is not
+      // literally the other order's id (which would match by the id branch).
+      expect('0509876543').toContain(term);
+      expect('0551112222').not.toContain(term);
+      expect(String(otherId)).not.toBe(term);
+
+      const res = await request(app.getHttpServer())
+        .get(`/reports/general/orders?search=${term}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      const ids = body<GeneralOrdersBody>(res).data.map((r) => r.id);
+      expect(ids).toContain(targetId);
+      expect(ids).not.toContain(otherId);
     });
 
     it('paymentMode filter matches storefront-set order.paymentMethod', async () => {
