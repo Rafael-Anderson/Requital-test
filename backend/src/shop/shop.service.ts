@@ -199,6 +199,8 @@ export class ShopService {
       notifyAbandonedCart: dto.notifyAbandonedCart,
       abandonedCartWindowMinutes: dto.abandonedCartWindowMinutes,
       notifyLowStockDigest: dto.notifyLowStockDigest,
+      notifyDailySalesSummary: dto.notifyDailySalesSummary,
+      notifyWeeklyDigest: dto.notifyWeeklyDigest,
       autoDeductIngredientStock: dto.autoDeductIngredientStock,
       businessType: dto.businessType,
       defaultLanguage: dto.defaultLanguage,

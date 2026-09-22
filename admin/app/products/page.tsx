@@ -14,6 +14,7 @@ import {
   listProducts,
   previewImportProducts,
   updateProductAvailability,
+  downloadExport,
 } from "@/lib/api";
 import {
   buildCollectionTree,
@@ -188,6 +189,21 @@ function InventoryPageContent() {
   // products-import.ts exactly — this is also the shape "Import CSV" reads
   // back, so re-importing an unmodified export is a no-op round trip. Only
   // reachable from the bulk action bar (a selection always exists here).
+  // The bulk export above serialises the ticked rows, which only exist in the
+  // browser. This streams EVERY product from the server in the same
+  // PRODUCT_IMPORT_HEADERS shape, including variants and stock - the thing a
+  // selection could never do, since it can only hold rows the current page
+  // loaded. Round-tripped through the importer by
+  // backend/test/products-export-roundtrip.e2e-spec.ts.
+  async function handleExportAll() {
+    try {
+      await downloadExport("products");
+      toast("Export started");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to export products", "error");
+    }
+  }
+
   function handleBulkExport() {
     const source = (visibleProducts ?? []).filter((p) => selection.selected.has(p.id));
     const rows: unknown[][] = [];
@@ -258,6 +274,9 @@ function InventoryPageContent() {
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
         <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Products</h1>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={handleExportAll}>
+            Export all
+          </Button>
           <div className="w-44">
             <Select
               value={collectionFilter}

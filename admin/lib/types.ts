@@ -954,6 +954,8 @@ export interface Shop {
   notifyAbandonedCart: boolean;
   abandonedCartWindowMinutes: number;
   notifyLowStockDigest: boolean;
+  notifyDailySalesSummary: boolean;
+  notifyWeeklyDigest: boolean;
   autoDeductIngredientStock: boolean;
 
   // Store Configuration — functional
@@ -2780,4 +2782,26 @@ export interface TodaySnapshot {
   ordersByStatus: Record<string, number>;
   slots: { slot: string; orders: number }[];
   unslotted: number;
+}
+
+// ANL-8 inventory analytics. Movement comes from the nightly rollups; stock is
+// live, so the two halves are deliberately different ages - `rolledUpThrough`
+// is how the page says so rather than implying the whole row is current.
+export interface InventoryMovementRow {
+  productId: number;
+  name: string;
+  unitsSold: number;
+  stockOnHand: number | null;
+  sellThroughPercent: number | null;
+  daysOfCover: number | null;
+  daysSinceLastSale: number | null;
+  isDeadStock: boolean;
+}
+
+export interface InventoryMovementReport {
+  windowDays: number;
+  deadStockAfterDays: number;
+  rolledUpThrough: string | null;
+  rows: InventoryMovementRow[];
+  deadStock: InventoryMovementRow[];
 }

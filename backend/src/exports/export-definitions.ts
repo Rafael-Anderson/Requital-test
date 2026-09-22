@@ -2,6 +2,8 @@ import type { RowDataPacket } from 'mysql2/promise';
 import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import type { QueryParam } from '../database/database.service';
+import { PRODUCT_IMPORT_HEADERS } from '../products/products-import';
+import { buildVariantLabel } from '../products/variant-generator';
 
 // ANL-11: one definition per exportable report. Adding an export is adding an
 // entry here - the controller, the streaming, the paging, the escaping and the
@@ -177,13 +179,164 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
     },
   },
 
-  // `products` is DELIBERATELY NOT HERE. The admin's product export is a bulk
-  // action over the current SELECTION, not a paginated "export all", so it does
-  // not have the bug this endpoint exists to fix - and its columns are
-  // PRODUCT_IMPORT_HEADERS, an import round-trip format whose Stock column has
-  // to resolve through shadow ingredients into outletingredientstock. Building
-  // that badly would break re-import silently. It moves in the ANL-8 PR, which
-  // is already in the stock code.
+  // Variant-expanded, one row per variant, because this file IS the CSV import
+  // format's round trip: headers come from PRODUCT_IMPORT_HEADERS itself rather
+  // than a copy, so the two cannot drift, and products.e2e re-imports a file
+  // this produces and asserts nothing changed.
+  //
+  // Collections and tags join with "; " (not a comma or a pipe) because that is
+  // what the importer splits on.
+  products: {
+    roles: ['admin', 'viewer'],
+    filenamePrefix: 'products',
+    headers: PRODUCT_IMPORT_HEADERS,
+    async fetchPage({ db, ctx, outletId }, limit, offset) {
+      // Pages over PRODUCTS and expands each into its variant rows, so a
+      // product's variants can never be split across two pages - which would
+      // corrupt the round trip by orphaning variants from their Handle.
+      const products = await db.query<RowDataPacket[]>(
+        `SELECT p.id, p.slug, p.name, p.description, p.sku, p.barcode, p.price,
+                p.compareAtPrice, p.costPrice, p.status, p.trackInventory,
+                p.chargeTax, p.vendor, p.productType, p.thumbnail
+           FROM product p
+          WHERE p.shopId = ?
+          ORDER BY p.id
+          LIMIT ? OFFSET ?`,
+        [ctx.shopId, limit, offset],
+      );
+      if (products.length === 0) return [];
+
+      const ids = products.map((p) => p.id as number);
+      const placeholders = ids.map(() => '?').join(', ');
+      const stockSum =
+        outletId !== undefined
+          ? 'AND ois.outletId = ?'
+          : '';
+      const stockParams: QueryParam[] =
+        outletId !== undefined ? [outletId] : [];
+
+      const [variants, collections, tags, productStock, variantStock] =
+        await Promise.all([
+          db.query<RowDataPacket[]>(
+            `SELECT v.id, v.productId, v.sku, v.price, v.compareAtPrice,
+                    ov1.value AS optionValue1, ov2.value AS optionValue2,
+                    ov3.value AS optionValue3
+               FROM productvariant v
+               LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
+               LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
+               LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
+              WHERE v.productId IN (${placeholders})
+              ORDER BY v.productId, v.id`,
+            ids,
+          ),
+          db.query<RowDataPacket[]>(
+            `SELECT pc.productId, c.name
+               FROM productcollection pc
+               JOIN collection c ON c.id = pc.collectionId
+              WHERE pc.productId IN (${placeholders})
+              ORDER BY pc.productId, c.name`,
+            ids,
+          ),
+          db.query<RowDataPacket[]>(
+            `SELECT pt.productId, t.name
+               FROM producttag pt
+               JOIN tag t ON t.id = pt.tagId
+              WHERE pt.productId IN (${placeholders})
+              ORDER BY pt.productId, t.name`,
+            ids,
+          ),
+          // Stock lives on the SHADOW ingredient, never on product (see
+          // CLAUDE.md's catalog-vs-stock split). A simple product resolves
+          // through ingredient.shadowProductId; a variant through
+          // shadowVariantId. Summed across outlets when none is requested, so
+          // the number means the same thing the "all branches" view shows.
+          db.query<RowDataPacket[]>(
+            `SELECT ing.shadowProductId AS productId,
+                    SUM(ois.stockQuantity) AS stockQuantity
+               FROM ingredient ing
+               JOIN outletingredientstock ois ON ois.ingredientId = ing.id ${stockSum}
+              WHERE ing.shadowProductId IN (${placeholders})
+              GROUP BY ing.shadowProductId`,
+            [...stockParams, ...ids],
+          ),
+          db.query<RowDataPacket[]>(
+            `SELECT ing.shadowVariantId AS variantId,
+                    SUM(ois.stockQuantity) AS stockQuantity
+               FROM ingredient ing
+               JOIN productvariant v ON v.id = ing.shadowVariantId
+               JOIN outletingredientstock ois ON ois.ingredientId = ing.id ${stockSum}
+              WHERE v.productId IN (${placeholders})
+              GROUP BY ing.shadowVariantId`,
+            [...stockParams, ...ids],
+          ),
+        ]);
+
+      const groupBy = <T extends RowDataPacket>(rows: T[], key: string) => {
+        const map = new Map<number, T[]>();
+        for (const r of rows) {
+          const id = r[key] as number;
+          const list = map.get(id);
+          if (list) list.push(r);
+          else map.set(id, [r]);
+        }
+        return map;
+      };
+      const variantsBy = groupBy(variants, 'productId');
+      const collectionsBy = groupBy(collections, 'productId');
+      const tagsBy = groupBy(tags, 'productId');
+      const productStockBy = new Map(
+        productStock.map((r) => [r.productId as number, Number(r.stockQuantity)]),
+      );
+      const variantStockBy = new Map(
+        variantStock.map((r) => [r.variantId as number, Number(r.stockQuantity)]),
+      );
+
+      const out: unknown[][] = [];
+      for (const p of products) {
+        const id = p.id as number;
+        const base: unknown[] = [
+          p.slug,
+          p.name,
+          p.description ?? '',
+          p.sku ?? '',
+          p.barcode ?? '',
+          p.price,
+          p.compareAtPrice ?? '',
+          p.costPrice ?? '',
+          p.status,
+          yesNo(p.trackInventory),
+          yesNo(p.chargeTax),
+          p.vendor ?? '',
+          p.productType ?? '',
+          p.thumbnail ?? '',
+          (collectionsBy.get(id) ?? []).map((c) => c.name as string).join('; '),
+          (tagsBy.get(id) ?? []).map((t) => t.name as string).join('; '),
+        ];
+
+        const productVariants = variantsBy.get(id) ?? [];
+        if (productVariants.length === 0) {
+          out.push([...base, '', '', '', '', productStockBy.get(id) ?? '']);
+          continue;
+        }
+        for (const v of productVariants) {
+          const label = buildVariantLabel([
+            v.optionValue1 as string | undefined,
+            v.optionValue2 as string | undefined,
+            v.optionValue3 as string | undefined,
+          ]);
+          out.push([
+            ...base,
+            label ?? '',
+            v.sku ?? '',
+            v.price ?? '',
+            v.compareAtPrice ?? '',
+            variantStockBy.get(v.id as number) ?? '',
+          ]);
+        }
+      }
+      return out;
+    },
+  },
 
   // Part A's margin report (A4). Uses orderitem.unitCost - the cost captured
   // at order time - and keeps that report's own null-not-zero rule: an
