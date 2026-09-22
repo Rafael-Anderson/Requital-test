@@ -3,8 +3,26 @@ name: CI
 on:
   push:
     branches: [main]
+  # No `branches:` filter here on purpose: a pull request into ANY base branch
+  # runs CI. Without this, a stacked PR (one opened against another feature
+  # branch rather than main) reports no checks at all - not "verified and
+  # passing", but silently unverified, which reads the same on the PR page.
+  # That bit us on #146. Retargeting such a PR to main afterwards does not
+  # retrigger anything either; only a new push does.
+  #
+  # Kept as `pull_request`, NOT `pull_request_target`: the latter runs workflow
+  # code with write-scoped secrets against the base repo, and this workflow does
+  # `npm ci` and executes test code from the branch. Wrong trade for this.
+  #
+  # Cost is some duplicate runs - a stacked PR runs once on its own base, then
+  # again once it is rebased onto main. Worth it to never merge something whose
+  # green checks were an illusion.
+  #
+  # Caveat when reviewing a stacked PR: the four required contexts are pinned by
+  # name in branch protection, so a stacked PR now shows them too and can look
+  # satisfiable while its diff still contains its parent's commits. Green there
+  # is evidence about that combined tree, not about the eventual main diff.
   pull_request:
-    branches: [main]
 
 jobs:
   backend:
