@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listNewsletterSubscribers } from "@/lib/api";
+import { listNewsletterSubscribers, downloadExport } from "@/lib/api";
 import type { NewsletterSubscriber } from "@/lib/types";
-import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
@@ -20,7 +19,6 @@ import CustomersTabs from "@/components/CustomersTabs";
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 // The list endpoint caps pageSize at 100, so a full export pages through.
-const EXPORT_PAGE_SIZE = 100;
 
 // The read side of the storefront newsletter widget, which until now wrote
 // rows nobody could see. Read-only by design: the merchant never adds or
@@ -81,25 +79,14 @@ export default function NewsletterSubscribersPage() {
   // on screen: a mailing list that exports 20 of 400 rows is worse than no
   // export at all. Pages through rather than raising the endpoint's cap, so
   // there is no size at which the file silently truncates.
+  // Was a client-side loop over the list endpoint; now one request to the
+  // server's streaming export (ANL-11), which never holds the whole list in
+  // the browser and cannot silently truncate.
   async function handleExport() {
     setExporting(true);
     try {
-      const all: NewsletterSubscriber[] = [];
-      for (let p = 1; ; p++) {
-        const result = await listNewsletterSubscribers({
-          page: p,
-          pageSize: EXPORT_PAGE_SIZE,
-          search: search || undefined,
-        });
-        all.push(...result.data);
-        if (result.data.length < EXPORT_PAGE_SIZE || all.length >= result.total) break;
-      }
-      downloadCsv(
-        `newsletter-subscribers-${new Date().toISOString().slice(0, 10)}.csv`,
-        ["Email", "Source", "Subscribed"],
-        all.map((s) => [s.email, s.source, new Date(s.createdAt).toISOString()]),
-      );
-      toast(`Exported ${all.length} subscriber${all.length === 1 ? "" : "s"}`);
+      await downloadExport("newsletter-subscribers", { search: search || undefined });
+      toast("Export started");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to export subscribers", "error");
     } finally {

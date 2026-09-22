@@ -8,10 +8,10 @@ import {
   listIngredientCategories,
   listIngredients,
   previewImportIngredients,
+  downloadExport,
 } from "@/lib/api";
 import type { Ingredient, IngredientCategory } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
-import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
@@ -78,14 +78,16 @@ export default function IngredientsPage() {
 
   // Column order matches INGREDIENT_IMPORT_HEADERS in backend/src/products/
   // products-import.ts — Import CSV reads this same shape back.
-  function handleExport() {
-    const rows = ingredients ?? [];
-    downloadCsv(
-      `ingredients-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Name", "Unit", "Track Inventory", "Stock"],
-      rows.map((i) => [i.name, i.unit, i.trackInventory, i.stockQuantity ?? ""]),
-    );
-    toast(`Exported ${rows.length} ingredient${rows.length === 1 ? "" : "s"}`);
+  // Served by the server's streaming export (ANL-11) rather than serialising
+  // the whole ingredient table in the browser. The selected outlet is passed
+  // through so the Stock column means what the page is showing.
+  async function handleExport() {
+    try {
+      await downloadExport("inventory", { outletId: selectedOutletId ?? undefined });
+      toast("Export started");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to export ingredients", "error");
+    }
   }
 
   const visibleIngredients = (ingredients ?? []).filter(

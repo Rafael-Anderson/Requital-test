@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useShopMode } from "@/lib/useShopMode";
-import { listCustomers, type ListCustomersParams } from "@/lib/api";
+import { listCustomers, type ListCustomersParams,
+  downloadExport,
+} from "@/lib/api";
 import type { CustomerListItem } from "@/lib/types";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { downloadCsv } from "@/lib/csv";
@@ -105,6 +107,21 @@ export default function CustomersPage() {
   // (just id/name/phone/email/birthday/addresses), and inventing one solely
   // to backfill a bulk-action button would be exactly the kind of unrequested
   // feature the task said not to build. Flagged rather than silently dropped.
+  // Two distinct actions, deliberately kept separate. "Export CSV" in the bulk
+  // bar exports exactly the rows the merchant ticked, which only ever exist in
+  // the browser. "Export all" (ANL-11) streams every customer from the server -
+  // the thing that was genuinely impossible before, since a selection can only
+  // contain rows the current page had already loaded. The active search is
+  // passed through so the file matches what is on screen.
+  async function handleExportAll() {
+    try {
+      await downloadExport("customers", { search: search || undefined });
+      toast("Export started");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to export customers", "error");
+    }
+  }
+
   function handleBulkExport() {
     const rows = (customers ?? []).filter((c) => selection.selected.has(c.id));
     downloadCsv(
@@ -133,6 +150,12 @@ export default function CustomersPage() {
       </div>
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+
+      <div className="flex justify-end mb-3">
+        <Button size="sm" variant="secondary" onClick={handleExportAll}>
+          Export all
+        </Button>
+      </div>
 
       {!isSimple && (
         <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>

@@ -22,6 +22,18 @@ export class DashboardController {
     );
   }
 
+  // ANL-9. Deliberately NOT served from the ANL-1 rollup tables: today has not
+  // been rolled up yet (the nightly job runs at 01:00 for YESTERDAY), so a
+  // rollup-backed "today" would show an empty or stale card all day. This
+  // queries `order` live, the same way the rest of this controller does.
+  @Get('today')
+  getToday(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: DashboardQueryDto,
+  ) {
+    return this.dashboardService.getToday(ctx, query.outletId);
+  }
+
   @Get('revenue-daily')
   getDailyRevenue(
     @CurrentUser() ctx: TenantContext,
