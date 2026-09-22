@@ -4,7 +4,9 @@
 export type JobType =
   | 'send_email'
   | 'send_merchant_whatsapp_alert'
-  | 'process_slider_webhook';
+  | 'process_slider_webhook'
+  | 'compute_daily_rollup'
+  | 'recompute_customer_metrics';
 
 export interface SendEmailJobPayload {
   to: string;
@@ -49,7 +51,30 @@ export interface ProcessSliderWebhookJobPayload {
   } | null;
 }
 
+// ANL-1's nightly rollup, one job per shop per day. `date` is a local
+// 'YYYY-MM-DD' key in the SHOP's timezone, not a UTC instant - a rollup is a
+// question about a merchant's trading day, and the two disagree for four hours
+// every day in Asia/Dubai.
+//
+// The idempotency key is derived from shopId + date (see
+// AnalyticsRollupService.enqueueDay), so re-enqueueing a day that is already
+// queued is a no-op at the job table's UNIQUE index. The handler is separately
+// idempotent by delete-then-insert, so a RETRY of an already-partly-run job
+// cannot double-count either - the two mechanisms guard different failures.
+export interface ComputeDailyRollupJobPayload {
+  shopId: number;
+  date: string;
+}
+
+// Customer metrics are a whole-history snapshot rather than a daily series, so
+// this recomputes a shop's set wholesale instead of taking a date.
+export interface RecomputeCustomerMetricsJobPayload {
+  shopId: number;
+}
+
 export type JobPayload =
   | SendEmailJobPayload
   | SendMerchantWhatsAppAlertJobPayload
-  | ProcessSliderWebhookJobPayload;
+  | ProcessSliderWebhookJobPayload
+  | ComputeDailyRollupJobPayload
+  | RecomputeCustomerMetricsJobPayload;
