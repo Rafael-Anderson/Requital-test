@@ -5,6 +5,7 @@ import type { QueryParam } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import { dateKeyInTimezone } from '../outlets/outlet-status';
 
 // UAE/Gulf merchants run on UTC+4 year-round (no DST) — day boundaries are
 // computed in that offset rather than server-local/UTC time.
@@ -345,4 +346,107 @@ export class DashboardService {
       };
     });
   }
+
+  // ANL-9: the live "today" card. Reads `order` directly rather than the
+  // ANL-1 rollups, and that is the point - the nightly job rolls up YESTERDAY
+  // at 01:00, so today has no rollup row until tomorrow morning. A card fed
+  // from the rollups would be blank every day until 01:00 and then show the
+  // wrong day.
+  //
+  // "Today" is the shop's own local day (dateKeyInTimezone, the same helper
+  // the rollups, time slots and product-is-new all use), not the server's -
+  // a Dubai merchant's day rolls over four hours before UTC does.
+  //
+  // Slot fill is keyed off deliveryDate, NOT createdAt: the question a florist
+  // is asking mid-morning is "how full is each delivery window TODAY", which
+  // includes an order placed three days ago for delivery today and excludes
+  // one placed this morning for next week.
+  async getToday(ctx: TenantContext, requestedOutletId?: number) {
+    const outletId = resolveOutletFilter(ctx, requestedOutletId);
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(
+        ctx,
+        outletId,
+        'dashboard.view',
+      );
+    }
+
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT timezone FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const timezone = (shopRows[0]?.timezone as string | null) ?? 'Asia/Dubai';
+    const today = dateKeyInTimezone(new Date(), timezone);
+
+    const outletSql = outletId !== undefined ? 'AND outletId = ?' : '';
+    const outletSqlAliased =
+      outletId !== undefined ? 'AND o.outletId = ?' : '';
+    const outletParam: QueryParam[] = outletId !== undefined ? [outletId] : [];
+
+    // Over-fetch a 3-day UTC window and bucket by the shop's local date key,
+    // the same technique AnalyticsRollupService uses, so there is one timezone
+    // rule in the codebase rather than two and no DST offset arithmetic.
+    const windowStart = `${today} 00:00:00`;
+    const [placedRows, slotRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT o.id, o.status, o.total, o.createdAt
+           FROM \`order\` o
+          WHERE o.shopId = ? ${outletSqlAliased}
+            AND o.createdAt >= DATE_SUB(?, INTERVAL 1 DAY)
+            AND o.createdAt < DATE_ADD(?, INTERVAL 2 DAY)`,
+        [ctx.shopId, ...outletParam, windowStart, windowStart],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT deliveryTimeSlot, COUNT(*) AS c
+           FROM \`order\`
+          WHERE shopId = ? ${outletSql}
+            AND status <> 'cancelled'
+            AND DATE(deliveryDate) = ?
+          GROUP BY deliveryTimeSlot
+          ORDER BY deliveryTimeSlot`,
+        [ctx.shopId, ...outletParam, today],
+      ),
+    ]);
+
+    const placedToday = placedRows.filter(
+      (r) => dateKeyInTimezone(r.createdAt as Date, timezone) === today,
+    );
+    // Cancelled orders are excluded from money but still counted as activity,
+    // so a merchant can see that something was placed and then cancelled
+    // rather than the card silently under-reporting the day.
+    const countable = placedToday.filter((r) => r.status !== 'cancelled');
+
+    const byStatus: Record<string, number> = {};
+    for (const r of placedToday) {
+      const status = r.status as string;
+      byStatus[status] = (byStatus[status] ?? 0) + 1;
+    }
+
+    const revenue = countable.reduce(
+      (sum, r) => sum + (Number(r.total) || 0),
+      0,
+    );
+
+    return {
+      date: today,
+      timezone,
+      orders: countable.length,
+      cancelledOrders: placedToday.length - countable.length,
+      revenue: Math.round(revenue * 100) / 100,
+      ordersByStatus: byStatus,
+      slots: slotRows
+        .filter((r) => r.deliveryTimeSlot !== null)
+        .map((r) => ({
+          slot: r.deliveryTimeSlot as string,
+          orders: Number(r.c),
+        })),
+      // Orders due today with no slot chosen: the merchant still has to
+      // deliver them, so they belong on the card rather than being dropped
+      // out of the slot list.
+      unslotted: Number(
+        slotRows.find((r) => r.deliveryTimeSlot === null)?.c ?? 0,
+      ),
+    };
+  }
+
 }

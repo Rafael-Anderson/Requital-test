@@ -2768,3 +2768,16 @@ export interface PolicyPage {
   content: string | null;
   updatedAt: string | null;
 }
+
+// ANL-9: the live "today" snapshot. Served from `order` directly, never the
+// nightly rollup tables - today has no rollup row until tomorrow morning.
+export interface TodaySnapshot {
+  date: string;
+  timezone: string;
+  orders: number;
+  cancelledOrders: number;
+  revenue: number;
+  ordersByStatus: Record<string, number>;
+  slots: { slot: string; orders: number }[];
+  unslotted: number;
+}

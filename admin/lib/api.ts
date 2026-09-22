@@ -92,7 +92,8 @@ import type {
   Theme,
   ThemeListItem,
   ThemeTemplateMeta,
-  ThemeConfig,
+  ThemeConfig,
+  TodaySnapshot,
   TopProduct,
   UserRole,
 } from "./types";
@@ -296,6 +297,66 @@ async function apiFetchText(path: string, isRetry = false): Promise<string> {
     throw new ApiError(`Request failed (${res.status})`, res.status);
   }
   return res.text();
+}
+
+// ANL-11: pulls a report from the server's streaming CSV endpoint and hands it
+// to the browser as a download. Same cookie / 401-refresh-retry contract as
+// apiFetch and apiFetchText above.
+//
+// The server streams; this buffers the whole response into a Blob before
+// saving, which is the trade for keeping auth handling identical to every
+// other call. The point of the server endpoint is that the FILE contains every
+// row rather than whichever page was on screen - the old in-page exporters
+// could only ever serialise the rows React had already loaded. Streaming still
+// matters on the server side, where a 50k-row export must not be built as one
+// string in memory.
+export function getTodaySnapshot(outletId?: number) {
+  const query = outletId ? `?outletId=${outletId}` : "";
+  return apiFetch<TodaySnapshot>(`/dashboard/today${query}`);
+}
+
+export async function downloadExport(
+  kind: string,
+  params: Record<string, string | number | undefined> = {},
+  isRetry = false,
+): Promise<void> {
+  const query = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  const res = await fetch(
+    `${API_URL}/exports/${encodeURIComponent(kind)}${query ? `?${query}` : ""}`,
+    { credentials: "include" },
+  );
+  if (!res.ok) {
+    if (res.status === 401 && !isRetry) {
+      try {
+        await refreshAccessToken();
+        return downloadExport(kind, params, true);
+      } catch {
+        notifyUnauthorized();
+      }
+    } else if (res.status === 401) {
+      notifyUnauthorized();
+    }
+    throw new ApiError(`Export failed (${res.status})`, res.status);
+  }
+
+  // Prefer the server's own filename (it carries the report name and date) and
+  // fall back only if the header is missing.
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  const filename = match?.[1] ?? `${kind}-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function login(email: string, password: string) {

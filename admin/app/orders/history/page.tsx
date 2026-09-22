@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { bulkUpdateOrderStatus, listOrders } from "@/lib/api";
+import { bulkUpdateOrderStatus, listOrders,
+  downloadExport,
+} from "@/lib/api";
 import { ORDER_STATUSES, type Order, type OrderStatus } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { useRowSelection } from "@/lib/useRowSelection";
@@ -102,6 +104,18 @@ export default function OrderHistoryPage() {
     }
   }
 
+  // See the Customers page for why this sits alongside the bulk export rather
+  // than replacing it: the bulk one exports the ticked rows, this one streams
+  // every order from the server (ANL-11), which a selection could never do.
+  async function handleExportAll() {
+    try {
+      await downloadExport("orders");
+      toast("Export started");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to export orders", "error");
+    }
+  }
+
   function handleBulkExport() {
     const rows = (orders ?? []).filter((o) => selection.selected.has(o.id));
     downloadCsv(
@@ -160,6 +174,12 @@ export default function OrderHistoryPage() {
           Export CSV
         </Button>
       </BulkActionBar>
+
+      <div className="flex justify-end mb-3">
+        <Button size="sm" variant="secondary" onClick={handleExportAll}>
+          Export all
+        </Button>
+      </div>
 
       <Table>
         <THead>

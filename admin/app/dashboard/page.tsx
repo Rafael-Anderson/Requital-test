@@ -7,6 +7,7 @@ import type { DashboardSummary, DailyRevenuePoint, TopProduct } from "@/lib/type
 import { useOutletFilter } from "@/lib/outlet-context";
 import { useShopMode } from "@/lib/useShopMode";
 import SimpleDashboard from "@/components/SimpleDashboard";
+import TodayCard from "@/components/TodayCard";
 import DateRangePicker, { defaultDateRange, type DateRange } from "@/components/ui/DateRangePicker";
 import StatCard from "@/components/ui/StatCard";
 import SalesOverviewChart from "@/components/SalesOverviewChart";
@@ -72,6 +73,7 @@ export default function DashboardPage() {
       <PageShell>
         <BranchBar left={<BackButton href="/" />} />
         <h1 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Sales dashboard</h1>
+        <TodayCard />
         <SimpleDashboard />
       </PageShell>
     );
@@ -81,6 +83,10 @@ export default function DashboardPage() {
     <PageShell>
       <BranchBar left={<BackButton href="/" />} right={<DateRangePicker value={range} onChange={setRange} />} />
       <h1 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Sales dashboard</h1>
+
+      {/* ANL-9: live today, above the date-ranged cards below it. Deliberately
+          outside the DateRangePicker's scope - "today" is not a range. */}
+      <TodayCard />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
