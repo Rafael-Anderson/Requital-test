@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { ReportsFilterQueryDto } from './dto/reports-filter-query.dto';
+import { MarginBreakdownQueryDto } from './dto/margin-breakdown-query.dto';
 import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
 import { ListProductSalesQueryDto } from './dto/list-product-sales-query.dto';
 import { MonthlyReportFilterDto } from './dto/monthly-report-filter.dto';
@@ -20,6 +21,30 @@ import type { TenantContext } from '../common/tenant-context';
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  // Gross margin from the cost captured at order time. Two endpoints, not
+  // one: the stat cards need a single total, the table needs a grouping,
+  // and bundling them would make the page fetch the breakdown it is not
+  // showing.
+  @Get('margin/summary')
+  getMarginSummary(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ReportsFilterQueryDto,
+  ) {
+    return this.reportsService.getMarginSummary(ctx, query);
+  }
+
+  @Get('margin/breakdown')
+  getMarginBreakdown(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: MarginBreakdownQueryDto,
+  ) {
+    return this.reportsService.getMarginBreakdown(
+      ctx,
+      query,
+      query.dimension ?? 'product',
+    );
+  }
 
   // NOV-12: measured prep time vs the configured constant. Reuses the
   // shared filter DTO (date range, outlet, orderType) rather than adding a

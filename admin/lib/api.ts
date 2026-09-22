@@ -57,6 +57,9 @@ import type {
   PaginatedExternalDeliveries,
   PaginatedGeneralReportOrders,
   PaginatedNewsletterSubscribers,
+  MarginDimension,
+  MarginRow,
+  MarginSummary,
   PrepTimeReport,
   PaginatedOrders,
   PaginatedProductSales,
@@ -1486,6 +1489,19 @@ export function listGeneralReportOrders(
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
   if (params.search) query.set("search", params.search);
   return apiFetch<PaginatedGeneralReportOrders>(`/reports/general/orders?${query.toString()}`);
+}
+
+// Gross margin from the cost captured at order time (orderitem.unitCost).
+// Two calls, not one: the stat cards want a single total and the table wants
+// a grouping, and a page should not fetch a breakdown it is not showing.
+export function getMarginSummary(filters: ReportsFilters) {
+  return apiFetch<MarginSummary>(`/reports/margin/summary?${reportsFilterQuery(filters).toString()}`);
+}
+
+export function getMarginBreakdown(filters: ReportsFilters, dimension: MarginDimension) {
+  const query = reportsFilterQuery(filters);
+  query.set("dimension", dimension);
+  return apiFetch<MarginRow[]>(`/reports/margin/breakdown?${query.toString()}`);
 }
 
 // NOV-12 prep-time truth: what orders actually took, next to the configured

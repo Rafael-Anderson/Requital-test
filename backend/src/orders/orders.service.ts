@@ -277,7 +277,15 @@ export class OrdersService {
 
     let subtotal = 0;
     const itemsData = resolvedItems.map(
-      ({ product, variant, quantity, price, autoDiscountAmount, variantLabel }) => {
+      ({
+        product,
+        variant,
+        quantity,
+        price,
+        autoDiscountAmount,
+        unitCost,
+        variantLabel,
+      }) => {
         subtotal += Number(price) * quantity;
         return {
           productId: product.id as number,
@@ -287,6 +295,7 @@ export class OrdersService {
           quantity,
           priceAtPurchase: price,
           autoDiscountAmount,
+          unitCost,
         };
       },
     );
@@ -416,9 +425,9 @@ export class OrdersService {
       const newOrderId = (result as { insertId: number }).insertId;
 
       if (itemsData.length > 0) {
-        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost)
            VALUES ${placeholders}`,
           itemsData.flatMap((d) => [
             newOrderId,
@@ -429,6 +438,7 @@ export class OrdersService {
             d.quantity,
             d.priceAtPurchase,
             d.autoDiscountAmount,
+            d.unitCost,
           ]),
         );
       }
@@ -710,7 +720,15 @@ export class OrdersService {
 
     let newSubtotal = 0;
     const newItemsData = resolvedItems.map(
-      ({ product, variant, quantity, price, autoDiscountAmount, variantLabel }) => {
+      ({
+        product,
+        variant,
+        quantity,
+        price,
+        autoDiscountAmount,
+        unitCost,
+        variantLabel,
+      }) => {
         newSubtotal += Number(price) * quantity;
         return {
           productId: product.id as number,
@@ -720,6 +738,7 @@ export class OrdersService {
           quantity,
           priceAtPurchase: price,
           autoDiscountAmount,
+          unitCost,
         };
       },
     );
@@ -900,9 +919,9 @@ export class OrdersService {
 
       await conn.query(`DELETE FROM orderitem WHERE orderId = ?`, [orderId]);
       if (newItemsData.length > 0) {
-        const placeholders = newItemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = newItemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost)
            VALUES ${placeholders}`,
           newItemsData.flatMap((d) => [
             orderId,
@@ -913,6 +932,7 @@ export class OrdersService {
             d.quantity,
             d.priceAtPurchase,
             d.autoDiscountAmount,
+            d.unitCost,
           ]),
         );
       }

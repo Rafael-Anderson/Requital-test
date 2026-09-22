@@ -1372,7 +1372,15 @@ export class PublicService {
     let subtotal = 0;
     const itemsData = resolvedItems.map(
       (
-        { product, variant, quantity, price, autoDiscountAmount, variantLabel },
+        {
+          product,
+          variant,
+          quantity,
+          price,
+          autoDiscountAmount,
+          unitCost,
+          variantLabel,
+        },
         idx,
       ) => {
         subtotal += Number(price) * quantity;
@@ -1384,6 +1392,7 @@ export class PublicService {
           quantity,
           priceAtPurchase: price,
           autoDiscountAmount,
+          unitCost,
           note: dto.items[idx].note || null,
         };
       },
@@ -1563,10 +1572,10 @@ export class PublicService {
 
       if (itemsData.length > 0) {
         const placeholders = itemsData
-          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, note)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, note)
            VALUES ${placeholders}`,
           itemsData.flatMap((d) => [
             newOrderId,
@@ -1577,6 +1586,7 @@ export class PublicService {
             d.quantity,
             d.priceAtPurchase,
             d.autoDiscountAmount,
+            d.unitCost,
             d.note,
           ]),
         );
