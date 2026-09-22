@@ -1019,3 +1019,48 @@ export interface ScheduledjoblockRow {
   name: string;
   lockedUntil: Date | null;
 }
+
+// ANL-1 rollups (migration 20260922120000). Per-OUTLET rows, never a
+// shop-wide row with a NULL outletId - a shop-wide figure is SUM() over these
+// at query time, so the same money is never stored twice. `cogs` is nullable
+// and means "cost of the lines whose cost we captured", never a zero-filled
+// total; `linesWithoutCost` says how many were left out.
+export interface DailyshopmetricsRow {
+  shopId: number;
+  outletId: number;
+  date: Date;
+  orders: number;
+  revenue: string;
+  cogs: string | null;
+  discount: string;
+  delivery: string;
+  tax: string;
+  newCustomers: number;
+  returningCustomers: number;
+  linesWithoutCost: number;
+  computedAt: Date;
+}
+
+export interface DailyproductmetricsRow {
+  shopId: number;
+  productId: number;
+  outletId: number;
+  date: Date;
+  units: number;
+  revenue: string;
+  cogs: string | null;
+  linesWithoutCost: number;
+  computedAt: Date;
+}
+
+// A whole-history snapshot per customer, not a daily series - there is nothing
+// to bucket by date in "when did they first order".
+export interface CustomermetricsRow {
+  shopId: number;
+  customerId: number;
+  firstOrder: Date | null;
+  lastOrder: Date | null;
+  orderCount: number;
+  ltv: string;
+  computedAt: Date;
+}

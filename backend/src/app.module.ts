@@ -60,6 +60,7 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { NotifySubscriptionsModule } from './notify-subscriptions/notify-subscriptions.module';
 import { StorefrontSearchModule } from './storefront-search/storefront-search.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { ExportsModule } from './exports/exports.module';
 import { StorageModule } from './storage/storage.module';
 import { DomainsModule } from './domains/domains.module';
@@ -173,6 +174,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     StorefrontSearchModule,
     HealthModule,
     JobsModule,
+    AnalyticsModule,
     ExportsModule,
     StorageModule,
     DomainsModule,
