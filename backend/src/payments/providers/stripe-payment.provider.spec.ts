@@ -5,9 +5,11 @@ import { StripePaymentProvider } from './stripe-payment.provider';
 // without proving the provider actually calls it, which is the regression that
 // matters here.
 const createSession = jest.fn();
+const createRefund = jest.fn();
 jest.mock('stripe', () =>
   jest.fn().mockImplementation(() => ({
     checkout: { sessions: { create: createSession } },
+    refunds: { create: createRefund },
   })),
 );
 
@@ -67,4 +69,29 @@ describe('StripePaymentProvider amount serialisation', () => {
     const priceData = await checkout(1.005, 'AED');
     expect(Number.isInteger(priceData.unit_amount)).toBe(true);
   });
+
+  // refundPayment is the OTHER amount conversion in this provider, and the one
+  // the currency findings missed. RefundPaymentParams carries no currency, so
+  // it falls back to a factor of 100 - identical to the previous hardcoded
+  // x100, now expressed through the shared helper so there is one conversion
+  // rule here rather than two literals.
+  describe('refundPayment', () => {
+    it('converts the refund amount to minor units', async () => {
+      createRefund.mockReset();
+      createRefund.mockResolvedValue({ id: 're_test_1' });
+      const provider = new StripePaymentProvider();
+      await provider.refundPayment({
+        chargeReference: 'pi_test_1',
+        amount: 24.5,
+        credentials: { secretKey: 'sk_test_refund' },
+      });
+      const calls = createRefund.mock.calls as unknown as {
+        payment_intent: string;
+        amount: number;
+      }[][];
+      expect(calls[0][0].amount).toBe(2450);
+      expect(Number.isInteger(calls[0][0].amount)).toBe(true);
+    });
+  });
+
 });
