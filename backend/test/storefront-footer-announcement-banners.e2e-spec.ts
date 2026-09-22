@@ -210,9 +210,14 @@ describe('Footer/announcement/banners (e2e)', () => {
         .get('/theme')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
+      // Content, not cardinality: a length of 1 passes just as happily when
+      // the removal keeps the WRONG image, which is the failure actually worth
+      // catching here.
       expect(
-        body<{ images: { url: string }[] }>(afterRemove).images,
-      ).toHaveLength(1);
+        body<{ images: { url: string }[] }>(afterRemove).images.map(
+          (i) => i.url,
+        ),
+      ).toEqual(['/uploads/theme/b.jpg']);
     });
 
     it('a slide can carry its own optional link', async () => {

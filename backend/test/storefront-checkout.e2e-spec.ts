@@ -303,7 +303,7 @@ describe('Storefront public checkout (e2e)', () => {
         .set('Authorization', `Bearer ${otherToken}`)
         .send({ name: 'Other Collection' })
         .expect(201);
-      await request(app.getHttpServer())
+      const otherAddon = await request(app.getHttpServer())
         .post('/products')
         .set('Authorization', `Bearer ${otherToken}`)
         .send({
@@ -322,7 +322,12 @@ describe('Storefront public checkout (e2e)', () => {
       const ids = body<{ id: number }[]>(res).map((p) => p.id);
       expect(ids).toContain(addonId);
       expect(ids).not.toContain(productId); // Rose Bouquet isn't flagged
-      expect(ids.length).toBe(1); // only this shop's addon product, never the other shop's
+      // What this is really asserting is tenant isolation, so name the row
+      // that must be absent instead of pinning a total. This shop is shared
+      // by every test in the file, so a later test adding another add-on here
+      // would have broken a raw length check without any isolation having
+      // actually regressed.
+      expect(ids).not.toContain(body<{ id: number }>(otherAddon).id);
     });
   });
 

@@ -497,7 +497,11 @@ describe('Reports (e2e)', () => {
         .post('/products')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
-          name: 'Cheap Filler',
+          // Name carries runId so the search term below cannot be matched by
+          // a product some future edit adds to setupShop. 'Cheap' alone was a
+          // literal against a LIKE'd column - the same shape as the order-id
+          // collision fixed in #142, just with a word instead of a number.
+          name: `Cheap-${runId} Filler`,
           price: 5,
           thumbnail: 'https://example.com/filler.jpg',
           sku: `FILLER-${runId}`,
@@ -525,7 +529,7 @@ describe('Reports (e2e)', () => {
       expect(rows[0].productId).toBe(shop.productId);
 
       const searched = await request(app.getHttpServer())
-        .get('/reports/product-sales?search=Cheap')
+        .get(`/reports/product-sales?search=Cheap-${runId}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
       const searchRows = body<ProductSalesBody>(searched).data;
