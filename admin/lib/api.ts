@@ -92,7 +92,8 @@ import type {
   Theme,
   ThemeListItem,
   ThemeTemplateMeta,
-  ThemeConfig,
+  ThemeConfig,
+  InventoryMovementReport,
   TodaySnapshot,
   TopProduct,
   UserRole,
@@ -313,6 +314,19 @@ async function apiFetchText(path: string, isRetry = false): Promise<string> {
 export function getTodaySnapshot(outletId?: number) {
   const query = outletId ? `?outletId=${outletId}` : "";
   return apiFetch<TodaySnapshot>(`/dashboard/today${query}`);
+}
+
+export function getInventoryMovement(params: {
+  days?: number;
+  deadStockDays?: number;
+  outletId?: number;
+} = {}) {
+  const query = new URLSearchParams();
+  if (params.days) query.set("days", String(params.days));
+  if (params.deadStockDays) query.set("deadStockDays", String(params.deadStockDays));
+  if (params.outletId) query.set("outletId", String(params.outletId));
+  const qs = query.toString();
+  return apiFetch<InventoryMovementReport>(`/reports/inventory/movement${qs ? `?${qs}` : ""}`);
 }
 
 export async function downloadExport(

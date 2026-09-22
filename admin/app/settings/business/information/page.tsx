@@ -146,6 +146,8 @@ export default function BusinessInformationPage() {
   const [notifyAbandonedCart, setNotifyAbandonedCart] = useState(false);
   const [abandonedCartWindowMinutes, setAbandonedCartWindowMinutes] = useState(60);
   const [notifyLowStockDigest, setNotifyLowStockDigest] = useState(false);
+  const [notifyDailySalesSummary, setNotifyDailySalesSummary] = useState(false);
+  const [notifyWeeklyDigest, setNotifyWeeklyDigest] = useState(false);
   const [autoDeductIngredientStock, setAutoDeductIngredientStock] = useState(true);
   const [productEditorMode, setProductEditorMode] = useState<"simple" | "advanced">("simple");
   const [saving, setSaving] = useState(false);
@@ -170,6 +172,8 @@ export default function BusinessInformationPage() {
       setNotifyAbandonedCart(s.notifyAbandonedCart);
       setAbandonedCartWindowMinutes(s.abandonedCartWindowMinutes);
       setNotifyLowStockDigest(s.notifyLowStockDigest);
+      setNotifyDailySalesSummary(s.notifyDailySalesSummary);
+      setNotifyWeeklyDigest(s.notifyWeeklyDigest);
       setAutoDeductIngredientStock(s.autoDeductIngredientStock);
       setProductEditorMode(s.productEditorMode);
     });
@@ -210,6 +214,8 @@ export default function BusinessInformationPage() {
         notifyAbandonedCart,
         abandonedCartWindowMinutes,
         notifyLowStockDigest,
+        notifyDailySalesSummary,
+        notifyWeeklyDigest,
         autoDeductIngredientStock,
         productEditorMode,
       });
@@ -380,6 +386,16 @@ export default function BusinessInformationPage() {
             label="Send a daily low-stock summary email"
             checked={notifyLowStockDigest}
             onChange={(e) => setNotifyLowStockDigest(e.target.checked)}
+          />
+          <Checkbox
+            label="Send a daily sales summary email when the shop closes"
+            checked={notifyDailySalesSummary}
+            onChange={(e) => setNotifyDailySalesSummary(e.target.checked)}
+          />
+          <Checkbox
+            label="Send a weekly sales digest every Monday"
+            checked={notifyWeeklyDigest}
+            onChange={(e) => setNotifyWeeklyDigest(e.target.checked)}
           />
         </div>
       </Card>

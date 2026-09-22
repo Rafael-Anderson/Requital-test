@@ -112,6 +112,17 @@ export class UpdateShopDto {
   @IsBoolean()
   notifyLowStockDigest?: boolean;
 
+  // ANL-5 scheduled report emails, both opt-in and off by default - see the
+  // migration for why a platform-wide default-on would be discovered in
+  // merchants' inboxes.
+  @IsOptional()
+  @IsBoolean()
+  notifyDailySalesSummary?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  notifyWeeklyDigest?: boolean;
+
   // Bill of Materials auto-deduction — on by default (see schema.prisma's
   // comment on shop.autoDeductIngredientStock for why this one defaults
   // differently from the notify* toggles above).
