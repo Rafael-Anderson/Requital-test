@@ -15,6 +15,11 @@ import {
   MaxLength,
 } from 'class-validator';
 
+// The single source of truth for which currencies the backend will accept.
+// Widening this list is the deliberate, visible act that turns multi-currency
+// on - which is why it is a named constant rather than an inline literal.
+export const SUPPORTED_CURRENCIES = ['AED'] as const;
+
 export class UpdateShopDto {
   // Gates storefront visibility — see PublicService.assertPublished and the
   // admin "Publish your store" action (Settings > Business Information). A
@@ -29,9 +34,37 @@ export class UpdateShopDto {
   @MaxLength(255)
   name?: string;
 
+  // TEMPORARY LOCK, to be removed when real multi-currency ships (Phase 2a,
+  // audit docs/plans/product-capability-audit.md D6 / I18N-4). Note there is a
+  // second, unrelated "D6" in docs/plans/google-shopping-listing.md about
+  // shipping - this is the multi-currency one.
+  //
+  // The admin has offered a seven-option currency dropdown for a long time
+  // while this field validated only @IsString() @MaxLength(10), so any merchant
+  // could set a currency the platform cannot actually honour. Nothing downstream
+  // is currency-aware enough to survive it:
+  //   - StripePaymentProvider serialises amounts in minor units, and until the
+  //     companion fix in common/currency-minor-units.ts it multiplied by 100
+  //     unconditionally - wrong by 10x for the three-decimal currencies
+  //     (KWD/BHD/OMR) that same dropdown offered
+  //   - PayPal's refundPayment hardcodes 'AED'
+  //   - every admin money display and all three notification templates
+  //     concatenate a literal "AED"
+  // So the value reached a real payment gateway as the charge currency; this was
+  // never display-only. Every shop in the database is AED today, so locking to
+  // AED takes nothing away from anyone - it only closes a door that should not
+  // have been open.
+  //
+  // This is the enforcement point for the whole field: shop.service.ts's update
+  // is the ONLY write path to shop.currency (signup never sets it, so new shops
+  // take the column default 'AED').
   @IsOptional()
   @IsString()
   @MaxLength(10)
+  @IsIn(SUPPORTED_CURRENCIES, {
+    message:
+      'Only AED is supported today. Multi-currency is planned; other currencies will be enabled when it ships.',
+  })
   currency?: string;
 
   @IsOptional()

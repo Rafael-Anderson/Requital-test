@@ -8,6 +8,7 @@ import {
   RefundResult,
   WebhookResult,
 } from '../payment-provider.interface';
+import { toMinorUnits } from '../../common/currency-minor-units';
 
 @Injectable()
 export class StripePaymentProvider implements PaymentProvider {
@@ -65,7 +66,12 @@ export class StripePaymentProvider implements PaymentProvider {
           price_data: {
             currency: params.currency.toLowerCase(),
             product_data: { name: `Order #${params.orderId}` },
-            unit_amount: Math.round(params.amount * 100),
+            // Minor units, per the currency's own exponent - NOT a fixed
+            // x100. KWD/BHD/OMR are three-decimal, so a hardcoded 100
+            // understates them by 10x. Unreachable today (shop.currency is
+            // locked to AED by UpdateShopDto) but fixed at the source rather
+            // than left resting on that lock alone.
+            unit_amount: toMinorUnits(params.amount, params.currency),
           },
           quantity: 1,
         },

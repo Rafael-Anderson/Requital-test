@@ -134,4 +134,65 @@ describe('Shop country lock (e2e)', () => {
       'Country cannot be changed once set',
     );
   });
+
+  // Fix 1: the currency allowlist. The admin dropdown offered seven currencies
+  // against a field that validated only @IsString() @MaxLength(10), and the
+  // value reaches a real payment gateway as the charge currency - it was never
+  // display-only. Locked to AED until multi-currency actually ships (audit D6 /
+  // I18N-4). Remove these cases when the lock is widened, not before.
+  describe('currency lock', () => {
+    it('accepts AED, the only supported currency today', async () => {
+      const shop = await setupShop('currency-aed-ok');
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ currency: 'AED' })
+        .expect(200);
+    });
+
+    it('rejects every other currency the admin dropdown used to offer', async () => {
+      const shop = await setupShop('currency-rejects');
+      for (const currency of ['SAR', 'KWD', 'QAR', 'BHD', 'OMR', 'USD']) {
+        const res = await request(app.getHttpServer())
+          .patch('/shop')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ currency })
+          .expect(400);
+        expect(JSON.stringify(body<unknown>(res))).toContain(
+          'Only AED is supported today',
+        );
+      }
+    });
+
+    // The DTO is the whole write surface, so an arbitrary string has to be
+    // rejected too - MaxLength(10) alone used to let this through.
+    it('rejects an arbitrary string, not just the known currency codes', async () => {
+      const shop = await setupShop('currency-arbitrary');
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ currency: 'XYZ' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ currency: 'aed' })
+        .expect(400);
+    });
+
+    it('leaves the stored currency untouched after a rejected write', async () => {
+      const shop = await setupShop('currency-unchanged');
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ currency: 'KWD' })
+        .expect(400);
+      const res = await request(app.getHttpServer())
+        .get('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<{ currency: string }>(res).currency).toBe('AED');
+    });
+  });
+
 });
