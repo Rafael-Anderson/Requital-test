@@ -206,7 +206,15 @@ describe('PayPal payment webhook (e2e)', () => {
     });
   }
 
-  it('a validly-verified PAYMENT.CAPTURE.COMPLETED event marks the order paid, without advancing its status (not BNPL)', async () => {
+  // ASSERTION CORRECTED, not worked around. This test previously asserted
+  // status stayed 'pending' and justified it as "PayPal isn't BNPL - payment
+  // success never implies order confirmation here, same as Stripe". That
+  // rationale does not survive contact with what the status actually controls:
+  // stock is decremented on pending -> confirmed, so leaving a PAID order
+  // pending reserved no inventory and let the same last item be sold twice,
+  // while an identically-paid Tabby order reserved it. The old behaviour was a
+  // gap that happened to be written down as a decision.
+  it('a validly-verified PAYMENT.CAPTURE.COMPLETED event marks the order paid AND confirms it, as BNPL already did', async () => {
     const { shopSlug, outletId, productId, adminToken } =
       await setupShop('paypal-paid');
     const order = body<OrderCreateResponse>(
@@ -232,9 +240,10 @@ describe('PayPal payment webhook (e2e)', () => {
       .expect(200);
     const updated = body<{ status: string; paymentStatus: string }>(detail);
     expect(updated.paymentStatus).toBe('paid');
-    // PayPal isn't BNPL — payment success never implies order confirmation
-    // here, same as Stripe.
-    expect(updated.status).toBe('pending');
+    // Confirmed, which is what decrements stock. applyAdvanceOrderStatus only
+    // acts on a still-pending order, so a merchant who already moved this one
+    // on is never overridden.
+    expect(updated.status).toBe('confirmed');
   });
 
   it('a failed verification_status is a safe no-op — the order is never touched', async () => {

@@ -215,6 +215,10 @@ export class PayPalPaymentProvider implements PaymentProvider {
         orderId,
         status: 'paid',
         chargeReference: event.resource?.id,
+        // Same advancement Tabby/Tamara have always returned - see the longer
+        // note in StripePaymentProvider for why the omission was an
+        // inventory-integrity gap rather than a cosmetic one.
+        advanceOrderStatus: 'confirmed',
       };
     }
     if (event.event_type === 'PAYMENT.CAPTURE.DENIED') {

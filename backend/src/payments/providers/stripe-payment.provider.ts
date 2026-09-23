@@ -130,6 +130,18 @@ export class StripePaymentProvider implements PaymentProvider {
         orderId,
         status: 'paid',
         chargeReference,
+        // Advances the order the same way Tabby/Tamara already do on their own
+        // approval events. This was missing, and it was not merely a kanban
+        // display inconsistency: stock is decremented on the
+        // pending -> confirmed transition (see OrdersService.updateStatus), so
+        // a paid card order sat pending and reserved NO stock until a human
+        // confirmed it by hand, while a paid BNPL order reserved it
+        // automatically. Two customers could be sold the last item.
+        //
+        // applyAdvanceOrderStatus only acts while the order is still 'pending',
+        // so a merchant who already moved or cancelled the order is never
+        // overridden by a late event.
+        advanceOrderStatus: 'confirmed',
       };
     }
     if (event.type === 'checkout.session.async_payment_failed') {
