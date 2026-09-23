@@ -1736,6 +1736,16 @@ export class PublicService {
         cancelUrl: `${STOREFRONT_URL}/${shopSlug}/checkout?orderId=${order.id}`,
         credentials,
       });
+      // Remembered so a payment whose webhook never arrives can still be
+      // reconciled (PaymentReconciliationService). Deliberately after the
+      // session exists and outside the order-creation transaction: failing to
+      // record it must never roll back an order the customer has already been
+      // sent off to pay for.
+      await this.db.execute(
+        `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?
+          WHERE id = ?`,
+        [session.providerReference, gatewayName, order.id],
+      );
       return { order, checkoutUrl: session.checkoutUrl };
     }
     return { order, checkoutUrl: null };

@@ -17,6 +17,7 @@ import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { OrdersService } from '../orders/orders.service';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { createLogger } from '../common/logging/logger';
+import type { WebhookResult } from './payment-provider.interface';
 
 const logger = createLogger('PaymentsService');
 
@@ -120,6 +121,17 @@ export class PaymentsService {
       cancelUrl: `${STOREFRONT_URL}/pay/${token}`,
       credentials,
     });
+    // Same reason as the storefront path: without this, a payment-link order
+    // whose webhook is lost has nothing to reconcile against.
+    await this.db.execute(
+      `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?
+        WHERE id = ?`,
+      [
+        session.providerReference,
+        order.shopPaymentGateway as string,
+        order.id,
+      ],
+    );
     return { alreadyPaid: false as const, checkoutUrl: session.checkoutUrl };
   }
 
@@ -194,6 +206,23 @@ export class PaymentsService {
       return { received: true };
     }
 
+    return this.applyWebhookResult(gateway, provider.name, result, shopId);
+  }
+
+  // The single place a payment outcome is applied to an order. Extracted from
+  // handleWebhook so PaymentReconciliationService can reuse it verbatim rather
+  // than growing a second, parallel "mark as paid" path that would inevitably
+  // drift from this one - same transaction, same unique-index idempotency guard,
+  // same affiliate sync, same CAS status advancement.
+  //
+  // `providerName` is passed separately from `gateway` because handleWebhook
+  // resolves a provider instance and reconciliation does not need one.
+  async applyWebhookResult(
+    gateway: string,
+    providerName: string,
+    result: WebhookResult,
+    shopId?: number,
+  ): Promise<{ received: boolean }> {
     const orderRows = await this.db.query<RowDataPacket[]>(
       `SELECT * FROM \`order\` WHERE id = ?`,
       [result.orderId],
@@ -229,7 +258,7 @@ export class PaymentsService {
            VALUES (?, ?, ?, ?, ?, ?)`,
           [
             order.id,
-            provider.name,
+            providerName,
             result.providerReference,
             result.chargeReference ?? null,
             order.total,

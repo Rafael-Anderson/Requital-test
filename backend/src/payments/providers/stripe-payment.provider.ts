@@ -7,6 +7,7 @@ import {
   RefundPaymentParams,
   RefundResult,
   WebhookResult,
+  CheckoutSessionOutcome,
 } from '../payment-provider.interface';
 
 @Injectable()
@@ -81,6 +82,36 @@ export class StripePaymentProvider implements PaymentProvider {
       );
     }
     return { providerReference: session.id, checkoutUrl: session.url };
+  }
+
+
+  // Fix 3a: what the reconciliation sweep asks when a webhook never arrived.
+  //
+  // Reads payment_status, NOT the session's own `status`. A session can be
+  // 'complete' while its payment is still 'unpaid' (a delayed method that has
+  // not settled), and treating that as paid would mark an order paid for money
+  // that never arrived - the opposite of the bug being fixed, and worse.
+  //
+  // Returns null rather than throwing on a session Stripe does not recognise:
+  // an id that no longer resolves is a reason to leave the order alone, not to
+  // fail the whole sweep for every other order behind it.
+  async retrieveSessionOutcome(
+    sessionId: string,
+    credentials?: Record<string, string> | null,
+  ): Promise<CheckoutSessionOutcome | null> {
+    const stripe = this.clientFor(credentials?.secretKey);
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session) return null;
+
+    if (session.payment_status === 'paid') {
+      const chargeReference =
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : session.payment_intent?.id;
+      return { status: 'paid', chargeReference };
+    }
+    if (session.status === 'expired') return { status: 'expired' };
+    return { status: 'unpaid' };
   }
 
   parseWebhookEvent(

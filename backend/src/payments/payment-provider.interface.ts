@@ -62,7 +62,26 @@ export interface RefundResult {
 // Strategy interface — Telr/PayTabs/Tabby/Tamara plug in by implementing this
 // and being wired up in PaymentsModule's PAYMENT_PROVIDER factory; nothing
 // outside providers/ should ever import a gateway SDK directly.
-export interface PaymentProvider {
+
+// Fix 3a: lets the reconciliation sweep ask the gateway what actually happened to
+// a checkout session whose webhook never arrived.
+//
+// OPTIONAL on purpose. Only Stripe implements it today, and a provider that
+// cannot answer the question should not be forced to pretend it can - the sweep
+// skips any provider without it rather than guessing. Returns null when the
+// session is unknown to the gateway.
+export type CheckoutSessionOutcome =
+  | { status: 'paid'; chargeReference?: string }
+  | { status: 'unpaid' }
+  | { status: 'expired' };
+
+export interface PaymentProvider {
+  // See CheckoutSessionOutcome. Undefined on providers that cannot be polled.
+  retrieveSessionOutcome?(
+    sessionId: string,
+    credentials?: Record<string, string> | null,
+  ): Promise<CheckoutSessionOutcome | null>;
+
   readonly name: string;
   createCheckoutSession(
     params: CreateCheckoutSessionParams,
