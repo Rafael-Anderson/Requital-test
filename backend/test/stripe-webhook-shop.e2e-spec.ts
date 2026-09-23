@@ -31,6 +31,7 @@ interface OutletRow {
 interface OrderRow {
   id: number;
   paymentStatus: string;
+  status: string;
 }
 
 function body<T>(res: Response): T {
@@ -185,6 +186,10 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
 
     const order = await getOrder(shop.adminToken, shop.orderId);
     expect(order.paymentStatus).toBe('paid');
+    // The assertion this suite was missing. paymentStatus alone passed happily
+    // while the order sat 'pending' and reserved no stock - the gap Tabby's own
+    // suite has always caught for BNPL (payments-bnpl.e2e-spec.ts:195).
+    expect(order.status).toBe('confirmed');
   });
 
   it("an event sent to a different shop's URL fails signature verification (each shop's secret is genuinely its own)", async () => {
@@ -263,5 +268,9 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
 
     const order = await getOrder(shop.adminToken, shop.orderId);
     expect(order.paymentStatus).toBe('paid');
+    // The assertion this suite was missing. paymentStatus alone passed happily
+    // while the order sat 'pending' and reserved no stock - the gap Tabby's own
+    // suite has always caught for BNPL (payments-bnpl.e2e-spec.ts:195).
+    expect(order.status).toBe('confirmed');
   });
 });

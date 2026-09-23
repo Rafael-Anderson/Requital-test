@@ -225,6 +225,11 @@ describe('PayPalPaymentProvider', () => {
         providerReference: 'WH-EVT-1',
         orderId: 99,
         status: 'paid',
+        // Added alongside the same field on Stripe: a captured PayPal payment
+        // now confirms the order, which is what decrements stock. This spec is
+        // an exact-shape toEqual, so the new field has to be listed here - it
+        // was not asserting the absence of advancement on purpose.
+        advanceOrderStatus: 'confirmed',
         chargeReference: 'CAPTURE-1',
       });
       const [tokenUrl, tokenInit] = fetchSpy.mock.calls[0];
