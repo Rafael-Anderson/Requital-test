@@ -20,6 +20,14 @@ const BUSINESS_TYPES = ["Florist", "Gift Shop", "Bakery", "Restaurant", "Grocery
 
 // Gulf-region currencies plus USD — same UAE-market scope as the dial codes
 // on the Business Information tab.
+// The other six stay VISIBLE but disabled rather than being removed. A merchant
+// in Riyadh who sees SAR greyed out with a reason learns something true - it is
+// planned - whereas an AED-only dropdown reads as "this product is UAE-only".
+// The backend is the part that actually enforces this: UpdateShopDto restricts
+// shop.currency to AED and rejects anything else, so a hand-rolled API call
+// cannot get past it either. Both go away together when multi-currency ships
+// (audit D6 / I18N-4).
+const SUPPORTED_CURRENCIES = ["AED"];
 const CURRENCIES = ["AED", "SAR", "KWD", "QAR", "BHD", "OMR", "USD"];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -154,11 +162,16 @@ export default function StoreConfigurationPage() {
               className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
             >
               {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
+                <option key={c} value={c} disabled={!SUPPORTED_CURRENCIES.includes(c)}>
                   {c}
+                  {SUPPORTED_CURRENCIES.includes(c) ? "" : " (coming soon)"}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-text-faint">
+              Only AED is supported today. Support for other currencies is planned, and the
+              remaining options will be enabled when it arrives.
+            </p>
           </Field>
 
           <Field label="Default Language">
