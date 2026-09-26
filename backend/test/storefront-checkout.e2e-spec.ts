@@ -28,6 +28,7 @@ interface OutletRow {
 }
 interface OrderRow {
   id: number;
+  shopOrderNumber: number;
   channel: string | null;
   orderType: string | null;
   paymentMethod: string | null;
@@ -39,6 +40,7 @@ interface OrderRow {
 }
 interface OrderLookupBody {
   id: number;
+  shopOrderNumber: number;
   status: string;
   orderType: string | null;
   items: { productName: string; quantity: number }[];
@@ -994,6 +996,33 @@ describe('Storefront public checkout (e2e)', () => {
       expect(looked.total).toBe(order.total);
       expect(looked.items.length).toBeGreaterThan(0);
       expect(looked.customerName).toBe('Storefront Customer');
+    });
+
+    // This endpoint builds an explicit narrow shape rather than spreading the
+    // row, so a newly-added column is NOT picked up for free here the way it is
+    // everywhere else. It shipped to production returning no shopOrderNumber at
+    // all while the tracking page rendered "Order #" followed by nothing.
+    // Asserting the value (not just the key) is what makes this meaningful: a
+    // present-but-undefined field is exactly the failure that occurred.
+    it('returns the per-shop display number, not only the global id', async () => {
+      const created = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({ orderType: 'pickup', paymentMethod: 'cash_on_pickup' }),
+        )
+        .expect(201);
+      const { order } = body<CreateOrderResponseBody>(created);
+
+      const res = await request(app.getHttpServer())
+        .get(`/public/orders/lookup?token=${order.trackingToken}`)
+        .expect(200);
+      const looked = body<OrderLookupBody>(res);
+
+      expect(looked.shopOrderNumber).toBe(order.shopOrderNumber);
+      expect(typeof looked.shopOrderNumber).toBe('number');
+      // The identity is still the global id — this endpoint hands out both, and
+      // swapping them would break every /orders/:id link the page builds.
+      expect(looked.id).toBe(order.id);
     });
 
     it('a missing token is rejected (400), not treated as "no filter"', async () => {
