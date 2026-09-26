@@ -28,6 +28,7 @@ import { getOrder, getShop, updateExternalDelivery } from "@/lib/api";
 function fakeOrder(): Order {
   return {
     id: 42,
+    shopOrderNumber: 3,
     outletId: 1,
     customerName: "Jane Shopper",
     customerPhone: "0501234567",

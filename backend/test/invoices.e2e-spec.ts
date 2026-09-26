@@ -20,7 +20,7 @@ interface OutletRow {
   id: number;
 }
 interface OrderCreateResponse {
-  order: { id: number };
+  order: { id: number; shopOrderNumber: number };
 }
 interface InvoiceRow {
   id: number;
@@ -449,7 +449,9 @@ describe('Invoices & packing slips (e2e)', () => {
         .expect(200);
       expect(res.headers['content-type']).toContain('text/html');
       expect(res.text).toContain(invoice.invoiceNumber);
-      expect(res.text).toContain(`Order #${order.id}`);
+      // The merchant-facing per-shop number, not the global id (migration
+      // 20260923130000). The id is still what /invoices?orderId= addresses.
+      expect(res.text).toContain(`Order #${order.shopOrderNumber}`);
     });
   });
 

@@ -98,8 +98,8 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
       const outletSql = outletId !== undefined ? 'AND o.outletId = ?' : '';
       const outletParam = outletId !== undefined ? [outletId] : [];
       const rows = await db.query<RowDataPacket[]>(
-        `SELECT o.id, o.status, o.customerName, o.orderType, o.paymentStatus,
-                o.total, o.channel, o.createdAt
+        `SELECT o.id, o.shopOrderNumber, o.status, o.customerName, o.orderType,
+                o.paymentStatus, o.total, o.channel, o.createdAt
            FROM \`order\` o
           WHERE o.shopId = ? ${outletSql}
           ORDER BY o.id DESC
@@ -107,7 +107,10 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         [ctx.shopId, ...outletParam, limit, offset],
       );
       return rows.map((r): unknown[] => [
-        r.id,
+        // The merchant's own order number, not the global id - see migration
+        // 20260923130000. Exports are read by humans and pasted into
+        // spreadsheets, so they carry the same number the admin shows.
+        r.shopOrderNumber,
         r.status,
         r.customerName,
         r.orderType ?? '',

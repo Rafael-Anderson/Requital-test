@@ -38,6 +38,7 @@ interface AssembledDraftOrder extends DraftorderRow {
   outlet: { id: number; name: string };
   convertedOrder: {
     id: number;
+    shopOrderNumber: number;
     status: string;
     paymentStatus: string;
     total: string;
@@ -447,7 +448,9 @@ export class DraftOrdersService {
         `SELECT d.*, disc.code AS discountCode, disc.type AS discountType, disc.value AS discountValue,
                 c.id AS customerRowId, c.name AS customerName2, c.phone AS customerPhone2,
                 o.id AS outletRowId, o.name AS outletName,
-                co.id AS convertedOrderRowId, co.status AS convertedOrderStatus,
+                co.id AS convertedOrderRowId,
+                co.shopOrderNumber AS convertedOrderNumber,
+                co.status AS convertedOrderStatus,
                 co.paymentStatus AS convertedOrderPaymentStatus, co.total AS convertedOrderTotal,
                 co.trackingToken AS convertedOrderTrackingToken
          FROM draftorder d
@@ -515,6 +518,7 @@ export class DraftOrdersService {
         convertedOrder: d.convertedOrderId
           ? {
               id: d.convertedOrderRowId as unknown as number,
+              shopOrderNumber: d.convertedOrderNumber as unknown as number,
               status: d.convertedOrderStatus as unknown as string,
               paymentStatus: d.convertedOrderPaymentStatus as unknown as string,
               total: d.convertedOrderTotal as unknown as string,

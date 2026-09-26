@@ -171,7 +171,7 @@ export default function CustomerDetailPage() {
                 ) : (
                   customer.orders.map((order) => (
                     <TR key={order.id} className="cursor-pointer" onClick={() => router.push(`/orders/${order.id}`)}>
-                      <TD className="font-medium">#{order.id}</TD>
+                      <TD className="font-medium">#{order.shopOrderNumber}</TD>
                       <TD>
                         <StatusBadge status={order.status} />
                       </TD>

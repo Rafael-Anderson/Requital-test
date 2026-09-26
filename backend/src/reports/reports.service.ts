@@ -75,7 +75,14 @@ const MARGIN_DIMENSIONS: Record<
     labelExpr: 'ou.name',
     joins: 'JOIN outlet ou ON ou.id = o.outletId',
   },
-  order: { keyExpr: 'o.id', labelExpr: 'CAST(o.id AS CHAR)', joins: '' },
+  // keyExpr stays o.id: it is the GROUP BY key and what the admin row links
+  // to (/orders/{key}). Only the human-readable label becomes the per-shop
+  // number.
+  order: {
+    keyExpr: 'o.id',
+    labelExpr: 'CAST(o.shopOrderNumber AS CHAR)',
+    joins: '',
+  },
 };
 
 function marginShape(revenue: number, cost: number) {
@@ -365,7 +372,8 @@ export class ReportsService {
 
     const [orders, totalRows] = await Promise.all([
       this.db.query<RowDataPacket[]>(
-        `SELECT o.id, o.status, o.customerName, o.customerPhone, o.orderType, o.paymentMethod,
+        `SELECT o.id, o.shopOrderNumber, o.status, o.customerName, o.customerPhone,
+                o.orderType, o.paymentMethod,
                 o.total, o.channel, o.createdAt, ot.name AS outletName, c.id AS customerId
          FROM \`order\` o
          JOIN outlet ot ON ot.id = o.outletId
@@ -384,6 +392,7 @@ export class ReportsService {
     return {
       data: orders.map((o) => ({
         id: o.id as number,
+        shopOrderNumber: o.shopOrderNumber as number,
         outletName: o.outletName as string,
         status: o.status as string,
         customerId: (o.customerId as number | null) ?? null,

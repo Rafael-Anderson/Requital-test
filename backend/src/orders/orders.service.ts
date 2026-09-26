@@ -12,6 +12,7 @@ import { trimDecimal } from '../database/decimal.util';
 import type { OrderRow, OrderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
+import { withShopOrderNumber } from './order-number';
 import { generateTrackingCode } from '../common/token-hash';
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -391,12 +392,22 @@ export class OrdersService {
       }
 
       const trackingToken = generateTrackingCode();
-      const [result] = await conn.query(
+      // The insert lives INSIDE withShopOrderNumber on purpose - see that
+      // function's own comment. The number must be claimed and read back before
+      // this AUTO_INCREMENT insert overwrites LAST_INSERT_ID() on this
+      // connection, and nesting it here is what makes that ordering impossible
+      // to reverse by accident.
+      const result = await withShopOrderNumber(
+        conn,
+        ctx.shopId,
+        async (shopOrderNumber) => {
+          const [res] = await conn.query(
         `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
-          channel, orderType, deliveryFee, discountId, discountCode, discountAmount, total, trackingToken
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          channel, orderType, deliveryFee, discountId, discountCode, discountAmount, total, trackingToken,
+          shopOrderNumber
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -420,7 +431,11 @@ export class OrdersService {
           discount ? discountAmount : null,
           total,
           trackingToken,
+          shopOrderNumber,
         ],
+          );
+          return res;
+        },
       );
       const newOrderId = (result as { insertId: number }).insertId;
 

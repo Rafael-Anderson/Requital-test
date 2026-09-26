@@ -138,7 +138,7 @@ export default function GeneralReportView({
           ) : (
             orders.map((order) => (
               <TR key={order.id}>
-                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">#{order.id}</TD>
+                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">#{order.shopOrderNumber}</TD>
                 <TD className="text-text-muted text-[13.5px]">{order.outletName}</TD>
                 <TD>
                   <StatusBadge status={order.status} />

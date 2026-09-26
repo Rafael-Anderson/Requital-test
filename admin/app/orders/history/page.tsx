@@ -231,10 +231,10 @@ export default function OrderHistoryPage() {
                     <Checkbox
                       checked={selection.selected.has(order.id)}
                       onChange={() => selection.toggle(order.id)}
-                      aria-label={`Select order #${order.id}`}
+                      aria-label={`Select order #${order.shopOrderNumber}`}
                     />
                   </TD>
-                  <TD className="font-medium">#{order.id}</TD>
+                  <TD className="font-medium">#{order.shopOrderNumber}</TD>
                   <TD>
                     <StatusBadge status={order.status} />
                   </TD>

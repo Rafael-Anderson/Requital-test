@@ -17,6 +17,9 @@ export interface InvoiceHtmlData {
   currency: string;
   order: {
     id: number;
+    // The merchant-facing number (migration 20260923130000). `id` is still the
+    // identity used for lookups; this is what the printed invoice shows.
+    shopOrderNumber: number;
     customerName: string;
     customerPhone: string;
     customerEmail: string | null;
@@ -159,7 +162,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
     <div>
       <h3>Order</h3>
       <p class="muted">
-        Order #${data.order.id}<br />
+        Order #${data.order.shopOrderNumber}<br />
         ${data.order.createdAt.toLocaleDateString()}
       </p>
     </div>

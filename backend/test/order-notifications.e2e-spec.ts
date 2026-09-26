@@ -24,6 +24,7 @@ interface OutletRow {
 }
 interface OrderRow {
   id: number;
+  shopOrderNumber: number;
   status: string;
 }
 interface EmailJobPayload {
@@ -251,9 +252,11 @@ describe('Order status customer email notifications (e2e)', () => {
     expect(job!.status).toBe('completed');
     const payload = job!.payload as EmailJobPayload;
     expect(payload.to).toBe(email);
-    expect(payload.subject).toContain(`Order confirmation — #${order.id}`);
+    expect(payload.subject).toContain(
+      `Order confirmation — #${order.shopOrderNumber}`,
+    );
     expectHtmlStructure(payload.html);
-    expect(payload.html).toContain(`#${order.id}`);
+    expect(payload.html).toContain(`#${order.shopOrderNumber}`);
   });
 
   it('does NOT send anything when the shop has notifications disabled', async () => {
@@ -486,7 +489,7 @@ describe('Order status customer email notifications (e2e)', () => {
 
       const waCalls = whatsAppStubCalls(logSpy, '+971501234567');
       expect(waCalls.length).toBe(1);
-      expect(waCalls[0]).toContain(`order #${order.id}`);
+      expect(waCalls[0]).toContain(`order #${order.shopOrderNumber}`);
       // Email toggle was off — no email attempted for this order at all.
       expect(metaApiCalls()).toHaveLength(0);
     });
@@ -645,7 +648,7 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(job!.status).toBe('completed');
       const payload = job!.payload as WhatsAppAlertJobPayload;
       expect(payload.to).toBe('+971507654321');
-      expect(payload.body).toContain(`New order #${order.id}`);
+      expect(payload.body).toContain(`New order #${order.shopOrderNumber}`);
       expect(payload.orderId).toBe(order.id);
     });
 
@@ -728,7 +731,7 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(metaApiCalls()).toHaveLength(0);
       expect(
         whatsAppStubCalls(logSpy, '+971507654323').some((line) =>
-          line.includes(`New order #${order.id}`),
+          line.includes(`New order #${order.shopOrderNumber}`),
         ),
       ).toBe(true);
     });
@@ -819,7 +822,9 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(init.headers.Authorization).toBe('Bearer test-resend-key');
       const sentBody = JSON.parse(init.body);
       expect(sentBody.to).toBe(email);
-      expect(sentBody.subject).toContain(`Order confirmation — #${order.id}`);
+      expect(sentBody.subject).toContain(
+        `Order confirmation — #${order.shopOrderNumber}`,
+      );
       expect(sentBody.from).toBe('Requital <noreply@requital.io>');
       expect(sentBody.html).toContain('<p style=');
 

@@ -18,6 +18,9 @@ const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 interface NotifiableOrder {
   id: number;
+  // What the customer sees. `id` is still used for the job idempotency keys and
+  // every lookup in this file - only the rendered "#N" changes.
+  shopOrderNumber: number;
   customerName: string;
   customerEmail: string | null;
   customerPhone: string;
@@ -63,7 +66,7 @@ export class OrderNotificationsService {
   ) {}
 
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
-    const bodyText = `Hi ${order.customerName}, we've received your order #${order.id} (total ${order.total} AED). We'll message you again once it's on its way.`;
+    const bodyText = `Hi ${order.customerName}, we've received your order #${order.shopOrderNumber} (total ${order.total} AED). We'll message you again once it's on its way.`;
     // Standalone literal, not shared with notifyOutForDelivery's own HTML
     // below — deliberately duplicated rather than factored into a common
     // renderer, so a future change to one order email type can't silently
@@ -73,7 +76,7 @@ export class OrderNotificationsService {
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
-<p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">We've received your order <strong>#${order.id}</strong> (total ${escapeHtml(order.total)} AED). We'll message you again once it's on its way.</p>
+<p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">We've received your order <strong>#${order.shopOrderNumber}</strong> (total ${escapeHtml(order.total)} AED). We'll message you again once it's on its way.</p>
 </td></tr>
 <tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
 <tr><td style="padding:24px 40px 40px;text-align:center;">
@@ -85,7 +88,7 @@ export class OrderNotificationsService {
       this.sendEmail(
         shopId,
         order,
-        `Order confirmation — #${order.id}`,
+        `Order confirmation — #${order.shopOrderNumber}`,
         bodyText,
         html,
         `order:${order.id}:confirmed-email`,
@@ -98,14 +101,14 @@ export class OrderNotificationsService {
   async notifyOutForDelivery(shopId: number, order: NotifiableOrder) {
     const isPickup = order.orderType === 'pickup';
     const subject = isPickup
-      ? `Your order #${order.id} is ready for pickup`
-      : `Your order #${order.id} is out for delivery`;
+      ? `Your order #${order.shopOrderNumber} is ready for pickup`
+      : `Your order #${order.shopOrderNumber} is out for delivery`;
     const bodyText = isPickup
-      ? `Hi ${order.customerName}, order #${order.id} is ready for pickup at your selected outlet.`
-      : `Hi ${order.customerName}, order #${order.id} is on its way to you now.`;
+      ? `Hi ${order.customerName}, order #${order.shopOrderNumber} is ready for pickup at your selected outlet.`
+      : `Hi ${order.customerName}, order #${order.shopOrderNumber} is on its way to you now.`;
     const messageHtml = isPickup
-      ? `Order <strong>#${order.id}</strong> is ready for pickup at your selected outlet.`
-      : `Order <strong>#${order.id}</strong> is on its way to you now.`;
+      ? `Order <strong>#${order.shopOrderNumber}</strong> is ready for pickup at your selected outlet.`
+      : `Order <strong>#${order.shopOrderNumber}</strong> is on its way to you now.`;
     // Standalone literal (see notifyOrderConfirmed's own comment above) —
     // the pickup/delivery wording branch lives inside this one email type's
     // own template, not shared across types.
@@ -189,7 +192,7 @@ export class OrderNotificationsService {
       {
         to: order.customerEmail,
         subject: `How was your order? — #${order.id}`,
-        bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.id}: ${link}`,
+        bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.shopOrderNumber}: ${link}`,
         html: surveyHtml,
         fromName: shopDisplayName,
       },
@@ -297,7 +300,7 @@ export class OrderNotificationsService {
         return;
       }
 
-      const body = `New order #${order.id} from ${order.customerName}. Total: ${order.total} AED.`;
+      const body = `New order #${order.shopOrderNumber} from ${order.customerName}. Total: ${order.total} AED.`;
       await this.jobsService.enqueue(
         shopId,
         'send_merchant_whatsapp_alert',

@@ -141,7 +141,7 @@ export default function EditOrderItemsModal({
         </>
       )}
     >
-        <p className="text-sm text-text-muted -mt-2 mb-4">Order #{order.id}</p>
+        <p className="text-sm text-text-muted -mt-2 mb-4">Order #{order.shopOrderNumber}</p>
 
         <Table>
           <THead>

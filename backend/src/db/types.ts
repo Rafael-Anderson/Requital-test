@@ -5,6 +5,10 @@
 export interface OrderRow {
   id: number;
   shopId: number;
+  // Per-shop display number (migration 20260923130000). `id` stays the identity
+  // for every FK, URL and gateway round trip; this is only ever shown to a
+  // human. Unique per (shopId, shopOrderNumber).
+  shopOrderNumber: number;
   outletId: number;
   customerId: number | null;
   customerName: string;

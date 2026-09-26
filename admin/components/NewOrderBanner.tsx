@@ -21,6 +21,7 @@ const FETCH_PAGE_SIZE = 50;
 
 interface NewOrder {
   id: number;
+  shopOrderNumber: number;
   customerName: string;
 }
 
@@ -56,7 +57,7 @@ export default function NewOrderBanner() {
         const newIds = diffNewOrderIds(seenIdsRef.current, fetchedIds);
         if (newIds.length === 0) return;
         const arrived = res.data.filter((o) => newIds.includes(o.id));
-        setNewOrders((prev) => [...prev, ...arrived.map((o) => ({ id: o.id, customerName: o.customerName }))]);
+        setNewOrders((prev) => [...prev, ...arrived.map((o) => ({ id: o.id, shopOrderNumber: o.shopOrderNumber, customerName: o.customerName }))]);
         playOrderSound();
       } catch {
         // Silent — a failed poll just leaves the last-known state showing;
@@ -111,7 +112,7 @@ export default function NewOrderBanner() {
               {newOrders.map((order) => (
                 <div key={order.id} className="flex items-center justify-between gap-2 px-3.5 py-2.5">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">Order #{order.id}</p>
+                    <p className="text-sm font-medium truncate">Order #{order.shopOrderNumber}</p>
                     <p className="text-xs text-text-muted truncate">{order.customerName}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

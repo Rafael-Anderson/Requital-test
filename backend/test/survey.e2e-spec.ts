@@ -22,6 +22,7 @@ interface OutletRow {
 }
 interface OrderRow {
   id: number;
+  shopOrderNumber: number;
   status: string;
 }
 interface EmailJobPayload {
@@ -268,7 +269,8 @@ describe('Post-purchase survey (e2e)', () => {
     const payload = job!.payload as unknown as EmailJobPayload;
     expect(payload.to).toBe(email);
     expect(payload.subject).toContain('How was your order');
-    expect(payload.bodyText).toContain(`#${order.id}`);
+    // Per-shop number in customer-facing copy; order.id remains the lookup key.
+    expect(payload.bodyText).toContain(`#${order.shopOrderNumber}`);
     // Structural markers the redesigned HTML email template carries — the
     // teal brand header/CTA button and the divider+copyright footer.
     expect(payload.html).toBeDefined();
@@ -327,6 +329,7 @@ describe('Post-purchase survey (e2e)', () => {
     if (!shop) throw new Error('shop not found');
     const notifiableOrder = {
       id: order.id,
+      shopOrderNumber: order.shopOrderNumber,
       customerName: 'Survey Customer',
       customerEmail: email,
       customerPhone: '0500000004',

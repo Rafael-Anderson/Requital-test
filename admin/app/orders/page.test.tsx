@@ -44,6 +44,7 @@ vi.mock("@/components/SimpleOrderDetailModal", () => ({
 
 const order: Order = {
   id: 101,
+  shopOrderNumber: 7,
   outletId: 1,
   customerName: "Sara Ahmed",
   customerPhone: "+971500000000",

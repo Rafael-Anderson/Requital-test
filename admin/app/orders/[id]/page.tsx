@@ -136,7 +136,7 @@ export default function OrderDetailPage() {
 
       <div className="mb-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Order #{order.id}</h1>
+          <h1 className="text-2xl font-semibold">Order #{order.shopOrderNumber}</h1>
           <div className="flex gap-2">
             <StatusBadge status={order.status} />
             <StatusBadge status={order.paymentStatus} />

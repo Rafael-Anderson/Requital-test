@@ -11,6 +11,7 @@ import { renderInvoiceHtml } from './invoice-html';
 
 interface OrderForInvoice {
   id: number;
+  shopOrderNumber: number;
   customerName: string;
   customerPhone: string;
   customerEmail: string | null;
@@ -203,6 +204,7 @@ export class InvoicesService {
     );
     return {
       id: order.id as number,
+      shopOrderNumber: order.shopOrderNumber as number,
       customerName: order.customerName as string,
       customerPhone: order.customerPhone as string,
       customerEmail: order.customerEmail as string | null,

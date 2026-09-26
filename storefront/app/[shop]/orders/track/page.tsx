@@ -133,7 +133,7 @@ function TrackOrderContent() {
             </div>
           )}
           <div>
-            <p className="text-xs text-zinc-400 uppercase tracking-wide">Order #{order.id}</p>
+            <p className="text-xs text-zinc-400 uppercase tracking-wide">Order #{order.shopOrderNumber}</p>
             <p className="font-medium">{order.status}</p>
           </div>
           <div className="text-sm space-y-1">

@@ -157,7 +157,7 @@ export default function DraftOrderDetailPage() {
                 <p className="text-sm">
                   Converted to{" "}
                   <Link href={`/orders/${draft.convertedOrder.id}`} className="text-accent-text hover:underline">
-                    Order #{draft.convertedOrder.id}
+                    Order #{draft.convertedOrder.shopOrderNumber}
                   </Link>{" "}
                   ({draft.convertedOrder.paymentStatus === "paid" ? "Paid" : "Unpaid"})
                 </p>

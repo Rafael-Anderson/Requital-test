@@ -61,7 +61,10 @@ export interface PaymentTransaction {
 }
 
 export interface Order {
-  id: number;
+  id: number;
+  // Per-shop display number. `id` remains the identity used for URLs,
+  // lookups and every API call - this is only what a human is shown.
+  shopOrderNumber: number;
   outletId: number;
   customerName: string;
   customerPhone: string;
@@ -201,6 +204,7 @@ export interface GeneralReportSummary {
 
 export interface GeneralReportOrderRow {
   id: number;
+  shopOrderNumber: number;
   outletName: string;
   status: OrderStatus;
   customerId: number | null;
@@ -2436,6 +2440,7 @@ export interface DraftOrder {
   convertedOrderId: number | null;
   convertedOrder: {
     id: number;
+    shopOrderNumber: number;
     status: string;
     paymentStatus: string;
     total: string;
