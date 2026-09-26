@@ -42,6 +42,10 @@ export interface OrderRow {
   ingredientsConsumedAt: Date | null;
   cashCollectedAt: Date | null;
   cashCollectedBy: number | null;
+  // ISO 4217, frozen at insert (migration 20260926210000). Reading this
+  // rather than shop.currency is what stops a later shop-setting change
+  // from re-denominating rows that are already written.
+  currency: string;
 }
 
 export interface OrdernoteRow {
@@ -111,6 +115,10 @@ export interface ExternaldeliveryRow {
   driverLat: string | null;
   driverLng: string | null;
   estimatedDeliveryMinutes: number | null;
+  // ISO 4217, frozen at insert (migration 20260926210000). Reading this
+  // rather than shop.currency is what stops a later shop-setting change
+  // from re-denominating rows that are already written.
+  currency: string;
 }
 
 export interface SurveyresponseRow {
@@ -178,6 +186,10 @@ export interface InvoiceRow {
   taxAmount: string;
   total: string;
   notes: string | null;
+  // ISO 4217, frozen at insert (migration 20260926210000). Reading this
+  // rather than shop.currency is what stops a later shop-setting change
+  // from re-denominating rows that are already written.
+  currency: string;
 }
 
 export interface InvoicecounterRow {
@@ -195,6 +207,10 @@ export interface PaymenttransactionRow {
   amount: string;
   status: string;
   createdAt: Date;
+  // ISO 4217, frozen at insert (migration 20260926210000). Reading this
+  // rather than shop.currency is what stops a later shop-setting change
+  // from re-denominating rows that are already written.
+  currency: string;
 }
 
 export interface ProductRow {
@@ -936,6 +952,10 @@ export interface DraftorderRow {
   convertedOrderId: number | null;
   createdAt: Date;
   updatedAt: Date;
+  // ISO 4217, frozen at insert (migration 20260926210000). Reading this
+  // rather than shop.currency is what stops a later shop-setting change
+  // from re-denominating rows that are already written.
+  currency: string;
 }
 
 export interface DraftorderitemRow {
@@ -976,6 +996,10 @@ export interface GiftcardRow {
   purchaseOrderId: number | null;
   createdAt: Date;
   updatedAt: Date;
+  // ISO 4217, frozen at insert (migration 20260926210000). Reading this
+  // rather than shop.currency is what stops a later shop-setting change
+  // from re-denominating rows that are already written.
+  currency: string;
 }
 
 export interface GiftcardredemptionRow {
@@ -1043,6 +1067,10 @@ export interface DailyshopmetricsRow {
   returningCustomers: number;
   linesWithoutCost: number;
   computedAt: Date;
+  // The currency every money column on this row is denominated in. A
+  // revenue figure with no currency is only readable while the whole
+  // platform shares one, which is what Phase 2a stops being true.
+  currency: string;
 }
 
 export interface DailyproductmetricsRow {
@@ -1055,6 +1083,10 @@ export interface DailyproductmetricsRow {
   cogs: string | null;
   linesWithoutCost: number;
   computedAt: Date;
+  // The currency every money column on this row is denominated in. A
+  // revenue figure with no currency is only readable while the whole
+  // platform shares one, which is what Phase 2a stops being true.
+  currency: string;
 }
 
 // A whole-history snapshot per customer, not a daily series - there is nothing
@@ -1067,4 +1099,8 @@ export interface CustomermetricsRow {
   orderCount: number;
   ltv: string;
   computedAt: Date;
+  // The currency every money column on this row is denominated in. A
+  // revenue figure with no currency is only readable while the whole
+  // platform shares one, which is what Phase 2a stops being true.
+  currency: string;
 }

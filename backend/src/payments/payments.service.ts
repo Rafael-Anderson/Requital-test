@@ -254,8 +254,8 @@ export class PaymentsService {
       // can't re-apply the paymentStatus change or insert a second row.
       await this.db.transaction(async (conn) => {
         await conn.query(
-          `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status, currency)
+           VALUES (?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
           [
             order.id,
             providerName,
@@ -263,6 +263,7 @@ export class PaymentsService {
             result.chargeReference ?? null,
             order.total,
             result.status,
+            order.id, // the currency subselect above
           ],
         );
         if (result.status === 'paid') {

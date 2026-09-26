@@ -73,7 +73,8 @@ export class GiftCardsService {
   async create(ctx: TenantContext, dto: CreateGiftCardDto) {
     const code = await this.generateUniqueCode();
     const result = await this.db.execute(
-      `INSERT INTO giftcard (shopId, code, initialValue, remainingBalance, expiresAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO giftcard (shopId, code, initialValue, remainingBalance, expiresAt, updatedAt, currency)
+       VALUES (?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
       [
         ctx.shopId,
         code,
@@ -81,6 +82,7 @@ export class GiftCardsService {
         dto.initialValue,
         dto.expiresAt ? new Date(dto.expiresAt) : null,
         new Date(),
+        ctx.shopId, // the currency subselect above
       ],
     );
     const card = await this.findByIdRaw(result.insertId);
@@ -207,9 +209,9 @@ export class GiftCardsService {
       for (let i = 0; i < line.quantity; i += 1) {
         const code = await this.generateUniqueCode(conn);
         await conn.query(
-          `INSERT INTO giftcard (shopId, code, initialValue, remainingBalance, purchasedByCustomerId, purchaseOrderId, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [shopId, code, line.amount, line.amount, customerId, orderId, new Date()],
+          `INSERT INTO giftcard (shopId, code, initialValue, remainingBalance, purchasedByCustomerId, purchaseOrderId, updatedAt, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
+          [shopId, code, line.amount, line.amount, customerId, orderId, new Date(), shopId],
         );
         issued.push({ code, initialValue: line.amount });
       }

@@ -76,8 +76,8 @@ export class InvoicesService {
           dto.type,
         );
         const [result] = await conn.query(
-          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
           [
             order.id,
             ctx.shopId,
@@ -86,6 +86,10 @@ export class InvoicesService {
             subtotal,
             taxAmount,
             order.total,
+            // Taken from the order, not the shop. invoice-html.ts currently
+            // formats every amount with a LIVE shop join, so a merchant
+            // switching currency re-denominates invoices they already issued.
+            order.id,
           ],
         );
         return (result as { insertId: number }).insertId;
