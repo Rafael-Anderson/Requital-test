@@ -869,7 +869,7 @@ export function updateOrderStatus(id: number, status: OrderStatus) {
 // `results` for which ids succeeded/failed and why.
 export interface GlobalSearchResult {
   products: { id: number; name: string; sku: string; price: string; thumbnail: string }[];
-  orders: { id: number; customerName: string; status: string; total: string }[];
+  orders: { id: number; shopOrderNumber: number; customerName: string; status: string; total: string }[];
   customers: { id: number; name: string; phone: string; email: string | null }[];
 }
 

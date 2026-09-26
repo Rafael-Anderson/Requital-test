@@ -79,7 +79,11 @@ export class SliderDeliveryService {
 
     const created = await this.sliderProvider.createDelivery({
       orderId: order.id,
-      displayOrderId: `#${order.id}`,
+      // Display only - Slider's webhook resolves our order by `order_id`
+      // (the real id, sent alongside this), never by display_order_id, so this
+      // can safely carry the merchant-facing number. Verified in
+      // slider-webhook.controller.ts, which reads body.order_id.
+      displayOrderId: `#${order.shopOrderNumber}`,
       vehicleType: dto.vehicleType,
       scheduleAt: dto.scheduleAt ?? null,
       driverTip: dto.driverTip,

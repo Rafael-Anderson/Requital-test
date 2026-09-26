@@ -54,7 +54,7 @@ export default function OrderHistoryPage() {
           >
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-medium">Order #{order.id}</p>
+                <p className="font-medium">Order #{order.shopOrderNumber}</p>
                 <p className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleDateString()}</p>
               </div>
               <div className="text-right">

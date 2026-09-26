@@ -29,7 +29,7 @@ function flatten(result: GlobalSearchResult | null): FlatResult[] {
     ...result.orders.map((o) => ({
       key: `order-${o.id}`,
       type: "order" as const,
-      label: `Order #${o.id} · ${o.customerName}`,
+      label: `Order #${o.shopOrderNumber} · ${o.customerName}`,
       sublabel: `${o.status.replace(/_/g, " ")} · ${o.total} AED`,
       href: `/orders/${o.id}`,
     })),

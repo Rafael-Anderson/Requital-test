@@ -26,8 +26,16 @@ vi.mock("@/lib/notification-sound", async (importOriginal) => {
   return { ...actual, playOrderSound: vi.fn() };
 });
 
-function mockOrder(id: number, customerName = "Test Customer"): Order {
-  return { id, customerName } as unknown as Order;
+// shopOrderNumber is deliberately NOT equal to id: the banner renders the
+// merchant's own per-shop number (migration 20260923130000) while `id` stays the
+// identity used for polling and links, and a test where the two were equal could
+// not tell the two apart if someone reverted the component to `order.id`.
+function mockOrder(
+  id: number,
+  customerName = "Test Customer",
+  shopOrderNumber = id + 100,
+): Order {
+  return { id, shopOrderNumber, customerName } as unknown as Order;
 }
 
 function mockUser(role: AuthUser["role"]): AuthUser {
@@ -154,9 +162,12 @@ describe("NewOrderBanner", () => {
     });
     expect(playOrderSound).toHaveBeenCalledTimes(1);
     expect(screen.getByText("New order received")).toBeInTheDocument();
-    expect(screen.getByText("Order #2")).toBeInTheDocument();
+    // Order id 2 renders as its per-shop number 102, not as "#2".
+    expect(screen.getByText("Order #102")).toBeInTheDocument();
+    expect(screen.queryByText("Order #2")).not.toBeInTheDocument();
     expect(screen.getByText("New Customer")).toBeInTheDocument();
-    expect(screen.queryByText("Order #1")).not.toBeInTheDocument(); // #1 was pre-existing, never flagged
+    // id 1 (per-shop #101) was pre-existing and never flagged.
+    expect(screen.queryByText("Order #101")).not.toBeInTheDocument();
   });
 
   it("dismissing a new-order notification removes only that one", async () => {

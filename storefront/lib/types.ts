@@ -493,6 +493,9 @@ export interface CreateOrderPayload {
 
 export interface OrderResult {
   id: number;
+  // Per-shop display number. `id` remains the identity used for URLs and every
+  // API call - this is only what the customer is shown.
+  shopOrderNumber: number;
   channel: string | null;
   orderType: string | null;
   paymentMethod: string | null;
@@ -515,6 +518,9 @@ export interface CreateOrderResponse {
 
 export interface OrderLookupResult {
   id: number;
+  // Per-shop display number. `id` remains the identity used for URLs and every
+  // API call - this is only what the customer is shown.
+  shopOrderNumber: number;
   shopName: string;
   outletName: string;
   customerName: string;
@@ -663,6 +669,9 @@ export interface CustomerAddress {
 
 export interface CustomerOrderSummary {
   id: number;
+  // Per-shop display number. `id` remains the identity used for URLs and every
+  // API call - this is only what the customer is shown.
+  shopOrderNumber: number;
   status: string;
   orderType: string | null;
   paymentStatus: string;

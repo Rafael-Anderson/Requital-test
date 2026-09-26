@@ -89,7 +89,7 @@ export class SearchService {
     conditions.push(`(${orClauses.join(' OR ')})`);
 
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id, customerName, status, total FROM \`order\`
+      `SELECT id, shopOrderNumber, customerName, status, total FROM \`order\`
        WHERE ${conditions.join(' AND ')}
        ORDER BY createdAt DESC
        LIMIT ?`,

@@ -83,7 +83,7 @@ export default function SimpleOrderDetailModal({
     if (action.next === "delivered" && order.paymentMethod === "cash_on_delivery" && !order.cashCollectedAt) return;
     try {
       await updateOrderStatus(order.id, action.next);
-      toast(`Order #${order.id} moved to ${action.next.replace(/_/g, " ")}`);
+      toast(`Order #${order.shopOrderNumber} moved to ${action.next.replace(/_/g, " ")}`);
       onChanged?.();
       setOrder(await getOrder(order.id));
     } catch (err) {
@@ -96,7 +96,7 @@ export default function SimpleOrderDetailModal({
     if (!confirm(`Cancel order #${order.id}? Any decremented stock will be restored.`)) return;
     try {
       await cancelOrder(order.id);
-      toast(`Order #${order.id} cancelled`);
+      toast(`Order #${order.shopOrderNumber} cancelled`);
       onChanged?.();
       setOrder(await getOrder(order.id));
     } catch (err) {
@@ -117,7 +117,7 @@ export default function SimpleOrderDetailModal({
       title={
         order ? (
           <div className="flex items-center gap-2 flex-wrap">
-            <span>Order #{order.id}</span>
+            <span>Order #{order.shopOrderNumber}</span>
             <StatusBadge status={order.status} />
           </div>
         ) : (

@@ -109,7 +109,7 @@ export default function OrderDetailModal({
     if (action.next === "delivered" && order.paymentMethod === "cash_on_delivery" && !order.cashCollectedAt) return;
     try {
       await updateOrderStatus(order.id, action.next);
-      toast(`Order #${order.id} moved to ${action.next.replace(/_/g, " ")}`);
+      toast(`Order #${order.shopOrderNumber} moved to ${action.next.replace(/_/g, " ")}`);
       refetch();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update status", "error");
@@ -121,7 +121,7 @@ export default function OrderDetailModal({
     if (!confirm(`Cancel order #${order.id}? Any decremented stock will be restored.`)) return;
     try {
       await cancelOrder(order.id);
-      toast(`Order #${order.id} cancelled`);
+      toast(`Order #${order.shopOrderNumber} cancelled`);
       refetch();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to cancel order", "error");
@@ -226,7 +226,7 @@ export default function OrderDetailModal({
       title={
         order ? (
           <div className="flex items-center gap-2 flex-wrap">
-            <span>Order #{order.id}</span>
+            <span>Order #{order.shopOrderNumber}</span>
             <StatusBadge status={order.status} />
           </div>
         ) : (

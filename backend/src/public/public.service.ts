@@ -57,6 +57,7 @@ import type {
   SurveyresponseRow,
 } from '../db/types';
 import { resolveCanonicalOrigin } from './canonical-origin';
+import { withShopOrderNumber } from '../orders/order-number';
 
 const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
@@ -1525,13 +1526,20 @@ export class PublicService {
         );
 
       const trackingToken = generateTrackingCode();
-      const [result] = await conn.query(
+      // Nested inside withShopOrderNumber deliberately - see that function's
+      // comment. Claiming the number must complete before this AUTO_INCREMENT
+      // insert clobbers LAST_INSERT_ID() on this connection.
+      const result = await withShopOrderNumber(
+        conn,
+        shop.id,
+        async (shopOrderNumber) => {
+          const [res] = await conn.query(
         `INSERT INTO \`order\` (
           shopId, ingredientsConsumedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
-          giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1566,7 +1574,11 @@ export class PublicService {
           // created for a zero remainder either, see below).
           remainderTotal <= 0 ? 'paid' : 'unpaid',
           trackingToken,
+          shopOrderNumber,
         ],
+          );
+          return res;
+        },
       );
       const newOrderId = (result as { insertId: number }).insertId;
 
@@ -1667,6 +1679,7 @@ export class PublicService {
     const order = {
       ...orderRows[0],
       id: orderRows[0].id as number,
+      shopOrderNumber: orderRows[0].shopOrderNumber as number,
       outletId: orderRows[0].outletId as number,
       customerName: orderRows[0].customerName as string,
       customerEmail: orderRows[0].customerEmail as string | null,

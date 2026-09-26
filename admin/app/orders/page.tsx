@@ -96,7 +96,7 @@ function OrdersPageContent() {
     if (!action) return;
     try {
       await updateOrderStatus(order.id, action.next);
-      toast(`Order #${order.id} moved to ${action.next.replace(/_/g, " ")}`);
+      toast(`Order #${order.shopOrderNumber} moved to ${action.next.replace(/_/g, " ")}`);
       refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update status", "error");
@@ -104,10 +104,10 @@ function OrdersPageContent() {
   }
 
   async function handleCancel(order: Order) {
-    if (!confirm(`Cancel order #${order.id}? Any decremented stock will be restored.`)) return;
+    if (!confirm(`Cancel order #${order.shopOrderNumber}? Any decremented stock will be restored.`)) return;
     try {
       await cancelOrder(order.id);
-      toast(`Order #${order.id} cancelled`);
+      toast(`Order #${order.shopOrderNumber} cancelled`);
       refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to cancel order", "error");
@@ -117,7 +117,7 @@ function OrdersPageContent() {
   async function handleCollectCash(order: Order) {
     try {
       await collectCash(order.id);
-      toast(`Cash collected for order #${order.id}`);
+      toast(`Cash collected for order #${order.shopOrderNumber}`);
       refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to mark cash collected", "error");
@@ -189,7 +189,7 @@ function OrdersPageContent() {
                         className="cursor-pointer rounded-xl border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 p-3.5 hover:border-accent-mid hover:shadow-[0_6px_18px_rgba(15,23,22,.07)] transition-[border-color,box-shadow] duration-150"
                       >
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">#{order.id}</span>
+                          <span className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">#{order.shopOrderNumber}</span>
                           <StatusBadge status={order.status} />
                         </div>
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
