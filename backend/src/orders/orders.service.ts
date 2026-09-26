@@ -301,20 +301,24 @@ export class OrdersService {
       },
     );
 
+    // One read for both the default delivery fee and the tax settings. Tax is
+    // now always needed (see the computeOrderTotals call below), so this is no
+    // longer worth doing conditionally inside the `else` branch.
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT defaultDeliveryFee, taxRate, taxInclusive FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const shopSettings = shopRows[0];
+
     // A caller-supplied fee (e.g. 0 for pickup) wins outright; otherwise
     // resolve and snapshot the shop's current default at creation time, same
     // principle as priceAtPurchase on order items — a later change to the
     // shop default must never retroactively change this order's total.
-    let deliveryFee: number;
-    if (dto.deliveryFee !== undefined) {
-      deliveryFee = dto.deliveryFee;
-    } else {
-      const shopRows = await this.db.query<RowDataPacket[]>(
-        `SELECT defaultDeliveryFee FROM shop WHERE id = ?`,
-        [ctx.shopId],
-      );
-      deliveryFee = Number(shopRows[0]?.defaultDeliveryFee ?? 0);
-    }
+    // Not `const` — the free-shipping branch of a discount code below zeroes it.
+    let deliveryFee: number =
+      dto.deliveryFee !== undefined
+        ? dto.deliveryFee
+        : Number(shopSettings?.defaultDeliveryFee ?? 0);
 
     // Resolved (not yet claimed — see redeem() inside the transaction below)
     // before the customer lookup, same "cheap read before the expensive/
@@ -343,7 +347,25 @@ export class OrdersService {
       }
     }
 
-    let total = subtotal + deliveryFee - discountAmount;
+    // Tax is computed the same way, from the same helper, as the storefront
+    // checkout path (PublicService.createOrder) — including that the discount
+    // reduces the TAXABLE base, because tax is owed on what the customer
+    // actually pays for the goods, not the pre-discount list price.
+    //
+    // This path used to compute `subtotal + deliveryFee - discountAmount` and
+    // omit taxAmount from the INSERT entirely, so an order taken by phone was
+    // charged 0% VAT while the identical basket through the storefront was
+    // charged the shop's rate — and `updateItems` below would then materialise
+    // the tax retroactively, at whatever the rate happened to be on the day of
+    // the edit, silently raising a total the customer had already agreed to.
+    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+    const { taxAmount, total: computedTotal } = computeOrderTotals({
+      subtotal: discountedSubtotal,
+      deliveryFee,
+      taxRate: Number(shopSettings?.taxRate ?? 0),
+      taxInclusive: Boolean(shopSettings?.taxInclusive),
+    });
+    let total = computedTotal;
     if (total < 0) total = 0;
 
     const customer = await this.customersService.findOrCreateForOrder(
@@ -405,9 +427,9 @@ export class OrdersService {
         `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
-          channel, orderType, deliveryFee, discountId, discountCode, discountAmount, total, trackingToken,
+          channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -429,6 +451,7 @@ export class OrdersService {
           discount?.id ?? null,
           discountCodeSnapshot ?? null,
           discount ? discountAmount : null,
+          taxAmount,
           total,
           trackingToken,
           shopOrderNumber,
@@ -518,13 +541,38 @@ export class OrdersService {
         sum + Number(item.priceAtPurchase) * item.quantity,
       0,
     );
-    const total = subtotal + dto.deliveryFee;
 
-    await this.db.execute(`UPDATE \`order\` SET deliveryFee = ?, total = ? WHERE id = ?`, [
-      dto.deliveryFee,
-      total,
-      id,
-    ]);
+    // This used to be `subtotal + dto.deliveryFee`, which silently dropped BOTH
+    // the order's discount and its tax from the total. Editing the delivery fee
+    // on a discounted order therefore deleted the discount: an order with a
+    // 199 subtotal and a 57.71 discount (total 141.29) became 199 + fee, an
+    // overcharge of exactly the discount amount. The tax half only affected
+    // tax-EXCLUSIVE shops, since on an inclusive shop the tax already sits
+    // inside the subtotal — the discount half affected every shop.
+    //
+    // All three total-computing paths in this service now share one formula:
+    // computeOrderTotals() on the discounted subtotal, then the discount
+    // subtracted from the result. `updateItems` below was already correct and
+    // is the shape this follows.
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT taxRate, taxInclusive FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const shop = shopRows[0];
+    const discountAmount = Number(order.discountAmount ?? 0);
+    const { taxAmount, total: computedTotal } = computeOrderTotals({
+      subtotal: Math.max(0, subtotal - discountAmount),
+      deliveryFee: dto.deliveryFee,
+      taxRate: Number(shop?.taxRate ?? 0),
+      taxInclusive: Boolean(shop?.taxInclusive),
+    });
+    let total = computedTotal;
+    if (total < 0) total = 0;
+
+    await this.db.execute(
+      `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ? WHERE id = ?`,
+      [dto.deliveryFee, taxAmount, total, id],
+    );
     const orders = await this.loadOrdersWithRelations([id]);
     return this.toResponse(orders.get(id)!);
   }
