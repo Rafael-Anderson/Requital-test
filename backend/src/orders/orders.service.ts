@@ -305,7 +305,7 @@ export class OrdersService {
     // now always needed (see the computeOrderTotals call below), so this is no
     // longer worth doing conditionally inside the `else` branch.
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT defaultDeliveryFee, taxRate, taxInclusive FROM shop WHERE id = ?`,
+      `SELECT defaultDeliveryFee, taxRate, taxInclusive, currency FROM shop WHERE id = ?`,
       [ctx.shopId],
     );
     const shopSettings = shopRows[0];
@@ -428,8 +428,8 @@ export class OrdersService {
           shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
-          shopOrderNumber
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          shopOrderNumber, currency
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -455,6 +455,11 @@ export class OrdersService {
           total,
           trackingToken,
           shopOrderNumber,
+          // The currency this order is priced and charged in, frozen here.
+          // Previously re-read live from shop.currency on every display and
+          // every gateway call, so changing the shop setting silently
+          // re-denominated every past order.
+          shopSettings?.currency ?? 'AED',
         ],
           );
           return res;

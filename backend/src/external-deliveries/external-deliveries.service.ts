@@ -24,8 +24,8 @@ export class ExternalDeliveriesService {
     await this.assertOrderBelongsToShop(ctx, orderId);
     try {
       const result = await this.db.execute(
-        `INSERT INTO externaldelivery (orderId, carrier, vehicleType, price, destination, status)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO externaldelivery (orderId, carrier, vehicleType, price, destination, status, currency)
+         VALUES (?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
         [
           orderId,
           dto.carrier,
@@ -33,6 +33,7 @@ export class ExternalDeliveriesService {
           dto.price,
           dto.destination,
           dto.status ?? 'pending',
+          orderId, // the currency subselect above
         ],
       );
       return this.findById(result.insertId);
@@ -102,8 +103,9 @@ export class ExternalDeliveriesService {
     try {
       const result = await this.db.execute(
         `INSERT INTO externaldelivery
-           (orderId, carrier, vehicleType, price, destination, status, provider, sliderOrderNumber, trackingUrl)
-         VALUES (?, 'Slider', ?, ?, ?, ?, 'slider', ?, ?)`,
+           (orderId, carrier, vehicleType, price, destination, status, provider, sliderOrderNumber, trackingUrl, currency)
+         VALUES (?, 'Slider', ?, ?, ?, ?, 'slider', ?, ?,
+                 (SELECT currency FROM \`order\` WHERE id = ?))`,
         [
           orderId,
           data.vehicleType,
@@ -112,6 +114,7 @@ export class ExternalDeliveriesService {
           data.status,
           data.sliderOrderNumber,
           data.trackingUrl,
+          orderId, // the currency subselect above
         ],
       );
       return this.findById(result.insertId);

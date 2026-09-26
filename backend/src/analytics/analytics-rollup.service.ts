@@ -173,11 +173,15 @@ export class AnalyticsRollupService implements OnModuleInit {
   // hit.
   async computeForShopDay(shopId: number, date: string): Promise<void> {
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT timezone FROM shop WHERE id = ?`,
+      `SELECT timezone, currency FROM shop WHERE id = ?`,
       [shopId],
     );
     if (shopRows.length === 0) return; // shop deleted between enqueue and run
     const timezone = (shopRows[0].timezone as string | null) ?? 'Asia/Dubai';
+    // Stamped on every row this day writes. A rollup row is a money figure, and
+    // a revenue number with no currency is only readable as long as the whole
+    // platform shares one — which is exactly what Phase 2a stops being true.
+    const currency = shopRows[0].currency as string;
 
     const { orders, items } = await this.loadDay(shopId, date, timezone);
     const newCustomers = await this.resolveNewCustomers(
@@ -214,9 +218,9 @@ export class AnalyticsRollupService implements OnModuleInit {
             `INSERT INTO dailyshopmetrics
                (shopId, outletId, \`date\`, orders, revenue, cogs, discount,
                 delivery, tax, newCustomers, returningCustomers,
-                linesWithoutCost, computedAt)
-             VALUES (?, ?, ?, 0, 0, NULL, 0, 0, 0, 0, 0, 0, ?)`,
-            [shopId, sentinelOutlet, date, computedAt],
+                linesWithoutCost, computedAt, currency)
+             VALUES (?, ?, ?, 0, 0, NULL, 0, 0, 0, 0, 0, 0, ?, ?)`,
+            [shopId, sentinelOutlet, date, computedAt, currency],
           );
         }
         return;
@@ -227,8 +231,8 @@ export class AnalyticsRollupService implements OnModuleInit {
           `INSERT INTO dailyshopmetrics
              (shopId, outletId, \`date\`, orders, revenue, cogs, discount,
               delivery, tax, newCustomers, returningCustomers,
-              linesWithoutCost, computedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              linesWithoutCost, computedAt, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             shopId,
             m.outletId,
@@ -243,6 +247,7 @@ export class AnalyticsRollupService implements OnModuleInit {
             m.returningCustomers,
             m.linesWithoutCost,
             computedAt,
+            currency,
           ],
         );
       }
@@ -251,8 +256,8 @@ export class AnalyticsRollupService implements OnModuleInit {
         await tx.query(
           `INSERT INTO dailyproductmetrics
              (shopId, productId, outletId, \`date\`, units, revenue, cogs,
-              linesWithoutCost, computedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              linesWithoutCost, computedAt, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             shopId,
             m.productId,
@@ -263,6 +268,7 @@ export class AnalyticsRollupService implements OnModuleInit {
             m.cogs,
             m.linesWithoutCost,
             computedAt,
+            currency,
           ],
         );
       }
@@ -407,8 +413,9 @@ export class AnalyticsRollupService implements OnModuleInit {
         await tx.query(
           `INSERT INTO customermetrics
              (shopId, customerId, firstOrder, lastOrder, orderCount, ltv,
-              computedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              computedAt, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?,
+                   (SELECT currency FROM shop WHERE id = ?))`,
           [
             shopId,
             r.customerId,
@@ -417,6 +424,7 @@ export class AnalyticsRollupService implements OnModuleInit {
             Number(r.orderCount),
             String(r.ltv),
             computedAt,
+            shopId,
           ],
         );
       }

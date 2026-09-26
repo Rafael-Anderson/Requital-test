@@ -442,7 +442,11 @@ describe('Order Returns/Refunds (e2e)', () => {
       // call stripe.refunds.create() is guaranteed to throw — this is
       // exactly the "provider call fails" path, not a mock standing in for it.
       await db.execute(
-        `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status) VALUES (?, ?, ?, ?, ?, ?)`,
+        // currency derived from the order, matching what PaymentsService does
+        // on the real path — the column is NOT NULL with no default precisely
+        // so a write that forgets it fails loudly rather than assuming AED.
+        `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status, currency)
+         VALUES (?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
         [
           order.id,
           'stripe',
@@ -450,6 +454,7 @@ describe('Order Returns/Refunds (e2e)', () => {
           `pi_test_${runId}`,
           order.total,
           'paid',
+          order.id, // the currency subselect above
         ],
       );
 

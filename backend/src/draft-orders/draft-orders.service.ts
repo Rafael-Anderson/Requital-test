@@ -102,8 +102,11 @@ export class DraftOrdersService {
 
     const newId = await this.db.transaction(async (conn) => {
       const [result] = await conn.query(
-        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, emirate, area, orderType, discountId, notes, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        // currency comes from the shop the draft belongs to, via a subselect
+        // rather than a separate read — a quote has to remember what it quoted
+        // in, independent of any later change to the shop setting.
+        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, emirate, area, orderType, discountId, notes, updatedAt, currency)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
         [
           ctx.shopId,
           dto.outletId,
@@ -118,6 +121,7 @@ export class DraftOrdersService {
           discountId,
           dto.notes ?? null,
           new Date(),
+          ctx.shopId, // the currency subselect above
         ],
       );
       const draftId = (result as { insertId: number }).insertId;

@@ -1547,8 +1547,9 @@ export class PublicService {
           shopId, ingredientsConsumedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
-          giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
+          currency
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1584,6 +1585,11 @@ export class PublicService {
           remainderTotal <= 0 ? 'paid' : 'unpaid',
           trackingToken,
           shopOrderNumber,
+          // Frozen at creation. This path already had shop.currency in hand and
+          // passed it straight to the payment gateway as the charge currency —
+          // now the order records what it was actually charged in, instead of
+          // that being re-derived from a mutable setting later.
+          shop.currency,
         ],
           );
           return res;
