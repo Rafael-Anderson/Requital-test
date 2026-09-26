@@ -40,6 +40,7 @@ import { SubmitSurveyDto } from './dto/submit-survey.dto';
 import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
 import { ThemesService } from '../themes/themes.service';
+import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import {
   POLICY_PAGE_TYPES,
   type PolicyPageType,
@@ -115,6 +116,7 @@ export class PublicService {
     private readonly policyPagesService: PolicyPagesService,
     private readonly themesService: ThemesService,
     private readonly jwtService: JwtService,
+    private readonly currencyRatesService: CurrencyRatesService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -1498,6 +1500,10 @@ export class PublicService {
     );
 
     const orderId = await this.db.transaction(async (conn) => {
+      const capturedRate = await this.currencyRatesService.resolveForCapture(
+        shop.currency,
+        conn,
+      );
       // Reserved at the moment the storefront customer checks out, not
       // deferred to merchant confirmation like the admin-entered order flow
       // — a real customer transaction needs the stock guarantee
@@ -1548,8 +1554,8 @@ export class PublicService {
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
-          currency
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          currency, rateBaseCurrency, exchangeRate
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1590,6 +1596,12 @@ export class PublicService {
           // now the order records what it was actually charged in, instead of
           // that being re-derived from a mutable setting later.
           shop.currency,
+          // See the matching comment in OrdersService.create — same freeze, same
+          // reason, and read on the transaction's own connection so a platform
+          // admin changing a rate mid-checkout cannot land between the read and
+          // the insert.
+          capturedRate?.rateBaseCurrency ?? null,
+          capturedRate?.exchangeRate ?? null,
         ],
           );
           return res;

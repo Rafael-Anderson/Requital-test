@@ -46,6 +46,13 @@ export interface OrderRow {
   // rather than shop.currency is what stops a later shop-setting change
   // from re-denominating rows that are already written.
   currency: string;
+  // The platform base the rate below is expressed against, and the rate
+  // itself, frozen at creation. NULL on any order placed before migration
+  // 20260926220000 - deliberately not backfilled, because "the rate this
+  // order used" and "the rate that existed that day" are different claims
+  // and only the first belongs here. Treat NULL as unknown, never as 1.
+  rateBaseCurrency: string | null;
+  exchangeRate: string | null;
 }
 
 export interface OrdernoteRow {

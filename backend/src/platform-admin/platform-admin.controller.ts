@@ -19,6 +19,8 @@ import { SliderSettingsService } from '../delivery-providers/slider-settings.ser
 import { SetSliderAccountIdDto } from '../delivery-providers/dto/set-slider-account-id.dto';
 import { ListShopsQueryDto } from './dto/list-shops-query.dto';
 import { ListWebhookLogQueryDto } from './dto/list-webhook-log-query.dto';
+import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { SetCurrencyRateDto } from '../currency-rates/dto/set-currency-rate.dto';
 import { PlatformAdminGuard } from '../platform-auth/guards/platform-admin.guard';
 import { CurrentPlatformAdmin } from '../platform-auth/decorators/current-platform-admin.decorator';
 import type { PlatformAdminContext } from '../platform-auth/guards/platform-admin.guard';
@@ -52,6 +54,7 @@ export class PlatformAdminController {
     private readonly platformAuditLogService: PlatformAuditLogService,
     private readonly webhookLogService: WebhookLogService,
     private readonly sliderSettingsService: SliderSettingsService,
+    private readonly currencyRatesService: CurrencyRatesService,
   ) {}
 
   @Get('shops')
@@ -166,6 +169,33 @@ export class PlatformAdminController {
         paypal: `${origin}/payments/webhook/paypal`,
       },
     };
+  }
+
+  // Exchange rates are platform-level, not per-shop — a merchant setting their
+  // own conversion could mis-state their own revenue and would make cross-tenant
+  // reporting incomparable. See the 20260926220000_currency_rates migration.
+  @Get('currency-rates')
+  listCurrencyRates() {
+    return this.currencyRatesService.list();
+  }
+
+  @Patch('currency-rates')
+  async setCurrencyRate(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Body() dto: SetCurrencyRateDto,
+  ) {
+    const result = await this.currencyRatesService.setRate(
+      dto.quoteCurrency,
+      dto.rate,
+      admin.id,
+    );
+    // shopId is null: this is a platform-wide change, not one shop's. Awaited
+    // before returning, per PlatformAuditLogService's fail-closed contract.
+    await this.platformAuditLogService.log(admin.id, 'currency_rate.set', null, {
+      quoteCurrency: result.quoteCurrency,
+      rate: result.rate,
+    });
+    return result;
   }
 
   @Get('webhook-log')
