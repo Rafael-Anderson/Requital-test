@@ -1225,6 +1225,15 @@ export class PublicService {
 
     return {
       id: order.id,
+      // The number the customer is shown. Easy to miss here and nowhere else:
+      // every other order response either spreads a `SELECT *` row or names the
+      // column in its SELECT list, so it picked this column up for free when
+      // migration 20260923130000 added it. This one endpoint deliberately
+      // builds a narrow, explicitly-listed shape (see the customerPhone /
+      // customerEmail omissions the test below pins), which means a new column
+      // has to be added by hand — and the storefront's OrderLookupResult type
+      // is a hand-maintained mirror, so nothing type-checks the gap.
+      shopOrderNumber: order.shopOrderNumber as number,
       shopName: shop.name as string,
       outletName: outlet.name as string,
       customerName: order.customerName,
