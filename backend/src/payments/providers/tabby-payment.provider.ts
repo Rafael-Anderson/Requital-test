@@ -8,6 +8,7 @@ import type {
 import { PaymentProviderNotConfiguredException } from '../payment-provider-not-configured.exception';
 import { verifyHmacSha256 } from '../webhook-signature';
 import { createLogger } from '../../common/logging/logger';
+import { toMajorUnitString } from '../../common/currency-minor-units';
 
 const logger = createLogger('TabbyPaymentProvider');
 const TABBY_API_URL = 'https://api.tabby.ai/api/v2';
@@ -80,7 +81,7 @@ export class TabbyPaymentProvider implements PaymentProvider {
       },
       body: JSON.stringify({
         payment: {
-          amount: params.amount.toFixed(2),
+          amount: toMajorUnitString(params.amount, params.currency),
           currency: params.currency,
           buyer: {},
           order: { reference_id: String(params.orderId) },

@@ -1,6 +1,9 @@
 import {
   DEFAULT_MINOR_UNIT_FACTOR,
+  minorUnitDecimals,
   minorUnitFactor,
+  roundMoney,
+  toMajorUnitString,
   toMinorUnits,
 } from './currency-minor-units';
 
@@ -80,5 +83,95 @@ describe('toMinorUnits', () => {
   it('handles zero and does not produce negative zero', () => {
     expect(toMinorUnits(0, 'AED')).toBe(0);
     expect(Object.is(toMinorUnits(0, 'AED'), -0)).toBe(false);
+  });
+});
+
+describe('minorUnitDecimals', () => {
+  it('derives the decimal count from the factor, not a second map', () => {
+    expect(minorUnitDecimals('AED')).toBe(2);
+    expect(minorUnitDecimals('USD')).toBe(2);
+    expect(minorUnitDecimals('KWD')).toBe(3);
+    expect(minorUnitDecimals('BHD')).toBe(3);
+    expect(minorUnitDecimals('OMR')).toBe(3);
+  });
+
+  it('falls back to 2 for an unknown or missing code', () => {
+    expect(minorUnitDecimals('XYZ')).toBe(2);
+    expect(minorUnitDecimals(null)).toBe(2);
+    expect(minorUnitDecimals(undefined)).toBe(2);
+  });
+});
+
+describe('roundMoney', () => {
+  it('rounds to the currency’s own precision, not a hardcoded 2', () => {
+    expect(roundMoney(10.555, 'AED')).toBeCloseTo(10.56, 10);
+    // The case a hardcoded .toFixed(2) silently destroys: the third decimal is
+    // a real, chargeable amount in KWD.
+    expect(roundMoney(10.5555, 'KWD')).toBeCloseTo(10.556, 10);
+    expect(roundMoney(10.5554, 'KWD')).toBeCloseTo(10.555, 10);
+  });
+
+  it('kills the binary-float tail that was being persisted raw', () => {
+    // 0.1 + 0.2 === 0.30000000000000004. The admin order paths wrote exactly
+    // this kind of value straight into DECIMAL(65,30).
+    expect(roundMoney(0.1 + 0.2, 'AED')).toBe(0.3);
+    expect(roundMoney(4.999999999999999, 'AED')).toBe(5);
+  });
+
+  it('is idempotent — rounding an already-rounded amount changes nothing', () => {
+    for (const [amount, currency] of [
+      [10.56, 'AED'],
+      [10.556, 'KWD'],
+      [0, 'AED'],
+    ] as const) {
+      expect(roundMoney(roundMoney(amount, currency), currency)).toBe(
+        roundMoney(amount, currency),
+      );
+    }
+  });
+
+  it('rounds the SUM, which is not the same as summing rounded lines', () => {
+    // The documented policy, pinned as a test because it is the part a future
+    // edit is most likely to get wrong. Three lines of 0.005 each:
+    const lines = [0.005, 0.005, 0.005];
+    const roundedSum = roundMoney(
+      lines.reduce((a, b) => a + b, 0),
+      'AED',
+    );
+    const sumOfRounded = lines
+      .map((l) => roundMoney(l, 'AED'))
+      .reduce((a, b) => a + b, 0);
+    expect(roundedSum).toBe(0.02);
+    expect(sumOfRounded).toBe(0.03);
+    // They genuinely differ — which is why the policy has to be stated rather
+    // than left to each call site.
+    expect(roundedSum).not.toBe(sumOfRounded);
+  });
+});
+
+describe('toMajorUnitString', () => {
+  it('serialises with the currency’s own decimal count', () => {
+    expect(toMajorUnitString(10.5, 'AED')).toBe('10.50');
+    // "10.50" would be read by the provider as a different amount than 10.500.
+    expect(toMajorUnitString(10.5, 'KWD')).toBe('10.500');
+    expect(toMajorUnitString(10.5, 'BHD')).toBe('10.500');
+  });
+
+  it('rounds before formatting rather than letting toFixed truncate oddly', () => {
+    expect(toMajorUnitString(10.5555, 'KWD')).toBe('10.556');
+    expect(toMajorUnitString(0.1 + 0.2, 'AED')).toBe('0.30');
+  });
+
+  it('agrees with toMinorUnits — the two must never disagree', () => {
+    // Both derive from the same factor map; this pins that they stay consistent,
+    // since a charge serialised one way and converted the other is a real
+    // money bug.
+    for (const currency of ['AED', 'KWD', 'BHD', 'USD']) {
+      const amount = 12.3456;
+      const asString = toMajorUnitString(amount, currency);
+      expect(toMinorUnits(Number(asString), currency)).toBe(
+        toMinorUnits(amount, currency),
+      );
+    }
   });
 });

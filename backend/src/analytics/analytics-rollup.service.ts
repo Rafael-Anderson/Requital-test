@@ -191,8 +191,15 @@ export class AnalyticsRollupService implements OnModuleInit {
       orders,
     );
 
-    const shopMetrics = computeShopDayMetrics(orders, items, newCustomers);
-    const productMetrics = computeProductDayMetrics(orders, items);
+    // The same currency stamped onto the rows below, so the rounding and the
+    // marker cannot disagree.
+    const shopMetrics = computeShopDayMetrics(
+      orders,
+      items,
+      newCustomers,
+      currency,
+    );
+    const productMetrics = computeProductDayMetrics(orders, items, currency);
     const computedAt = new Date();
 
     await this.db.transaction(async (tx) => {

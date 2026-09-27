@@ -1,3 +1,4 @@
+import { toMajorUnitString } from '../common/currency-minor-units';
 // ANL-1's arithmetic, kept pure so the cases that actually matter (an empty
 // day, a day where only some lines carry a captured cost) are unit-testable
 // without a database.
@@ -58,8 +59,12 @@ function num(value: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function money(value: number): string {
-  return value.toFixed(2);
+// Rounded to the shop currency's own precision rather than a hardcoded 2dp.
+// Passed in rather than read from a row because these are pure functions over
+// already-loaded data - the caller (AnalyticsRollupService) has the shop's
+// currency and stamps the same value onto the rows it writes.
+function money(value: number, currency: string | undefined): string {
+  return toMajorUnitString(value, currency);
 }
 
 // Accumulates the two cost figures together because they are two halves of
@@ -69,6 +74,14 @@ class CostAccumulator {
   private costed = 0;
   private anyCosted = false;
   private missing = 0;
+
+  // The currency `cogs` rounds to. Note this is the SHOP's currency, not
+  // orderitem.unitCostCurrency: the rollup reports one figure per shop-day, so a
+  // cost captured in another currency would need converting before it could be
+  // summed here at all. Today unitCostCurrency is universally 'AED' so the two
+  // coincide; when that stops being true this sum needs a conversion step, not
+  // just a different rounding.
+  constructor(private readonly currency: string | undefined) {}
 
   add(quantity: number, unitCost: string | null): void {
     const cost = num(unitCost);
@@ -84,7 +97,7 @@ class CostAccumulator {
   // would report as 100% margin downstream, which is a more confident lie
   // than "unknown" (the rule Part A established in product-cost.ts).
   get cogs(): string | null {
-    return this.anyCosted ? money(this.costed) : null;
+    return this.anyCosted ? money(this.costed, this.currency) : null;
   }
 
   get linesWithoutCost(): number {
@@ -123,6 +136,7 @@ export function computeShopDayMetrics(
   orders: RollupOrderRow[],
   items: RollupItemRow[],
   newCustomersOnThisDate: ReadonlySet<number>,
+  currency?: string,
 ): ShopDayMetrics[] {
   const byOrder = itemsByOrder(items);
   const perOutlet = new Map<
@@ -148,7 +162,7 @@ export function computeShopDayMetrics(
         discount: 0,
         delivery: 0,
         tax: 0,
-        cost: new CostAccumulator(),
+        cost: new CostAccumulator(currency),
         newCustomers: new Set<number>(),
         returningCustomers: new Set<number>(),
       };
@@ -177,11 +191,11 @@ export function computeShopDayMetrics(
     .map(([outletId, b]) => ({
       outletId,
       orders: b.orders,
-      revenue: money(b.revenue),
+      revenue: money(b.revenue, currency),
       cogs: b.cost.cogs,
-      discount: money(b.discount),
-      delivery: money(b.delivery),
-      tax: money(b.tax),
+      discount: money(b.discount, currency),
+      delivery: money(b.delivery, currency),
+      tax: money(b.tax, currency),
       newCustomers: b.newCustomers.size,
       returningCustomers: b.returningCustomers.size,
       linesWithoutCost: b.cost.linesWithoutCost,
@@ -194,6 +208,7 @@ export function computeShopDayMetrics(
 export function computeProductDayMetrics(
   orders: RollupOrderRow[],
   items: RollupItemRow[],
+  currency?: string,
 ): ProductDayMetrics[] {
   const outletOf = new Map(orders.map((o) => [o.id, o.outletId]));
   const buckets = new Map<
@@ -222,7 +237,7 @@ export function computeProductDayMetrics(
         outletId,
         units: 0,
         revenue: 0,
-        cost: new CostAccumulator(),
+        cost: new CostAccumulator(currency),
       };
       buckets.set(key, bucket);
     }
@@ -236,7 +251,7 @@ export function computeProductDayMetrics(
       productId: b.productId,
       outletId: b.outletId,
       units: b.units,
-      revenue: money(b.revenue),
+      revenue: money(b.revenue, currency),
       cogs: b.cost.cogs,
       linesWithoutCost: b.cost.linesWithoutCost,
     }))
