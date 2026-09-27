@@ -52,6 +52,14 @@ export interface RefundPaymentParams {
   // CreateCheckoutSessionParams.amount; each provider implementation
   // converts to its own minor-unit expectation itself.
   amount: number;
+  // The currency the ORIGINAL CHARGE was made in, taken from
+  // paymenttransaction.currency rather than from the order or the shop. A
+  // refund reverses a specific past charge, so the only correct denomination
+  // is whatever that charge actually moved — not whatever the shop is set to
+  // now. Required, not optional: the providers cannot guess it, and the two
+  // that tried (PayPal hardcoding 'AED', Stripe falling back to factor 100)
+  // were each wrong for any 3-decimal currency.
+  currency: string;
   credentials?: Record<string, string> | null;
 }
 

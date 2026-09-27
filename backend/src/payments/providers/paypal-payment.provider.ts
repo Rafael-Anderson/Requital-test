@@ -247,14 +247,15 @@ export class PayPalPaymentProvider implements PaymentProvider {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        // ponytail: RefundPaymentParams carries no currency field, and this
-        // codebase is single-currency AED throughout (see CLAUDE.md) — hard
-        // code it here rather than threading a currency param through every
-        // provider's refundPayment for the one gateway that needs it.
-        // Revisit if RefundPaymentParams ever carries currency, or if
-        // multi-currency ships.
+        // Phase 2a/A4: RefundPaymentParams now carries the original charge's
+        // currency, so this no longer hardcodes 'AED'. Serialised through
+        // toMajorUnitString for the same reason the charge path is — PayPal
+        // reads "10.50" and "10.500" as different amounts.
         body: JSON.stringify({
-          amount: { currency_code: 'AED', value: params.amount.toFixed(2) },
+          amount: {
+            currency_code: params.currency,
+            value: toMajorUnitString(params.amount, params.currency),
+          },
         }),
       },
     );

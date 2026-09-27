@@ -188,17 +188,12 @@ export class StripePaymentProvider implements PaymentProvider {
     const stripe = this.clientFor(params.credentials?.secretKey);
     const refund = await stripe.refunds.create({
       payment_intent: params.chargeReference,
-      // The SECOND x100 in this file, and the one the currency findings
-      // missed. Routed through the same helper so there is one conversion
-      // rule in this provider rather than two.
-      //
-      // RefundPaymentParams carries no currency (PayPal's refundPayment has
-      // the same gap and hardcodes 'AED' for it), so this falls back to a
-      // factor of 100 - byte-identical to the previous behaviour, and correct
-      // while shop.currency is locked to AED. Threading currency through
-      // RefundPaymentParams is a Phase 2a interface change affecting every
-      // provider, deliberately not done here.
-      amount: toMinorUnits(params.amount, undefined),
+      // The second minor-unit conversion in this file, routed through the same
+      // helper so there is one conversion rule here rather than two. Now with
+      // the charge's real currency (Phase 2a/A4): this previously passed
+      // `undefined`, which meant factor 100 unconditionally and would have
+      // under-refunded a KWD/BHD/OMR charge by 10x.
+      amount: toMinorUnits(params.amount, params.currency),
     });
     return { providerReference: refund.id };
   }
