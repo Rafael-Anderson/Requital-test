@@ -41,6 +41,7 @@ import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
 import { ThemesService } from '../themes/themes.service';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { roundMoney } from '../common/currency-minor-units';
 import {
   POLICY_PAGE_TYPES,
   type PolicyPageType,
@@ -1455,7 +1456,10 @@ export class PublicService {
       taxRate: Number(shop.taxRate),
       taxInclusive: shop.taxInclusive,
     });
-    const orderTotal = Number(total.toFixed(2));
+    // Rounded once, here, to the smallest unit this shop's currency actually
+    // has - not a hardcoded 2dp, which silently truncated the third decimal of
+    // a KWD/BHD/OMR total.
+    const orderTotal = roundMoney(total, shop.currency);
 
     // Gift card applies against the final total (after tax/delivery), not
     // the pre-tax subtotal a discount reduces — it's a payment credit, not
@@ -1575,7 +1579,7 @@ export class PublicService {
           dto.orderType,
           dto.paymentMethod,
           deliveryFee,
-          Number(taxAmount.toFixed(2)),
+          roundMoney(taxAmount, shop.currency),
           discount?.id ?? null,
           discountCodeSnapshot ?? null,
           discount ? discountAmount : null,

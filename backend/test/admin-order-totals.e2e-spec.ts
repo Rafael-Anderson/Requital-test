@@ -22,6 +22,14 @@ interface OrderRow {
   discountAmount: string | null;
 }
 
+// Counts decimal places in a DECIMAL string as returned by the API (trimDecimal
+// strips trailing zeros but does NOT round, so a raw float tail survives to here
+// and is exactly what this asserts against).
+function decimalPlaces(value: string): number {
+  const dot = value.indexOf('.');
+  return dot === -1 ? 0 : value.length - dot - 1;
+}
+
 function body<T>(res: Response): T {
   return res.body as T;
 }
@@ -327,6 +335,97 @@ describe('Admin order totals: tax and discount (e2e)', () => {
       // same basket must now be a no-op on the figure.
       expect(Number(updated.taxAmount)).toBeCloseTo(taxBefore, 2);
       expect(Number(updated.total)).toBeCloseTo(Number(order.total), 2);
+    });
+  });
+
+  // Phase 2a / A3. The two order paths used to disagree about rounding for
+  // reasons unrelated to currency: storefront checkout rounded its total and tax
+  // to 2dp before persisting, the three admin paths wrote the raw float straight
+  // into DECIMAL(65,30). A tax-INCLUSIVE shop is what makes this visible, because
+  // backing tax out of a price produces a repeating decimal:
+  // 100 - 100/1.05 = 4.761904761904759.
+  describe('rounding at persist', () => {
+    it('stores tax rounded to the currency precision, not the raw float', async () => {
+      const shop = await setupShop('tot-round-create', {
+        taxRate: 5,
+        taxInclusive: true,
+      });
+      const order = body<OrderRow>(await createOrder(shop).expect(201));
+
+      // Exactly 4.76. Before A3 this persisted 4.761904761904759, which is not a
+      // representable amount of money in any currency.
+      expect(order.taxAmount).toBe('4.76');
+      expect(decimalPlaces(order.taxAmount!)).toBeLessThanOrEqual(2);
+    });
+
+    it('rounds on the editing paths too, not just on create', async () => {
+      const shop = await setupShop('tot-round-edit', {
+        taxRate: 5,
+        taxInclusive: true,
+      });
+      const order = body<OrderRow>(
+        await createOrder(shop, { orderType: 'delivery' }).expect(201),
+      );
+
+      const afterFee = body<OrderRow>(
+        await request(app.getHttpServer())
+          .patch(`/orders/${order.id}/delivery-fee`)
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ deliveryFee: 7 })
+          .expect(200),
+      );
+      expect(decimalPlaces(afterFee.taxAmount!)).toBeLessThanOrEqual(2);
+      expect(decimalPlaces(afterFee.total)).toBeLessThanOrEqual(2);
+
+      const afterItems = body<OrderRow>(
+        await request(app.getHttpServer())
+          .patch(`/orders/${order.id}/items`)
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ items: [{ productId: shop.productId, quantity: 3 }] })
+          .expect(200),
+      );
+      // 300 - 300/1.05 = 14.285714285714278 before rounding.
+      expect(afterItems.taxAmount).toBe('14.29');
+      expect(decimalPlaces(afterItems.total)).toBeLessThanOrEqual(2);
+    });
+
+    it('agrees with what the storefront path stores for the same basket', async () => {
+      // The divergence this closes: same shop settings, same goods, two code
+      // paths that used to persist different values.
+      const shop = await setupShop('tot-round-parity', {
+        taxRate: 5,
+        taxInclusive: true,
+      });
+      const adminOrder = body<OrderRow>(await createOrder(shop).expect(201));
+
+      await request(app.getHttpServer())
+        .patch(`/outlets/${shop.outletId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch('/shop')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ published: true })
+        .expect(200);
+
+      const storefront = await request(app.getHttpServer())
+        .post(`/public/tot-round-parity-${runId}/orders`)
+        .send({
+          outletId: shop.outletId,
+          customerName: 'Parity Customer',
+          customerPhone: '0509999999',
+          customerAddress: 'Pickup at outlet',
+          emirate: 'Dubai',
+          orderType: 'pickup',
+          paymentMethod: 'cash_on_pickup',
+          items: [{ productId: shop.productId, quantity: 1 }],
+        })
+        .expect(201);
+      const storefrontOrder = body<{ order: OrderRow }>(storefront).order;
+
+      expect(adminOrder.taxAmount).toBe(storefrontOrder.taxAmount);
+      expect(adminOrder.total).toBe(storefrontOrder.total);
     });
   });
 });

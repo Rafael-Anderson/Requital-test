@@ -38,6 +38,7 @@ import {
 } from './constants';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { roundMoney } from '../common/currency-minor-units';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 
@@ -367,8 +368,15 @@ export class OrdersService {
       taxRate: Number(shopSettings?.taxRate ?? 0),
       taxInclusive: Boolean(shopSettings?.taxInclusive),
     });
-    let total = computedTotal;
+    // Rounded once, at persist, to this shop currency's own precision. This
+    // path previously wrote the raw float straight into DECIMAL(65,30) while the
+    // storefront rounded - the same basket stored as 4.999999999999999 or 5.00
+    // depending on which screen created it.
+    const orderCurrency =
+      (shopSettings?.currency as string | undefined) ?? 'AED';
+    let total = roundMoney(computedTotal, orderCurrency);
     if (total < 0) total = 0;
+    const roundedTaxAmount = roundMoney(taxAmount, orderCurrency);
 
     const customer = await this.customersService.findOrCreateForOrder(
       ctx.shopId,
@@ -389,7 +397,7 @@ export class OrdersService {
       // Read on the transaction's own connection so a platform admin editing a
       // rate cannot land between this read and the insert below.
       const capturedRate = await this.currencyRatesService.resolveForCapture(
-        shopSettings?.currency ?? 'AED',
+        orderCurrency,
         conn,
       );
       // Stock reservation only fires alongside an immediate reservation
@@ -459,7 +467,7 @@ export class OrdersService {
           discount?.id ?? null,
           discountCodeSnapshot ?? null,
           discount ? discountAmount : null,
-          taxAmount,
+          roundedTaxAmount,
           total,
           trackingToken,
           shopOrderNumber,
@@ -467,7 +475,7 @@ export class OrdersService {
           // Previously re-read live from shop.currency on every display and
           // every gateway call, so changing the shop setting silently
           // re-denominated every past order.
-          shopSettings?.currency ?? 'AED',
+          orderCurrency,
           // Frozen at creation and never recomputed, exactly like
           // priceAtPurchase and orderitem.unitCost. Null when the platform has
           // no rate stored for this currency — an honest "not captured" rather
@@ -585,12 +593,13 @@ export class OrdersService {
       taxRate: Number(shop?.taxRate ?? 0),
       taxInclusive: Boolean(shop?.taxInclusive),
     });
-    let total = computedTotal;
+    const feeCurrency = order.currency;
+    let total = roundMoney(computedTotal, feeCurrency);
     if (total < 0) total = 0;
 
     await this.db.execute(
       `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ? WHERE id = ?`,
-      [dto.deliveryFee, taxAmount, total, id],
+      [dto.deliveryFee, roundMoney(taxAmount, feeCurrency), total, id],
     );
     const orders = await this.loadOrdersWithRelations([id]);
     return this.toResponse(orders.get(id)!);
@@ -882,8 +891,12 @@ export class OrdersService {
       taxRate: Number(shop.taxRate),
       taxInclusive: Boolean(shop.taxInclusive),
     });
-    let total = totalBeforeDiscount - discountAmount;
+    // Rounded once at persist, the same policy as the other two total paths.
+    // This one previously wrote the raw float too.
+    const itemsCurrency = order.currency;
+    let total = roundMoney(totalBeforeDiscount - discountAmount, itemsCurrency);
     if (total < 0) total = 0;
+    const roundedItemsTax = roundMoney(taxAmount, itemsCurrency);
 
     let ingredientStockWarnings: string[] = [];
     await this.db.transaction(async (conn) => {
@@ -1021,7 +1034,7 @@ export class OrdersService {
 
       const set = buildSetClause({
         total,
-        taxAmount,
+        taxAmount: roundedItemsTax,
         discountAmount,
         ...(discountDropped && { discountId: null, discountCode: null }),
       });

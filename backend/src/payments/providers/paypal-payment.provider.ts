@@ -9,6 +9,7 @@ import type {
 } from '../payment-provider.interface';
 import { PaymentProviderNotConfiguredException } from '../payment-provider-not-configured.exception';
 import { createLogger } from '../../common/logging/logger';
+import { toMajorUnitString } from '../../common/currency-minor-units';
 
 const logger = createLogger('PayPalPaymentProvider');
 const PAYPAL_API_URL =
@@ -121,7 +122,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
             custom_id: String(params.orderId),
             amount: {
               currency_code: params.currency,
-              value: params.amount.toFixed(2),
+              value: toMajorUnitString(params.amount, params.currency),
             },
           },
         ],

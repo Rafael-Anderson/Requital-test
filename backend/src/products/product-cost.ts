@@ -1,3 +1,4 @@
+import { toMajorUnitString } from '../common/currency-minor-units';
 // What one unit of a product cost the merchant, resolved AT ORDER TIME.
 //
 // Kept pure (the caller does the querying) so the two branches below are
@@ -39,11 +40,19 @@ export interface UnitCostInput {
   // Empty for a plain product. For a recipe product, the lines that apply to
   // the specific variant being ordered (the caller filters).
   recipe: RecipeLine[];
+  // The currency this COST is denominated in - orderitem.unitCostCurrency, NOT
+  // the order's sale currency. They are genuinely independent: cost is what the
+  // merchant paid, which for imported stock can be a different currency from
+  // what they sell in. Omitted today because unitCostCurrency is universally
+  // 'AED' (its column default, and nothing writes anything else yet), which
+  // rounds to 2dp exactly as this always has. It becomes load-bearing the moment
+  // a cost is recorded in a 3-decimal currency.
+  currency?: string;
 }
 
 export function resolveUnitCost(input: UnitCostInput): string | null {
   if (!input.usesIngredients) {
-    return normalizeMoney(input.costPrice);
+    return normalizeMoney(input.costPrice, input.currency);
   }
 
   // A product flagged as recipe-backed with no recipe rows has no knowable
@@ -58,14 +67,17 @@ export function resolveUnitCost(input: UnitCostInput): string | null {
     if (!Number.isFinite(cost) || !Number.isFinite(quantity)) return null;
     total += cost * quantity;
   }
-  // Two decimal places: these are money, and the DECIMAL(65,30) column would
-  // otherwise persist the full binary-float tail of a multiplication.
-  return total.toFixed(2);
+  // Rounded to the cost currency's own precision - the DECIMAL(65,30) column
+  // would otherwise persist the full binary-float tail of a multiplication.
+  return toMajorUnitString(total, input.currency);
 }
 
-function normalizeMoney(value: string | null): string | null {
+function normalizeMoney(
+  value: string | null,
+  currency: string | undefined,
+): string | null {
   if (value === null) return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
-  return parsed.toFixed(2);
+  return toMajorUnitString(parsed, currency);
 }

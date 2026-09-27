@@ -23,8 +23,15 @@
 // it right in advance is what makes widening a small change rather than an
 // audit of every amount conversion in the codebase.
 //
-// Deliberately NOT here: rounding policy, display formatting, exchange rates.
-// This answers exactly one question - how many minor units in a major one.
+// Phase 2a/A3 widened this file's remit from "how many minor units in a major
+// one" to also owning the ROUNDING POLICY derived from that answer, because the
+// two cannot be allowed to drift: a site that rounds to 2 decimals while the
+// gateway converts with factor 1000 produces a charge that disagrees with the
+// stored total. They key off one map, here, or they eventually disagree.
+//
+// Still deliberately NOT here: display formatting (a currency symbol/locale
+// concern, and admin has its own helper for it) and exchange rates (see
+// currency-rates/).
 
 const MINOR_UNIT_FACTORS: Readonly<Record<string, number>> = {
   AED: 100,
@@ -61,4 +68,49 @@ export function toMinorUnits(
   currency: string | null | undefined,
 ): number {
   return Math.round(amount * minorUnitFactor(currency));
+}
+
+// How many decimal places the currency actually has. Derived from the factor
+// rather than stored in a second map, so the two can never disagree: every
+// factor here is a power of ten, and 100 -> 2, 1000 -> 3, 1 -> 0.
+export function minorUnitDecimals(currency: string | null | undefined): number {
+  return Math.round(Math.log10(minorUnitFactor(currency)));
+}
+
+// THE ROUNDING POLICY for this codebase, in one place.
+//
+// Rounds a computed amount to the smallest unit the currency genuinely has, so
+// 2 decimals for AED and 3 for KWD. Every site that persists a money value
+// routes through this instead of a hardcoded `.toFixed(2)`.
+//
+// WHY ONE FUNCTION AND NOT A CONVENTION. Before this, rounding was inconsistent
+// in a way that had nothing to do with currency: the storefront checkout rounded
+// its total and tax to 2dp before persisting, while the admin order paths wrote
+// raw floats straight into DECIMAL(65,30). The same basket could therefore be
+// stored as 4.999999999999999 or 5.00 depending on which screen touched it last.
+// Multi-currency makes that worse rather than better, because the correct number
+// of places stops being a constant.
+//
+// WHERE TO APPLY IT: compute at full precision, then round ONCE per stored
+// column at the moment of persisting. Not per intermediate step, and not per
+// line before summing - rounding each of three lines to 2dp and then adding them
+// gives a different answer than rounding the sum, and the sum is the figure the
+// customer is actually charged.
+export function roundMoney(
+  amount: number,
+  currency: string | null | undefined,
+): number {
+  const factor = minorUnitFactor(currency);
+  return Math.round(amount * factor) / factor;
+}
+
+// Fixed-decimal string for a gateway whose API wants a decimal string rather
+// than integer minor units (Tabby, Tamara, PayPal all do). Replaces the
+// hardcoded `.toFixed(2)` in those providers: a 10.5 KWD charge has to serialise
+// as "10.500", not "10.50", or the provider reads it as a different amount.
+export function toMajorUnitString(
+  amount: number,
+  currency: string | null | undefined,
+): string {
+  return roundMoney(amount, currency).toFixed(minorUnitDecimals(currency));
 }
