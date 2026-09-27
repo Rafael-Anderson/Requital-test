@@ -17,6 +17,8 @@ import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import ReportsFilterBar from "@/components/ReportsFilterBar";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const DIMENSIONS: { value: MarginDimension; label: string }[] = [
   { value: "product", label: "Product" },
@@ -26,15 +28,13 @@ const DIMENSIONS: { value: MarginDimension; label: string }[] = [
   { value: "order", label: "Order" },
 ];
 
-function money(value: number) {
-  return `${value.toFixed(2)} AED`;
-}
-
 function percent(value: number | null) {
   return value === null ? "-" : `${value.toFixed(1)}%`;
 }
 
 export default function MarginReportPage() {
+  const currency = useShopCurrency();
+  const fmt = (value: number) => formatMoney(value, currency);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [draftFilters, setDraftFilters] = useState<ReportsFilters>({});
   const [appliedFilters, setAppliedFilters] = useState<ReportsFilters>({});
@@ -101,19 +101,19 @@ export default function MarginReportPage() {
           <Card>
             <p className="text-xs text-text-faint">Revenue (costed lines)</p>
             <p className="text-lg font-bold text-text-primary dark:text-zinc-50">
-              {money(summary.revenue)}
+              {fmt(summary.revenue)}
             </p>
           </Card>
           <Card>
             <p className="text-xs text-text-faint">Cost</p>
             <p className="text-lg font-bold text-text-primary dark:text-zinc-50">
-              {money(summary.cost)}
+              {fmt(summary.cost)}
             </p>
           </Card>
           <Card>
             <p className="text-xs text-text-faint">Gross margin</p>
             <p className="text-lg font-bold text-text-primary dark:text-zinc-50">
-              {money(summary.margin)}
+              {fmt(summary.margin)}
             </p>
           </Card>
           <Card>
@@ -198,10 +198,10 @@ export default function MarginReportPage() {
                         r.label
                       )}
                     </TD>
-                    <TD className="text-[13.5px]">{money(r.revenue)}</TD>
-                    <TD className="text-[13.5px]">{money(r.cost)}</TD>
+                    <TD className="text-[13.5px]">{fmt(r.revenue)}</TD>
+                    <TD className="text-[13.5px]">{fmt(r.cost)}</TD>
                     <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">
-                      {money(r.margin)}
+                      {fmt(r.margin)}
                     </TD>
                     <TD className="text-[13.5px]">{percent(r.marginPercent)}</TD>
                     <TD className="text-[13.5px] text-text-muted">

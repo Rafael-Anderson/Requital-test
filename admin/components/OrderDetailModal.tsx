@@ -33,6 +33,7 @@ import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 import Modal from "@/components/ui/Modal";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Tooltip from "@/components/ui/Tooltip";
+import { formatMoney } from "@/lib/money";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
 // Mirrors the backend's own @Roles on the Slider dispatch/cancel routes —
@@ -311,14 +312,14 @@ export default function OrderDetailModal({
                             {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                           </div>
                           <div className="text-xs text-text-muted">
-                            {item.quantity} × {item.priceAtPurchase} AED
+                            {item.quantity} × {formatMoney(item.priceAtPurchase, order.currency)}
                           </div>
                           {item.note && (
                             <div className="text-xs italic text-text-muted mt-0.5">Customer: {item.note}</div>
                           )}
                         </div>
                         <div className="text-sm font-medium">
-                          {(Number(item.priceAtPurchase) * item.quantity).toFixed(2)} AED
+                          {formatMoney(Number(item.priceAtPurchase) * item.quantity, order.currency)}
                         </div>
                       </div>
                     ))}
@@ -341,7 +342,7 @@ export default function OrderDetailModal({
                       <>
                         <div className="flex justify-between text-sm">
                           <span className="text-text-muted">Subtotal</span>
-                          <span>{subtotal.toFixed(2)} AED</span>
+                          <span>{formatMoney(subtotal, order.currency)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-text-muted">Delivery fee</span>
@@ -372,7 +373,7 @@ export default function OrderDetailModal({
                             </div>
                           ) : (
                             <span className="flex items-center gap-1.5">
-                              {deliveryFee.toFixed(2)} AED
+                              {formatMoney(deliveryFee, order.currency)}
                               {canEditFee && (
                                 <Tooltip label="Override the delivery fee for this order">
                                   <button
@@ -392,7 +393,7 @@ export default function OrderDetailModal({
                         </div>
                         <div className="flex justify-between text-sm font-medium border-t border-gray-200 dark:border-white/10 mt-2 pt-2">
                           <span>Total</span>
-                          <span>{order.total} AED</span>
+                          <span>{formatMoney(order.total, order.currency)}</span>
                         </div>
                         {taxDisplayText && (
                           <p className="text-xs text-text-faint mt-1 text-right">{taxDisplayText}</p>
@@ -563,7 +564,12 @@ export default function OrderDetailModal({
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Paid to carrier</span>
-                        <span>{order.externaldelivery.price} AED</span>
+                        <span>
+                          {formatMoney(
+                            order.externaldelivery.price,
+                            order.externaldelivery.currency,
+                          )}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-text-muted">Status</span>

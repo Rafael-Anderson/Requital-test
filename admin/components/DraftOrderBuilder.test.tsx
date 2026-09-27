@@ -26,6 +26,12 @@ vi.mock("@/lib/api", () => ({
 
 import { listOutlets, listProducts } from "@/lib/api";
 
+// Mocking the module rather than wrapping in a provider, matching how this
+// suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
+vi.mock("@/lib/useShopCurrency", () => ({
+  useShopCurrency: () => "AED",
+}));
+
 function renderBuilder() {
   vi.mocked(listOutlets).mockResolvedValue(outlets);
   vi.mocked(listProducts).mockResolvedValue(products);

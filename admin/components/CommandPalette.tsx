@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Package, ClipboardList, Users, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { globalSearch, type GlobalSearchResult } from "@/lib/api";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -16,21 +18,26 @@ interface FlatResult {
   href: string;
 }
 
-function flatten(result: GlobalSearchResult | null): FlatResult[] {
+// currency is a parameter rather than a hook call: this is a pure module-level
+// function, and the search payload carries no currency of its own.
+function flatten(
+  result: GlobalSearchResult | null,
+  currency: string | null,
+): FlatResult[] {
   if (!result) return [];
   return [
     ...result.products.map((p) => ({
       key: `product-${p.id}`,
       type: "product" as const,
       label: p.name,
-      sublabel: `${p.sku} · ${p.price} AED`,
+      sublabel: `${p.sku} · ${formatMoney(p.price, currency)}`,
       href: `/products/${p.id}/edit`,
     })),
     ...result.orders.map((o) => ({
       key: `order-${o.id}`,
       type: "order" as const,
       label: `Order #${o.shopOrderNumber} · ${o.customerName}`,
-      sublabel: `${o.status.replace(/_/g, " ")} · ${o.total} AED`,
+      sublabel: `${o.status.replace(/_/g, " ")} · ${formatMoney(o.total, currency)}`,
       href: `/orders/${o.id}`,
     })),
     ...result.customers.map((c) => ({
@@ -67,7 +74,8 @@ export default function CommandPalette() {
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const flat = useMemo(() => flatten(result), [result]);
+  const currency = useShopCurrency();
+  const flat = useMemo(() => flatten(result, currency), [result, currency]);
 
   const close = useCallback(() => {
     setOpen(false);

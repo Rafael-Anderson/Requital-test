@@ -18,6 +18,7 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import DateTimePicker, { formatDateTimeDisplay } from "@/components/ui/DateTimePicker";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
+import { formatMoney } from "@/lib/money";
 
 type CompanyId = "slider";
 
@@ -196,7 +197,7 @@ export default function ManageDeliveryModal({
               <div>
                 <div className="text-xs text-text-muted">Charge</div>
                 <div className="text-sm font-bold text-success dark:text-green-400">
-                  {selectedVehicle.deliveryFee.toFixed(2)} AED
+                  {formatMoney(selectedVehicle.deliveryFee, order.currency)}
                 </div>
               </div>
             </div>
@@ -254,7 +255,7 @@ export default function ManageDeliveryModal({
                 <div className="flex justify-between items-center pt-2">
                   <span className="text-text-muted text-sm">Delivery Total Charge</span>
                   <span className="rounded-full bg-accent-tint text-accent-text text-sm font-bold px-3 py-1">
-                    {selectedVehicle.deliveryFee.toFixed(2)} AED
+                    {formatMoney(selectedVehicle.deliveryFee, order.currency)}
                   </span>
                 </div>
               </section>

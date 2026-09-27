@@ -38,6 +38,7 @@ function fakeOrder(overrides: Partial<Order> = {}): Order {
     cashCollectedByName: null,
     deliveryFee: "10",
     total: "60",
+    currency: "AED",
     createdAt: new Date().toISOString(),
     trackingToken: null,
     paymentLinkToken: null,

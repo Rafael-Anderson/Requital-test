@@ -47,6 +47,8 @@ import BranchBar from "@/components/BranchBar";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 export default function InventoryPage() {
   return (
@@ -57,6 +59,7 @@ export default function InventoryPage() {
 }
 
 function InventoryPageContent() {
+  const currency = useShopCurrency();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[] | null>(null);
@@ -426,7 +429,7 @@ function InventoryPageContent() {
                       )}
                     </div>
                   </TD>
-                  <TD className="text-[13.5px]">{p.price} AED</TD>
+                  <TD className="text-[13.5px]">{formatMoney(p.price, currency)}</TD>
                   <TD className="text-text-muted">{p.sku}</TD>
                   <TD className="text-text-muted">{p.totalSold} sold</TD>
                   <TD className="text-xs text-text-muted">

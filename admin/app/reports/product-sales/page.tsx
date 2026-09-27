@@ -11,6 +11,8 @@ import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import ReportsFilterBar from "@/components/ReportsFilterBar";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -24,6 +26,7 @@ const COLUMNS: { field: SortField; label: string }[] = [
 ];
 
 export default function ProductSaleReportPage() {
+  const currency = useShopCurrency();
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [draftFilters, setDraftFilters] = useState<ReportsFilters>({});
   const [appliedFilters, setAppliedFilters] = useState<ReportsFilters>({});
@@ -164,10 +167,10 @@ export default function ProductSaleReportPage() {
                     <span className="font-medium">{row.name}</span>
                   </div>
                 </TD>
-                <TD>{Number(row.currentPrice).toFixed(2)} AED</TD>
+                <TD>{formatMoney(row.currentPrice, currency)}</TD>
                 <TD>{row.orderCount}</TD>
                 <TD>{row.totalQuantity}</TD>
-                <TD>{row.totalSalePrice.toFixed(2)} AED</TD>
+                <TD>{formatMoney(row.totalSalePrice, currency)}</TD>
                 <TD className="text-text-muted">{row.deliveryFee.toFixed(2)}</TD>
               </TR>
             ))

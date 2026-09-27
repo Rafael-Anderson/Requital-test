@@ -20,6 +20,7 @@ import Toggle from "@/components/ui/Toggle";
 import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 function randomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I
@@ -45,6 +46,7 @@ export default function DiscountFormModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const currency = useShopCurrency();
   const toast = useToast();
   const [requiresCode, setRequiresCode] = useState(discount ? discount.discountType !== "auto" : true);
   const [code, setCode] = useState(discount?.code ?? "");
@@ -161,7 +163,7 @@ export default function DiscountFormModal({
 
           {type !== "FREE_SHIPPING" && (
             <Input
-              label={type === "PERCENTAGE" ? "Value (%)" : "Value (AED)"}
+              label={type === "PERCENTAGE" ? "Value (%)" : `Value (${currency})`}
               type="number"
               min="0"
               step="0.01"

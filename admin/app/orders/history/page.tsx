@@ -23,6 +23,7 @@ import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -248,7 +249,7 @@ export default function OrderHistoryPage() {
                       </div>
                     )}
                   </TD>
-                  <TD>{order.total} AED</TD>
+                  <TD>{formatMoney(order.total, order.currency)}</TD>
                   <TD className="text-text-muted">{order.channel ?? "-"}</TD>
                   <TD className="text-xs text-text-muted">
                     {new Date(order.createdAt).toLocaleString()}

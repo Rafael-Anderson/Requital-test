@@ -9,6 +9,7 @@ import CartLineItems from "@/components/CartLineItems";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import { storeButtonClassName } from "@/lib/button-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import { formatPriceAmount } from "@/lib/currency";
 
 // Always reachable by direct navigation regardless of theme.cartLayout —
 // the "drawer" preset changes what clicking the header cart icon does, not
@@ -48,21 +49,21 @@ export default function CartPage() {
         <div className="flex items-center justify-between">
           <span className="text-zinc-600">Subtotal</span>
           <span>
-            {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+            {formatPriceAmount(subtotal, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
         </div>
         {discountAmount !== null && discountAmount > 0 && (
           <div className="flex items-center justify-between text-green-600">
             <span>Discount</span>
             <span>
-              -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+              -{formatPriceAmount(discountAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
             </span>
           </div>
         )}
         <div className="flex items-center justify-between pt-1">
           <span className="text-zinc-600">Total</span>
           <span className="text-lg font-semibold">
-            {total.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+            {formatPriceAmount(total, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
         </div>
       </div>

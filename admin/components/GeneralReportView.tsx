@@ -10,6 +10,8 @@ import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
 import StatusBadge from "@/components/StatusBadge";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 function formatPaymentMode(method: string | null): string {
   if (!method) return "-";
@@ -49,6 +51,7 @@ export default function GeneralReportView({
   onPrevPage: () => void;
   onNextPage: () => void;
 }) {
+  const currency = useShopCurrency();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -73,19 +76,19 @@ export default function GeneralReportView({
             />
             <StatCard
               label="Grand Total"
-              value={`${summary.grandTotal.toFixed(2)} AED`}
+              value={formatMoney(summary.grandTotal, currency)}
               icon={<Wallet className="size-4" />}
               subtext="Grand total from orders."
             />
             <StatCard
               label="Total Payments"
-              value={`${summary.totalPayments.toFixed(2)} AED`}
+              value={formatMoney(summary.totalPayments, currency)}
               icon={<CreditCard className="size-4" />}
               subtext="Total payments without delivery fee."
             />
             <StatCard
               label="Total Delivery Fee"
-              value={`${summary.totalDeliveryFee.toFixed(2)} AED`}
+              value={formatMoney(summary.totalDeliveryFee, currency)}
               icon={<Truck className="size-4" />}
               subtext="Total delivery fee with orders."
             />
@@ -155,7 +158,7 @@ export default function GeneralReportView({
                 </TD>
                 <TD className="capitalize text-text-muted text-[13.5px]">{order.orderType ?? "-"}</TD>
                 <TD className="text-text-muted text-[13.5px]">{formatPaymentMode(order.paymentMethod)}</TD>
-                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{order.total} AED</TD>
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{formatMoney(order.total, currency)}</TD>
                 <TD className="text-text-muted text-[13.5px]">{order.channel ?? "-"}</TD>
                 <TD className="text-xs text-text-faint">{new Date(order.createdAt).toLocaleString()}</TD>
               </TR>

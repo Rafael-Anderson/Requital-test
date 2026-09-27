@@ -14,6 +14,7 @@ import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
 import SliderDeliveryPanel from "@/components/SliderDeliveryPanel";
+import { formatMoney } from "@/lib/money";
 
 // Mirrors OrderDetailModal's own allow-list for the Slider action — see
 // that file's SLIDER_ROLES comment.
@@ -234,18 +235,18 @@ export default function SimpleOrderDetailModal({
                       {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                     </div>
                     <div className="text-xs text-text-muted">
-                      {item.quantity} × {item.priceAtPurchase} AED
+                      {item.quantity} × {formatMoney(item.priceAtPurchase, order.currency)}
                     </div>
                   </div>
                   <div className="text-sm font-medium">
-                    {(Number(item.priceAtPurchase) * item.quantity).toFixed(2)} AED
+                    {formatMoney(Number(item.priceAtPurchase) * item.quantity, order.currency)}
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex justify-between text-sm font-medium border-t border-gray-200 dark:border-white/10 mt-3 pt-3">
               <span>Total</span>
-              <span>{order.total} AED</span>
+              <span>{formatMoney(order.total, order.currency)}</span>
             </div>
           </section>
         </div>

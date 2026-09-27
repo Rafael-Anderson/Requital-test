@@ -14,6 +14,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
 
 const STATUS_CLASS: Record<DraftOrderStatus, string> = {
   OPEN: "text-text-secondary dark:text-zinc-400",
@@ -91,7 +92,7 @@ export default function DraftOrdersPage() {
                   <div className="text-xs text-text-muted">{d.customerPhone}</div>
                 </TD>
                 <TD className="text-text-muted">{d.items.length} item{d.items.length === 1 ? "" : "s"}</TD>
-                <TD>{d.total.toFixed(2)} AED</TD>
+                <TD>{formatMoney(d.total, d.currency)}</TD>
                 <TD className={`font-medium ${STATUS_CLASS[d.status]}`}>{DRAFT_ORDER_STATUS_LABELS[d.status]}</TD>
                 <TD className="text-xs text-text-muted">{new Date(d.createdAt).toLocaleDateString()}</TD>
               </TR>

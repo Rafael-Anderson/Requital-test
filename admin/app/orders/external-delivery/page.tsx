@@ -18,6 +18,7 @@ import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -169,7 +170,7 @@ export default function ExternalDeliveryOrdersTabPage() {
                   <StatusBadge status={row.status} />
                 </TD>
                 <TD className="text-xs text-text-muted">{new Date(row.createdAt).toLocaleString()}</TD>
-                <TD>{Number(row.price).toFixed(2)} AED</TD>
+                <TD>{formatMoney(row.price, row.currency)}</TD>
               </TR>
             ))
           )}

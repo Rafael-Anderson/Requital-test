@@ -6,6 +6,12 @@ import { ToastProvider } from "@/components/ui/Toast";
 import type { Product } from "@/lib/types";
 import { getShop } from "@/lib/api";
 
+// Mocking the module rather than wrapping in a provider, matching how this
+// suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
+vi.mock("@/lib/useShopCurrency", () => ({
+  useShopCurrency: () => "AED",
+}));
+
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),

@@ -29,6 +29,7 @@ function fakeOrder(): Order {
   return {
     id: 42,
     shopOrderNumber: 3,
+    currency: "AED",
     outletId: 1,
     customerName: "Jane Shopper",
     customerPhone: "0501234567",
@@ -57,6 +58,7 @@ function fakeOrder(): Order {
     orderitem: [],
     externaldelivery: {
       id: 1,
+      currency: "AED",
       orderId: 42,
       carrier: "Careem",
       vehicleType: null,

@@ -10,6 +10,8 @@ import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
+import { formatAmount, formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const PAGE_SIZE = 25;
 
@@ -28,14 +30,16 @@ const ACTION_LABELS: Record<string, string> = {
 
 const ENTITY_TYPES = ["auth", "product", "order", "collection", "discount", "biolink"];
 
-function describe(entry: AuditLogEntry): string {
+// currency is a parameter, not a hook: describe() is pure and module-level, and
+// an audit entry stores only the before/after values, no currency.
+function describe(entry: AuditLogEntry, currency: string | null): string {
   const before = entry.before as Record<string, unknown> | null;
   const after = entry.after as Record<string, unknown> | null;
   const metadata = entry.metadata as Record<string, unknown> | null;
 
   switch (entry.action) {
     case "product.price_changed":
-      return `${before?.price ?? "?"} → ${after?.price ?? "?"} AED`;
+      return `${formatAmount(before?.price as string, currency) || "?"} → ${formatMoney(after?.price as string, currency) || "?"}`;
     case "product.status_changed":
       return `${before?.status ?? "?"} → ${after?.status ?? "?"}`;
     case "product.deleted":
@@ -60,6 +64,7 @@ function describe(entry: AuditLogEntry): string {
 }
 
 export default function ActivityLogPage() {
+  const currency = useShopCurrency();
   const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -163,7 +168,7 @@ export default function ActivityLogPage() {
                   {e.entityType}
                   {e.entityId ? ` #${e.entityId}` : ""}
                 </TD>
-                <TD className="text-[13px] text-text-muted">{describe(e)}</TD>
+                <TD className="text-[13px] text-text-muted">{describe(e, currency)}</TD>
                 <TD className="text-text-muted text-[13px]">{e.actorName}</TD>
                 <TD className="text-xs text-text-faint">{new Date(e.createdAt).toLocaleString()}</TD>
               </TR>

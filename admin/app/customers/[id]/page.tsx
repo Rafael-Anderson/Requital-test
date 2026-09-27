@@ -20,9 +20,12 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatusBadge from "@/components/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 // Admin-only, same as the list page — see app/customers/page.tsx.
 export default function CustomerDetailPage() {
+  const currency = useShopCurrency();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -104,7 +107,7 @@ export default function CustomerDetailPage() {
               <StatCard label="Orders" value={String(customer.orderCount)} icon={<ClipboardList className="size-4" />} />
               <StatCard
                 label="Lifetime Value"
-                value={`${customer.lifetimeValue.toFixed(2)} AED`}
+                value={formatMoney(customer.lifetimeValue, currency)}
                 icon={<Wallet className="size-4" />}
                 subtext="Excludes cancelled orders"
               />
@@ -176,7 +179,7 @@ export default function CustomerDetailPage() {
                         <StatusBadge status={order.status} />
                       </TD>
                       <TD className="capitalize text-text-muted">{order.orderType ?? "-"}</TD>
-                      <TD>{order.total} AED</TD>
+                      <TD>{formatMoney(order.total, order.currency)}</TD>
                       <TD className="text-xs text-text-muted">{new Date(order.createdAt).toLocaleString()}</TD>
                     </TR>
                   ))

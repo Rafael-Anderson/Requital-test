@@ -20,6 +20,8 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import Combobox from "@/components/ui/Combobox";
 import Tooltip from "@/components/ui/Tooltip";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 // Mirrors backend/src/orders/constants.ts EMIRATES by hand — no shared
 // package between admin/backend, same tradeoff as every other mirrored
@@ -39,6 +41,7 @@ interface WorkingItem {
 // emirate/order-type pickers are Combobox.tsx, same as every other picker
 // in this app.
 export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
+  const currency = useShopCurrency();
   const router = useRouter();
   const toast = useToast();
   const isEdit = !!draft;
@@ -213,7 +216,9 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                 <span className="text-text-secondary dark:text-zinc-300 truncate">
                   {item.quantity} × {item.productName}
                 </span>
-                <span className="shrink-0">{(Number(item.price) * item.quantity).toFixed(2)} AED</span>
+                <span className="shrink-0">
+                  {formatMoney(Number(item.price) * item.quantity, currency)}
+                </span>
               </li>
             ))}
           </ul>
@@ -223,17 +228,17 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       <div className="border-t border-black/5 dark:border-white/10 pt-3 space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="text-text-muted">Subtotal</span>
-          <span>{subtotal.toFixed(2)} AED</span>
+          <span>{formatMoney(subtotal, currency)}</span>
         </div>
         {discountAmount > 0 && (
           <div className="flex items-center justify-between text-sm text-green-600 dark:text-green-400">
             <span>Discount</span>
-            <span>-{discountAmount.toFixed(2)} AED</span>
+            <span>-{formatMoney(discountAmount, currency)}</span>
           </div>
         )}
         <div className="flex items-center justify-between text-sm font-medium pt-1">
           <span>Total</span>
-          <span>{total.toFixed(2)} AED</span>
+          <span>{formatMoney(total, currency)}</span>
         </div>
       </div>
     </Card>
@@ -391,7 +396,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
         {discountPreview && (
           <p className={`text-xs ${discountPreview.valid ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
             {discountPreview.valid
-              ? `Applies: -${discountPreview.discountAmount} AED`
+              ? `Applies: -${formatMoney(discountPreview.discountAmount, currency)}`
               : discountPreview.message ?? "This code cannot be applied"}
           </p>
         )}
