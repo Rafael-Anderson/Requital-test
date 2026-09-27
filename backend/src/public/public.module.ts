@@ -19,6 +19,7 @@ import { AbandonedCartsModule } from '../abandoned-carts/abandoned-carts.module'
 import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { PolicyPagesModule } from '../policy-pages/policy-pages.module';
 import { ThemesModule } from '../themes/themes.module';
+import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { ThemesModule } from '../themes/themes.module';
     GiftCardsModule,
     PolicyPagesModule,
     ThemesModule,
+    CurrencyRatesModule,
   ],
   controllers: [
     PublicController,

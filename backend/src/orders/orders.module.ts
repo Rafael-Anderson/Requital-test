@@ -9,6 +9,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { OrderNotificationsModule } from './order-notifications.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
+import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscr
     OrderNotificationsModule,
     BranchRolesModule,
     NotifySubscriptionsModule,
+    CurrencyRatesModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

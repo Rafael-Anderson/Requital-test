@@ -37,6 +37,7 @@ import {
   OrderStatus,
 } from './constants';
 import { computeOrderTotals } from '../public/order-pricing';
+import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 
@@ -77,6 +78,7 @@ export class OrdersService {
     private readonly orderNotificationsService: OrderNotificationsService,
     private readonly branchRolesService: BranchRolesService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
+    private readonly currencyRatesService: CurrencyRatesService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -384,6 +386,12 @@ export class OrdersService {
     );
 
     const orderId = await this.db.transaction(async (conn) => {
+      // Read on the transaction's own connection so a platform admin editing a
+      // rate cannot land between this read and the insert below.
+      const capturedRate = await this.currencyRatesService.resolveForCapture(
+        shopSettings?.currency ?? 'AED',
+        conn,
+      );
       // Stock reservation only fires alongside an immediate reservation
       // (reserveStock) — a deferred (non-reserveStock) admin order hasn't
       // committed stock yet either; that case is instead covered at the
@@ -428,8 +436,8 @@ export class OrdersService {
           shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
-          shopOrderNumber, currency
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          shopOrderNumber, currency, rateBaseCurrency, exchangeRate
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -460,6 +468,12 @@ export class OrdersService {
           // every gateway call, so changing the shop setting silently
           // re-denominated every past order.
           shopSettings?.currency ?? 'AED',
+          // Frozen at creation and never recomputed, exactly like
+          // priceAtPurchase and orderitem.unitCost. Null when the platform has
+          // no rate stored for this currency — an honest "not captured" rather
+          // than a 1 that would later read as parity with the base.
+          capturedRate?.rateBaseCurrency ?? null,
+          capturedRate?.exchangeRate ?? null,
         ],
           );
           return res;

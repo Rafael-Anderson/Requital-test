@@ -50,6 +50,7 @@ function buildService(db: DatabaseService) {
     unused,
     unused,
     jwtService,
+    unused, // currencyRatesService — not reached on the preview-auth path
   );
   return { service, jwtService };
 }
