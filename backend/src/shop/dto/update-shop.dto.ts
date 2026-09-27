@@ -47,7 +47,9 @@ export class UpdateShopDto {
   //     companion fix in common/currency-minor-units.ts it multiplied by 100
   //     unconditionally - wrong by 10x for the three-decimal currencies
   //     (KWD/BHD/OMR) that same dropdown offered
-  //   - PayPal's refundPayment hardcodes 'AED'
+  //   - ~~PayPal's refundPayment hardcodes 'AED'~~ fixed in Phase 2a/A4:
+  //     RefundPaymentParams now carries the original charge's currency, read off
+  //     paymenttransaction.currency
   //   - every admin money display and all three notification templates
   //     concatenate a literal "AED"
   // So the value reached a real payment gateway as the charge currency; this was

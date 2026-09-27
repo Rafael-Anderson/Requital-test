@@ -281,6 +281,11 @@ export class ReturnsService {
       const result = await provider.refundPayment({
         chargeReference: paidTransaction.providerChargeReference as string,
         amount,
+        // The currency the CHARGE moved, read off the same
+        // paymenttransaction row the chargeReference came from — not the
+        // order's and not the shop's. A refund reverses one specific past
+        // charge, so that row is the only authoritative source.
+        currency: paidTransaction.currency as string,
         credentials,
       });
       return {

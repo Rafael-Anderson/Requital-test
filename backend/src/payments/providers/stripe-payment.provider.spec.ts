@@ -70,11 +70,11 @@ describe('StripePaymentProvider amount serialisation', () => {
     expect(Number.isInteger(priceData.unit_amount)).toBe(true);
   });
 
-  // refundPayment is the OTHER amount conversion in this provider, and the one
-  // the currency findings missed. RefundPaymentParams carries no currency, so
-  // it falls back to a factor of 100 - identical to the previous hardcoded
-  // x100, now expressed through the shared helper so there is one conversion
-  // rule here rather than two literals.
+  // refundPayment is the OTHER amount conversion in this provider. As of Phase
+  // 2a/A4 RefundPaymentParams carries the original charge's currency, so this
+  // is genuinely currency-aware rather than falling back to a factor of 100 -
+  // which it did until now, and which would have under-refunded any 3-decimal
+  // currency by 10x.
   describe('refundPayment', () => {
     it('converts the refund amount to minor units', async () => {
       createRefund.mockReset();
@@ -83,6 +83,7 @@ describe('StripePaymentProvider amount serialisation', () => {
       await provider.refundPayment({
         chargeReference: 'pi_test_1',
         amount: 24.5,
+        currency: 'AED',
         credentials: { secretKey: 'sk_test_refund' },
       });
       const calls = createRefund.mock.calls as unknown as {
@@ -91,6 +92,24 @@ describe('StripePaymentProvider amount serialisation', () => {
       }[][];
       expect(calls[0][0].amount).toBe(2450);
       expect(Number.isInteger(calls[0][0].amount)).toBe(true);
+    });
+
+    it('uses the 3-decimal factor for a KWD charge, not 100', async () => {
+      createRefund.mockReset();
+      createRefund.mockResolvedValue({ id: 're_test_kwd' });
+      const provider = new StripePaymentProvider();
+      await provider.refundPayment({
+        chargeReference: 'pi_test_kwd',
+        amount: 24.5,
+        currency: 'KWD',
+        credentials: { secretKey: 'sk_test_refund' },
+      });
+      const calls = createRefund.mock.calls as unknown as {
+        amount: number;
+      }[][];
+      // 24500, not 2450. The old `undefined` currency made this 2450 — a
+      // refund of 2.450 KWD against a 24.500 KWD charge.
+      expect(calls[0][0].amount).toBe(24500);
     });
   });
 

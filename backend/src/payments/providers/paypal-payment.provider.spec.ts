@@ -332,6 +332,7 @@ describe('PayPalPaymentProvider', () => {
         provider.refundPayment({
           chargeReference: 'CAPTURE-1',
           amount: 50,
+          currency: 'AED',
           credentials: null,
         }),
       ).rejects.toBeInstanceOf(PaymentProviderNotConfiguredException);
@@ -347,6 +348,7 @@ describe('PayPalPaymentProvider', () => {
       const result = await provider.refundPayment({
         chargeReference: 'CAPTURE-99',
         amount: 25.5,
+        currency: 'AED',
         credentials: null,
       });
 
@@ -355,8 +357,40 @@ describe('PayPalPaymentProvider', () => {
       expect(String(refundUrl)).toContain(
         '/v2/payments/captures/CAPTURE-99/refund',
       );
-      const sentBody = JSON.parse(refundInit.body);
+      const sentBody = JSON.parse(String(refundInit.body)) as {
+        amount: { currency_code: string; value: string };
+      };
       expect(sentBody.amount.value).toBe('25.50');
+      // Asserting currency_code is the gap that let a hardcoded 'AED' survive
+      // here: the old test checked only the value.
+      expect(sentBody.amount.currency_code).toBe('AED');
+    });
+
+    // The case the hardcode made impossible. KWD has 3 minor digits, so both
+    // the code AND the serialised width have to follow the charge's currency.
+    it('refunds a KWD charge in KWD, with three decimal places', async () => {
+      process.env.PAYPAL_CLIENT_ID = 'env-client-refund-kwd';
+      process.env.PAYPAL_CLIENT_SECRET = 'env-secret';
+      fetchSpy
+        .mockResolvedValueOnce(oauthResponse())
+        .mockResolvedValueOnce(jsonResponse({ id: 'REFUND-KWD' }));
+
+      await provider.refundPayment({
+        chargeReference: 'CAPTURE-KWD',
+        amount: 25.5,
+        currency: 'KWD',
+        credentials: null,
+      });
+
+      const [, kwdInit] = fetchSpy.mock.calls[1] as unknown as [
+        unknown,
+        { body: string },
+      ];
+      const sentBody = JSON.parse(kwdInit.body) as {
+        amount: { currency_code: string; value: string };
+      };
+      expect(sentBody.amount.currency_code).toBe('KWD');
+      expect(sentBody.amount.value).toBe('25.500');
     });
   });
 });
