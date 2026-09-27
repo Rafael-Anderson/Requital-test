@@ -31,7 +31,11 @@ export function trimOrderRow<
     discountAmount?: unknown;
     giftCardAmount?: unknown;
     total?: unknown;
-    orderitem?: { priceAtPurchase?: unknown; autoDiscountAmount?: unknown }[];
+    orderitem?: {
+      priceAtPurchase?: unknown;
+      autoDiscountAmount?: unknown;
+      unitCost?: unknown;
+    }[];
   },
 >(order: T): T {
   return {
@@ -45,6 +49,10 @@ export function trimOrderRow<
       ...i,
       priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
       autoDiscountAmount: trimDecimal(i.autoDiscountAmount as string | null),
+      // Added by migration 20260921120000 after this helper was written, so it
+      // was silently uncovered — a 30-decimal unitCost would reach any response
+      // that starts exposing it untrimmed.
+      unitCost: trimDecimal(i.unitCost as string | null),
     })),
   };
 }

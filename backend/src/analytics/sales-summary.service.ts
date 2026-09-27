@@ -8,6 +8,7 @@ import { escapeHtml } from '../common/email';
 import { createLogger } from '../common/logging/logger';
 import { dateKeyInTimezone } from '../outlets/outlet-status';
 import { AnalyticsRollupService } from './analytics-rollup.service';
+import { formatMoney } from '../common/money-format';
 
 const logger = createLogger('SalesSummary');
 
@@ -29,10 +30,15 @@ interface DayTotals {
   newCustomers: number;
   returningCustomers: number;
   linesWithoutCost: number;
+  // Every dailyshopmetrics row for one shop carries the same currency (A1
+  // stamps it from the shop), so one value describes the whole range.
+  currency: string | null;
 }
 
-function money(value: number): string {
-  return `${value.toFixed(2)} AED`;
+// The rollup rows carry their own currency (A1), so the digest states the
+// shop's real currency rather than asserting AED at every merchant.
+function money(value: number, currency: string | null | undefined): string {
+  return formatMoney(value, currency);
 }
 
 // Minutes since midnight, or null for anything that is not "HH:MM".
@@ -253,7 +259,8 @@ export class SalesSummaryService {
               COALESCE(SUM(tax), 0) AS tax,
               COALESCE(SUM(newCustomers), 0) AS newCustomers,
               COALESCE(SUM(returningCustomers), 0) AS returningCustomers,
-              COALESCE(SUM(linesWithoutCost), 0) AS linesWithoutCost
+              COALESCE(SUM(linesWithoutCost), 0) AS linesWithoutCost,
+              MAX(currency) AS currency
          FROM dailyshopmetrics
         WHERE shopId = ? AND \`date\` BETWEEN ? AND ?`,
       [shopId, from, to],
@@ -273,22 +280,23 @@ export class SalesSummaryService {
       newCustomers: Number(r.newCustomers),
       returningCustomers: Number(r.returningCustomers),
       linesWithoutCost: Number(r.linesWithoutCost),
+      currency: (r.currency as string | null) ?? null,
     };
   }
 
   private summaryLines(t: DayTotals): string[] {
     const lines = [
       `Orders: ${t.orders}`,
-      `Revenue: ${money(t.revenue)}`,
+      `Revenue: ${money(t.revenue, t.currency)}`,
       t.cogs === null
         ? 'Cost of goods: not recorded'
-        : `Cost of goods: ${money(t.cogs)}`,
+        : `Cost of goods: ${money(t.cogs, t.currency)}`,
       t.cogs === null
         ? 'Gross margin: not available without recorded costs'
-        : `Gross margin: ${money(t.revenue - t.cogs)}`,
-      `Discounts: ${money(t.discount)}`,
-      `Delivery: ${money(t.delivery)}`,
-      `Tax: ${money(t.tax)}`,
+        : `Gross margin: ${money(t.revenue - t.cogs, t.currency)}`,
+      `Discounts: ${money(t.discount, t.currency)}`,
+      `Delivery: ${money(t.delivery, t.currency)}`,
+      `Tax: ${money(t.tax, t.currency)}`,
       `New customers: ${t.newCustomers}`,
       `Returning customers: ${t.returningCustomers}`,
     ];
@@ -309,15 +317,15 @@ export class SalesSummaryService {
       `<tr><td style="padding:6px 0;font-size:14px;color:#111111;">${escapeHtml(label)}</td><td style="padding:6px 0;font-size:14px;color:#111111;text-align:right;">${escapeHtml(value)}</td></tr>`;
     const rows = [
       row('Orders', String(t.orders)),
-      row('Revenue', money(t.revenue)),
-      row('Cost of goods', t.cogs === null ? 'Not recorded' : money(t.cogs)),
+      row('Revenue', money(t.revenue, t.currency)),
+      row('Cost of goods', t.cogs === null ? 'Not recorded' : money(t.cogs, t.currency)),
       row(
         'Gross margin',
-        t.cogs === null ? 'Not available' : money(t.revenue - t.cogs),
+        t.cogs === null ? 'Not available' : money(t.revenue - t.cogs, t.currency),
       ),
-      row('Discounts', money(t.discount)),
-      row('Delivery', money(t.delivery)),
-      row('Tax', money(t.tax)),
+      row('Discounts', money(t.discount, t.currency)),
+      row('Delivery', money(t.delivery, t.currency)),
+      row('Tax', money(t.tax, t.currency)),
       row('New customers', String(t.newCustomers)),
       row('Returning customers', String(t.returningCustomers)),
     ].join('');

@@ -67,7 +67,11 @@ export class SliderDeliveryService {
       credentials,
     });
     assertVehicleDistanceOk(dto.vehicleType, quote.distanceKm);
-    assertPaymentOnDeliveryWithinCap(order.paymentMethod, Number(order.total));
+    assertPaymentOnDeliveryWithinCap(
+      order.paymentMethod,
+      Number(order.total),
+      order.currency as string,
+    );
     assertScheduleAtOk(dto.scheduleAt);
 
     const paymentOnDelivery =

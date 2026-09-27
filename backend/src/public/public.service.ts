@@ -1711,6 +1711,9 @@ export class PublicService {
       ...orderRows[0],
       id: orderRows[0].id as number,
       shopOrderNumber: orderRows[0].shopOrderNumber as number,
+      // Captured on the row at creation (A1); the notification states what
+      // THIS order was priced in, not what the shop is set to now.
+      currency: orderRows[0].currency as string,
       outletId: orderRows[0].outletId as number,
       customerName: orderRows[0].customerName as string,
       customerEmail: orderRows[0].customerEmail as string | null,

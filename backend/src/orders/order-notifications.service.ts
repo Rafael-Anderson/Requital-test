@@ -9,6 +9,7 @@ import { WhatsAppSettingsService } from '../whatsapp/whatsapp-settings.service';
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
 import { createLogger } from '../common/logging/logger';
 import { JobsService } from '../jobs/jobs.service';
+import { formatMoney } from '../common/money-format';
 
 const logger = createLogger('OrderNotifications');
 
@@ -26,6 +27,10 @@ interface NotifiableOrder {
   customerPhone: string;
   orderType: string | null;
   total: string;
+  // The order's own captured currency (A1), not the shop's current setting:
+  // a notification about a past order has to state what that order was
+  // actually priced in.
+  currency: string;
   outletId: number;
 }
 
@@ -66,7 +71,7 @@ export class OrderNotificationsService {
   ) {}
 
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
-    const bodyText = `Hi ${order.customerName}, we've received your order #${order.shopOrderNumber} (total ${order.total} AED). We'll message you again once it's on its way.`;
+    const bodyText = `Hi ${order.customerName}, we've received your order #${order.shopOrderNumber} (total ${formatMoney(order.total, order.currency)}). We'll message you again once it's on its way.`;
     // Standalone literal, not shared with notifyOutForDelivery's own HTML
     // below — deliberately duplicated rather than factored into a common
     // renderer, so a future change to one order email type can't silently
@@ -76,7 +81,7 @@ export class OrderNotificationsService {
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
-<p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">We've received your order <strong>#${order.shopOrderNumber}</strong> (total ${escapeHtml(order.total)} AED). We'll message you again once it's on its way.</p>
+<p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">We've received your order <strong>#${order.shopOrderNumber}</strong> (total ${escapeHtml(formatMoney(order.total, order.currency))}). We'll message you again once it's on its way.</p>
 </td></tr>
 <tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
 <tr><td style="padding:24px 40px 40px;text-align:center;">
@@ -300,7 +305,7 @@ export class OrderNotificationsService {
         return;
       }
 
-      const body = `New order #${order.shopOrderNumber} from ${order.customerName}. Total: ${order.total} AED.`;
+      const body = `New order #${order.shopOrderNumber} from ${order.customerName}. Total: ${formatMoney(order.total, order.currency)}.`;
       await this.jobsService.enqueue(
         shopId,
         'send_merchant_whatsapp_alert',

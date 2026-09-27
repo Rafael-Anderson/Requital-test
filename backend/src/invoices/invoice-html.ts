@@ -1,3 +1,5 @@
+import { toMajorUnitString } from '../common/currency-minor-units';
+
 // Self-contained, printable HTML — no PDF library is installed in this repo
 // (checked package.json for puppeteer/@react-pdf/renderer before writing
 // this; see InvoicesController's own comment on the /pdf route). Serving
@@ -50,8 +52,11 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+// Code first, matching how this document has always read, but with the
+// currency's own decimal width instead of a hardcoded 2 - a KWD invoice line
+// must print three decimals or it states a different amount.
 function money(amount: string | number, currency: string): string {
-  return `${currency} ${Number(amount).toFixed(2)}`;
+  return `${currency} ${toMajorUnitString(Number(amount), currency)}`;
 }
 
 export function renderInvoiceHtml(data: InvoiceHtmlData): string {

@@ -17,7 +17,19 @@ import {
 export function assertPaymentOnDeliveryWithinCap(
   paymentMethod: string | null,
   amountAed: number,
+  currency: string,
 ): void {
+  // These caps are Slider's own, denominated in AED, and Slider is a UAE-only
+  // courier. Comparing a total in another currency against them is not a
+  // rounding inaccuracy, it is a category error: 400 OMR would pass a 350 cap
+  // while being roughly ten times the real limit. Refusing is the honest
+  // outcome, and it fails at dispatch rather than silently booking a courier
+  // run that Slider itself would reject.
+  if (currency.trim().toUpperCase() !== 'AED') {
+    throw new BadRequestException(
+      `Slider dispatch is available for AED orders only (this order is in ${currency})`,
+    );
+  }
   if (
     paymentMethod === 'cash_on_delivery' &&
     amountAed > SLIDER_COD_CASH_CAP_AED
