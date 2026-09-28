@@ -77,7 +77,10 @@ const QUANTITY_PATTERNS = [
 
 // Trailing number on the line, optionally AED-prefixed/suffixed — invoices
 // consistently put the price last on a line item row.
-const PRICE_PATTERN = /(?:AED\s*)?(\d+(?:\.\d{1,2})?)\s*(?:AED)?\s*$/i;
+// {1,3}, not {1,2}: KWD/BHD/OMR have three minor digits, so a scanned
+// "12.500" is a real price rather than a typo. The literal AED stays optional
+// on both sides - a hint this regex tolerates, never a requirement.
+const PRICE_PATTERN = /(?:AED\s*)?(\d+(?:\.\d{1,3})?)\s*(?:AED)?\s*$/i;
 
 export function parseLine(rawLine: string): ParsedLineItem {
   let line = rawLine;

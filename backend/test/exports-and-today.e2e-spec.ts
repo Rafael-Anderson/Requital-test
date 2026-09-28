@@ -176,7 +176,11 @@ describe('Server-side exports + today dashboard (e2e)', () => {
       expect(res.headers['content-disposition']).toContain('customers-');
 
       const lines = csvLines(res.text);
-      expect(lines[0]).toBe('Name,Phone,Orders,Lifetime Value,Last Order');
+      // Currency sits next to the money column it describes (A5a): an LTV
+      // figure in a spreadsheet outlives the assumption that every shop is AED.
+      expect(lines[0]).toBe(
+        'Name,Phone,Orders,Lifetime Value,Currency,Last Order',
+      );
       expect(lines.length).toBe(26); // header + 25 customers, not 21
     }, 90000);
 
@@ -250,10 +254,11 @@ describe('Server-side exports + today dashboard (e2e)', () => {
         .expect(200);
       const lines = csvLines(res.text);
       expect(lines[0]).toBe(
-        'Product,Revenue,Cost,Margin,Margin %,Uncosted Lines',
+        'Product,Revenue,Cost,Margin,Margin %,Currency,Uncosted Lines',
       );
-      // 20 sold, 8 cost captured -> 12 margin at 60%.
-      expect(lines[1]).toContain('20.00,8.00,12.00,60.0');
+      // 20 sold, 8 cost captured -> 12 margin at 60%, stated in the order's own
+      // currency rather than leaving the reader to assume one.
+      expect(lines[1]).toContain('20.00,8.00,12.00,60.0,AED');
     }, 60000);
 
     it('serves every registered kind without erroring', async () => {

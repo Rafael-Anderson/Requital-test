@@ -335,6 +335,7 @@ describe('Post-purchase survey (e2e)', () => {
       customerPhone: '0500000004',
       orderType: null,
       total: '25',
+      currency: 'AED',
       outletId,
     };
     await orderNotificationsService.notifySurveyRequest(

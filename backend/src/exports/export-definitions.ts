@@ -4,6 +4,7 @@ import type { TenantContext } from '../common/tenant-context';
 import type { QueryParam } from '../database/database.service';
 import { PRODUCT_IMPORT_HEADERS } from '../products/products-import';
 import { buildVariantLabel } from '../products/variant-generator';
+import { toMajorUnitString } from '../common/currency-minor-units';
 
 // ANL-11: one definition per exportable report. Adding an export is adding an
 // entry here - the controller, the streaming, the paging, the escaping and the
@@ -49,7 +50,14 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
   customers: {
     roles: ['admin', 'viewer', 'order_manager'],
     filenamePrefix: 'customers',
-    headers: ['Name', 'Phone', 'Orders', 'Lifetime Value', 'Last Order'],
+    headers: [
+      'Name',
+      'Phone',
+      'Orders',
+      'Lifetime Value',
+      'Currency',
+      'Last Order',
+    ],
     async fetchPage({ db, ctx, search }, limit, offset) {
       // Same OR-across-name-and-phone shape as CustomersService, so the file
       // matches what the page was showing.
@@ -61,7 +69,11 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         `SELECT c.name, c.phone,
                 COUNT(o.id) AS orderCount,
                 COALESCE(SUM(o.total), 0) AS ltv,
-                MAX(o.createdAt) AS lastOrderDate
+                MAX(o.createdAt) AS lastOrderDate,
+                -- A customer's LTV is a sum of their order totals, so it is
+                -- denominated in whatever those orders were priced in. MAX()
+                -- because one shop has one currency; it is a pick, not a range.
+                MAX(o.currency) AS currency
            FROM customer c
            LEFT JOIN \`order\` o
              ON o.customerId = c.id AND o.status <> 'cancelled'
@@ -75,7 +87,8 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         r.name,
         r.phone,
         Number(r.orderCount),
-        Number(r.ltv).toFixed(2),
+        toMajorUnitString(Number(r.ltv), r.currency as string | null),
+        (r.currency as string | null) ?? '',
         isoOrEmpty(r.lastOrderDate),
       ]);
     },
@@ -91,6 +104,9 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
       'Type',
       'Payment Status',
       'Total',
+      // A money column with no currency is only readable while every shop
+      // shares one. Spreadsheets outlive that assumption.
+      'Currency',
       'Channel',
       'Placed At',
     ],
@@ -99,7 +115,7 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
       const outletParam = outletId !== undefined ? [outletId] : [];
       const rows = await db.query<RowDataPacket[]>(
         `SELECT o.id, o.shopOrderNumber, o.status, o.customerName, o.orderType,
-                o.paymentStatus, o.total, o.channel, o.createdAt
+                o.paymentStatus, o.total, o.currency, o.channel, o.createdAt
            FROM \`order\` o
           WHERE o.shopId = ? ${outletSql}
           ORDER BY o.id DESC
@@ -116,6 +132,7 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         r.orderType ?? '',
         r.paymentStatus,
         r.total,
+        r.currency,
         r.channel ?? '',
         isoOrEmpty(r.createdAt),
       ]);
@@ -354,6 +371,7 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
       'Cost',
       'Margin',
       'Margin %',
+      'Currency',
       'Uncosted Lines',
     ],
     async fetchPage({ db, ctx, outletId }, limit, offset) {
@@ -365,7 +383,8 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
                                   THEN oi.quantity * oi.priceAtPurchase END), 0) AS revenue,
                 COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
                                   THEN oi.quantity * oi.unitCost END), 0) AS cost,
-                COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost
+                COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost,
+                MAX(o.currency) AS currency
            FROM orderitem oi
            JOIN \`order\` o ON o.id = oi.orderId
           WHERE o.shopId = ? ${outletSql}
@@ -378,14 +397,16 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         const revenue = Number(r.revenue);
         const cost = Number(r.cost);
         const margin = revenue - cost;
+        const currency = r.currency as string | null;
         return [
           r.label,
-          revenue.toFixed(2),
-          cost.toFixed(2),
-          margin.toFixed(2),
+          toMajorUnitString(revenue, currency),
+          toMajorUnitString(cost, currency),
+          toMajorUnitString(margin, currency),
           // Blank, not 0, when nothing costed sold: "0%" and "nothing to
           // measure" are different answers.
           revenue > 0 ? ((margin / revenue) * 100).toFixed(1) : '',
+          currency ?? '',
           Number(r.linesWithoutCost),
         ];
       });
