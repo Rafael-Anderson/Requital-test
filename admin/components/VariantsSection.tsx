@@ -13,6 +13,8 @@ import VariantEditModal from "@/components/VariantEditModal";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
 import type { GalleryImage } from "@/components/ProductMediaGallery";
 import Tooltip from "@/components/ui/Tooltip";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 interface OptionDraft {
   name: string;
@@ -57,6 +59,7 @@ export default function VariantsSection({
   onImagesChange: (images: GalleryImage[]) => void;
 }) {
   const toast = useToast();
+  const currency = useShopCurrency();
   const [options, setOptions] = useState<OptionDraft[]>(product ? fromProduct(product) : []);
   const [valueDraft, setValueDraft] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState(false);
@@ -250,7 +253,7 @@ export default function VariantsSection({
                       <span className="font-medium">{v.label}</span>
                     </div>
                   </TD>
-                  <TD>{v.price ?? product.price} AED</TD>
+                  <TD>{formatMoney(v.price ?? product.price, currency)}</TD>
                   <TD className="text-text-muted">{v.stockQuantity ?? "-"}</TD>
                   <TD>
                     <Tooltip label={`Edit ${v.label}`} align="end">

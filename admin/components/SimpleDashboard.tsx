@@ -9,6 +9,8 @@ import { defaultDateRange } from "@/components/ui/DateRangePicker";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 // Simple-mode counterpart to the full DashboardPage (see admin/app/dashboard/
 // page.tsx) — CLAUDE.md documents this as already shipped, but the file
@@ -17,6 +19,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 // matching the same pared-down philosophy already applied to Orders/
 // Customers in simple mode (see admin/lib/useShopMode.ts's own doc comment).
 export default function SimpleDashboard() {
+  const currency = useShopCurrency();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +55,7 @@ export default function SimpleDashboard() {
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <StatCard
         label="Revenue Today"
-        value={`${summary.revenue.current.toLocaleString()} AED`}
+        value={formatMoney(summary.revenue.current, currency)}
         icon={<Wallet className="size-4" />}
       />
       <StatCard label="Orders Today" value={String(summary.totalOrders)} icon={<ClipboardList className="size-4" />} />

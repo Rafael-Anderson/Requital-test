@@ -12,6 +12,7 @@ import IngredientRecipeEditor from "@/components/IngredientRecipeEditor";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
 import { WEIGHT_UNITS, type WeightUnit } from "@/lib/types";
 import type { ProductFormState } from "@/lib/useProductForm";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 // Quick presets for the per-product delivery-time override — same
 // preset-Select-plus-custom-inputs juxtaposition OutletDeliveryTab.tsx's
@@ -27,6 +28,7 @@ const DELIVERY_TIME_PRESETS = [
 ];
 
 export default function ProductFormStepPricing({ form }: { form: ProductFormState }) {
+  const currency = useShopCurrency();
   return (
     <>
       {!form.product?.hasVariants && (
@@ -44,7 +46,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
             {form.isGiftCard ? (
               <div>
                 <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
-                  Denominations (AED)
+                  Denominations ({currency})
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {form.giftCardDenominations.map((value) => (
@@ -95,7 +97,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Input
-                  label="Price (AED)"
+                  label={`Price (${currency})`}
                   type="number"
                   step="0.01"
                   value={form.price}

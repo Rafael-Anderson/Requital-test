@@ -18,6 +18,7 @@ import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
 
 const POLL_INTERVAL_MS = 20_000;
 
@@ -193,7 +194,7 @@ function OrdersPageContent() {
                           <StatusBadge status={order.status} />
                         </div>
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
-                        <div className="text-sm font-bold text-text-primary dark:text-zinc-50">{order.total} AED</div>
+                        <div className="text-sm font-bold text-text-primary dark:text-zinc-50">{formatMoney(order.total, order.currency)}</div>
                         {order.deliveryDate && (
                           <div className="text-xs text-text-muted mt-1">
                             {new Date(order.deliveryDate).toLocaleDateString()}

@@ -31,6 +31,7 @@ import ImageDropzone from "@/components/ui/ImageDropzone";
 import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 import Tooltip from "@/components/ui/Tooltip";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 // One per parsed OCR line — starts from the server's ScanPreviewItem but is
 // fully editable before commit, since Tesseract's accuracy is nowhere near
@@ -121,6 +122,7 @@ function KeywordChips({
 }
 
 export default function ScanToStockPage() {
+  const currency = useShopCurrency();
   const toast = useToast();
   const [settings, setSettings] = useState<ScanSettings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -494,7 +496,7 @@ export default function ScanToStockPage() {
                           })()}
 
                         <div>
-                          <label className="text-xs text-text-muted block mb-1">Cost price (AED)</label>
+                          <label className="text-xs text-text-muted block mb-1">Cost price ({currency})</label>
                           <input
                             type="number"
                             min="0"
@@ -535,7 +537,7 @@ export default function ScanToStockPage() {
                         {row.matchedId === null && row.targetType === "product" && (
                           <>
                             <div>
-                              <label className="text-xs text-text-muted block mb-1">New product price (AED)</label>
+                              <label className="text-xs text-text-muted block mb-1">New product price ({currency})</label>
                               <input
                                 type="number"
                                 min="0"

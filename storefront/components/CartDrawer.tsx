@@ -10,6 +10,7 @@ import { useAnimatedNumber } from "@/lib/use-animated-number";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { iconStyleProps } from "@/lib/icon-style";
 import CartLineItems from "@/components/CartLineItems";
+import { formatPriceAmount } from "@/lib/currency";
 
 // §8.13.C item 13 — drawers.animation open transitions. `slide` (and absent)
 // is today's exact treatment; the others swap which classes carry the
@@ -100,7 +101,7 @@ export default function CartDrawer() {
                   key={subtotalAnim === "flash" ? Math.round(subtotal * 100) : undefined}
                   className={`font-medium${subtotalAnim === "flash" ? " theme-cart-subtotal-flash" : ""}`}
                 >
-                  {shownSubtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(shownSubtotal, shop?.currency)} <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
               <Link

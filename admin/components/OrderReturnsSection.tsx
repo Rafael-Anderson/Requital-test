@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
+import { formatAmount, formatMoney } from "@/lib/money";
 
 const RETURN_REASONS: { value: OrderReturn["reason"]; label: string }[] = [
   { value: "damaged", label: "Damaged" },
@@ -118,7 +119,9 @@ export default function OrderReturnsSection({
           {returns.map((r) => (
             <div key={r.id} className="text-sm border border-border rounded-md p-2.5 dark:border-white/10">
               <div className="flex justify-between">
-                <span className="font-medium">{r.refundAmount} AED refunded</span>
+                <span className="font-medium">
+                  {formatMoney(r.refundAmount, order.currency)} refunded
+                </span>
                 <span className="text-xs text-text-muted">{new Date(r.createdAt).toLocaleDateString()}</span>
               </div>
               <div className="text-xs text-text-muted mt-0.5 capitalize">
@@ -187,14 +190,18 @@ export default function OrderReturnsSection({
               type="number"
               min={0}
               step="0.01"
-              value={amountTouched ? refundAmount : computedRefund.toFixed(2)}
+              value={
+                amountTouched
+                  ? refundAmount
+                  : formatAmount(computedRefund, order.currency)
+              }
               onChange={(e) => {
                 setAmountTouched(true);
                 setRefundAmount(e.target.value);
               }}
               className="h-8 w-28 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
             />
-            AED
+            {order.currency}
           </label>
 
           <div className="flex justify-end gap-2">

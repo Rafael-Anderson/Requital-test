@@ -25,6 +25,7 @@ import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 import SliderDeliveryPanel from "@/components/SliderDeliveryPanel";
+import { formatMoney } from "@/lib/money";
 
 // Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
 // staff start physically preparing the order.
@@ -216,7 +217,7 @@ export default function OrderDetailPage() {
                   {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                 </td>
                 <td className="py-2 text-text-muted">× {item.quantity}</td>
-                <td className="py-2 text-right">{item.priceAtPurchase} AED</td>
+                <td className="py-2 text-right">{formatMoney(item.priceAtPurchase, order.currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -225,7 +226,7 @@ export default function OrderDetailPage() {
               <td className="py-2" colSpan={2}>
                 Total
               </td>
-              <td className="py-2 text-right">{order.total} AED</td>
+              <td className="py-2 text-right">{formatMoney(order.total, order.currency)}</td>
             </tr>
           </tfoot>
         </table>

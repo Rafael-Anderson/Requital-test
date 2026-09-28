@@ -12,6 +12,7 @@ import DeliveryDateCalendar from "./DeliveryDateCalendar";
 import TimeSlotPicker from "./TimeSlotPicker";
 import { FIELD_CLASS, TEXTAREA_CLASS } from "./checkout-field-styles";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import { formatPriceAmount } from "@/lib/currency";
 
 // The original checkout layout — every field on one long scroll. Kept as
 // its own component (not inlined in the page) so it sits side by side with
@@ -208,14 +209,14 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
         <div className="flex items-center justify-between">
           <span className="text-zinc-600">Subtotal</span>
           <span>
-            {subtotal.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+            {formatPriceAmount(subtotal, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
         </div>
         {discountAmount !== null && discountAmount > 0 && (
           <div className="flex items-center justify-between text-green-600">
             <span>Discount</span>
             <span>
-              -{discountAmount.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+              -{formatPriceAmount(discountAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
             </span>
           </div>
         )}
@@ -223,14 +224,14 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
           <div className="flex items-center justify-between text-green-600">
             <span>Gift card</span>
             <span>
-              -{Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))).toFixed(2)} <CurrencySymbol code={shop?.currency} />
+              -{formatPriceAmount(Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))), shop?.currency)} <CurrencySymbol code={shop?.currency} />
             </span>
           </div>
         )}
         <div className="flex items-center justify-between">
           <span className="text-zinc-600">Total (before delivery/tax)</span>
           <span className="font-medium">
-            {total.toFixed(2)} <CurrencySymbol code={shop?.currency} />
+            {formatPriceAmount(total, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
         </div>
       </div>

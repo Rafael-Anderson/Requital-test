@@ -113,6 +113,11 @@ export interface Order {
   // Read-only here — responses are customer-submitted only, see
   // PublicSurveyController.
   surveyresponse?: SurveyResponse | null;
+  // Frozen at creation by migration 20260926210000 and returned by the API
+  // today (the backend selects the whole row). Render money with THIS, not
+  // with the shop's current setting - a historical record must keep the
+  // currency it was actually priced in.
+  currency: string;
 }
 
 export interface SurveyResponse {
@@ -267,6 +272,11 @@ export interface ExternalDeliveryRow {
   trackingUrl: string | null;
   driverName: string | null;
   driverPhone: string | null;
+  // Frozen at creation by migration 20260926210000 and returned by the API
+  // today (the backend selects the whole row). Render money with THIS, not
+  // with the shop's current setting - a historical record must keep the
+  // currency it was actually priced in.
+  currency: string;
 }
 
 export interface PaginatedExternalDeliveries {
@@ -293,6 +303,11 @@ export interface ExternalDelivery {
   driverLat: string | null;
   driverLng: string | null;
   estimatedDeliveryMinutes: number | null;
+  // Frozen at creation by migration 20260926210000 and returned by the API
+  // today (the backend selects the whole row). Render money with THIS, not
+  // with the shop's current setting - a historical record must keep the
+  // currency it was actually priced in.
+  currency: string;
 }
 
 export interface ProductSalesRow {
@@ -2452,6 +2467,11 @@ export interface DraftOrder {
   total: number;
   createdAt: string;
   updatedAt: string;
+  // Frozen at creation by migration 20260926210000 and returned by the API
+  // today (the backend selects the whole row). Render money with THIS, not
+  // with the shop's current setting - a historical record must keep the
+  // currency it was actually priced in.
+  currency: string;
 }
 
 export interface DraftOrderItemInput {

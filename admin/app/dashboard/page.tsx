@@ -20,6 +20,8 @@ import Card from "@/components/ui/Card";
 import PageShell from "@/components/ui/PageShell";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] = [
   { key: "placed", label: "Placed" },
@@ -30,6 +32,7 @@ const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] 
 ];
 
 export default function DashboardPage() {
+  const currency = useShopCurrency();
   const [range, setRange] = useState<DateRange>(() => defaultDateRange(30));
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [daily, setDaily] = useState<DailyRevenuePoint[] | null>(null);
@@ -101,7 +104,7 @@ export default function DashboardPage() {
           <>
             <StatCard
               label="Avg Basket Value"
-              value={`${summary.avgBasketValue.current.toFixed(2)} AED`}
+              value={formatMoney(summary.avgBasketValue.current, currency)}
               icon={<Wallet className="size-4" />}
               change={{ pct: summary.avgBasketValue.changePct }}
             />
@@ -121,7 +124,7 @@ export default function DashboardPage() {
             />
             <StatCard
               label="Total Revenue"
-              value={`${summary.revenue.current.toFixed(2)} AED`}
+              value={formatMoney(summary.revenue.current, currency)}
               icon={<Banknote className="size-4" />}
               change={{ pct: summary.revenue.changePct }}
             />
@@ -267,7 +270,7 @@ export default function DashboardPage() {
                     <div className="text-sm font-medium truncate">{p.name}</div>
                     <div className="text-xs text-text-muted">{p.unitsSold} sold</div>
                   </div>
-                  <div className="text-sm font-medium shrink-0">{p.revenue.toFixed(2)} AED</div>
+                  <div className="text-sm font-medium shrink-0">{formatMoney(p.revenue, currency)}</div>
                 </div>
               ))}
             </div>

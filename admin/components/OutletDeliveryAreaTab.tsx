@@ -9,8 +9,11 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import Button from "@/components/ui/Button";
 import DeliveryZoneFormModal from "@/components/DeliveryZoneFormModal";
 import { useToast } from "@/components/ui/Toast";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }) {
+  const currency = useShopCurrency();
   const [zones, setZones] = useState<DeliveryZone[] | null>(null);
   const [editingZone, setEditingZone] = useState<DeliveryZone | null | "new">(null);
   const toast = useToast();
@@ -93,8 +96,10 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
                   </button>
                 </TD>
                 <TD className="font-medium">{z.name}</TD>
-                <TD className="text-text-muted">{z.fee} AED</TD>
-                <TD className="text-text-muted">{z.minOrderAmount} AED</TD>
+                <TD className="text-text-muted">{formatMoney(z.fee, currency)}</TD>
+                <TD className="text-text-muted">
+                  {formatMoney(z.minOrderAmount, currency)}
+                </TD>
                 <TD>
                   <button
                     onClick={() => setEditingZone(z)}

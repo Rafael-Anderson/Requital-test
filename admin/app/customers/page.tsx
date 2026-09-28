@@ -22,6 +22,8 @@ import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
 import CustomersTabs from "@/components/CustomersTabs";
+import { formatMoney } from "@/lib/money";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -40,6 +42,7 @@ const COLUMNS: { field: SortField; label: string }[] = [
 // regardless of what this check does (customers are shop-wide, unlike
 // orders/products, so there's no branch-scoped view to fall back to).
 export default function CustomersPage() {
+  const currency = useShopCurrency();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const mode = useShopMode();
@@ -231,7 +234,7 @@ export default function CustomersPage() {
                 <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</TD>
                 <TD className="text-text-muted text-[13.5px]">{c.phone}</TD>
                 <TD className="text-[13.5px]">{c.orderCount}</TD>
-                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{c.lifetimeValue.toFixed(2)} AED</TD>
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{formatMoney(c.lifetimeValue, currency)}</TD>
                 <TD className="text-xs text-text-faint">
                   {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "-"}
                 </TD>

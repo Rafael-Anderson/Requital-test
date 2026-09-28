@@ -4,6 +4,12 @@ import SimpleDashboard from "./SimpleDashboard";
 import { getDashboardSummary, getTopProducts } from "@/lib/api";
 import type { DashboardSummary, TopProduct } from "@/lib/types";
 
+// Mocking the module rather than wrapping in a provider, matching how this
+// suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
+vi.mock("@/lib/useShopCurrency", () => ({
+  useShopCurrency: () => "AED",
+}));
+
 vi.mock("@/lib/api", () => ({
   getDashboardSummary: vi.fn(),
   getTopProducts: vi.fn(),
@@ -36,7 +42,10 @@ describe("SimpleDashboard", () => {
     render(<SimpleDashboard />);
 
     await waitFor(() => expect(screen.getByText("Revenue Today")).toBeInTheDocument());
-    expect(screen.getByText("350 AED")).toBeInTheDocument();
+    // formatMoney renders the currency's own decimal width, so 350 becomes
+    // "350.00 AED". This card previously used toLocaleString() and was the only
+    // site in admin with thousands separators; formatMoney keeps those.
+    expect(screen.getByText("350.00 AED")).toBeInTheDocument();
     expect(screen.getByText("Orders Today")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("Top Product Today")).toBeInTheDocument();

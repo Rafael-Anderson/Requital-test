@@ -8,6 +8,7 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 
 type Field = "price" | "compareAtPrice";
 type Mode = "percentage" | "fixed";
@@ -35,6 +36,7 @@ export default function BulkPriceUpdateModal({
   onClose: () => void;
   onApplied: () => void;
 }) {
+  const currency = useShopCurrency();
   const toast = useToast();
   const [field, setField] = useState<Field>("price");
   const [mode, setMode] = useState<Mode>("percentage");
@@ -106,12 +108,16 @@ export default function BulkPriceUpdateModal({
           </Select>
           <Select label="Adjustment" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
             <option value="percentage">Percentage</option>
-            <option value="fixed">Fixed amount (AED)</option>
+            <option value="fixed">Fixed amount ({currency})</option>
           </Select>
         </div>
 
         <Input
-          label={mode === "percentage" ? "Percentage (e.g. 10 or -15)" : "Amount in AED (e.g. 5 or -5)"}
+          label={
+            mode === "percentage"
+              ? "Percentage (e.g. 10 or -15)"
+              : `Amount in ${currency} (e.g. 5 or -5)`
+          }
           type="number"
           step="0.01"
           value={value}

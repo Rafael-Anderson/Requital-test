@@ -4,6 +4,12 @@ import userEvent from "@testing-library/user-event";
 import DiscountFormModal from "./DiscountFormModal";
 import type { Discount } from "@/lib/types";
 
+// Mocking the module rather than wrapping in a provider, matching how this
+// suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
+vi.mock("@/lib/useShopCurrency", () => ({
+  useShopCurrency: () => "AED",
+}));
+
 const createDiscount = vi.fn();
 const updateDiscount = vi.fn();
 
