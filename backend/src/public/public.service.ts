@@ -58,10 +58,11 @@ import type {
   BrandRow,
   SurveyresponseRow,
 } from '../db/types';
-import { resolveCanonicalOrigin } from './canonical-origin';
+import {
+  resolveCanonicalOrigin,
+  storefrontUrl,
+} from '../common/storefront-url';
 import { withShopOrderNumber } from '../orders/order-number';
-
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 // Meta descriptions render best under ~160 characters (Google truncates
 // around there) — cuts at the last whole word rather than mid-word.
@@ -1779,8 +1780,12 @@ export class PublicService {
         orderId: order.id,
         amount: remainderTotal,
         currency: shop.currency,
-        successUrl: `${STOREFRONT_URL}/${shopSlug}/orders/${order.id}?paid=1`,
-        cancelUrl: `${STOREFRONT_URL}/${shopSlug}/checkout?orderId=${order.id}`,
+        // Built from THIS shop's own public host, not a platform-wide base
+        // URL - see common/storefront-url.ts. The slug is deliberately absent
+        // from the path: on a real host proxy.ts prepends it, so including it
+        // here produced a 404 on every gateway return.
+        successUrl: storefrontUrl(shop, `/orders/${order.id}?paid=1`),
+        cancelUrl: storefrontUrl(shop, `/checkout?orderId=${order.id}`),
         credentials,
       });
       // Remembered so a payment whose webhook never arrives can still be

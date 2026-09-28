@@ -734,3 +734,16 @@ export const EMIRATES = [
   "Ras Al Khaimah",
   "Fujairah",
 ] as const;
+
+// What the /pay page renders before the customer commits. Comes from the
+// READ-ONLY GET /pay/:token/summary - deliberately not GET /pay/:token, which
+// mints a gateway checkout session as a side effect.
+export interface PaymentLinkSummary {
+  shopOrderNumber: number;
+  total: string;
+  currency: string;
+  shopName: string;
+  alreadyPaid: boolean;
+  expired: boolean;
+  expiresAt: string | null;
+}

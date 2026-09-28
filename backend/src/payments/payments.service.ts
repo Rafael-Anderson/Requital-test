@@ -18,11 +18,15 @@ import { OrdersService } from '../orders/orders.service';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { createLogger } from '../common/logging/logger';
 import type { WebhookResult } from './payment-provider.interface';
+import {
+  storefrontUrl,
+  type ShopUrlFields,
+} from '../common/storefront-url';
+import { trimDecimal } from '../database/decimal.util';
 
 const logger = createLogger('PaymentsService');
 
 const LINK_EXPIRY_DAYS = 3;
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 @Injectable()
 export class PaymentsService {
@@ -45,7 +49,15 @@ export class PaymentsService {
       params.push(outletId);
     }
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT * FROM \`order\` WHERE ${conditions.join(' AND ')}`,
+      // The shop is joined purely to build the link from its own public host
+      // (see common/storefront-url.ts); `conditions` are all on `order`, so
+      // they are qualified with o. here.
+      `SELECT o.*, s.subdomain AS shopSubdomain,
+              s.customDomain AS shopCustomDomain,
+              s.customDomainStatus AS shopCustomDomainStatus,
+              s.domainType AS shopDomainType
+         FROM \`order\` o JOIN shop s ON s.id = o.shopId
+        WHERE ${conditions.map((c) => `o.${c}`).join(' AND ')}`,
       params,
     );
     const order = rows[0];
@@ -80,14 +92,55 @@ export class PaymentsService {
       [token, expiresAt, orderId],
     );
 
-    return { url: `${STOREFRONT_URL}/pay/${token}`, token, expiresAt };
+    return {
+      url: storefrontUrl(shopUrlFieldsFrom(order), `/pay?token=${token}`),
+      token,
+      expiresAt,
+    };
+  }
+
+  // What the /pay page renders. READ-ONLY, deliberately.
+  //
+  // getCheckoutSession below MINTS a gateway checkout session and writes
+  // paymentSessionId on every call, so a page that called it just to display
+  // "Order #12 - 199.00 AED" would create a live session per render and per
+  // refresh. This returns the same decision (payable / already paid / expired)
+  // plus enough to render, and touches nothing.
+  async getPaymentLinkSummary(token: string) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT o.shopOrderNumber, o.total, o.currency, o.paymentStatus,
+              o.paymentLinkExpiresAt, s.name AS shopName, s.displayName AS shopDisplayName
+         FROM \`order\` o JOIN shop s ON s.id = o.shopId
+        WHERE o.paymentLinkToken = ?`,
+      [token],
+    );
+    const order = rows[0];
+    if (!order) {
+      throw new NotFoundException('Payment link not found');
+    }
+    const expiresAt = order.paymentLinkExpiresAt as Date | null;
+    return {
+      shopOrderNumber: order.shopOrderNumber as number,
+      total: trimDecimal(order.total as string),
+      currency: order.currency as string,
+      shopName: (order.shopDisplayName ?? order.shopName) as string,
+      alreadyPaid: order.paymentStatus === 'paid',
+      // Expiry is reported rather than thrown so the page can render a proper
+      // "this link expired" state instead of a bare 410.
+      expired: !expiresAt || expiresAt < new Date(),
+      expiresAt,
+    };
   }
 
   // Public (token-authenticated, not shop-scoped) — the token is the
   // credential a customer holds, standing in for a merchant session.
   async getCheckoutSession(token: string) {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT o.*, s.id AS shopRowId, s.paymentGateway AS shopPaymentGateway, s.currency AS shopCurrency
+      `SELECT o.*, s.id AS shopRowId, s.paymentGateway AS shopPaymentGateway,
+              s.currency AS shopCurrency, s.subdomain AS shopSubdomain,
+              s.customDomain AS shopCustomDomain,
+              s.customDomainStatus AS shopCustomDomainStatus,
+              s.domainType AS shopDomainType
        FROM \`order\` o JOIN shop s ON s.id = o.shopId
        WHERE o.paymentLinkToken = ?`,
       [token],
@@ -117,8 +170,11 @@ export class PaymentsService {
       orderId: order.id as number,
       amount: Number(order.total),
       currency: order.shopCurrency as string,
-      successUrl: `${STOREFRONT_URL}/pay/${token}/success`,
-      cancelUrl: `${STOREFRONT_URL}/pay/${token}`,
+      successUrl: storefrontUrl(
+        shopUrlFieldsFrom(order),
+        `/pay/success?token=${token}`,
+      ),
+      cancelUrl: storefrontUrl(shopUrlFieldsFrom(order), `/pay?token=${token}`),
       credentials,
     });
     // Same reason as the storefront path: without this, a payment-link order
@@ -379,4 +435,15 @@ export class PaymentsService {
       });
     }
   }
+}
+
+// Both methods above join the shop only for its public-host fields; this keeps
+// the aliasing in one place.
+function shopUrlFieldsFrom(row: RowDataPacket): ShopUrlFields {
+  return {
+    subdomain: row.shopSubdomain as string,
+    domainType: row.shopDomainType as string | null,
+    customDomain: row.shopCustomDomain as string | null,
+    customDomainStatus: row.shopCustomDomainStatus as string | null,
+  };
 }

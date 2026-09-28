@@ -9,8 +9,8 @@ import type { NotifysubscriptionRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
 import { escapeHtml } from '../common/email';
 import { SubscribeDto } from './dto/subscribe.dto';
+import { storefrontUrl } from '../common/storefront-url';
 
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 const RATE_LIMIT_PER_HOUR = 3;
 const NOTIFY_CHUNK_SIZE = 50;
 
@@ -104,7 +104,10 @@ export class NotifySubscriptionsService {
     variantId?: number | null,
   ) {
     const productRows = await this.db.query<RowDataPacket[]>(
-      `SELECT p.id, p.name, p.thumbnail, p.slug, s.subdomain AS shopSubdomain, s.name AS shopName
+      `SELECT p.id, p.name, p.thumbnail, p.slug, s.subdomain AS shopSubdomain, s.name AS shopName,
+              s.customDomain AS shopCustomDomain,
+              s.customDomainStatus AS shopCustomDomainStatus,
+              s.domainType AS shopDomainType
        FROM product p JOIN shop s ON s.id = p.shopId
        WHERE p.id = ?`,
       [productId],
@@ -119,13 +122,25 @@ export class NotifySubscriptionsService {
     );
     if (subscriptions.length === 0) return;
 
-    const productUrl = `${STOREFRONT_URL}/${product.shopSubdomain as string}/products/${product.slug as string}`;
+    const shopUrlFields = {
+      subdomain: product.shopSubdomain as string,
+      domainType: product.shopDomainType as string | null,
+      customDomain: product.shopCustomDomain as string | null,
+      customDomainStatus: product.shopCustomDomainStatus as string | null,
+    };
+    const productUrl = storefrontUrl(
+      shopUrlFields,
+      `/products/${product.slug as string}`,
+    );
 
     for (let i = 0; i < subscriptions.length; i += NOTIFY_CHUNK_SIZE) {
       const chunk = subscriptions.slice(i, i + NOTIFY_CHUNK_SIZE);
       await Promise.allSettled(
         chunk.map(async (sub) => {
-          const unsubscribeUrl = `${STOREFRONT_URL}/${product.shopSubdomain as string}/unsubscribe-notify?email=${encodeURIComponent(sub.email)}&productId=${productId}`;
+          const unsubscribeUrl = storefrontUrl(
+            shopUrlFields,
+            `/unsubscribe-notify?email=${encodeURIComponent(sub.email)}&productId=${productId}`,
+          );
           const productName = product.name as string;
           const shopName = product.shopName as string;
           const backInStockHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">

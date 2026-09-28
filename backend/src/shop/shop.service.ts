@@ -22,12 +22,14 @@ import { normalizeCustomDomain } from '../common/normalize';
 import { DomainsService } from '../domains/domains.service';
 import type { TenantContext } from '../common/tenant-context';
 
-// Same env-driven storefront base URL every other customer-facing link in
-// this codebase resolves from (see e.g. payments.service.ts's own
-// STOREFRONT_URL) — the root domain a shop's own subdomain hangs off of,
-// not the full base URL, since a subdomain-type shop's storefrontUrl is
-// {subdomain}.{root}, not {STOREFRONT_URL}/{subdomain} like the existing
-// path-based storefront links.
+// The root domain a shop's own subdomain hangs off of — NOT a full base URL,
+// since a subdomain-type shop's address is {subdomain}.{root}.
+//
+// The path-based {STOREFRONT_URL}/{subdomain} shape this comment used to
+// contrast against is gone: every customer-facing link now resolves through
+// common/storefront-url.ts, which reads this same env var. This declaration
+// and the one in domains.service.ts remain separate copies deliberately
+// (see that file's own note).
 const STOREFRONT_ROOT_DOMAIN =
   process.env.STOREFRONT_ROOT_DOMAIN ?? 'requital.io';
 

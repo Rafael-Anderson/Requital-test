@@ -38,6 +38,16 @@ export class PaymentLinkController {
 export class PayController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
+  // Render-only: what the /pay page shows before the customer commits. Kept a
+  // separate route from :token below precisely because that one has side
+  // effects (it mints a gateway session), and a page must be able to display an
+  // amount without creating one.
+  @Public()
+  @Get(':token/summary')
+  getPaymentLinkSummary(@Param('token') token: string) {
+    return this.paymentsService.getPaymentLinkSummary(token);
+  }
+
   @Public()
   @Get(':token')
   getCheckoutSession(@Param('token') token: string) {

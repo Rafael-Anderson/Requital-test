@@ -26,6 +26,7 @@ import type {
   SurveyLookupResult,
   ValidateDiscountResult,
   ValidateGiftCardResult,
+  PaymentLinkSummary,
 } from "./types";
 import type { ThemeConfig } from "./theme-config-types";
 
@@ -610,4 +611,19 @@ export function deleteMyAddress(shopSlug: string, addressId: string) {
   return authedFetch<{ id: string; deleted: boolean }>(shopSlug, `/public/${shopSlug}/account/addresses/${addressId}`, {
     method: "DELETE",
   });
+}
+
+// The payment-link pages. getPaymentLinkSummary is safe to call on mount;
+// startPaymentLinkCheckout is NOT - it mints a gateway session server-side, so
+// it is only called from an explicit "Pay now" action.
+export function getPaymentLinkSummary(token: string) {
+  return get<PaymentLinkSummary>(
+    `/pay/${encodeURIComponent(token)}/summary`,
+  );
+}
+
+export function startPaymentLinkCheckout(token: string) {
+  return get<{ alreadyPaid: boolean; checkoutUrl?: string }>(
+    `/pay/${encodeURIComponent(token)}`,
+  );
 }
