@@ -383,6 +383,14 @@ export class UpdateShopDto {
   @IsBoolean()
   taxInclusive?: boolean;
 
+  // Whether the delivery fee itself is taxable. false is what order-pricing.ts
+  // has always done (tax on the goods subtotal only) - this is the switch its
+  // own header comment asked for. Read by the per-line computation (B2), so
+  // toggling it changes no total yet.
+  @IsOptional()
+  @IsBoolean()
+  taxOnDelivery?: boolean;
+
   // paymentGateway is deliberately NOT settable here anymore — it moved to
   // PATCH /payment-settings/:provider, the only place that enforces the
   // nomod/stripe mutual-exclusivity rule. Leaving it reachable through this

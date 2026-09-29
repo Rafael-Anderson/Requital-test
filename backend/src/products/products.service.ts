@@ -30,6 +30,7 @@ import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 import { DiscountsService } from '../discounts/discounts.service';
+import { TaxClassesService } from '../tax-classes/tax-classes.service';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { ProductIngredientInput } from './dto/product-ingredient-input.dto';
 import {
@@ -135,6 +136,7 @@ interface AssembledProduct {
   usesIngredients: boolean;
   brandId: number | null;
   brand: { id: number; name: string; logoUrl: string | null } | null;
+  taxClassId: number | null;
   productcollection: { collection: RowDataPacket }[];
   producttag: { tag: { name: string } }[];
   productimage: { id: number; url: string; order: number }[];
@@ -199,6 +201,7 @@ export class ProductsService {
     private readonly branchRolesService: BranchRolesService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
     private readonly discountsService: DiscountsService,
+    private readonly taxClassesService: TaxClassesService,
   ) {}
 
   async findAll(ctx: TenantContext, requestedOutletId?: number) {
@@ -260,6 +263,9 @@ export class ProductsService {
     if (dto.brandId != null) {
       await this.assertBrandBelongsToShop(ctx, dto.brandId);
     }
+    if (dto.taxClassId != null) {
+      await this.taxClassesService.assertOwned(ctx.shopId, dto.taxClassId);
+    }
     // Inferred, not just defaulted to false, when the caller doesn't touch
     // this field at all: submitting a non-empty `ingredients` array without
     // ever mentioning `usesIngredients` is exactly what every pre-Phase-A
@@ -305,8 +311,8 @@ export class ProductsService {
             isCheckoutAddon, showVariants, showAttributes, showFaqs, usesIngredients,
             vendor, productType, physicalProduct, weight, weightUnit, dimensions,
             isGiftCard, giftCardDenominations, giftCardCustomAmountMin, giftCardCustomAmountMax,
-            additionalInfo, brandId
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            additionalInfo, brandId, taxClassId
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
@@ -348,6 +354,7 @@ export class ProductsService {
             dto.giftCardCustomAmountMax ?? null,
             dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : null,
             dto.brandId ?? null,
+            dto.taxClassId ?? null,
           ],
         );
         const newId = (result as { insertId: number }).insertId;
@@ -477,8 +484,8 @@ export class ProductsService {
             compareAtPrice, costPrice, sku, barcode, status, trackInventory,
             continueSellingOutOfStock, chargeTax, isCheckoutAddon, showVariants,
             showAttributes, showFaqs, vendor, productType, physicalProduct, weight,
-            weightUnit, dimensions, slug, metaTitle, metaDescription, brandId
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            weightUnit, dimensions, slug, metaTitle, metaDescription, brandId, taxClassId
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             newName,
@@ -509,6 +516,9 @@ export class ProductsService {
             original.metaTitle,
             original.metaDescription,
             original.brandId ?? null,
+            // Inherited, like brandId and chargeTax: a duplicate is the same
+            // goods, so it carries the same VAT treatment.
+            original.taxClassId ?? null,
           ],
         );
         const newProduct = {
@@ -645,6 +655,9 @@ export class ProductsService {
     }
     if (dto.brandId != null) {
       await this.assertBrandBelongsToShop(ctx, dto.brandId);
+    }
+    if (dto.taxClassId != null) {
+      await this.taxClassesService.assertOwned(ctx.shopId, dto.taxClassId);
     }
     this.assertDeliveryTimeOverrideFields({
       estimatedDeliveryTimeFrom: dto.estimatedDeliveryTimeFrom,
@@ -816,6 +829,7 @@ export class ProductsService {
           giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
           additionalInfo: dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : undefined,
           brandId: dto.brandId,
+          taxClassId: dto.taxClassId,
         });
         if (set) {
           await conn.query(`UPDATE product SET ${set.setClause} WHERE id = ?`, [
@@ -2278,6 +2292,14 @@ export class ProductsService {
     const rawRows = parseCsv(file.buffer.toString('utf-8'));
     const { results, groups } = await this.classifyImportRows(ctx, rawRows);
 
+    // The CSV carries `chargeTax`, so an imported row expresses a real VAT
+    // intent - and leaving taxClassId NULL would resolve it to the shop's
+    // DEFAULT (standard) class once B2 computes per line, i.e. charging tax on a
+    // row the merchant explicitly marked chargeTax=false. Mapped here the same
+    // way migration 20260929120000 backfilled the existing catalog. Resolved
+    // once per import rather than per row.
+    const importTaxClassIds = await this.resolveChargeTaxClassIds(ctx.shopId);
+
     let created = 0;
     let updated = 0;
     const usedSlugsThisBatch = new Set<string>();
@@ -2309,8 +2331,8 @@ export class ProductsService {
             group.data.tagNames ?? [],
           );
           const [productResult] = await conn.query(
-            `INSERT INTO product (shopId, name, price, compareAtPrice, costPrice, thumbnail, sku, barcode, description, vendor, productType, slug, status, trackInventory, chargeTax)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO product (shopId, name, price, compareAtPrice, costPrice, thumbnail, sku, barcode, description, vendor, productType, slug, status, trackInventory, chargeTax, taxClassId)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               ctx.shopId,
               group.data.name,
@@ -2327,6 +2349,9 @@ export class ProductsService {
               group.data.status ?? 'Available',
               group.data.trackInventory ?? false,
               group.data.chargeTax ?? true,
+              (group.data.chargeTax ?? true)
+                ? importTaxClassIds.standard
+                : importTaxClassIds.zero,
             ],
           );
           const newProduct = {
@@ -2857,6 +2882,30 @@ export class ProductsService {
         'estimatedDeliveryTimeFrom/To/Unit must all be set together, or all left unset, to override the shop default',
       );
     }
+  }
+
+  // Maps the CSV contract's `chargeTax` boolean onto this shop's tax classes,
+  // the same mapping migration 20260929120000 used for the existing catalog:
+  // true -> the shop's default (standard) class, false -> its zero-rated one.
+  //
+  // Returns null for either side the shop genuinely lacks (a shop whose classes
+  // were deleted), which leaves taxClassId NULL and lets B2's shop-default
+  // fallback handle it - never an invented class and never a wrong one.
+  private async resolveChargeTaxClassIds(
+    shopId: number,
+  ): Promise<{ standard: number | null; zero: number | null }> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, type, isDefault FROM taxclass WHERE shopId = ?`,
+      [shopId],
+    );
+    const zero = rows.find((r) => r.type === 'zero');
+    const standard =
+      rows.find((r) => r.isDefault === true) ??
+      rows.find((r) => r.type === 'standard');
+    return {
+      standard: standard ? (standard.id as number) : null,
+      zero: zero ? (zero.id as number) : null,
+    };
   }
 
   private async assertBrandBelongsToShop(ctx: TenantContext, brandId: number) {

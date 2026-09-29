@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import Combobox from "@/components/ui/Combobox";
 import MultiCombobox from "@/components/ui/MultiCombobox";
+import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
 import Thumbnail from "@/components/ui/Thumbnail";
 import VariantsSection from "@/components/VariantsSection";
@@ -144,6 +145,25 @@ export default function ProductFormStepOrganization({
             onCreateNew={() => openCreate("brand")}
             createLabel="Create new brand"
           />
+        </div>
+        <div>
+          <Select
+            label="Tax class"
+            value={form.taxClassId === null ? "" : String(form.taxClassId)}
+            onChange={(e) =>
+              form.setTaxClassId(e.target.value ? Number(e.target.value) : null)
+            }
+            tooltip="Controls the VAT treatment for this product. Leave on the shop default unless this item is zero rated or exempt."
+          >
+            {/* An empty value is "use the shop default", not "no tax". */}
+            <option value="">Shop default</option>
+            {form.taxClasses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.type === "standard" ? ` (${Number(c.rate)}%)` : ""}
+              </option>
+            ))}
+          </Select>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Type" value={form.productType} onChange={(e) => form.setProductType(e.target.value)} />

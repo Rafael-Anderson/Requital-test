@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/settings/business/information", label: "Business Information" },
   { href: "/settings/business/domain", label: "Domain" },
   { href: "/settings/business/store-configuration", label: "Store Configuration" },
+  { href: "/settings/business/tax-classes", label: "Tax Classes" },
   { href: "/settings/business/online-presence", label: "Online Presence" },
   { href: "/settings/business/seo", label: "SEO" },
   { href: "/settings/business/policy-pages", label: "Policy Pages" },

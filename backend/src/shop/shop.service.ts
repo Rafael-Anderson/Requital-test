@@ -256,6 +256,7 @@ export class ShopService {
       allowNextDayOrders: dto.allowNextDayOrders,
       taxRate: dto.taxRate,
       taxInclusive: dto.taxInclusive,
+      taxOnDelivery: dto.taxOnDelivery,
     });
     if (set) {
       await this.db.execute(`UPDATE shop SET ${set.setClause} WHERE id = ?`, [

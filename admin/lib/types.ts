@@ -404,6 +404,44 @@ export interface Brand {
   updatedAt: string;
 }
 
+// Tax classes (see backend tax-classes/). `rate` is a percentage string from
+// mysql2's DECIMAL(5,2), not money. `type` distinguishes zero from exempt: both
+// are 0% but they are not interchangeable on a VAT return.
+export interface TaxClass {
+  id: number;
+  shopId: number;
+  name: string;
+  rate: string;
+  type: TaxClassType;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const TAX_CLASS_TYPES = [
+  "standard",
+  "zero",
+  "exempt",
+  "out_of_scope",
+] as const;
+
+export type TaxClassType = (typeof TAX_CLASS_TYPES)[number];
+
+// Merchant-facing wording. No em dashes, per the admin copy rule.
+export const TAX_CLASS_TYPE_LABELS: Record<TaxClassType, string> = {
+  standard: "Standard rate",
+  zero: "Zero rated (0%)",
+  exempt: "Exempt",
+  out_of_scope: "Out of scope",
+};
+
+export interface TaxClassInput {
+  name: string;
+  rate: number;
+  type: TaxClassType;
+  isDefault?: boolean;
+}
+
 export interface BrandInput {
   name: string;
   logoUrl?: string | null;
@@ -602,6 +640,9 @@ export interface ProductInput {
   productType?: string;
   // Optional brand. `null` clears an existing assignment on update.
   brandId?: number | null;
+  // Optional tax class. `null` clears it, which means "no class of its own" and
+  // falls back to the shop default, not "no tax".
+  taxClassId?: number | null;
   physicalProduct?: boolean;
   weight?: number;
   weightUnit?: WeightUnit;
@@ -706,6 +747,8 @@ export interface Product {
   // `brand` is the resolved row, null when unset.
   brandId: number | null;
   brand: { id: number; name: string; logoUrl: string | null } | null;
+  // null means the shop's default class applies, not that the product is untaxed.
+  taxClassId: number | null;
   physicalProduct: boolean;
   weight: string | null;
   weightUnit: WeightUnit;
@@ -1040,6 +1083,9 @@ export interface Shop {
   allowNextDayOrders: boolean;
   taxRate: string;
   taxInclusive: boolean;
+  // Whether the delivery fee is taxable. false is the behaviour the backend has
+  // always had; the per-line computation that reads it ships separately.
+  taxOnDelivery: boolean;
 }
 
 // Backs the Publish toggle's disabled/tooltip state — see

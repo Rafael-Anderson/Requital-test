@@ -53,6 +53,7 @@ export default function OutletBasicInfoTab({
   const [allowNextDayOrders, setAllowNextDayOrders] = useState(true);
   const [taxRate, setTaxRate] = useState("0");
   const [taxInclusive, setTaxInclusive] = useState(true);
+  const [taxOnDelivery, setTaxOnDelivery] = useState(false);
   const [savingOrderSettings, setSavingOrderSettings] = useState(false);
   // The shop-wide payload as loaded, for the "this changes every outlet"
   // confirm (lib/shop-wide-fields.ts). Re-baselined after a successful save
@@ -70,11 +71,13 @@ export default function OutletBasicInfoTab({
         setAllowNextDayOrders(s.allowNextDayOrders);
         setTaxRate(s.taxRate);
         setTaxInclusive(s.taxInclusive);
+        setTaxOnDelivery(s.taxOnDelivery);
         setShopBaseline({
           allowSameDayOrders: s.allowSameDayOrders,
           allowNextDayOrders: s.allowNextDayOrders,
           taxRate: Number(s.taxRate) || 0,
           taxInclusive: s.taxInclusive,
+          taxOnDelivery: s.taxOnDelivery,
         });
       })
       .catch(() => {});
@@ -111,6 +114,7 @@ export default function OutletBasicInfoTab({
       allowNextDayOrders,
       taxRate: Number(taxRate) || 0,
       taxInclusive,
+      taxOnDelivery,
     };
   }
 
@@ -245,6 +249,13 @@ export default function OutletBasicInfoTab({
                   { value: "exclusive", label: "Exclusive" },
                   { value: "inclusive", label: "Inclusive" },
                 ]}
+              />
+            </Field>
+            <Field label="Tax on delivery fee">
+              <Toggle
+                checked={taxOnDelivery}
+                onChange={setTaxOnDelivery}
+                tooltip="Off applies tax to the goods only, which is how orders have always been priced here."
               />
             </Field>
           </div>
