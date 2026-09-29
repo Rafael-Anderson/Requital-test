@@ -37,6 +37,7 @@ export const SHOP_WIDE_FIELD_LABELS: Record<string, string> = {
   allowNextDayOrders: "Next-day orders",
   taxRate: "Tax Rate (%)",
   taxInclusive: "Tax Type",
+  taxOnDelivery: "Tax on delivery fee",
 
   // OutletDeliveryTab > "Delivery Settings"
   deliveryPaymentCardOnline: "Delivery payment methods",

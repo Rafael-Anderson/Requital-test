@@ -7,6 +7,7 @@ import {
   duplicateProduct,
   getShop,
   listBrands,
+  listTaxClasses,
   listCollections,
   listIngredientCategories,
   listIngredients,
@@ -18,6 +19,7 @@ import { commitStockChanges } from "@/lib/stock";
 import {
   PRODUCT_STATUS_LABELS,
   type Brand,
+  type TaxClass,
   type Collection,
   type Ingredient,
   type IngredientCategory,
@@ -122,6 +124,11 @@ export function useProductForm(initialProduct: Product | undefined) {
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandId, setBrandId] = useState<number | null>(product?.brand?.id ?? null);
+  const [taxClasses, setTaxClasses] = useState<TaxClass[]>([]);
+  // null means "use the shop default", which is a real choice, not an empty one.
+  const [taxClassId, setTaxClassId] = useState<number | null>(
+    product?.taxClassId ?? null,
+  );
   const [productEditorMode, setProductEditorMode] = useState<"simple" | "advanced">("simple");
   const [showVariants, setShowVariants] = useState(product?.showVariants ?? false);
   const [showAttributes, setShowAttributes] = useState(product?.showAttributes ?? false);
@@ -154,6 +161,9 @@ export function useProductForm(initialProduct: Product | undefined) {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load collections"));
     listBrands()
       .then(setBrands)
+      .catch(() => {});
+    listTaxClasses()
+      .then(setTaxClasses)
       .catch(() => {});
     getShop()
       .then((s) => {
@@ -323,6 +333,7 @@ export function useProductForm(initialProduct: Product | undefined) {
         vendor: vendor || undefined,
         productType: productType || undefined,
         brandId,
+        taxClassId,
         tags,
         collectionIds: [...collectionIds],
         slug: slug || undefined,
@@ -413,6 +424,8 @@ export function useProductForm(initialProduct: Product | undefined) {
     collections, setCollections,
     brands, setBrands,
     brandId, setBrandId,
+    taxClasses, setTaxClasses,
+    taxClassId, setTaxClassId,
     productEditorMode,
     showVariants, setShowVariants,
     showAttributes, setShowAttributes,

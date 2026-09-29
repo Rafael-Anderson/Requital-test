@@ -247,6 +247,14 @@ export class UpdateProductDto {
   @IsPositive()
   brandId?: number | null;
 
+  // Optional tax class (see tax-classes/ module). `null` clears it, which is a
+  // real state - the product then falls back to the shop's default class - and
+  // omitted leaves it untouched. Validated for shop ownership in ProductsService.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  taxClassId?: number | null;
+
   // If provided, replaces the full tag set.
   @IsOptional()
   @IsArray()

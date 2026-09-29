@@ -118,6 +118,19 @@ export class AuthService {
           shopId,
           'Main Branch',
         ]);
+
+        // ...and with the same two tax classes migration 20260929120000 gave
+        // every existing shop. Without this a shop created AFTER that migration
+        // would have none, so a product with no class of its own would have no
+        // default to fall back to - the migration seeded history, this seeds the
+        // future. `rate` reads the shop's own column default (0), which is what
+        // a brand-new shop's taxRate is.
+        await conn.query(
+          `INSERT INTO taxclass (shopId, name, rate, type, isDefault, updatedAt)
+           VALUES (?, 'Standard', (SELECT taxRate FROM shop WHERE id = ?), 'standard', TRUE, ?),
+                  (?, 'Zero rated', 0, 'zero', FALSE, ?)`,
+          [shopId, shopId, new Date(), shopId, new Date()],
+        );
         const [userResult] = await conn.query(
           `INSERT INTO user (shopId, name, email, phone, passwordHash, role)
            VALUES (?, ?, ?, ?, ?, ?)`,

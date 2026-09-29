@@ -111,6 +111,23 @@ describe('Gateway return URLs are built per shop (e2e)', () => {
   });
 
   afterAll(async () => {
+    // Leave no PaymentReconciliationService candidates behind. Every order this
+    // suite places is unpaid with a paymentSessionId set, which is EXACTLY the
+    // shape that sweep looks for (`paymentStatus='unpaid' AND paymentSessionId
+    // IS NOT NULL`), and that query is not shop-scoped: it takes the 50 oldest
+    // candidates platform-wide per tick. Against a long-lived dev database
+    // these rows accumulate across runs until they fill that batch and starve
+    // payment-reconciliation.e2e-spec.ts of its own order, which is how this
+    // was found (its two tests failed with the sweep visibly chewing through
+    // ids from earlier runs). CI never saw it, because a fresh database plus
+    // the sweep's 20-minute age floor means nothing this suite creates is ever
+    // eligible inside one run.
+    await db.execute(
+      `UPDATE \`order\` o JOIN shop s ON s.id = o.shopId
+          SET o.paymentSessionId = NULL, o.paymentSessionGateway = NULL
+        WHERE s.subdomain LIKE ?`,
+      [`ret-%-${runId}`],
+    );
     await app.close();
     if (ORIGINAL_STOREFRONT_URL !== undefined) {
       process.env.STOREFRONT_URL = ORIGINAL_STOREFRONT_URL;

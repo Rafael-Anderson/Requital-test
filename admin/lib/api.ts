@@ -20,6 +20,8 @@ import type {
   Collection,
   Brand,
   BrandInput,
+  TaxClass,
+  TaxClassInput,
   Template,
   TemplateRules,
   TemplateType,
@@ -1391,6 +1393,33 @@ export function deleteBrand(id: number) {
   return apiFetch<{ id: number; deleted: boolean }>(`/brands/${id}`, {
     method: "DELETE",
   });
+}
+
+export function listTaxClasses() {
+  return apiFetch<TaxClass[]>("/tax-classes");
+}
+
+export function createTaxClass(data: TaxClassInput) {
+  return apiFetch<TaxClass>("/tax-classes", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateTaxClass(id: number, data: Partial<TaxClassInput>) {
+  return apiFetch<TaxClass>(`/tax-classes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// Returns how many products were unassigned, which is the one consequence the
+// list view cannot show.
+export function deleteTaxClass(id: number) {
+  return apiFetch<{ id: number; deleted: boolean; productsUnassigned: number }>(
+    `/tax-classes/${id}`,
+    { method: "DELETE" },
+  );
 }
 
 export function listTemplates() {

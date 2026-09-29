@@ -1376,7 +1376,7 @@ the single biggest addressable-market limiter in the document.
 | **I18N-2** | **Content translation** — per-locale product name/description, collection, policy page, theme section text | **L** | feature | TABLE STAKES | I18N-1 | translation tables, every public read, an admin translation editor | **YES** |
 | I18N-3 | Locale switcher on the storefront with `hreflang`, per-locale sitemaps and locale-prefixed URLs | M | feature | TABLE STAKES | I18N-1/2 | routing, SEO | **YES** |
 | **I18N-4** | **Multi-currency** — order currency column, per-shop base currency, presentment currencies with rates, **per-currency minor units (KWD/BHD/OMR are three-decimal)** | **XL** | infra | TABLE STAKES | §6-D | every money column, every provider, every display | **DECIDED (D6): true multi-currency, committed. Moves to Phase 2a.** |
-| **I18N-5** | **Tax classes + per-product tax behaviour** (wire `product.chargeTax`, add zero-rated/exempt, tax on delivery toggle) | **M** | infra | TABLE STAKES | none | `computeOrderTotals`, product form, invoice | **YES — early** |
+| **I18N-5** | **Tax classes + per-product tax behaviour** (wire `product.chargeTax`, add zero-rated/exempt, tax on delivery toggle) — **IN PROGRESS: schema + assignment landed 2026-09-29 (Phase 2b/B1); the per-line computation is B2** | **M** | infra | TABLE STAKES | none | `computeOrderTotals`, product form, invoice | **YES — early** |
 | I18N-6 | Multi-country address model replacing the hardcoded `EMIRATES` const | M | infra | TABLE STAKES | §6-E | `order.emirate`, checkout, zones, reports | **YES** |
 | **I18N-7** | **UAE FTA e-invoicing** (Peppol-based, phased mandate) — structured invoice, accredited service provider, archive | **XL** | integration | TABLE STAKES (becoming mandatory) | I18N-5, INV-6 | invoices module, a new ASP integration | **YES** (see §9) |
 | I18N-8 | ZATCA Phase 2 e-invoicing for Saudi (QR, hash chain, cryptographic stamp, clearance) | XL | integration | TABLE STAKES for KSA | I18N-4, I18N-6 | invoices module | LATER |
@@ -1438,6 +1438,24 @@ VAT invoice needs and what I18N-7's e-invoicing will require.
 
 `product.chargeTax` maps cleanly onto this: unticked ⇒ the zero/exempt class. So the
 dead column becomes the migration source rather than being deleted.
+
+**Status (2026-09-29).** B1 has landed: `taxclass`, `product.taxClassId`,
+`shop.taxOnDelivery`, the `chargeTax`-driven backfill, CRUD + assignment, and the same
+two classes seeded at signup. Two corrections to this section as written:
+
+- **`chargeTax` is NOT a dead column.** It is part of the CSV import/export contract
+  (`products-import.ts`'s header, `export-definitions.ts`) with a round-trip e2e asserting
+  it survives, and it is inherited on duplicate. It was the backfill source and stays;
+  dropping it is a separate contract change. The CSV import path now maps it onto a class
+  on every new row, so an imported `chargeTax=false` row is not silently taxed.
+- **`type` distinguishes `zero` from `exempt` for reporting, not for pricing.** Both are
+  0%; only the return treatment differs. `TaxClassesService` refuses a non-zero rate on
+  either, so the two cannot diverge in what they charge.
+
+Still open, and explicitly B2: `computeOrderTotals` is untouched and still applies one
+`shop.taxRate` to the whole subtotal, `shop.taxOnDelivery` has no reader yet, and
+`orderitem` has no `taxRate`/`taxAmount` capture. Assigning a class today changes no
+price, which `tax-classes.e2e-spec.ts` asserts directly.
 
 ### I18N-7 — UAE e-invoicing, in detail
 

@@ -238,6 +238,11 @@ export interface ProductRow {
   continueSellingOutOfStock: boolean;
   usesIngredients: boolean;
   chargeTax: boolean;
+  // Tax class assignment (migration 20260929120000). NULL is a real state -
+  // "no class of its own" - and the per-line computation falls back to the
+  // shop default. `chargeTax` above was the backfill source and remains part of
+  // the CSV import/export contract; it is NOT the pricing input.
+  taxClassId: number | null;
   isCheckoutAddon: boolean;
   // "New" badge (stakeholder #6). isNew: merchant flag. newUntil: read via
   // `DATE_FORMAT(newUntil, '%Y-%m-%d') AS newUntil` in every SELECT that
@@ -479,6 +484,24 @@ export interface ShopRow {
   allowNextDayOrders: boolean;
   taxRate: string;
   taxInclusive: boolean;
+  // false preserves the behaviour order-pricing.ts has always had (tax on the
+  // goods subtotal only). Read by the per-line computation, not by B1.
+  taxOnDelivery: boolean;
+}
+
+export interface TaxclassRow {
+  id: number;
+  shopId: number;
+  name: string;
+  // A percentage (DECIMAL(5,2)), not money - deliberately not the
+  // DECIMAL(65,30) money convention. Arrives as a string from mysql2.
+  rate: string;
+  // 'standard' | 'zero' | 'exempt' | 'out_of_scope'. See TAX_CLASS_TYPES;
+  // zero and exempt are both 0% but are not interchangeable on a VAT return.
+  type: string;
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface PolicypageRow {

@@ -352,6 +352,18 @@ export class CreateProductDto {
   @IsPositive()
   brandId?: number;
 
+  // Optional tax class (see tax-classes/ module). Validated for shop ownership
+  // in ProductsService, same as brandId. Omitted or null means "no class of its
+  // own" - the per-line computation (B2) falls back to the shop's default class,
+  // so an unassigned product is never untaxed by accident.
+  //
+  // This does NOT replace `chargeTax`, which stays as part of the CSV
+  // import/export contract.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  taxClassId?: number;
+
   // Free-form tags, e.g. "roses", "boxes" (SRS FR-4.2, distinct from collection).
   @IsOptional()
   @IsArray()

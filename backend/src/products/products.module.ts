@@ -8,6 +8,7 @@ import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscr
 import { JobsModule } from '../jobs/jobs.module';
 import { StorageModule } from '../storage/storage.module';
 import { DiscountsModule } from '../discounts/discounts.module';
+import { TaxClassesModule } from '../tax-classes/tax-classes.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { DiscountsModule } from '../discounts/discounts.module';
     JobsModule,
     StorageModule,
     DiscountsModule,
+    TaxClassesModule,
   ],
   controllers: [ProductsController],
   providers: [ProductsService, LowStockDigestService],

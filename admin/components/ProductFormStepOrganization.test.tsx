@@ -43,6 +43,9 @@ function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
     brands: [],
     setBrands: vi.fn(),
     brandId: null,
+    taxClasses: [],
+    taxClassId: null,
+    setTaxClassId: vi.fn(),
     setBrandId: vi.fn(),
     images: [],
     setImages: vi.fn(),
@@ -67,11 +70,25 @@ function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
   } as unknown as ProductFormState;
 }
 
+// The Status control is deliberately a Combobox rather than a native <select>.
+// Scoped to that one control rather than asserting the whole step contains no
+// <select> at all: the Tax class picker IS a native Select, which is the
+// documented default for a short option list (Combobox is for long/searchable
+// ones), so a step-wide assertion would forbid the correct component.
+function statusPicker() {
+  const picker = screen
+    .getAllByRole("combobox")
+    .find((el) => el.textContent?.includes("Active"));
+  expect(picker).toBeDefined();
+  return picker!;
+}
+
 describe("ProductFormStepOrganization — Status picker", () => {
   it("renders the Status picker as a Combobox, not a native select", () => {
     renderStep(fakeForm());
-    expect(screen.getByRole("combobox")).toHaveTextContent("Active");
-    expect(document.querySelector("select")).not.toBeInTheDocument();
+    const picker = statusPicker();
+    expect(picker).toHaveTextContent("Active");
+    expect(picker.tagName).not.toBe("SELECT");
   });
 
   it("selecting a new status calls form.setStatus", async () => {
@@ -79,7 +96,7 @@ describe("ProductFormStepOrganization — Status picker", () => {
     const setStatus = vi.fn();
     renderStep(fakeForm({ setStatus }));
 
-    await user.click(screen.getByRole("combobox"));
+    await user.click(statusPicker());
     await user.click(await screen.findByRole("option", { name: "Draft" }));
 
     expect(setStatus).toHaveBeenCalledWith("Unavailable");
