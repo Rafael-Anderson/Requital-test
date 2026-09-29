@@ -14,8 +14,7 @@ import { UpdateBioLinkDto } from './dto/update-bio-link.dto';
 import { ReorderBioLinksDto } from './dto/reorder-bio-links.dto';
 import { UpdateBioPageConfigDto } from './dto/update-bio-page-config.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
-
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
+import { storefrontUrl } from '../common/storefront-url';
 
 const PLATFORM_LABELS: Record<string, string> = {
   instagram: 'Instagram',
@@ -396,6 +395,9 @@ export class BioLinksService {
       `SELECT bl.*, s.published AS shopPublished, s.subdomain AS shopSubdomain,
               s.socialLinks AS shopSocialLinks, s.whatsappCountryCode AS shopWhatsappCountryCode,
               s.whatsappNumber AS shopWhatsappNumber,
+              s.customDomain AS shopCustomDomain,
+              s.customDomainStatus AS shopCustomDomainStatus,
+              s.domainType AS shopDomainType,
               p.slug AS productSlug, p.status AS productStatus,
               c.id AS collectionRowId,
               t.slug AS templateSlug, t.isActive AS templateIsActive
@@ -416,7 +418,17 @@ export class BioLinksService {
       id,
     ]);
 
-    const base = `${STOREFRONT_URL}/${link.shopSubdomain as string}`;
+    // The shop's own public host. `base` is now an origin (no trailing slug),
+    // so the suffixes below are appended to it exactly as before.
+    const base = storefrontUrl(
+      {
+        subdomain: link.shopSubdomain as string,
+        domainType: link.shopDomainType as string | null,
+        customDomain: link.shopCustomDomain as string | null,
+        customDomainStatus: link.shopCustomDomainStatus as string | null,
+      },
+      '',
+    ).replace(/\/$/, '');
     switch (link.type as string) {
       case 'EXTERNAL_URL':
         return (link.url as string | null) ?? base;

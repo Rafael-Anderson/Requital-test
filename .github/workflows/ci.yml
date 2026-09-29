@@ -209,6 +209,11 @@ jobs:
       - name: No-console-log guardrail (structured logging)
         run: node tools/check-no-console-log.js
 
+      # Job name above is a pinned branch-protection context and is NOT
+      # renamed for this addition - adding a step is safe, renaming is not.
+      - name: Storefront-URL guardrail (per-shop customer links)
+        run: node tools/check-storefront-url.js
+
       - name: sendEmailStub bypass guardrail
         working-directory: backend
         run: npm test -- email-callsites --ci

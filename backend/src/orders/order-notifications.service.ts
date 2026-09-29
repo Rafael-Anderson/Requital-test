@@ -10,12 +10,12 @@ import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provid
 import { createLogger } from '../common/logging/logger';
 import { JobsService } from '../jobs/jobs.service';
 import { formatMoney } from '../common/money-format';
+import { storefrontUrl } from '../common/storefront-url';
 
 const logger = createLogger('OrderNotifications');
 
 // Same env-driven storefront base URL every other customer-facing email
 // link uses — see e.g. customer-auth.service.ts's reset-password link.
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 
 interface NotifiableOrder {
   id: number;
@@ -153,7 +153,9 @@ export class OrderNotificationsService {
   // re-evaluated" discipline as ingredientsConsumedAt (see schema.prisma).
   async notifySurveyRequest(shopId: number, order: NotifiableOrder) {
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT customerSurveyEnabled, notifyEmail, subdomain, name, displayName FROM shop WHERE id = ?`,
+      `SELECT customerSurveyEnabled, notifyEmail, subdomain, name, displayName,
+              customDomain, customDomainStatus, domainType
+         FROM shop WHERE id = ?`,
       [shopId],
     );
     const shop = shopRows[0];
@@ -172,7 +174,15 @@ export class OrderNotificationsService {
     );
 
     if (!shop.notifyEmail || !order.customerEmail) return;
-    const link = `${STOREFRONT_URL}/${shop.subdomain as string}/survey?token=${token}`;
+    const link = storefrontUrl(
+      {
+        subdomain: shop.subdomain as string,
+        domainType: shop.domainType as string | null,
+        customDomain: shop.customDomain as string | null,
+        customDomainStatus: shop.customDomainStatus as string | null,
+      },
+      `/survey?token=${token}`,
+    );
     const shopDisplayName = (shop.displayName as string | null) ?? (shop.name as string);
     const surveyHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">

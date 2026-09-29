@@ -650,6 +650,11 @@ describe('Bio Links (e2e)', () => {
       const res = await request(app.getHttpServer())
         .get(`/public/bio-links/${body<BioLinkRow>(link).id}/click`)
         .expect(302);
+      // The slug-in-path form is the DEV shape (common/storefront-url.ts only
+      // takes it when STOREFRONT_URL points at a local host, which it does in
+      // the test env). On a real host the same call emits
+      // https://<slug>.requital.io/templates/... with no slug in the path -
+      // see test/payment-return-urls.e2e-spec.ts for that branch.
       expect(res.headers.location).toBe(
         `http://localhost:3002/${shop.slug}/templates/click-target`,
       );

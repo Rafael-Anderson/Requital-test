@@ -10,8 +10,7 @@ import { generateOpaqueToken } from '../common/token-hash';
 import { escapeHtml } from '../common/email';
 import type { TenantContext } from '../common/tenant-context';
 import { CaptureAbandonedCartDto } from './dto/capture-abandoned-cart.dto';
-
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
+import { storefrontUrl } from '../common/storefront-url';
 
 export interface CartItemSnapshot {
   productId: number;
@@ -206,10 +205,20 @@ export class AbandonedCartsService {
     windowMinutes: number,
   ) {
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT notifyAbandonedCart FROM shop WHERE id = ?`,
+      `SELECT notifyAbandonedCart, subdomain, customDomain, customDomainStatus,
+              domainType
+         FROM shop WHERE id = ?`,
       [shopId],
     );
     if (!shopRows[0]?.notifyAbandonedCart) return 0;
+    // Taken from the row this method already re-reads, so the recovery link is
+    // built from the shop's own host rather than a platform-wide base URL.
+    const shopUrlFields = {
+      subdomain: shopRows[0].subdomain as string,
+      domainType: shopRows[0].domainType as string | null,
+      customDomain: shopRows[0].customDomain as string | null,
+      customDomainStatus: shopRows[0].customDomainStatus as string | null,
+    };
 
     const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000);
     const candidates = await this.db.query<(AbandonedcartRow & RowDataPacket)[]>(
@@ -241,9 +250,15 @@ export class AbandonedCartsService {
             `- ${i.quantity}x ${i.name}${i.variantLabel ? ` (${i.variantLabel})` : ''} — ${i.price}`,
         ),
         '',
-        `Pick up where you left off: ${STOREFRONT_URL}/${shopSlug}/cart/recover?token=${cart.recoverToken}`,
+        `Pick up where you left off: ${storefrontUrl(
+          shopUrlFields,
+          `/cart/recover?token=${cart.recoverToken}`,
+        )}`,
       ];
-      const recoverLink = `${STOREFRONT_URL}/${shopSlug}/cart/recover?token=${cart.recoverToken}`;
+      const recoverLink = storefrontUrl(
+        shopUrlFields,
+        `/cart/recover?token=${cart.recoverToken}`,
+      );
       const itemRows = items
         .map(
           (i) =>

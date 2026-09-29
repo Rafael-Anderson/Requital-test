@@ -16,8 +16,7 @@ import { CreateAffiliateCodeDto } from './dto/create-affiliate-code.dto';
 import { UpdateAffiliateCodeDto } from './dto/update-affiliate-code.dto';
 import { UpdateAffiliateOrderStatusDto } from './dto/update-affiliate-order-status.dto';
 import { ListQueryDto } from './dto/list-query.dto';
-
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
+import { storefrontUrl } from '../common/storefront-url';
 
 @Injectable()
 export class AffiliateService {
@@ -192,7 +191,8 @@ export class AffiliateService {
     const where = conditions.join(' AND ');
 
     const [shopRows, rows, totalRows] = await Promise.all([
-      this.db.query<RowDataPacket[]>(`SELECT subdomain FROM shop WHERE id = ?`, [
+      this.db.query<RowDataPacket[]>(`SELECT subdomain, customDomain, customDomainStatus, domainType
+           FROM shop WHERE id = ?`, [
         ctx.shopId,
       ]),
       this.db.query<RowDataPacket[]>(
@@ -210,7 +210,12 @@ export class AffiliateService {
         params,
       ),
     ]);
-    const subdomain = shopRows[0].subdomain as string;
+    const shopUrlFields = {
+      subdomain: shopRows[0].subdomain as string,
+      domainType: shopRows[0].domainType as string | null,
+      customDomain: shopRows[0].customDomain as string | null,
+      customDomainStatus: shopRows[0].customDomainStatus as string | null,
+    };
 
     return {
       data: rows.map((c) => ({
@@ -219,7 +224,7 @@ export class AffiliateService {
         affiliateId: c.affiliateId as number,
         affiliateName: c.affiliateName as string,
         promotionFor: c.promotionFor as string,
-        url: `${STOREFRONT_URL}/${subdomain}?ref=${c.code as string}`,
+        url: storefrontUrl(shopUrlFields, `/?ref=${c.code as string}`),
         status: c.status as string,
         commissionType: c.commissionType as string,
         commissionValue: Number(c.commissionValue),

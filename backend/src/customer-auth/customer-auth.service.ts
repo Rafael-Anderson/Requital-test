@@ -18,6 +18,7 @@ import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
 import { ForgotCustomerPasswordDto } from './dto/forgot-customer-password.dto';
 import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
+import { storefrontUrl } from '../common/storefront-url';
 
 const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
@@ -36,7 +37,6 @@ const LOGIN_LOCKOUT_BASE_DELAY_SECONDS = 2;
 const LOGIN_LOCKOUT_MAX_DELAY_SECONDS = 60;
 // Where the reset link points — the storefront app, not this API. Same
 // pattern as AuthService's ADMIN_URL, just the other frontend.
-const STOREFRONT_URL = process.env.STOREFRONT_URL ?? 'http://localhost:3002';
 // Same dev-only echo-the-link-back convenience as AuthService — see its
 // comment for why this must never happen in production.
 const isDev = process.env.NODE_ENV !== 'production';
@@ -259,7 +259,10 @@ export class CustomerAuthService {
         new Date(Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000),
       ],
     );
-    const resetLink = `${STOREFRONT_URL}/${shopSlug}/account/reset-password?token=${raw}`;
+    const resetLink = storefrontUrl(
+      shop,
+      `/account/reset-password?token=${raw}`,
+    );
     const shopDisplayName = shop.displayName ?? shop.name;
     const resetHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
