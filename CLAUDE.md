@@ -266,6 +266,17 @@ One VAT treatment per product, replacing the single shop-wide `shop.taxRate` app
 - **A `PACKING_SLIP` is never snapshotted and always renders live** - `snapshotJson`/`snapshotVersion` stay NULL for it. It is a picking and cash-collection document, not a record. Its **"CASH TO COLLECT" now reads the order's CURRENT total**, not `invoice.total`: the frozen figure is what would send a rider to collect a stale amount after the order was edited, which is the concrete bug this piece exists to prevent. `OrderForInvoice` gained `total` for exactly that, and `giftCardAmount` is snapshotted for completeness even though nothing prints it yet - when something does, it must read the frozen value.
 - **No backfill.** The invoices that predate this keep `snapshotJson` NULL and render live, because what they looked like at issue is precisely what was never captured. Same argument `orderitem.unitCost`, `order.exchangeRate` and `orderitem.taxRate` each made for their own history.
 
+### The stale-invoice marker (Phase 2c / C2)
+
+C1's freeze means an invoice can now legitimately disagree with its own order: edit the items, change the delivery fee, cancel, or process a return, and the frozen document is still a correct record of what was issued while no longer describing what the order is. **`invoice.supersededAt`** (migration `20260930160000`) records that, and the admin Invoice tab says so.
+
+- **One helper, `invoices/invoice-superseded.ts`'s `markInvoicesSuperseded(exec, orderId)`** - a plain function, not a service, because `InvoicesModule` already imports `OrdersModule` (`InvoicesService` needs `OrdersService.findOne`) so an injected service in `OrdersService` would be a dependency cycle. It takes the caller's own connection and therefore commits or rolls back with the change that caused it.
+- Called from **four places**: `OrdersService.updateItems`, `OrdersService.updateDeliveryFee`, `OrdersService.cancel` (in **each** of its two successful CAS branches, since both return early inside the transaction), and `ReturnsService.create`.
+- **`type = 'INVOICE'` only.** A `PACKING_SLIP` renders live and its cash-to-collect is the current total (C1), so it cannot be out of date and must never be flagged as if it were.
+- **`supersededAt IS NULL` in the WHERE clause**, so the FIRST divergence is kept rather than being overwritten by every later edit - "it stopped describing the order at 14:02" is the useful fact, and it makes repeated calls idempotent.
+- **No backfill**: nothing recorded whether the 12 existing invoices already disagree with their orders, so marking them all would be a false claim about 12 documents. Any future edit marks them correctly from then on.
+- **No reissue in this phase.** Reissuing belongs with credit notes (audit I18N-10), where the accounting model supports it.
+
 ## Customer-facing storefront URLs — always via `common/storefront-url.ts`
 
 Every customer-facing URL the backend builds (all four gateways' success/cancel, the three payment-link URLs, cart-recovery, survey, customer password reset, back-in-stock + unsubscribe, bio-link clicks, affiliate links) goes through **`storefrontUrl(shop, path)`** in `backend/src/common/storefront-url.ts`. `resolveCanonicalOrigin` (the SEO canonical resolver, moved here from `public/canonical-origin.ts`) is the same function's origin half.

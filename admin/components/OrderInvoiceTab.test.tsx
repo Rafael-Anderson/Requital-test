@@ -32,6 +32,7 @@ const invoice: Invoice = {
   taxAmount: "5.00",
   total: "105.00",
   notes: null,
+  supersededAt: null,
 };
 
 describe("OrderInvoiceTab", () => {
@@ -70,5 +71,42 @@ describe("OrderInvoiceTab", () => {
     expect(screen.queryByText("Generate Invoice")).not.toBeInTheDocument();
     expect(screen.getByText("Generate Packing Slip")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTitle("Invoice preview")).toBeInTheDocument());
+  });
+});
+
+
+describe("OrderInvoiceTab superseded marker (C2)", () => {
+  // The document is frozen at issue, so after an edit it correctly no longer
+  // matches the order. Staff have to see that before handing it to a customer.
+  it("warns when the invoice predates the current order", async () => {
+    vi.mocked(listInvoicesForOrder).mockResolvedValue([
+      { ...invoice, supersededAt: "2026-09-30T10:00:00.000Z" },
+    ]);
+    renderTab();
+    expect(
+      await screen.findByText(/predates the current order/i),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing when the invoice still describes its order", async () => {
+    vi.mocked(listInvoicesForOrder).mockResolvedValue([invoice]);
+    renderTab();
+    await screen.findByText(/View Invoice/);
+    expect(
+      screen.queryByText(/predates the current order/i),
+    ).not.toBeInTheDocument();
+  });
+
+  // A packing slip renders live, so it is never marked and must never trigger
+  // the warning.
+  it("never warns for a packing slip", async () => {
+    vi.mocked(listInvoicesForOrder).mockResolvedValue([
+      { ...invoice, type: "PACKING_SLIP", supersededAt: null },
+    ]);
+    renderTab();
+    await screen.findByText(/View Packing Slip/);
+    expect(
+      screen.queryByText(/predates the current order/i),
+    ).not.toBeInTheDocument();
   });
 });

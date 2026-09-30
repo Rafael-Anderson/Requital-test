@@ -8,6 +8,7 @@ import { OrdersService } from '../orders/orders.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { createLogger } from '../common/logging/logger';
 
 const logger = createLogger('ReturnsService');
@@ -210,6 +211,11 @@ export class ReturnsService {
           );
         }
       }
+
+      // A refunded/returned order is no longer described by the invoice issued
+      // for it (C2) - the document still records what was sold, but the order has
+      // moved on. In the same transaction as the return itself.
+      await markInvoicesSuperseded(conn, orderId);
 
       return newReturnId;
     });

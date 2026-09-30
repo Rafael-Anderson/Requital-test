@@ -444,4 +444,177 @@ describe('Invoice snapshots (e2e)', () => {
     expect(customerHtml).not.toContain('Snap Second snap-g');
     expect(customerHtml).toBe(staffHtml);
   });
+
+
+  // ── Phase 2c / C2: the stale marker ───────────────────────────────────────
+  //
+  // C1's freeze means an invoice can legitimately disagree with its own order.
+  // These assert that every path which moves the order marks the invoice, and
+  // that a packing slip - which renders live and therefore cannot be stale - is
+  // never marked.
+  describe('supersededAt', () => {
+    function supersededOf(invoiceId: number) {
+      return db
+        .query<RowDataPacket[]>(
+          `SELECT supersededAt FROM invoice WHERE id = ?`,
+          [invoiceId],
+        )
+        .then((r) => r[0].supersededAt as Date | null);
+    }
+
+    async function orderWithInvoice(prefix: string) {
+      const shop = await setupShop(prefix);
+      const order = await createOrder(shop, [
+        { productId: shop.firstId, quantity: 1 },
+      ]).expect(201);
+      const orderId = orderIdOf(order);
+      const invoiceId = body<IdRow>(
+        await generate(shop.adminToken, orderId, 'INVOICE').expect(201),
+      ).id;
+      expect(await supersededOf(invoiceId)).toBeNull();
+      return { shop, orderId, invoiceId };
+    }
+
+    it('is marked when the items are edited', async () => {
+      const { shop, orderId, invoiceId } = await orderWithInvoice('sup-items');
+      await request(app.getHttpServer())
+        .patch(`/orders/${orderId}/items`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ items: [{ productId: shop.secondId, quantity: 1 }] })
+        .expect(200);
+      expect(await supersededOf(invoiceId)).not.toBeNull();
+    });
+
+    it('is marked when the delivery fee changes', async () => {
+      const { shop, orderId, invoiceId } = await orderWithInvoice('sup-fee');
+      await request(app.getHttpServer())
+        .patch(`/orders/${orderId}/delivery-fee`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ deliveryFee: 42 })
+        .expect(200);
+      expect(await supersededOf(invoiceId)).not.toBeNull();
+    });
+
+    it('is marked when the order is cancelled', async () => {
+      const { shop, orderId, invoiceId } = await orderWithInvoice('sup-cancel');
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/cancel`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(201);
+      expect(await supersededOf(invoiceId)).not.toBeNull();
+    });
+
+    // Keeps the FIRST divergence: "it stopped describing the order at 14:02" is
+    // the useful fact, and it makes repeated edits idempotent.
+    it('keeps the first divergence rather than overwriting it on every edit', async () => {
+      const { shop, orderId, invoiceId } = await orderWithInvoice('sup-first');
+      await request(app.getHttpServer())
+        .patch(`/orders/${orderId}/delivery-fee`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ deliveryFee: 15 })
+        .expect(200);
+      const first = await supersededOf(invoiceId);
+      expect(first).not.toBeNull();
+
+      await request(app.getHttpServer())
+        .patch(`/orders/${orderId}/items`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ items: [{ productId: shop.secondId, quantity: 2 }] })
+        .expect(200);
+      expect((await supersededOf(invoiceId))?.getTime()).toBe(first?.getTime());
+    });
+
+    // A slip renders live every time, so it can never be out of date and must
+    // not be flagged as if it were.
+    it('is never set on a packing slip', async () => {
+      const shop = await setupShop('sup-slip');
+      const order = await createOrder(shop, [
+        { productId: shop.firstId, quantity: 1 },
+      ]).expect(201);
+      const orderId = orderIdOf(order);
+      const slipId = body<IdRow>(
+        await generate(shop.adminToken, orderId, 'PACKING_SLIP').expect(201),
+      ).id;
+
+      await request(app.getHttpServer())
+        .patch(`/orders/${orderId}/items`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ items: [{ productId: shop.secondId, quantity: 3 }] })
+        .expect(200);
+      expect(await supersededOf(slipId)).toBeNull();
+    });
+
+    // The fourth trigger. A return needs a delivered order, so this one is a
+    // pickup order paid at pickup - a cash_on_delivery order additionally gates
+    // 'delivered' on cash collection, which is not what is under test here.
+    it('is marked when a return is processed', async () => {
+      const shop = await setupShop('sup-return');
+      const placed = await request(app.getHttpServer())
+        .post(`/public/${shop.slug}/orders`)
+        .send({
+          outletId: shop.outletId,
+          customerName: 'Return Customer',
+          customerPhone: '0505554443',
+          customerAddress: 'Pickup',
+          emirate: 'Dubai',
+          orderType: 'pickup',
+          paymentMethod: 'cash_on_pickup',
+          items: [{ productId: shop.firstId, quantity: 2 }],
+        })
+        .expect(201);
+      const orderId = orderIdOf(placed);
+      const invoiceId = body<IdRow>(
+        await generate(shop.adminToken, orderId, 'INVOICE').expect(201),
+      ).id;
+      expect(await supersededOf(invoiceId)).toBeNull();
+
+      for (const status of [
+        'confirmed',
+        'preparing',
+        'out_for_delivery',
+        'delivered',
+      ]) {
+        await request(app.getHttpServer())
+          .patch(`/orders/${orderId}/status`)
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ status })
+          .expect(200);
+      }
+
+      const detail = await request(app.getHttpServer())
+        .get(`/orders/${orderId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      const itemId = body<{ orderitem: IdRow[] }>(detail).orderitem[0].id;
+
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/returns`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({
+          items: [{ orderItemId: itemId, quantity: 1 }],
+          reason: 'damaged',
+          restock: false,
+        })
+        .expect(201);
+
+      expect(await supersededOf(invoiceId)).not.toBeNull();
+    });
+
+    it('an order with no invoice at all is unaffected by an edit', async () => {
+      const shop = await setupShop('sup-none');
+      const order = await createOrder(shop, [
+        { productId: shop.firstId, quantity: 1 },
+      ]).expect(201);
+      await request(app.getHttpServer())
+        .patch(`/orders/${orderIdOf(order)}/items`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ items: [{ productId: shop.secondId, quantity: 1 }] })
+        .expect(200);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS n FROM invoice WHERE orderId = ?`,
+        [orderIdOf(order)],
+      );
+      expect(Number(rows[0].n)).toBe(0);
+    });
+  });
 });

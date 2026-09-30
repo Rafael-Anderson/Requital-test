@@ -36,6 +36,7 @@ import {
   isValidStatusTransition,
   OrderStatus,
 } from './constants';
+import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { roundMoney } from '../common/currency-minor-units';
@@ -650,6 +651,7 @@ export class OrdersService {
           order.orderitem[i].id,
         ]);
       }
+      await markInvoicesSuperseded(conn, id);
     });
     const orders = await this.loadOrdersWithRelations([id]);
     return this.toResponse(orders.get(id)!);
@@ -1123,6 +1125,10 @@ export class OrdersService {
         ...set!.params,
         orderId,
       ]);
+      // The items just changed, so any invoice already issued for this order no
+      // longer describes it (C2). In the same transaction, so the marking cannot
+      // survive a rolled-back edit.
+      await markInvoicesSuperseded(conn, orderId);
     });
 
     const orders = await this.loadOrdersWithRelations([orderId]);
@@ -1191,6 +1197,10 @@ export class OrdersService {
         [id, ctx.shopId, order.outletId],
       );
       if ((fromPending as { affectedRows: number }).affectedRows === 1) {
+        // A cancelled order is no longer described by any invoice issued for it
+        // (C2). Marked in each successful CAS branch rather than after the
+        // transaction, so it commits with the cancellation or not at all.
+        await markInvoicesSuperseded(conn, id);
         // An order from an immediate-reservation channel already reserved
         // stock at creation (decremented while still 'pending', not at
         // confirm — see updateStatus above) — cancelling from 'pending' must
@@ -1217,6 +1227,7 @@ export class OrdersService {
         [id, ctx.shopId, order.outletId],
       );
       if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
+        await markInvoicesSuperseded(conn, id);
         await this.adjustStockForOrder(
           conn,
           ctx,

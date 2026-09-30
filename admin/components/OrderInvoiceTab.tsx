@@ -96,6 +96,7 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
               onClick={() => setSelected(existing)}
             >
               View {TYPE_LABEL[type]} ({existing.invoiceNumber})
+              {existing.supersededAt ? " *" : ""}
             </Button>
           ) : (
             <Button
@@ -111,6 +112,18 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
           );
         })}
       </div>
+
+      {/* C2. The document is frozen at issue, so it stays a correct record of
+          what was issued - it just no longer matches the order after an edit,
+          cancellation or return. Staff need to know that before handing it to a
+          customer. A packing slip renders live and is never marked. */}
+      {TYPES.some((type) => byType(type)?.supersededAt) && (
+        <p className="text-[13px] rounded-lg px-3 py-2 bg-amber-50 text-amber-900 border border-amber-200">
+          This invoice predates the current order. It still shows what was
+          issued, which is why it has not changed, but the order has been
+          modified since.
+        </p>
+      )}
 
       {selected && (
         <div className="space-y-2">

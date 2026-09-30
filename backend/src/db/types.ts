@@ -206,6 +206,12 @@ export interface InvoiceRow {
   // rather than shop.currency is what stops a later shop-setting change
   // from re-denominating rows that are already written.
   currency: string;
+  // When the order moved on after this invoice was issued (migration
+  // 20260930160000): items edited, delivery fee changed, order cancelled, or a
+  // return processed. NULL means it still describes its order. Records the FIRST
+  // divergence, not the latest. Never set on a PACKING_SLIP, which renders live
+  // and so cannot be out of date.
+  supersededAt: Date | null;
   // Everything the document renders, frozen at issue (migration 20260930120000).
   // NULL on the invoices that predate it, which fall back to live rendering, and
   // NULL on every PACKING_SLIP by design - that one is a live cash-collection
