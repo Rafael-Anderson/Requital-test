@@ -64,9 +64,7 @@ describe('buildTaxBreakdown', () => {
       orderTaxAmount: '15',
     });
     // 25 off the first line, 75 off the second: 75 + 225 = 300 net at 5%.
-    expect(rows).toEqual([
-      { taxRate: 5, taxableAmount: 300, taxAmount: 15 },
-    ]);
+    expect(rows).toEqual([{ taxRate: 5, taxableAmount: 300, taxAmount: 15 }]);
   });
 
   // Inclusive pricing: the charged amount contains the tax, so the taxable base

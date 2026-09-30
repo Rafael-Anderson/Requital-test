@@ -10,6 +10,12 @@ import type { InvoiceType } from './invoices.constants';
 import { renderInvoiceHtml } from './invoice-html';
 import { buildTaxBreakdown } from './invoice-tax';
 
+// The shape version written into invoice.snapshotVersion. Bump it whenever
+// OrderForInvoice changes in a way that moves or removes a field the renderer
+// reads, so an older snapshot is recognised as a shape this code no longer
+// understands and falls back to live rendering rather than being misread.
+export const INVOICE_SNAPSHOT_VERSION = 1;
+
 interface OrderForInvoice {
   id: number;
   shopOrderNumber: number;
@@ -25,6 +31,14 @@ interface OrderForInvoice {
   discountCode: string | null;
   paymentMethod: string | null;
   paymentStatus: string;
+  // The order's CURRENT total. Only the packing slip reads it (see buildHtml):
+  // the rider collects what is owed now, not what was owed when the document was
+  // first generated. Every other figure on an invoice comes from the frozen
+  // invoice row.
+  total: string;
+  // Snapshotted for completeness (C1) even though the renderer does not print it
+  // yet - when it does, it must read the frozen value, not a live one.
+  giftCardAmount: string | null;
   shopName: string;
   shopDisplayName: string | null;
   shopAddress: string | null;
@@ -73,6 +87,19 @@ export class InvoicesService {
     );
     const taxAmount = Number(order.taxAmount ?? 0);
 
+    // C1: freeze what the document renders. Read through loadOrderForInvoice -
+    // the exact same loader buildHtml uses - so the snapshot's shape is identical
+    // to the live shape by construction rather than by a parallel mapping that
+    // could drift. Read-only, so it happens before the transaction.
+    //
+    // A PACKING_SLIP is deliberately NOT snapshotted: it is a live picking and
+    // cash-collection document, and freezing it is what would cause a rider to
+    // collect a stale amount.
+    const snapshot =
+      dto.type === 'PACKING_SLIP'
+        ? null
+        : await this.loadOrderForInvoice(order.id, ctx.shopId);
+
     try {
       const invoiceId = await this.db.transaction(async (conn) => {
         const invoiceNumber = await this.nextInvoiceNumber(
@@ -81,9 +108,10 @@ export class InvoicesService {
           dto.type,
         );
         const [result] = await conn.query(
-          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total, currency, taxInclusive)
+          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total, currency, taxInclusive,
+                                snapshotJson, snapshotVersion)
            VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?),
-                   (SELECT taxInclusive FROM shop WHERE id = ?))`,
+                   (SELECT taxInclusive FROM shop WHERE id = ?), ?, ?)`,
           [
             order.id,
             ctx.shopId,
@@ -100,6 +128,8 @@ export class InvoicesService {
             // same reason as currency: flipping the shop toggle must not rewrite
             // the arithmetic of a document already issued. See invoice-html.ts.
             ctx.shopId,
+            snapshot ? JSON.stringify(snapshot) : null,
+            snapshot ? INVOICE_SNAPSHOT_VERSION : null,
           ],
         );
         return (result as { insertId: number }).insertId;
@@ -233,6 +263,8 @@ export class InvoicesService {
       discountCode: order.discountCode as string | null,
       paymentMethod: order.paymentMethod as string | null,
       paymentStatus: order.paymentStatus as string,
+      total: order.total as string,
+      giftCardAmount: order.giftCardAmount as string | null,
       shopName: order.shopName as string,
       shopDisplayName: order.shopDisplayName as string | null,
       shopAddress: order.shopAddress as string | null,
@@ -252,7 +284,46 @@ export class InvoicesService {
     };
   }
 
-  private buildHtml(invoice: InvoiceRow, order: OrderForInvoice): string {
+  // What the document is rendered FROM.
+  //
+  // An INVOICE renders from its snapshot when it has one: line items, delivery
+  // fee, discount, payment state, order number, and the customer and shop blocks
+  // as they were when it was issued. Editing the order afterwards, or renaming
+  // the shop, no longer rewrites a document already given to a customer.
+  //
+  // A PACKING_SLIP always renders LIVE, on purpose. It is a picking and
+  // cash-collection document, not a record: its "CASH TO COLLECT" must be what is
+  // owed NOW, or a rider collects a stale amount after the order was edited -
+  // the concrete bug this piece exists to prevent.
+  //
+  // An unrecognised snapshotVersion falls back to live as well: reading fields out
+  // of a shape this code no longer understands is worse than rendering fresh.
+  private resolveRenderSource(
+    invoice: InvoiceRow,
+    live: OrderForInvoice,
+  ): { order: OrderForInvoice; fromSnapshot: boolean } {
+    if (invoice.type === 'PACKING_SLIP') {
+      return { order: live, fromSnapshot: false };
+    }
+    if (
+      invoice.snapshotJson == null ||
+      invoice.snapshotVersion !== INVOICE_SNAPSHOT_VERSION
+    ) {
+      return { order: live, fromSnapshot: false };
+    }
+    // mysql2 parses a real JSON column for us (see the migration's note on why
+    // the column is JSON and not LONGTEXT). createdAt comes back as the ISO
+    // string JSON.stringify produced and the renderer calls
+    // toLocaleDateString() on it, so it is revived to a Date here.
+    const snapshot = invoice.snapshotJson as unknown as OrderForInvoice;
+    return {
+      order: { ...snapshot, createdAt: new Date(snapshot.createdAt) },
+      fromSnapshot: true,
+    };
+  }
+
+  private buildHtml(invoice: InvoiceRow, liveOrder: OrderForInvoice): string {
+    const { order } = this.resolveRenderSource(invoice, liveOrder);
     // Grouped from the CAPTURED per-line figures, never recomputed from a live
     // rate - the whole point of the capture is that the document keeps adding up
     // after the shop's settings change.
@@ -262,7 +333,11 @@ export class InvoicesService {
       issuedAt: invoice.issuedAt,
       subtotal: invoice.subtotal,
       taxAmount: invoice.taxAmount,
-      total: invoice.total,
+      // A packing slip's only money is "CASH TO COLLECT", and that has to be
+      // what is owed NOW: invoice.total was frozen when the slip was generated,
+      // so after an edit it would send the rider to collect the wrong amount.
+      // An invoice keeps its frozen total, which is the whole point of an invoice.
+      total: invoice.type === 'PACKING_SLIP' ? liveOrder.total : invoice.total,
       taxInclusive: invoice.taxInclusive,
       taxBreakdown: buildTaxBreakdown({
         items: order.orderitem,

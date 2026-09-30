@@ -172,7 +172,6 @@ describe('renderInvoiceHtml totals arithmetic', () => {
   });
 });
 
-
 describe('renderInvoiceHtml per-line tax and breakdown (B3)', () => {
   it('renders a Tax column with the captured rate per line', () => {
     const html = renderInvoiceHtml(data({ taxInclusive: false }));
