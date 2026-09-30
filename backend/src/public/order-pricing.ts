@@ -165,6 +165,9 @@ export interface ZoneLike {
   // optional: a zone predating the modal has none, and mysql2 hands a DECIMAL
   // back as a string, so both shapes are accepted and read through `Number()`.
   id?: number;
+  // The regions this zone covers (deliveryzoneregion). Read only in 'regions'
+  // matching mode; see delivery-zones/zone-matching-mode.ts.
+  regionIds?: number[];
   lat?: string | number | null;
   lng?: string | number | null;
   radiusKm?: string | number | null;
@@ -183,6 +186,12 @@ export interface GeoPoint {
 // today it would simply never match, but a merchant who widens the radius
 // without placing the pin would start capturing real addresses.
 const UNPLACED_ZONE_CENTER: GeoPoint = { lat: 23.85, lng: 54.4 };
+
+// True when the merchant has actually placed the zone's circle: a real centre and
+// radius, not the modal's unplaced default. Such a zone can match by location alone.
+export function hasPlacedCircle(zone: ZoneLike): boolean {
+  return zoneCircle(zone) !== null;
+}
 
 function zoneCircle(
   zone: ZoneLike,
@@ -275,4 +284,39 @@ export function matchDeliveryZone<Z extends ZoneLike>(
     if (byLocation) return byLocation;
   }
   return active.find((z) => norm(z.name) === norm(emirate)) ?? null;
+}
+
+// Zone resolution once a shop's zones are region-mapped (see
+// delivery-zones/zone-matching-mode.ts). The zone's NAME plays no part:
+//   1. the customer's pin inside a placed map circle (tightest circle wins), else
+//   2. a zone whose region set contains the customer's region (the zone covering
+//      the fewest regions wins, as the most specific; then the lowest id).
+// With neither a pin inside a circle nor a region match the answer is null, and
+// the caller applies the same "no zone matched" rule as the legacy path.
+export function matchDeliveryZoneByRegion<Z extends ZoneLike>(
+  zones: Z[],
+  regionId: number | null | undefined,
+  location?: GeoPoint | null,
+): Z | null {
+  const active = zones.filter((z) => z.isActive);
+  if (location) {
+    const byLocation = matchZoneByLocation(active, location);
+    if (byLocation) return byLocation;
+  }
+  if (regionId == null) return null;
+  let best: Z | null = null;
+  for (const zone of active) {
+    const ids = zone.regionIds ?? [];
+    if (!ids.includes(regionId)) continue;
+    if (
+      !best ||
+      ids.length < (best.regionIds ?? []).length ||
+      (ids.length === (best.regionIds ?? []).length &&
+        (zone.id ?? Number.MAX_SAFE_INTEGER) <
+          (best.id ?? Number.MAX_SAFE_INTEGER))
+    ) {
+      best = zone;
+    }
+  }
+  return best;
 }

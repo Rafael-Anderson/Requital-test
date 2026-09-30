@@ -62,6 +62,14 @@ export class PlatformAdminController {
     return this.platformAdminService.listShops(query);
   }
 
+  // The gate for deleting the legacy name-based delivery-zone matcher: shops still
+  // waiting on a merchant to confirm their zones' regions. Zero rows means the
+  // legacy branch (zone-matching-mode.ts) can go.
+  @Get('zone-mapping-status')
+  zoneMappingStatus() {
+    return this.platformAdminService.listLegacyZoneMappingShops();
+  }
+
   @Get('shops/:shopId')
   getShop(@Param('shopId', ParseIntPipe) shopId: number) {
     return this.platformAdminService.getShopDetail(shopId);

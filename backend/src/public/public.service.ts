@@ -18,7 +18,12 @@ import { createLogger } from '../common/logging/logger';
 const logger = createLogger('PublicService');
 import { haversineDistanceKm } from '../common/geo';
 import { generateTrackingCode } from '../common/token-hash';
-import { computeOrderTotals, matchDeliveryZone } from './order-pricing';
+import {
+  computeOrderTotals,
+  matchDeliveryZone,
+  matchDeliveryZoneByRegion,
+} from './order-pricing';
+import { getZoneMatchingMode } from '../delivery-zones/zone-matching-mode';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { CustomersService } from '../customers/customers.service';
@@ -1470,6 +1475,7 @@ export class PublicService {
               dto,
               subtotal,
               region.emirate ?? '',
+              region.regionId,
             ),
           );
 
@@ -1890,6 +1896,7 @@ export class PublicService {
     dto: CreatePublicOrderDto,
     subtotal: number,
     emirateName: string,
+    regionId: number | null,
   ): Promise<string> {
     // Radius is the eligibility boundary — if configured, coordinates are
     // required to prove the customer is inside it. Zones (below) then
@@ -1917,14 +1924,41 @@ export class PublicService {
       `SELECT * FROM deliveryzone WHERE outletId = ? AND isActive = 1`,
       [outlet.id],
     );
-    const zone = matchDeliveryZone(
-      zones,
-      dto.area,
-      emirateName,
+    const pin =
       dto.latitude != null && dto.longitude != null
         ? { lat: dto.latitude, lng: dto.longitude }
-        : null,
-    );
+        : null;
+    // Which rule decides the zone: until a merchant has reviewed and confirmed
+    // every active zone's regions, the shop keeps the old name matching and no fee
+    // changes. See delivery-zones/zone-matching-mode.ts.
+    const { mode } = await getZoneMatchingMode(this.db, shop.id);
+    let zone: (typeof zones)[number] | null;
+    if (mode === 'regions') {
+      const regionRows =
+        zones.length === 0
+          ? []
+          : await this.db.query<
+              ({ zoneId: number; regionId: number } & RowDataPacket)[]
+            >(
+              `SELECT zoneId, regionId FROM deliveryzoneregion WHERE zoneId IN (${zones
+                .map(() => '?')
+                .join(', ')})`,
+              zones.map((z) => z.id),
+            );
+      const regionIdsByZone = new Map<number, number[]>();
+      for (const r of regionRows) {
+        const list = regionIdsByZone.get(r.zoneId) ?? [];
+        list.push(r.regionId);
+        regionIdsByZone.set(r.zoneId, list);
+      }
+      zone = matchDeliveryZoneByRegion(
+        zones.map((z) => ({ ...z, regionIds: regionIdsByZone.get(z.id) ?? [] })),
+        regionId,
+        pin,
+      );
+    } else {
+      zone = matchDeliveryZone(zones, dto.area, emirateName, pin);
+    }
     if (zone) {
       if (subtotal < Number(zone.minOrderAmount)) {
         throw new BadRequestException(
@@ -1952,7 +1986,13 @@ export class PublicService {
       }
       logger.warn(
         'address matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
-        { outletId: outlet.id, area: dto.area ?? null, emirate: emirateName },
+        {
+          outletId: outlet.id,
+          area: dto.area ?? null,
+          emirate: emirateName,
+          regionId,
+          zoneMatchingMode: mode,
+        },
       );
     }
 

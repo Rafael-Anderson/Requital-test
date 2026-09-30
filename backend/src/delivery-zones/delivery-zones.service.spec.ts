@@ -2,10 +2,27 @@ import { DeliveryZonesService } from './delivery-zones.service';
 import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
+import type { RegionsService } from '../regions/regions.service';
+import type { AuditLogService } from '../audit-log/audit-log.service';
 
 const mockBranchRolesService = {
   assertPermission: jest.fn().mockResolvedValue(undefined),
 } as unknown as BranchRolesService;
+
+// These specs are about the map-circle columns, not the region mapping (which has
+// its own e2e coverage), so the region and audit collaborators are inert.
+const mockRegionsService = {
+  resolveManyForShop: jest.fn(async (_shopId: number, ids: number[]) => ids),
+} as unknown as RegionsService;
+const mockAuditLog = {
+  logCtx: jest.fn().mockResolvedValue(undefined),
+} as unknown as AuditLogService;
+
+// A shop that still has unconfirmed zones is in legacy matching mode, where a zone
+// saved with no regions is fine. Every other query gets a generic row.
+function answer(sql: string) {
+  return sql.includes('COUNT(*) AS n') ? [{ n: 1 }] : [{ id: 10 }];
+}
 
 function createMockDb() {
   return {
@@ -23,9 +40,12 @@ function insertFields(sql: string, params: unknown[]): Record<string, unknown> {
 
 function updateFields(sql: string, params: unknown[]): Record<string, unknown> {
   const match = sql.match(/SET ([\s\S]*?) WHERE/)!;
-  const columns = match[1]
-    .split(',')
-    .map((c) => c.trim().replace(/`/g, '').replace(/\s*=\s*\?$/, ''));
+  const columns = match[1].split(',').map((c) =>
+    c
+      .trim()
+      .replace(/`/g, '')
+      .replace(/\s*=\s*\?$/, ''),
+  );
   return Object.fromEntries(columns.map((c, i) => [c, params[i]]));
 }
 
@@ -39,8 +59,13 @@ const adminCtx: TenantContext = {
 describe('DeliveryZonesService — map center/radius wiring', () => {
   it('create() persists lat/lng/radiusKm alongside the flat-fee fields', async () => {
     const db = createMockDb();
-    db.query.mockResolvedValue([{ id: 10 }]);
-    const service = new DeliveryZonesService(db, mockBranchRolesService);
+    db.query.mockImplementation(async (sql: string) => answer(sql));
+    const service = new DeliveryZonesService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+      mockAuditLog,
+    );
 
     await service.create(adminCtx, 10, {
       name: 'Dubai',
@@ -62,8 +87,13 @@ describe('DeliveryZonesService — map center/radius wiring', () => {
 
   it('create() defaults lat/lng/radiusKm to null when not provided', async () => {
     const db = createMockDb();
-    db.query.mockResolvedValue([{ id: 10 }]);
-    const service = new DeliveryZonesService(db, mockBranchRolesService);
+    db.query.mockImplementation(async (sql: string) => answer(sql));
+    const service = new DeliveryZonesService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+      mockAuditLog,
+    );
 
     await service.create(adminCtx, 10, { name: 'Sharjah', fee: 20 });
 
@@ -77,8 +107,13 @@ describe('DeliveryZonesService — map center/radius wiring', () => {
 
   it('update() only sets lat/lng/radiusKm when actually sent', async () => {
     const db = createMockDb();
-    db.query.mockResolvedValue([{ id: 10 }]);
-    const service = new DeliveryZonesService(db, mockBranchRolesService);
+    db.query.mockImplementation(async (sql: string) => answer(sql));
+    const service = new DeliveryZonesService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+      mockAuditLog,
+    );
 
     await service.update(adminCtx, 10, 5, { radiusKm: 8 });
 

@@ -27,6 +27,34 @@ export class PlatformAdminService {
     private readonly platformAuditLogService: PlatformAuditLogService,
   ) {}
 
+  // Shops whose delivery zones are still matched by free-text name because at
+  // least one active zone has not had its regions confirmed. Read-only.
+  async listLegacyZoneMappingShops() {
+    const rows = await this.db.query<
+      ({
+        shopId: number;
+        subdomain: string;
+        unconfirmedActiveZones: number;
+      } & RowDataPacket)[]
+    >(
+      `SELECT s.id AS shopId, s.subdomain, COUNT(*) AS unconfirmedActiveZones
+         FROM deliveryzone dz
+         JOIN outlet o ON o.id = dz.outletId
+         JOIN shop s ON s.id = o.shopId
+        WHERE dz.isActive = 1 AND dz.mappingConfirmedAt IS NULL
+        GROUP BY s.id, s.subdomain
+        ORDER BY s.id`,
+    );
+    return {
+      legacyShops: rows.length,
+      shops: rows.map((r) => ({
+        shopId: r.shopId,
+        subdomain: r.subdomain,
+        unconfirmedActiveZones: Number(r.unconfirmedActiveZones),
+      })),
+    };
+  }
+
   // Paginated because this is the one platform list that was genuinely
   // unbounded, and a dev database with 26k leftover shops (repeated e2e runs)
   // has crashed a verification script trying to enumerate it. Returns the

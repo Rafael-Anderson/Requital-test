@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Flags a backend method that WRITES a `regionId` without calling
-// RegionsService.resolveForShop in the same method.
+// RegionsService.resolveForShop (or resolveManyForShop, for a zone's region set)
+// in the same method.
 //
 // Why a guardrail: a region is valid for a shop only if it belongs to that
 // shop's own country, which a DTO validator cannot know. So the check lives in
@@ -22,7 +23,14 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..", "backend", "src");
 const EXEMPT_DIRS = ["regions" + path.sep, "db" + path.sep];
 const METHOD_START = /^ {2}(?:private |public |protected )?(?:async )?[A-Za-z_$][\w$]*\s*(?:<[^>]*>)?\(/;
-const WRITE = /INSERT INTO|\bUPDATE\b|buildSetClause/;
+// `replaceZoneRegions(` is the zone region-set writer: its callers carry the SQL-free
+// side of the write, so they must be checked too.
+const WRITE = /INSERT INTO|\bUPDATE\b|buildSetClause|replaceZoneRegions\(/;
+
+// Private writers only ever called with ids their caller has just validated; every
+// caller (create / update / setMapping in the same file) is itself checked above,
+// because it mentions regionIds next to a SQL write and so must resolve them.
+const ALLOWLIST = new Set(["delivery-zones/delivery-zones.service.ts:replaceZoneRegions"]);
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -46,7 +54,9 @@ for (const file of walk(ROOT)) {
       .slice(start, end)
       .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
       .join("\n");
-    if (/\bregionId\b/.test(body) && WRITE.test(body) && !body.includes("resolveForShop(")) {
+    const method = (lines[start].match(/([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\(/) || [])[1];
+    if (ALLOWLIST.has(`${rel.split(path.sep).join("/")}:${method}`)) return;
+    if (/\bregionIds?\b/.test(body) && WRITE.test(body) && !/resolve(?:Many)?ForShop\(/.test(body)) {
       violations.push(`${rel}:${start + 1}  ${lines[start].trim().slice(0, 70)}`);
     }
   };
