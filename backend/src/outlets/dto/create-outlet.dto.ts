@@ -54,12 +54,6 @@ export class CreateOutletDto {
   @Min(1)
   regionId?: number;
 
-  // DEPRECATED alias: the region's English name. Superseded by regionId.
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  emirate?: string;
-
   @IsOptional()
   @IsString()
   @MaxLength(255)

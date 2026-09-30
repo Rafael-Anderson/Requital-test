@@ -104,7 +104,6 @@ describe('Shop publish state (e2e)', () => {
       .set('Authorization', `Bearer ${shop.adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         pickupEnabled: true,
         latitude: 25.2048,
@@ -204,7 +203,6 @@ describe('Shop publish state (e2e)', () => {
           customerName: 'Test Customer',
           customerPhone: '0501234567',
           customerAddress: '1 Test St',
-          emirate: 'Dubai',
           latitude: 25.2048,
           longitude: 55.2708,
           items: [{ productId: shop.productId, quantity: 1 }],
@@ -239,7 +237,6 @@ describe('Shop publish state (e2e)', () => {
           customerName: 'Test Customer',
           customerPhone: '0501234567',
           customerAddress: '1 Test St',
-          emirate: 'Dubai',
           latitude: 25.2048,
           longitude: 55.2708,
           items: [{ productId: shop.productId, quantity: 1 }],
@@ -292,7 +289,6 @@ describe('Shop publish state (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
           active: true,
-          emirate: 'Dubai',
           deliveryEnabled: true,
           latitude: 25.2048,
           longitude: 55.2708,
@@ -440,7 +436,6 @@ describe('Shop publish state (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           active: true,
-          emirate: 'Dubai',
           deliveryEnabled: true,
           pickupEnabled: true,
           latitude: 25.2048,

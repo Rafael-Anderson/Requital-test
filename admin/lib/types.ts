@@ -73,9 +73,6 @@ export interface Order {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
-  // Legacy name of the region, still returned (and mirrored by the backend)
-  // until that column is dropped. Read `region` first.
-  emirate: string | null;
   region?: Region | null;
   area: string | null;
   deliveryDate: string | null;
@@ -970,7 +967,6 @@ export interface Outlet {
   // Top-level enable/disable switch, independent of the hours-derived
   // isOpen status.
   active: boolean;
-  emirate: string | null;
   region?: Region | null;
   area: string | null;
   phone: string | null;
@@ -2530,7 +2526,6 @@ export interface DraftOrder {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string | null;
-  emirate: string | null;
   regionId: number | null;
   region?: Region | null;
   area: string | null;

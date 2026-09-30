@@ -94,7 +94,7 @@ describe('Low Stock Alerts (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletIds[0]}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     for (let i = 1; i < outletCount; i += 1) {
@@ -104,7 +104,6 @@ describe('Low Stock Alerts (e2e)', () => {
         .send({
           name: `Branch ${i}`,
           active: true,
-          emirate: 'Dubai',
           pickupEnabled: true,
         })
         .expect(201);
@@ -281,7 +280,6 @@ describe('Low Stock Alerts (e2e)', () => {
         customerName: 'Buyer',
         customerPhone: '0521111111',
         customerAddress: 'N/A',
-        emirate: 'Dubai',
         items: [{ productId, quantity: 2 }],
       })
       .expect(201);

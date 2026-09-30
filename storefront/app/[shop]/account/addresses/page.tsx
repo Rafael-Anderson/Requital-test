@@ -188,7 +188,7 @@ export default function AddressesPage() {
               <p className="text-sm text-zinc-600">{a.address}</p>
               <p className="text-xs text-zinc-500">
                 {a.area ? `${a.area}, ` : ""}
-                {a.region?.nameEn ?? a.emirate}
+                {a.region?.nameEn}
               </p>
             </div>
             <div className="flex flex-col gap-1 shrink-0">

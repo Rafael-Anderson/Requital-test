@@ -142,7 +142,7 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -189,7 +189,6 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         customerName: 'Privacy Shopper',
         customerPhone: phone,
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         items: [{ productId, quantity: 1 }],
       })
       .expect(201);

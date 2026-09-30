@@ -123,7 +123,6 @@ describe('Exchange rate capture and freeze (e2e)', () => {
         customerName: 'Rate Customer',
         customerPhone: `05${Math.floor(Math.random() * 100000000)}`,
         customerAddress: '1 Rate St',
-        emirate: 'Dubai',
         orderType: 'pickup',
         outletId: shop.outletId,
         deliveryFee: 0,
@@ -189,7 +188,7 @@ describe('Exchange rate capture and freeze (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${shop.outletId}`)
       .set('Authorization', `Bearer ${shop.adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
     // Publishing has a readiness bar (outlet + product must exist first), and an
     // unpublished shop 404s on the public order route — see
@@ -207,7 +206,6 @@ describe('Exchange rate capture and freeze (e2e)', () => {
         customerName: 'Storefront Rate Customer',
         customerPhone: '0501234567',
         customerAddress: 'Pickup at outlet',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod: 'cash_on_pickup',
         items: [{ productId: shop.productId, quantity: 1 }],

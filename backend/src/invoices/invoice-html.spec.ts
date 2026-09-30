@@ -28,7 +28,7 @@ function data(overrides: Partial<InvoiceHtmlData> = {}): InvoiceHtmlData {
       customerPhone: '0501234567',
       customerEmail: null,
       customerAddress: 'Somewhere',
-      emirate: 'Dubai',
+      regionName: 'Dubai',
       area: null,
       createdAt: new Date('2026-09-29T09:00:00Z'),
       deliveryFee: '10.00',
@@ -256,20 +256,20 @@ describe('renderInvoiceHtml delivery address line', () => {
     const base = data();
     const withBoth = renderInvoiceHtml({
       ...base,
-      order: { ...base.order, area: 'Marina', emirate: 'Dubai' },
+      order: { ...base.order, area: 'Marina', regionName: 'Dubai' },
     });
     expect(withBoth).toContain('Marina, Dubai');
 
     const noRegion = renderInvoiceHtml({
       ...base,
-      order: { ...base.order, area: null, emirate: null },
+      order: { ...base.order, area: null, regionName: null },
     });
     expect(noRegion).not.toContain('null');
     expect(addressLine(noRegion, 'Somewhere')).not.toContain(',');
 
     const areaOnly = renderInvoiceHtml({
       ...base,
-      order: { ...base.order, area: 'Marina', emirate: null },
+      order: { ...base.order, area: 'Marina', regionName: null },
     });
     expect(areaOnly).toMatch(/Marina\s*<\/p>/);
     expect(areaOnly).not.toContain('null');

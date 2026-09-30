@@ -263,7 +263,6 @@ describe('Audit log (e2e)', () => {
         customerName: 'Audit Customer',
         customerPhone: '0501234567',
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         orderType: 'delivery',
         outletId,
         items: [{ productId: product.id, quantity: 1 }],

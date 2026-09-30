@@ -16,6 +16,9 @@ interface AuthResponse {
 interface IdRow {
   id: number;
 }
+interface InvoiceSnapshotRow {
+  snapshotJson: { regionName: string | null } & Record<string, unknown>;
+}
 interface OrderResponse {
   id: number;
   total: string;
@@ -99,7 +102,6 @@ describe('Invoice snapshots (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         pickupEnabled: true,
         latitude: 25.2048,
@@ -155,7 +157,6 @@ describe('Invoice snapshots (e2e)', () => {
         customerName: 'Snapshot Customer',
         customerPhone: '0501234567',
         customerAddress: 'Somewhere in Dubai',
-        emirate: 'Dubai',
         orderType: 'delivery',
         paymentMethod: 'cash_on_delivery',
         // The outlet has a delivery radius, so the address has to prove it is
@@ -204,7 +205,7 @@ describe('Invoice snapshots (e2e)', () => {
       `SELECT snapshotJson, snapshotVersion FROM invoice WHERE id = ?`,
       [body<IdRow>(invoice).id],
     );
-    expect(rows[0].snapshotVersion).toBe(1);
+    expect(rows[0].snapshotVersion).toBe(2);
     // A real JSON column, so mysql2 hands it back parsed rather than as a string.
     const snap = rows[0].snapshotJson as Record<string, unknown>;
     expect(typeof snap).toBe('object');
@@ -221,7 +222,7 @@ describe('Invoice snapshots (e2e)', () => {
       'customerName',
       'customerPhone',
       'customerAddress',
-      'emirate',
+      'regionName',
       'shopName',
       'shopAddress',
       'shopEmail',
@@ -230,6 +231,69 @@ describe('Invoice snapshots (e2e)', () => {
     ]) {
       expect(Object.keys(snap)).toContain(key);
     }
+  });
+
+  // The region printed on the document. v2 freezes the region's NAME, v1 (issued
+  // before the `order.emirate` column was dropped) froze `emirate`; both must keep
+  // printing what they were issued with, and neither may follow a later edit.
+  describe('the region line', () => {
+    async function regionIdOf(code: string) {
+      const rows = await db.query<({ id: number } & RowDataPacket)[]>(
+        `SELECT id FROM region WHERE code = ?`,
+        [code],
+      );
+      return rows[0].id;
+    }
+    async function issued(prefix: string) {
+      const shop = await setupShop(prefix);
+      const orderId = orderIdOf(
+        await createOrder(shop, [
+          { productId: shop.firstId, quantity: 1 },
+        ]).expect(201),
+      );
+      await db.execute(`UPDATE \`order\` SET regionId = ? WHERE id = ?`, [
+        await regionIdOf('AE-DU'),
+        orderId,
+      ]);
+      const invoiceId = body<IdRow>(
+        await generate(shop.adminToken, orderId, 'INVOICE').expect(201),
+      ).id;
+      return { shop, orderId, invoiceId };
+    }
+    const addressLine = (html: string) =>
+      /Somewhere in Dubai<br \/>\s*([^<]*?)\s*<\/p>/.exec(html)?.[1];
+
+    it('a v2 invoice prints the region it was issued with, and a later change to the order does not rewrite it', async () => {
+      const { shop, orderId, invoiceId } = await issued('snap-r2');
+      await db.execute(`UPDATE \`order\` SET regionId = ? WHERE id = ?`, [
+        await regionIdOf('AE-SH'),
+        orderId,
+      ]);
+      const html = (await pdf(shop.adminToken, invoiceId).expect(200)).text;
+      expect(addressLine(html)).toBe('Dubai');
+    });
+
+    it('a v1 invoice still prints its frozen `emirate`, not a live read and not nothing', async () => {
+      const { shop, orderId, invoiceId } = await issued('snap-r1');
+      // Rewrite the stored snapshot into the shape v1 wrote: `emirate`, no
+      // `regionName`. The live order then says something different, so a fallback to
+      // live rendering would print Sharjah.
+      const rows = await db.query<(InvoiceSnapshotRow & RowDataPacket)[]>(
+        `SELECT snapshotJson FROM invoice WHERE id = ?`,
+        [invoiceId],
+      );
+      const { regionName, ...rest } = rows[0].snapshotJson;
+      await db.execute(
+        `UPDATE invoice SET snapshotJson = ?, snapshotVersion = 1 WHERE id = ?`,
+        [JSON.stringify({ ...rest, emirate: regionName }), invoiceId],
+      );
+      await db.execute(`UPDATE \`order\` SET regionId = ? WHERE id = ?`, [
+        await regionIdOf('AE-SH'),
+        orderId,
+      ]);
+      const html = (await pdf(shop.adminToken, invoiceId).expect(200)).text;
+      expect(addressLine(html)).toBe('Dubai');
+    });
   });
 
   // THE test this feature exists for.
@@ -408,7 +472,6 @@ describe('Invoice snapshots (e2e)', () => {
         customerName: 'Snapshot Shopper',
         customerPhone: phone,
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod: 'cash_on_pickup',
         items: [{ productId: shop.firstId, quantity: 1 }],
@@ -556,7 +619,6 @@ describe('Invoice snapshots (e2e)', () => {
           customerName: 'Return Customer',
           customerPhone: '0505554443',
           customerAddress: 'Pickup',
-          emirate: 'Dubai',
           orderType: 'pickup',
           paymentMethod: 'cash_on_pickup',
           items: [{ productId: shop.firstId, quantity: 2 }],

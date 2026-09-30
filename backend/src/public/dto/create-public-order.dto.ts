@@ -114,14 +114,6 @@ export class CreatePublicOrderDto {
   @Min(1)
   regionId?: number;
 
-  // DEPRECATED alias: the region's English name. Accepted only while older
-  // frontends are still deployed; `regionId` supersedes it. Resolved against
-  // the shop's own country by RegionsService, never against a global list.
-  @IsOptional()
-  @IsString()
-  @MaxLength(191)
-  emirate?: string;
-
   @IsOptional()
   @IsString()
   area?: string;

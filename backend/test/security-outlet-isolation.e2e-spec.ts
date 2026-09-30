@@ -201,7 +201,6 @@ describe('Outlet & shop isolation (e2e)', () => {
       customerName: 'Test Customer',
       customerPhone: '0501234567',
       customerAddress: '1 Sheikh Zayed Rd',
-      emirate: 'Dubai',
       outletId,
       items: [{ productId: productAId, quantity: 1 }],
     });
@@ -295,7 +294,6 @@ describe('Outlet & shop isolation (e2e)', () => {
         customerName: 'Test Customer B',
         customerPhone: '0509999999',
         customerAddress: '1 Corniche Rd',
-        emirate: 'Abu Dhabi',
         outletId: outletB1Id,
         items: [{ productId: body<IdRow>(productB).id, quantity: 1 }],
       })
@@ -356,7 +354,6 @@ describe('Outlet & shop isolation (e2e)', () => {
           customerName: 'Spoof Attempt',
           customerPhone: '0501111111',
           customerAddress: '1 Sheikh Zayed Rd',
-          emirate: 'Dubai',
           outletId: outletA2Id, // the branch user is trying to place an order at a branch they don't run
           items: [{ productId: productAId, quantity: 1 }],
         })

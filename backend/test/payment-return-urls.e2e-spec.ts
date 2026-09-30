@@ -160,7 +160,7 @@ describe('Gateway return URLs are built per shop (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -211,7 +211,6 @@ describe('Gateway return URLs are built per shop (e2e)', () => {
         customerName: 'Return URL Customer',
         customerPhone: '0501234567',
         customerAddress: 'Pickup at outlet',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod,
         items: [{ productId: shop.productId, quantity: 1 }],

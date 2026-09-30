@@ -158,7 +158,6 @@ describe('Storefront public checkout (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         pickupEnabled: true,
         latitude: OUTLET_LAT,
@@ -221,7 +220,6 @@ describe('Storefront public checkout (e2e)', () => {
       customerName: 'Storefront Customer',
       customerPhone: '0501234567',
       customerAddress: '1 Sheikh Zayed Rd',
-      emirate: 'Dubai',
       items: [{ productId, quantity: 1 }],
       ...overrides,
     };
@@ -572,20 +570,40 @@ describe('Storefront public checkout (e2e)', () => {
     });
 
     it('the same area text with a pin outside the circle still gets the emirate-wide zone', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/public/${shopSlug}/orders`)
-        .send(
-          basePayload({
-            orderType: 'delivery',
-            paymentMethod: 'cash_on_delivery',
-            area: 'Dubai Marina Walk Residences',
-            ...OUTSIDE_CIRCLE,
-          }),
-        )
-        .expect(201);
-      expect(Number(body<CreateOrderResponseBody>(res).order.deliveryFee)).toBe(
-        30,
-      );
+      // The emirate-wide zone is matched on the customer's region, which a shop
+      // can only supply once its country is known. This shop has none (the other
+      // tests here deliberately order without a region), so give it one for this
+      // order only.
+      await db.execute(`UPDATE shop SET countryCode = 'AE' WHERE subdomain = ?`, [
+        shopSlug,
+      ]);
+      try {
+        const dubai = (
+          await db.query<({ id: number } & RowDataPacket)[]>(
+            `SELECT id FROM region WHERE code = 'AE-DU'`,
+          )
+        )[0].id;
+        const res = await request(app.getHttpServer())
+          .post(`/public/${shopSlug}/orders`)
+          .send(
+            basePayload({
+              orderType: 'delivery',
+              paymentMethod: 'cash_on_delivery',
+              area: 'Dubai Marina Walk Residences',
+              regionId: dubai,
+              ...OUTSIDE_CIRCLE,
+            }),
+          )
+          .expect(201);
+        expect(
+          Number(body<CreateOrderResponseBody>(res).order.deliveryFee),
+        ).toBe(30);
+      } finally {
+        await db.execute(
+          `UPDATE shop SET countryCode = NULL WHERE subdomain = ?`,
+          [shopSlug],
+        );
+      }
     });
   });
 
@@ -700,7 +718,6 @@ describe('Storefront public checkout (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           active: true,
-          emirate: 'Dubai',
           deliveryEnabled: true,
           latitude: OUTLET_LAT,
           longitude: OUTLET_LON,

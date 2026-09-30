@@ -54,7 +54,6 @@ async function main() {
         customerName: "Return Customer",
         customerPhone: "0501234567",
         customerAddress: "1 Test St",
-        emirate: "Dubai",
         orderType: "delivery",
         outletId,
         items: [{ productId: product.id, quantity: 3 }],

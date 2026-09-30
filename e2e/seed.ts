@@ -246,7 +246,6 @@ export async function seedShop(): Promise<SeedState> {
         customerName,
         customerPhone,
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         items: [{ productId: simpleProductRaw.id, quantity: 1 }],
       }),
     },

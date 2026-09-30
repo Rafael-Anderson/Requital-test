@@ -532,7 +532,7 @@ export default function OrderDetailModal({
                   <p className="text-sm">{order.customerAddress}</p>
                   <p className="text-sm text-text-muted">
                     {order.area ? `${order.area}, ` : ""}
-                    {order.region?.nameEn ?? order.emirate}
+                    {order.region?.nameEn}
                   </p>
                   {order.deliveryNotes && (
                     <p className="text-sm text-text-muted mt-2">

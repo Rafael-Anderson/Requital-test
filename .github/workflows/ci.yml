@@ -206,6 +206,9 @@ jobs:
       - name: Region-validation guardrail (every regionId write is country-checked)
         run: node tools/check-region-validation.js
 
+      - name: No-emirate-list guardrail (addresses use the region table)
+        run: node tools/check-no-emirate-list.js
+
       - name: Page-width guardrail
         run: node tools/check-page-width.js
 

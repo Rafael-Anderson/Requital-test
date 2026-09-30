@@ -1169,7 +1169,6 @@ export class PublicService {
       id: o.id,
       name: o.name,
       nameAr: o.nameAr,
-      emirate: o.emirate,
       region: o.region,
       area: o.area,
       phone: o.phone,
@@ -1474,7 +1473,7 @@ export class PublicService {
               outlet,
               dto,
               subtotal,
-              region.emirate ?? '',
+              region.regionName ?? '',
               region.regionId,
             ),
           );
@@ -1634,11 +1633,11 @@ export class PublicService {
           const [res] = await conn.query(
         `INSERT INTO \`order\` (
           shopId, ingredientsConsumedAt, outletId, customerId, customerName, customerPhone, customerEmail,
-          customerAddress, emirate, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1648,7 +1647,6 @@ export class PublicService {
           dto.customerPhone,
           dto.customerEmail ?? null,
           dto.customerAddress,
-          region.emirate,
           region.regionId,
           dto.area ?? null,
           dto.deliveryDate ? new Date(dto.deliveryDate) : null,
@@ -1895,7 +1893,7 @@ export class PublicService {
     },
     dto: CreatePublicOrderDto,
     subtotal: number,
-    emirateName: string,
+    regionName: string,
     regionId: number | null,
   ): Promise<string> {
     // Radius is the eligibility boundary — if configured, coordinates are
@@ -1957,7 +1955,7 @@ export class PublicService {
         pin,
       );
     } else {
-      zone = matchDeliveryZone(zones, dto.area, emirateName, pin);
+      zone = matchDeliveryZone(zones, dto.area, regionName, pin);
     }
     if (zone) {
       if (subtotal < Number(zone.minOrderAmount)) {
@@ -1989,7 +1987,7 @@ export class PublicService {
         {
           outletId: outlet.id,
           area: dto.area ?? null,
-          emirate: emirateName,
+          regionName,
           regionId,
           zoneMatchingMode: mode,
         },

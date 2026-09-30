@@ -114,7 +114,6 @@ describe('Order internal notes (e2e)', () => {
         customerName: 'Note Customer',
         customerPhone: `05${Math.floor(Math.random() * 100000000)}`,
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         orderType: 'delivery',
         outletId,
         items: [{ productId, quantity: 1 }],

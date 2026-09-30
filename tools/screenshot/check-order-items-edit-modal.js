@@ -58,7 +58,6 @@ async function main() {
         customerName: "Kanban Edit Customer",
         customerPhone: "0500000001",
         customerAddress: "1 Board Rd",
-        emirate: "Dubai",
         outletId,
         items: [{ productId: product.id, quantity: 1 }],
       }),

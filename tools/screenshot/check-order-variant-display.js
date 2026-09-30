@@ -57,7 +57,6 @@ async function main() {
         customerName: "Variant Display Customer",
         customerPhone: "0500000077",
         customerAddress: "1 Display Rd",
-        emirate: "Dubai",
         outletId,
         items: [{ productId: product.id, variantId: variant.id, quantity: 2 }],
       }),

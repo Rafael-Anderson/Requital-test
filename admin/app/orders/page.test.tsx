@@ -51,7 +51,6 @@ const order: Order = {
   customerPhone: "+971500000000",
   customerEmail: null,
   customerAddress: "123 Street",
-  emirate: "Dubai",
   area: null,
   deliveryDate: "2026-08-05",
   deliveryTimeSlot: "10am-12pm",

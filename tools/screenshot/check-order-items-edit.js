@@ -79,7 +79,6 @@ async function main() {
         customerName: "Item Edit Customer",
         customerPhone: "0500000000",
         customerAddress: "123 Test St",
-        emirate: "Dubai",
         outletId,
         items: [{ productId: productA.id, quantity: 2 }],
       }),

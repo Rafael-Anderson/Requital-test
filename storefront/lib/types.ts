@@ -432,7 +432,6 @@ export interface Outlet {
   id: number;
   name: string;
   nameAr: string | null;
-  emirate: string | null;
   region?: Region | null;
   area: string | null;
   phone: string | null;
@@ -671,8 +670,6 @@ export interface CustomerAddress {
   address: string;
   regionId?: number | null;
   region?: Region | null;
-  // Legacy name of the region, still returned while older clients exist.
-  emirate?: string | null;
   area?: string;
   latitude?: number;
   longitude?: number;

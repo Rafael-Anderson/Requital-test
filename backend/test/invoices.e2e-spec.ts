@@ -93,7 +93,7 @@ describe('Invoices & packing slips (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -140,7 +140,6 @@ describe('Invoices & packing slips (e2e)', () => {
         customerName: 'Shopper',
         customerPhone: '0501234567',
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         items: [{ productId, quantity: 2 }],
         ...overrides,
       })
@@ -360,7 +359,7 @@ describe('Invoices & packing slips (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/outlets/${outletBId}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+        .send({ active: true, pickupEnabled: true })
         .expect(200);
 
       const branchEmail = `inv-branch-${runId}@test.com`;

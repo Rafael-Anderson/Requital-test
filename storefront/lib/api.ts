@@ -600,7 +600,7 @@ export function listMyAddresses(shopSlug: string) {
 
 export function createMyAddress(
   shopSlug: string,
-  data: Omit<CustomerAddress, "id" | "region" | "emirate">,
+  data: Omit<CustomerAddress, "id" | "region">,
 ) {
   return authedFetch<CustomerAddress>(shopSlug, `/public/${shopSlug}/account/addresses`, {
     method: "POST",
@@ -611,7 +611,7 @@ export function createMyAddress(
 export function updateMyAddress(
   shopSlug: string,
   addressId: string,
-  data: Partial<Omit<CustomerAddress, "id" | "region" | "emirate">>,
+  data: Partial<Omit<CustomerAddress, "id" | "region">>,
 ) {
   return authedFetch<CustomerAddress>(shopSlug, `/public/${shopSlug}/account/addresses/${addressId}`, {
     method: "PATCH",

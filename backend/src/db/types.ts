@@ -15,7 +15,6 @@ export interface OrderRow {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
-  emirate: string | null;
   regionId: number | null;
   area: string | null;
   deliveryDate: Date | null;
@@ -753,7 +752,6 @@ export interface OutletRow {
   email: string | null;
   whatsapp: string | null;
   active: boolean;
-  emirate: string | null;
   regionId: number | null;
   area: string | null;
   phone: string | null;
@@ -1026,7 +1024,6 @@ export interface DraftorderRow {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string | null;
-  emirate: string | null;
   regionId: number | null;
   area: string | null;
   orderType: string | null;

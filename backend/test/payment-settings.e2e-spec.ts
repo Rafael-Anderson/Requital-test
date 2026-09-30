@@ -467,7 +467,6 @@ describe('Payment Settings (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
           active: true,
-          emirate: 'Dubai',
           deliveryEnabled: true,
           pickupEnabled: true,
           latitude: 25.2048,
@@ -538,7 +537,6 @@ describe('Payment Settings (e2e)', () => {
           customerName: 'Test Customer',
           customerPhone: '0501234567',
           customerAddress: '1 Test St',
-          emirate: 'Dubai',
           items: [{ productId: shop.productId, quantity: 1 }],
         })
         .expect(400);
@@ -567,7 +565,6 @@ describe('Payment Settings (e2e)', () => {
           customerName: 'Test Customer',
           customerPhone: '0501234567',
           customerAddress: '1 Test St',
-          emirate: 'Dubai',
           // Required because setupOrderableShop configures deliveryRadiusKm
           // — otherwise the radius check 400s before ever reaching the
           // tabby stub, which isn't what this test is about.
@@ -603,7 +600,6 @@ describe('Payment Settings (e2e)', () => {
           customerName: 'Test Customer',
           customerPhone: '0501234567',
           customerAddress: '1 Test St',
-          emirate: 'Dubai',
           items: [{ productId: shop.productId, quantity: 1 }],
         })
         .expect(400);

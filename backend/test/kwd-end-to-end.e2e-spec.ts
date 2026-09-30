@@ -137,7 +137,7 @@ describe('KWD end to end (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     // A6: this is the line that was rejected with 400 before the lock was
@@ -248,7 +248,6 @@ describe('KWD end to end (e2e)', () => {
         customerName: 'KWD Customer',
         customerPhone: '0501112222',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod: 'card_online',
         items: [{ productId: shop.productId, quantity: QTY }],
@@ -339,7 +338,7 @@ describe('KWD end to end (e2e)', () => {
     expect(stored[0].currency).toBe('KWD');
     expect(Number(stored[0].total)).toBeCloseTo(TOTAL, 3);
     // C1's snapshot, captured in a non-AED currency.
-    expect(stored[0].snapshotVersion).toBe(1);
+    expect(stored[0].snapshotVersion).toBe(2);
 
     const html = (
       await request(app.getHttpServer())

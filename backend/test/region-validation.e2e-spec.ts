@@ -28,7 +28,6 @@ interface RegionsBody {
 }
 interface OrderBody {
   id: number;
-  emirate: string | null;
   regionId: number | null;
   region: RegionPayload | null;
   deliveryFee?: string | null;
@@ -43,8 +42,8 @@ function body<T>(res: Response): T {
 // Phase 2b / PR-B. The six `@IsIn(EMIRATES)` validators are gone; every write
 // path that stores an address region goes through RegionsService.resolveForShop,
 // which checks the region against the SHOP'S OWN country. This spec walks each
-// such path, the deprecated `emirate` alias, and the tenant boundary (a region
-// of another country is refused).
+// such path, the retired `emirate` field (now an unknown property, so a 400), and
+// the tenant boundary (a region of another country is refused).
 describe('Region validation (e2e)', () => {
   let app: INestApplication<App>;
   let db: DatabaseService;
@@ -256,42 +255,34 @@ describe('Region validation (e2e)', () => {
       legacy = await setupShop('ord-legacy');
     });
 
-    it('accepts a regionId of the shop country, stores it, mirrors the name, and returns the region', async () => {
+    it('accepts a regionId of the shop country, stores it, and returns the region', async () => {
       const dubai = await regionId('AE-DU');
       const res = await adminOrder(ae, { regionId: dubai }).expect(201);
       const order = body<OrderBody>(res);
       expect(order.regionId).toBe(dubai);
-      expect(order.emirate).toBe('Dubai');
+      expect(order.region?.nameEn).toBe('Dubai');
       const rows = await db.query<(OrderBody & RowDataPacket)[]>(
-        `SELECT regionId, emirate FROM \`order\` WHERE id = ?`,
+        `SELECT regionId FROM \`order\` WHERE id = ?`,
         [order.id],
       );
       expect(rows[0].regionId).toBe(dubai);
-      expect(rows[0].emirate).toBe('Dubai');
     });
 
-    it('the deprecated emirate alias still works and resolves to the same region', async () => {
-      const res = await adminOrder(ae, { emirate: 'Sharjah' }).expect(201);
-      expect(body<OrderBody>(res).regionId).toBe(await regionId('AE-SH'));
-    });
-
-    it('refuses a region of another country, an unknown id, a mismatched pair and no region at all', async () => {
-      const riyadh = await regionId('SA-01');
+    it('the retired emirate field is refused, alone or beside a valid regionId', async () => {
       const dubai = await regionId('AE-DU');
-      const sharjahName = 'Sharjah';
-      await adminOrder(ae, { regionId: riyadh }).expect(400);
+      await adminOrder(ae, { emirate: 'Sharjah' }).expect(400);
+      await adminOrder(ae, { regionId: dubai, emirate: 'Dubai' }).expect(400);
+    });
+
+    it('refuses a region of another country, an unknown id and no region at all', async () => {
+      await adminOrder(ae, { regionId: await regionId('SA-01') }).expect(400);
       await adminOrder(ae, { regionId: 999999999 }).expect(400);
-      await adminOrder(ae, { regionId: dubai, emirate: sharjahName }).expect(
-        400,
-      );
-      await adminOrder(ae, { emirate: 'Riyadh' }).expect(400);
       await adminOrder(ae, {}).expect(400);
     });
 
-    it('an SA shop takes a Saudi region and refuses a UAE emirate by id or by name', async () => {
+    it('an SA shop takes a Saudi region and refuses a UAE region', async () => {
       await adminOrder(sa, { regionId: await regionId('SA-01') }).expect(201);
       await adminOrder(sa, { regionId: await regionId('AE-DU') }).expect(400);
-      await adminOrder(sa, { emirate: 'Dubai' }).expect(400);
     });
 
     it('one message for "no such region" and "another country region", so ids cannot be probed', async () => {
@@ -302,40 +293,33 @@ describe('Region validation (e2e)', () => {
       );
     });
 
-    it('a shop with no country code keeps the old UAE-emirate meaning for the alias, records no region, refuses a regionId', async () => {
-      const res = await adminOrder(legacy, { emirate: 'Dubai' }).expect(201);
-      const order = body<OrderBody>(res);
-      expect(order.emirate).toBe('Dubai');
-      expect(order.regionId).toBeNull(); // unknown country, so no region is asserted
-      await adminOrder(legacy, { emirate: 'Riyadh' }).expect(400);
+    it('a shop with no country code records no region and refuses a regionId', async () => {
+      // Unknown country, so no region is asserted and none can be chosen.
       await adminOrder(legacy, { regionId: await regionId('AE-DU') }).expect(
         400,
       );
       // Nothing to choose from, so nothing is required: a shop whose country is
       // unknown offers no regions and must still be able to take an order.
       const bare = body<OrderBody>(await adminOrder(legacy, {}).expect(201));
-      expect(bare.emirate).toBeNull();
       expect(bare.regionId).toBeNull();
     });
   });
 
   describe('POST /public/:shopSlug/orders (storefront checkout)', () => {
-    it('takes a regionId alone; an order never needs the old emirate field', async () => {
+    it('takes a regionId alone', async () => {
       const shop = await setupShop('pub-ae', 'United Arab Emirates');
       const res = await publicOrder(shop, {
         regionId: await regionId('AE-AJ'),
       }).expect(201);
       const order = body<{ order: OrderBody }>(res).order;
       expect(order.regionId).toBe(await regionId('AE-AJ'));
-      expect(order.emirate).toBe('Ajman');
     });
 
-    it('refuses another country region, a wrong-country emirate name and a missing region', async () => {
+    it('refuses another country region, and accepts one of the shop country', async () => {
       const shop = await setupShop('pub-sa', 'Saudi Arabia');
       await publicOrder(shop, { regionId: await regionId('AE-DU') }).expect(
         400,
       );
-      await publicOrder(shop, { emirate: 'Dubai' }).expect(400);
       await publicOrder(shop, { regionId: await regionId('SA-02') }).expect(
         201,
       );
@@ -368,7 +352,6 @@ describe('Region validation (e2e)', () => {
         await publicOrder(shop, {}).expect(201),
       ).order;
       expect(pickup.regionId).toBeNull();
-      expect(pickup.emirate).toBeNull();
     });
 
     it('zone matching uses the resolved region name, so a regionId-only order still gets its zone fee', async () => {
@@ -444,7 +427,6 @@ describe('Region validation (e2e)', () => {
         await patch({ regionId: await regionId('AE-SH') }).expect(200),
       );
       expect(moved.region?.code).toBe('AE-SH');
-      expect(moved.emirate).toBe('Sharjah');
       await patch({ regionId: await regionId('SA-01') }).expect(400);
       const unchanged = body<OrderBody>(
         await patch({ customerName: 'Renamed' }).expect(200),
@@ -464,11 +446,10 @@ describe('Region validation (e2e)', () => {
           .expect(201),
       );
       const rows = await db.query<(OrderBody & RowDataPacket)[]>(
-        `SELECT regionId, emirate FROM \`order\` WHERE id = ?`,
+        `SELECT regionId FROM \`order\` WHERE id = ?`,
         [done.convertedOrderId],
       );
       expect(rows[0].regionId).toBe(await regionId('AE-FU'));
-      expect(rows[0].emirate).toBe('Fujairah');
     });
 
     it('a legacy draft holding no region is refused at completion, not cast into a NOT NULL error', async () => {
@@ -477,7 +458,7 @@ describe('Region validation (e2e)', () => {
         await draft(ae, { regionId: await regionId('AE-DU') }).expect(201),
       );
       await db.execute(
-        `UPDATE draftorder SET emirate = NULL, regionId = NULL WHERE id = ?`,
+        `UPDATE draftorder SET regionId = NULL WHERE id = ?`,
         [created.id],
       );
       const res = await request(server())
@@ -491,7 +472,7 @@ describe('Region validation (e2e)', () => {
   });
 
   describe('outlets', () => {
-    it('PATCH: a region of the shop country is stored; another country region and a wrong alias are refused', async () => {
+    it('PATCH: a region of the shop country is stored; another country region and the retired emirate field are refused', async () => {
       const sa = await setupShop('out-sa', 'Saudi Arabia');
       const patch = (payload: Record<string, unknown>) =>
         request(server())
@@ -506,16 +487,15 @@ describe('Region validation (e2e)', () => {
       await patch({ emirate: 'Dubai' }).expect(400);
     });
 
-    it('PATCH: a shop with no country code still accepts the alias (existing behaviour), storing no region', async () => {
+    it('PATCH: a shop with no country code cannot choose a region, and is not asked for one', async () => {
       const legacy = await setupShop('out-legacy');
-      const res = body<OrderBody>(
-        await request(server())
+      const patch = (payload: Record<string, unknown>) =>
+        request(server())
           .patch(`/outlets/${legacy.outletId}`)
           .set('Authorization', `Bearer ${legacy.token}`)
-          .send({ emirate: 'Dubai' })
-          .expect(200),
-      );
-      expect(res.emirate).toBe('Dubai');
+          .send(payload);
+      await patch({ regionId: await regionId('AE-DU') }).expect(400);
+      const res = body<OrderBody>(await patch({ name: 'Renamed' }).expect(200));
       expect(res.regionId).toBeNull();
     });
 

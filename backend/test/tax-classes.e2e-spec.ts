@@ -377,7 +377,7 @@ describe('Tax classes (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${shop.adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -403,7 +403,6 @@ describe('Tax classes (e2e)', () => {
           customerName: 'Tax Customer',
           customerPhone: '0501234567',
           customerAddress: 'Pickup',
-          emirate: 'Dubai',
           orderType: 'pickup',
           paymentMethod: 'cash_on_pickup',
           items: [{ productId, quantity: 1 }],

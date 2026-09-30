@@ -52,7 +52,6 @@ async function guestCheckout(outletId, productId, phone, name) {
       customerName: name,
       customerPhone: phone,
       customerAddress: "N/A — pickup",
-      emirate: "Dubai",
       items: [{ productId, quantity: 1 }],
     }),
   });

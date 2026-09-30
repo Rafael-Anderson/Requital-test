@@ -87,7 +87,7 @@ describe('Server-side exports + today dashboard (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -132,7 +132,6 @@ describe('Server-side exports + today dashboard (e2e)', () => {
         customerName: 'Export Customer',
         customerPhone: `export-no-digits-${runId}`,
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId,
         orderType: 'pickup',
         items: [{ productId, quantity: 1 }],
@@ -158,7 +157,6 @@ describe('Server-side exports + today dashboard (e2e)', () => {
             customerName: `Customer ${i}`,
             customerPhone: `exp-cust-${i}-${runId}`,
             customerAddress: 'Pickup',
-            emirate: 'Dubai',
             outletId: shop.outletId,
             orderType: 'pickup',
             items: [{ productId: shop.productId, quantity: 1 }],
@@ -230,7 +228,6 @@ describe('Server-side exports + today dashboard (e2e)', () => {
           customerName: 'Doe, Jane',
           customerPhone: `exp-escape-${runId}`,
           customerAddress: 'Pickup',
-          emirate: 'Dubai',
           outletId: shop.outletId,
           orderType: 'pickup',
           items: [{ productId: shop.productId, quantity: 1 }],
