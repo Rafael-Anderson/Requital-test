@@ -185,6 +185,10 @@ export interface Invoice {
   taxAmount: string;
   total: string;
   notes: string | null;
+  // Set when the order changed after this invoice was issued (C2). The document
+  // is still a correct record of what was issued; it just no longer describes the
+  // order. Never set on a packing slip, which renders live.
+  supersededAt: string | null;
 }
 
 export interface ReportsFilters {
