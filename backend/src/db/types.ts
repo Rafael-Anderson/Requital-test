@@ -206,6 +206,15 @@ export interface InvoiceRow {
   // rather than shop.currency is what stops a later shop-setting change
   // from re-denominating rows that are already written.
   currency: string;
+  // Everything the document renders, frozen at issue (migration 20260930120000).
+  // NULL on the invoices that predate it, which fall back to live rendering, and
+  // NULL on every PACKING_SLIP by design - that one is a live cash-collection
+  // document. A real MySQL JSON column, so mysql2 hands it back already parsed.
+  // `unknown` already admits null, which is the no-snapshot case.
+  snapshotJson: unknown;
+  // Which shape snapshotJson is in; see INVOICE_SNAPSHOT_VERSION. An unrecognised
+  // value falls back to live rendering rather than being misread.
+  snapshotVersion: number | null;
   // How the order was priced, captured at issue (migration 20260929170000).
   // `subtotal` above is the sum of `priceAtPurchase * quantity`, so on an
   // inclusive shop it ALREADY contains the tax and the document must not print

@@ -56,7 +56,11 @@ export function buildTaxBreakdown(params: {
     // base is what is left once it is taken out.
     const taxable = taxInclusive ? net - lineTax : net;
     const rate = item.taxRate == null ? 0 : Number(item.taxRate);
-    const row = byRate.get(rate) ?? { taxRate: rate, taxableAmount: 0, taxAmount: 0 };
+    const row = byRate.get(rate) ?? {
+      taxRate: rate,
+      taxableAmount: 0,
+      taxAmount: 0,
+    };
     row.taxableAmount += taxable;
     row.taxAmount += lineTax;
     byRate.set(rate, row);
