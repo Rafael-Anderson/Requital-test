@@ -3574,6 +3574,21 @@ export class ProductsService {
       collectionIdsByProduct.set(pid, list);
     }
 
+    // Tax classes for the per-line tax capture (Phase 2b / B2). ONE shop-wide
+    // fetch, the same shape as listActiveAutoDiscounts above - not a query per
+    // line. `product.taxClassId` already arrives on the product rows (this
+    // method does SELECT * FROM product), so resolving a line's rate needs
+    // nothing else.
+    const taxClasses = await this.db.query<RowDataPacket[]>(
+      `SELECT id, rate, type, isDefault FROM taxclass WHERE shopId = ?`,
+      [shopId],
+    );
+    const taxClassById = new Map(taxClasses.map((t) => [t.id as number, t]));
+    // A product with no class of its own resolves through the shop default -
+    // NULL means "no class of its own", never "untaxed".
+    const defaultTaxClass =
+      taxClasses.find((t) => t.isDefault === true) ?? null;
+
     // Recipes for the cost capture below. One batched query for the whole
     // order, same batch-load-then-assemble shape as the collection lookup
     // above - not one query per line. Only recipe-backed products need it;
@@ -3710,6 +3725,17 @@ export class ProductsService {
         recipe: recipeFor(item.productId, variant?.id ?? null),
       });
 
+      // The class this line is actually taxed under, resolved at order time and
+      // frozen by the caller into orderitem.taxClassId/taxRate. A product
+      // pointing at nothing falls back to the shop default; a shop with no
+      // default at all (every class deleted) resolves to null/0, which is a
+      // genuinely unknown rate rather than an invented one.
+      const ownClass =
+        product.taxClassId != null
+          ? (taxClassById.get(product.taxClassId as number) ?? null)
+          : null;
+      const taxClass = ownClass ?? defaultTaxClass;
+
       return {
         product,
         variant,
@@ -3717,6 +3743,8 @@ export class ProductsService {
         price,
         autoDiscountAmount,
         unitCost,
+        taxClassId: taxClass ? (taxClass.id as number) : null,
+        taxRate: taxClass ? Number(taxClass.rate) : 0,
         variantLabel: variant
           ? buildVariantLabel([
               variant.optionValue1Value as string | undefined,

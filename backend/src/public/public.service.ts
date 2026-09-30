@@ -1394,6 +1394,8 @@ export class PublicService {
           autoDiscountAmount,
           unitCost,
           variantLabel,
+          taxClassId,
+          taxRate,
         },
         idx,
       ) => {
@@ -1408,6 +1410,11 @@ export class PublicService {
           autoDiscountAmount,
           unitCost,
           note: dto.items[idx].note || null,
+          taxClassId,
+          taxRate,
+          // Filled in below, once computeOrderTotals has apportioned the
+          // order-level discount across the lines.
+          taxAmount: null as string | null,
         };
       },
     );
@@ -1446,16 +1453,32 @@ export class PublicService {
         deliveryFee = 0;
       }
     }
-    // Discount reduces the taxable base, same as a merchant discounting the
-    // goods themselves — tax is computed on what the customer actually pays
-    // for the products, not the pre-discount list price.
-    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
-
-    const { taxAmount, total } = computeOrderTotals({
-      subtotal: discountedSubtotal,
+    // Tax is computed PER LINE against each product's own tax class, and the
+    // order-level discount is apportioned across the lines inside
+    // computeOrderTotals - tax is owed on what the customer actually pays for
+    // the goods, not the pre-discount list price.
+    const totals = computeOrderTotals({
+      lines: itemsData.map((d) => ({
+        amount: Number(d.priceAtPurchase) * d.quantity,
+        taxRate: d.taxRate,
+        taxClassId: d.taxClassId,
+      })),
       deliveryFee,
-      taxRate: Number(shop.taxRate),
+      discountAmount,
       taxInclusive: shop.taxInclusive,
+      taxOnDelivery: Boolean(shop.taxOnDelivery),
+      // Delivery is the shop's own service, so it carries the shop's default
+      // (standard) rate rather than any product's class.
+      deliveryTaxRate: Number(shop.taxRate),
+    });
+    const { taxAmount, total } = totals;
+    // Each line's own captured tax, rounded once at persist to this currency's
+    // real precision - the same round-once-per-stored-column policy the order
+    // total follows.
+    totals.lines.forEach((line, i) => {
+      itemsData[i].taxAmount = String(
+        roundMoney(line.taxAmount, shop.currency),
+      );
     });
     // Rounded once, here, to the smallest unit this shop's currency actually
     // has - not a hardcoded 2dp, which silently truncated the third decimal of
@@ -1616,10 +1639,10 @@ export class PublicService {
 
       if (itemsData.length > 0) {
         const placeholders = itemsData
-          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, note)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, note, taxClassId, taxRate, taxAmount)
            VALUES ${placeholders}`,
           itemsData.flatMap((d) => [
             newOrderId,
@@ -1632,6 +1655,9 @@ export class PublicService {
             d.autoDiscountAmount,
             d.unitCost,
             d.note,
+            d.taxClassId,
+            d.taxRate,
+            d.taxAmount,
           ]),
         );
       }

@@ -12,6 +12,13 @@ export interface InvoiceHtmlData {
   subtotal: string | number;
   taxAmount: string | number;
   total: string | number;
+  // How the order was priced, frozen on the invoice at issue. `subtotal` is the
+  // sum of `priceAtPurchase * quantity`, so when this is true that figure
+  // ALREADY contains the tax and the Tax row must be shown as a component of the
+  // total ("includes tax of X"), not as another addend. Optional so a caller
+  // predating the column still renders the exclusive layout, which is the one
+  // that was always arithmetically correct.
+  taxInclusive?: boolean;
   notes: string | null;
   shopName: string;
   shopAddress: string | null;
@@ -97,13 +104,30 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
         : `<div class="cash-block cash-block-due">CASH TO COLLECT: ${money(data.total, data.currency)}</div>`
       : `<div class="cash-due-box"><span class="cash-due-label">Cash Due</span><span class="cash-due-amount">${money(data.total, data.currency)}</span></div>`;
 
+  // THE ARITHMETIC. This column is something a merchant, a customer and an
+  // auditor all read as a sum, so it has to be one.
+  //
+  // Exclusive pricing: subtotal - discount + delivery + tax = total. Correct as
+  // it always was, and rendered unchanged.
+  //
+  // INCLUSIVE pricing: `subtotal` already contains the tax, so the old layout
+  // printed Tax as a further addend and the column overstated the total by
+  // exactly the tax. It now reads subtotal - discount + delivery = total, with
+  // the tax shown as a labelled component instead of an addend - the ordinary
+  // way an inclusive-price VAT invoice states it. No number changes; what
+  // changes is that the ones printed now add up.
+  const taxRow = data.taxInclusive
+    ? `<tr class="tax-included"><td class="label">Includes tax</td><td class="num">${money(data.taxAmount, data.currency)}</td></tr>`
+    : `<tr><td class="label">Tax</td><td class="num">${money(data.taxAmount, data.currency)}</td></tr>`;
+
   const totalsRows = showMoney
     ? `
       <tr><td class="label">Subtotal</td><td class="num">${money(data.subtotal, data.currency)}</td></tr>
       ${data.order.discountAmount && Number(data.order.discountAmount) > 0 ? `<tr><td class="label">Discount${data.order.discountCode ? ` (${escapeHtml(data.order.discountCode)})` : ''}</td><td class="num">-${money(data.order.discountAmount, data.currency)}</td></tr>` : ''}
       ${data.order.deliveryFee && Number(data.order.deliveryFee) > 0 ? `<tr><td class="label">Delivery</td><td class="num">${money(data.order.deliveryFee, data.currency)}</td></tr>` : ''}
-      <tr><td class="label">Tax</td><td class="num">${money(data.taxAmount, data.currency)}</td></tr>
+      ${data.taxInclusive ? '' : taxRow}
       <tr class="grand-total"><td class="label">Total</td><td class="num">${money(data.total, data.currency)}</td></tr>
+      ${data.taxInclusive ? taxRow : ''}
     `
     : '';
 
