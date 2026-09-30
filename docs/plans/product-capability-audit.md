@@ -1,7 +1,9 @@
 # Product capability audit and expansion plan — the whole application
 
-**Status:** planning, **six decisions locked 2026-09-10** (§9.1). No code written, no
-branch, no PR. This document is the deliverable.
+**Status:** planning, **six decisions locked 2026-09-10** (§9.1). ~~No code written, no
+branch, no PR.~~ **Stale since 2026-09-10: Phase 0, most of Phase 1 and the money half
+of Phase 2a have since shipped; see the verification pass below for exactly which, and
+how each was checked.** This document remains the plan of record.
 
 > **Decisions applied — read §9 first.** §8 (phasing) and §9 (decision record) were
 > revised on 2026-09-10 after D20, D13, D6, §6-E, D15 and D12 were locked. **§9 is
@@ -40,6 +42,46 @@ was being written: #119 featured collections, #120 earliest-delivery / same-day 
 #121 TipTap rich text. §1 was re-checked against HEAD afterwards. Worth noting for its
 own sake: all three are storefront-presentation work, which is the imbalance this
 document was commissioned to surface, observed live over the days it took to write.
+
+> ### Verification pass, 2026-09-30 (`main` at `ac85003`)
+>
+> Every Phase 0 and Phase 1 claim, and the Phase 2a money/tax/invoice claims, were
+> re-checked against current code rather than taken from PR titles or `CLAUDE.md`.
+> **Method per row is stated because the methods differ in strength**: *code* = the
+> implementing file was read at HEAD; *spec* = the named spec passes in a full local run
+> (84 suites / 950 e2e tests against a fresh MySQL 8, 108 migrations replayed from
+> empty), whose assertions were **not** audited line by line; *prod* = a fact about the
+> live VPS, which this pass has **no access to** and therefore cannot confirm.
+>
+> | Item | Result | Evidence |
+> |---|---|---|
+> | OPS-1 scheduled off-host backups | **In repo, production install UNVERIFIED** | *code*: `tools/backup-cron.sh`, `tools/restore-db.sh`, `deploy/requital-backup.cron`, runbook RPO/RTO section (`9dccf65`). Whether the cron is live on the VPS and a drill has run is *prod*; the runbook says verified 2026-09-19, which is the runbook's claim, not this pass's. |
+> | OPS-2 error alerting | **Abstraction built; destination UNVERIFIED** | *code*: `common/error-tracking/*` (`5197773`). The audit's actual finding was that nothing listens; whether `ERROR_TRACKING_WEBHOOK_URL` is set on the VPS is *prod*. |
+> | DSC-1 | **Confirmed resolved** | *code*: `ProductsService.resolveOrderItems` applies `findBestAutoDiscountAmount` and persists `autoDiscountAmount` (see the §2.7 note). |
+> | §7.2 dead toggles under Coming Soon | **Done** | *code*: all seven (`allowPreOrders`, `notifyWhatsapp`, `asapDeliveryEnabled`, `birthdayDiscountEnabled`, `customerConfirmationRequired`, `dynamicThemeBuilderEnabled`, `deliveryCalendarEnabled`) render after the "Coming Soon" heading in `store-configuration/page.tsx` (`5197773`). |
+> | PLT-6 Webhooks tab rename | **Done** | *code*: label is "Incoming Webhooks" (`IntegrationsTabs.tsx`, `5197773`). |
+> | MKT-7 newsletter list + export | **Done** | *code*: `newsletter/` controller, `admin/app/customers/newsletter`, the `newsletter-subscribers` export definition (`5197773`, `00d22e7`). |
+> | D-8 runbook Prisma instructions | **Done** | *code*: `docs/runbook.md` now states there is no Prisma; no stale restore steps remain (`9dccf65`). |
+> | PLT-16 / D-12 pagination | **Done** | *code*: `{data,page,pageSize,total}` with `Max(100)` (`5197773`). |
+> | STF-14 + OPS-10 | **Done** | *code*: `VerifiedEmailGuard` + `@RequiresVerifiedEmail`, `signupHourly` scoped by `skipIf`, disposable-domain list (`58efd6a`, `fa854a0`). |
+> | §13 ToS draft, §14 IA spec | **Drafted in this document** | *text*: §13 and §14 exist. Legal review (§13) and the IA build (Phase 2c) are still ahead. |
+> | `orderitem.unitCost` (with currency) | **Done** | *code*: migration `20260921120000` adds `unitCost` DECIMAL NULL and `unitCostCurrency`; `products/product-cost.ts` returns null rather than zero (`bdd929b`). |
+> | ERP-13 BoM cost | **Purpose met, literal item not built** | *code*: cost of a recipe product is resolved at order time from the recipe (`product-cost.ts`). The audit's literal wording, keeping `product.costPrice` itself in sync as ingredient costs change, is **not** implemented; D-5 stays open in that narrower form. |
+> | ANL-6 margin, ANL-1 rollups, ANL-5 scheduled emails, ANL-8, ANL-9, ANL-11 | **Done** | *code*: `reports` margin endpoints + `admin/app/reports/margin`, `analytics/*`, `scheduled_report_emails` migration + `sales-summary.service.ts`, `TodayCard.tsx`, `exports/` (`bdd929b`, `87f0373`, `123bb2e`, `00d22e7`). |
+> | MKT-8 JSON-LD, MKT-9 canonical/OG/Twitter | **Done** | *code*: `storefront/lib/structured-data.ts`, `components/JsonLd.tsx`, `lib/seo.ts` (`1d0fe95`). |
+> | NOV-12 prep-time truth | **Done** | *code*: `reports/prep-time.ts`, `admin/app/reports/prep-time` (`251ea00`). |
+> | **MKT-4 analytics + pixel layer** | **NOT BUILT** | *code*: no GA4/Meta/TikTok/Snap code exists anywhere in `storefront/`, `admin/` or `backend/src/`. |
+> | **MKT-14 UTM / first-last-touch** | **NOT BUILT** | *code*: no UTM capture in any migration, service or storefront module. |
+> | **§7.6 unit specs on the four untested paths** | **NOT DONE** | *code*: there is still no `orders.service` or `products.service` spec (only `product-cost`, `product-is-new`, `variant-generator`). |
+> | §7.6 concurrency claim | **Partly STALE** | *code*: races are tested for concurrent storefront orders against one ingredient (`bill-of-materials.e2e-spec.ts`), concurrent transfers, and concurrent item-edit increases. Not found: two concurrent confirmations of the **same** order (the `pending → confirmed` CAS). |
+> | 2a multi-currency (A1-A6) | **Done** | *code*: `SUPPORTED_CURRENCIES` lists all seven, `currency-minor-units.ts` has KWD/BHD/OMR at 1000; *spec*: `money-currency-capture`, `currency-rate-freeze`, `kwd-end-to-end`, `payment-return-urls` pass. |
+> | 2a tax classes (I18N-5) and invoice snapshots (§6-H) | **Done** | *code*: migrations `20260929120000`, `20260929170000`, `20260930120000`, `20260930160000`; *spec*: `tax-classes`, `order-tax-capture`, `invoice-snapshot` pass. |
+> | **D-3 wording** | **Partly WRONG**, corrected under D-3 | The matcher *trims*, it is not whitespace-sensitive, and it does not silently fall back to a wrong fee in the common case. |
+> | **Delivery-zone circles "never read"** | **Was true, now false** | SHP-1, this branch. See the §2.8 note. |
+>
+> *Phase labels:* `CLAUDE.md` had called the tax and invoice work "Phase 2b/2c". Per this
+> document's §8, 2b is geography and 2c is foundations; `CLAUDE.md` now labels that work
+> **2a-tax (T1-T3)** and **2a-invoice (S1-S2)**.
 
 **Annotation key**, used on every proposal in §2–§5:
 
@@ -1222,7 +1264,7 @@ delivery business this is the difference between a working fee model and a guess
 
 | ID | Proposal | Effort | Type | Class | Depends on | Touches | Ship |
 |---|---|---|---|---|---|---|---|
-| **SHP-1** | **Distance-based delivery fees** — use the already-captured zone lat/lng/radius; haversine first, road distance later | **S** | feature | TABLE STAKES | none | `order-pricing.ts`, checkout, a `common/geo.ts` haversine (a `geo.ts` already exists) | **YES — early** |
+| **SHP-1** | **Distance-based delivery fees** — use the already-captured zone lat/lng/radius; haversine first, road distance later. **DONE as zone selection by map circle (this branch, 2026-09-30). The per-km band fee model in the detail below is NOT built: it needs new zone columns and is a separate item.** | **S** | feature | TABLE STAKES | none | `order-pricing.ts`, checkout, a `common/geo.ts` haversine (a `geo.ts` already exists) | **YES — early** |
 | SHP-2 | Polygon delivery zones (draw on the map) instead of circles | M | feature | DIFFERENTIATOR | SHP-1 | zone geometry JSON, point-in-polygon, the admin map | **YES** |
 | SHP-3 | Slot capacity / quotas — N orders per slot per outlet, sold out when full | M | feature | DIFFERENTIATOR | none | a slot-capacity config, a count check in `assertValidTimeSlot`, checkout display | **YES** |
 | SHP-4 | Weight- and dimension-based rates (the data exists on `product`) | S | feature | TABLE STAKES | none | a rate table, `computeOrderTotals` | **YES** |
@@ -3101,6 +3143,18 @@ arithmetic; it has no per-product tax case because there is no per-product tax.
 ### D-3 · **CORRECTNESS** · Delivery zone matching is a free-text string compare
 `backend/src/public/order-pricing.ts` (`matchDeliveryZone`)
 
+> **CORRECTED 2026-09-30.** Read against the code, three sentences below are wrong and
+> one is right. **Wrong:** "whitespace-sensitive" (both sides are `.trim()`med and
+> lower-cased, so a trailing space matches); "silently falls through" (when an outlet
+> has zones and none match, `PublicService.resolveDeliveryFee` throws a 400 unless the
+> outlet also has a delivery radius, and in that one case it falls back to
+> `shop.defaultDeliveryFee` **with a structured `warn`**, covered by an existing e2e);
+> "never reads `lat`/`lng`/`radiusKm`" (true until SHP-1, which now reads them).
+> **Right:** a customer's area text that differs from the merchant's zone name ("Dubai
+> Marina" vs a zone called "Marina") does fall through to the emirate-named zone, which is
+> the wrong fee for that address. SHP-1 fixes exactly that, but only for zones whose circle
+> the merchant actually placed; the structured-region half is still §6-E.
+
 Zones are matched by a case-insensitive, whitespace-sensitive comparison of the zone's
 `name` against the customer's `area`, falling back to `emirate`. A trailing space, a
 spelling variant, or "Dubai Marina" vs "Marina" silently falls through to the
@@ -3165,7 +3219,7 @@ toggle under Coming Soon copy"). The inverse rule is missing and should be added
 | `shop.notifyWhatsapp` | Business Information | **Dead.** Documented as such in `order-notifications.service.ts:40-46`. |
 | `shop.dynamicThemeBuilderEnabled` | Store Configuration, **under Coming Soon** | Dead and honestly labelled — the correct treatment. |
 | `product.chargeTax` | Product form | **Dead** (D-2 above). |
-| `deliveryzone.lat/lng/radiusKm` | Zone modal map | **Captured, never read** (D-3 above). |
+| ~~`deliveryzone.lat/lng/radiusKm`~~ | Zone modal map | ~~**Captured, never read** (D-3 above).~~ **Read since SHP-1 (2026-09-30)**, for zones whose pin the merchant actually placed. |
 | Integrations → "Webhooks" tab | Integrations app | **Misleading name.** Shows *inbound* diagnostics; every merchant will read it as outbound. PLT-6, an S. |
 | Newsletter subscribers | collected at `POST /public/:shopSlug/newsletter-subscribe` | **Write-only.** No admin page, no export, no send path. Data collected and never usable. |
 | `customer.birthday` | Customer form | **Captured, never read.** |
@@ -3330,7 +3384,7 @@ specific and they cluster exactly where they should not.
 | No unit tests on `orders.service.ts` or `products.service.ts` | D-6. The two files that move money and stock. |
 | No test that displayed price equals charged price | D-1 would have been caught. |
 | No test for per-product tax behaviour | Because there is no per-product tax (D-2). |
-| No test for concurrent stock decrement across two orders | The CAS design is correct; nothing proves it stays correct. |
+| ~~No test for concurrent stock decrement across two orders~~ **PARTLY STALE (2026-09-30)** | Concurrent storefront orders against one ingredient (`bill-of-materials.e2e-spec.ts`), concurrent transfers, and concurrent item-edit increases are all race-tested. **Still missing:** two concurrent confirmations of the same order (the `pending → confirmed` CAS that does the decrement). |
 | No test for gift card + discount + tax interaction on one order | Three money paths that compose, tested only individually. |
 | No test for return-restock arithmetic against BoM-backed products | `returns` restocks products; ingredient restock on return is not obviously covered. |
 | No test for the ingredient delta path on order item edit | `order-items-edit-bom.e2e-spec.ts` exists — worth confirming it covers the negative-stock-warning branch specifically. |
@@ -3425,16 +3479,16 @@ block later phases exist in draft.
 
 | Item | Effort | Why it is here |
 |---|---|---|
-| OPS-1 scheduled off-host backups + a real restore drill | S | The single highest-consequence gap in the product |
-| OPS-2 point `ERROR_TRACKING_WEBHOOK_URL` at something that pages a human | S | The abstraction is built; nothing is listening |
+| OPS-1 scheduled off-host backups + a real restore drill **(in repo `9dccf65`; production install UNVERIFIED by the 2026-09-30 pass, which has no VPS access)** | S | The single highest-consequence gap in the product |
+| OPS-2 point `ERROR_TRACKING_WEBHOOK_URL` at something that pages a human **(abstraction confirmed in code; whether the var is set in production is UNVERIFIED)** | S | The abstraction is built; nothing is listening |
 | ~~**DSC-1 charge the auto-discount that is displayed**~~ **RESOLVED 2026-09-20** | — | Already charged since `b2736eb`; the stale-doc-driven finding is withdrawn. The real bug (quick-add put the undiscounted price in the cart) is fixed with tests at three layers. |
-| §7.2 move the six dead toggles under Coming Soon | S | Stops the product lying to merchants |
-| PLT-6 rename the Integrations "Webhooks" tab | S | One label, removes a real misconception |
-| MKT-7 newsletter subscriber list + export | S | Data collected and currently unusable |
-| D-8 fix `docs/runbook.md`'s stale Prisma restore instructions | S | The document read during an incident |
+| ~~§7.2 move the six dead toggles under Coming Soon~~ **DONE (`5197773`), verified 2026-09-30** | S | All seven now sit under the Coming Soon card |
+| ~~PLT-6 rename the Integrations "Webhooks" tab~~ **DONE (`5197773`), verified 2026-09-30** | S | One label, removes a real misconception |
+| ~~MKT-7 newsletter subscriber list + export~~ **DONE (`5197773`, `00d22e7`), verified 2026-09-30** | S | Data collected and currently unusable |
+| ~~D-8 fix `docs/runbook.md`'s stale Prisma restore instructions~~ **DONE (`9dccf65`), verified 2026-09-30** | S | The document read during an incident |
 | ~~D-10 add the two missing row types to `db/types.ts`~~ **WITHDRAWN, see §7.3** | — | False finding: both tables were dropped in 2026-08. `db/types.ts` is complete, 75/75. |
 | PLT-16 / D-12 pagination on platform lists | S | Already caused a real failure |
-| STF-14 + OPS-10 email verification gate, signup velocity limits | S | Open signup with no gate |
+| ~~STF-14 + OPS-10 email verification gate, signup velocity limits~~ **DONE (`58efd6a`, `fa854a0`), verified 2026-09-30** | S | Open signup with no gate |
 | **§13 ToS revision drafted** (benchmarking + recipient data) | S | *New.* Blocks NOV-2 (Phase 4) and NOV-4 (Phase 8). Drafting is free; legal review has a lead time, so start it now. |
 | **§14 settings IA restructure — decided and specced** | S | *New.* The plan, not the build. Phase 2 adds ~15 settings and Phase 3 adds ~12 more; the target structure has to exist before they land. |
 
@@ -3450,17 +3504,17 @@ margin, attribution and rollups are vertical-neutral.
 
 | Item | Effort | Depends on |
 |---|---|---|
-| **MKT-4 analytics + pixel layer** (GA4, Meta + CAPI, TikTok, Snap), consent-gated | M | consent banner (exists), job queue (exists) |
-| MKT-14 UTM capture and first/last-touch attribution on the order | S | MKT-4 |
-| **`orderitem.unitCost` captured at order time** | S | — |
-| ERP-13 BoM cost rollup so ingredient-backed cost is real | S | `orderitem.unitCost` |
-| **ANL-6 margin and profitability reporting** | M | the two above |
-| ANL-1 nightly rollup tables | M | — |
-| ANL-5 scheduled report emails · ANL-8 inventory analytics · ANL-11 server-side exports | S each | ANL-1 |
-| ANL-9 real-time today dashboard | S | — |
-| MKT-8 JSON-LD · MKT-9 canonical/OG/Twitter | S | — |
-| NOV-12 prep-time truth (measured vs configured) | S | order status timestamps (exist) |
-| §7.6 unit specs on the four untested money/stock paths + a stock CAS concurrency test | M | — |
+| **MKT-4 analytics + pixel layer** (GA4, Meta + CAPI, TikTok, Snap), consent-gated **NOT BUILT, verified 2026-09-30: no pixel code exists** | M | consent banner (exists), job queue (exists) |
+| MKT-14 UTM capture and first/last-touch attribution on the order **NOT BUILT, verified 2026-09-30** | S | MKT-4 |
+| ~~**`orderitem.unitCost` captured at order time**~~ **DONE (`bdd929b`), verified 2026-09-30** | S | — |
+| ERP-13 BoM cost rollup so ingredient-backed cost is real **(purpose met at order time by `product-cost.ts`; literal `product.costPrice` sync NOT built, see verification pass)** | S | `orderitem.unitCost` |
+| ~~**ANL-6 margin and profitability reporting**~~ **DONE (`bdd929b`), verified 2026-09-30** | M | the two above |
+| ~~ANL-1 nightly rollup tables~~ **DONE (`87f0373`), verified 2026-09-30** | M | — |
+| ~~ANL-5 scheduled report emails · ANL-8 inventory analytics · ANL-11 server-side exports~~ **DONE (`123bb2e`, `00d22e7`), verified 2026-09-30** | S each | ANL-1 |
+| ~~ANL-9 real-time today dashboard~~ **DONE (`00d22e7`), verified 2026-09-30** | S | — |
+| ~~MKT-8 JSON-LD · MKT-9 canonical/OG/Twitter~~ **DONE (`1d0fe95`), verified 2026-09-30** | S | — |
+| ~~NOV-12 prep-time truth (measured vs configured)~~ **DONE (`251ea00`), verified 2026-09-30** | S | order status timestamps (exist) |
+| §7.6 unit specs on the four untested money/stock paths + a stock CAS concurrency test **NOT DONE, verified 2026-09-30: no `orders.service`/`products.service` spec; concurrency coverage is partly there, see §7.6** | M | — |
 
 **One addition from D6.** `orderitem.unitCost` must be added **with a currency column
 alongside it**, or Phase 2 immediately rewrites it. Cost in an unspecified currency is
@@ -3481,13 +3535,13 @@ Every argument for deferring it is an argument that gets weaker every week.
 
 | Item | Effort | Depends on |
 |---|---|---|
-| **§6-D / I18N-4 true multi-currency** — currency columns on `order`, `draftorder`, `orderitem`, `giftcard`, `paymenttransaction`, `discount`, `product` price fields; per-currency minor units; rate capture and freeze at order time | **XL** | D6 (locked) |
+| ~~**§6-D / I18N-4 true multi-currency**~~ **DONE (A1-A6, PRs #155, #157-#161, #168), verified 2026-09-30** — currency columns on `order`, `draftorder`, `orderitem`, `giftcard`, `paymenttransaction`, `discount`, `product` price fields; per-currency minor units; rate capture and freeze at order time | **XL** | D6 (locked) |
 | **Three-decimal currency handling (KWD, BHD, OMR) at the schema level** | *(part of the above, called out separately because it is the failure mode)* | — |
 | Provider amount serialisation per currency (PayPal's `'AED'` hardcode is the visible one; every other provider takes it from a caller that always passes AED) | S | multi-currency |
 | `CurrencySymbol.tsx` / `lib/currency.ts` generalised beyond the one AED entry | S | multi-currency |
-| **I18N-5 tax classes + per-product tax behaviour** (wires `chargeTax`) | M | — |
+| ~~**I18N-5 tax classes + per-product tax behaviour** (wires `chargeTax`)~~ **DONE (T1-T3, PRs #163-#165), verified 2026-09-30** | M | — |
 | I18N-9 bilingual VAT invoice · I18N-10 credit notes | S each | I18N-5 |
-| **§6-H invoice snapshots** | S/M | — |
+| ~~**§6-H invoice snapshots**~~ **DONE (S1-S2, PRs #166-#167), verified 2026-09-30** | S/M | — |
 
 ### 2b — Geography
 
