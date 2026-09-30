@@ -959,6 +959,21 @@ export class PublicService {
     ]);
     const shopTimezone =
       (shopRows[0]?.timezone as string | undefined) || 'Asia/Dubai';
+    // Per-product tax rate for the storefront's cart/checkout quote (B3). ONE
+    // shop-wide query, the same resolution rule resolveOrderItems uses (the
+    // product's own class, else the shop default) - so the quote the customer
+    // sees is derived from the same rates the server will charge, rather than
+    // from a second source of truth.
+    const taxClasses = await this.db.query<RowDataPacket[]>(
+      `SELECT id, rate, isDefault FROM taxclass WHERE shopId = ?`,
+      [shopId],
+    );
+    const taxRateByClassId = new Map(
+      taxClasses.map((t) => [t.id as number, Number(t.rate)]),
+    );
+    const defaultTaxRate = Number(
+      taxClasses.find((t) => t.isDefault === true)?.rate ?? 0,
+    );
     const brandById = new Map(
       brands.map((b) => [
         b.id,
@@ -1069,6 +1084,13 @@ export class PublicService {
           shopTimezone,
         ),
         newUntil: undefined,
+        // The rate this product would be taxed at, for the checkout quote. The
+        // class ID itself is internal and deliberately not exposed.
+        taxRate:
+          p.taxClassId != null
+            ? (taxRateByClassId.get(p.taxClassId as number) ?? defaultTaxRate)
+            : defaultTaxRate,
+        taxClassId: undefined,
         costPrice: trimDecimal(p.costPrice),
         weight: trimDecimal(p.weight),
         giftCardCustomAmountMin: trimDecimal(p.giftCardCustomAmountMin),

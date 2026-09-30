@@ -73,6 +73,7 @@ export default function AddonPrompt({
           price: Number(product.price),
           thumbnail: product.thumbnail,
           maxStock: product.stockQuantity,
+          taxRate: product.taxRate,
         },
         1,
         outletId,

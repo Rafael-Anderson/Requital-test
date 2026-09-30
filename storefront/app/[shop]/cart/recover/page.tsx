@@ -48,6 +48,10 @@ function RecoverContent() {
               price: item.price,
               thumbnail: item.thumbnail,
               maxStock: null,
+              // No taxRate: a recovered cart is rebuilt from the abandoned-cart
+              // snapshot, which never carried one. lib/order-tax.ts treats that
+              // as unknown and labels the quote estimated rather than guessing
+              // silently.
             },
             item.quantity,
             resolvedOutletId,

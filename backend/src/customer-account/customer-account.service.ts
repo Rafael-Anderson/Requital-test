@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { buildSetClause } from '../database/update.util';
+import { trimDecimal } from '../database/decimal.util';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { CustomerRow } from '../db/types';
 import type { CustomerContext } from '../customer-auth/customer-context';
@@ -600,7 +601,10 @@ export class CustomerAccountService {
       customerAddress: order.customerAddress,
       items: order.orderitem,
       deliveryFee: order.deliveryFee,
-      taxAmount: order.taxAmount,
+      // trimDecimal, like the public tracking route already did. Without it this
+      // returned the raw DECIMAL(65,30) and the account page rendered
+      // "0.000000000000000000000000000000".
+      taxAmount: trimDecimal(order.taxAmount),
       discountAmount: order.discountAmount,
       total: order.total,
       trackingToken: order.trackingToken,

@@ -23,6 +23,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
     shop,
     total,
     subtotal,
+    taxQuote,
     discountAmount,
     giftCardAmount,
     orderType,
@@ -228,10 +229,26 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
             </span>
           </div>
         )}
+        {/* Per-line tax, mirroring the server's own computation (lib/order-tax.ts).
+            Labelled "estimated" only when a line's rate is genuinely unknown -
+            a cart saved before per-line rates shipped. */}
+        {!taxQuote.empty && (
+          <div className="flex items-center justify-between">
+            <span className="text-zinc-600">
+              {shop?.taxInclusive ? "Includes tax" : "Tax"}
+              {taxQuote.estimated ? " (estimated)" : ""}
+            </span>
+            <span>
+              {formatPriceAmount(taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
-          <span className="text-zinc-600">Total (before delivery/tax)</span>
+          {/* Delivery is still resolved server-side from the address (zones and
+              radius), so it remains outside this quote. Tax no longer is. */}
+          <span className="text-zinc-600">Total (before delivery)</span>
           <span className="font-medium">
-            {formatPriceAmount(total, shop?.currency)} <CurrencySymbol code={shop?.currency} />
+            {formatPriceAmount(shop?.taxInclusive ? total : total + taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
         </div>
       </div>

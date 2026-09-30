@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatPriceAmount } from "@/lib/currency";
+import { hasAmount } from "@/lib/order-money-rows";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
@@ -127,19 +129,24 @@ export default function OrderDetailPage() {
                 </span>
               </div>
             )}
-            {order.discountAmount && (
+            {hasAmount(order.discountAmount) && (
               <div className="flex justify-between text-green-600">
                 <span>Discount</span>
                 <span>
-                  -{order.discountAmount} <CurrencySymbol code={shop?.currency} />
+                  -{formatPriceAmount(order.discountAmount!, shop?.currency)}{" "}
+                  <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
             )}
-            {order.taxAmount && (
+            {/* Same rule as the tracking page - see lib/order-money-rows.ts.
+                This one used truthiness, which on a string is nearly always
+                true, so it printed a Tax row for every zero-tax order. */}
+            {hasAmount(order.taxAmount) && (
               <div className="flex justify-between text-zinc-500">
                 <span>Tax</span>
                 <span>
-                  {order.taxAmount} <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(order.taxAmount!, shop?.currency)}{" "}
+                  <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
             )}

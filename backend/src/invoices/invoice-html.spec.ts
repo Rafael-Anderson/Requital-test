@@ -43,6 +43,8 @@ function data(overrides: Partial<InvoiceHtmlData> = {}): InvoiceHtmlData {
           quantity: 1,
           priceAtPurchase: '100.00',
           autoDiscountAmount: null,
+          taxRate: '5.00',
+          taxAmount: '5.00',
         },
       ],
     },
@@ -167,5 +169,82 @@ describe('renderInvoiceHtml totals arithmetic', () => {
     );
     expect(html).not.toContain('Includes tax');
     expect(row(html, 'Subtotal')).toBeNull();
+  });
+});
+
+
+describe('renderInvoiceHtml per-line tax and breakdown (B3)', () => {
+  it('renders a Tax column with the captured rate per line', () => {
+    const html = renderInvoiceHtml(data({ taxInclusive: false }));
+    expect(html).toContain('<th class="num">Tax</th>');
+    expect(html).toContain('(5%)');
+  });
+
+  // A pre-B2 order captured nothing. Every cell would be an em dash, so the
+  // column is dropped rather than printed empty.
+  it('omits the Tax column entirely when no line carries a capture', () => {
+    const base = data();
+    const html = renderInvoiceHtml({
+      ...base,
+      order: {
+        ...base.order,
+        orderitem: base.order.orderitem.map((i) => ({
+          ...i,
+          taxRate: null,
+          taxAmount: null,
+        })),
+      },
+    });
+    expect(html).not.toContain('<th class="num">Tax</th>');
+  });
+
+  it('renders the breakdown by rate, and the rows sum to the Tax total', () => {
+    const html = renderInvoiceHtml(
+      data({
+        taxInclusive: false,
+        taxAmount: '15.00',
+        taxBreakdown: [
+          { taxRate: 5, taxableAmount: 300, taxAmount: 15 },
+          { taxRate: 0, taxableAmount: 50, taxAmount: 0 },
+        ],
+      }),
+    );
+    expect(html).toContain('Tax summary');
+    expect(html).toContain('Taxable at 5%');
+    // Zero-rated is listed too: on a return it is as reportable as taxed sales.
+    expect(html).toContain('Taxable at 0%');
+  });
+
+  it('labels the delivery row rather than calling it a rate', () => {
+    const html = renderInvoiceHtml(
+      data({
+        taxBreakdown: [
+          { taxRate: 5, taxableAmount: 100, taxAmount: 5 },
+          { taxRate: 0, taxableAmount: 0, taxAmount: 1, label: 'Delivery' },
+        ],
+      }),
+    );
+    expect(html).toContain('>Delivery</td>');
+    expect(html).not.toContain('Taxable at 0%');
+  });
+
+  it('prints no breakdown when there is none to print', () => {
+    expect(renderInvoiceHtml(data({ taxBreakdown: [] }))).not.toContain(
+      'Tax summary',
+    );
+    expect(renderInvoiceHtml(data({}))).not.toContain('Tax summary');
+  });
+
+  // A packing slip hides pricing from warehouse and rider staff; a tax summary
+  // is pricing.
+  it('prints neither the Tax column nor the breakdown on a packing slip', () => {
+    const html = renderInvoiceHtml(
+      data({
+        type: 'PACKING_SLIP',
+        taxBreakdown: [{ taxRate: 5, taxableAmount: 100, taxAmount: 5 }],
+      }),
+    );
+    expect(html).not.toContain('<th class="num">Tax</th>');
+    expect(html).not.toContain('Tax summary');
   });
 });

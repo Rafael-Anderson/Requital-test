@@ -13,6 +13,11 @@ export interface CartItem {
   thumbnail: string;
   quantity: number;
   maxStock: number | null; // null = unlimited (not stock-tracked)
+  // The product's tax rate at the time it went in the cart, for the checkout
+  // quote only (lib/order-tax.ts). The server re-resolves it at order creation
+  // and its number is the one charged. Optional: a cart persisted in
+  // localStorage before this field existed has no rate on its lines.
+  taxRate?: number;
   // Gift Cards — when true, `price` IS the denomination/custom amount the
   // shopper picked (not a catalog price), and checkout sends it back as
   // this line's giftCardAmount rather than leaving it off the payload — see

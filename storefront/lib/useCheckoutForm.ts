@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
+import { quoteCartTax } from "@/lib/order-tax";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
@@ -32,6 +33,19 @@ export function useCheckoutForm() {
   // and the server is the only one that ever actually draws down the balance.
   const [giftCardAmount, setGiftCardAmount] = useState<number | null>(null);
   const total = Math.max(0, subtotal - (discountAmount ?? 0) - (giftCardAmount ?? 0));
+  // The tax quote shown at checkout. A display mirror of the server's per-line
+  // computation (see lib/order-tax.ts) - the server recomputes and charges its
+  // own number at order creation. Computed once here so both checkout layouts
+  // show the identical figure.
+  const taxQuote = quoteCartTax({
+    lines: items.map((i) => ({
+      amount: i.price * i.quantity,
+      taxRate: i.taxRate,
+    })),
+    discountAmount: discountAmount ?? 0,
+    taxInclusive: Boolean(shop?.taxInclusive),
+    fallbackRate: Number(shop?.taxRate ?? 0),
+  });
 
   const deliveryOutlets = outlets.filter((o) => o.deliveryEnabled);
   const pickupOutlets = outlets.filter((o) => o.pickupEnabled);
@@ -257,6 +271,7 @@ export function useCheckoutForm() {
     shop,
     items,
     subtotal,
+    taxQuote,
     total,
     discountAmount,
     setDiscountAmount,

@@ -1,6 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { formatPriceAmount } from "@/lib/currency";
+import { hasAmount } from "@/lib/order-money-rows";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
@@ -67,26 +69,31 @@ function OrderConfirmationContent() {
               </span>
             </div>
           )}
-          {order.discountAmount !== null && Number(order.discountAmount) > 0 && (
+          {hasAmount(order.discountAmount) && (
             <div className="flex justify-between text-green-600">
               <span>Discount{order.discountCode ? ` (${order.discountCode})` : ""}</span>
               <span>
-                -{order.discountAmount} <CurrencySymbol code={shop?.currency} />
+                -{formatPriceAmount(order.discountAmount!, shop?.currency)}{" "}
+                <CurrencySymbol code={shop?.currency} />
               </span>
             </div>
           )}
-          {order.taxAmount !== null && (
+          {/* One shared rule for both order-detail pages - see
+              lib/order-money-rows.ts for why they had diverged. */}
+          {hasAmount(order.taxAmount) && (
             <div className="flex justify-between">
               <span className="text-zinc-500">Tax</span>
               <span>
-                {order.taxAmount} <CurrencySymbol code={shop?.currency} />
+                {formatPriceAmount(order.taxAmount!, shop?.currency)}{" "}
+                <CurrencySymbol code={shop?.currency} />
               </span>
             </div>
           )}
           <div className="flex justify-between font-medium pt-1 border-t border-black/10">
             <span>Total</span>
             <span>
-              {order.total} <CurrencySymbol code={shop?.currency} />
+              {formatPriceAmount(order.total, shop?.currency)}{" "}
+              <CurrencySymbol code={shop?.currency} />
             </span>
           </div>
         </div>
