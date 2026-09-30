@@ -1,7 +1,6 @@
 "use client";
 
 import type { CheckoutFormState } from "@/lib/useCheckoutForm";
-import { EMIRATES } from "@/lib/types";
 import { storeButtonClassName } from "@/lib/button-style";
 import { isDateBlocked } from "@/lib/slots";
 import PromoCodeField from "@/components/PromoCodeField";
@@ -40,8 +39,6 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
     setCustomerPhone,
     customerEmail,
     setCustomerEmail,
-    emirate,
-    setEmirate,
     deliveryNotes,
     setDeliveryNotes,
     deliveryDate,
@@ -140,19 +137,6 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
       </div>
 
       {orderType === "delivery" && <DeliveryAddressFields state={state} />}
-      {orderType === "pickup" && (
-        <div>
-          <label className="text-sm font-medium block mb-1">Emirate</label>
-          <select value={emirate} onChange={(e) => setEmirate(e.target.value)} className={FIELD_CLASS}>
-            {EMIRATES.map((e) => (
-              <option key={e} value={e}>
-                {e}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <label className="text-sm font-medium block mb-1">{orderType === "pickup" ? "Pickup date (optional)" : "Delivery date (optional)"}</label>

@@ -8,6 +8,7 @@ import type {
   PaginatedAffiliateCodes,
   PaginatedAffiliateOrders,
   PaginatedAffiliates,
+  RegionsResponse,
   AuthUser,
   BranchRole,
   BranchRoleAssignment,
@@ -94,7 +95,9 @@ import type {
   Theme,
   ThemeListItem,
   ThemeTemplateMeta,
-  ThemeConfig,
+  ThemeConfig,
+
+
   InventoryMovementReport,
   TodaySnapshot,
   TopProduct,
@@ -531,6 +534,10 @@ export function unassignBranchRole(userId: number, outletId: number) {
   );
 }
 
+export function getRegions() {
+  return apiFetch<RegionsResponse>("/regions");
+}
+
 export function listOutlets() {
   return apiFetch<Outlet[]>("/outlets");
 }
@@ -545,7 +552,7 @@ export interface OutletInput {
   email?: string;
   whatsapp?: string;
   active?: boolean;
-  emirate?: string;
+  regionId?: number;
   area?: string;
   phone?: string;
   latitude?: number;

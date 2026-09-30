@@ -59,7 +59,7 @@ export function paymentModeLabel(order: Order): { label: string; gatewaySubline:
 }
 
 function formatDeliveryAddress(order: Order): string {
-  return [order.customerAddress, order.area, order.emirate].filter(Boolean).join(", ");
+  return [order.customerAddress, order.area, order.region?.nameEn ?? order.emirate].filter(Boolean).join(", ");
 }
 
 export default function ManageDeliveryModal({

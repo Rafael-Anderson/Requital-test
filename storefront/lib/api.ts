@@ -19,6 +19,7 @@ import type {
   DeliveryZone,
   OrderLookupResult,
   Outlet,
+  RegionsResponse,
   PolicyPage,
   Product,
   SearchResponse,
@@ -264,6 +265,10 @@ export async function getRelatedProducts(shopSlug: string, slug: string, outletI
 export function listOutlets(shopSlug: string, previewToken?: string) {
   const qs = previewToken ? `?previewToken=${encodeURIComponent(previewToken)}` : "";
   return get<Outlet[]>(`/public/${shopSlug}/outlets${qs}`);
+}
+
+export function getRegions(shopSlug: string) {
+  return get<RegionsResponse>(`/public/${shopSlug}/regions`);
 }
 
 export function listDeliveryZones(shopSlug: string, outletId: number) {
@@ -593,14 +598,21 @@ export function listMyAddresses(shopSlug: string) {
   return authedFetch<CustomerAddress[]>(shopSlug, `/public/${shopSlug}/account/addresses`);
 }
 
-export function createMyAddress(shopSlug: string, data: Omit<CustomerAddress, "id">) {
+export function createMyAddress(
+  shopSlug: string,
+  data: Omit<CustomerAddress, "id" | "region" | "emirate">,
+) {
   return authedFetch<CustomerAddress>(shopSlug, `/public/${shopSlug}/account/addresses`, {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export function updateMyAddress(shopSlug: string, addressId: string, data: Partial<Omit<CustomerAddress, "id">>) {
+export function updateMyAddress(
+  shopSlug: string,
+  addressId: string,
+  data: Partial<Omit<CustomerAddress, "id" | "region" | "emirate">>,
+) {
   return authedFetch<CustomerAddress>(shopSlug, `/public/${shopSlug}/account/addresses/${addressId}`, {
     method: "PATCH",
     body: JSON.stringify(data),

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CheckoutFormState } from "@/lib/useCheckoutForm";
-import { EMIRATES } from "@/lib/types";
+import RegionSelect from "./RegionSelect";
 import MapPicker from "@/components/MapPicker";
 import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_OUTLINE_CLASS } from "./checkout-field-styles";
 
@@ -12,8 +12,8 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
   const {
     customerAddress,
     setCustomerAddress,
-    emirate,
-    setEmirate,
+    regionId,
+    setRegionId,
     area,
     setArea,
     coords,
@@ -78,16 +78,7 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
         />
       </div>
       <div className="grid sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-sm font-medium block mb-1">Emirate</label>
-          <select value={emirate} onChange={(e) => setEmirate(e.target.value)} className={FIELD_CLASS}>
-            {EMIRATES.map((e) => (
-              <option key={e} value={e}>
-                {e}
-              </option>
-            ))}
-          </select>
-        </div>
+        <RegionSelect value={regionId} onChange={setRegionId} />
         <div>
           <label className="text-sm font-medium block mb-1">Area (optional)</label>
           <input value={area} onChange={(e) => setArea(e.target.value)} className={FIELD_CLASS} />

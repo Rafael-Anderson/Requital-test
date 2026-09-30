@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import type { CheckoutFormState } from "@/lib/useCheckoutForm";
-import { EMIRATES } from "@/lib/types";
 import { storeButtonClassName } from "@/lib/button-style";
 import { isDateBlocked } from "@/lib/slots";
 import PromoCodeField from "@/components/PromoCodeField";
@@ -67,8 +66,6 @@ export default function CheckoutSteps(state: CheckoutFormState) {
     customerEmail,
     setCustomerEmail,
     customerAddress,
-    emirate,
-    setEmirate,
     deliveryNotes,
     setDeliveryNotes,
     deliveryDate,
@@ -172,19 +169,6 @@ export default function CheckoutSteps(state: CheckoutFormState) {
         {step === 1 && (
           <div className="space-y-4">
             {orderType === "delivery" && <DeliveryAddressFields state={state} />}
-            {orderType === "pickup" && (
-              <div>
-                <label className="text-sm font-medium block mb-1">Emirate</label>
-                <select value={emirate} onChange={(e) => setEmirate(e.target.value)} className={FIELD_CLASS}>
-                  {EMIRATES.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium block mb-1">{orderType === "pickup" ? "Pickup date (optional)" : "Delivery date (optional)"}</label>

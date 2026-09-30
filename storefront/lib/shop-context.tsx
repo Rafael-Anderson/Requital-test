@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
+import { getRegions, getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
 import { resolveSchemeCssVars, resolveThemeCssVars } from "./theme-css-vars";
 import { applyMotionCssVars, applyScrollBehavior } from "./motion";
 import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
@@ -12,7 +12,7 @@ import { captureReferralFromUrl } from "./referral";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
 import { resolveLetterSpacing, resolveLineHeight, resolveScaleSizes, resolveTypographyPairing } from "./theme-typography";
-import type { AutoDiscount, Outlet, Shop } from "./types";
+import type { AutoDiscount, Outlet, RegionsResponse, Shop } from "./types";
 import type { ColorScheme, HeadingTextPreset, ThemeConfig } from "./theme-config-types";
 
 interface ShopContextValue {
@@ -59,6 +59,12 @@ interface ShopContextValue {
   // "no auto discounts yet" shop and "still loading" shop render identically
   // (no strikethrough) either way.
   autoDiscounts: AutoDiscount[];
+  // The regions (emirates, provinces, governorates) of this shop's own country,
+  // for address forms. Empty while loading, and for a shop whose country has no
+  // region model; the address forms then simply omit the field. `regionLabel`
+  // is what that country calls them ("Emirate", "Governorate", ...).
+  regions: RegionsResponse["regions"];
+  regionLabel: string;
 }
 
 const ShopContext = createContext<ShopContextValue | null>(null);
@@ -442,6 +448,7 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   const [shop, setShop] = useState<Shop | null>(null);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [autoDiscounts, setAutoDiscounts] = useState<AutoDiscount[]>([]);
+  const [regionsRes, setRegionsRes] = useState<RegionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
@@ -560,6 +567,15 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
       .catch(() => setAutoDiscounts([]));
   }, [shopSlug]);
 
+  // Same reasoning again: a failed regions fetch must not take the shop down. The
+  // address forms just lose the region field, and the server says so if one was
+  // required.
+  useEffect(() => {
+    getRegions(shopSlug)
+      .then(setRegionsRes)
+      .catch(() => setRegionsRes(null));
+  }, [shopSlug]);
+
   // Live preview sync — only registered in preview mode, never for a real
   // shopper visit. Validates event.origin against the known admin
   // origin(s) before accepting a config update; an untrusted origin (or a
@@ -599,7 +615,20 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
 
   return (
     <ShopContext.Provider
-      value={{ shopSlug, shopBasePath, shop, outlets, loading, error, themeConfig, previewMode: preview, previewToken, autoDiscounts }}
+      value={{
+        shopSlug,
+        shopBasePath,
+        shop,
+        outlets,
+        loading,
+        error,
+        themeConfig,
+        previewMode: preview,
+        previewToken,
+        autoDiscounts,
+        regions: regionsRes?.regions ?? [],
+        regionLabel: regionsRes?.country?.regionLabel ?? "Region",
+      }}
     >
       {children}
     </ShopContext.Provider>

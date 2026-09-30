@@ -433,6 +433,7 @@ export interface Outlet {
   name: string;
   nameAr: string | null;
   emirate: string | null;
+  region?: Region | null;
   area: string | null;
   phone: string | null;
   latitude: number | null;
@@ -473,7 +474,9 @@ export interface CreateOrderPayload {
   customerPhone: string;
   customerEmail?: string;
   customerAddress: string;
-  emirate: string;
+  // Required for a delivery order in a country that has regions; omitted for
+  // pickup (there is no customer address to place in a region).
+  regionId?: number;
   area?: string;
   latitude?: number;
   longitude?: number;
@@ -666,7 +669,10 @@ export interface CustomerAddress {
   id: string;
   label?: string;
   address: string;
-  emirate: string;
+  regionId?: number | null;
+  region?: Region | null;
+  // Legacy name of the region, still returned while older clients exist.
+  emirate?: string | null;
   area?: string;
   latitude?: number;
   longitude?: number;
@@ -730,15 +736,21 @@ export interface PolicyPage {
   updatedAt: string;
 }
 
-export const EMIRATES = [
-  "Abu Dhabi",
-  "Dubai",
-  "Sharjah",
-  "Ajman",
-  "Umm Al Quwain",
-  "Ras Al Khaimah",
-  "Fujairah",
-] as const;
+// A first-level administrative region of a country (an emirate, a province, a
+// governorate). Options come from GET /public/:shopSlug/regions, never a
+// hardcoded list: they differ per country.
+export interface Region {
+  id: number;
+  code: string;
+  nameEn: string;
+  nameAr: string;
+}
+
+export interface RegionsResponse {
+  // null for a shop whose country is unknown; it then has no regions either.
+  country: { code: string; regionLabel: string } | null;
+  regions: (Region & { sortOrder: number })[];
+}
 
 // What the /pay page renders before the customer commits. Comes from the
 // READ-ONLY GET /pay/:token/summary - deliberately not GET /pay/:token, which
