@@ -135,34 +135,48 @@ describe('Shop country lock (e2e)', () => {
     );
   });
 
-  // Fix 1: the currency allowlist. The admin dropdown offered seven currencies
-  // against a field that validated only @IsString() @MaxLength(10), and the
-  // value reaches a real payment gateway as the charge currency - it was never
-  // display-only. Locked to AED until multi-currency actually ships (audit D6 /
-  // I18N-4). Remove these cases when the lock is widened, not before.
-  describe('currency lock', () => {
-    it('accepts AED, the only supported currency today', async () => {
-      const shop = await setupShop('currency-aed-ok');
-      await request(app.getHttpServer())
-        .patch('/shop')
-        .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ currency: 'AED' })
-        .expect(200);
-    });
+  // The currency allowlist. The field validated only @IsString()
+  // @MaxLength(10) originally, while the admin dropdown offered seven
+  // currencies and the value reaches a real payment gateway as the charge
+  // currency - it was never display-only. It was then locked to AED while the
+  // money layer was built (A1-A5), and WIDENED to all seven by Phase 2a/A6.
+  // The allowlist itself is what still matters: it is the whole write surface.
+  describe('currency allowlist', () => {
+    it.each(['AED', 'SAR', 'KWD', 'QAR', 'BHD', 'OMR', 'USD'])(
+      'accepts %s',
+      async (currency) => {
+        const shop = await setupShop(`currency-ok-${currency.toLowerCase()}`);
+        await request(app.getHttpServer())
+          .patch('/shop')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .send({ currency })
+          .expect(200);
+        // Read it back through the API rather than the DB: this spec has no
+        // database handle, and the response is the contract the admin consumes.
+        const shopRes = await request(app.getHttpServer())
+          .get('/shop')
+          .set('Authorization', `Bearer ${shop.adminToken}`)
+          .expect(200);
+        expect(body<{ currency: string }>(shopRes).currency).toBe(currency);
+      },
+    );
 
-    it('rejects every other currency the admin dropdown used to offer', async () => {
-      const shop = await setupShop('currency-rejects');
-      for (const currency of ['SAR', 'KWD', 'QAR', 'BHD', 'OMR', 'USD']) {
+    // The allowlist is still an allowlist: a real ISO code this platform does
+    // not support must not get through just because the lock was widened.
+    it.each(['EUR', 'GBP', 'INR', 'aed'])(
+      'still rejects %s',
+      async (currency) => {
+        const shop = await setupShop(`currency-no-${currency.toLowerCase()}`);
         const res = await request(app.getHttpServer())
           .patch('/shop')
           .set('Authorization', `Bearer ${shop.adminToken}`)
           .send({ currency })
           .expect(400);
         expect(JSON.stringify(body<unknown>(res))).toContain(
-          'Only AED is supported today',
+          'currency must be one of',
         );
-      }
-    });
+      },
+    );
 
     // The DTO is the whole write surface, so an arbitrary string has to be
     // rejected too - MaxLength(10) alone used to let this through.
@@ -180,12 +194,15 @@ describe('Shop country lock (e2e)', () => {
         .expect(400);
     });
 
+    // The property still matters after A6 widened the list: a rejected write must
+    // not mutate the stored value. Re-pointed from KWD (now accepted) to a code
+    // this platform still does not support.
     it('leaves the stored currency untouched after a rejected write', async () => {
       const shop = await setupShop('currency-unchanged');
       await request(app.getHttpServer())
         .patch('/shop')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ currency: 'KWD' })
+        .send({ currency: 'EUR' })
         .expect(400);
       const res = await request(app.getHttpServer())
         .get('/shop')
