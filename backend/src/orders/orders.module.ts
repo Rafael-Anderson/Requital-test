@@ -10,6 +10,7 @@ import { OrderNotificationsModule } from './order-notifications.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
+import { RegionsModule } from '../regions/regions.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
     BranchRolesModule,
     NotifySubscriptionsModule,
     CurrencyRatesModule,
+    RegionsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

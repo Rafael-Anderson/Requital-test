@@ -106,6 +106,7 @@ describe('CustomerAccountService.exportData', () => {
       mockInvoicesService,
       auditLog,
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     const result = await service.exportData(ctx);
@@ -146,6 +147,7 @@ describe('CustomerAccountService.exportData', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -166,6 +168,7 @@ describe('CustomerAccountService.exportData', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -181,6 +184,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     const result = await service.requestDeletion(ctx);
@@ -218,6 +222,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -258,6 +263,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -285,6 +291,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -303,6 +310,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -364,6 +372,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockInvoicesService,
       createMockAuditLog(),
       mockPublicService,
+      {} as never, // regionsService: not reached by these paths
     );
 
     const first = await service.confirmDeletion(ctx, raw);

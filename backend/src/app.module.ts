@@ -31,6 +31,7 @@ import { BrandsModule } from './brands/brands.module';
 import { TaxClassesModule } from './tax-classes/tax-classes.module';
 import { ShopModule } from './shop/shop.module';
 import { DeliveryZonesModule } from './delivery-zones/delivery-zones.module';
+import { RegionsModule } from './regions/regions.module';
 import { PublicModule } from './public/public.module';
 import { CustomersModule } from './customers/customers.module';
 import { ReportsModule } from './reports/reports.module';
@@ -145,6 +146,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     TaxClassesModule,
     ShopModule,
     DeliveryZonesModule,
+    RegionsModule,
     PublicModule,
     CustomersModule,
     ReportsModule,

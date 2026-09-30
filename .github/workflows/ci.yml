@@ -203,6 +203,9 @@ jobs:
       - name: Outlet-scoping guardrail (tenant-isolation)
         run: node tools/check-outlet-scoping.js
 
+      - name: Region-validation guardrail (every regionId write is country-checked)
+        run: node tools/check-region-validation.js
+
       - name: Page-width guardrail
         run: node tools/check-page-width.js
 

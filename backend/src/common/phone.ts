@@ -1,8 +1,7 @@
 const UAE_COUNTRY_CODE = '971';
 
 // UAE-scoped, not a general international phone parser — this app's
-// checkout only accepts UAE emirates as delivery addresses (see
-// orders/constants.ts EMIRATES), and customer phone numbers are collected
+// checkout was built for UAE delivery addresses, and customer phone numbers are collected
 // as plain local UAE numbers with no separate country-code field. A number
 // already carrying its own country code (+ or 00 prefixed, or a non-UAE
 // E.164 number) is left as-is; anything else is assumed local UAE and given

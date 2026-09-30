@@ -52,14 +52,3 @@ export const IMMEDIATE_STOCK_RESERVATION_CHANNELS = [
 // this feature deliberately doesn't try to reconcile. 'cancelled'/
 // 'delivered' are terminal states already excluded by not being pending/confirmed.
 export const EDITABLE_ORDER_STATUSES: OrderStatus[] = ['pending', 'confirmed'];
-
-export const EMIRATES = [
-  'Abu Dhabi',
-  'Dubai',
-  'Sharjah',
-  'Ajman',
-  'Umm Al Quwain',
-  'Ras Al Khaimah',
-  'Fujairah',
-] as const;
-export type Emirate = (typeof EMIRATES)[number];

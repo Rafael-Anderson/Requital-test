@@ -41,6 +41,7 @@ import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
 import { ThemesService } from '../themes/themes.service';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { RegionsService, attachRegion } from '../regions/regions.service';
 import { roundMoney } from '../common/currency-minor-units';
 import {
   POLICY_PAGE_TYPES,
@@ -119,6 +120,7 @@ export class PublicService {
     private readonly themesService: ThemesService,
     private readonly jwtService: JwtService,
     private readonly currencyRatesService: CurrencyRatesService,
+    private readonly regionsService: RegionsService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -450,6 +452,13 @@ export class PublicService {
 
   // Storefront brand filter — only brands that have at least one Available
   // product, so the filter never lists a brand that would match nothing.
+  // The regions the storefront's address forms offer: those of this shop's own
+  // country. Reference data, so no preview-token handling is needed.
+  async listRegions(shopSlug: string) {
+    const shop = await this.resolveShop(shopSlug);
+    return this.regionsService.listForShop(shop.id);
+  }
+
   async listPublicBrands(shopSlug: string, previewToken?: string) {
     const shop = await this.resolveShop(shopSlug);
     await this.assertPublishedOrPreview(shop, previewToken);
@@ -1150,11 +1159,13 @@ export class PublicService {
       `SELECT * FROM outlet WHERE shopId = ? AND active = 1 ORDER BY id ASC`,
       [shop.id],
     );
-    return outlets.map((o) => ({
+    const withRegion = await attachRegion(this.db, outlets);
+    return withRegion.map((o) => ({
       id: o.id,
       name: o.name,
       nameAr: o.nameAr,
       emirate: o.emirate,
+      region: o.region,
       area: o.area,
       phone: o.phone,
       latitude: o.latitude,
@@ -1441,10 +1452,24 @@ export class PublicService {
       },
     );
 
+    // Required even for pickup, as the old emirate validator was. Resolved
+    // here, before the fee, because zone matching needs the region's name.
+    const region = await this.regionsService.resolveForShop(shop.id, dto, {
+      required: true,
+    });
+
     let deliveryFee =
       dto.orderType === 'pickup'
         ? 0
-        : Number(await this.resolveDeliveryFee(shop, outlet, dto, subtotal));
+        : Number(
+            await this.resolveDeliveryFee(
+              shop,
+              outlet,
+              dto,
+              subtotal,
+              region.emirate ?? '',
+            ),
+          );
 
     // Resolved before the transaction (doesn't need order.id) — an
     // invalid/expired/exhausted code throws here rather than silently
@@ -1601,11 +1626,11 @@ export class PublicService {
           const [res] = await conn.query(
         `INSERT INTO \`order\` (
           shopId, ingredientsConsumedAt, outletId, customerId, customerName, customerPhone, customerEmail,
-          customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          customerAddress, emirate, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1615,7 +1640,8 @@ export class PublicService {
           dto.customerPhone,
           dto.customerEmail ?? null,
           dto.customerAddress,
-          dto.emirate,
+          region.emirate,
+          region.regionId,
           dto.area ?? null,
           dto.deliveryDate ? new Date(dto.deliveryDate) : null,
           dto.deliveryTimeSlot ?? null,
@@ -1861,6 +1887,7 @@ export class PublicService {
     },
     dto: CreatePublicOrderDto,
     subtotal: number,
+    emirateName: string,
   ): Promise<string> {
     // Radius is the eligibility boundary — if configured, coordinates are
     // required to prove the customer is inside it. Zones (below) then
@@ -1891,7 +1918,7 @@ export class PublicService {
     const zone = matchDeliveryZone(
       zones,
       dto.area,
-      dto.emirate,
+      emirateName,
       dto.latitude != null && dto.longitude != null
         ? { lat: dto.latitude, lng: dto.longitude }
         : null,
@@ -1923,7 +1950,7 @@ export class PublicService {
       }
       logger.warn(
         'address matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
-        { outletId: outlet.id, area: dto.area ?? null, emirate: dto.emirate },
+        { outletId: outlet.id, area: dto.area ?? null, emirate: emirateName },
       );
     }
 

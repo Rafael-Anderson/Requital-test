@@ -1,4 +1,5 @@
 import { OutletsService } from './outlets.service';
+import type { RegionsService } from '../regions/regions.service';
 import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -41,11 +42,22 @@ function insertFields(sql: string, params: unknown[]): Record<string, unknown> {
 // field left untouched" is just "is the key absent."
 function updateFields(sql: string, params: unknown[]): Record<string, unknown> {
   const match = sql.match(/SET ([\s\S]*?) WHERE/)!;
-  const columns = match[1]
-    .split(',')
-    .map((c) => c.trim().replace(/`/g, '').replace(/\s*=\s*\?$/, ''));
+  const columns = match[1].split(',').map((c) =>
+    c
+      .trim()
+      .replace(/`/g, '')
+      .replace(/\s*=\s*\?$/, ''),
+  );
   return Object.fromEntries(columns.map((c, i) => [c, params[i]]));
 }
+
+// The region check has its own e2e coverage (region-validation.e2e-spec.ts);
+// these tests are about the delivery wiring, so it resolves to "no region".
+const mockRegionsService = {
+  resolveForShop: jest
+    .fn()
+    .mockResolvedValue({ regionId: null, emirate: null }),
+} as unknown as RegionsService;
 
 const adminCtx: TenantContext = {
   userId: 1,
@@ -58,7 +70,11 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
   it('create() persists deliveryRadiusKm with latitude/longitude together', async () => {
     const db = createMockDb();
     db.query.mockResolvedValue([{ id: 1 }]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.create(adminCtx, {
       name: 'Test Outlet',
@@ -79,7 +95,11 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
 
   it('create() rejects delivery enabled without coordinates', async () => {
     const db = createMockDb();
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(
       service.create(adminCtx, {
@@ -87,13 +107,19 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
         deliveryEnabled: true,
         deliveryRadiusKm: 5,
       } as any),
-    ).rejects.toThrow('Outlet coordinates are required when delivery is enabled');
+    ).rejects.toThrow(
+      'Outlet coordinates are required when delivery is enabled',
+    );
     expect(db.execute).not.toHaveBeenCalled();
   });
 
   it('create() rejects delivery enabled without a radius', async () => {
     const db = createMockDb();
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(
       service.create(adminCtx, {
@@ -102,7 +128,9 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
         latitude: 25.2,
         longitude: 55.3,
       } as any),
-    ).rejects.toThrow('Delivery radius (km) is required when delivery is enabled');
+    ).rejects.toThrow(
+      'Delivery radius (km) is required when delivery is enabled',
+    );
     expect(db.execute).not.toHaveBeenCalled();
   });
 
@@ -120,7 +148,11 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
       },
     ]);
     db.query.mockResolvedValueOnce([{ id: 5 }]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.update(adminCtx, 5, {
       deliveryEnabled: true,
@@ -147,7 +179,11 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
         closedOverride: false,
       },
     ]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(
       service.update(adminCtx, 5, {
@@ -174,7 +210,11 @@ describe('OutletsService — delivery radius/coordinates wiring', () => {
       },
     ]);
     db.query.mockResolvedValueOnce([{ id: 5 }]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.update(adminCtx, 5, { name: 'Renamed' });
 
@@ -186,7 +226,11 @@ describe('OutletsService — closedOverride timestamp stamping', () => {
   it('create() stamps closedOverrideSetAt when created with the override already on', async () => {
     const db = createMockDb();
     db.query.mockResolvedValue([{ id: 1 }]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.create(adminCtx, {
       name: 'Test Outlet',
@@ -213,7 +257,11 @@ describe('OutletsService — closedOverride timestamp stamping', () => {
       },
     ]);
     db.query.mockResolvedValueOnce([{ id: 5 }]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.update(adminCtx, 5, { closedOverride: false });
 
@@ -237,7 +285,11 @@ describe('OutletsService — closedOverride timestamp stamping', () => {
       },
     ]);
     db.query.mockResolvedValueOnce([{ id: 5 }]);
-    const service = new OutletsService(db, mockBranchRolesService);
+    const service = new OutletsService(
+      db,
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.update(adminCtx, 5, { name: 'Renamed' });
 
@@ -265,7 +317,11 @@ describe('OutletsService.geocode', () => {
         },
       ],
     } as any);
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     const result = await service.geocode('Dubai Mall');
 
@@ -287,7 +343,11 @@ describe('OutletsService.geocode', () => {
       ok: true,
       json: async () => [],
     } as any);
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(service.geocode('zzznonexistentplace')).rejects.toThrow(
       'No location found for that search',
@@ -296,7 +356,11 @@ describe('OutletsService.geocode', () => {
 
   it('rejects an empty query without calling fetch', async () => {
     global.fetch = jest.fn();
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(service.geocode('')).rejects.toThrow(
       'A search query is required',
@@ -306,7 +370,11 @@ describe('OutletsService.geocode', () => {
 
   it('throws a friendly error when the upstream request itself fails (network/non-200)', async () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false });
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(service.geocode('Dubai Mall')).rejects.toThrow(
       'Geocoding lookup failed',
@@ -318,7 +386,11 @@ describe('OutletsService.geocode', () => {
       ok: true,
       json: async () => [{ lat: '1', lon: '2', display_name: 'x' }],
     } as any);
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await service.geocode('Dubai Mall');
 
@@ -344,7 +416,11 @@ describe('OutletsService.reverseGeocode', () => {
       ok: true,
       json: async () => ({ display_name: 'Dubai Mall, Dubai, UAE' }),
     } as any);
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     const result = await service.reverseGeocode(25.197044, 55.2789516);
 
@@ -359,7 +435,11 @@ describe('OutletsService.reverseGeocode', () => {
       ok: true,
       json: async () => ({ error: 'Unable to geocode' }),
     } as any);
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(service.reverseGeocode(0, 0)).rejects.toThrow(
       'No address found for that location',
@@ -368,7 +448,11 @@ describe('OutletsService.reverseGeocode', () => {
 
   it('rejects missing/non-numeric coordinates without calling fetch', async () => {
     global.fetch = jest.fn();
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(service.reverseGeocode(undefined, undefined)).rejects.toThrow(
       'lat and lon are required',
@@ -381,7 +465,11 @@ describe('OutletsService.reverseGeocode', () => {
 
   it('throws a friendly error when the upstream request itself fails', async () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false });
-    const service = new OutletsService(createMockDb(), mockBranchRolesService);
+    const service = new OutletsService(
+      createMockDb(),
+      mockBranchRolesService,
+      mockRegionsService,
+    );
 
     await expect(service.reverseGeocode(25.2, 55.3)).rejects.toThrow(
       'Reverse geocoding lookup failed',
