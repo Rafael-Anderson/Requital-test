@@ -520,8 +520,14 @@ describe('Storefront public checkout (e2e)', () => {
     };
 
     beforeAll(async () => {
+      // An emirate-wide zone with no circle is one the API no longer lets a
+      // region-mode shop create, so it is seeded directly (legacy, name-matched).
+      const legacy = await db.execute(
+        'INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive) VALUES (?, ?, ?, 0, 1)',
+        [outletId, 'Dubai', 30],
+      );
+      zoneIds.push(legacy.insertId);
       for (const zone of [
-        { name: 'Dubai', fee: 30 }, // emirate-wide, no circle
         {
           name: 'Marina Walk',
           fee: 40,
@@ -587,12 +593,11 @@ describe('Storefront public checkout (e2e)', () => {
     let zoneId: number;
 
     beforeAll(async () => {
-      const zone = await request(app.getHttpServer())
-        .post(`/outlets/${outletId}/delivery-zones`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Marina', fee: 25, minOrderAmount: 200 })
-        .expect(201);
-      zoneId = body<IdRow>(zone).id;
+      const zone = await db.execute(
+        'INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive) VALUES (?, ?, ?, ?, 1)',
+        [outletId, 'Marina', 25, 200],
+      );
+      zoneId = zone.insertId;
     });
 
     afterAll(async () => {
@@ -707,12 +712,11 @@ describe('Storefront public checkout (e2e)', () => {
         noRadiusOutletId,
       ]);
 
-      const zone = await request(app.getHttpServer())
-        .post(`/outlets/${noRadiusOutletId}/delivery-zones`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Only This Zone', fee: 30 })
-        .expect(201);
-      zoneId = body<IdRow>(zone).id;
+      const zone = await db.execute(
+        'INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive) VALUES (?, ?, ?, 0, 1)',
+        [noRadiusOutletId, 'Only This Zone', 30],
+      );
+      zoneId = zone.insertId;
     });
 
     afterAll(async () => {
