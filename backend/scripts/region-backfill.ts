@@ -4,7 +4,11 @@
 //   npx ts-node -r tsconfig-paths/register scripts/region-backfill.ts --apply-addresses
 //
 // The order / draftorder / outlet backfills are plain UPDATEs inside migration
-// 20261001110000. This script (a) reports, per table, how many rows mapped, how
+// 20261001110000. The contract migration 20261003100000 drops those `emirate`
+// source columns and REFUSES to run while a row still holds a value no region
+// carries, so run this first: any "unmatched" line below is exactly what would
+// block it (exit code 1 in that case). Once the columns are gone the per-table
+// report is skipped. This script (a) reports, per table, how many rows mapped, how
 // many had nothing to map (source emirate NULL) and how many held a value that
 // matched no region, and (b) with --apply-addresses stamps `regionId` into the
 // customer.addresses JSON (idempotent). It prints counts and region names only,
@@ -22,7 +26,18 @@ async function main() {
   const apply = process.argv.includes('--apply-addresses');
   const pool = createPool({ uri: process.env.DATABASE_URL });
   try {
+    let blocked = false;
+    const [cols] = await pool.query<RowDataPacket[]>(
+      `SELECT table_name AS t FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND column_name = 'emirate'
+          AND table_name IN ('order', 'draftorder', 'outlet')`,
+    );
+    const haveEmirate = new Set(cols.map((c) => String(c.t)));
     for (const t of TABLES) {
+      if (!haveEmirate.has(t)) {
+        console.log(`${t}: emirate column already dropped`);
+        continue;
+      }
       const [rows] = await pool.query<RowDataPacket[]>(
         `SELECT COUNT(*) AS total,
                 SUM(regionId IS NOT NULL) AS mapped,
@@ -40,6 +55,7 @@ async function main() {
       );
       for (const b of bad)
         console.log(`  unmatched value: "${b.emirate}" x${b.n}`);
+      if (bad.length > 0) blocked = true;
     }
 
     const [shops] = await pool.query<RowDataPacket[]>(
@@ -85,6 +101,12 @@ async function main() {
     );
     for (const [v, n] of unmapped)
       console.log(`  unmatched value: "${v}" x${n}`);
+    if (blocked) {
+      console.log(
+        'BLOCKED: unmatched emirate values above would be lost by migration 20261003100000.',
+      );
+      process.exitCode = 1;
+    }
   } finally {
     await pool.end();
   }

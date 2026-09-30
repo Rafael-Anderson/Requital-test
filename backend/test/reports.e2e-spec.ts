@@ -122,7 +122,7 @@ describe('Reports (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletAId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
     const outletBRes = await request(app.getHttpServer())
       .post('/outlets')
@@ -133,7 +133,7 @@ describe('Reports (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletBId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -182,7 +182,6 @@ describe('Reports (e2e)', () => {
       customerName: 'Report Test Customer',
       customerPhone: '0501230001',
       customerAddress: 'Pickup',
-      emirate: 'Dubai',
       outletId,
       orderType: 'pickup',
       items: [{ productId, quantity }],
@@ -415,7 +414,6 @@ describe('Reports (e2e)', () => {
           customerName: 'Storefront Customer',
           customerPhone: '0509990000',
           customerAddress: 'Pickup',
-          emirate: 'Dubai',
           items: [{ productId: shop.productId, quantity: 1 }],
         })
         .expect(201);

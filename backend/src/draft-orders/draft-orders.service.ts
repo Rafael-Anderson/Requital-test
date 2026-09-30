@@ -86,7 +86,7 @@ export class DraftOrdersService {
       throw new BadRequestException('outletId is invalid for this shop');
     }
 
-    // Required, as the old emirate validator was: completing a draft reuses
+    // Required: completing a draft reuses
     // OrdersService.create, which requires a region.
     const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
       required: true,
@@ -118,8 +118,8 @@ export class DraftOrdersService {
         // currency comes from the shop the draft belongs to, via a subselect
         // rather than a separate read — a quote has to remember what it quoted
         // in, independent of any later change to the shop setting.
-        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, emirate, regionId, area, orderType, discountId, notes, updatedAt, currency)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
+        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, regionId, area, orderType, discountId, notes, updatedAt, currency)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
         [
           ctx.shopId,
           dto.outletId,
@@ -128,7 +128,6 @@ export class DraftOrdersService {
           dto.customerPhone,
           dto.customerEmail ?? null,
           dto.customerAddress ?? null,
-          region.emirate,
           region.regionId,
           dto.area ?? null,
           dto.orderType ?? null,
@@ -177,7 +176,7 @@ export class DraftOrdersService {
     }
     // Optional on an update: only re-resolved when the caller changes it.
     const region =
-      dto.regionId != null || dto.emirate
+      dto.regionId != null
         ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
             required: true,
           })
@@ -241,7 +240,6 @@ export class DraftOrdersService {
         customerPhone: dto.customerPhone,
         customerEmail: dto.customerEmail,
         customerAddress: dto.customerAddress,
-        emirate: region?.emirate,
         regionId: region?.regionId,
         area: dto.area,
         orderType: dto.orderType,
@@ -360,10 +358,9 @@ export class DraftOrdersService {
         // creation time even though the DB column is nullable (nullable
         // only so historical/edge rows can't violate a NOT NULL constraint).
         customerAddress: draft.customerAddress as string,
-        // Both carried so the region is re-validated on the way through; a
-        // draft holding neither is refused rather than given a placeholder.
+        // Carried so the region is re-validated on the way through; a draft
+        // holding none is refused rather than given a placeholder.
         regionId: draft.regionId ?? undefined,
-        emirate: draft.emirate ?? undefined,
         area: draft.area ?? undefined,
         orderType: draft.orderType ?? undefined,
         channel: 'draft_order',

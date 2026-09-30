@@ -95,7 +95,7 @@ describe('Per-line tax computation and capture (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     await request(app.getHttpServer())
@@ -190,7 +190,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Tax Customer',
         customerPhone: '0501234567',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod: 'cash_on_pickup',
         items: [
@@ -231,7 +230,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Tax Customer',
         customerPhone: '0501234567',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod: 'cash_on_pickup',
         items: [
@@ -263,7 +261,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Phone Customer',
         customerPhone: '0509998887',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         deliveryFee: 0,
@@ -298,7 +295,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Edit Customer',
         customerPhone: '0501112223',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         deliveryFee: 0,
@@ -339,7 +335,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Fee Customer',
         customerPhone: '0504445556',
         customerAddress: 'Somewhere',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'delivery',
         deliveryFee: 10,
@@ -386,7 +381,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
           customerName: 'Delivery Customer',
           customerPhone: '0507778889',
           customerAddress: 'Somewhere',
-          emirate: 'Dubai',
           outletId: shop.outletId,
           orderType: 'delivery',
           deliveryFee: 100,
@@ -428,7 +422,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Discount Customer',
         customerPhone: '0502223334',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         orderType: 'pickup',
         paymentMethod: 'cash_on_pickup',
         discountCode: code,
@@ -534,7 +527,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Breakdown Customer',
         customerPhone: '0506667778',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         deliveryFee: 0,
@@ -579,7 +571,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Slip Customer',
         customerPhone: '0508889990',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         deliveryFee: 0,
@@ -612,7 +603,6 @@ describe('Per-line tax computation and capture (e2e)', () => {
         customerName: 'Invoice Customer',
         customerPhone: '0503334445',
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         deliveryFee: 0,

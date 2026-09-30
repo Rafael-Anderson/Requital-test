@@ -113,7 +113,7 @@ describe('Abandoned Cart Recovery (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -185,7 +185,6 @@ describe('Abandoned Cart Recovery (e2e)', () => {
         customerName: 'Almost Buyer',
         customerPhone: phone,
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         items: [{ productId, quantity: 1 }],
       });
   }

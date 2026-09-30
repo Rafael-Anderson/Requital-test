@@ -36,7 +36,6 @@ async function main() {
     method: "PATCH",
     body: JSON.stringify({
       active: true,
-      emirate: "Dubai",
       pickupEnabled: true,
       deliveryEnabled: true,
       deliveryRadiusKm: 20,

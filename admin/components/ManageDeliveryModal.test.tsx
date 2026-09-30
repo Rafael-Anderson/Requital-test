@@ -22,7 +22,6 @@ function fakeOrder(overrides: Partial<Order> = {}): Order {
     customerPhone: "0501234567",
     customerEmail: null,
     customerAddress: "123 Street",
-    emirate: "Dubai",
     area: "Al Barsha",
     deliveryDate: null,
     deliveryTimeSlot: null,

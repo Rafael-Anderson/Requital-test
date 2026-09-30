@@ -110,7 +110,6 @@ describe('Draft Orders (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         latitude: OUTLET_LAT,
         longitude: OUTLET_LON,
@@ -152,7 +151,6 @@ describe('Draft Orders (e2e)', () => {
       customerName: 'Phone Customer',
       customerPhone: `05${Math.floor(Math.random() * 100000000)}`,
       customerAddress: '1 Main St',
-      emirate: 'Dubai',
       orderType: 'delivery',
       items: [{ productId, quantity: 1 }],
       ...overrides,

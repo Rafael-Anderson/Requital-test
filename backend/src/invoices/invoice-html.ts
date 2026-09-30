@@ -45,7 +45,7 @@ export interface InvoiceHtmlData {
     customerEmail: string | null;
     customerAddress: string;
     // NULL for an order placed without a region (pickup, or a country with no region model).
-    emirate: string | null;
+    regionName: string | null;
     area: string | null;
     createdAt: Date;
     deliveryFee: string | number | null;
@@ -252,7 +252,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
         ${escapeHtml(data.order.customerPhone)}<br />
         ${data.order.customerEmail ? `${escapeHtml(data.order.customerEmail)}<br />` : ''}
         ${escapeHtml(data.order.customerAddress)}<br />
-        ${escapeHtml([data.order.area, data.order.emirate].filter(Boolean).join(', '))}
+        ${escapeHtml([data.order.area, data.order.regionName].filter(Boolean).join(', '))}
       </p>
     </div>
     <div>

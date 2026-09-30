@@ -112,7 +112,6 @@ describe('SEO (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         latitude: 25.2048,
         longitude: 55.2708,

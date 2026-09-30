@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { RegionRow } from '../db/types';
-import { LEGACY_ALIAS_COUNTRY, REGION_LABELS } from './regions.constants';
+import { REGION_LABELS } from './regions.constants';
 
 export interface RegionSummary {
   id: number;
@@ -11,20 +11,16 @@ export interface RegionSummary {
   nameAr: string;
 }
 
-// What an address write carries. `emirate` is the DEPRECATED name-based alias,
-// accepted only while older frontends are still deployed; `regionId` is the
-// real field.
+// What an address write carries.
 export interface RegionInput {
   regionId?: number | null;
-  emirate?: string | null;
 }
 
-// The pair an address write persists. `emirate` mirrors the region's English
-// name so every reader that has not moved to `regionId` keeps working until the
-// column is dropped.
+// What a resolved address write persists (`regionId`) plus the region's English
+// name, which is NOT stored: the legacy zone matcher compares it with a zone name.
 export interface ResolvedRegion {
   regionId: number | null;
-  emirate: string | null;
+  regionName: string | null;
 }
 
 @Injectable()
@@ -55,70 +51,37 @@ export class RegionsService {
   // (tools/check-region-validation.js enforces that), because the thing being
   // validated is a function of the TENANT: a region is valid for a shop only if
   // it belongs to the shop's own country. `required` is per path, mirroring what
-  // each old `@IsIn(EMIRATES)` DTO demanded.
+  // each old per-DTO emirate validator demanded.
   async resolveForShop(
     shopId: number,
     input: RegionInput,
     opts: { required: boolean },
   ): Promise<ResolvedRegion> {
-    const hasId = input.regionId != null;
-    const alias = input.emirate?.trim();
-    const hasAlias = !!alias;
+    const countryCode = await this.shopCountryCode(shopId);
 
-    if (!hasId && !hasAlias) {
+    if (input.regionId == null) {
       // "Required" only binds where there is something to choose from. A shop
       // whose country is unknown, or has no region model ("Other"), offers no
       // regions, so demanding one would make checkout impossible for it.
-      if (opts.required && (await this.shopCountryCode(shopId))) {
+      if (opts.required && countryCode) {
         throw new BadRequestException('regionId is required');
       }
-      return { regionId: null, emirate: null };
+      return { regionId: null, regionName: null };
     }
-    const countryCode = await this.shopCountryCode(shopId);
-
-    let byId: RegionRow | undefined;
-    if (hasId) {
-      if (!countryCode) {
-        throw new BadRequestException(
-          "Set your shop's country before choosing a region",
-        );
-      }
-      byId = await this.findById(input.regionId as number);
-      if (!byId || byId.countryCode !== countryCode) {
-        // One message for "no such region" and "another country's region", so a
-        // probe cannot enumerate which ids exist.
-        throw new BadRequestException(
-          "regionId is not a region of this shop's country",
-        );
-      }
-    }
-
-    let byAlias: RegionRow | undefined;
-    if (hasAlias) {
-      byAlias = await this.findByName(
-        countryCode ?? LEGACY_ALIAS_COUNTRY,
-        alias,
-      );
-      if (!byAlias) {
-        throw new BadRequestException(
-          `emirate is not a region of this shop's country: ${alias}`,
-        );
-      }
-    }
-
-    if (byId && byAlias && byId.id !== byAlias.id) {
+    if (!countryCode) {
       throw new BadRequestException(
-        'regionId and emirate name different regions',
+        "Set your shop's country before choosing a region",
       );
     }
-
-    const region = (byId ?? byAlias) as RegionRow;
-    return {
-      // A shop with no country code validated the alias as UAE, but it is not
-      // recorded as a UAE region: its country is unknown.
-      regionId: countryCode ? region.id : null,
-      emirate: region.nameEn,
-    };
+    const region = await this.findById(input.regionId);
+    if (!region || region.countryCode !== countryCode) {
+      // One message for "no such region" and "another country's region", so a
+      // probe cannot enumerate which ids exist.
+      throw new BadRequestException(
+        "regionId is not a region of this shop's country",
+      );
+    }
+    return { regionId: region.id, regionName: region.nameEn };
   }
 
   // The many-regions sibling of resolveForShop, for a delivery zone's region set:
@@ -161,17 +124,6 @@ export class RegionsService {
     const rows = await this.db.query<(RegionRow & RowDataPacket)[]>(
       `SELECT * FROM region WHERE id = ?`,
       [id],
-    );
-    return rows[0];
-  }
-
-  private async findByName(
-    countryCode: string,
-    name: string,
-  ): Promise<RegionRow | undefined> {
-    const rows = await this.db.query<(RegionRow & RowDataPacket)[]>(
-      `SELECT * FROM region WHERE countryCode = ? AND nameEn = ?`,
-      [countryCode, name],
     );
     return rows[0];
   }

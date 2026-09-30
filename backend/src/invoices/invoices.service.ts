@@ -14,7 +14,14 @@ import { buildTaxBreakdown } from './invoice-tax';
 // OrderForInvoice changes in a way that moves or removes a field the renderer
 // reads, so an older snapshot is recognised as a shape this code no longer
 // understands and falls back to live rendering rather than being misread.
-export const INVOICE_SNAPSHOT_VERSION = 1;
+//
+// v1 froze the order's free-text `emirate`; v2 freezes the region's English name
+// as `regionName` (the `order.emirate` column no longer exists). Both stay
+// RENDERABLE FROM THEIR OWN FROZEN DATA: a v1 invoice issued before the column was
+// dropped must keep printing the address it was issued with, never fall back to
+// a live read that would rewrite it.
+export const INVOICE_SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION_V1 = 1;
 
 interface OrderForInvoice {
   id: number;
@@ -23,7 +30,9 @@ interface OrderForInvoice {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
-  emirate: string | null;
+  // The region's English name at the time the document was read; NULL for an
+  // order placed without a region (pickup, or a country with no region model).
+  regionName: string | null;
   area: string | null;
   createdAt: Date;
   deliveryFee: string | null;
@@ -56,6 +65,11 @@ interface OrderForInvoice {
     taxAmount: string | null;
   }[];
 }
+
+// What a v1 snapshot holds: the same document with the region under its old name.
+type OrderForInvoiceV1 = Omit<OrderForInvoice, 'regionName'> & {
+  emirate: string | null;
+};
 
 @Injectable()
 export class InvoicesService {
@@ -235,8 +249,10 @@ export class InvoicesService {
     }
     const orderRows = await this.db.query<RowDataPacket[]>(
       `SELECT o.*, s.name AS shopName, s.displayName AS shopDisplayName,
-              s.address AS shopAddress, s.email AS shopEmail, s.currency AS shopCurrency
+              s.address AS shopAddress, s.email AS shopEmail, s.currency AS shopCurrency,
+              r.nameEn AS regionName
        FROM \`order\` o JOIN shop s ON s.id = o.shopId
+       LEFT JOIN region r ON r.id = o.regionId
        WHERE ${conditions.join(' AND ')}`,
       params,
     );
@@ -255,7 +271,7 @@ export class InvoicesService {
       customerPhone: order.customerPhone as string,
       customerEmail: order.customerEmail as string | null,
       customerAddress: order.customerAddress as string,
-      emirate: order.emirate as string | null,
+      regionName: order.regionName as string | null,
       area: order.area as string | null,
       createdAt: order.createdAt as Date,
       deliveryFee: order.deliveryFee as string | null,
@@ -307,7 +323,8 @@ export class InvoicesService {
     }
     if (
       invoice.snapshotJson == null ||
-      invoice.snapshotVersion !== INVOICE_SNAPSHOT_VERSION
+      (invoice.snapshotVersion !== INVOICE_SNAPSHOT_VERSION &&
+        invoice.snapshotVersion !== SNAPSHOT_VERSION_V1)
     ) {
       return { order: live, fromSnapshot: false };
     }
@@ -315,6 +332,18 @@ export class InvoicesService {
     // the column is JSON and not LONGTEXT). createdAt comes back as the ISO
     // string JSON.stringify produced and the renderer calls
     // toLocaleDateString() on it, so it is revived to a Date here.
+    if (invoice.snapshotVersion === SNAPSHOT_VERSION_V1) {
+      const { emirate, ...v1 } =
+        invoice.snapshotJson as unknown as OrderForInvoiceV1;
+      return {
+        order: {
+          ...v1,
+          regionName: emirate,
+          createdAt: new Date(v1.createdAt),
+        },
+        fromSnapshot: true,
+      };
+    }
     const snapshot = invoice.snapshotJson as unknown as OrderForInvoice;
     return {
       order: { ...snapshot, createdAt: new Date(snapshot.createdAt) },

@@ -102,7 +102,6 @@ describe('Cash-on-delivery completion gate (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         pickupEnabled: true,
         latitude: OUTLET_LAT,
@@ -155,7 +154,6 @@ describe('Cash-on-delivery completion gate (e2e)', () => {
       customerName: 'COD Customer',
       customerPhone: '0501234567',
       customerAddress: '1 Sheikh Zayed Rd',
-      emirate: 'Dubai',
       items: [{ productId, quantity: 1 }],
       ...overrides,
     };

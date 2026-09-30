@@ -138,7 +138,6 @@ describe('Discounts (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         latitude: OUTLET_LAT,
         longitude: OUTLET_LON,
@@ -203,7 +202,6 @@ describe('Discounts (e2e)', () => {
       customerName: 'Discount Customer',
       customerPhone: `05${Math.floor(Math.random() * 100000000)}`,
       customerAddress: '1 Main St',
-      emirate: 'Dubai',
       latitude: OUTLET_LAT,
       longitude: OUTLET_LON,
       ...overrides,

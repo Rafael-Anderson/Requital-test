@@ -35,7 +35,6 @@ function fakeOrder(): Order {
     customerPhone: "0501234567",
     customerEmail: null,
     customerAddress: "123 Street",
-    emirate: "Dubai",
     area: null,
     deliveryDate: null,
     deliveryTimeSlot: null,

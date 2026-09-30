@@ -182,7 +182,6 @@ describe('Post-purchase survey (e2e)', () => {
         customerName: 'Survey Customer',
         customerPhone: '0500000004',
         customerAddress: '1 Survey Rd',
-        emirate: 'Dubai',
         outletId,
         items: [{ productId, quantity: 1 }],
         ...overrides,

@@ -141,7 +141,6 @@ describe('Bulk actions: products + orders (e2e)', () => {
         customerName: 'Bulk Customer',
         customerPhone: `05${Math.floor(Math.random() * 100000000)}`,
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         orderType: 'delivery',
         outletId,
         items: [{ productId, quantity: 1 }],

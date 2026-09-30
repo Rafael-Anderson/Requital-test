@@ -85,7 +85,6 @@ describe('Bio Link page config (e2e)', () => {
       .set('Authorization', `Bearer ${shop.adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         latitude: 25.2048,
         longitude: 55.2708,

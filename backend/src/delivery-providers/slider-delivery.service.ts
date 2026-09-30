@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import type { RowDataPacket } from 'mysql2/promise';
+import { DatabaseService } from '../database/database.service';
 import { OrdersService } from '../orders/orders.service';
 import { OutletsService } from '../outlets/outlets.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -19,6 +21,7 @@ import {
 @Injectable()
 export class SliderDeliveryService {
   constructor(
+    private readonly db: DatabaseService,
     private readonly ordersService: OrdersService,
     private readonly outletsService: OutletsService,
     private readonly branchRolesService: BranchRolesService,
@@ -92,7 +95,11 @@ export class SliderDeliveryService {
       scheduleAt: dto.scheduleAt ?? null,
       driverTip: dto.driverTip,
       pickup: {
-        address: [outlet.name, outlet.area, outlet.emirate]
+        address: [
+          outlet.name,
+          outlet.area,
+          await this.regionName(outlet.regionId),
+        ]
           .filter(Boolean)
           .join(', '),
         latitude: pickup.latitude,
@@ -180,7 +187,12 @@ export class SliderDeliveryService {
     // documents for outlet-address entry / checkout pin-drag — never
     // autocomplete-as-you-type.
     const deliveryPoint = await geocodeAddress(
-      [order.customerAddress, order.area, order.emirate, 'UAE']
+      [
+        order.customerAddress,
+        order.area,
+        await this.regionName(order.regionId),
+        'UAE',
+      ]
         .filter(Boolean)
         .join(', '),
     );
@@ -192,5 +204,16 @@ export class SliderDeliveryService {
         longitude: deliveryPoint.longitude,
       },
     };
+  }
+
+  // The region's English name for the printed address; nothing when the order or
+  // outlet has no region.
+  private async regionName(regionId: number | null): Promise<string | null> {
+    if (regionId == null) return null;
+    const rows = await this.db.query<({ nameEn: string } & RowDataPacket)[]>(
+      `SELECT nameEn FROM region WHERE id = ?`,
+      [regionId],
+    );
+    return rows[0]?.nameEn ?? null;
   }
 }

@@ -98,18 +98,17 @@ export class OutletsService {
       dto.latitude,
       dto.longitude,
     );
-    // Optional for an outlet. Previously free text; now a real region of the
-    // shop's own country (or the deprecated name alias for it).
+    // Optional for an outlet: a real region of the shop's own country.
     const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
       required: false,
     });
     const closedOverride = dto.closedOverride ?? false;
     const result = await this.db.execute(
       `INSERT INTO outlet (
-        shopId, name, nameAr, email, whatsapp, active, emirate, regionId, area, phone,
+        shopId, name, nameAr, email, whatsapp, active, regionId, area, phone,
         latitude, longitude, businessHours, closedOverride, closedOverrideSetAt,
         pickupEnabled, deliveryEnabled, deliveryRadiusKm
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         ctx.shopId,
         dto.name,
@@ -117,7 +116,6 @@ export class OutletsService {
         dto.email ?? null,
         dto.whatsapp ?? null,
         dto.active ?? true,
-        region.emirate,
         region.regionId,
         dto.area ?? null,
         dto.phone ?? null,
@@ -154,7 +152,7 @@ export class OutletsService {
 
     // Only re-resolved when the caller changes the region.
     const region =
-      dto.regionId != null || dto.emirate
+      dto.regionId != null
         ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
             required: true,
           })
@@ -166,7 +164,6 @@ export class OutletsService {
       email: dto.email,
       whatsapp: dto.whatsapp,
       active: dto.active,
-      emirate: region?.emirate,
       regionId: region?.regionId,
       area: dto.area,
       phone: dto.phone,

@@ -119,7 +119,6 @@ describe('Affiliate (e2e)', () => {
       .set('Authorization', `Bearer ${shop.adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         pickupEnabled: true,
         latitude: 25.2048,
@@ -218,7 +217,6 @@ describe('Affiliate (e2e)', () => {
         customerName: 'Test Customer',
         customerPhone: '0501234567',
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         latitude: 25.2048,
         longitude: 55.2708,
         items: [{ productId: shop.productId, quantity: 1 }],
@@ -673,7 +671,6 @@ describe('Affiliate (e2e)', () => {
           customerName: 'Walk-in Customer',
           customerPhone: '0507654321',
           customerAddress: 'Store pickup',
-          emirate: 'Dubai',
           outletId: shop.outletId,
           referralCode: code.code,
           items: [{ productId: shop.productId, quantity: 1 }],

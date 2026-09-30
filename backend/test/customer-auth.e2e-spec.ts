@@ -45,7 +45,6 @@ interface AddressRow {
   id: string;
   label?: string;
   address: string;
-  emirate: string;
 }
 
 function body<T>(res: Response): T {
@@ -183,7 +182,7 @@ describe('Customer storefront accounts (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -237,7 +236,6 @@ describe('Customer storefront accounts (e2e)', () => {
         customerName: 'Guest Customer',
         customerPhone: '0501111111',
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         items: [{ productId, quantity: 1 }],
         ...overrides,
       })
@@ -486,13 +484,9 @@ describe('Customer storefront accounts (e2e)', () => {
     >(await post({ regionId: await regions('AE-DU') }).expect(201));
     expect(created.regionId).toBe(await regions('AE-DU'));
     expect(created.region.code).toBe('AE-DU');
-    expect(created.emirate).toBe('Dubai');
 
-    // The deprecated alias resolves; the wrong country and a missing region do not.
-    const viaAlias = body<{ regionId: number }>(
-      await post({ emirate: 'Sharjah' }).expect(201),
-    );
-    expect(viaAlias.regionId).toBe(await regions('AE-SH'));
+    // The retired name alias is refused; so are the wrong country and a missing region.
+    await post({ emirate: 'Sharjah' }).expect(400);
     await post({ regionId: await regions('SA-01') }).expect(400);
     await post({}).expect(400);
 
@@ -532,7 +526,7 @@ describe('Customer storefront accounts (e2e)', () => {
       .post(`/public/${shopSlug}/account/addresses`)
       .set('Cookie', session.cookieHeaderStr)
       .set('X-CSRF-Token', session.csrfToken)
-      .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+      .send({ label: 'Home', address: '1 Test St' })
       .expect(201);
     const addressId = body<AddressRow>(created).id;
 
@@ -801,7 +795,7 @@ describe('Customer storefront accounts (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post(`/public/${shopSlug}/account/addresses`)
         .set('Cookie', session.cookieHeaderStr)
-        .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+        .send({ label: 'Home', address: '1 Test St' })
         .expect(403);
       expect(body<{ message: string }>(res).message).toBe('invalid csrf token');
     });
@@ -816,7 +810,7 @@ describe('Customer storefront accounts (e2e)', () => {
         .post(`/public/${shopSlug}/account/addresses`)
         .set('Cookie', session.cookieHeaderStr)
         .set('X-CSRF-Token', 'not-the-real-token')
-        .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+        .send({ label: 'Home', address: '1 Test St' })
         .expect(403);
     });
 
@@ -871,7 +865,7 @@ describe('Customer storefront accounts (e2e)', () => {
         .post(`/public/${shopSlug}/account/addresses`)
         .set('Cookie', cookieWithFreshCsrf)
         .set('X-CSRF-Token', freshCsrfToken!)
-        .send({ label: 'Home', address: '1 Test St', emirate: 'Dubai' })
+        .send({ label: 'Home', address: '1 Test St' })
         .expect(201);
     });
 

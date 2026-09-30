@@ -271,7 +271,7 @@ export class OrdersService {
       outletId,
       'orders.manage',
     );
-    // Required, as the old emirate validator was. The region's validity is a
+    // Required. The region's validity is a
     // function of this shop's country, so it is checked here, not in the DTO.
     const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
       required: true,
@@ -473,10 +473,10 @@ export class OrdersService {
           const [res] = await conn.query(
         `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
-          customerAddress, emirate, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -486,7 +486,6 @@ export class OrdersService {
           dto.customerPhone,
           dto.customerEmail ?? null,
           dto.customerAddress,
-          region.emirate,
           region.regionId,
           dto.area ?? null,
           dto.deliveryDate ? new Date(dto.deliveryDate) : null,

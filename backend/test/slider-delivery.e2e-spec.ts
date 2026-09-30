@@ -231,7 +231,6 @@ describe('Slider delivery integration (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         deliveryEnabled: true,
         pickupEnabled: true,
         latitude: OUTLET_LAT,
@@ -330,7 +329,6 @@ describe('Slider delivery integration (e2e)', () => {
         customerName: 'Slider Customer',
         customerPhone: '0501234567',
         customerAddress: '1 Sheikh Zayed Rd',
-        emirate: 'Dubai',
         orderType: 'delivery',
         paymentMethod,
         latitude: OUTLET_LAT,
@@ -755,7 +753,6 @@ describe('Slider delivery integration (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         active: true,
-        emirate: 'Dubai',
         latitude: OUTLET_LAT,
         longitude: OUTLET_LON,
       })
@@ -769,7 +766,6 @@ describe('Slider delivery integration (e2e)', () => {
           customerName: 'X',
           customerPhone: '0501234567',
           customerAddress: '1 Sheikh Zayed Rd',
-          emirate: 'Dubai',
           orderType: 'pickup',
           paymentMethod: 'cash_on_pickup',
           items: [],

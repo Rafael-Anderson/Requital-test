@@ -39,9 +39,6 @@ export interface CustomerAddress {
   id: string;
   label?: string;
   address: string;
-  // Mirrors the region's English name while readers still use it; NULL when
-  // the shop's country has no region model.
-  emirate?: string | null;
   regionId?: number | null;
   area?: string;
   latitude?: number;
@@ -431,13 +428,11 @@ export class CustomerAccountService {
     const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
       required: true,
     });
-    const { regionId: _r, emirate: _e, ...rest } = dto;
+    const { regionId: _r, ...rest } = dto;
     void _r;
-    void _e;
     const address: CustomerAddress = {
       id: randomUUID().slice(0, 8),
       ...rest,
-      emirate: region.emirate,
       regionId: region.regionId,
     };
     await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [
@@ -457,12 +452,11 @@ export class CustomerAccountService {
     if (index === -1) {
       throw new NotFoundException(`Address ${addressId} not found`);
     }
-    const { regionId: _r, emirate: _e, ...rest } = dto;
+    const { regionId: _r, ...rest } = dto;
     void _r;
-    void _e;
     // Only re-resolved when the caller changes the region.
     const region =
-      dto.regionId != null || dto.emirate
+      dto.regionId != null
         ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
             required: true,
           })
@@ -470,7 +464,7 @@ export class CustomerAccountService {
     const updated: CustomerAddress = {
       ...addresses[index],
       ...rest,
-      ...(region && { emirate: region.emirate, regionId: region.regionId }),
+      ...(region && { regionId: region.regionId }),
     };
     addresses[index] = updated;
     await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [

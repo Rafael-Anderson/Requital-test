@@ -99,7 +99,6 @@ async function main() {
         customerName: "Variant Edit Customer",
         customerPhone: "0500000010",
         customerAddress: "1 Variant Rd",
-        emirate: "Dubai",
         outletId,
         items: [{ productId: plainProduct.id, quantity: 1 }],
       }),

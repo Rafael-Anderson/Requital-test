@@ -124,7 +124,6 @@ describe('Order status history/timeline (e2e)', () => {
         customerName: 'History Customer',
         customerPhone: `05${Math.floor(Math.random() * 100000000)}`,
         customerAddress: '1 Test St',
-        emirate: 'Dubai',
         orderType: 'pickup',
         outletId,
         items: [{ productId, quantity: 1 }],

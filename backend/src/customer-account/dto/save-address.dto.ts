@@ -11,7 +11,7 @@ import {
 import { Type } from 'class-transformer';
 
 // Same address shape checkout already collects (see
-// CreatePublicOrderDto: customerAddress/emirate/area/latitude/longitude) —
+// CreatePublicOrderDto: customerAddress/regionId/area/latitude/longitude) —
 // a saved address is just that shape plus a label, kept in
 // customer.addresses (see schema.prisma's comment on that field).
 export class SaveAddressDto {
@@ -31,14 +31,6 @@ export class SaveAddressDto {
   @IsInt()
   @Min(1)
   regionId?: number;
-
-  // DEPRECATED alias: the region's English name. Accepted only while older
-  // frontends are still deployed; `regionId` supersedes it. Resolved against
-  // the shop's own country by RegionsService, never against a global list.
-  @IsOptional()
-  @IsString()
-  @MaxLength(191)
-  emirate?: string;
 
   @IsOptional()
   @IsString()

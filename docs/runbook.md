@@ -275,6 +275,8 @@ This project's migrations are hand-authored `migration.sql` files applied by `np
 | `20260804120000_notify_subscriptions` | Data-loss revert | `DROP TABLE notifysubscription` — every "notify me when back in stock" subscription is destroyed. |
 | `20260805090000_auth_lockout` | Schema-only | Drop `user.failedLoginAttempts`/`lastFailedLoginAt` — only resets every staff account's lockout counter, no other data. |
 | `20260805110000_customer_login_lockout` | Schema-only | Drop `customer.failedLoginAttempts`/`lastFailedLoginAt` (the down-path is already spelled out, commented, directly in the migration file itself) — only resets every shopper account's lockout counter, no other data. |
+| `20261001100000_region_table_and_seed` / `20261001110000_region_columns_and_backfill` / `20261002100000_order_emirate_nullable` | Schema-only (+ a re-runnable backfill) | Drop `deliveryzoneregion`, the `regionId` columns and `shop.countryCode`, then `region`. The backfill only filled NULL `regionId`s from the old `emirate` strings, which were kept until the contract migration below, so nothing is lost. |
+| `20261003100000_drop_emirate_columns` | Reversible for every mapped row; lossy otherwise | Re-add `emirate VARCHAR(191) NULL` to `order`, `draftorder`, `outlet` and refill it: `UPDATE \`order\` o JOIN region r ON r.id = o.regionId SET o.emirate = r.nameEn` (same for the other two). That is lossless for every row that had a region, which the migration's own guard guarantees is every row that had a value: it REFUSES to run while any row holds an `emirate` with no `regionId`. Restoring a pre-migration backup is still the safer route. |
 
 For any "Data-loss revert" row above, the actually-safe rollback procedure is: **restore from a backup taken before the migration was applied** (see Backup/Restore above), not attempt the down-path against a live database that already has real post-migration data in it. The down-paths listed are what you'd run to make the *schema* match a pre-migration state, not to un-lose the data that lived in the tables/columns being dropped.
 
@@ -325,3 +327,14 @@ Work through it in this order:
    nothing to do but wait it out (the failed-validation limit resets in an hour;
    the certs-per-domain limit is weekly). Do **not** keep reloading Caddy in a
    loop; that makes it worse.
+
+## Region contract deploy (dropping `emirate`)
+
+Migration `20261003100000_drop_emirate_columns` removes the free-text `emirate` column from `order`, `draftorder` and `outlet`. It is the only step of the region work that cannot be undone from its own file, so it has a procedure. **Nothing here runs without a person deciding to.**
+
+1. **Fresh dump, validated** (see Backup above): gzip integrity, table count, a scratch-database restore with row counts compared.
+2. **Preflight (read-only):** `npx ts-node -r tsconfig-paths/register scripts/region-backfill.ts` from `backend/`. Every table must report `unmatched=0`; an `unmatched value:` line is an emirate string no region carries, and the script exits 1 (`BLOCKED`). Do not proceed on a non-zero exit: map or correct those rows first. The migration itself refuses in that case (`Column 'unmapped' cannot be null`, nothing dropped, migration not recorded), so this step is about finding out early, not about safety.
+3. **Deploy the two Next apps first** (admin, storefront), then confirm they work. Older builds still send the `emirate` field, and once the backend rejects unknown properties that is a 400 on checkout.
+4. **Then the backend:** pull, `npm run db:migrate`, `npm ci`, `npm run build`, restart. Read the per-migration output; the drop prints `Applied 1 migration(s)`.
+5. **After:** `sudo -u deploy pm2 list` (online, low restart count), backend logs for a clean start, one real storefront checkout and one admin order view, and `GET /platform-admin/zone-mapping-status` to see which shops are still name-matched (the legacy zone matcher is deleted only when that list is empty, after the notice period).
+6. **Checksums:** the same `order` / money-column checksum query before and after, identical; `.env` fingerprint (hash, never the contents) before and after.

@@ -150,7 +150,7 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -230,7 +230,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       customerName: 'BOM Customer',
       customerPhone: '0501234567',
       customerAddress: 'Pickup',
-      emirate: 'Dubai',
       outletId,
       orderType: 'pickup',
       items: [{ productId, quantity: 1 }],
@@ -250,7 +249,6 @@ describe('Bill of Materials: recipes + ingredient auto-consumption (e2e)', () =>
       customerName: 'BOM Storefront Customer',
       customerPhone: '0509990000',
       customerAddress: 'Pickup',
-      emirate: 'Dubai',
       items: [{ productId, quantity: 1 }],
       ...overrides,
     };

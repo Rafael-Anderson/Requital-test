@@ -33,7 +33,7 @@ async function main() {
   const outletId = outlets[0].id;
   await api(`/outlets/${outletId}`, {
     method: "PATCH",
-    body: JSON.stringify({ active: true, emirate: "Dubai", pickupEnabled: true, deliveryEnabled: true, deliveryRadiusKm: 20, latitude: 25.2048, longitude: 55.2708 }),
+    body: JSON.stringify({ active: true, pickupEnabled: true, deliveryEnabled: true, deliveryRadiusKm: 20, latitude: 25.2048, longitude: 55.2708 }),
   }, adminToken);
 
   const categories = {};

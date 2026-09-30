@@ -2957,7 +2957,28 @@ merchants the currency dropdown already invites in.
 
 ---
 
-## §6-E — The address model is UAE-shaped and enum-locked
+## §6-E — ~~The address model is UAE-shaped and enum-locked~~ BUILT (2026-09-30), production apply pending
+
+> **STATUS 2026-09-30.** Built and merged as five PRs (A schema and seed, B backend
+> validation, C frontends, D zone matching by region, E contract). What exists now: a
+> `region` table (AE 7, SA 13, KW 6, QA 8, BH 4, OM 11, depth one), `shop.countryCode`,
+> `regionId` on `order`/`draftorder`/`outlet` and saved addresses, one validation path
+> (`RegionsService.resolveForShop`, guarded by `tools/check-region-validation.js`),
+> frontends that fetch the list, delivery zones carrying a region set with a per-shop
+> cutover gated on the merchant confirming each zone, `EMIRATES` and the six DTO
+> validators deleted, the `emirate` columns dropped by migration
+> `20261003100000` (which refuses to run while a row holds a value no region carries),
+> invoice snapshot v2 (v1 still renders its frozen `emirate`), and a guardrail
+> (`tools/check-no-emirate-list.js`). **Not yet applied to production**: that step has
+> its own procedure (`docs/runbook.md`, "Region contract deploy") and needs a person to
+> run it. **Open follow-ups, deliberately not built here:**
+> (1) **D-R7** `common/phone.ts` normalises every number to `+971` by default and Slider's
+> address suffix is hardcoded `'UAE'`, so a non-UAE shop still cannot take correctly
+> normalised phone numbers or a correct courier address. (2) The legacy (name-matching)
+> zone matcher stays until `GET /platform-admin/zone-mapping-status` is empty, after the
+> agreed 14-day notice. (3) `nameAr` and the ISO-style codes for the non-UAE seeds need a
+> native-speaker review. (4) The country banner (D-R1) ships but no current shop has a NULL
+> country, so it is unexercised by real data.
 
 > **DECIDED (2026-09-10): remove all Emirates-specific structure**, not add a region
 > model alongside it. The const, the required `order.emirate` column, the six DTO
@@ -3140,7 +3161,9 @@ updatable — everything except consumed.
 An M. **Test gap:** `order-pricing.spec.ts` exists and tests inclusive/exclusive
 arithmetic; it has no per-product tax case because there is no per-product tax.
 
-### D-3 · **CORRECTNESS** · Delivery zone matching is a free-text string compare
+### D-3 · **CORRECTNESS** · Delivery zone matching is a free-text string compare — STRUCTURALLY FIXED (PR-D, 2026-09-30)
+
+> **Fixed by §6-E:** zones carry a region set and match on the customer's region once the merchant confirms them; the zone name plays no part in that mode. Shops not yet confirmed keep the old behaviour, unchanged, until they do.
 `backend/src/public/order-pricing.ts` (`matchDeliveryZone`)
 
 > **CORRECTED 2026-09-30.** Read against the code, three sentences below are wrong and

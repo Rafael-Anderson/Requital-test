@@ -227,7 +227,7 @@ describe('Notify subscriptions (e2e)', () => {
       const secondOutlet = await request(app.getHttpServer())
         .post('/outlets')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'Second Branch', active: true, emirate: 'Dubai', pickupEnabled: true })
+        .send({ name: 'Second Branch', active: true, pickupEnabled: true })
         .expect(201);
       const outletB = body<OutletRow>(secondOutlet).id;
 
@@ -270,7 +270,6 @@ describe('Notify subscriptions (e2e)', () => {
           customerName: 'Restock Customer',
           customerPhone: '0501234567',
           customerAddress: 'Pickup',
-          emirate: 'Dubai',
           outletId,
           orderType: 'pickup',
           items: [{ productId, quantity: 1 }],

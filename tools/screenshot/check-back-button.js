@@ -50,7 +50,6 @@ async function main() {
         customerName: "Back Button Customer",
         customerPhone: "0500000099",
         customerAddress: "1 Back Button Rd",
-        emirate: "Dubai",
         outletId,
         items: [{ productId: product.id, quantity: 1 }],
       }),

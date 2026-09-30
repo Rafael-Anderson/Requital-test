@@ -141,7 +141,6 @@ describe('Per-shop Stripe webhook routing (e2e)', () => {
         customerName: 'Webhook Test Customer',
         customerPhone: '0501234567',
         customerAddress: 'Store pickup',
-        emirate: 'Dubai',
         outletId,
         items: [{ productId, quantity: 1 }],
       })

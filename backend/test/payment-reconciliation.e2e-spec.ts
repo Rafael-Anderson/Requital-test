@@ -83,7 +83,7 @@ describe('Payment reconciliation (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -131,7 +131,6 @@ describe('Payment reconciliation (e2e)', () => {
         customerName: 'Reconcile Customer',
         customerPhone: `reconcile-no-digits-${runId}`,
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         items: [{ productId: shop.productId, quantity: 1 }],
@@ -315,7 +314,6 @@ describe('Payment reconciliation (e2e)', () => {
         customerName: 'Cash Customer',
         customerPhone: `reconcile-cash-${runId}`,
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId: shop.outletId,
         orderType: 'pickup',
         items: [{ productId: shop.productId, quantity: 1 }],

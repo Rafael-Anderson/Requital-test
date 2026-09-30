@@ -1,6 +1,4 @@
 import 'dotenv/config';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
@@ -23,8 +21,9 @@ function body<T>(res: Response): T {
 
 // Phase 2b / PR-A. The region tables and columns are schema only: nothing reads
 // them yet. This spec pins (1) the seed, (2) the FKs, (3) shop.countryCode being
-// written on signup and on the once-only PATCH, and (4) the backfill, by
-// re-running the migration's own UPDATE statements against fixtures.
+// written on signup and on the once-only PATCH. (The backfill that mapped the old
+// emirate strings onto regions was tested here until the columns were dropped;
+// the drop migration's guard is tested in emirate-drop-migration.e2e-spec.ts.)
 describe('Region model schema (e2e)', () => {
   let app: INestApplication<App>;
   let db: DatabaseService;
@@ -210,106 +209,6 @@ describe('Region model schema (e2e)', () => {
         .send({ country: 'Qatar' })
         .expect(200);
       expect(await countryCodeOf(shop.shopId)).toBe('QA');
-    });
-  });
-
-  describe('backfill (the migration own UPDATE statements, re-run on fixtures)', () => {
-    // Pulled out of the migration file itself, so this tests what production
-    // runs rather than a copy of it that could drift.
-    const backfillStatements = readFileSync(
-      join(
-        __dirname,
-        '..',
-        'prisma',
-        'migrations',
-        '20261001110000_region_columns_and_backfill',
-        'migration.sql',
-      ),
-      'utf8',
-    )
-      .replace(/^\s*--.*$/gm, '')
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => /^UPDATE `(order|draftorder|outlet)`/.test(s));
-
-    async function insertOrder(
-      shop: { shopId: number; outletId: number },
-      n: number,
-      emirate: string,
-    ) {
-      const r = await db.execute(
-        `INSERT INTO \`order\` (shopId, outletId, shopOrderNumber, customerName, customerPhone, customerAddress, emirate, total, currency)
-         VALUES (?, ?, ?, 'Fixture', '0501234567', '1 Fixture St', ?, 10, 'AED')`,
-        [shop.shopId, shop.outletId, n, emirate],
-      );
-      return r.insertId;
-    }
-    async function insertDraft(
-      shop: { shopId: number; outletId: number },
-      emirate: string | null,
-    ) {
-      const r = await db.execute(
-        `INSERT INTO draftorder (shopId, outletId, customerName, customerPhone, emirate, currency, updatedAt)
-         VALUES (?, ?, 'Fixture', '0501234567', ?, 'AED', NOW(3))`,
-        [shop.shopId, shop.outletId, emirate],
-      );
-      return r.insertId;
-    }
-    async function regionOf(table: string, id: number) {
-      const rows = await db.query<({ code: string | null } & RowDataPacket)[]>(
-        `SELECT r.code FROM \`${table}\` t LEFT JOIN region r ON r.id = t.regionId WHERE t.id = ?`,
-        [id],
-      );
-      return rows[0].code;
-    }
-    async function runBackfill() {
-      for (const sql of backfillStatements) await db.execute(sql);
-    }
-
-    it('extracted exactly the three UPDATE statements', () => {
-      expect(backfillStatements).toHaveLength(3);
-    });
-
-    it('maps every shape it should, leaves every shape it should not, and a re-run changes nothing', async () => {
-      const uae = await setupShop('bf-uae', 'United Arab Emirates');
-      const sa = await setupShop('bf-sa', 'Saudi Arabia');
-      const noCountry = await setupShop('bf-none');
-
-      const exact = await insertOrder(uae, 1, 'Dubai');
-      const spaced = await insertOrder(uae, 2, '  Sharjah ');
-      const cased = await insertOrder(uae, 3, 'ABU DHABI');
-      const typo = await insertOrder(uae, 4, 'Dubay');
-      // A UAE emirate on a Saudi shop must NOT map: Saudi Arabia has no Dubai.
-      const wrongCountry = await insertOrder(sa, 1, 'Dubai');
-      // No countryCode means unknown; it must not be assumed to be the UAE.
-      const unknownCountry = await insertOrder(noCountry, 1, 'Dubai');
-      const draftOk = await insertDraft(uae, 'Fujairah');
-      const draftNull = await insertDraft(uae, null);
-
-      await db.execute(`UPDATE outlet SET emirate = 'Ajman' WHERE id = ?`, [
-        uae.outletId,
-      ]);
-      await db.execute(`UPDATE outlet SET emirate = NULL WHERE id = ?`, [
-        noCountry.outletId,
-      ]);
-
-      await runBackfill();
-
-      expect(await regionOf('order', exact)).toBe('AE-DU');
-      expect(await regionOf('order', spaced)).toBe('AE-SH');
-      expect(await regionOf('order', cased)).toBe('AE-AZ');
-      expect(await regionOf('order', typo)).toBeNull();
-      expect(await regionOf('order', wrongCountry)).toBeNull();
-      expect(await regionOf('order', unknownCountry)).toBeNull();
-      expect(await regionOf('draftorder', draftOk)).toBe('AE-FU');
-      expect(await regionOf('draftorder', draftNull)).toBeNull();
-      expect(await regionOf('outlet', uae.outletId)).toBe('AE-AJ');
-      expect(await regionOf('outlet', noCountry.outletId)).toBeNull();
-
-      // Idempotent: a second pass neither throws nor moves anything.
-      await runBackfill();
-      expect(await regionOf('order', exact)).toBe('AE-DU');
-      expect(await regionOf('order', typo)).toBeNull();
     });
   });
 });

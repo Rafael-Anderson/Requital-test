@@ -95,7 +95,7 @@ describe('Inventory analytics + scheduled report emails (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/outlets/${outletId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ active: true, emirate: 'Dubai', pickupEnabled: true })
+      .send({ active: true, pickupEnabled: true })
       .expect(200);
 
     const collection = await request(app.getHttpServer())
@@ -148,7 +148,6 @@ describe('Inventory analytics + scheduled report emails (e2e)', () => {
         customerName: 'Analytics Customer',
         customerPhone: `analytics-no-digits-${runId}`,
         customerAddress: 'Pickup',
-        emirate: 'Dubai',
         outletId,
         orderType: 'pickup',
         items: [{ productId, quantity }],
