@@ -9,8 +9,9 @@ import {
   listProducts,
   updateDraftOrder,
   validateDiscount,
+  getRegions,
 } from "@/lib/api";
-import type { DraftOrder, DraftOrderItemInput, Outlet, Product } from "@/lib/types";
+import type { DraftOrder, DraftOrderItemInput, Outlet, Product, RegionsResponse } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -22,11 +23,6 @@ import Combobox from "@/components/ui/Combobox";
 import Tooltip from "@/components/ui/Tooltip";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
-
-// Mirrors backend/src/orders/constants.ts EMIRATES by hand — no shared
-// package between admin/backend, same tradeoff as every other mirrored
-// constant in this codebase (e.g. admin's PAYMENT_GATEWAY_PROVIDERS).
-const EMIRATES = ["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "Umm Al Quwain", "Ras Al Khaimah", "Fujairah"] as const;
 
 interface WorkingItem {
   productId: number;
@@ -53,7 +49,10 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
   const [customerPhone, setCustomerPhone] = useState(draft?.customerPhone ?? "");
   const [customerEmail, setCustomerEmail] = useState(draft?.customerEmail ?? "");
   const [customerAddress, setCustomerAddress] = useState(draft?.customerAddress ?? "");
-  const [emirate, setEmirate] = useState(draft?.emirate ?? "Dubai");
+  // No default region: a silent "Dubai" is how an order ends up in the wrong delivery
+  // zone. A legacy draft that only has the old name is asked to pick a region.
+  const [regionId, setRegionId] = useState<number | null>(draft?.regionId ?? null);
+  const [regionsRes, setRegionsRes] = useState<RegionsResponse | null>(null);
   const [area, setArea] = useState(draft?.area ?? "");
   const [orderType, setOrderType] = useState(draft?.orderType ?? "delivery");
   const [notes, setNotes] = useState(draft?.notes ?? "");
@@ -82,8 +81,14 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       if (!draft && list[0]) setOutletId(list[0].id);
     });
     listProducts().then(setProducts);
+    getRegions()
+      .then(setRegionsRes)
+      .catch(() => setRegionsRes(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const regions = regionsRes?.regions ?? [];
+  const regionLabel = regionsRes?.country?.regionLabel ?? "Region";
 
   const subtotal = useMemo(() => items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0), [items]);
 
@@ -156,6 +161,10 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       toast("Customer name, phone, and address are required", "error");
       return;
     }
+    if (regions.length > 0 && regionId === null) {
+      toast(`Choose the ${regionLabel.toLowerCase()}`, "error");
+      return;
+    }
     if (items.length === 0) {
       toast("Add at least one item", "error");
       return;
@@ -174,7 +183,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
         customerPhone,
         customerEmail: customerEmail || undefined,
         customerAddress,
-        emirate,
+        regionId: regionId ?? undefined,
         area: area || undefined,
         orderType,
         discountCode: discountCode.trim() || null,
@@ -262,12 +271,14 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
           <Input label="Address" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} required />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Combobox
-            label="Emirate"
-            value={emirate}
-            onChange={setEmirate}
-            options={EMIRATES.map((em) => ({ value: em, label: em }))}
-          />
+          {regions.length > 0 && (
+            <Combobox
+              label={regionLabel}
+              value={regionId === null ? "" : String(regionId)}
+              onChange={(v) => setRegionId(v === "" ? null : Number(v))}
+              options={regions.map((r) => ({ value: String(r.id), label: r.nameEn }))}
+            />
+          )}
           <Input label="Area (optional)" value={area} onChange={(e) => setArea(e.target.value)} />
         </div>
       </Card>

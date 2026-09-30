@@ -247,3 +247,31 @@ describe('renderInvoiceHtml per-line tax and breakdown (B3)', () => {
     expect(html).not.toContain('Tax summary');
   });
 });
+
+describe('renderInvoiceHtml delivery address line', () => {
+  const addressLine = (html: string, needle: string) =>
+    html.split('\n').find((l) => l.includes(needle)) ?? '';
+
+  it('joins area and region, and prints neither "null" nor a stray comma when the region is missing', () => {
+    const base = data();
+    const withBoth = renderInvoiceHtml({
+      ...base,
+      order: { ...base.order, area: 'Marina', emirate: 'Dubai' },
+    });
+    expect(withBoth).toContain('Marina, Dubai');
+
+    const noRegion = renderInvoiceHtml({
+      ...base,
+      order: { ...base.order, area: null, emirate: null },
+    });
+    expect(noRegion).not.toContain('null');
+    expect(addressLine(noRegion, 'Somewhere')).not.toContain(',');
+
+    const areaOnly = renderInvoiceHtml({
+      ...base,
+      order: { ...base.order, area: 'Marina', emirate: null },
+    });
+    expect(areaOnly).toMatch(/Marina\s*<\/p>/);
+    expect(areaOnly).not.toContain('null');
+  });
+});

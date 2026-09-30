@@ -66,7 +66,10 @@ export class RegionsService {
     const hasAlias = !!alias;
 
     if (!hasId && !hasAlias) {
-      if (opts.required) {
+      // "Required" only binds where there is something to choose from. A shop
+      // whose country is unknown, or has no region model ("Other"), offers no
+      // regions, so demanding one would make checkout impossible for it.
+      if (opts.required && (await this.shopCountryCode(shopId))) {
         throw new BadRequestException('regionId is required');
       }
       return { regionId: null, emirate: null };

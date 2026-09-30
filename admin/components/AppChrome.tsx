@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import TopBar from "@/components/TopBar";
+import CountryBanner from "@/components/CountryBanner";
 import EmailVerificationBanner from "@/components/EmailVerificationBanner";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 import NewOrderBanner from "@/components/NewOrderBanner";
@@ -37,6 +38,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       <ImpersonationBanner />
       <TopBar />
       <EmailVerificationBanner />
+      <CountryBanner />
       <NewOrderBanner />
       <CommandPalette />
       {/* 1600px/48px-side/28px-top content wrapper from the 2026-08 admin

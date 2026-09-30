@@ -11,7 +11,6 @@ import { generateTimeSlots, isDateBlocked } from "@/lib/slots";
 import { resolvePaymentMethods } from "@/lib/payment-methods";
 import { getStoredReferralCode } from "@/lib/referral";
 import { sanitizePhoneInput } from "@/lib/phone";
-import { EMIRATES } from "@/lib/types";
 import type { CustomerAddress, OrderType, PaymentMethod } from "@/lib/types";
 
 // All checkout state, derived values, and submit handling — pulled out of
@@ -79,7 +78,10 @@ export function useCheckoutForm() {
   const setCustomerPhone = (value: string) => setCustomerPhoneRaw(sanitizePhoneInput(value));
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
-  const [emirate, setEmirate] = useState<string>(EMIRATES[1]); // Dubai default
+  // No default: a silent "Dubai" picked a zone fee the customer never chose. The
+  // region field is required for delivery (the browser enforces it), and there is
+  // none for pickup, where the customer gives no address.
+  const [regionId, setRegionId] = useState<number | null>(null);
   const [area, setArea] = useState("");
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -112,7 +114,7 @@ export function useCheckoutForm() {
 
   function applySavedAddress(address: CustomerAddress) {
     setCustomerAddress(address.address);
-    setEmirate(address.emirate);
+    setRegionId(address.regionId ?? null);
     setArea(address.area ?? "");
     if (address.latitude !== undefined && address.longitude !== undefined) {
       setCoords({ latitude: address.latitude, longitude: address.longitude });
@@ -222,7 +224,7 @@ export function useCheckoutForm() {
         customerPhone,
         customerEmail: customerEmail || undefined,
         customerAddress: orderType === "pickup" ? customerAddress || `Pickup at ${selectedOutlet?.name}` : customerAddress,
-        emirate,
+        regionId: orderType === "delivery" ? (regionId ?? undefined) : undefined,
         area: area || undefined,
         latitude: orderType === "delivery" ? coords?.latitude : undefined,
         longitude: orderType === "delivery" ? coords?.longitude : undefined,
@@ -293,8 +295,8 @@ export function useCheckoutForm() {
     setCustomerEmail,
     customerAddress,
     setCustomerAddress,
-    emirate,
-    setEmirate,
+    regionId,
+    setRegionId,
     area,
     setArea,
     coords,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DraftOrderBuilder from "./DraftOrderBuilder";
@@ -22,9 +22,19 @@ vi.mock("@/lib/api", () => ({
   validateDiscount: vi.fn(),
   createDraftOrder: vi.fn(),
   updateDraftOrder: vi.fn(),
+  getRegions: vi.fn(),
 }));
 
-import { listOutlets, listProducts } from "@/lib/api";
+import { getRegions, listOutlets, listProducts } from "@/lib/api";
+
+const uaeRegions = {
+  country: { code: "AE", regionLabel: "Emirate" },
+  regions: [
+    { id: 1, code: "AE-AZ", nameEn: "Abu Dhabi", nameAr: "أبوظبي", sortOrder: 1 },
+    { id: 2, code: "AE-DU", nameEn: "Dubai", nameAr: "دبي", sortOrder: 2 },
+    { id: 3, code: "AE-SH", nameEn: "Sharjah", nameAr: "الشارقة", sortOrder: 3 },
+  ],
+};
 
 // Mocking the module rather than wrapping in a provider, matching how this
 // suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
@@ -32,9 +42,12 @@ vi.mock("@/lib/useShopCurrency", () => ({
   useShopCurrency: () => "AED",
 }));
 
+let regionsResponse: typeof uaeRegions | { country: null; regions: [] } = uaeRegions;
+
 function renderBuilder() {
   vi.mocked(listOutlets).mockResolvedValue(outlets);
   vi.mocked(listProducts).mockResolvedValue(products);
+  vi.mocked(getRegions).mockResolvedValue(regionsResponse);
   return render(
     <ToastProvider>
       <DraftOrderBuilder />
@@ -49,10 +62,14 @@ function getCombobox(labelText: string) {
 }
 
 describe("DraftOrderBuilder", () => {
+  beforeEach(() => {
+    regionsResponse = uaeRegions;
+  });
+
   it("renders Emirate/Branch/Order type/Product pickers as Comboboxes, not native selects", async () => {
     renderBuilder();
     await waitFor(() => expect(getCombobox("Branch")).toBeInTheDocument());
-    expect(getCombobox("Emirate")).toBeInTheDocument();
+    await waitFor(() => expect(getCombobox("Emirate")).toBeInTheDocument());
     expect(getCombobox("Order type")).toBeInTheDocument();
     expect(getCombobox("Product")).toBeInTheDocument();
     expect(document.querySelector("select")).not.toBeInTheDocument();
@@ -62,10 +79,40 @@ describe("DraftOrderBuilder", () => {
     const user = userEvent.setup();
     renderBuilder();
     await waitFor(() => expect(getCombobox("Branch")).toBeInTheDocument());
+    await waitFor(() => expect(getCombobox("Emirate")).toBeInTheDocument());
     await user.click(getCombobox("Emirate"));
     const option = await screen.findByRole("option", { name: "Sharjah" });
     await user.click(option);
     expect(getCombobox("Emirate")).toHaveTextContent("Sharjah");
+  });
+
+  it("pre-selects no region: a silent default is how an order lands in the wrong zone", async () => {
+    renderBuilder();
+    await waitFor(() => expect(getCombobox("Emirate")).toBeInTheDocument());
+    expect(getCombobox("Emirate")).not.toHaveTextContent("Dubai");
+    expect(getCombobox("Emirate")).not.toHaveTextContent("Abu Dhabi");
+  });
+
+  it("labels the field with the country's own word and offers only that country's regions", async () => {
+    regionsResponse = {
+      country: { code: "KW", regionLabel: "Governorate" },
+      regions: [{ id: 9, code: "KW-KU", nameEn: "Capital", nameAr: "العاصمة", sortOrder: 1 }],
+    } as unknown as typeof uaeRegions;
+    const user = userEvent.setup();
+    renderBuilder();
+    await waitFor(() => expect(getCombobox("Governorate")).toBeInTheDocument());
+    expect(screen.queryByText("Emirate")).not.toBeInTheDocument();
+    await user.click(getCombobox("Governorate"));
+    expect(await screen.findByRole("option", { name: "Capital" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Dubai" })).not.toBeInTheDocument();
+  });
+
+  it("has no region field at all for a shop whose country has no regions", async () => {
+    regionsResponse = { country: null, regions: [] };
+    renderBuilder();
+    await waitFor(() => expect(getCombobox("Branch")).toBeInTheDocument());
+    expect(screen.queryByText("Emirate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Region")).not.toBeInTheDocument();
   });
 
   it("Branch combobox is populated from listOutlets and defaults to the first outlet", async () => {

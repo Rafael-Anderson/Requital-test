@@ -176,7 +176,7 @@ export default function OrderDetailPage() {
         <p className="text-sm mt-2">{order.customerAddress}</p>
         <p className="text-sm text-text-muted">
           {order.area ? `${order.area}, ` : ""}
-          {order.emirate}
+          {order.region?.nameEn ?? order.emirate}
         </p>
       </Card>
 

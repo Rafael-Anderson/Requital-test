@@ -6,22 +6,22 @@ import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
 import { createMyAddress, deleteMyAddress, listMyAddresses, updateMyAddress } from "@/lib/api";
-import { EMIRATES } from "@/lib/types";
 import type { CustomerAddress } from "@/lib/types";
 import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/form-styles";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import MapPicker from "@/components/MapPicker";
+import RegionSelect from "@/components/checkout/RegionSelect";
 
 interface AddressFormState {
   label: string;
   address: string;
-  emirate: string;
+  regionId: number | null;
   area: string;
   latitude: number | null;
   longitude: number | null;
 }
 
-const EMPTY_FORM: AddressFormState = { label: "", address: "", emirate: EMIRATES[1], area: "", latitude: null, longitude: null };
+const EMPTY_FORM: AddressFormState = { label: "", address: "", regionId: null, area: "", latitude: null, longitude: null };
 
 export default function AddressesPage() {
   const router = useRouter();
@@ -58,7 +58,7 @@ export default function AddressesPage() {
     setForm({
       label: address.label ?? "",
       address: address.address,
-      emirate: address.emirate,
+      regionId: address.regionId ?? null,
       area: address.area ?? "",
       latitude: address.latitude ?? null,
       longitude: address.longitude ?? null,
@@ -74,7 +74,7 @@ export default function AddressesPage() {
       const payload = {
         label: form.label || undefined,
         address: form.address,
-        emirate: form.emirate,
+        regionId: form.regionId ?? undefined,
         area: form.area || undefined,
         latitude: form.latitude ?? undefined,
         longitude: form.longitude ?? undefined,
@@ -156,20 +156,7 @@ export default function AddressesPage() {
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium block mb-1">Emirate</label>
-              <select
-                value={form.emirate}
-                onChange={(e) => setForm((f) => ({ ...f, emirate: e.target.value }))}
-                className={FIELD_CLASS}
-              >
-                {EMIRATES.map((em) => (
-                  <option key={em} value={em}>
-                    {em}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <RegionSelect value={form.regionId} onChange={(regionId) => setForm((f) => ({ ...f, regionId }))} />
             <div>
               <label className="text-sm font-medium block mb-1">Area (optional)</label>
               <input value={form.area} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} className={FIELD_CLASS} />
@@ -201,7 +188,7 @@ export default function AddressesPage() {
               <p className="text-sm text-zinc-600">{a.address}</p>
               <p className="text-xs text-zinc-500">
                 {a.area ? `${a.area}, ` : ""}
-                {a.emirate}
+                {a.region?.nameEn ?? a.emirate}
               </p>
             </div>
             <div className="flex flex-col gap-1 shrink-0">

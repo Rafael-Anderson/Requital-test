@@ -15,8 +15,9 @@ import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
 
 function locationLabel(outlet: Outlet): string {
-  if (outlet.area && outlet.emirate) return `${outlet.area}, ${outlet.emirate}`;
-  return outlet.area ?? outlet.emirate ?? "-";
+  const region = outlet.region?.nameEn ?? outlet.emirate;
+  if (outlet.area && region) return `${outlet.area}, ${region}`;
+  return outlet.area ?? region ?? "-";
 }
 
 export default function SettingsOutletsPage() {

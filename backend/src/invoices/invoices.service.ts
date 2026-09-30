@@ -23,7 +23,7 @@ interface OrderForInvoice {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
-  emirate: string;
+  emirate: string | null;
   area: string | null;
   createdAt: Date;
   deliveryFee: string | null;
@@ -255,7 +255,7 @@ export class InvoicesService {
       customerPhone: order.customerPhone as string,
       customerEmail: order.customerEmail as string | null,
       customerAddress: order.customerAddress as string,
-      emirate: order.emirate as string,
+      emirate: order.emirate as string | null,
       area: order.area as string | null,
       createdAt: order.createdAt as Date,
       deliveryFee: order.deliveryFee as string | null,

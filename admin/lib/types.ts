@@ -61,16 +61,22 @@ export interface PaymentTransaction {
 }
 
 export interface Order {
-  id: number;
-  // Per-shop display number. `id` remains the identity used for URLs,
-  // lookups and every API call - this is only what a human is shown.
+  id: number;
+
+  // Per-shop display number. `id` remains the identity used for URLs,
+
+  // lookups and every API call - this is only what a human is shown.
+
   shopOrderNumber: number;
   outletId: number;
   customerName: string;
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
-  emirate: string;
+  // Legacy name of the region, still returned (and mirrored by the backend)
+  // until that column is dropped. Read `region` first.
+  emirate: string | null;
+  region?: Region | null;
   area: string | null;
   deliveryDate: string | null;
   deliveryTimeSlot: string | null;
@@ -965,6 +971,7 @@ export interface Outlet {
   // isOpen status.
   active: boolean;
   emirate: string | null;
+  region?: Region | null;
   area: string | null;
   phone: string | null;
   latitude: number | null;
@@ -2495,6 +2502,8 @@ export interface DraftOrder {
   customerEmail: string | null;
   customerAddress: string | null;
   emirate: string | null;
+  regionId: number | null;
+  region?: Region | null;
   area: string | null;
   orderType: string | null;
   outletId: number;
@@ -2537,7 +2546,7 @@ export interface DraftOrderInput {
   customerPhone: string;
   customerEmail?: string;
   customerAddress: string;
-  emirate: string;
+  regionId?: number;
   area?: string;
   orderType?: string;
   discountCode?: string | null;
@@ -2879,4 +2888,20 @@ export interface InventoryMovementReport {
   rolledUpThrough: string | null;
   rows: InventoryMovementRow[];
   deadStock: InventoryMovementRow[];
+}
+
+// A first-level administrative region of the shop's country (an emirate, a
+// province, a governorate). Options come from GET /regions, never a hardcoded
+// list: they differ per country.
+export interface Region {
+  id: number;
+  code: string;
+  nameEn: string;
+  nameAr: string;
+}
+
+export interface RegionsResponse {
+  // null for a shop whose country is unknown; it then has no regions either.
+  country: { code: string; regionLabel: string } | null;
+  regions: (Region & { sortOrder: number })[];
 }

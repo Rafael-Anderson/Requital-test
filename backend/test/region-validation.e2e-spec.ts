@@ -311,7 +311,11 @@ describe('Region validation (e2e)', () => {
       await adminOrder(legacy, { regionId: await regionId('AE-DU') }).expect(
         400,
       );
-      await adminOrder(legacy, {}).expect(400);
+      // Nothing to choose from, so nothing is required: a shop whose country is
+      // unknown offers no regions and must still be able to take an order.
+      const bare = body<OrderBody>(await adminOrder(legacy, {}).expect(201));
+      expect(bare.emirate).toBeNull();
+      expect(bare.regionId).toBeNull();
     });
   });
 
@@ -332,10 +336,39 @@ describe('Region validation (e2e)', () => {
         400,
       );
       await publicOrder(shop, { emirate: 'Dubai' }).expect(400);
-      await publicOrder(shop, {}).expect(400);
       await publicOrder(shop, { regionId: await regionId('SA-02') }).expect(
         201,
       );
+    });
+
+    it('a region is required for DELIVERY in a country that has regions, and never for pickup', async () => {
+      const shop = await setupShop('pub-req', 'United Arab Emirates');
+      await request(server())
+        .patch(`/outlets/${shop.outletId}`)
+        .set('Authorization', `Bearer ${shop.token}`)
+        .send({
+          deliveryEnabled: true,
+          latitude: 25.2048,
+          longitude: 55.2708,
+          deliveryRadiusKm: 5,
+        })
+        .expect(200);
+      const delivery = {
+        orderType: 'delivery',
+        paymentMethod: 'cash_on_delivery',
+        latitude: 25.2048,
+        longitude: 55.2708,
+      };
+      const res = await publicOrder(shop, {}, delivery).expect(400);
+      expect(body<ErrorBody>(res).message).toEqual(
+        expect.stringContaining('regionId is required'),
+      );
+      // Pickup gives no address to place in a region, so none is stored and none is made up.
+      const pickup = body<{ order: OrderBody }>(
+        await publicOrder(shop, {}).expect(201),
+      ).order;
+      expect(pickup.regionId).toBeNull();
+      expect(pickup.emirate).toBeNull();
     });
 
     it('zone matching uses the resolved region name, so a regionId-only order still gets its zone fee', async () => {
