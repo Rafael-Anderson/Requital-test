@@ -2,22 +2,27 @@
 
 import { useState, type FormEvent } from "react";
 import { createDeliveryZone, updateDeliveryZone } from "@/lib/api";
-import type { DeliveryZone } from "@/lib/types";
+import type { DeliveryZone, Region } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import Modal from "@/components/ui/Modal";
+import MultiCombobox from "@/components/ui/MultiCombobox";
 import { useToast } from "@/components/ui/Toast";
 import DeliveryZoneMap, { UAE_CENTER } from "@/components/DeliveryZoneMap";
 
 export default function DeliveryZoneFormModal({
   outletId,
   zone,
+  regions,
+  regionLabel,
   onClose,
   onSaved,
 }: {
   outletId: number;
   zone: DeliveryZone | null;
+  regions: Region[];
+  regionLabel: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -31,6 +36,10 @@ export default function DeliveryZoneFormModal({
       : UAE_CENTER,
   );
   const [radiusKm, setRadiusKm] = useState(zone?.radiusKm !== null && zone?.radiusKm !== undefined ? Number(zone.radiusKm) : 5);
+  // Only sent once the merchant has touched the picker: saving a fee change on an
+  // old zone must not try to overwrite (or demand) its regions.
+  const [regionIds, setRegionIds] = useState<string[]>((zone?.regions ?? []).map((r) => String(r.id)));
+  const [regionsTouched, setRegionsTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -47,6 +56,7 @@ export default function DeliveryZoneFormModal({
         lat: center.lat,
         lng: center.lng,
         radiusKm,
+        ...(regionsTouched && { regionIds: regionIds.map(Number) }),
       };
       if (zone) {
         await updateDeliveryZone(outletId, zone.id, payload);
@@ -71,7 +81,7 @@ export default function DeliveryZoneFormModal({
         <div className="space-y-3.5">
           <Input
             label="Name"
-            placeholder="e.g. Dubai, DXB/SHJ/AJM, Other Emirate"
+            placeholder="e.g. Central Dubai"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -92,6 +102,19 @@ export default function DeliveryZoneFormModal({
             value={minOrderAmount}
             onChange={(e) => setMinOrderAmount(e.target.value)}
           />
+          {regions.length > 0 && (
+            <MultiCombobox
+              label={`${regionLabel}s covered`}
+              value={regionIds}
+              onChange={(next) => {
+                setRegionIds(next);
+                setRegionsTouched(true);
+              }}
+              options={regions.map((r) => ({ value: String(r.id), label: r.nameEn }))}
+              placeholder={`Select ${regionLabel.toLowerCase()}s`}
+              searchPlaceholder={`Search ${regionLabel.toLowerCase()}s`}
+            />
+          )}
           <div className="flex items-center gap-2">
             <Toggle checked={isActive} onChange={setIsActive} />
             <span className="text-sm">Active</span>

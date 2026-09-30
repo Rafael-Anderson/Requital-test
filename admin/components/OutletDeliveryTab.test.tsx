@@ -16,6 +16,8 @@ vi.mock("@/lib/api", () => ({
   listDeliveryZones: vi.fn().mockResolvedValue([]),
   deleteDeliveryZone: vi.fn(),
   updateDeliveryZone: vi.fn(),
+  getZoneMappingProposal: vi.fn().mockResolvedValue({ mode: "regions", unconfirmedActiveZones: 0, zones: [] }),
+  getRegions: vi.fn().mockResolvedValue({ country: null, regions: [] }),
 }));
 import { getShop } from "@/lib/api";
 
