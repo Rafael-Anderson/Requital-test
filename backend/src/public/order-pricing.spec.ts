@@ -1,4 +1,8 @@
-import { computeOrderTotals, matchDeliveryZone } from './order-pricing';
+import {
+  computeOrderTotals,
+  matchDeliveryZone,
+  matchDeliveryZoneByRegion,
+} from './order-pricing';
 
 describe('matchDeliveryZone', () => {
   const zones = [
@@ -158,6 +162,78 @@ describe('matchDeliveryZone by map circle (SHP-1)', () => {
     );
     const justOutside = { ...onEdge, lat: onEdge.lat + 0.001 };
     expect(matchDeliveryZone([zone], 'x', 'Fujairah', justOutside)).toBeNull();
+  });
+});
+
+describe('matchDeliveryZoneByRegion', () => {
+  const DUBAI = 2;
+  const SHARJAH = 3;
+  const AJMAN = 4;
+  const multi = {
+    id: 1,
+    name: 'DXB/SHJ/AJM',
+    isActive: true,
+    regionIds: [DUBAI, SHARJAH, AJMAN],
+  };
+  const dubaiOnly = {
+    id: 2,
+    name: 'Anything',
+    isActive: true,
+    regionIds: [DUBAI],
+  };
+
+  it('matches by the customer region, never by the zone name: the DXB/SHJ/AJM case', () => {
+    expect(matchDeliveryZoneByRegion([multi], SHARJAH)?.name).toBe(
+      'DXB/SHJ/AJM',
+    );
+    expect(matchDeliveryZoneByRegion([multi], 99)).toBeNull();
+  });
+
+  it('a zone named "Dubai" with no region set does not match the Dubai region', () => {
+    const byNameOnly = { id: 9, name: 'Dubai', isActive: true, regionIds: [] };
+    expect(matchDeliveryZoneByRegion([byNameOnly], DUBAI)).toBeNull();
+  });
+
+  it('the zone covering the fewest regions is the most specific and wins, in any row order', () => {
+    expect(matchDeliveryZoneByRegion([multi, dubaiOnly], DUBAI)?.id).toBe(2);
+    expect(matchDeliveryZoneByRegion([dubaiOnly, multi], DUBAI)?.id).toBe(2);
+  });
+
+  it('equal specificity falls to the lowest id', () => {
+    const a = { id: 5, name: 'A', isActive: true, regionIds: [DUBAI] };
+    const b = { id: 6, name: 'B', isActive: true, regionIds: [DUBAI] };
+    expect(matchDeliveryZoneByRegion([b, a], DUBAI)?.id).toBe(5);
+  });
+
+  it('a placed circle containing the pin beats any region match', () => {
+    const circle = {
+      id: 7,
+      name: 'Marina',
+      isActive: true,
+      regionIds: [],
+      lat: '25.0805',
+      lng: '55.1403',
+      radiusKm: '3.00',
+    };
+    const pin = { lat: 25.0905, lng: 55.1453 };
+    expect(matchDeliveryZoneByRegion([dubaiOnly, circle], DUBAI, pin)?.id).toBe(
+      7,
+    );
+    // Pin elsewhere: the region answer stands.
+    expect(
+      matchDeliveryZoneByRegion([dubaiOnly, circle], DUBAI, {
+        lat: 25.3,
+        lng: 55.5,
+      })?.id,
+    ).toBe(2);
+  });
+
+  it('never matches an inactive zone, and needs a region or a pin to match anything', () => {
+    expect(
+      matchDeliveryZoneByRegion([{ ...dubaiOnly, isActive: false }], DUBAI),
+    ).toBeNull();
+    expect(matchDeliveryZoneByRegion([dubaiOnly], null)).toBeNull();
+    expect(matchDeliveryZoneByRegion([dubaiOnly], undefined)).toBeNull();
   });
 });
 

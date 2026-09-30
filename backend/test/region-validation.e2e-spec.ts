@@ -383,11 +383,11 @@ describe('Region validation (e2e)', () => {
           deliveryRadiusKm: 5,
         })
         .expect(200);
-      await request(server())
-        .post(`/outlets/${shop.outletId}/delivery-zones`)
-        .set('Authorization', `Bearer ${shop.token}`)
-        .send({ name: 'Sharjah', fee: 40 })
-        .expect(201);
+      // Seeded directly: a zone with no regions is a legacy one, matched by name.
+      await db.execute(
+        'INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive) VALUES (?, ?, ?, 0, 1)',
+        [shop.outletId, 'Sharjah', 40],
+      );
       const res = await publicOrder(
         shop,
         { regionId: await regionId('AE-SH') },

@@ -9,6 +9,7 @@ import type {
   PaginatedAffiliateOrders,
   PaginatedAffiliates,
   RegionsResponse,
+  ZoneMappingProposal,
   AuthUser,
   BranchRole,
   BranchRoleAssignment,
@@ -594,6 +595,19 @@ export interface DeliveryZoneInput {
   lat?: number;
   lng?: number;
   radiusKm?: number;
+  regionIds?: number[];
+}
+
+export function getZoneMappingProposal(outletId: number) {
+  return apiFetch<ZoneMappingProposal>(`/outlets/${outletId}/delivery-zones/mapping-proposal`);
+}
+
+// Saves the zone's region set AND marks it reviewed.
+export function setZoneMapping(outletId: number, zoneId: number, regionIds: number[]) {
+  return apiFetch<DeliveryZone>(`/outlets/${outletId}/delivery-zones/${zoneId}/mapping`, {
+    method: "PUT",
+    body: JSON.stringify({ regionIds }),
+  });
 }
 
 export function listDeliveryZones(outletId: number) {

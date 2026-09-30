@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -51,4 +54,15 @@ export class CreateDeliveryZoneDto {
   @Min(1)
   @Max(100)
   radiusKm?: number;
+
+  // The regions this zone covers, all of the shop's own country. Choosing them
+  // here is itself the merchant's review of the zone's mapping, so a zone saved
+  // with regions is confirmed.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  regionIds?: number[];
 }

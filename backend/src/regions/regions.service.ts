@@ -121,6 +121,35 @@ export class RegionsService {
     };
   }
 
+  // The many-regions sibling of resolveForShop, for a delivery zone's region set:
+  // every id must be a region of the shop's own country. Returns the de-duplicated
+  // ids. An empty list is valid (a zone covered by a map circle alone).
+  async resolveManyForShop(
+    shopId: number,
+    regionIds: number[],
+  ): Promise<number[]> {
+    const unique = [...new Set(regionIds)];
+    if (unique.length === 0) return [];
+    const countryCode = await this.shopCountryCode(shopId);
+    if (!countryCode) {
+      throw new BadRequestException(
+        "Set your shop's country before choosing regions",
+      );
+    }
+    const found = await this.db.query<({ id: number } & RowDataPacket)[]>(
+      `SELECT id FROM region WHERE countryCode = ? AND id IN (${unique
+        .map(() => '?')
+        .join(', ')})`,
+      [countryCode, ...unique],
+    );
+    if (found.length !== unique.length) {
+      throw new BadRequestException(
+        "regionIds must all be regions of this shop's country",
+      );
+    }
+    return unique;
+  }
+
   private async shopCountryCode(shopId: number): Promise<string | null> {
     const rows = await this.db.query<
       ({ countryCode: string | null } & RowDataPacket)[]

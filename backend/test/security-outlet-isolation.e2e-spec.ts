@@ -74,6 +74,19 @@ describe('Outlet & shop isolation (e2e)', () => {
   let app: INestApplication<App>;
   let db: DatabaseService;
 
+  async function seedLegacyZone(
+    outletId: number,
+    name: string,
+    fee: number,
+    minOrderAmount: number,
+  ): Promise<number> {
+    const res = await db.execute(
+      'INSERT INTO deliveryzone (outletId, name, fee, minOrderAmount, isActive) VALUES (?, ?, ?, ?, 1)',
+      [outletId, name, fee, minOrderAmount],
+    );
+    return res.insertId;
+  }
+
   // Unique per run so repeated executions don't collide on shop.subdomain's
   // unique constraint.
   const runId = Date.now();
@@ -218,12 +231,10 @@ describe('Outlet & shop isolation (e2e)', () => {
       })
       .expect(200);
 
-    const zoneA1 = await request(app.getHttpServer())
-      .post(`/outlets/${outletA1Id}/delivery-zones`)
-      .set('Authorization', `Bearer ${shopAAdminToken}`)
-      .send({ name: 'Dubai', fee: 10, minOrderAmount: 50 })
-      .expect(201);
-    outletA1ZoneId = body<IdRow>(zoneA1).id;
+    // A shop with no zones is already matched by region, where the API refuses a zone
+    // with no regions and no map circle. These zones stand for ones that predate
+    // that, so they are seeded directly (the shop then stays in legacy mode).
+    outletA1ZoneId = await seedLegacyZone(outletA1Id, 'Dubai', 10, 50);
 
     const zoneA2 = await request(app.getHttpServer())
       .post(`/outlets/${outletA2Id}/delivery-zones`)
@@ -255,12 +266,7 @@ describe('Outlet & shop isolation (e2e)', () => {
       .expect(200);
     outletB1Id = body<OutletRow[]>(outletsB)[0].id;
 
-    const zoneB1 = await request(app.getHttpServer())
-      .post(`/outlets/${outletB1Id}/delivery-zones`)
-      .set('Authorization', `Bearer ${shopBAdminToken}`)
-      .send({ name: 'Abu Dhabi', fee: 20, minOrderAmount: 100 })
-      .expect(201);
-    outletB1ZoneId = body<IdRow>(zoneB1).id;
+    outletB1ZoneId = await seedLegacyZone(outletB1Id, 'Abu Dhabi', 20, 100);
 
     const collectionB = await request(app.getHttpServer())
       .post('/collections')

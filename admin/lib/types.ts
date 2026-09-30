@@ -2040,6 +2040,35 @@ export interface DeliveryZone {
   lng: string | null;
   radiusKm: string | null;
   createdAt: string;
+  // The regions this zone covers, and when a merchant last confirmed them.
+  // NULL until reviewed; a shop matches zones by region only once every active
+  // zone has been confirmed.
+  regions?: Region[];
+  mappingConfirmedAt?: string | null;
+}
+
+export interface ZoneMappingProposalItem {
+  zoneId: number;
+  name: string;
+  isActive: boolean;
+  confirmed: boolean;
+  hasPlacedCircle: boolean;
+  currentRegions: Region[];
+  // What the zone does today under the old name rule, in a sentence.
+  current: string;
+  proposal: {
+    regionIds: number[];
+    reason: "exact-name" | "token-split" | "contains-name" | "none";
+    // True only when the zone's name IS a region name (or a list of them).
+    confident: boolean;
+    explanation: string;
+  };
+}
+
+export interface ZoneMappingProposal {
+  mode: "legacy" | "regions";
+  unconfirmedActiveZones: number;
+  zones: ZoneMappingProposalItem[];
 }
 
 export const SOCIAL_PLATFORMS = [
