@@ -16,12 +16,13 @@
 // 10500. The admin's currency dropdown offered all three of those currencies,
 // so the combination was reachable through the UI.
 //
-// Today that path is closed at the other end too: UpdateShopDto restricts
-// shop.currency to SUPPORTED_CURRENCIES (AED only) until real multi-currency
-// ships. This module is deliberately NOT limited to that list - it is the
-// groundwork that has to be correct before the lock can be widened, and having
-// it right in advance is what makes widening a small change rather than an
-// audit of every amount conversion in the codebase.
+// That was closed at the other end too while the money layer was being built:
+// UpdateShopDto restricted shop.currency to AED only. Phase 2a/A6 widened it to
+// all seven, and this module having been correct for all of them in advance is
+// exactly what made that a list change rather than an audit of every amount
+// conversion in the codebase. It remains deliberately independent of
+// SUPPORTED_CURRENCIES: an unrecognised code falls back to factor 100 rather
+// than throwing.
 //
 // Phase 2a/A3 widened this file's remit from "how many minor units in a major
 // one" to also owning the ROUNDING POLICY derived from that answer, because the

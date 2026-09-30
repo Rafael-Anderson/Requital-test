@@ -18,7 +18,31 @@ import {
 // The single source of truth for which currencies the backend will accept.
 // Widening this list is the deliberate, visible act that turns multi-currency
 // on - which is why it is a named constant rather than an inline literal.
-export const SUPPORTED_CURRENCIES = ['AED'] as const;
+//
+// WIDENED (Phase 2a / A6). It was ['AED'] while the money layer was being built:
+// every amount carried an implicit currency, so a second one would have produced
+// silently wrong charges, invoices and reports. The groundwork that had to land
+// first, and has:
+//   A1  every money-bearing row records its OWN currency (never re-read live)
+//   A2  an exchange-rate table, and the rate frozen onto each order
+//   A3  one rounding policy keyed off the currency's real minor-unit factor,
+//       applied once per stored column at persist
+//   A4  a refund is denominated in the currency of the charge it reverses
+//   A5  every backend consumer and both frontends read the CAPTURED currency
+// `minorUnitFactor` has always known all seven (KWD/BHD/OMR are 1000, not 100),
+// which is what makes this a list change rather than an audit of every
+// conversion in the codebase.
+//
+// The order matches the admin dropdown: AED first as the platform's home market.
+export const SUPPORTED_CURRENCIES = [
+  'AED',
+  'SAR',
+  'KWD',
+  'QAR',
+  'BHD',
+  'OMR',
+  'USD',
+] as const;
 
 export class UpdateShopDto {
   // Gates storefront visibility — see PublicService.assertPublished and the
@@ -64,8 +88,7 @@ export class UpdateShopDto {
   @IsString()
   @MaxLength(10)
   @IsIn(SUPPORTED_CURRENCIES, {
-    message:
-      'Only AED is supported today. Multi-currency is planned; other currencies will be enabled when it ships.',
+    message: `currency must be one of: ${SUPPORTED_CURRENCIES.join(', ')}`,
   })
   currency?: string;
 

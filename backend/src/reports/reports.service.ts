@@ -4,6 +4,7 @@ import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
+import { roundMoney } from '../common/currency-minor-units';
 import { ReportsFilterQueryDto } from './dto/reports-filter-query.dto';
 import { bucketPrepTimes, type PrepTimeSample } from './prep-time';
 import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
@@ -85,12 +86,22 @@ const MARGIN_DIMENSIONS: Record<
   },
 };
 
-function marginShape(revenue: number, cost: number) {
+// `currency` decides the precision of the three MONEY figures. It used to be a
+// hardcoded round2, which silently destroyed the third decimal of every
+// KWD/BHD/OMR figure - 31.515 was reported as 31.52. Invisible while every shop
+// was AED, and found by the KWD end-to-end proof (test/kwd-end-to-end.e2e-spec.ts)
+// the moment A6 made a 3-decimal shop reachable. The margin CSV export was
+// already correct via toMajorUnitString; this is the same rule, applied to the
+// report the admin screen reads.
+//
+// marginPercent deliberately stays at 2 decimals: a percentage is not money, so
+// the currency's minor-unit factor has nothing to say about it.
+function marginShape(revenue: number, cost: number, currency: string | null) {
   const margin = revenue - cost;
   return {
-    revenue: round2(revenue),
-    cost: round2(cost),
-    margin: round2(margin),
+    revenue: roundMoney(revenue, currency),
+    cost: roundMoney(cost, currency),
+    margin: roundMoney(margin, currency),
     // Null rather than 0 when there is no costed revenue: 0% and "nothing to
     // measure" are different answers.
     marginPercent: revenue > 0 ? round2((margin / revenue) * 100) : null,
@@ -270,7 +281,12 @@ export class ReportsService {
          COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
                            THEN oi.quantity * oi.unitCost END), 0) AS cost,
          COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost,
-         COUNT(*) AS lineCount
+         COUNT(*) AS lineCount,
+         -- MAX, not a range: one shop has one currency, the same pick the margin
+         -- CSV export makes (export-definitions.ts). Read from the ORDERS rather
+         -- than live from the shop, so a shop that changes currency does not
+         -- re-denominate its own history.
+         MAX(o.currency) AS currency
        FROM orderitem oi
        JOIN \`order\` o ON o.id = oi.orderId
        WHERE ${sql}`,
@@ -279,8 +295,10 @@ export class ReportsService {
 
     const revenue = Number(rows[0].revenue);
     const cost = Number(rows[0].cost);
+    const currency = rows[0].currency as string | null;
     return {
-      ...marginShape(revenue, cost),
+      ...marginShape(revenue, cost, currency),
+      currency,
       linesCosted:
         Number(rows[0].lineCount) - Number(rows[0].linesWithoutCost),
       linesWithoutCost: Number(rows[0].linesWithoutCost),
@@ -306,7 +324,8 @@ export class ReportsService {
                                 THEN oi.quantity * oi.priceAtPurchase END), 0) AS revenue,
               COALESCE(SUM(CASE WHEN oi.unitCost IS NOT NULL
                                 THEN oi.quantity * oi.unitCost END), 0) AS cost,
-              COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost
+              COALESCE(SUM(CASE WHEN oi.unitCost IS NULL THEN 1 ELSE 0 END), 0) AS linesWithoutCost,
+              MAX(o.currency) AS currency
          FROM orderitem oi
          JOIN \`order\` o ON o.id = oi.orderId
          ${dim.joins}
@@ -321,7 +340,12 @@ export class ReportsService {
     return rows.map((r) => ({
       key: r.groupKey as string | number | null,
       label: (r.label as string | null) ?? 'Unattributed',
-      ...marginShape(Number(r.revenue), Number(r.cost)),
+      ...marginShape(
+        Number(r.revenue),
+        Number(r.cost),
+        r.currency as string | null,
+      ),
+      currency: r.currency as string | null,
       linesWithoutCost: Number(r.linesWithoutCost),
     }));
   }
