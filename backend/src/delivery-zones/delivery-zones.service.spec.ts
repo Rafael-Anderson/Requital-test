@@ -12,7 +12,9 @@ const mockBranchRolesService = {
 // These specs are about the map-circle columns, not the region mapping (which has
 // its own e2e coverage), so the region and audit collaborators are inert.
 const mockRegionsService = {
-  resolveManyForShop: jest.fn(async (_shopId: number, ids: number[]) => ids),
+  resolveManyForShop: jest.fn((_shopId: number, ids: number[]) =>
+    Promise.resolve(ids),
+  ),
 } as unknown as RegionsService;
 const mockAuditLog = {
   logCtx: jest.fn().mockResolvedValue(undefined),
@@ -59,7 +61,7 @@ const adminCtx: TenantContext = {
 describe('DeliveryZonesService — map center/radius wiring', () => {
   it('create() persists lat/lng/radiusKm alongside the flat-fee fields', async () => {
     const db = createMockDb();
-    db.query.mockImplementation(async (sql: string) => answer(sql));
+    db.query.mockImplementation((sql: string) => Promise.resolve(answer(sql)));
     const service = new DeliveryZonesService(
       db,
       mockBranchRolesService,
@@ -87,7 +89,7 @@ describe('DeliveryZonesService — map center/radius wiring', () => {
 
   it('create() defaults lat/lng/radiusKm to null when not provided', async () => {
     const db = createMockDb();
-    db.query.mockImplementation(async (sql: string) => answer(sql));
+    db.query.mockImplementation((sql: string) => Promise.resolve(answer(sql)));
     const service = new DeliveryZonesService(
       db,
       mockBranchRolesService,
@@ -107,7 +109,7 @@ describe('DeliveryZonesService — map center/radius wiring', () => {
 
   it('update() only sets lat/lng/radiusKm when actually sent', async () => {
     const db = createMockDb();
-    db.query.mockImplementation(async (sql: string) => answer(sql));
+    db.query.mockImplementation((sql: string) => Promise.resolve(answer(sql)));
     const service = new DeliveryZonesService(
       db,
       mockBranchRolesService,

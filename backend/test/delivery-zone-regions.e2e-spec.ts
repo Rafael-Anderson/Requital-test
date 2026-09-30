@@ -459,9 +459,7 @@ describe('Delivery zone region mapping (e2e)', () => {
       const list = body<ZoneBody[]>(
         await request(server()).get(zonesUrl(s)).set(s.auth).expect(200),
       );
-      expect(list[0].regions.map((r) => r.code)).toEqual(
-        ['AE-SH', 'AE-DU'].sort((x, y) => (x === 'AE-DU' ? -1 : 1)),
-      );
+      expect(list[0].regions.map((r) => r.code)).toEqual(['AE-DU', 'AE-SH']);
       expect(list[0].mappingConfirmedAt).not.toBeNull();
     });
   });
