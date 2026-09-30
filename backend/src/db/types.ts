@@ -16,6 +16,7 @@ export interface OrderRow {
   customerEmail: string | null;
   customerAddress: string;
   emirate: string;
+  regionId: number | null;
   area: string | null;
   deliveryDate: Date | null;
   deliveryTimeSlot: string | null;
@@ -436,6 +437,9 @@ export interface ShopRow {
   whatsappNumber: string | null;
   description: string | null;
   country: string | null;
+  // ISO 3166-1 alpha-2, derived from `country` (see shop/constants.ts). NULL
+  // means unknown, never "assume UAE".
+  countryCode: string | null;
   address: string | null;
   timezone: string;
   // Same-day delivery cutoff (stakeholder #13). "HH:MM" wall-clock in the
@@ -750,6 +754,7 @@ export interface OutletRow {
   whatsapp: string | null;
   active: boolean;
   emirate: string | null;
+  regionId: number | null;
   area: string | null;
   phone: string | null;
   latitude: number | null;
@@ -774,6 +779,23 @@ export interface DeliveryzoneRow {
   lng: string | null;
   radiusKm: string | null;
   createdAt: Date;
+  // NULL until a merchant reviews the zone's region mapping.
+  mappingConfirmedAt: Date | null;
+}
+
+export interface RegionRow {
+  id: number;
+  countryCode: string;
+  code: string;
+  nameEn: string;
+  nameAr: string;
+  parentRegionId: number | null;
+  sortOrder: number;
+}
+
+export interface DeliveryzoneregionRow {
+  zoneId: number;
+  regionId: number;
 }
 
 export interface IngredientRow {
@@ -1005,6 +1027,7 @@ export interface DraftorderRow {
   customerEmail: string | null;
   customerAddress: string | null;
   emirate: string | null;
+  regionId: number | null;
   area: string | null;
   orderType: string | null;
   discountId: number | null;

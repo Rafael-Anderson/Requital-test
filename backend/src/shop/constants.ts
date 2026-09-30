@@ -22,6 +22,28 @@ export const SOCIAL_PLATFORM_DOMAINS: Record<string, string[]> = {
 
 export const SOCIAL_PLATFORMS = Object.keys(SOCIAL_PLATFORM_DOMAINS);
 
+// `shop.country` is the display string the signup wizard offers; the region
+// model needs an ISO code. "Other" and anything unrecognised map to NULL:
+// unknown is stored as unknown, never as a guessed country. Mirrors the
+// COUNTRIES list in admin/lib/useAccountSetupForm.ts and the backfill CASE in
+// migration 20261001110000.
+// A Map, not an object literal: a free-text country of "constructor" must not
+// resolve to Object.prototype's function.
+const COUNTRY_CODES = new Map([
+  ['United Arab Emirates', 'AE'],
+  ['Saudi Arabia', 'SA'],
+  ['Kuwait', 'KW'],
+  ['Qatar', 'QA'],
+  ['Bahrain', 'BH'],
+  ['Oman', 'OM'],
+]);
+
+export function countryCodeFor(
+  country: string | null | undefined,
+): string | null {
+  return COUNTRY_CODES.get(country?.trim() ?? '') ?? null;
+}
+
 // Subdomains a shop must never claim — collides with a real platform
 // hostname (admin.requital.io, api.requital.io, ...) or a reserved word a
 // future platform page might need. Checked once, at signup (shop.subdomain

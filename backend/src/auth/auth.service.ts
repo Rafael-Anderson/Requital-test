@@ -18,7 +18,7 @@ import { generateOpaqueToken, hashToken } from '../common/token-hash';
 import { escapeHtml } from '../common/email';
 import { JobsService } from '../jobs/jobs.service';
 import { SignupDto } from './dto/signup.dto';
-import { RESERVED_SUBDOMAINS } from '../shop/constants';
+import { RESERVED_SUBDOMAINS, countryCodeFor } from '../shop/constants';
 import { LoginDto } from './dto/login.dto';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -91,8 +91,8 @@ export class AuthService {
     try {
       userId = await this.db.transaction(async (conn) => {
         const [shopResult] = await conn.query(
-          `INSERT INTO shop (name, subdomain, businessType, trn, websiteUrl, address, operatingModel, branchCount, productEditorMode, country)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO shop (name, subdomain, businessType, trn, websiteUrl, address, operatingModel, branchCount, productEditorMode, country, countryCode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             dto.shopName,
             dto.subdomain,
@@ -108,6 +108,7 @@ export class AuthService {
             // explicit NULL is passed, so this one needs its own fallback.
             dto.productEditorMode ?? 'simple',
             dto.country ?? null,
+            countryCodeFor(dto.country),
           ],
         );
         const shopId = (shopResult as { insertId: number }).insertId;

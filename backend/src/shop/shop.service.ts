@@ -11,7 +11,11 @@ import type { RowDataPacket } from 'mysql2/promise';
 import type { ShopRow } from '../db/types';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { UpdateShopDomainDto } from './dto/update-shop-domain.dto';
-import { SOCIAL_PLATFORM_DOMAINS, SOCIAL_PLATFORMS } from './constants';
+import {
+  SOCIAL_PLATFORM_DOMAINS,
+  SOCIAL_PLATFORMS,
+  countryCodeFor,
+} from './constants';
 import { isValidCustomDomain } from './domain-validation';
 import {
   VERIFY_RECORD_PREFIX,
@@ -193,6 +197,8 @@ export class ShopService {
       whatsappNumber: dto.whatsappNumber,
       description: dto.description,
       country: dto.country,
+      countryCode:
+        dto.country === undefined ? undefined : countryCodeFor(dto.country),
       address: dto.address,
       timezone: dto.timezone,
       notifyWhatsapp: dto.notifyWhatsapp,
