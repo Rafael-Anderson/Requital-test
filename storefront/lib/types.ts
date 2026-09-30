@@ -378,6 +378,11 @@ export interface Product {
   // product-is-new.ts) — a plain boolean, the raw expiry date is not
   // exposed. Drives the storefront "NEW" badge.
   isNew: boolean;
+  // The rate this product would be taxed at, as a percentage, resolved
+  // server-side from its tax class (see backend PublicService). Optional because
+  // it is absent from anything cached or persisted before it shipped - see
+  // lib/order-tax.ts for how an unknown rate is handled.
+  taxRate?: number;
   // Per-product override of Shop.estimatedDeliveryTime{From,To,Unit} — see
   // lib/delivery-time.ts. All three null = use the shop default.
   estimatedDeliveryTimeFrom: number | null;

@@ -12,6 +12,17 @@ export interface InvoiceHtmlData {
   subtotal: string | number;
   taxAmount: string | number;
   total: string | number;
+  // Tax grouped by rate, for the "of which tax" table a VAT invoice needs (and
+  // what I18N-9's proper bilingual VAT invoice builds on). Empty or omitted when
+  // the order predates B2's per-line capture, in which case only the single Tax
+  // total is shown - an invented breakdown would be worse than none.
+  taxBreakdown?: {
+    taxRate: number;
+    taxableAmount: number;
+    taxAmount: number;
+    // Set only for the delivery row, which has no product tax class.
+    label?: string;
+  }[];
   // How the order was priced, frozen on the invoice at issue. `subtotal` is the
   // sum of `priceAtPurchase * quantity`, so when this is true that figure
   // ALREADY contains the tax and the Tax row must be shown as a component of the
@@ -47,6 +58,12 @@ export interface InvoiceHtmlData {
       quantity: number;
       priceAtPurchase: string | number;
       autoDiscountAmount: string | number | null;
+      // The tax this line actually bore, captured at order time (B2). NULL on
+      // every order placed before that capture existed, which means UNKNOWN and
+      // is why the Tax column and the breakdown below are both omitted rather
+      // than printed as zero for those.
+      taxRate?: string | number | null;
+      taxAmount?: string | number | null;
     }[];
   };
 }
@@ -71,6 +88,11 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   const showMoney = data.type !== 'PACKING_SLIP';
   const isCod = data.order.paymentMethod === 'cash_on_delivery';
   const isPaid = data.order.paymentStatus === 'paid';
+  // A per-line Tax column is only meaningful once at least one line carries the
+  // capture; on a pre-B2 order every cell would be an em dash, so the column is
+  // dropped entirely instead.
+  const showTaxColumn =
+    showMoney && data.order.orderitem.some((i) => i.taxAmount != null);
   const itemRows = data.order.orderitem
     .map((item) => {
       const baseName = item.variantLabel
@@ -86,7 +108,21 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
       const priceCell = showMoney
         ? `<td class="num">${money(item.priceAtPurchase, data.currency)}</td><td class="num">${money(Number(item.priceAtPurchase) * item.quantity, data.currency)}</td>`
         : '';
-      return `<tr><td>${name}</td><td class="num">${item.quantity}</td>${priceCell}</tr>`;
+      // Only rendered when this order actually carries the capture. A line whose
+      // taxAmount is NULL is unknown, not zero, so it prints an em dash rather
+      // than a number nobody recorded.
+      const taxCell = showTaxColumn
+        ? `<td class="num">${
+            item.taxAmount == null
+              ? '&mdash;'
+              : `${money(item.taxAmount, data.currency)}${
+                  item.taxRate == null
+                    ? ''
+                    : ` <span class="muted">(${Number(item.taxRate)}%)</span>`
+                }`
+          }</td>`
+        : '';
+      return `<tr><td>${name}</td><td class="num">${item.quantity}</td>${priceCell}${taxCell}</tr>`;
     })
     .join('');
 
@@ -120,6 +156,31 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
     ? `<tr class="tax-included"><td class="label">Includes tax</td><td class="num">${money(data.taxAmount, data.currency)}</td></tr>`
     : `<tr><td class="label">Tax</td><td class="num">${money(data.taxAmount, data.currency)}</td></tr>`;
 
+  // The breakdown by rate. Zero-rated and exempt lines are listed too, with 0
+  // tax: on a VAT return "what was zero-rated" is exactly as reportable as what
+  // was taxed, which is the whole reason taxclass.type exists.
+  const breakdownRows = (data.taxBreakdown ?? [])
+    .map(
+      (b) =>
+        `<tr><td class="label">${
+          b.label ?? `Taxable at ${b.taxRate}%`
+        }</td><td class="num">${money(
+          b.taxableAmount,
+          data.currency,
+        )}</td><td class="num">${money(b.taxAmount, data.currency)}</td></tr>`,
+    )
+    .join('');
+  const breakdownTable =
+    showMoney && breakdownRows
+      ? `
+    <table class="tax-breakdown">
+      <thead>
+        <tr><th>Tax summary</th><th class="num">Net</th><th class="num">Tax</th></tr>
+      </thead>
+      <tbody>${breakdownRows}</tbody>
+    </table>`
+      : '';
+
   const totalsRows = showMoney
     ? `
       <tr><td class="label">Subtotal</td><td class="num">${money(data.subtotal, data.currency)}</td></tr>
@@ -152,6 +213,11 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   .totals { width: 280px; margin-left: auto; }
   .totals td { border-bottom: none; padding: 4px; }
   .totals .label { color: #71717a; }
+  .tax-breakdown { width: 280px; margin-left: auto; margin-top: 14px; font-size: 12px; }
+  .tax-breakdown th { text-align: left; padding: 4px; border-bottom: 1px solid #e4e4e7; }
+  .tax-breakdown th.num, .tax-breakdown td.num { text-align: right; }
+  .tax-breakdown td { padding: 4px; border-bottom: none; }
+  .tax-breakdown .label { color: #71717a; }
   .grand-total td { font-weight: 700; font-size: 16px; border-top: 2px solid #18181b; padding-top: 8px; }
   .notes { margin-top: 24px; font-size: 13px; color: #52525b; white-space: pre-wrap; }
   .cash-due-box { width: 280px; margin-left: auto; margin-top: 12px; padding: 12px 16px; border: 2px solid #18181b; border-radius: 6px; display: flex; justify-content: space-between; align-items: baseline; }
@@ -203,6 +269,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
         <th>Item</th>
         <th class="num">Qty</th>
         ${showMoney ? '<th class="num">Price</th><th class="num">Total</th>' : ''}
+        ${showTaxColumn ? '<th class="num">Tax</th>' : ''}
       </tr>
     </thead>
     <tbody>
@@ -211,6 +278,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   </table>
 
   ${showMoney ? `<table class="totals">${totalsRows}</table>` : ''}
+  ${breakdownTable}
 
   ${codBlock}
 

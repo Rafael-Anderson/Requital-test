@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
+import { quoteCartTax } from "@/lib/order-tax";
 import PromoCodeField from "@/components/PromoCodeField";
 import CartLineItems from "@/components/CartLineItems";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
@@ -20,6 +21,12 @@ export default function CartPage() {
   const { items, subtotal } = useCart();
   const [discountAmount, setDiscountAmount] = useState<number | null>(null);
   const total = Math.max(0, subtotal - (discountAmount ?? 0));
+  const taxQuote = quoteCartTax({
+    lines: items.map((i) => ({ amount: i.price * i.quantity, taxRate: i.taxRate })),
+    discountAmount: discountAmount ?? 0,
+    taxInclusive: Boolean(shop?.taxInclusive),
+    fallbackRate: Number(shop?.taxRate ?? 0),
+  });
 
   if (items.length === 0) {
     return (
@@ -60,10 +67,24 @@ export default function CartPage() {
             </span>
           </div>
         )}
+        {/* Per-line tax, the same mirror the checkout shows (lib/order-tax.ts).
+            Delivery is still only known once an address is entered, so the cart
+            total remains goods + tax. */}
+        {!taxQuote.empty && (
+          <div className="flex items-center justify-between">
+            <span className="text-zinc-600">
+              {shop?.taxInclusive ? "Includes tax" : "Tax"}
+              {taxQuote.estimated ? " (estimated)" : ""}
+            </span>
+            <span>
+              {formatPriceAmount(taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between pt-1">
           <span className="text-zinc-600">Total</span>
           <span className="text-lg font-semibold">
-            {formatPriceAmount(total, shop?.currency)} <CurrencySymbol code={shop?.currency} />
+            {formatPriceAmount(shop?.taxInclusive ? total : total + taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
         </div>
       </div>

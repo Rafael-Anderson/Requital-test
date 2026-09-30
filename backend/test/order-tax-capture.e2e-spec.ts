@@ -524,6 +524,83 @@ describe('Per-line tax computation and capture (e2e)', () => {
     expect(Number(body<{ taxRate: string }>(shopRes).taxRate)).toBeCloseTo(12, 2);
   });
 
+  // B3: the document has to SHOW the tax it captured.
+  it('renders a per-line Tax column and a breakdown by rate on the invoice', async () => {
+    const shop = await setupShop('tax3a');
+    const created = await request(app.getHttpServer())
+      .post('/orders')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({
+        customerName: 'Breakdown Customer',
+        customerPhone: '0506667778',
+        customerAddress: 'Pickup',
+        emirate: 'Dubai',
+        outletId: shop.outletId,
+        orderType: 'pickup',
+        deliveryFee: 0,
+        items: [
+          { productId: shop.taxedId, quantity: 2 },
+          { productId: shop.zeroRatedId, quantity: 1 },
+        ],
+      })
+      .expect(201);
+    const orderId = body<OrderResponse>(created).id;
+
+    const invoice = await request(app.getHttpServer())
+      .post('/invoices')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({ orderId, type: 'INVOICE' })
+      .expect(201);
+    const invoiceId = body<IdRow>(invoice).id;
+
+    const html = (
+      await request(app.getHttpServer())
+        .get(`/invoices/${invoiceId}/pdf`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200)
+    ).text;
+
+    // Per-line column, with the captured rate beside the amount.
+    expect(html).toContain('<th class="num">Tax</th>');
+    expect(html).toContain('(5%)');
+    // Breakdown by rate: the taxed lines and the zero-rated one, which is just
+    // as reportable on a return.
+    expect(html).toContain('Tax summary');
+    expect(html).toContain('Taxable at 5%');
+    expect(html).toContain('Taxable at 0%');
+  });
+
+  it('omits the Tax column on a packing slip, which hides pricing by design', async () => {
+    const shop = await setupShop('tax3b');
+    const created = await request(app.getHttpServer())
+      .post('/orders')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({
+        customerName: 'Slip Customer',
+        customerPhone: '0508889990',
+        customerAddress: 'Pickup',
+        emirate: 'Dubai',
+        outletId: shop.outletId,
+        orderType: 'pickup',
+        deliveryFee: 0,
+        items: [{ productId: shop.taxedId, quantity: 1 }],
+      })
+      .expect(201);
+    const slip = await request(app.getHttpServer())
+      .post('/invoices')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({ orderId: body<OrderResponse>(created).id, type: 'PACKING_SLIP' })
+      .expect(201);
+    const html = (
+      await request(app.getHttpServer())
+        .get(`/invoices/${body<IdRow>(slip).id}/pdf`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200)
+    ).text;
+    expect(html).not.toContain('<th class="num">Tax</th>');
+    expect(html).not.toContain('Tax summary');
+  });
+
   // The invoice is what a merchant files against, so its stored snapshot has to
   // record how the order was priced.
   it('freezes taxInclusive on the invoice at issue', async () => {

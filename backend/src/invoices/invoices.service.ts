@@ -8,6 +8,7 @@ import { OrdersService } from '../orders/orders.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import type { InvoiceType } from './invoices.constants';
 import { renderInvoiceHtml } from './invoice-html';
+import { buildTaxBreakdown } from './invoice-tax';
 
 interface OrderForInvoice {
   id: number;
@@ -35,6 +36,10 @@ interface OrderForInvoice {
     quantity: number;
     priceAtPurchase: string;
     autoDiscountAmount: string | null;
+    // B2's per-line capture. NULL on any order that predates it - unknown, not
+    // zero, which is why the renderer omits the column rather than printing 0.
+    taxRate: string | null;
+    taxAmount: string | null;
   }[];
 }
 
@@ -208,7 +213,9 @@ export class InvoicesService {
     const order = orderRows[0];
     if (!order) return null;
     const items = await this.db.query<RowDataPacket[]>(
-      `SELECT productName, variantLabel, quantity, priceAtPurchase, autoDiscountAmount FROM orderitem WHERE orderId = ?`,
+      `SELECT productName, variantLabel, quantity, priceAtPurchase,
+              autoDiscountAmount, taxRate, taxAmount
+         FROM orderitem WHERE orderId = ?`,
       [orderId],
     );
     return {
@@ -237,11 +244,18 @@ export class InvoicesService {
         quantity: i.quantity as number,
         priceAtPurchase: i.priceAtPurchase as string,
         autoDiscountAmount: i.autoDiscountAmount as string | null,
+        // B2's capture. NULL on any order predating it, which the renderer
+        // treats as unknown rather than zero.
+        taxRate: i.taxRate as string | null,
+        taxAmount: i.taxAmount as string | null,
       })),
     };
   }
 
   private buildHtml(invoice: InvoiceRow, order: OrderForInvoice): string {
+    // Grouped from the CAPTURED per-line figures, never recomputed from a live
+    // rate - the whole point of the capture is that the document keeps adding up
+    // after the shop's settings change.
     return renderInvoiceHtml({
       invoiceNumber: invoice.invoiceNumber,
       type: invoice.type as 'INVOICE' | 'PACKING_SLIP',
@@ -250,6 +264,12 @@ export class InvoicesService {
       taxAmount: invoice.taxAmount,
       total: invoice.total,
       taxInclusive: invoice.taxInclusive,
+      taxBreakdown: buildTaxBreakdown({
+        items: order.orderitem,
+        discountAmount: order.discountAmount,
+        taxInclusive: invoice.taxInclusive,
+        orderTaxAmount: invoice.taxAmount,
+      }),
       notes: invoice.notes,
       shopName: order.shopDisplayName ?? order.shopName,
       shopAddress: order.shopAddress,

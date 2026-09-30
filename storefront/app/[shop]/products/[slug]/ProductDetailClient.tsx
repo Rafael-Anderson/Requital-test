@@ -210,6 +210,8 @@ export default function ProductDetailClient() {
       maxStock: displayStock,
       isGiftCard: product.isGiftCard || undefined,
       note: note.trim() || undefined,
+      // Carried for the checkout tax quote only; the server re-resolves it.
+      taxRate: product.taxRate,
     };
   }
 

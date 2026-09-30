@@ -113,7 +113,14 @@ function QuickAddButton({
         if (previewMode) return;
         e.stopPropagation();
         addItem(
-          { productId: product.id, name: product.name, price, thumbnail: product.thumbnail, maxStock: product.stockQuantity },
+          {
+            productId: product.id,
+            name: product.name,
+            price,
+            thumbnail: product.thumbnail,
+            maxStock: product.stockQuantity,
+            taxRate: product.taxRate,
+          },
           1,
           outletId,
         );
