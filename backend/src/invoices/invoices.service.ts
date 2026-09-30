@@ -76,8 +76,9 @@ export class InvoicesService {
           dto.type,
         );
         const [result] = await conn.query(
-          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total, currency)
-           VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
+          `INSERT INTO invoice (orderId, shopId, type, invoiceNumber, subtotal, taxAmount, total, currency, taxInclusive)
+           VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?),
+                   (SELECT taxInclusive FROM shop WHERE id = ?))`,
           [
             order.id,
             ctx.shopId,
@@ -90,6 +91,10 @@ export class InvoicesService {
             // formats every amount with a LIVE shop join, so a merchant
             // switching currency re-denominates invoices they already issued.
             order.id,
+            // Whether `subtotal` above already contains the tax. Frozen for the
+            // same reason as currency: flipping the shop toggle must not rewrite
+            // the arithmetic of a document already issued. See invoice-html.ts.
+            ctx.shopId,
           ],
         );
         return (result as { insertId: number }).insertId;
@@ -244,6 +249,7 @@ export class InvoicesService {
       subtotal: invoice.subtotal,
       taxAmount: invoice.taxAmount,
       total: invoice.total,
+      taxInclusive: invoice.taxInclusive,
       notes: invoice.notes,
       shopName: order.shopDisplayName ?? order.shopName,
       shopAddress: order.shopAddress,
@@ -275,7 +281,9 @@ export class InvoicesService {
        ON DUPLICATE KEY UPDATE lastNumber = LAST_INSERT_ID(lastNumber + 1)`,
       [shopId, type],
     );
-    const [rows] = await conn.query<RowDataPacket[]>(`SELECT LAST_INSERT_ID() AS seq`);
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT LAST_INSERT_ID() AS seq`,
+    );
     const n = Number(rows[0].seq);
     const prefix = type === 'PACKING_SLIP' ? 'PS' : 'INV';
     return `${prefix}-${String(n).padStart(4, '0')}`;

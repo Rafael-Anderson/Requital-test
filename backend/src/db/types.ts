@@ -158,6 +158,15 @@ export interface OrderitemRow {
   // Always 'AED' today; exists so the captured cost is unambiguous once
   // multi-currency lands (audit D6) instead of needing a guess-migration.
   unitCostCurrency: string;
+  // The tax this line actually bore, captured at order time (migration
+  // 20260929170000). All three are NULL for every order placed before that
+  // migration, and NULL means UNKNOWN, never zero - a consumer must not read a
+  // NULL taxAmount as an untaxed line. `taxRate` is stored separately from
+  // `taxClassId` on purpose: the class reference goes NULL if the merchant later
+  // deletes the class, and the rate charged has to survive that.
+  taxClassId: number | null;
+  taxRate: string | null;
+  taxAmount: string | null;
   note: string | null;
 }
 
@@ -197,6 +206,12 @@ export interface InvoiceRow {
   // rather than shop.currency is what stops a later shop-setting change
   // from re-denominating rows that are already written.
   currency: string;
+  // How the order was priced, captured at issue (migration 20260929170000).
+  // `subtotal` above is the sum of `priceAtPurchase * quantity`, so on an
+  // inclusive shop it ALREADY contains the tax and the document must not print
+  // Tax as a further addend. Frozen rather than read live from the shop, for the
+  // same reason `currency` is.
+  taxInclusive: boolean;
 }
 
 export interface InvoicecounterRow {

@@ -1452,10 +1452,27 @@ two classes seeded at signup. Two corrections to this section as written:
   0%; only the return treatment differs. `TaxClassesService` refuses a non-zero rate on
   either, so the two cannot diverge in what they charge.
 
-Still open, and explicitly B2: `computeOrderTotals` is untouched and still applies one
-`shop.taxRate` to the whole subtotal, `shop.taxOnDelivery` has no reader yet, and
-`orderitem` has no `taxRate`/`taxAmount` capture. Assigning a class today changes no
-price, which `tax-classes.e2e-spec.ts` asserts directly.
+**B2 landed 2026-09-29.** `computeOrderTotals` is now per line, `shop.taxOnDelivery` is
+read, and `orderitem.taxClassId`/`taxRate`/`taxAmount` capture what each line bore (NULL =
+unknown, no backfill). Four findings this audit does not have, all confirmed in code while
+doing it:
+
+- **`OrdersService.updateItems` taxed the UNDISCOUNTED subtotal** and then subtracted the
+  discount from the total, while checkout and `create` taxed the discounted base. On a
+  tax-exclusive shop, editing a discounted order therefore charged tax on the pre-discount
+  base - the same basket owed different tax depending on whether it had ever been edited.
+  All four callers now share one rule.
+- **The tax-inclusive invoice did not add up.** `invoice.subtotal` is
+  `SUM(priceAtPurchase * quantity)`, tax-inclusive on an inclusive shop, and the document
+  printed Tax as a further addend - overstating the printed column by exactly the tax on
+  every such invoice. Fixed, with `invoice.taxInclusive` captured at issue so a later
+  toggle flip cannot rewrite an issued document.
+- **An order-level discount had no defined apportionment** once rates differ. It is now
+  pro rata by line amount, in one place.
+- **`updateDeliveryFee` is a fourth total-computing caller**, not one of the three the plan
+  named. It re-taxes lines at their captured rate rather than today's class.
+
+Remaining for B3: rendering the per-rate breakdown on the invoice and in the admin.
 
 ### I18N-7 — UAE e-invoicing, in detail
 

@@ -118,6 +118,21 @@ export class TaxClassesService {
           );
         }
       });
+      // The other half of the relationship ShopService.update maintains: the
+      // shop's default standard class IS the shop's standard rate, and
+      // `shop.taxRate` is still what the Business Settings field shows and what
+      // B2 charges on a taxed delivery fee. Letting them drift would mean the
+      // settings page displaying one rate while orders charge another, or
+      // delivery being taxed at a stale figure.
+      const becameDefault = dto.isDefault === true;
+      const isTheDefault = becameDefault || before.isDefault;
+      const nowStandard = nextType === 'standard';
+      if (isTheDefault && nowStandard) {
+        await this.db.execute(`UPDATE shop SET taxRate = ? WHERE id = ?`, [
+          nextRate,
+          ctx.shopId,
+        ]);
+      }
       await this.auditLogService.logCtx(ctx, {
         action: 'tax_class.updated',
         entityType: 'taxclass',

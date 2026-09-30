@@ -289,6 +289,8 @@ export class OrdersService {
         autoDiscountAmount,
         unitCost,
         variantLabel,
+        taxClassId,
+        taxRate,
       }) => {
         subtotal += Number(price) * quantity;
         return {
@@ -300,6 +302,11 @@ export class OrdersService {
           priceAtPurchase: price,
           autoDiscountAmount,
           unitCost,
+          taxClassId,
+          taxRate,
+          // Filled once computeOrderTotals has apportioned the order-level
+          // discount across the lines.
+          taxAmount: null as string | null,
         };
       },
     );
@@ -308,7 +315,8 @@ export class OrdersService {
     // now always needed (see the computeOrderTotals call below), so this is no
     // longer worth doing conditionally inside the `else` branch.
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT defaultDeliveryFee, taxRate, taxInclusive, currency FROM shop WHERE id = ?`,
+      `SELECT defaultDeliveryFee, taxRate, taxInclusive, taxOnDelivery, currency
+         FROM shop WHERE id = ?`,
       [ctx.shopId],
     );
     const shopSettings = shopRows[0];
@@ -361,13 +369,23 @@ export class OrdersService {
     // charged the shop's rate — and `updateItems` below would then materialise
     // the tax retroactively, at whatever the rate happened to be on the day of
     // the edit, silently raising a total the customer had already agreed to.
-    const discountedSubtotal = Math.max(0, subtotal - discountAmount);
-    const { taxAmount, total: computedTotal } = computeOrderTotals({
-      subtotal: discountedSubtotal,
+    //
+    // Per line against each product's own tax class since Phase 2b/B2, with the
+    // order-level discount apportioned across the lines inside
+    // computeOrderTotals rather than pre-subtracted here.
+    const orderTotals = computeOrderTotals({
+      lines: itemsData.map((d) => ({
+        amount: Number(d.priceAtPurchase) * d.quantity,
+        taxRate: d.taxRate,
+        taxClassId: d.taxClassId,
+      })),
       deliveryFee,
-      taxRate: Number(shopSettings?.taxRate ?? 0),
+      discountAmount,
       taxInclusive: Boolean(shopSettings?.taxInclusive),
+      taxOnDelivery: Boolean(shopSettings?.taxOnDelivery),
+      deliveryTaxRate: Number(shopSettings?.taxRate ?? 0),
     });
+    const { taxAmount, total: computedTotal } = orderTotals;
     // Rounded once, at persist, to this shop currency's own precision. This
     // path previously wrote the raw float straight into DECIMAL(65,30) while the
     // storefront rounded - the same basket stored as 4.999999999999999 or 5.00
@@ -377,6 +395,11 @@ export class OrdersService {
     let total = roundMoney(computedTotal, orderCurrency);
     if (total < 0) total = 0;
     const roundedTaxAmount = roundMoney(taxAmount, orderCurrency);
+    orderTotals.lines.forEach((line, i) => {
+      itemsData[i].taxAmount = String(
+        roundMoney(line.taxAmount, orderCurrency),
+      );
+    });
 
     const customer = await this.customersService.findOrCreateForOrder(
       ctx.shopId,
@@ -490,9 +513,10 @@ export class OrdersService {
       const newOrderId = (result as { insertId: number }).insertId;
 
       if (itemsData.length > 0) {
-        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount)
            VALUES ${placeholders}`,
           itemsData.flatMap((d) => [
             newOrderId,
@@ -504,6 +528,9 @@ export class OrdersService {
             d.priceAtPurchase,
             d.autoDiscountAmount,
             d.unitCost,
+            d.taxClassId,
+            d.taxRate,
+            d.taxAmount,
           ]),
         );
       }
@@ -563,12 +590,6 @@ export class OrdersService {
       );
     }
 
-    const subtotal = order.orderitem.reduce(
-      (sum: number, item: AssembledOrderItem) =>
-        sum + Number(item.priceAtPurchase) * item.quantity,
-      0,
-    );
-
     // This used to be `subtotal + dto.deliveryFee`, which silently dropped BOTH
     // the order's discount and its tax from the total. Editing the delivery fee
     // on a discounted order therefore deleted the discount: an order with a
@@ -582,25 +603,54 @@ export class OrdersService {
     // subtracted from the result. `updateItems` below was already correct and
     // is the shape this follows.
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT taxRate, taxInclusive FROM shop WHERE id = ?`,
+      `SELECT taxRate, taxInclusive, taxOnDelivery FROM shop WHERE id = ?`,
       [ctx.shopId],
     );
     const shop = shopRows[0];
     const discountAmount = Number(order.discountAmount ?? 0);
-    const { taxAmount, total: computedTotal } = computeOrderTotals({
-      subtotal: Math.max(0, subtotal - discountAmount),
+    // The ITEMS are not changing here, only the fee, so each line is re-taxed at
+    // the rate it was ORIGINALLY captured at (orderitem.taxRate) rather than at
+    // whatever its product's class says today - the same
+    // never-retroactively-reprice discipline priceAtPurchase follows. An order
+    // predating the capture has taxRate NULL, which is unknown, not zero: those
+    // fall back to the shop's current rate, which is exactly what this path
+    // already did for every order before B2, so nothing regresses.
+    const capturedRate = (item: AssembledOrderItem) =>
+      item.taxRate != null ? Number(item.taxRate) : Number(shop?.taxRate ?? 0);
+    const feeTotals = computeOrderTotals({
+      lines: order.orderitem.map((item: AssembledOrderItem) => ({
+        amount: Number(item.priceAtPurchase) * item.quantity,
+        taxRate: capturedRate(item),
+        taxClassId: item.taxClassId ?? null,
+      })),
       deliveryFee: dto.deliveryFee,
-      taxRate: Number(shop?.taxRate ?? 0),
+      discountAmount,
       taxInclusive: Boolean(shop?.taxInclusive),
+      taxOnDelivery: Boolean(shop?.taxOnDelivery),
+      deliveryTaxRate: Number(shop?.taxRate ?? 0),
     });
+    const { taxAmount, total: computedTotal } = feeTotals;
     const feeCurrency = order.currency;
     let total = roundMoney(computedTotal, feeCurrency);
     if (total < 0) total = 0;
 
-    await this.db.execute(
-      `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ? WHERE id = ?`,
-      [dto.deliveryFee, roundMoney(taxAmount, feeCurrency), total, id],
-    );
+    await this.db.transaction(async (conn) => {
+      await conn.query(
+        `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?
+          WHERE id = ?`,
+        [dto.deliveryFee, roundMoney(taxAmount, feeCurrency), total, id],
+      );
+      // Only the delivery fee's own tax can have moved (the discount
+      // apportionment is unchanged), but writing the recomputed line captures
+      // back keeps orderitem.taxAmount summing to order.taxAmount, which is the
+      // property a VAT document depends on.
+      for (const [i, line] of feeTotals.lines.entries()) {
+        await conn.query(`UPDATE orderitem SET taxAmount = ? WHERE id = ?`, [
+          roundMoney(line.taxAmount, feeCurrency),
+          order.orderitem[i].id,
+        ]);
+      }
+    });
     const orders = await this.loadOrdersWithRelations([id]);
     return this.toResponse(orders.get(id)!);
   }
@@ -819,6 +869,8 @@ export class OrdersService {
         autoDiscountAmount,
         unitCost,
         variantLabel,
+        taxClassId,
+        taxRate,
       }) => {
         newSubtotal += Number(price) * quantity;
         return {
@@ -830,6 +882,11 @@ export class OrdersService {
           priceAtPurchase: price,
           autoDiscountAmount,
           unitCost,
+          taxClassId,
+          taxRate,
+          // Filled once computeOrderTotals has apportioned the order-level
+          // discount across the lines.
+          taxAmount: null as string | null,
         };
       },
     );
@@ -880,23 +937,43 @@ export class OrdersService {
     // that, or the order's numbers stop adding up. deliveryFee is left
     // exactly as it was (it doesn't depend on items in this app's model).
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT taxRate, taxInclusive FROM shop WHERE id = ?`,
+      `SELECT taxRate, taxInclusive, taxOnDelivery FROM shop WHERE id = ?`,
       [ctx.shopId],
     );
     const shop = shopRows[0];
     const deliveryFee = Number(order.deliveryFee ?? 0);
-    const { taxAmount, total: totalBeforeDiscount } = computeOrderTotals({
-      subtotal: newSubtotal,
+    // Phase 2b/B2 changed two things here. Tax is now per line, against each
+    // product's own class. And the DISCOUNT is now passed in rather than being
+    // subtracted from the total afterwards: this path used to tax the
+    // UNDISCOUNTED subtotal (`subtotal: newSubtotal`) and then deduct the
+    // discount from the resulting total, so on a tax-exclusive shop editing a
+    // discounted order charged tax on the pre-discount base while both other
+    // paths charged it on the post-discount one. Same basket, different tax,
+    // depending on whether the order had been edited. They now share one rule.
+    const itemsTotals = computeOrderTotals({
+      lines: newItemsData.map((d) => ({
+        amount: Number(d.priceAtPurchase) * d.quantity,
+        taxRate: d.taxRate,
+        taxClassId: d.taxClassId,
+      })),
       deliveryFee,
-      taxRate: Number(shop.taxRate),
+      discountAmount,
       taxInclusive: Boolean(shop.taxInclusive),
+      taxOnDelivery: Boolean(shop.taxOnDelivery),
+      deliveryTaxRate: Number(shop.taxRate),
     });
+    const { taxAmount } = itemsTotals;
     // Rounded once at persist, the same policy as the other two total paths.
     // This one previously wrote the raw float too.
     const itemsCurrency = order.currency;
-    let total = roundMoney(totalBeforeDiscount - discountAmount, itemsCurrency);
+    let total = roundMoney(itemsTotals.total, itemsCurrency);
     if (total < 0) total = 0;
     const roundedItemsTax = roundMoney(taxAmount, itemsCurrency);
+    itemsTotals.lines.forEach((line, i) => {
+      newItemsData[i].taxAmount = String(
+        roundMoney(line.taxAmount, itemsCurrency),
+      );
+    });
 
     let ingredientStockWarnings: string[] = [];
     await this.db.transaction(async (conn) => {
@@ -1014,9 +1091,10 @@ export class OrdersService {
 
       await conn.query(`DELETE FROM orderitem WHERE orderId = ?`, [orderId]);
       if (newItemsData.length > 0) {
-        const placeholders = newItemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = newItemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .join(', ');
         await conn.query(
-          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost)
+          `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount)
            VALUES ${placeholders}`,
           newItemsData.flatMap((d) => [
             orderId,
@@ -1028,6 +1106,9 @@ export class OrdersService {
             d.priceAtPurchase,
             d.autoDiscountAmount,
             d.unitCost,
+            d.taxClassId,
+            d.taxRate,
+            d.taxAmount,
           ]),
         );
       }

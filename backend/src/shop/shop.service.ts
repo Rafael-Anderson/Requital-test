@@ -264,6 +264,24 @@ export class ShopService {
         ctx.shopId,
       ]);
     }
+    // `shop.taxRate` IS the shop's standard rate, and since Phase 2b/B2 the rate
+    // actually charged comes from the line's tax class - so if this control only
+    // wrote the shop column, a merchant setting 5% here would still be charged
+    // whatever their default class says, which is what it was seeded with at
+    // signup. That silently makes the Tax Rate field inert, and was caught by
+    // admin-order-totals.e2e-spec.ts rather than in production. The two are kept
+    // in step: the shop's DEFAULT class, and only while it is a `standard` one
+    // (a merchant who has made a zero/exempt class their default has said
+    // something deliberate, and a second standard class at another rate is not
+    // this number). TaxClassesService.update writes the same relationship in the
+    // other direction.
+    if (dto.taxRate !== undefined) {
+      await this.db.execute(
+        `UPDATE taxclass SET rate = ?, updatedAt = ?
+          WHERE shopId = ? AND isDefault = TRUE AND type = 'standard'`,
+        [dto.taxRate, new Date(), ctx.shopId],
+      );
+    }
     return this.findOne(ctx);
   }
 

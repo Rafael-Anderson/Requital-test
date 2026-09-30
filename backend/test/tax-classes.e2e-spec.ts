@@ -349,9 +349,12 @@ describe('Tax classes (e2e)', () => {
     expect(body<{ taxOnDelivery: boolean }>(after).taxOnDelivery).toBe(true);
   });
 
-  // B1 is schema and assignment only. The per-line computation is B2, so nothing
-  // here may move a price yet — this is the guard against that leaking early.
-  it('assigning a tax class does NOT change what an order charges', async () => {
+  // This asserted B1's scope boundary: schema and assignment only, no price
+  // movement. **B2 deliberately ends that**, which is the entire point of the
+  // feature - a zero-rated line must stop being charged the shop rate. The
+  // fixture is kept and the assertion inverted, so the file still pins which
+  // phase owns the behaviour rather than silently going quiet.
+  it('assigning the zero class DOES change what an order charges (B2 per-line tax)', async () => {
     const shop = await setupShop('tax-noprice');
     const listed = await request(app.getHttpServer())
       .get('/tax-classes')
@@ -424,7 +427,12 @@ describe('Tax classes (e2e)', () => {
     const after = body<{ order: { total: string; taxAmount: string } }>(second)
       .order;
 
-    expect(Number(after.total)).toBeCloseTo(Number(baseline.total), 6);
-    expect(Number(after.taxAmount)).toBeCloseTo(Number(baseline.taxAmount), 6);
+    // Baseline: 100 at the shop's 10% standard rate -> 10 tax, 110 total.
+    expect(Number(baseline.taxAmount)).toBeCloseTo(10, 2);
+    expect(Number(baseline.total)).toBeCloseTo(110, 2);
+    // On the zero class: no tax owed, so the customer pays the goods only. Under
+    // B1 (and everything before it) this still charged 110.
+    expect(Number(after.taxAmount)).toBeCloseTo(0, 2);
+    expect(Number(after.total)).toBeCloseTo(100, 2);
   });
 });
