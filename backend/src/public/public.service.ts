@@ -1452,10 +1452,12 @@ export class PublicService {
       },
     );
 
-    // Required even for pickup, as the old emirate validator was. Resolved
-    // here, before the fee, because zone matching needs the region's name.
+    // Required for delivery only: a pickup customer gives no address to place in
+    // a region (the storefront no longer asks; it used to send a silent
+    // "Dubai"). Resolved here, before the fee, because zone matching needs the
+    // region's name.
     const region = await this.regionsService.resolveForShop(shop.id, dto, {
-      required: true,
+      required: dto.orderType === 'delivery',
     });
 
     let deliveryFee =
