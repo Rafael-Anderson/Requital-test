@@ -155,7 +155,7 @@ describe('Customer storefront accounts (e2e)', () => {
   // Publishes the shop, enables pickup, and seeds one purchasable product —
   // the minimum a guest checkout (and therefore a findOrCreateForOrder
   // Customer row) needs. Mirrors storefront-checkout.e2e-spec.ts's setup.
-  async function setupShop(slugPrefix: string) {
+  async function setupShop(slugPrefix: string, country?: string) {
     const shopSlug = `${slugPrefix}-${runId}`;
     const signup = await request(app.getHttpServer())
       .post('/auth/signup')
@@ -165,6 +165,7 @@ describe('Customer storefront accounts (e2e)', () => {
         password: 'password123',
         shopName: `${shopSlug} Shop`,
         subdomain: shopSlug,
+        ...(country && { country }),
       })
       .expect(201);
     const adminToken = body<AdminAuthResponse>(signup).accessToken;
@@ -456,6 +457,69 @@ describe('Customer storefront accounts (e2e)', () => {
       .post(`/public/${shopSlug}/auth/reset-password`)
       .send({ token, newPassword: 'thirdPassword3' });
     expect(reuse.status).toBe(400);
+  });
+
+  it('saved addresses are region-checked against the shop country (Phase 2b PR-B)', async () => {
+    const { shopSlug } = await setupShop(
+      'acct-addr-region',
+      'United Arab Emirates',
+    );
+    const session = sessionFromResponse(
+      await register(shopSlug, { phone: '0508888888' }).expect(201),
+    );
+    const regions = async (code: string) =>
+      (
+        await db.query<RowDataPacket[]>(
+          `SELECT id FROM region WHERE code = ?`,
+          [code],
+        )
+      )[0].id as number;
+    const post = (payload: Record<string, unknown>) =>
+      request(app.getHttpServer())
+        .post(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', session.csrfToken)
+        .send({ address: '1 Test St', ...payload });
+
+    const created = body<
+      AddressRow & { regionId: number; region: { code: string } }
+    >(await post({ regionId: await regions('AE-DU') }).expect(201));
+    expect(created.regionId).toBe(await regions('AE-DU'));
+    expect(created.region.code).toBe('AE-DU');
+    expect(created.emirate).toBe('Dubai');
+
+    // The deprecated alias resolves; the wrong country and a missing region do not.
+    const viaAlias = body<{ regionId: number }>(
+      await post({ emirate: 'Sharjah' }).expect(201),
+    );
+    expect(viaAlias.regionId).toBe(await regions('AE-SH'));
+    await post({ regionId: await regions('SA-01') }).expect(400);
+    await post({}).expect(400);
+
+    const patch = (id: string, payload: Record<string, unknown>) =>
+      request(app.getHttpServer())
+        .patch(`/public/${shopSlug}/account/addresses/${id}`)
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', session.csrfToken)
+        .send(payload);
+    const moved = body<{ region: { code: string } }>(
+      await patch(created.id, { regionId: await regions('AE-AJ') }).expect(200),
+    );
+    expect(moved.region.code).toBe('AE-AJ');
+    await patch(created.id, { regionId: await regions('SA-01') }).expect(400);
+    const renamed = body<{ region: { code: string } }>(
+      await patch(created.id, { label: 'Renamed' }).expect(200),
+    );
+    expect(renamed.region.code).toBe('AE-AJ'); // untouched when not in the request
+
+    // The stored JSON carries the ids and the mirrored name, never the decorated object.
+    const customer = await db.query<RowDataPacket[]>(
+      `SELECT addresses FROM customer WHERE id = ?`,
+      [session.customer.id],
+    );
+    const stored = customer[0].addresses as Record<string, unknown>[];
+    expect(stored.every((a) => !('region' in a))).toBe(true);
+    expect(stored.every((a) => typeof a.regionId === 'number')).toBe(true);
   });
 
   it('a logged-in customer can save, edit, and delete addresses', async () => {
@@ -821,7 +885,9 @@ describe('Customer storefront accounts (e2e)', () => {
       const { shopSlug } = await setupShop('cust-stale-cookie-login');
       const phone = '0505560010';
       const session = sessionFromResponse(
-        await register(shopSlug, { phone, password: 'password123' }).expect(201),
+        await register(shopSlug, { phone, password: 'password123' }).expect(
+          201,
+        ),
       );
       const staleAccessCookie = `req-customer-at=${session.cookieHeaderStr.match(/req-customer-at=([^;]+)/)![1]}`;
 

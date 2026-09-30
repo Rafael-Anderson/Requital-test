@@ -44,6 +44,12 @@ export class PublicController {
   // replaces the pre-Phase-C curated-list detail that used to live at this
   // same URL (now served by GET templates/:slug instead).
   @Public()
+  @Get('regions')
+  listRegions(@Param('shopSlug') shopSlug: string) {
+    return this.publicService.listRegions(shopSlug);
+  }
+
+  @Public()
   @Get('brands')
   listBrands(
     @Param('shopSlug') shopSlug: string,

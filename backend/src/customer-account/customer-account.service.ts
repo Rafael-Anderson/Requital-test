@@ -18,6 +18,7 @@ import { UpdateAddressDto } from './dto/update-address.dto';
 import { InvoicesService } from '../invoices/invoices.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PublicService } from '../public/public.service';
+import { RegionsService, attachRegion } from '../regions/regions.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 
 // UAE PDPL: max one data-export request per customer per rolling 24h
@@ -38,7 +39,10 @@ export interface CustomerAddress {
   id: string;
   label?: string;
   address: string;
-  emirate: string;
+  // Mirrors the region's English name while readers still use it; NULL when
+  // the shop's country has no region model.
+  emirate?: string | null;
+  regionId?: number | null;
   area?: string;
   latitude?: number;
   longitude?: number;
@@ -75,6 +79,7 @@ export class CustomerAccountService {
     private readonly invoicesService: InvoicesService,
     private readonly auditLogService: AuditLogService,
     private readonly publicService: PublicService,
+    private readonly regionsService: RegionsService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -98,10 +103,10 @@ export class CustomerAccountService {
         phone: dto.phone,
       });
       if (set) {
-        await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
-          ...set.params,
-          ctx.customerId,
-        ]);
+        await this.db.execute(
+          `UPDATE customer SET ${set.setClause} WHERE id = ?`,
+          [...set.params, ctx.customerId],
+        );
       }
       const customer = await this.findCustomerOrThrow(ctx.customerId);
       return this.toProfileResponse(customer);
@@ -126,7 +131,8 @@ export class CustomerAccountService {
     const customer = await this.findCustomerOrThrow(ctx.customerId);
     if (
       customer.lastDataExportAt &&
-      Date.now() - (customer.lastDataExportAt as Date).getTime() < EXPORT_RATE_LIMIT_MS
+      Date.now() - (customer.lastDataExportAt as Date).getTime() <
+        EXPORT_RATE_LIMIT_MS
     ) {
       const retryAt = new Date(
         (customer.lastDataExportAt as Date).getTime() + EXPORT_RATE_LIMIT_MS,
@@ -138,10 +144,10 @@ export class CustomerAccountService {
 
     const orders = await this.fetchOrdersWithItems(ctx.customerId, ctx.shopId);
 
-    await this.db.execute(`UPDATE customer SET lastDataExportAt = ? WHERE id = ?`, [
-      new Date(),
-      ctx.customerId,
-    ]);
+    await this.db.execute(
+      `UPDATE customer SET lastDataExportAt = ? WHERE id = ?`,
+      [new Date(), ctx.customerId],
+    );
     await this.logCustomerAction(
       ctx.shopId,
       ctx.customerId,
@@ -332,7 +338,11 @@ export class CustomerAccountService {
   // doesn't match, and returns the same 404 either way, never leaking which
   // case it was.
   async getOrder(ctx: CustomerContext, id: number) {
-    const orders = await this.fetchOrdersWithItems(ctx.customerId, ctx.shopId, id);
+    const orders = await this.fetchOrdersWithItems(
+      ctx.customerId,
+      ctx.shopId,
+      id,
+    );
     const order = orders[0];
     if (!order) {
       throw new NotFoundException(`Order ${id} not found`);
@@ -403,45 +413,75 @@ export class CustomerAccountService {
     return new Set(rows.map((r) => r.orderId as number));
   }
 
-  async listAddresses(ctx: CustomerContext): Promise<CustomerAddress[]> {
+  // The stored JSON, untouched. Every read-modify-write below works on this so a
+  // decorated `region` object can never be written back into the column.
+  private async loadAddresses(
+    ctx: CustomerContext,
+  ): Promise<CustomerAddress[]> {
     const customer = await this.findCustomerOrThrow(ctx.customerId);
     return (customer.addresses as CustomerAddress[] | null) ?? [];
   }
 
-  async createAddress(
-    ctx: CustomerContext,
-    dto: SaveAddressDto,
-  ): Promise<CustomerAddress> {
-    const addresses = await this.listAddresses(ctx);
-    const address: CustomerAddress = { id: randomUUID().slice(0, 8), ...dto };
+  async listAddresses(ctx: CustomerContext) {
+    return attachRegion(this.db, await this.loadAddresses(ctx));
+  }
+
+  async createAddress(ctx: CustomerContext, dto: SaveAddressDto) {
+    const addresses = await this.loadAddresses(ctx);
+    const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
+      required: true,
+    });
+    const { regionId: _r, emirate: _e, ...rest } = dto;
+    void _r;
+    void _e;
+    const address: CustomerAddress = {
+      id: randomUUID().slice(0, 8),
+      ...rest,
+      emirate: region.emirate,
+      regionId: region.regionId,
+    };
     await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [
       JSON.stringify([...addresses, address]),
       ctx.customerId,
     ]);
-    return address;
+    return (await attachRegion(this.db, [address]))[0];
   }
 
   async updateAddress(
     ctx: CustomerContext,
     addressId: string,
     dto: UpdateAddressDto,
-  ): Promise<CustomerAddress> {
-    const addresses = await this.listAddresses(ctx);
+  ) {
+    const addresses = await this.loadAddresses(ctx);
     const index = addresses.findIndex((a) => a.id === addressId);
     if (index === -1) {
       throw new NotFoundException(`Address ${addressId} not found`);
     }
-    const updated: CustomerAddress = { ...addresses[index], ...dto };
+    const { regionId: _r, emirate: _e, ...rest } = dto;
+    void _r;
+    void _e;
+    // Only re-resolved when the caller changes the region.
+    const region =
+      dto.regionId != null || dto.emirate
+        ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
+            required: true,
+          })
+        : undefined;
+    const updated: CustomerAddress = {
+      ...addresses[index],
+      ...rest,
+      ...(region && { emirate: region.emirate, regionId: region.regionId }),
+    };
     addresses[index] = updated;
     await this.db.execute(`UPDATE customer SET addresses = ? WHERE id = ?`, [
       JSON.stringify(addresses),
       ctx.customerId,
     ]);
-    return updated;
+    return (await attachRegion(this.db, [updated]))[0];
   }
 
   async deleteAddress(ctx: CustomerContext, addressId: string) {
-    const addresses = await this.listAddresses(ctx);
+    const addresses = await this.loadAddresses(ctx);
     if (!addresses.some((a) => a.id === addressId)) {
       throw new NotFoundException(`Address ${addressId} not found`);
     }

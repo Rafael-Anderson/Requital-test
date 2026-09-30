@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -46,6 +47,14 @@ export class CreateOutletDto {
   @IsBoolean()
   active?: boolean;
 
+  // The region, by id (GET /regions).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  regionId?: number;
+
+  // DEPRECATED alias: the region's English name. Superseded by regionId.
   @IsOptional()
   @IsString()
   @MaxLength(100)

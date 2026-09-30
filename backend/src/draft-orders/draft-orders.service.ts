@@ -16,6 +16,11 @@ import { PaymentsService } from '../payments/payments.service';
 import { buildVariantLabel } from '../products/variant-generator';
 import { CreateDraftOrderDto } from './dto/create-draft-order.dto';
 import { UpdateDraftOrderDto } from './dto/update-draft-order.dto';
+import {
+  RegionsService,
+  attachRegion,
+  type RegionSummary,
+} from '../regions/regions.service';
 
 interface DraftItemInput {
   productId: number;
@@ -32,6 +37,7 @@ interface AssembledDraftItem extends DraftorderitemRow {
 }
 
 interface AssembledDraftOrder extends DraftorderRow {
+  region: RegionSummary | null;
   draftorderitem: AssembledDraftItem[];
   discount: { id: number; code: string; type: string; value: string | null } | null;
   customer: { id: number; name: string; phone: string } | null;
@@ -54,6 +60,7 @@ export class DraftOrdersService {
     private readonly discountsService: DiscountsService,
     private readonly ordersService: OrdersService,
     private readonly paymentsService: PaymentsService,
+    private readonly regionsService: RegionsService,
   ) {}
 
   async findAll(ctx: TenantContext) {
@@ -78,6 +85,12 @@ export class DraftOrdersService {
     if (outletRows.length === 0) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
+
+    // Required, as the old emirate validator was: completing a draft reuses
+    // OrdersService.create, which requires a region.
+    const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
+      required: true,
+    });
 
     const itemsData = await this.buildItemsData(ctx, dto.items);
     const subtotal = this.sumItems(itemsData ?? []);
@@ -105,8 +118,8 @@ export class DraftOrdersService {
         // currency comes from the shop the draft belongs to, via a subselect
         // rather than a separate read — a quote has to remember what it quoted
         // in, independent of any later change to the shop setting.
-        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, emirate, area, orderType, discountId, notes, updatedAt, currency)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
+        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, emirate, regionId, area, orderType, discountId, notes, updatedAt, currency)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
         [
           ctx.shopId,
           dto.outletId,
@@ -115,7 +128,8 @@ export class DraftOrdersService {
           dto.customerPhone,
           dto.customerEmail ?? null,
           dto.customerAddress ?? null,
-          dto.emirate ?? null,
+          region.emirate,
+          region.regionId,
           dto.area ?? null,
           dto.orderType ?? null,
           discountId,
@@ -161,6 +175,13 @@ export class DraftOrdersService {
         throw new BadRequestException('outletId is invalid for this shop');
       }
     }
+    // Optional on an update: only re-resolved when the caller changes it.
+    const region =
+      dto.regionId != null || dto.emirate
+        ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
+            required: true,
+          })
+        : undefined;
 
     const itemsData = await this.buildItemsData(ctx, dto.items);
     let subtotal: number;
@@ -220,7 +241,8 @@ export class DraftOrdersService {
         customerPhone: dto.customerPhone,
         customerEmail: dto.customerEmail,
         customerAddress: dto.customerAddress,
-        emirate: dto.emirate,
+        emirate: region?.emirate,
+        regionId: region?.regionId,
         area: dto.area,
         orderType: dto.orderType,
         discountId,
@@ -338,7 +360,10 @@ export class DraftOrdersService {
         // creation time even though the DB column is nullable (nullable
         // only so historical/edge rows can't violate a NOT NULL constraint).
         customerAddress: draft.customerAddress as string,
-        emirate: draft.emirate as string,
+        // Both carried so the region is re-validated on the way through; a
+        // draft holding neither is refused rather than given a placeholder.
+        regionId: draft.regionId ?? undefined,
+        emirate: draft.emirate ?? undefined,
         area: draft.area ?? undefined,
         orderType: draft.orderType ?? undefined,
         channel: 'draft_order',
@@ -496,7 +521,7 @@ export class DraftOrdersService {
       });
       itemsByDraft.set(item.draftOrderId as number, list);
     }
-    for (const d of drafts) {
+    for (const d of await attachRegion(this.db, drafts)) {
       result.set(d.id, {
         ...d,
         draftorderitem: itemsByDraft.get(d.id) ?? [],

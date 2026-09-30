@@ -20,6 +20,7 @@ import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { PolicyPagesModule } from '../policy-pages/policy-pages.module';
 import { ThemesModule } from '../themes/themes.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
+import { RegionsModule } from '../regions/regions.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
     PolicyPagesModule,
     ThemesModule,
     CurrencyRatesModule,
+    RegionsModule,
   ],
   controllers: [
     PublicController,

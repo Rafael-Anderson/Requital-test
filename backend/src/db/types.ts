@@ -15,7 +15,7 @@ export interface OrderRow {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
-  emirate: string;
+  emirate: string | null;
   regionId: number | null;
   area: string | null;
   deliveryDate: Date | null;

@@ -15,12 +15,14 @@ import { computeIsOpen } from './outlet-status';
 import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import type { TenantContext } from '../common/tenant-context';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import { RegionsService, attachRegion } from '../regions/regions.service';
 
 @Injectable()
 export class OutletsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly branchRolesService: BranchRolesService,
+    private readonly regionsService: RegionsService,
   ) {}
 
   // Admin sees every outlet in the shop (for the switcher / management
@@ -54,7 +56,9 @@ export class OutletsService {
       ]),
     ]);
     const timezone = shopRows[0].timezone as string;
-    return outlets.map((o) => this.withComputedStatus(o, timezone));
+    return (await attachRegion(this.db, outlets)).map((o) =>
+      this.withComputedStatus(o, timezone),
+    );
   }
 
   async findOne(ctx: TenantContext, id: number) {
@@ -83,7 +87,8 @@ export class OutletsService {
     if (!outlet) {
       throw new NotFoundException(`Outlet ${id} not found`);
     }
-    return this.withComputedStatus(outlet, shopRows[0].timezone as string);
+    const [withRegion] = await attachRegion(this.db, [outlet]);
+    return this.withComputedStatus(withRegion, shopRows[0].timezone as string);
   }
 
   async create(ctx: TenantContext, dto: CreateOutletDto) {
@@ -93,13 +98,18 @@ export class OutletsService {
       dto.latitude,
       dto.longitude,
     );
+    // Optional for an outlet. Previously free text; now a real region of the
+    // shop's own country (or the deprecated name alias for it).
+    const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
+      required: false,
+    });
     const closedOverride = dto.closedOverride ?? false;
     const result = await this.db.execute(
       `INSERT INTO outlet (
-        shopId, name, nameAr, email, whatsapp, active, emirate, area, phone,
+        shopId, name, nameAr, email, whatsapp, active, emirate, regionId, area, phone,
         latitude, longitude, businessHours, closedOverride, closedOverrideSetAt,
         pickupEnabled, deliveryEnabled, deliveryRadiusKm
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         ctx.shopId,
         dto.name,
@@ -107,7 +117,8 @@ export class OutletsService {
         dto.email ?? null,
         dto.whatsapp ?? null,
         dto.active ?? true,
-        dto.emirate ?? null,
+        region.emirate,
+        region.regionId,
         dto.area ?? null,
         dto.phone ?? null,
         dto.latitude ?? null,
@@ -126,7 +137,7 @@ export class OutletsService {
       `SELECT * FROM outlet WHERE id = ?`,
       [result.insertId],
     );
-    return rows[0];
+    return (await attachRegion(this.db, [rows[0]]))[0];
   }
 
   async update(ctx: TenantContext, id: number, dto: UpdateOutletDto) {
@@ -141,13 +152,22 @@ export class OutletsService {
       dto.longitude !== undefined ? dto.longitude : current.longitude,
     );
 
+    // Only re-resolved when the caller changes the region.
+    const region =
+      dto.regionId != null || dto.emirate
+        ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
+            required: true,
+          })
+        : undefined;
+
     const set = buildSetClause({
       name: dto.name,
       nameAr: dto.nameAr,
       email: dto.email,
       whatsapp: dto.whatsapp,
       active: dto.active,
-      emirate: dto.emirate,
+      emirate: region?.emirate,
+      regionId: region?.regionId,
       area: dto.area,
       phone: dto.phone,
       latitude: dto.latitude,
@@ -178,7 +198,7 @@ export class OutletsService {
       `SELECT * FROM outlet WHERE id = ?`,
       [id],
     );
-    return rows[0];
+    return (await attachRegion(this.db, [rows[0]]))[0];
   }
 
   // Branch Status tab's write path — deliberately narrower than update()
@@ -190,7 +210,11 @@ export class OutletsService {
   // gotcha (see CLAUDE.md's "Tenant isolation" section). An admin/
   // order_manager isn't outlet-pinned, so the shop-boundary check in
   // assertBelongsToShop is sufficient for them.
-  async updateStatus(ctx: TenantContext, id: number, dto: UpdateOutletStatusDto) {
+  async updateStatus(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateOutletStatusDto,
+  ) {
     const current = await this.assertBelongsToShop(ctx, id);
     if (ctx.role === 'branch' && id !== ctx.outletId) {
       throw new NotFoundException(`Outlet ${id} not found`);

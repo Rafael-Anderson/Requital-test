@@ -39,6 +39,7 @@ import {
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { RegionsService, attachRegion } from '../regions/regions.service';
 import { roundMoney } from '../common/currency-minor-units';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
@@ -81,6 +82,7 @@ export class OrdersService {
     private readonly branchRolesService: BranchRolesService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
     private readonly currencyRatesService: CurrencyRatesService,
+    private readonly regionsService: RegionsService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -269,6 +271,11 @@ export class OrdersService {
       outletId,
       'orders.manage',
     );
+    // Required, as the old emirate validator was. The region's validity is a
+    // function of this shop's country, so it is checked here, not in the DTO.
+    const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
+      required: true,
+    });
 
     const resolvedItems = await this.productsService.resolveOrderItems(
       ctx.shopId,
@@ -466,10 +473,10 @@ export class OrdersService {
           const [res] = await conn.query(
         `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
-          customerAddress, emirate, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          customerAddress, emirate, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -479,7 +486,8 @@ export class OrdersService {
           dto.customerPhone,
           dto.customerEmail ?? null,
           dto.customerAddress,
-          dto.emirate,
+          region.emirate,
+          region.regionId,
           dto.area ?? null,
           dto.deliveryDate ? new Date(dto.deliveryDate) : null,
           dto.deliveryTimeSlot ?? null,
@@ -1430,7 +1438,7 @@ export class OrdersService {
       list.push(item);
       itemsByOrder.set(item.orderId, list);
     }
-    for (const o of orders) {
+    for (const o of await attachRegion(this.db, orders)) {
       result.set(o.id, {
         ...o,
         orderitem: itemsByOrder.get(o.id) ?? [],
@@ -1481,7 +1489,7 @@ export class OrdersService {
           [id],
         ),
       ]);
-    const order = orderRows[0];
+    const [order] = await attachRegion(this.db, orderRows);
     return {
       ...order,
       orderitem: items.map((i) => ({
