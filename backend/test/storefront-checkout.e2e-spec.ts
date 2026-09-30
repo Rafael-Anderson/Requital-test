@@ -508,6 +508,81 @@ describe('Storefront public checkout (e2e)', () => {
     });
   });
 
+  describe('delivery zones resolve by map circle (SHP-1, audit D-3)', () => {
+    const zoneIds: number[] = [];
+    // ~1.1km north of the outlet: inside the 2km "Marina Walk" circle centred
+    // on the outlet, and well inside the outlet's own 5km radius.
+    const NEAR = { latitude: OUTLET_LAT + 0.01, longitude: OUTLET_LON };
+    // ~3.3km north: outside the 2km circle, still inside the outlet radius.
+    const OUTSIDE_CIRCLE = {
+      latitude: OUTLET_LAT + 0.03,
+      longitude: OUTLET_LON,
+    };
+
+    beforeAll(async () => {
+      for (const zone of [
+        { name: 'Dubai', fee: 30 }, // emirate-wide, no circle
+        {
+          name: 'Marina Walk',
+          fee: 40,
+          lat: OUTLET_LAT,
+          lng: OUTLET_LON,
+          radiusKm: 2,
+        },
+      ]) {
+        const res = await request(app.getHttpServer())
+          .post(`/outlets/${outletId}/delivery-zones`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(zone)
+          .expect(201);
+        zoneIds.push(body<IdRow>(res).id);
+      }
+    });
+
+    afterAll(async () => {
+      for (const id of zoneIds) {
+        await request(app.getHttpServer())
+          .delete(`/outlets/${outletId}/delivery-zones/${id}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200);
+      }
+    });
+
+    it('an address whose area text matches no zone name is charged the zone its pin falls in, not the emirate-wide zone', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            area: 'Dubai Marina Walk Residences', // not "Marina Walk"
+            ...NEAR,
+          }),
+        )
+        .expect(201);
+      expect(Number(body<CreateOrderResponseBody>(res).order.deliveryFee)).toBe(
+        40,
+      );
+    });
+
+    it('the same area text with a pin outside the circle still gets the emirate-wide zone', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            area: 'Dubai Marina Walk Residences',
+            ...OUTSIDE_CIRCLE,
+          }),
+        )
+        .expect(201);
+      expect(Number(body<CreateOrderResponseBody>(res).order.deliveryFee)).toBe(
+        30,
+      );
+    });
+  });
+
   describe('delivery zones take precedence over the default fee', () => {
     let zoneId: number;
 

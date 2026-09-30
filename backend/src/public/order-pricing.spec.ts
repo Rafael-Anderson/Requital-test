@@ -32,6 +32,135 @@ describe('matchDeliveryZone', () => {
   });
 });
 
+describe('matchDeliveryZone by map circle (SHP-1)', () => {
+  // Real-ish Dubai points. The Marina pin is ~1.4km from the Marina centre and
+  // ~14km from Downtown, so the circles below are unambiguous.
+  const MARINA_CENTER = { lat: 25.0805, lng: 55.1403 };
+  const IN_MARINA = { lat: 25.0905, lng: 55.1453 };
+  const DOWNTOWN = { lat: 25.1972, lng: 55.2744 };
+
+  const marina = {
+    id: 1,
+    name: 'Marina',
+    isActive: true,
+    lat: String(MARINA_CENTER.lat), // mysql2 hands DECIMAL back as a string
+    lng: String(MARINA_CENTER.lng),
+    radiusKm: '3.00',
+  };
+  const dubai = { id: 2, name: 'Dubai', isActive: true };
+
+  it('the audit D-3 case: "Dubai Marina" vs a zone named "Marina" used to fall through to the emirate-wide zone, and the pin now resolves it', () => {
+    const zones = [marina, dubai];
+    // Name-only behaviour (no pin): unchanged, lands on the emirate zone.
+    expect(matchDeliveryZone(zones, 'Dubai Marina', 'Dubai')?.name).toBe(
+      'Dubai',
+    );
+    // With the customer's pin inside the drawn circle: the specific zone.
+    expect(
+      matchDeliveryZone(zones, 'Dubai Marina', 'Dubai', IN_MARINA)?.name,
+    ).toBe('Marina');
+  });
+
+  it('an exact area-name match still wins over a circle match', () => {
+    const downtown = { id: 3, name: 'Downtown', isActive: true };
+    expect(
+      matchDeliveryZone(
+        [marina, downtown, dubai],
+        'downtown',
+        'Dubai',
+        IN_MARINA,
+      )?.name,
+    ).toBe('Downtown');
+  });
+
+  it('a pin outside every circle falls back to the emirate zone, as before', () => {
+    expect(
+      matchDeliveryZone([marina, dubai], 'Somewhere', 'Dubai', DOWNTOWN)?.name,
+    ).toBe('Dubai');
+  });
+
+  it('with no pin the circle is never consulted', () => {
+    expect(
+      matchDeliveryZone([marina], 'Dubai Marina', 'Dubai', null),
+    ).toBeNull();
+    expect(matchDeliveryZone([marina], 'Dubai Marina', 'Dubai')).toBeNull();
+  });
+
+  it('a zone with no circle, or an incomplete one, is invisible to location matching', () => {
+    const noRadius = { ...marina, radiusKm: null };
+    const noLat = { ...marina, lat: null };
+    expect(
+      matchDeliveryZone([noRadius, noLat], 'x', 'Fujairah', IN_MARINA),
+    ).toBeNull();
+  });
+
+  it("a zone still on the admin modal's default, unplaced centre never decides a fee, however wide its radius", () => {
+    const unplaced = {
+      id: 9,
+      name: 'Never placed',
+      isActive: true,
+      lat: '23.850000',
+      lng: '54.400000',
+      radiusKm: '100.00',
+    };
+    // A point inside that 100km circle.
+    expect(
+      matchDeliveryZone([unplaced], 'x', 'Fujairah', { lat: 23.9, lng: 54.45 }),
+    ).toBeNull();
+  });
+
+  it('an inactive zone never matches by circle', () => {
+    expect(
+      matchDeliveryZone(
+        [{ ...marina, isActive: false }],
+        'x',
+        'Fujairah',
+        IN_MARINA,
+      ),
+    ).toBeNull();
+  });
+
+  it('overlapping circles: the tightest wins, regardless of row order', () => {
+    const wide = { ...marina, id: 5, name: 'Dubai South', radiusKm: '15.00' };
+    const tight = { ...marina, id: 6, name: 'Marina Walk', radiusKm: '1.50' };
+    expect(
+      matchDeliveryZone([wide, tight], 'x', 'Fujairah', IN_MARINA)?.name,
+    ).toBe('Marina Walk');
+    expect(
+      matchDeliveryZone([tight, wide], 'x', 'Fujairah', IN_MARINA)?.name,
+    ).toBe('Marina Walk');
+  });
+
+  it('equal radius: the nearer centre wins, then the lower id', () => {
+    const far = { ...marina, id: 7, name: 'Far', lat: '25.0705' };
+    const near = { ...marina, id: 8, name: 'Near' };
+    expect(
+      matchDeliveryZone([far, near], 'x', 'Fujairah', IN_MARINA)?.name,
+    ).toBe('Near');
+    const twinA = { ...marina, id: 10, name: 'Twin A' };
+    const twinB = { ...marina, id: 11, name: 'Twin B' };
+    expect(
+      matchDeliveryZone([twinB, twinA], 'x', 'Fujairah', IN_MARINA)?.name,
+    ).toBe('Twin A');
+  });
+
+  it('the boundary is inclusive, like the outlet radius check', () => {
+    // A point exactly radiusKm due north of the centre (1 deg lat = 111.195km
+    // for the 6371km sphere haversine uses).
+    const radiusKm = 5;
+    const onEdge = {
+      lat: MARINA_CENTER.lat + radiusKm / 111.19492664455873,
+      lng: MARINA_CENTER.lng,
+    };
+    const zone = { ...marina, radiusKm: String(radiusKm) };
+    expect(matchDeliveryZone([zone], 'x', 'Fujairah', onEdge)?.name).toBe(
+      'Marina',
+    );
+    const justOutside = { ...onEdge, lat: onEdge.lat + 0.001 };
+    expect(matchDeliveryZone([zone], 'x', 'Fujairah', justOutside)).toBeNull();
+  });
+});
+
 // One helper so each case reads as "these lines, this shop setting" rather than
 // a wall of object literals. `rate` is a percentage; taxClassId is carried
 // through untouched and only asserted where it matters.

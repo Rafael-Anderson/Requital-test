@@ -1888,7 +1888,14 @@ export class PublicService {
       `SELECT * FROM deliveryzone WHERE outletId = ? AND isActive = 1`,
       [outlet.id],
     );
-    const zone = matchDeliveryZone(zones, dto.area, dto.emirate);
+    const zone = matchDeliveryZone(
+      zones,
+      dto.area,
+      dto.emirate,
+      dto.latitude != null && dto.longitude != null
+        ? { lat: dto.latitude, lng: dto.longitude }
+        : null,
+    );
     if (zone) {
       if (subtotal < Number(zone.minOrderAmount)) {
         throw new BadRequestException(

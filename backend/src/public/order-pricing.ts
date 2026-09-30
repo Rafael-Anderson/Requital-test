@@ -1,3 +1,5 @@
+import { haversineDistanceKm } from '../common/geo';
+
 // A line as handed to the tax computation: its money amount as charged, and the
 // rate its own tax class carries. `taxRate` is a percentage.
 //
@@ -156,26 +158,121 @@ export function computeOrderTotals(params: {
   };
 }
 
-interface ZoneLike {
+export interface ZoneLike {
   name: string;
   isActive: boolean;
+  // The zone's map circle, as captured by the admin's zone modal. All three are
+  // optional: a zone predating the modal has none, and mysql2 hands a DECIMAL
+  // back as a string, so both shapes are accepted and read through `Number()`.
+  id?: number;
+  lat?: string | number | null;
+  lng?: string | number | null;
+  radiusKm?: string | number | null;
 }
 
-// Zones aren't modeled with a dedicated area/emirate column — they're a
-// free-text `name` (e.g. "Dubai", "DXB/SHJ/AJM") — so matching is a
-// case-insensitive compare against the customer's area first (more
-// specific), falling back to their emirate. Flag back if zones should
-// instead carry a structured area/emirate list.
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
+// The admin zone modal's "pin not placed yet" default centre
+// (admin/components/DeliveryZoneMap.tsx's UAE_CENTER, mirrored by hand, the two
+// apps share no code). A zone saved without the merchant moving the pin still
+// carries this centre and a 5km radius; that circle describes nothing the
+// merchant chose, so it must never decide a fee. It sits in open desert, so
+// today it would simply never match, but a merchant who widens the radius
+// without placing the pin would start capturing real addresses.
+const UNPLACED_ZONE_CENTER: GeoPoint = { lat: 23.85, lng: 54.4 };
+
+function zoneCircle(
+  zone: ZoneLike,
+): { center: GeoPoint; radiusKm: number } | null {
+  if (zone.lat == null || zone.lng == null || zone.radiusKm == null) {
+    return null;
+  }
+  const lat = Number(zone.lat);
+  const lng = Number(zone.lng);
+  const radiusKm = Number(zone.radiusKm);
+  if (![lat, lng, radiusKm].every(Number.isFinite) || radiusKm <= 0) {
+    return null;
+  }
+  if (lat === UNPLACED_ZONE_CENTER.lat && lng === UNPLACED_ZONE_CENTER.lng) {
+    return null;
+  }
+  return { center: { lat, lng }, radiusKm };
+}
+
+// Picks the zone whose map circle contains the customer's pin. When several
+// contain it the tightest circle wins (a 2km "Marina" inside a 15km "Dubai
+// South"), then the nearest centre, then the lowest id, so the answer never
+// depends on row order.
+function matchZoneByLocation<Z extends ZoneLike>(
+  zones: Z[],
+  location: GeoPoint,
+): Z | null {
+  let best: {
+    zone: Z;
+    radiusKm: number;
+    distanceKm: number;
+    id: number;
+  } | null = null;
+  for (const zone of zones) {
+    const circle = zoneCircle(zone);
+    if (!circle) continue;
+    const distanceKm = haversineDistanceKm(
+      location.lat,
+      location.lng,
+      circle.center.lat,
+      circle.center.lng,
+    );
+    // Inclusive boundary, the same way the outlet radius check rejects only
+    // `distance > radius`.
+    if (distanceKm > circle.radiusKm) continue;
+    const candidate = {
+      zone,
+      radiusKm: circle.radiusKm,
+      distanceKm,
+      id: zone.id ?? Number.MAX_SAFE_INTEGER,
+    };
+    if (
+      !best ||
+      candidate.radiusKm < best.radiusKm ||
+      (candidate.radiusKm === best.radiusKm &&
+        (candidate.distanceKm < best.distanceKm ||
+          (candidate.distanceKm === best.distanceKm && candidate.id < best.id)))
+    ) {
+      best = candidate;
+    }
+  }
+  return best?.zone ?? null;
+}
+
+// Zones carry a free-text `name` (e.g. "Dubai", "DXB/SHJ/AJM") plus, since the
+// admin map modal, an optional circle. Resolution runs from most to least
+// specific:
+//   1. the customer's area equals a zone name (trimmed, case-insensitive);
+//   2. the customer's pin falls inside a zone's circle (SHP-1);
+//   3. the customer's emirate equals a zone name.
+// Step 2 is what stops "Dubai Marina" (customer text) against a zone named
+// "Marina" from silently dropping to the emirate-wide zone: the merchant drew
+// where "Marina" is, and the pin says the customer is inside it. With no pin,
+// or no zone that has a placed circle, step 2 yields nothing and this is
+// exactly the name-only behaviour it had before.
 export function matchDeliveryZone<Z extends ZoneLike>(
   zones: Z[],
   area: string | null | undefined,
   emirate: string,
+  location?: GeoPoint | null,
 ): Z | null {
   const active = zones.filter((z) => z.isActive);
   const norm = (s: string) => s.trim().toLowerCase();
   if (area?.trim()) {
     const byArea = active.find((z) => norm(z.name) === norm(area));
     if (byArea) return byArea;
+  }
+  if (location) {
+    const byLocation = matchZoneByLocation(active, location);
+    if (byLocation) return byLocation;
   }
   return active.find((z) => norm(z.name) === norm(emirate)) ?? null;
 }
