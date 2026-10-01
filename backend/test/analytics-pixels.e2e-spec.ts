@@ -949,6 +949,26 @@ describe('Analytics pixels, Meta CAPI and order attribution (e2e)', () => {
       expect(body<{ rows: unknown[] }>(spoof).rows).toHaveLength(0);
     });
 
+    it('the CSV export neutralises spreadsheet formulas in visitor-supplied source/campaign', async () => {
+      const shop = await setupShop('csvf');
+      await placeOrder(shop, {
+        attribution: {
+          consent: { marketing: false },
+          lastTouch: {
+            source: `evil-${runId}`,
+            medium: '=cmd|calc',
+            campaign: '@SUM(1+1)',
+          },
+        },
+      }).expect(201);
+      const csv = await request(app.getHttpServer())
+        .get('/exports/attribution')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(csv.text).toContain(`evil-${runId},'=cmd|calc,'@SUM(1+1)`);
+      expect(csv.text).not.toMatch(/,=cmd|,@SUM/);
+    });
+
     it('the export honours roles: viewer yes, order_manager no', async () => {
       const shop = await setupShop('rxr');
       const mk = async (role: string) => {

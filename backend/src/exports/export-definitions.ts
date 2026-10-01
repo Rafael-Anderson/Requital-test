@@ -39,6 +39,13 @@ export interface ExportDefinition {
   ): Promise<unknown[][]>;
 }
 
+// A cell that starts with = + - @ (or tab / CR) is executed as a formula by Excel
+// and Sheets. Prefixing an apostrophe makes it plain text. Applied only to the
+// attribution export, whose text is visitor-supplied (utm parameters).
+export function neutraliseFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 function yesNo(value: unknown): string {
   return value ? 'TRUE' : 'FALSE';
 }
@@ -435,9 +442,11 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         offset,
       );
       return rows.map((r): unknown[] => [
-        r.source,
-        r.medium,
-        r.campaign,
+        // source / medium / campaign come from a visitor's own URL (utm_*), so
+        // they are attacker-controlled text headed for a merchant's spreadsheet.
+        neutraliseFormula(r.source),
+        neutraliseFormula(r.medium),
+        neutraliseFormula(r.campaign),
         r.orders,
         toMajorUnitString(r.revenue, r.currency),
         r.currency,
