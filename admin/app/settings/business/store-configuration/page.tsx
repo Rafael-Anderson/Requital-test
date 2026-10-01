@@ -188,17 +188,6 @@ export default function StoreConfigurationPage() {
 
           <div className="space-y-4">
             <Card>
-              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Delivery & Fulfillment</h3>
-              <div className="space-y-2">
-                <Checkbox
-                  label="External delivery enabled"
-                  checked={externalDeliveryEnabled}
-                  onChange={(e) => setExternalDeliveryEnabled(e.target.checked)}
-                />
-              </div>
-            </Card>
-
-            <Card>
               <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Messaging</h3>
               <div className="space-y-3">
                 <p className="text-xs text-text-faint">
@@ -267,6 +256,11 @@ export default function StoreConfigurationPage() {
                 until it&apos;s built.
               </p>
               <div className="space-y-2">
+                <Checkbox
+                  label="External delivery enabled"
+                  checked={externalDeliveryEnabled}
+                  onChange={(e) => setExternalDeliveryEnabled(e.target.checked)}
+                />
                 <Checkbox
                   label="Allow pre-orders"
                   checked={allowPreOrders}
