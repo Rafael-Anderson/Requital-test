@@ -270,7 +270,7 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
     // (100 * 100 / 234 = 42.735042...) stored into DECIMAL(65,30). That breaks the
     // "round once per stored column to the currency's minor unit" policy and leaves
     // the card with a balance no one can pay out.
-    test.failing(
+    it(
       'FINDING F6: a partial return on a gift-card order credits whole minor units only',
       async () => {
         const { shop, a, card, orderId } = await scenario('gdt-aed-round', 100);
@@ -294,12 +294,14 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
           .expect(201);
         const r = body<{ giftCardRefundAmount: string }>(ret);
         expect(isWholeMinorUnit(r.giftCardRefundAmount, 'AED')).toBe(true); // 42.735042...
+        expect(Number(r.giftCardRefundAmount)).toBe(42.74);
         expect(
           isWholeMinorUnit(
             (await cardRow(card.id)).remainingBalance as string,
             'AED',
           ),
         ).toBe(true);
+        expect(Number((await cardRow(card.id)).remainingBalance)).toBe(42.74);
       },
     );
   });
@@ -356,6 +358,70 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
         0,
       );
       expect(Number((await cardRow(card.id)).remainingBalance)).toBe(0);
+    });
+  });
+
+  describe('gift-card refund split in KWD (3 decimals)', () => {
+    it('splits each return in whole fils, and the returns together give the card back exactly what it paid', async () => {
+      const { shop, standard, zero } = await taxedShop('gdt-kwd-ret', 'KWD');
+      const a = await f.stockedProduct(shop, 10, {
+        price: 10.505,
+        taxClassId: standard.id,
+      });
+      const b = await f.stockedProduct(shop, 10, {
+        price: 4.125,
+        taxClassId: zero.id,
+      });
+      await f.publish(shop);
+      const discount = await f.createDiscount(shop, {
+        type: 'PERCENTAGE',
+        value: 10,
+      });
+      const card = await issueCard(shop, 10);
+      const res = await f.storefrontOrder(
+        shop,
+        [
+          { productId: a.id, quantity: 3 },
+          { productId: b.id, quantity: 1 },
+        ],
+        { discountCode: discount.code, giftCardCode: card.code },
+      );
+      const orderId = body<{ order: { id: number } }>(res).order.id;
+      expect(Number((await f.orderRow(orderId)).total)).toBe(33.494);
+      expect(Number((await cardRow(card.id)).remainingBalance)).toBe(0);
+      await f.advance(shop, orderId, 'delivered');
+      const items = await f.orderItems(orderId);
+      const lineA = items.find((i) => i.productId === a.id)!;
+      const lineB = items.find((i) => i.productId === b.id)!;
+
+      const giveBack = async (orderItemId: number, refundAmount: number) =>
+        body<{ refundAmount: string; giftCardRefundAmount: string }>(
+          await request(f.http())
+            .post(`/orders/${orderId}/returns`)
+            .set(f.auth(shop))
+            .send({
+              reason: 'changed_mind',
+              items: [{ orderItemId, quantity: 1 }],
+              refundAmount,
+              restock: false,
+            })
+            .expect(201),
+        );
+
+      // 10 * 10 / 33.494 = 2.98560... -> 2.986
+      const r1 = await giveBack(lineA.id as number, 10);
+      expect(Number(r1.giftCardRefundAmount)).toBe(2.986);
+      // The return that completes the refund returns the rest of the card
+      // exactly (7.014), not a re-rounded 23.494 * 10 / 33.494 share.
+      const r2 = await giveBack(lineB.id as number, 23.494);
+      expect(Number(r2.giftCardRefundAmount)).toBe(7.014);
+      expect(Number(r1.refundAmount) + Number(r2.refundAmount)).toBeCloseTo(
+        33.494,
+        6,
+      );
+      const balance = (await cardRow(card.id)).remainingBalance as string;
+      expect(isWholeMinorUnit(balance, 'KWD')).toBe(true);
+      expect(Number(balance)).toBe(10);
     });
   });
 

@@ -10,6 +10,7 @@ import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { createLogger } from '../common/logging/logger';
+import { minorUnitFactor, roundMoney } from '../common/currency-minor-units';
 
 const logger = createLogger('ReturnsService');
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
@@ -91,12 +92,17 @@ export class ReturnsService {
       computedRefund += Number(orderItem.priceAtPurchase) * line.quantity;
     }
 
-    const refundAmount = Number(dto.refundAmount ?? computedRefund);
+    // Rounded once to the order currency's minor unit, like every other stored
+    // money column (a KWD/BHD/OMR figure keeps its third decimal).
+    const refundAmount = roundMoney(
+      Number(dto.refundAmount ?? computedRefund),
+      order.currency,
+    );
 
     // Running-total cap: cumulative refunds across every return on this
     // order must never exceed the order's original total.
     const priorReturnsRows = await this.db.query<RowDataPacket[]>(
-      `SELECT COALESCE(SUM(refundAmount), 0) AS total FROM orderreturn WHERE orderId = ?`,
+      `SELECT COALESCE(SUM(refundAmount), 0) AS total, COALESCE(SUM(giftCardRefundAmount), 0) AS gift FROM orderreturn WHERE orderId = ?`,
       [orderId],
     );
     const alreadyRefunded = Number(priorReturnsRows[0].total);
@@ -113,11 +119,36 @@ export class ReturnsService {
     // and a partial return splits fairly. Summed across every return on an
     // order, this can never exceed the original giftCardAmount, since total
     // refunds across all returns are already capped at order.total above.
-    const giftCardRefundAmount =
-      order.giftCardId && order.giftCardAmount && Number(order.giftCardAmount) > 0
-        ? (refundAmount * Number(order.giftCardAmount)) / Number(order.total)
-        : 0;
-    const providerRefundPortion = refundAmount - giftCardRefundAmount;
+    //
+    // Split in integer minor units so the two parts sum EXACTLY to
+    // refundAmount (F6): the gift-card share is rounded once, the provider
+    // share is the remainder. Across returns the gift share is capped at what
+    // is still unreturned of giftCardAmount, and the return that completes
+    // the refund returns all of it, so rounding can neither create nor lose a
+    // minor unit on the card.
+    const factor = minorUnitFactor(order.currency);
+    const refundMinor = Math.round(refundAmount * factor);
+    const giftTotalMinor = Math.round(Number(order.giftCardAmount ?? 0) * factor);
+    let giftMinor = 0;
+    if (order.giftCardId && giftTotalMinor > 0) {
+      const giftLeftMinor =
+        giftTotalMinor - Math.round(Number(priorReturnsRows[0].gift) * factor);
+      const totalMinor = Math.round(Number(order.total) * factor);
+      const completesRefund =
+        Math.round(alreadyRefunded * factor) + refundMinor >= totalMinor;
+      giftMinor = Math.max(
+        0,
+        Math.min(
+          completesRefund
+            ? giftLeftMinor
+            : Math.round((refundMinor * giftTotalMinor) / totalMinor),
+          giftLeftMinor,
+          refundMinor,
+        ),
+      );
+    }
+    const giftCardRefundAmount = giftMinor / factor;
+    const providerRefundPortion = (refundMinor - giftMinor) / factor;
 
     // Only ever asked to refund the non-gift-card slice — a return that's
     // fully covered by gift-card credit never touches the payment provider

@@ -356,11 +356,10 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
       await expectConserved(shop, ing);
     });
 
-    // FINDING F4. PATCH /products/stock/bulk-adjust (adjustStock) does its floor
-    // check as a plain SELECT before the transaction and then adds delta with no
-    // WHERE guard, so concurrent decrements can all pass the check. It also
-    // writes NO stockmovement row. The reason-coded POST /products/stock/adjust
-    // right above is guarded and logged; this older endpoint is neither.
+    // FINDING F4 (fixed). PATCH /products/stock/bulk-adjust used to do its floor
+    // check as a plain SELECT before the transaction and add delta with no WHERE
+    // guard, and wrote NO stockmovement row. It now has the CAS floor and the
+    // ledger row like the reason-coded POST /products/stock/adjust above.
     // Deterministic form of the race: a side connection holds the stock row's lock
     // so every request passes its pre-transaction floor check against the SAME
     // unchanged stock (1), then all of them apply their decrement once it is released.
@@ -390,12 +389,7 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
       return { shop, p, res: await Promise.all(pending) };
     }
 
-    it('bulk-adjust race precondition: every racer passes the floor check and succeeds (characterises F4a)', async () => {
-      const { res } = await bulkDecrementsBehindLock('cc-bulk-neg-char');
-      expect(res.map((r) => r.status)).toEqual([200, 200, 200, 200]);
-    });
-
-    test.failing(
+    it(
       'FINDING F4a: bulk-adjust never takes stock below zero under concurrent decrements',
       async () => {
         const { shop, p, res } = await bulkDecrementsBehindLock('cc-bulk-neg');
@@ -408,7 +402,7 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
       },
     );
 
-    test.failing(
+    it(
       'FINDING F4b: bulk-adjust writes a stockmovement row, so the ledger stays conserved',
       async () => {
         const shop = await f.setupShop('cc-bulk-ledger');
@@ -423,7 +417,7 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
           })
           .expect(200);
         expect(await f.productStock(shop.outletId, p.id)).toBe(9);
-        await expectConserved(shop, ing); // ledger says 5, stock says 9
+        await expectConserved(shop, ing);
       },
     );
   });

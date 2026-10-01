@@ -354,7 +354,7 @@ describe('resolveOrderItems: price, variant, discount, tax, cost (e2e)', () => {
     // variant's rows, so a variant overriding an ingredient is costed for both
     // the default quantity and the override. Cost no longer matches what stock
     // actually consumed, and margin reports are understated.
-    test.failing(
+    it(
       'FINDING F3: a variant with a recipe override is costed on its override only, matching what is consumed',
       async () => {
         const shop = await f.setupShop('ro-cost-override-recipe');
@@ -373,7 +373,7 @@ describe('resolveOrderItems: price, variant, discount, tax, cost (e2e)', () => {
         const [r] = await resolve(shop, [
           { productId: p.id, variantId: large.id, quantity: 1 },
         ]);
-        // Consumption would take 10 roses -> cost 20. Actual capture: (6 + 10) * 2 = 32.
+        // Consumption takes 10 roses -> cost 20 (not (6 + 10) * 2 = 32).
         expect(Number(r.unitCost)).toBe(20);
       },
     );
