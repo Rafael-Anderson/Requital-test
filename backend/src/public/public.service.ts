@@ -30,6 +30,7 @@ import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BioLinksService } from '../bio-links/bio-links.service';
 import { ProductsService } from '../products/products.service';
+import type { ConsumedRow } from '../products/product-order-items.service';
 import { buildVariantLabel } from '../products/variant-generator';
 import { DiscountsService } from '../discounts/discounts.service';
 import { OrderNotificationsService } from '../orders/order-notifications.service';
@@ -1665,6 +1666,7 @@ export class PublicService {
       // is a defensive second guard, not the only one. actorUserId: null —
       // no authenticated staff user exists on this anonymous storefront
       // path (see stockmovement.actorUserId's schema comment).
+      const consumedRows: ConsumedRow[] = [];
       const ingredientsConsumed =
         await this.productsService.consumeForOrderItems(
           conn,
@@ -1679,7 +1681,11 @@ export class PublicService {
               allowNegative,
             })),
           -1,
-          { throwOnInsufficientStock: true, actorUserId: null },
+          {
+            throwOnInsufficientStock: true,
+            actorUserId: null,
+            collect: consumedRows,
+          },
         );
 
       const trackingToken = generateTrackingCode();
@@ -1692,15 +1698,18 @@ export class PublicService {
         async (shopOrderNumber) => {
           const [res] = await conn.query(
         `INSERT INTO \`order\` (
-          shopId, ingredientsConsumedAt, outletId, customerId, customerName, customerPhone, customerEmail,
+          shopId, ingredientsConsumedAt, consumptionRecordedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate, attributionJson
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
+          // The stock record below is authoritative for this order from the
+          // start, even when it consumed nothing (see OrdersService.create).
+          new Date(),
           outlet.id,
           customer.id,
           dto.customerName,
@@ -1778,6 +1787,13 @@ export class PublicService {
           ]),
         );
       }
+
+      await this.productsService.recordOrderConsumption(
+        conn,
+        shop.id,
+        newOrderId,
+        consumedRows,
+      );
 
       if (discount) {
         await this.discountsService.redeem(

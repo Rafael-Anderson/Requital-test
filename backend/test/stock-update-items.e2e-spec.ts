@@ -245,7 +245,7 @@ describe('updateItems: stock delta arithmetic and warnings (e2e)', () => {
     // immediate-channel order "has never run consumeForOrderItems yet", which
     // is false. So editing a pending storefront order leaves the reservation at
     // the OLD quantity, and the later cancel restocks the NEW one.
-    test.failing(
+    it(
       'FINDING F1: editing a pending storefront order moves its reserved stock by the delta',
       async () => {
         const shop = await f.setupShop('ui-pending-sf');
@@ -260,12 +260,12 @@ describe('updateItems: stock delta arithmetic and warnings (e2e)', () => {
         await f
           .editItems(shop, orderId, [{ productId: p.id, quantity: 5 }])
           .expect(200);
-        // Correct: 5 now reserved -> 5 on the shelf. Actual: still 8.
+        // 5 now reserved -> 5 on the shelf (was: still 8).
         expect(await f.productStock(shop.outletId, p.id)).toBe(5);
       },
     );
 
-    test.failing(
+    it(
       'FINDING F1 (consequence): edit then cancel a pending storefront order ends at the starting stock',
       async () => {
         const shop = await f.setupShop('ui-pending-sf2');
@@ -279,7 +279,7 @@ describe('updateItems: stock delta arithmetic and warnings (e2e)', () => {
           .editItems(shop, orderId, [{ productId: p.id, quantity: 5 }])
           .expect(200);
         await f.cancelOrder(shop, orderId).expect(201);
-        // Correct: 10. Actual: 8 + 5 = 13, three units of phantom stock.
+        // 10 (was 8 + 5 = 13, three units of phantom stock).
         expect(await f.productStock(shop.outletId, p.id)).toBe(10);
       },
     );
@@ -292,7 +292,7 @@ describe('updateItems: stock delta arithmetic and warnings (e2e)', () => {
     // cancel) deliberately ignores it. With the toggle off after confirm, an
     // increase consumes nothing but the later cancel returns the full new
     // quantity.
-    test.failing(
+    it(
       'FINDING F2: increase-edit then cancel with the toggle flipped off in between does not create phantom stock',
       async () => {
         const { shop, rose, bouquet } = await recipeShop('ui-toggle');
@@ -304,7 +304,7 @@ describe('updateItems: stock delta arithmetic and warnings (e2e)', () => {
           .editItems(shop, orderId, [{ productId: bouquet.id, quantity: 3 }])
           .expect(200);
         await f.cancelOrder(shop, orderId).expect(201);
-        // Correct: 1000. Actual: 1000 - 6 (confirm) + 18 (cancel, qty 3) = 1012.
+        // 1000 (was 1000 - 6 (confirm) + 18 (cancel, qty 3) = 1012).
         expect(await f.stockOf(shop.outletId, rose.id)).toBe(1000);
       },
     );

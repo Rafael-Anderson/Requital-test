@@ -176,6 +176,38 @@ export class ReturnsService {
     }
 
     const returnId = await this.db.transaction(async (conn) => {
+      // An order with a stock record (consumptionRecordedAt) gets exactly what
+      // it holds back, not today's recipe and not today's product flags. The
+      // order row is locked first so two returns on one order cannot both read
+      // the same remaining-unit count; the count is taken here, after the lock.
+      // A LEGACY order (no record) keeps the recipe-driven restock below.
+      const [orderLock] = await conn.query<RowDataPacket[]>(
+        `SELECT consumptionRecordedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+        [orderId, order.shopId],
+      );
+      const hasStockRecord = orderLock[0]?.consumptionRecordedAt != null;
+      // Units of each line identity (product + variant) still with the customer
+      // before this return: the denominator for "k of n units". Lines that share
+      // an identity (same product, different note) pool together, since the
+      // record is keyed by identity, not by line.
+      const remainingByIdentity = new Map<string, number>();
+      if (restock && hasStockRecord) {
+        const [lineRows] = await conn.query<RowDataPacket[]>(
+          `SELECT oi.id, oi.productId, oi.variantId, oi.quantity,
+                  COALESCE((SELECT SUM(ri.quantity) FROM orderreturnitem ri WHERE ri.orderItemId = oi.id), 0) AS returned
+             FROM orderitem oi WHERE oi.orderId = ?`,
+          [orderId],
+        );
+        for (const l of lineRows) {
+          const k = `${l.productId as number}:${(l.variantId as number | null) ?? ''}`;
+          remainingByIdentity.set(
+            k,
+            (remainingByIdentity.get(k) ?? 0) +
+              (l.quantity as number) -
+              Number(l.returned),
+          );
+        }
+      }
       const [result] = await conn.query(
         `INSERT INTO orderreturn (orderId, reason, refundAmount, refundMethod, providerRefundReference, giftCardRefundAmount, restocked, staffUserId)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -209,7 +241,28 @@ export class ReturnsService {
           [newReturnId, line.orderItemId, line.quantity],
         );
 
-        if (restock && trackInventoryByProduct.get(orderItem.productId)) {
+        if (restock && hasStockRecord) {
+          const k = `${orderItem.productId}:${orderItem.variantId ?? ''}`;
+          const den = remainingByIdentity.get(k) ?? 0;
+          await this.productsService.releaseOrderConsumption(conn, {
+            shopId: order.shopId,
+            outletId: order.outletId,
+            orderId,
+            actorUserId: ctx.userId,
+            movementType: 'RETURN',
+            note: `Return #${newReturnId}`,
+            reason: dto.reason,
+            only: [
+              {
+                productId: orderItem.productId,
+                variantId: orderItem.variantId,
+                num: line.quantity,
+                den,
+              },
+            ],
+          });
+          remainingByIdentity.set(k, den - line.quantity);
+        } else if (restock && trackInventoryByProduct.get(orderItem.productId)) {
           // Phase A: routes through the same CAS-disciplined mechanism
           // every other stock-mutation path now uses (shadow or real
           // recipe) — throwOnInsufficientStock: false since a return
