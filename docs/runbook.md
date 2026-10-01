@@ -332,9 +332,21 @@ Work through it in this order:
 
 Migration `20261003100000_drop_emirate_columns` removes the free-text `emirate` column from `order`, `draftorder` and `outlet`. It is the only step of the region work that cannot be undone from its own file, so it has a procedure. **Nothing here runs without a person deciding to.**
 
-1. **Fresh dump, validated** (see Backup above): gzip integrity, table count, a scratch-database restore with row counts compared.
-2. **Preflight (read-only):** `npx ts-node -r tsconfig-paths/register scripts/region-backfill.ts` from `backend/`. Every table must report `unmatched=0`; an `unmatched value:` line is an emirate string no region carries, and the script exits 1 (`BLOCKED`). Do not proceed on a non-zero exit: map or correct those rows first. The migration itself refuses in that case (`Column 'unmapped' cannot be null`, nothing dropped, migration not recorded), so this step is about finding out early, not about safety.
-3. **Deploy the two Next apps first** (admin, storefront), then confirm they work. Older builds still send the `emirate` field, and once the backend rejects unknown properties that is a 400 on checkout.
-4. **Then the backend:** pull, `npm run db:migrate`, `npm ci`, `npm run build`, restart. Read the per-migration output; the drop prints `Applied 1 migration(s)`.
-5. **After:** `sudo -u deploy pm2 list` (online, low restart count), backend logs for a clean start, one real storefront checkout and one admin order view, and `GET /platform-admin/zone-mapping-status` to see which shops are still name-matched (the legacy zone matcher is deleted only when that list is empty, after the notice period).
-6. **Checksums:** the same `order` / money-column checksum query before and after, identical; `.env` fingerprint (hash, never the contents) before and after.
+**First, find out what production is running** (`git -C /home/deploy/requital log --oneline -1`, plus `git status`: never pull over uncommitted work). The order below depends on it, because there is no single-step order that is safe when production predates the region work: the OLD frontends send the `emirate` field (rejected once the contract backend is live), and the NEW frontends call `GET /regions` and read `region` (which an old backend does not have). So the jump is made in three stages, each safe against the other tier as it stands:
+
+| Stage | What | Commit | Why it is safe |
+|---|---|---|---|
+| 1 | Backend only: migrate, `npm ci`, build, restart | **`e0abedd`** (PR-D merge; has every region migration up to `20261002100000`, NOT the drop) | Still accepts the old `emirate` alias and still returns `emirate`, so the old frontends keep working; adds `/regions` and `region` for the new ones. |
+| 2 | admin and storefront: `npm ci`, build, restart. **Do not run `db:migrate`.** | **`b3fa26c`** (main) | They send `regionId` and read `region`, both served by stage 1. |
+| 3 | Backend: preflight, migrate (the drop), build, restart | `b3fa26c` | Only now is `emirate` rejected, and no deployed frontend sends it. |
+
+If production already runs `e0abedd` or later with the new frontends, only stage 3 applies; if it already runs `b3fa26c`, nothing is left. Between stages, confirm health before moving on: `pm2 list`, backend logs clean on start, one real storefront checkout (delivery, with a region) and one admin order view.
+
+For each stage that touches the backend:
+
+1. **Fresh dump, validated** (see Backup above): gzip integrity, table count, a scratch-database restore with row counts compared. Take one before stage 1 and another before stage 3.
+2. **Per-migration output:** read what `npm run db:migrate` prints for each folder it applies, and stop on any error. A migration that fails is not recorded as applied.
+3. **Stage 3 only, before migrating, the read-only preflight:** `npx ts-node -r tsconfig-paths/register scripts/region-backfill.ts` from `backend/`. Every table must report `unmatched=0`; an `unmatched value:` line is an emirate string no region carries, and the script exits 1 (`BLOCKED`). Do not proceed on a non-zero exit: map or correct those rows first. The migration itself refuses in that case (`Column 'unmapped' cannot be null`, nothing dropped, migration not recorded), so this step is about finding out early, not about safety. (A NULL-country shop's historical rows are the ones to expect here.)
+4. **Checksums:** the same `order` / money-column checksum query before and after each backend stage, identical; `.env` fingerprint (a hash, never the contents) before and after.
+5. **After each restart:** `sudo -u deploy pm2 list` (online, low restart count), backend logs for a clean start, and the scheduled sweeps (custom-domain verification, abandoned-cart recovery, the job queue) running and not erroring.
+6. **After stage 3:** `GET /platform-admin/zone-mapping-status` shows which shops are still name-matched. The legacy zone matcher is deleted only when that list is empty, after the notice period (which starts at the stage-3 deploy date).
