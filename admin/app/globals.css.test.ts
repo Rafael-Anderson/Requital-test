@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // Guard for the logical-properties sweep (audit §6-C step 1). The UA stylesheet gives a
 // `th` `text-align: -internal-center`, which Chrome resolves to "center unless the parent's
 // computed text-align is explicitly set"; it does NOT count the keyword `start` as explicit.
-// `THead` used to set the physical `text-left` (explicit), so headers inherited it. Under
+// `THead` used to set the physical left-align utility (explicit), so headers inherited it. Under
 // the logical `text-start` every table header silently centred in LTR. This base rule makes
 // headers inherit the thead's alignment again, and must stay in `@layer base` so a TH's own
 // `text-end` / `text-center` utility still overrides it.
