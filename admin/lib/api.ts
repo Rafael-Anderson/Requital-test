@@ -25,6 +25,11 @@ import type {
   BrandInput,
   TaxClass,
   TaxClassInput,
+  MetafieldDefinition,
+  MetafieldDefinitionInput,
+  MetafieldEntry,
+  MetafieldOwnerType,
+  MetafieldValidation,
   Template,
   TemplateRules,
   TemplateType,
@@ -1491,6 +1496,60 @@ export function deleteTaxClass(id: number) {
     `/tax-classes/${id}`,
     { method: "DELETE" },
   );
+}
+
+export function listMetafieldDefinitions(ownerType?: MetafieldOwnerType) {
+  return apiFetch<MetafieldDefinition[]>(
+    `/metafield-definitions${ownerType ? `?ownerType=${ownerType}` : ""}`,
+  );
+}
+
+export function createMetafieldDefinition(data: MetafieldDefinitionInput) {
+  return apiFetch<MetafieldDefinition>("/metafield-definitions", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Type, owner and key are fixed at creation, so they are not editable here.
+export function updateMetafieldDefinition(
+  id: number,
+  data: {
+    name?: string;
+    validation?: MetafieldValidation;
+    displayOrder?: number;
+    visibleOnStorefront?: boolean;
+  },
+) {
+  return apiFetch<MetafieldDefinition>(`/metafield-definitions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// A definition that still has values answers 409; deleteValues removes them in
+// the same step.
+export function deleteMetafieldDefinition(id: number, deleteValues = false) {
+  return apiFetch<{ id: number; deleted: boolean; valuesDeleted: number }>(
+    `/metafield-definitions/${id}${deleteValues ? "?deleteValues=true" : ""}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getMetafields(ownerType: MetafieldOwnerType, ownerId: number) {
+  return apiFetch<MetafieldEntry[]>(`/metafields/${ownerType}/${ownerId}`);
+}
+
+// A null value clears that field for the record.
+export function setMetafields(
+  ownerType: MetafieldOwnerType,
+  ownerId: number,
+  values: { definitionId: number; value: unknown }[],
+) {
+  return apiFetch<MetafieldEntry[]>(`/metafields/${ownerType}/${ownerId}`, {
+    method: "PUT",
+    body: JSON.stringify({ values }),
+  });
 }
 
 export function listTemplates() {

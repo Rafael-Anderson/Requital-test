@@ -1240,3 +1240,32 @@ export interface CustomermetricsRow {
   // platform shares one, which is what Phase 2a stops being true.
   currency: string;
 }
+
+export interface MetafielddefinitionRow {
+  id: number;
+  shopId: number;
+  ownerType: 'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
+  namespace: string;
+  // `key` in the API; `fieldKey` here because KEY is a MySQL reserved word.
+  fieldKey: string;
+  name: string;
+  type: string;
+  validationJson: Record<string, unknown> | null;
+  displayOrder: number;
+  visibleOnStorefront: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MetafieldvalueRow {
+  id: number;
+  shopId: number;
+  ownerType: 'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
+  // Polymorphic (no FK): points into the table named by ownerType.
+  ownerId: number;
+  definitionId: number;
+  // Real JSON column, auto-parsed by mysql2. Never NULL: no value = no row.
+  value: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}

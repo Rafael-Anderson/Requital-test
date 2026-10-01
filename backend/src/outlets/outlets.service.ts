@@ -17,6 +17,7 @@ import type { TenantContext } from '../common/tenant-context';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { normalizePhoneToE164 } from '../common/phone';
+import { deleteMetafieldValues } from '../metafields/metafield-cleanup';
 
 @Injectable()
 export class OutletsService {
@@ -286,6 +287,7 @@ export class OutletsService {
     // outletstock rows cascade on delete — an outlet with no orders/users
     // but existing stock rows is safe to remove outright.
     await this.db.execute(`DELETE FROM outlet WHERE id = ?`, [id]);
+    await deleteMetafieldValues(this.db, 'outlet', [id]);
     return { id, deleted: true };
   }
 

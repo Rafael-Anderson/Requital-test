@@ -76,6 +76,7 @@ import {
   storefrontUrl,
 } from '../common/storefront-url';
 import { withShopOrderNumber } from '../orders/order-number';
+import { loadVisibleProductMetafields } from '../metafields/metafields.service';
 
 // Meta descriptions render best under ~160 characters (Google truncates
 // around there) — cuts at the last whole word rather than mid-word.
@@ -918,6 +919,7 @@ export class PublicService {
       shadowStock,
       brands,
       shopRows,
+      metafieldsByProduct,
     ] = await Promise.all([
       this.db.query<(ProductRow & RowDataPacket)[]>(
         // DATE_FORMAT alias shadows the raw `newUntil` from `*` so it's a
@@ -990,6 +992,9 @@ export class PublicService {
         `SELECT timezone FROM shop WHERE id = ?`,
         [shopId],
       ),
+      // Storefront-visible custom fields only (visibleOnStorefront = 1), one
+      // query for the whole list. Hidden fields are never selected.
+      loadVisibleProductMetafields(this.db, shopId, productIds),
     ]);
     const shopTimezone =
       (shopRows[0]?.timezone as string | undefined) || 'Asia/Dubai';
@@ -1125,6 +1130,7 @@ export class PublicService {
             ? (taxRateByClassId.get(p.taxClassId as number) ?? defaultTaxRate)
             : defaultTaxRate,
         taxClassId: undefined,
+        metafields: metafieldsByProduct.get(id) ?? {},
         costPrice: trimDecimal(p.costPrice),
         weight: trimDecimal(p.weight),
         giftCardCustomAmountMin: trimDecimal(p.giftCardCustomAmountMin),

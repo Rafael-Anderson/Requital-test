@@ -36,6 +36,10 @@ import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { TaxClassesService } from '../tax-classes/tax-classes.service';
 import { ProductReadService } from './product-read.service';
 import { ProductBomService } from './product-bom.service';
+import {
+  deleteMetafieldValues,
+  deleteVariantMetafieldValuesForProduct,
+} from '../metafields/metafield-cleanup';
 
 // Catalog CRUD: products, variants and options, availability, bulk actions.
 @Injectable()
@@ -909,6 +913,7 @@ export class ProductCatalogService {
       // product now needs a fresh product-level shadow to have anywhere for
       // its stock to live again.
       await this.db.transaction(async (conn) => {
+        await deleteVariantMetafieldValuesForProduct(conn, id);
         await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [id]);
         await conn.query(`DELETE FROM productoption WHERE productId = ?`, [id]);
         if (!product.usesIngredients) {
@@ -1021,6 +1026,7 @@ export class ProductCatalogService {
         )
         .map((v) => v.id as number);
       if (staleVariantIds.length > 0) {
+        await deleteMetafieldValues(conn, 'variant', staleVariantIds);
         await conn.query(
           `DELETE FROM productvariant WHERE id IN (${staleVariantIds.map(() => '?').join(', ')})`,
           staleVariantIds,
@@ -1189,7 +1195,14 @@ export class ProductCatalogService {
   async remove(ctx: TenantContext, id: number) {
     const product = await this.findOne(ctx, id);
     try {
-      await this.db.execute(`DELETE FROM product WHERE id = ?`, [id]);
+      // One transaction: if the product delete is refused (FK from an order
+      // line, say) its custom-field values are not lost. Variants cascade away
+      // with the product, so their values are swept while the ids still resolve.
+      await this.db.transaction(async (conn) => {
+        await deleteVariantMetafieldValuesForProduct(conn, id);
+        await deleteMetafieldValues(conn, 'product', [id]);
+        await conn.query(`DELETE FROM product WHERE id = ?`, [id]);
+      });
     } catch (error) {
       this.handleDbError(error);
     }

@@ -20,6 +20,8 @@ import OutletQuantityTable from "@/components/ui/OutletQuantityTable";
 import IngredientRecipeEditor, { type RecipeRowDraft } from "@/components/IngredientRecipeEditor";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { useMetafieldEditor } from "@/lib/useMetafieldEditor";
+import { MetafieldsSection } from "@/components/MetafieldsFields";
 
 export default function VariantEditModal({
   product,
@@ -69,6 +71,7 @@ export default function VariantEditModal({
     })),
   );
   const [saving, setSaving] = useState(false);
+  const metafields = useMetafieldEditor("variant", variant.id);
 
   useEffect(() => {
     listIngredients()
@@ -85,6 +88,11 @@ export default function VariantEditModal({
     // not the (portaled) DOM tree — without this, submitting this form
     // still also triggers ProductForm's own onSubmit one level up.
     e.stopPropagation();
+    const metafieldError = metafields.validate();
+    if (metafieldError) {
+      toast(metafieldError, "error");
+      return;
+    }
     setSaving(true);
     try {
       let imageId: number | null = null;
@@ -124,6 +132,11 @@ export default function VariantEditModal({
           variantId: variant.id,
         });
       }
+      await metafields.save().catch((err: unknown) => {
+        throw new Error(
+          `Variant saved, but custom fields were not: ${err instanceof Error ? err.message : "unknown error"}`,
+        );
+      });
       toast(`"${variant.label}" updated`);
       onSaved(updated, refreshedImages);
       onClose();
@@ -335,6 +348,8 @@ export default function VariantEditModal({
               onChange={setRecipeRows}
             />
           </div>
+
+          <MetafieldsSection editor={metafields} />
         </div>
 
         <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
