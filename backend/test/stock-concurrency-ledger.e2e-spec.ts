@@ -210,10 +210,39 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
 
     // Forces a deterministic interleaving of two requests on ONE order: a side
     // connection holds the order row's lock, `first` is started and parks on its
-    // CAS UPDATE, then `second` does the same behind it, then the lock is released.
-    // Each request has already done its plain read of the order (status 'pending',
-    // ingredientsConsumedAt NULL) before it parks, which is exactly the stale read
-    // a real race produces. Lock grant order is FIFO per row, so first commits first.
+    // row-lock wait, then `second` does the same behind it, then the lock is
+    // released. Each request has already done its plain read of the order (status
+    // 'pending', ingredientsConsumedAt NULL) before it parks, which is exactly the
+    // stale read a real race produces. Lock grant order is FIFO per row, so first
+    // commits first.
+    //
+    // No fixed sleeps: instead of guessing how long a request needs to reach the
+    // lock, it polls performance_schema until the expected number of waiters is
+    // actually queued on THIS order's row (filtered by schema, table and primary
+    // key, so other specs running in parallel against the same MySQL cannot
+    // satisfy it). A request that never parks (e.g. it fails validation before the
+    // lock) would hang here, so the poll has a hard timeout and fails loudly.
+    async function waitForLockWaiters(orderId: number, expected: number) {
+      const deadline = Date.now() + 20000;
+      for (;;) {
+        const rows = await db.query<RowDataPacket[]>(
+          `SELECT COUNT(*) AS c
+             FROM performance_schema.data_lock_waits w
+             JOIN performance_schema.data_locks l
+               ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+            WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = 'order'
+              AND l.LOCK_DATA = ?`,
+          [String(orderId)],
+        );
+        if (Number(rows[0].c) >= expected) return;
+        if (Date.now() > deadline)
+          throw new Error(
+            `timed out waiting for ${expected} request(s) to queue on order ${orderId}`,
+          );
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    }
+
     async function raceOnOrder(
       shop: Shop,
       orderId: number,
@@ -222,15 +251,14 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
     ) {
       let firstP!: Promise<request.Response>;
       let secondP!: Promise<request.Response>;
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       await db.transaction(async (conn) => {
         await conn.query('SELECT id FROM `order` WHERE id = ? FOR UPDATE', [
           orderId,
         ]);
         firstP = Promise.resolve(first());
-        await sleep(500);
+        await waitForLockWaiters(orderId, 1);
         secondP = Promise.resolve(second());
-        await sleep(500);
+        await waitForLockWaiters(orderId, 2);
       });
       return { first: await firstP, second: await secondP };
     }
@@ -273,14 +301,75 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
     // (confirmed->cancelled, its second CAS branch) both succeed in sequence, and
     // the cancel acted on a pre-confirm read where the column was still NULL. So
     // it skips the restock and the confirm's decrement is leaked for good.
-    test.failing(
+    it(
       'FINDING F5: a cancel that raced a confirm still returns the stock the confirm took',
       async () => {
         const { shop, p, ing } = await confirmThenStaleCancel();
-        expect(await f.productStock(shop.outletId, p.id)).toBe(10); // actual: 7
+        expect(await f.productStock(shop.outletId, p.id)).toBe(10); // was 7 before the fix
         await expectConserved(shop, ing);
       },
     );
+
+    it('item edit parked behind a cancel: the edit is refused (409) instead of adjusting stock for an order that was already restocked', async () => {
+      const shop = await f.setupShop('cc-edit-after-cancel');
+      const p = await f.stockedProduct(shop, 10);
+      const ing = (await f.shadowIngredientId(p.id))!;
+      const order = await f.adminOrder(shop, [
+        { productId: p.id, quantity: 3 },
+      ]);
+      await f.setStatus(shop, order.id, 'confirmed');
+      expect(await f.productStock(shop.outletId, p.id)).toBe(7);
+      const r = await raceOnOrder(
+        shop,
+        order.id,
+        () => f.cancelOrder(shop, order.id),
+        () => f.editItems(shop, order.id, [{ productId: p.id, quantity: 5 }]),
+      );
+      expect(r.first.status).toBe(201);
+      expect(r.second.status).toBe(409);
+      expect(await f.productStock(shop.outletId, p.id)).toBe(10);
+      expect((await f.orderRow(order.id)).status).toBe('cancelled');
+      await expectConserved(shop, ing);
+    });
+
+    it('item edit parked behind a confirm: the edit is refused (409), so the confirm never consumes quantities the edit then replaces', async () => {
+      const shop = await f.setupShop('cc-edit-after-confirm');
+      const p = await f.stockedProduct(shop, 10);
+      const ing = (await f.shadowIngredientId(p.id))!;
+      const order = await f.adminOrder(shop, [
+        { productId: p.id, quantity: 3 },
+      ]);
+      const r = await raceOnOrder(
+        shop,
+        order.id,
+        () =>
+          request(f.http())
+            .patch(`/orders/${order.id}/status`)
+            .set(f.auth(shop))
+            .send({ status: 'confirmed' }),
+        () => f.editItems(shop, order.id, [{ productId: p.id, quantity: 5 }]),
+      );
+      expect(r.first.status).toBe(200);
+      expect(r.second.status).toBe(409);
+      expect(await f.productStock(shop.outletId, p.id)).toBe(7); // 3 consumed, 3 on the order
+      await expectConserved(shop, ing);
+    });
+
+    it('two concurrent identical edits of a confirmed order consume the quantity once, not twice', async () => {
+      const shop = await f.setupShop('cc-edit-twice');
+      const p = await f.stockedProduct(shop, 30);
+      const ing = (await f.shadowIngredientId(p.id))!;
+      const order = await f.adminOrder(shop, [
+        { productId: p.id, quantity: 1 },
+      ]);
+      await f.setStatus(shop, order.id, 'confirmed');
+      const edit = () =>
+        f.editItems(shop, order.id, [{ productId: p.id, quantity: 10 }]);
+      const res = await Promise.all([edit(), edit()]);
+      expect(res.map((r) => r.status).sort()).toEqual([200, 200]);
+      expect(await f.productStock(shop.outletId, p.id)).toBe(20); // 30 - 10
+      await expectConserved(shop, ing);
+    });
 
     it('cancel parked FIRST: it wins, the confirm is rejected, and nothing was ever taken or returned', async () => {
       const shop = await f.setupShop('cc-cancel-first');

@@ -1005,6 +1005,21 @@ export class OrdersService {
 
     let ingredientStockWarnings: string[] = [];
     await this.db.transaction(async (conn) => {
+      // Everything above was decided from a read taken BEFORE this transaction.
+      // A cancel (or a confirm) that commits in between changes both the status
+      // and what stock the order holds, so lock the row and refuse to edit
+      // against a stale picture (a 409 the caller can retry), rather than
+      // adjusting stock for an order that has already been restocked.
+      const [lockRows] = await conn.query<RowDataPacket[]>(
+        `SELECT status, ingredientsConsumedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+        [orderId, ctx.shopId],
+      );
+      if (lockRows[0]?.status !== order.status) {
+        throw new ConflictException(
+          'Order status changed before this edit could be applied - refresh and retry',
+        );
+      }
+      const ingredientsConsumedNow = lockRows[0].ingredientsConsumedAt != null;
       if (stockReserved) {
         const [oldItems] = await conn.query<RowDataPacket[]>(
           `SELECT productId, variantId, quantity FROM orderitem WHERE orderId = ?`,
@@ -1042,7 +1057,7 @@ export class OrdersService {
         // double-deducting what confirm already took.
         if (
           order.status === 'confirmed' &&
-          order.ingredientsConsumedAt !== null
+          ingredientsConsumedNow
         ) {
           // A usesIngredients:true product's recipe consumption must never
           // block the save (going negative is surfaced as a warning
@@ -1241,7 +1256,7 @@ export class OrdersService {
             id,
             order.outletId,
             1,
-            order.ingredientsConsumedAt !== null,
+            await this.readConsumedFlag(conn, ctx.shopId, id),
           );
         }
         return;
@@ -1260,7 +1275,7 @@ export class OrdersService {
           id,
           order.outletId,
           1,
-          order.ingredientsConsumedAt !== null,
+          await this.readConsumedFlag(conn, ctx.shopId, id),
         );
         return;
       }
@@ -1315,17 +1330,39 @@ export class OrdersService {
     ];
   }
 
-  // ingredientsAlreadyConsumed only matters for direction 1 (restock): the
-  // pre-transaction-read order.ingredientsConsumedAt !== null, telling this
-  // call whether Bill of Materials ingredients were actually deducted for
-  // this specific order — never re-derived from the *current* value of
+  // The current value of order.ingredientsConsumedAt, read INSIDE the caller's
+  // transaction with a locking read (FOR UPDATE: a current read, never the
+  // transaction's consistent snapshot). It must be called after the status CAS
+  // has won: that UPDATE holds the order row's lock, and a confirm that raced
+  // this request has by then committed its decrement AND its
+  // ingredientsConsumedAt stamp (both are written inside the confirm's own
+  // transaction, behind the same row lock), so this read sees them. The earlier
+  // pre-transaction read of the same column did not: a cancel that read the
+  // order while it was still 'pending', then lost the row lock to a confirm,
+  // went on to win its second CAS branch ('confirmed' -> 'cancelled') acting on
+  // a NULL stamp and skipped the restock for good (finding F5).
+  private async readConsumedFlag(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ): Promise<boolean> {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT ingredientsConsumedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+      [orderId, shopId],
+    );
+    return rows[0]?.ingredientsConsumedAt != null;
+  }
+
+  // ingredientsAlreadyConsumed only matters for direction 1 (restock): whether
+  // Bill of Materials ingredients were actually deducted for this specific
+  // order - never re-derived from the *current* value of
   // shop.autoDeductIngredientStock, which may have changed since (see
-  // order.ingredientsConsumedAt's own schema comment). Safe to trust despite
-  // being read before this method's own transaction: confirm and cancel are
-  // both CAS-guarded on `status`, so at most one of them can ever be the
-  // request that actually wins the race on a given order — the value can't
-  // have gone stale under the concurrent case that would matter here, same
-  // trust already placed in order.channel/order.outletId throughout this file.
+  // order.ingredientsConsumedAt's own schema comment). Callers MUST obtain it
+  // with readConsumedFlag() inside the transaction, after their status CAS won.
+  // Confirm and cancel are both CAS-guarded on `status`, but that does NOT make
+  // a value read before the transaction safe: a confirm followed by a cancel
+  // both succeed in sequence, and the cancel's earlier read predates the
+  // confirm's decrement (finding F5).
   private async adjustStockForOrder(
     conn: PoolConnection,
     ctx: TenantContext,

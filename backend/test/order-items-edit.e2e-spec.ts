@@ -371,12 +371,16 @@ describe('Order item editing after placement (e2e)', () => {
       const failed = results.filter(
         (r) => r.status === 409 || r.status === 500,
       );
-      expect(succeeded.length).toBeLessThanOrEqual(1);
+      // The edit now locks the order row and re-reads the items inside its
+      // transaction, so the second edit sees the first one's result and is a
+      // no-op (200) instead of consuming the same +9 a second time against a
+      // stale item list. Before, it was refused with a 409 only because stock
+      // happened to be exhausted; with spare stock it consumed twice (see
+      // stock-concurrency-ledger: "two concurrent identical edits").
+      expect(succeeded.length).toBeGreaterThanOrEqual(1);
       expect(succeeded.length + failed.length).toBe(2);
-      // Whatever the final state, stock must never go negative.
-      expect(
-        await stockAt(adminToken, outletId, product.id),
-      ).toBeGreaterThanOrEqual(0);
+      // 10 units on the order, 10 consumed in total: never negative, never double.
+      expect(await stockAt(adminToken, outletId, product.id)).toBe(0);
     });
   });
 
