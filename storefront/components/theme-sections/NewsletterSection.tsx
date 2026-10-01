@@ -109,7 +109,7 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           {floatLabel ? (
-            <label className="theme-float-label flex-1 text-left">
+            <label className="theme-float-label flex-1 text-start">
               <input
                 type="email"
                 required
@@ -141,7 +141,7 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
           >
             {status === "submitting" ? "Submitting…" : buttonLabel}
             {buttonHover.showIcon && status !== "submitting" && (
-              <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />
+              <ArrowRight className="theme-btn-icon inline-block ms-1.5 size-4 align-[-3px]" aria-hidden="true" />
             )}
           </button>
         </form>

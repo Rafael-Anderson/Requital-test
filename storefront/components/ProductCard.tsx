@@ -38,7 +38,7 @@ function PriceDisplay({
   }
   return (
     <>
-      <span className="line-through text-price-main font-normal mr-1.5">
+      <span className="line-through text-price-main font-normal me-1.5">
         {discounted.originalPrice} <CurrencySymbol code={currency} />
       </span>
       {/* Phase B1 — `text-sale-price` (default #dc2626 = the old `text-red-600`),

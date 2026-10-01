@@ -41,7 +41,7 @@ export default function OrderNotesSection({
     <section className="border border-border rounded-lg p-4 dark:border-white/10">
       <h3 className="font-medium mb-3">
         Internal notes
-        <span className="ml-1.5 text-xs font-normal text-text-faint">staff-only, never shown to the customer</span>
+        <span className="ms-1.5 text-xs font-normal text-text-faint">staff-only, never shown to the customer</span>
       </h3>
 
       <div className="flex gap-2 mb-3">

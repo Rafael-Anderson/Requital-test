@@ -169,7 +169,7 @@ export default function ThemeDrivenFooter({ shop, config }: { shop: Shop; config
           aria-hidden="true"
           viewBox="0 0 1200 24"
           preserveAspectRatio="none"
-          className="absolute top-0 left-0 w-full h-6 -translate-y-full"
+          className="absolute top-0 start-0 w-full h-6 -translate-y-full"
         >
           <path d="M0,24 C300,0 900,0 1200,24 L1200,24 L0,24 Z" fill="var(--background)" />
         </svg>

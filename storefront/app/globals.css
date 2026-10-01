@@ -305,8 +305,8 @@ body {
 .theme-nav-link--anim::after {
   content: "";
   position: absolute;
-  left: 0.75rem;
-  right: 0.75rem;
+  inset-inline-start: 0.75rem;
+  inset-inline-end: 0.75rem;
   bottom: 0.25rem;
   height: 1.5px;
   background: currentColor;
@@ -674,7 +674,7 @@ body {
      is `fixed inset-0 overflow-hidden`, so an absolute child is still
      viewport-anchored AND actually clipped by the wrapper. A `fixed` child
      escapes `overflow: hidden` entirely, so a blob deliberately placed past a
-     viewport edge (e.g. left: -4%) used to extend document.scrollWidth and
+     viewport edge (e.g. inset-inline-start: -4%) used to extend document.scrollWidth and
      produce a phantom horizontal scrollbar with shapes bleeding off-screen. */
   position: absolute;
   border-radius: 9999px;

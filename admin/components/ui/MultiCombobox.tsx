@@ -107,7 +107,7 @@ export default function MultiCombobox({
           className="flex min-h-9 w-full items-center justify-between gap-2 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-1.5 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         >
           {selectedOptions.length === 0 ? (
-            <span className="truncate text-left text-text-faint">{placeholder}</span>
+            <span className="truncate text-start text-text-faint">{placeholder}</span>
           ) : (
             <span className="flex flex-wrap gap-1">
               {selectedOptions.map((o) => (
@@ -135,7 +135,7 @@ export default function MultiCombobox({
             id={listboxId}
             role="listbox"
             aria-multiselectable={!single}
-            className="popover-in absolute left-0 top-full z-50 mt-1.5 w-full rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 overflow-hidden"
+            className="popover-in absolute start-0 top-full z-50 mt-1.5 w-full rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 overflow-hidden"
           >
             <input
               ref={inputRef}
@@ -151,8 +151,8 @@ export default function MultiCombobox({
               {filtered.map((option) => (
                 <label
                   key={option.value}
-                  style={option.depth ? { paddingLeft: `${12 + option.depth * 16}px` } : undefined}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  style={option.depth ? { paddingInlineStart: `${12 + option.depth * 16}px` } : undefined}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <Checkbox
                     aria-label={option.label}

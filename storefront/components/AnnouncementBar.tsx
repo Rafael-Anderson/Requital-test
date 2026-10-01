@@ -104,7 +104,7 @@ function ThemedAnnouncementBar({
       type="button"
       onClick={dismiss}
       aria-label="Dismiss announcement"
-      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 opacity-70 hover:opacity-100"
+      className="absolute end-1.5 top-1/2 -translate-y-1/2 p-1 opacity-70 hover:opacity-100"
     >
       <X className="size-3.5" />
     </button>

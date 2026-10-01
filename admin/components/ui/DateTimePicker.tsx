@@ -118,7 +118,7 @@ export default function DateTimePicker({
         </button>
 
         {open && (
-          <div className="popover-in absolute left-0 top-full z-50 mt-1.5 w-72 rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 p-3">
+          <div className="popover-in absolute start-0 top-full z-50 mt-1.5 w-72 rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 p-3">
             <div className="flex items-center justify-between mb-2">
               <button
                 type="button"

@@ -107,7 +107,7 @@ export default function PlatformShopsPage() {
 
       <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
         <table className="w-full text-sm">
-          <thead className="border-b border-slate-800 text-left text-[11.5px] font-bold uppercase tracking-wide text-slate-500">
+          <thead className="border-b border-slate-800 text-start text-[11.5px] font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="p-3">Shop</th>
               <th className="p-3">Status</th>
@@ -115,7 +115,7 @@ export default function PlatformShopsPage() {
               <th className="p-3">Created</th>
               <th className="p-3">Orders</th>
               <th className="p-3">Last activity</th>
-              <th className="p-3 text-right">Actions</th>
+              <th className="p-3 text-end">Actions</th>
             </tr>
           </thead>
           <tbody>

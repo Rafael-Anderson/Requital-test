@@ -55,7 +55,7 @@ function BlockRow({
         className={`group flex items-center gap-1.5 rounded-lg border px-2 py-1.5 ${
           selected ? "border-accent bg-accent/5" : "border-transparent hover:bg-black/5 dark:hover:bg-white/10"
         }`}
-        style={{ paddingLeft: 8 + props.depth * 16 }}
+        style={{ paddingInlineStart: 8 + props.depth * 16 }}
       >
         {canExpand ? (
           <button
@@ -88,7 +88,7 @@ function BlockRow({
             <GripVertical className="size-3.5" />
           </button>
         )}
-        <button type="button" onClick={() => props.onSelect(block.id)} className="flex-1 truncate text-left text-sm">
+        <button type="button" onClick={() => props.onSelect(block.id)} className="flex-1 truncate text-start text-sm">
           {BLOCK_TYPE_LABELS[block.type] ?? block.type}
         </button>
         <button
@@ -142,7 +142,7 @@ export default function TreeNode(props: TreeNodeListProps) {
   }
 
   return (
-    <div className="space-y-0.5" style={{ paddingLeft: props.depth > 0 ? 8 : 0 }}>
+    <div className="space-y-0.5" style={{ paddingInlineStart: props.depth > 0 ? 8 : 0 }}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -161,7 +161,7 @@ export default function TreeNode(props: TreeNodeListProps) {
           type="button"
           onClick={() => props.onAddBlock(props.parentBlockId, allowedTypes)}
           className="flex items-center gap-1 text-xs font-medium text-zinc-400 hover:text-accent"
-          style={{ paddingLeft: 8 + (props.depth + 1) * 16 }}
+          style={{ paddingInlineStart: 8 + (props.depth + 1) * 16 }}
         >
           <Plus className="size-3" /> Add block
         </button>

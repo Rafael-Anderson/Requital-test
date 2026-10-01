@@ -108,7 +108,7 @@ export default function SettingsUsersPage() {
               onClick={() => setAddingUser(true)}
               disabled={!outlets || outlets.length === 0}
             >
-              <Plus className="size-4 inline -mt-0.5 mr-1" />
+              <Plus className="size-4 inline -mt-0.5 me-1" />
               New branch account
             </Button>
           </div>
@@ -176,7 +176,7 @@ export default function SettingsUsersPage() {
               </p>
             </div>
             <Button variant="primary" onClick={() => setAddingRole(true)}>
-              <Plus className="size-4 inline -mt-0.5 mr-1" />
+              <Plus className="size-4 inline -mt-0.5 me-1" />
               New branch role
             </Button>
           </div>
@@ -198,7 +198,7 @@ export default function SettingsUsersPage() {
                   >
                     <div>
                       <span className="text-sm font-medium">{r.name}</span>
-                      <span className="text-text-faint ml-2 text-xs">
+                      <span className="text-text-faint ms-2 text-xs">
                         {r.permissions.length} permission{r.permissions.length === 1 ? "" : "s"}
                       </span>
                     </div>
@@ -243,7 +243,7 @@ export default function SettingsUsersPage() {
               onClick={() => setAssigning(true)}
               disabled={!users || !outlets || !branchRoles || users.length === 0 || outlets.length === 0 || branchRoles.length === 0}
             >
-              <Plus className="size-4 inline -mt-0.5 mr-1" />
+              <Plus className="size-4 inline -mt-0.5 me-1" />
               New assignment
             </Button>
           </div>
@@ -278,7 +278,7 @@ export default function SettingsUsersPage() {
                   <TR key={a.id}>
                     <TD>
                       {a.user.name}
-                      <span className="text-text-faint ml-2 text-xs">{a.user.email}</span>
+                      <span className="text-text-faint ms-2 text-xs">{a.user.email}</span>
                     </TD>
                     <TD className="text-text-muted">{a.outlet.name}</TD>
                     <TD className="text-text-muted">{a.branchrole.name}</TD>

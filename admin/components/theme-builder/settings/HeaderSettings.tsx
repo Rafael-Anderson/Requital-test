@@ -168,7 +168,7 @@ export default function HeaderSettings({
         <div className="mb-1 flex items-center justify-between">
           <span className="text-sm font-medium">Header rows</span>
           <Button type="button" variant="secondary" size="sm" onClick={addRow}>
-            <Plus className="mr-1 size-3.5" /> Add row
+            <Plus className="me-1 size-3.5" /> Add row
           </Button>
         </div>
         <p className="mb-2 text-xs text-zinc-500">

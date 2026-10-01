@@ -51,7 +51,7 @@ export default function UserMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full mt-2 w-64 rounded-lg border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 py-1.5 z-50"
+          className="absolute end-0 top-full mt-2 w-64 rounded-lg border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 py-1.5 z-50"
         >
           <div className="px-3.5 py-2.5 border-b border-border dark:border-white/10">
             <p className="text-sm font-medium truncate">{user.name}</p>
@@ -96,7 +96,7 @@ export default function UserMenu() {
               setOpen(false);
               setChangingPassword(true);
             }}
-            className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
           >
             <KeyRound className="size-3.5" />
             Change password
@@ -109,7 +109,7 @@ export default function UserMenu() {
               setOpen(false);
               logout();
             }}
-            className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
           >
             <LogOut className="size-3.5" />
             Sign out

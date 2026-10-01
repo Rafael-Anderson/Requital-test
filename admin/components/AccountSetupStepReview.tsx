@@ -7,7 +7,7 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 py-2 text-sm border-b border-black/5 dark:border-white/10 last:border-0">
       <span className="text-text-muted dark:text-zinc-400">{label}</span>
-      <span className="font-medium text-zinc-900 dark:text-zinc-100 text-right">{value || "-"}</span>
+      <span className="font-medium text-zinc-900 dark:text-zinc-100 text-end">{value || "-"}</span>
     </div>
   );
 }

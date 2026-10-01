@@ -104,7 +104,7 @@ export default function SearchBar({
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-50 overflow-hidden">
+        <div className="absolute end-0 mt-2 w-72 sm:w-80 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-[0_8px_24px_rgba(0,0,0,0.12)] z-50 overflow-hidden">
           <div className="p-2 border-b border-popover-border">
             <input
               ref={inputRef}

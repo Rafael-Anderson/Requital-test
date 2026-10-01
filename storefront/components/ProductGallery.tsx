@@ -54,7 +54,7 @@ export default function ProductGallery({
           style={hoverPos ? { transform: "scale(1.7)", transformOrigin: `${hoverPos.x}% ${hoverPos.y}%` } : undefined}
         />
         {zoomEnabled && (
-          <span className="absolute bottom-3 right-3 flex items-center justify-center size-8 rounded-full bg-white/90 text-zinc-700 pointer-events-none sm:hidden">
+          <span className="absolute bottom-3 end-3 flex items-center justify-center size-8 rounded-full bg-white/90 text-zinc-700 pointer-events-none sm:hidden">
             <ZoomIn className="size-4" {...iconStyleProps(shop?.iconStyle, 2)} />
           </span>
         )}
@@ -88,7 +88,7 @@ export default function ProductGallery({
           <button
             type="button"
             onClick={() => setZoomed(false)}
-            className="absolute top-4 right-4 text-white cursor-pointer"
+            className="absolute top-4 end-4 text-white cursor-pointer"
             aria-label="Close"
           >
             <X className="size-6" {...iconStyleProps(shop?.iconStyle, 2)} />

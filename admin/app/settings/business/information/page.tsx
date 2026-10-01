@@ -371,7 +371,7 @@ export default function BusinessInformationPage() {
               onChange={(e) => setNotifyAbandonedCart(e.target.checked)}
             />
             {notifyAbandonedCart && (
-              <div className="mt-2 ml-6 max-w-40">
+              <div className="mt-2 ms-6 max-w-40">
                 <Input
                   label="Wait before sending (minutes)"
                   type="number"
@@ -407,7 +407,7 @@ export default function BusinessInformationPage() {
           checked={autoDeductIngredientStock}
           onChange={(e) => setAutoDeductIngredientStock(e.target.checked)}
         />
-        <p className="text-xs text-text-faint mt-1.5 ml-6">
+        <p className="text-xs text-text-faint mt-1.5 ms-6">
           On by default. When a product has a recipe linked (Inventory &gt; Products), completing an order
           automatically deducts the linked ingredients&apos; stock at the fulfilling branch. Turn this off to keep
           recipe data for costing purposes only, without the system touching ingredient counts.
@@ -431,7 +431,7 @@ export default function BusinessInformationPage() {
       </Card>
 
       <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
-        <Check className="size-4 inline -mt-0.5 mr-1" />
+        <Check className="size-4 inline -mt-0.5 me-1" />
         Save changes
       </Button>
       </div>

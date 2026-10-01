@@ -30,7 +30,7 @@ export default function ShopWideSummary({
         {rows.map((row) => (
           <div key={row.label} className="flex justify-between gap-4 border-b border-border dark:border-white/10 pb-1.5">
             <dt className="text-text-secondary dark:text-zinc-400">{row.label}</dt>
-            <dd className="font-medium text-text-primary dark:text-zinc-100 text-right">{row.value}</dd>
+            <dd className="font-medium text-text-primary dark:text-zinc-100 text-end">{row.value}</dd>
           </div>
         ))}
       </dl>

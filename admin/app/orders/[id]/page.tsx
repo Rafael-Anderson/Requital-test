@@ -217,7 +217,7 @@ export default function OrderDetailPage() {
                   {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                 </td>
                 <td className="py-2 text-text-muted">× {item.quantity}</td>
-                <td className="py-2 text-right">{formatMoney(item.priceAtPurchase, order.currency)}</td>
+                <td className="py-2 text-end">{formatMoney(item.priceAtPurchase, order.currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -226,7 +226,7 @@ export default function OrderDetailPage() {
               <td className="py-2" colSpan={2}>
                 Total
               </td>
-              <td className="py-2 text-right">{formatMoney(order.total, order.currency)}</td>
+              <td className="py-2 text-end">{formatMoney(order.total, order.currency)}</td>
             </tr>
           </tfoot>
         </table>

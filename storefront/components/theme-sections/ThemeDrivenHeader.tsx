@@ -222,7 +222,7 @@ export default function ThemeDrivenHeader({
             <ShoppingCart className="size-5" {...iconProps} style={resolveIconElementStyle(block.settings)} />
             {cartShowLabel && <span className="text-sm">Cart</span>}
             {count > 0 && (
-              <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-accent text-accent-foreground text-[10px] font-medium">
+              <span className="absolute -top-1 -end-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-accent text-accent-foreground text-[10px] font-medium">
                 {count}
               </span>
             )}

@@ -68,7 +68,7 @@ export default function AttributesSection({
         <button
           type="button"
           onClick={addRow}
-          className="flex items-center gap-1 text-sm text-accent-text hover:underline cursor-pointer shrink-0 ml-3"
+          className="flex items-center gap-1 text-sm text-accent-text hover:underline cursor-pointer shrink-0 ms-3"
         >
           <Plus className="size-4" /> Add attribute
         </button>

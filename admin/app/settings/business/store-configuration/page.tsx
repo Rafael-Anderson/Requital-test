@@ -181,7 +181,7 @@ export default function StoreConfigurationPage() {
             </Card>
 
             <Button variant="primary" onClick={handleSave} disabled={saving} className="w-fit" loading={saving}>
-              <Check className="size-4 inline -mt-0.5 mr-1" />
+              <Check className="size-4 inline -mt-0.5 me-1" />
               Save changes
             </Button>
           </div>
@@ -219,7 +219,7 @@ export default function StoreConfigurationPage() {
                   <span className="text-sm">Disable store cart</span>
                 </div>
                 {disableStoreCart && (
-                  <div className="pl-1">
+                  <div className="ps-1">
                     <Field label="When cart is disabled, customers should">
                       <SegmentedToggle
                         value={cartDisabledMode}

@@ -41,7 +41,7 @@ describe("FloatingCustomButtons", () => {
       { id: "l", label: "Left one", url: "https://l", position: "bottom_left" },
     ]);
     const { container } = render(<FloatingCustomButtons />);
-    expect(container.querySelector(".left-5")).not.toBeNull();
-    expect(container.querySelector(".right-5")).not.toBeNull();
+    expect(container.querySelector(".start-5")).not.toBeNull();
+    expect(container.querySelector(".end-5")).not.toBeNull();
   });
 });

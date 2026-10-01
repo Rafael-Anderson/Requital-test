@@ -52,7 +52,7 @@ export default function TemplatesPage() {
         <h1 className="text-2xl font-semibold">Templates</h1>
         <Link href="/products/templates/new">
           <Button variant="primary">
-            <Plus className="size-4 inline -mt-0.5 mr-1" />
+            <Plus className="size-4 inline -mt-0.5 me-1" />
             New template
           </Button>
         </Link>

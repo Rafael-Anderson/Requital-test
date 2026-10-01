@@ -216,7 +216,7 @@ export default function EditOrderItemsModal({
             />
           </div>
           <Button type="button" variant="secondary" onClick={handleAdd} disabled={!addProductId}>
-            <Plus className="size-4 inline -mt-0.5 mr-1" />
+            <Plus className="size-4 inline -mt-0.5 me-1" />
             Add
           </Button>
         </div>

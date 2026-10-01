@@ -38,7 +38,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
             plain-text block's line breaks still render. */}
         <div
           {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
-          className="whitespace-pre-line leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline"
+          className="whitespace-pre-line leading-relaxed [&_ul]:list-disc [&_ul]:ps-5 [&_ol]:list-decimal [&_ol]:ps-5 [&_a]:underline"
           style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
           dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
         />
@@ -64,7 +64,7 @@ export default function ImageTextSection({ sectionId, settings, blocks }: { sect
             {/* #16 — see the banded branch above. */}
             <div
               {...editableAttrs(previewMode, { id: textBlock.id, sectionId, type: "body_text", reorderable: true })}
-              className="whitespace-pre-line text-sm leading-relaxed opacity-80 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:underline"
+              className="whitespace-pre-line text-sm leading-relaxed opacity-80 [&_ul]:list-disc [&_ul]:ps-5 [&_ol]:list-decimal [&_ol]:ps-5 [&_a]:underline"
               style={{ ...themeTextPresetStyle("paragraph"), ...resolveTextElementStyle(textBlock.settings) }}
               dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(text) }}
             />

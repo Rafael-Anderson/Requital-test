@@ -142,7 +142,7 @@ export default function ThemeLibraryPage() {
                 type="button"
                 disabled={creating !== null}
                 onClick={() => void createAndOpen(tpl.key, { name: tpl.name, fromTemplate: tpl.key })}
-                className="text-left rounded-2xl border border-[#D3D8D7] dark:border-white/15 p-[18px] flex gap-3.5 items-start hover:border-accent-mid hover:bg-[#FAFCFC] dark:hover:border-white/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="text-start rounded-2xl border border-[#D3D8D7] dark:border-white/15 p-[18px] flex gap-3.5 items-start hover:border-accent-mid hover:bg-[#FAFCFC] dark:hover:border-white/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span
                   className="size-11 rounded-[10px] shrink-0 border border-black/10 dark:border-white/10 flex items-center justify-center"

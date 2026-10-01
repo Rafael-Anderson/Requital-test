@@ -17,7 +17,7 @@ export default function BulkActionBar({
       <button
         type="button"
         onClick={onClear}
-        className="ml-auto text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline decoration-transparent hover:decoration-current cursor-pointer"
+        className="ms-auto text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline decoration-transparent hover:decoration-current cursor-pointer"
       >
         Clear
       </button>

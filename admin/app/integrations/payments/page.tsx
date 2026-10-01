@@ -249,10 +249,10 @@ export default function PaymentIntegrationsPage() {
                 />
                 <span className="font-medium">{PAYMENT_PROVIDER_LABELS[provider]}</span>
                 {comingSoon ? (
-                  <span className="ml-auto text-xs">Coming soon</span>
+                  <span className="ms-auto text-xs">Coming soon</span>
                 ) : (
                   rowFor(provider)?.enabled && (
-                    <span className="ml-auto text-xs text-green-600 dark:text-green-400 font-medium">Active</span>
+                    <span className="ms-auto text-xs text-green-600 dark:text-green-400 font-medium">Active</span>
                   )
                 )}
               </label>

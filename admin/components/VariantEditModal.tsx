@@ -208,14 +208,14 @@ export default function VariantEditModal({
                 <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
                 <div
                   role="menu"
-                  className="absolute z-20 top-full left-0 mt-1.5 w-64 rounded-lg border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg p-3"
+                  className="absolute z-20 top-full start-0 mt-1.5 w-64 rounded-lg border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg p-3"
                 >
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploadingVariantImage}
-                    className="w-full text-sm text-left px-2 py-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full text-sm text-start px-2 py-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {uploadingVariantImage ? "Uploading…" : "Upload new image"}
                   </button>

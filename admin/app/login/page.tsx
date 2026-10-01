@@ -108,7 +108,7 @@ export default function LoginPage() {
           />
           {error && <InlineErrorMessage className="mt-2">{error}</InlineErrorMessage>}
         </div>
-        <p className="text-right -mt-2">
+        <p className="text-end -mt-2">
           <Link href="/forgot-password" className="text-sm text-accent hover:underline">
             Forgot password?
           </Link>

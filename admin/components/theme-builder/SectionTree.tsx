@@ -58,7 +58,7 @@ function ChromeRow({
       <button type="button" onClick={onToggleExpand} aria-label={expanded ? "Collapse" : "Expand"} className="shrink-0 text-zinc-400">
         <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
       </button>
-      <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 truncate text-left text-sm font-medium">
+      <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 truncate text-start text-sm font-medium">
         <Icon className="size-4 text-zinc-400" />
         {label}
       </button>
@@ -98,7 +98,7 @@ function SortableSectionRow({
         <button type="button" {...attributes} {...listeners} aria-label="Drag to reorder" className="shrink-0 cursor-grab touch-none text-zinc-400 active:cursor-grabbing">
           <GripVertical className="size-4" />
         </button>
-        <button type="button" onClick={onSelect} className="flex-1 truncate text-left text-sm font-medium">
+        <button type="button" onClick={onSelect} className="flex-1 truncate text-start text-sm font-medium">
           {SECTION_TYPE_LABELS[section.type]}
         </button>
         <button type="button" onClick={onRemove} aria-label="Remove section" className="hidden shrink-0 text-zinc-400 hover:text-red-500 group-hover:block">

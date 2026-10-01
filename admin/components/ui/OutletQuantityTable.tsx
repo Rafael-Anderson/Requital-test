@@ -29,7 +29,7 @@ export default function OutletQuantityTable({
             min={0}
             value={values[row.outletId] ?? String(row.stockQuantity)}
             onChange={(e) => onChangeValue(row.outletId, e.target.value)}
-            className="w-24 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm text-right dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
+            className="w-24 border border-black/15 dark:border-white/15 rounded px-2 py-1 text-sm text-end dark:bg-zinc-900 outline-none focus:border-accent transition-colors"
           />
         </div>
       ))}

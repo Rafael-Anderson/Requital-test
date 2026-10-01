@@ -86,7 +86,7 @@ export default function CollectionsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Collections</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           New collection
         </Button>
       </div>
@@ -110,7 +110,7 @@ export default function CollectionsPage() {
           // the deepest nesting present, since the gradient tiles infinitely
           // otherwise and would draw guide lines across the full row width.
           <div
-            className="relative divide-y divide-black/5 dark:divide-white/10 before:absolute before:top-0 before:bottom-0 before:left-0 before:-ml-1 before:w-(--tree-guide-width) before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)))] dark:before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)))]"
+            className="relative divide-y divide-black/5 dark:divide-white/10 before:absolute before:top-0 before:bottom-0 before:start-0 before:-ms-1 before:w-(--tree-guide-width) before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)))] dark:before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)))]"
             style={
               {
                 "--tree-indent": "20px",
@@ -129,12 +129,12 @@ export default function CollectionsPage() {
                   draggedId === c.id ? "opacity-40" : ""
                 }`}
               >
-                <div style={{ paddingLeft: `${c.depth * 20 + 8}px` }} className="flex items-center gap-2 text-sm">
+                <div style={{ paddingInlineStart: `${c.depth * 20 + 8}px` }} className="flex items-center gap-2 text-sm">
                   <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
                     <GripVertical className="size-4" />
                   </span>
                   <span className="font-medium">{c.name}</span>
-                  <span className="text-text-faint ml-2 text-xs">{c.slug}</span>
+                  <span className="text-text-faint ms-2 text-xs">{c.slug}</span>
                 </div>
                 <div className="flex gap-1">
                   <Tooltip label={`Edit ${c.name}`}>

@@ -127,7 +127,7 @@ export default function FloatingElementsSettings({ editor }: { editor: ThemeEdit
           className="mt-2"
           onClick={() => setButtons([...buttons, { id: newButtonId(), label: "", url: "", position: "bottom_right" }])}
         >
-          <Plus className="mr-1 size-3.5" /> Add button
+          <Plus className="me-1 size-3.5" /> Add button
         </Button>
       </div>
     </div>

@@ -356,7 +356,7 @@ export default function OrderDetailModal({
                                 autoFocus
                                 value={feeInput}
                                 onChange={(e) => setFeeInput(e.target.value)}
-                                className="h-7 w-24 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
+                                className="h-7 w-24 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-end outline-none focus:border-accent"
                               />
                               <button
                                 onClick={handleSaveFee}
@@ -397,7 +397,7 @@ export default function OrderDetailModal({
                           <span>{formatMoney(order.total, order.currency)}</span>
                         </div>
                         {taxDisplayText && (
-                          <p className="text-xs text-text-faint mt-1 text-right">{taxDisplayText}</p>
+                          <p className="text-xs text-text-faint mt-1 text-end">{taxDisplayText}</p>
                         )}
                       </>
                     );
@@ -442,7 +442,7 @@ export default function OrderDetailModal({
                     )}
                     <div className="flex justify-between items-start text-sm">
                       <span className="text-text-muted">Payment</span>
-                      <div className="text-right">
+                      <div className="text-end">
                         <StatusBadge status={order.paymentStatus} />
                         {order.paymentMethod && (
                           <div className="text-xs text-text-muted mt-1 capitalize">
@@ -460,7 +460,7 @@ export default function OrderDetailModal({
                       <div className="flex justify-between items-center text-sm pt-1 border-t border-gray-200 dark:border-white/10">
                         <span className="text-text-muted">Cash collected</span>
                         {order.cashCollectedAt ? (
-                          <span className="text-right text-xs">
+                          <span className="text-end text-xs">
                             <span className="text-green-700 dark:text-green-400 font-medium">Collected ✓</span>
                             <br />
                             {new Date(order.cashCollectedAt).toLocaleString()}
@@ -564,7 +564,7 @@ export default function OrderDetailModal({
                       )}
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Destination</span>
-                        <span className="text-right">{order.externaldelivery.destination}</span>
+                        <span className="text-end">{order.externaldelivery.destination}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Paid to carrier</span>

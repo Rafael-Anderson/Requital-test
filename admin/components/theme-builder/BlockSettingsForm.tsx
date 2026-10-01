@@ -242,7 +242,7 @@ export default function BlockSettingsForm({
             ))}
           </div>
           <Button variant="secondary" size="sm" onClick={() => updateLinks([...links, { label: "", url: "" }])}>
-            <Plus className="mr-1 size-3.5" /> Add link
+            <Plus className="me-1 size-3.5" /> Add link
           </Button>
         </div>
       );
@@ -307,7 +307,7 @@ export default function BlockSettingsForm({
             ))}
           </div>
           <Button variant="secondary" size="sm" onClick={() => setLinks([...socialLinks.map((l) => ({ platform: l.platform ?? "", url: l.url ?? "" })), { platform: "instagram", url: "" }])}>
-            <Plus className="mr-1 size-3.5" /> Add link
+            <Plus className="me-1 size-3.5" /> Add link
           </Button>
         </div>
       );

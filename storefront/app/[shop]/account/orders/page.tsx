@@ -57,7 +57,7 @@ export default function OrderHistoryPage() {
                 <p className="font-medium">Order #{order.shopOrderNumber}</p>
                 <p className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleDateString()}</p>
               </div>
-              <div className="text-right">
+              <div className="text-end">
                 <p className="text-sm capitalize">{order.status}</p>
                 <p className="font-medium">
                   {order.total} <CurrencySymbol code={shop?.currency} />

@@ -183,7 +183,7 @@ function MegaColumnEditor({
           </button>
         </Tooltip>
       </div>
-      <div className="space-y-2 pl-6">
+      <div className="space-y-2 ps-6">
         {column.links.map((link, linkIndex) => (
           <MegaLinkEditor
             key={linkIndex}
@@ -195,7 +195,7 @@ function MegaColumnEditor({
           />
         ))}
         <Button type="button" variant="secondary" onClick={onAddLink}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           Add link
         </Button>
       </div>
@@ -512,7 +512,7 @@ export default function MenuBuilder() {
               </span>
               <div className="min-w-0 flex-1">
                 <span className="text-sm font-medium">{item.label}</span>
-                <span className="text-text-faint ml-2 text-xs">{itemSummary(item)}</span>
+                <span className="text-text-faint ms-2 text-xs">{itemSummary(item)}</span>
               </div>
               <div className="flex gap-1 shrink-0">
                 <Tooltip label={`Edit ${item.label}`}>
@@ -627,7 +627,7 @@ export default function MenuBuilder() {
                   />
                 </div>
                 <Button type="button" variant="secondary" onClick={addDropdownCollection} disabled={!addDropdownCollectionId}>
-                  <Plus className="size-4 inline -mt-0.5 mr-1" />
+                  <Plus className="size-4 inline -mt-0.5 me-1" />
                   Add
                 </Button>
               </div>
@@ -654,7 +654,7 @@ export default function MenuBuilder() {
                 />
               ))}
               <Button type="button" variant="secondary" onClick={addColumn}>
-                <Plus className="size-4 inline -mt-0.5 mr-1" />
+                <Plus className="size-4 inline -mt-0.5 me-1" />
                 Add column
               </Button>
             </div>
@@ -671,7 +671,7 @@ export default function MenuBuilder() {
         </div>
       ) : (
         <Button type="button" variant="secondary" onClick={startCreate}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           Add menu item
         </Button>
       )}

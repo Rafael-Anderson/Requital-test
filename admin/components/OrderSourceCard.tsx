@@ -31,29 +31,29 @@ export default function OrderSourceCard({ attribution }: { attribution: OrderAtt
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="text-text-faint">Last touch</dt>
-            <dd className="font-medium text-right break-words">{last ?? "Not recorded"}</dd>
+            <dd className="font-medium text-end break-words">{last ?? "Not recorded"}</dd>
           </div>
           {showFirst && (
             <div className="flex justify-between gap-3">
               <dt className="text-text-faint">First touch</dt>
-              <dd className="text-right break-words">{first}</dd>
+              <dd className="text-end break-words">{first}</dd>
             </div>
           )}
           {landing && (
             <div className="flex justify-between gap-3">
               <dt className="text-text-faint">Landing page</dt>
-              <dd className="text-right break-all">{landing}</dd>
+              <dd className="text-end break-all">{landing}</dd>
             </div>
           )}
           {referrer && (
             <div className="flex justify-between gap-3">
               <dt className="text-text-faint">Referrer</dt>
-              <dd className="text-right break-all">{referrer}</dd>
+              <dd className="text-end break-all">{referrer}</dd>
             </div>
           )}
           <div className="flex justify-between gap-3">
             <dt className="text-text-faint">Marketing cookies</dt>
-            <dd className="text-right">{CONSENT_LABEL(attribution.consentMarketing)}</dd>
+            <dd className="text-end">{CONSENT_LABEL(attribution.consentMarketing)}</dd>
           </div>
         </dl>
       )}

@@ -64,8 +64,8 @@ describe("resolveButtonElementStyle", () => {
     expect(style.background).toBe("#069494");
     expect(style.color).toBe("#ffffff");
     expect(style.borderRadius).toBe("8px");
-    expect(style.paddingLeft).toBe("24px");
-    expect(style.paddingRight).toBe("24px");
+    expect(style.paddingInlineStart).toBe("24px");
+    expect(style.paddingInlineEnd).toBe("24px");
     expect(style.paddingTop).toBe("12px");
     expect(style.paddingBottom).toBe("12px");
     expect(style.fontSize).toBe("14px");

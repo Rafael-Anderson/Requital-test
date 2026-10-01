@@ -54,7 +54,7 @@ export default function IngredientCategoriesPage() {
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Ingredient Categories</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           New category
         </Button>
       </div>

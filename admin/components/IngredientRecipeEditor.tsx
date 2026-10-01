@@ -125,7 +125,7 @@ export default function IngredientRecipeEditor({
         onClick={addRow}
         disabled={rows.length >= filteredIngredients.length}
       >
-        <Plus className="size-3.5 inline -mt-0.5 mr-1" />
+        <Plus className="size-3.5 inline -mt-0.5 me-1" />
         Add ingredient
       </Button>
     </div>

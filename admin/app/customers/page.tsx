@@ -142,12 +142,12 @@ export default function CustomersPage() {
       <CustomersTabs />
       <div className="flex items-center justify-end mb-6 flex-wrap gap-2">
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search name or phone…"
-            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 ps-8 pe-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
       </div>

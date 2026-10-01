@@ -271,7 +271,7 @@ export default function ColorPicker({ value, onChange, swatchSize = "md", classN
           id={panelId}
           role="dialog"
           aria-label="Color picker"
-          className={`popover-in absolute ${align === "left" ? "left-0" : "right-0"} top-full z-50 mt-2 w-56 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg shadow-black/10 p-3`}
+          className={`popover-in absolute ${align === "left" ? "start-0" : "end-0"} top-full z-50 mt-2 w-56 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-lg shadow-black/10 p-3`}
         >
           {presets && presets.length > 0 && (
             <SwatchRow label="Theme colors" colors={presets} onPick={pickSwatch} className="mb-2" />

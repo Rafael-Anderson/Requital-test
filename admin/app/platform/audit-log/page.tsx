@@ -20,7 +20,7 @@ export default function PlatformAuditLogPage() {
 
       <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900">
         <table className="w-full text-sm">
-          <thead className="border-b border-slate-800 text-left text-[11.5px] font-bold uppercase tracking-wide text-slate-500">
+          <thead className="border-b border-slate-800 text-start text-[11.5px] font-bold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="p-3">Time</th>
               <th className="p-3">Platform admin</th>

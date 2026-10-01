@@ -62,7 +62,7 @@ export default function PolicyPage() {
           produce) and the same manual arbitrary-variant styling, since this
           codebase has no Tailwind Typography plugin installed. */}
       <div
-        className="text-[15px] text-zinc-600 leading-relaxed [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-product-name [&_h2]:mt-4 [&_h2]:mb-1.5 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-accent-text [&_a]:underline"
+        className="text-[15px] text-zinc-600 leading-relaxed [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-product-name [&_h2]:mt-4 [&_h2]:mb-1.5 [&_p]:mb-3 [&_ul]:list-disc [&_ul]:ps-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:ps-5 [&_a]:text-accent-text [&_a]:underline"
         dangerouslySetInnerHTML={{ __html: sanitizeDescriptionHtml(content) }}
       />
     </StorefrontPageShell>

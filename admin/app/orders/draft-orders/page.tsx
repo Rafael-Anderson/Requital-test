@@ -47,7 +47,7 @@ export default function DraftOrdersPage() {
         <h1 className="text-2xl font-semibold">Draft Orders</h1>
         <Link href="/orders/draft-orders/new">
           <Button variant="primary">
-            <Plus className="size-4 inline -mt-0.5 mr-1" />
+            <Plus className="size-4 inline -mt-0.5 me-1" />
             New draft order
           </Button>
         </Link>

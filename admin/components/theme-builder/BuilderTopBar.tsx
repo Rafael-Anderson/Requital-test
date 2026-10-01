@@ -64,7 +64,7 @@ export default function BuilderTopBar({ editor }: { editor: ThemeEditorState }) 
       />
 
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 mr-1">
+        <div className="flex items-center gap-1 me-1">
           <Tooltip label="Undo (Ctrl+Z)">
             <button
               type="button"
