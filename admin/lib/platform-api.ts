@@ -208,6 +208,45 @@ export function setShopSliderAccountId(shopId: number, accountId: string) {
   });
 }
 
+export interface ShopFeatureStatus {
+  key: string;
+  description: string;
+  source: "column" | "table";
+  default: boolean;
+  /** The merchant's own toggle; null for a key with no shop column. */
+  columnValue: boolean | null;
+  override: {
+    enabled: boolean;
+    note: string | null;
+    updatedBy: number | null;
+    updatedAt: string;
+  } | null;
+  effective: boolean;
+}
+
+export function listShopFeatures(shopId: number) {
+  return platformFetch<ShopFeatureStatus[]>(`/platform-admin/shops/${shopId}/features`);
+}
+
+export function setShopFeatureOverride(
+  shopId: number,
+  key: string,
+  enabled: boolean,
+  note?: string,
+) {
+  return platformFetch<ShopFeatureStatus[]>(
+    `/platform-admin/shops/${shopId}/features/${encodeURIComponent(key)}`,
+    { method: "PUT", body: JSON.stringify({ enabled, ...(note ? { note } : {}) }) },
+  );
+}
+
+export function clearShopFeatureOverride(shopId: number, key: string) {
+  return platformFetch<ShopFeatureStatus[]>(
+    `/platform-admin/shops/${shopId}/features/${encodeURIComponent(key)}`,
+    { method: "DELETE" },
+  );
+}
+
 export interface SliderQuoteVehicle {
   vehicleType: string;
   deliveryFee: number;

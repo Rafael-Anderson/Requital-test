@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -18,6 +20,7 @@ import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { SliderSettingsService } from '../delivery-providers/slider-settings.service';
 import { SetSliderAccountIdDto } from '../delivery-providers/dto/set-slider-account-id.dto';
 import { ListShopsQueryDto } from './dto/list-shops-query.dto';
+import { SetFeatureOverrideDto } from './dto/set-feature-override.dto';
 import { ListWebhookLogQueryDto } from './dto/list-webhook-log-query.dto';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { SetCurrencyRateDto } from '../currency-rates/dto/set-currency-rate.dto';
@@ -73,6 +76,40 @@ export class PlatformAdminController {
   @Get('shops/:shopId')
   getShop(@Param('shopId', ParseIntPipe) shopId: number) {
     return this.platformAdminService.getShopDetail(shopId);
+  }
+
+  @Get('shops/:shopId/features')
+  listFeatures(@Param('shopId', ParseIntPipe) shopId: number) {
+    return this.platformAdminService.listFeatures(shopId);
+  }
+
+  @Put('shops/:shopId/features/:key')
+  setFeature(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Param('key') key: string,
+    @Body() dto: SetFeatureOverrideDto,
+  ) {
+    return this.platformAdminService.setFeatureOverride(
+      admin.id,
+      shopId,
+      key,
+      dto.enabled,
+      dto.note ?? null,
+    );
+  }
+
+  @Delete('shops/:shopId/features/:key')
+  clearFeature(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Param('key') key: string,
+  ) {
+    return this.platformAdminService.clearFeatureOverride(
+      admin.id,
+      shopId,
+      key,
+    );
   }
 
   @Post('shops/:shopId/suspend')

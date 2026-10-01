@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
+import { FeaturesService } from '../features/features.service';
 import { trimDecimal } from '../database/decimal.util';
 import type { AbandonedcartRow } from '../db/types';
 import { JobsService } from '../jobs/jobs.service';
@@ -28,6 +29,7 @@ export class AbandonedCartsService {
     private readonly db: DatabaseService,
     private readonly jobsService: JobsService,
     private readonly schedulerService: SchedulerService,
+    private readonly features: FeaturesService,
   ) {}
 
   // Called by the storefront checkout page once name+phone are both
@@ -181,8 +183,11 @@ export class AbandonedCartsService {
   }
 
   private async runSweep() {
+    const ids = await this.features.enabledShopIds('abandoned_cart_recovery');
+    if (ids.length === 0) return;
     const shops = await this.db.query<RowDataPacket[]>(
-      `SELECT id, name, subdomain, abandonedCartWindowMinutes FROM shop WHERE notifyAbandonedCart = TRUE`,
+      `SELECT id, name, subdomain, abandonedCartWindowMinutes FROM shop WHERE id IN (${ids.map(() => '?').join(', ')})`,
+      ids,
     );
     for (const shop of shops) {
       await this.sendDueForShop(
@@ -205,12 +210,16 @@ export class AbandonedCartsService {
     windowMinutes: number,
   ) {
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT notifyAbandonedCart, subdomain, customDomain, customDomainStatus,
+      `SELECT subdomain, customDomain, customDomainStatus,
               domainType
          FROM shop WHERE id = ?`,
       [shopId],
     );
-    if (!shopRows[0]?.notifyAbandonedCart) return 0;
+    if (
+      !shopRows[0] ||
+      !(await this.features.isEnabled(shopId, 'abandoned_cart_recovery'))
+    )
+      return 0;
     // Taken from the row this method already re-reads, so the recovery link is
     // built from the shop's own host rather than a platform-wide base URL.
     const shopUrlFields = {

@@ -220,6 +220,9 @@ jobs:
       - name: Storefront-URL guardrail (per-shop customer links)
         run: node tools/check-storefront-url.js
 
+      - name: Feature-flag guardrail (registry-backed shop columns read only via FeaturesService)
+        run: node tools/check-feature-flags.js
+
       - name: sendEmailStub bypass guardrail
         working-directory: backend
         run: npm test -- email-callsites --ci
