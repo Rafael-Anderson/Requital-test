@@ -11,6 +11,8 @@ import { SliderDeliveryProvider } from '../delivery-providers/slider/slider-deli
 import { SLIDER_CURRENCY } from '../delivery-providers/slider/slider.constants';
 import { assertShopCountryIsUae } from '../delivery-providers/slider/slider-caps';
 import { PlatformAuditLogService } from './platform-audit-log.service';
+import { FeaturesService } from '../features/features.service';
+import { isFeatureKey } from '../features/feature-keys';
 import type { ShopRow, OutletRow } from '../db/types';
 
 export type ShopStatus = 'active' | 'suspended';
@@ -27,6 +29,7 @@ export class PlatformAdminService {
     private readonly sliderSettingsService: SliderSettingsService,
     private readonly sliderProvider: SliderDeliveryProvider,
     private readonly platformAuditLogService: PlatformAuditLogService,
+    private readonly features: FeaturesService,
   ) {}
 
   // Shops whose delivery zones are still matched by free-text name because at
@@ -230,6 +233,70 @@ export class PlatformAdminService {
       },
     );
     return session;
+  }
+
+  async listFeatures(shopId: number) {
+    const statuses = await this.features.describe(shopId);
+    if (!statuses) throw new NotFoundException(`Shop ${shopId} not found`);
+    return statuses;
+  }
+
+  private assertFeatureKey(key: string) {
+    if (!isFeatureKey(key)) throw new NotFoundException('Unknown feature');
+    return key;
+  }
+
+  // The override and its audit entry are one transaction: if the audit insert
+  // fails the override is rolled back and the request fails (same hard
+  // precondition as impersonation, but atomic).
+  async setFeatureOverride(
+    platformAdminId: number,
+    shopId: number,
+    rawKey: string,
+    enabled: boolean,
+    note: string | null,
+  ) {
+    const key = this.assertFeatureKey(rawKey);
+    await this.findShopOrThrow(shopId);
+    await this.db.transaction(async (conn) => {
+      await this.features.setOverride(
+        conn,
+        shopId,
+        key,
+        enabled,
+        note,
+        platformAdminId,
+      );
+      await this.platformAuditLogService.log(
+        platformAdminId,
+        'shop.feature_override.set',
+        shopId,
+        { key, enabled, note },
+        conn,
+      );
+    });
+    return this.listFeatures(shopId);
+  }
+
+  async clearFeatureOverride(
+    platformAdminId: number,
+    shopId: number,
+    rawKey: string,
+  ) {
+    const key = this.assertFeatureKey(rawKey);
+    await this.findShopOrThrow(shopId);
+    await this.db.transaction(async (conn) => {
+      if (await this.features.clearOverride(conn, shopId, key)) {
+        await this.platformAuditLogService.log(
+          platformAdminId,
+          'shop.feature_override.clear',
+          shopId,
+          { key },
+          conn,
+        );
+      }
+    });
+    return this.listFeatures(shopId);
   }
 
   async sliderTestDispatch(shopId: number) {

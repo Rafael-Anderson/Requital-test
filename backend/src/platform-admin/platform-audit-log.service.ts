@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { createLogger } from '../common/logging/logger';
 import type { PlatformauditlogentryRow } from '../db/types';
@@ -22,17 +22,20 @@ export class PlatformAuditLogService {
     action: string,
     shopId: number | null,
     metadata?: Record<string, unknown>,
+    // Pass the caller's transaction connection to make the audit entry and the
+    // change it records commit or roll back together.
+    conn?: PoolConnection,
   ): Promise<void> {
+    const sql = `INSERT INTO platformauditlogentry (platformAdminId, action, shopId, metadata) VALUES (?, ?, ?, ?)`;
+    const params = [
+      platformAdminId,
+      action,
+      shopId,
+      metadata ? JSON.stringify(metadata) : null,
+    ];
     try {
-      await this.db.execute(
-        `INSERT INTO platformauditlogentry (platformAdminId, action, shopId, metadata) VALUES (?, ?, ?, ?)`,
-        [
-          platformAdminId,
-          action,
-          shopId,
-          metadata ? JSON.stringify(metadata) : null,
-        ],
-      );
+      if (conn) await conn.query(sql, params);
+      else await this.db.execute(sql, params);
     } catch (error) {
       logger.error(
         'failed to write platform audit log entry — action blocked',

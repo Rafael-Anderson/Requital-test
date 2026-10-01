@@ -522,6 +522,16 @@ export interface ShopRow {
   taxOnDelivery: boolean;
 }
 
+export interface ShopfeatureoverrideRow {
+  shopId: number;
+  featureKey: string;
+  enabled: boolean;
+  note: string | null;
+  // platformadmin id; NULL once that admin row is gone. Never a merchant user.
+  updatedBy: number | null;
+  updatedAt: Date;
+}
+
 export interface TaxclassRow {
   id: number;
   shopId: number;

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
+import { FeaturesService } from '../features/features.service';
 import type { TenantContext } from '../common/tenant-context';
 import { createLogger } from '../common/logging/logger';
 import {
@@ -34,7 +35,10 @@ export interface SliderSettingsResponse {
 // PR #72 correction this replaces.
 @Injectable()
 export class SliderSettingsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly features: FeaturesService,
+  ) {}
 
   // Merchant-facing read — used by both the Integrations > Delivery card
   // (status indicator) and SliderDeliveryPanel (to decide whether to offer
@@ -85,7 +89,7 @@ export class SliderSettingsService {
     shopId: number,
   ): Promise<DeliveryProviderCredentials | null> {
     const row = await this.findRow(shopId);
-    if (!row || !row.sliderEnabled || !row.sliderAccountId) return null;
+    if (!row || !row.enabled || !row.sliderAccountId) return null;
 
     const apiKey = process.env.SLIDER_API_KEY;
     const environment = process.env.SLIDER_ENVIRONMENT as
@@ -133,33 +137,34 @@ export class SliderSettingsService {
   }
 
   private async findRow(shopId: number): Promise<{
-    sliderEnabled: boolean;
+    enabled: boolean;
     sliderAccountId: string | null;
   } | null> {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT sliderEnabled, sliderAccountId FROM shop WHERE id = ?`,
+      `SELECT sliderAccountId FROM shop WHERE id = ?`,
       [shopId],
     );
     if (rows.length === 0) return null;
     return {
-      sliderEnabled: !!rows[0].sliderEnabled,
+      // Effective value (platform override, else the merchant's own toggle).
+      enabled: await this.features.isEnabled(shopId, 'slider'),
       sliderAccountId: rows[0].sliderAccountId as string | null,
     };
   }
 
   private toResponse(
-    row: { sliderEnabled: boolean; sliderAccountId: string | null } | null,
+    row: { enabled: boolean; sliderAccountId: string | null } | null,
   ): SliderSettingsResponse {
     if (!row) {
       throw new NotFoundException('Shop not found');
     }
-    const status: SliderStatus = !row.sliderEnabled
+    const status: SliderStatus = !row.enabled
       ? 'not_enabled'
       : row.sliderAccountId
         ? 'connected'
         : 'awaiting_setup';
     return {
-      enabled: row.sliderEnabled,
+      enabled: row.enabled,
       accountId: row.sliderAccountId,
       status,
     };

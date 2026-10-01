@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from '../database/database.service';
+import { FeaturesService } from '../features/features.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import { JobsService } from '../jobs/jobs.service';
 import { SchedulerService } from '../jobs/scheduler.service';
@@ -27,6 +28,7 @@ export class LowStockDigestService {
     private readonly db: DatabaseService,
     private readonly jobsService: JobsService,
     private readonly schedulerService: SchedulerService,
+    private readonly features: FeaturesService,
   ) {}
 
   // Wrapped in the cross-instance advisory lock (see SchedulerService) so
@@ -44,8 +46,11 @@ export class LowStockDigestService {
   }
 
   private async runSweep() {
+    const ids = await this.features.enabledShopIds('low_stock_digest');
+    if (ids.length === 0) return;
     const candidates = await this.db.query<RowDataPacket[]>(
-      `SELECT id, name, email, lowStockDigestLastSentAt FROM shop WHERE notifyLowStockDigest = true`,
+      `SELECT id, name, email, lowStockDigestLastSentAt FROM shop WHERE id IN (${ids.map(() => '?').join(', ')})`,
+      ids,
     );
 
     const startOfToday = new Date();
@@ -75,12 +80,13 @@ export class LowStockDigestService {
     shopEmail: string | null,
     startOfToday: Date,
   ) {
-    const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT notifyLowStockDigest FROM shop WHERE id = ?`,
-      [shopId],
-    );
-    if (!shopRows[0]?.notifyLowStockDigest) return false;
+    if (!(await this.features.isEnabled(shopId, 'low_stock_digest')))
+      return false;
 
+    // The claim below no longer repeats the opt-in in its WHERE: the check above
+    // is the resolved flag (platform override, else the column), and a column
+    // predicate here would veto an override that turns the digest ON.
+    //
     // CAS claim FIRST, before doing any query work — mirrors
     // AbandonedCartsService's claim-before-send discipline: if two
     // triggers for the same shop race, only one UPDATE can match
@@ -88,7 +94,7 @@ export class LowStockDigestService {
     // and skips.
     const claimed = await this.db.execute(
       `UPDATE shop SET lowStockDigestLastSentAt = ?
-       WHERE id = ? AND notifyLowStockDigest = true
+       WHERE id = ?
          AND (lowStockDigestLastSentAt IS NULL OR lowStockDigestLastSentAt < ?)`,
       [new Date(), shopId, startOfToday],
     );

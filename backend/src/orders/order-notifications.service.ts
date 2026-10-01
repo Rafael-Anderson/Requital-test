@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { FeaturesService } from '../features/features.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import { sendWhatsAppStub } from '../common/whatsapp';
 import { normalizePhoneToE164 } from '../common/phone';
@@ -68,6 +69,7 @@ export class OrderNotificationsService {
     private readonly whatsAppSettingsService: WhatsAppSettingsService,
     private readonly metaWhatsAppProvider: MetaWhatsAppProvider,
     private readonly jobsService: JobsService,
+    private readonly features: FeaturesService,
   ) {}
 
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
@@ -153,13 +155,14 @@ export class OrderNotificationsService {
   // re-evaluated" discipline as ingredientsConsumedAt (see schema.prisma).
   async notifySurveyRequest(shopId: number, order: NotifiableOrder) {
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT customerSurveyEnabled, notifyEmail, subdomain, name, displayName,
+      `SELECT subdomain, name, displayName,
               customDomain, customDomainStatus, domainType
          FROM shop WHERE id = ?`,
       [shopId],
     );
     const shop = shopRows[0];
-    if (!shop?.customerSurveyEnabled) return;
+    const flags = await this.features.getFlags(shopId);
+    if (!shop || !flags.customer_survey) return;
 
     const existingRows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM surveyresponse WHERE orderId = ?`,
@@ -173,7 +176,7 @@ export class OrderNotificationsService {
       [shopId, order.id, token],
     );
 
-    if (!shop.notifyEmail || !order.customerEmail) return;
+    if (!flags.notify_email || !order.customerEmail) return;
     const link = storefrontUrl(
       {
         subdomain: shop.subdomain as string,
@@ -225,11 +228,12 @@ export class OrderNotificationsService {
   ) {
     if (!order.customerEmail) return;
     const shopRows = await this.db.query<RowDataPacket[]>(
-      `SELECT notifyEmail, name, displayName FROM shop WHERE id = ?`,
+      `SELECT name, displayName FROM shop WHERE id = ?`,
       [shopId],
     );
     const shop = shopRows[0];
-    if (!shop?.notifyEmail) return;
+    if (!shop || !(await this.features.isEnabled(shopId, 'notify_email')))
+      return;
     await this.jobsService.enqueue(
       shopId,
       'send_email',
@@ -253,11 +257,12 @@ export class OrderNotificationsService {
     bodyText: string,
   ) {
     try {
+      if (!(await this.features.isEnabled(shopId, 'notify_customers_whatsapp')))
+        return;
       const shopRows = await this.db.query<RowDataPacket[]>(
-        `SELECT notifyCustomersWhatsapp, countryCode FROM shop WHERE id = ?`,
+        `SELECT countryCode FROM shop WHERE id = ?`,
         [shopId],
       );
-      if (!shopRows[0]?.notifyCustomersWhatsapp) return;
 
       // The customer's number is a local number of the shop's own country
       // (NULL country keeps the legacy +971 assumption, see common/phone.ts).

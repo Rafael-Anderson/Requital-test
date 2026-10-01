@@ -31,6 +31,7 @@ import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 import { DiscountsService } from '../discounts/discounts.service';
 import { TaxClassesService } from '../tax-classes/tax-classes.service';
+import { FeaturesService } from '../features/features.service';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { ProductIngredientInput } from './dto/product-ingredient-input.dto';
 import {
@@ -202,6 +203,7 @@ export class ProductsService {
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
     private readonly discountsService: DiscountsService,
     private readonly taxClassesService: TaxClassesService,
+    private readonly features: FeaturesService,
   ) {}
 
   async findAll(ctx: TenantContext, requestedOutletId?: number) {
@@ -3827,11 +3829,10 @@ export class ProductsService {
     },
   ): Promise<boolean> {
     if (direction === -1) {
-      const [shopRows] = await conn.query<RowDataPacket[]>(
-        `SELECT autoDeductIngredientStock FROM shop WHERE id = ?`,
-        [shopId],
-      );
-      if (!Boolean(shopRows[0]?.autoDeductIngredientStock)) return false;
+      // Read on the caller's own connection: this runs inside the order's
+      // transaction and must not take a second pool connection.
+      if (!(await this.features.isEnabled(shopId, 'auto_deduct_ingredient_stock', conn)))
+        return false;
     }
 
     const productIds = [...new Set(items.map((i) => i.productId))];

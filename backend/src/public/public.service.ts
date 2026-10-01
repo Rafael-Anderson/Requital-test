@@ -47,6 +47,7 @@ import { PolicyPagesService } from '../policy-pages/policy-pages.service';
 import { ThemesService } from '../themes/themes.service';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
+import { FeaturesService } from '../features/features.service';
 import { roundMoney } from '../common/currency-minor-units';
 import {
   POLICY_PAGE_TYPES,
@@ -126,6 +127,7 @@ export class PublicService {
     private readonly jwtService: JwtService,
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly regionsService: RegionsService,
+    private readonly features: FeaturesService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -240,6 +242,10 @@ export class PublicService {
       [shop.id],
     );
     const seo = seoRows[0] ?? null;
+    // Effective values (platform override, else the merchant's toggle) for THIS
+    // shop only: shop.id came from the slug above, so no other shop's state is
+    // reachable, and only the resolved booleans leave, never override metadata.
+    const flags = await this.features.getFlags(shop.id);
     // Which of the independent online providers (PayPal/Tabby/Tamara) the
     // storefront should offer as their own selectable payment methods —
     // reuses PaymentSettingsService.isEnabled, the exact same enabled/
@@ -325,13 +331,13 @@ export class PublicService {
       defaultLanguage: shop.defaultLanguage,
       whatsappCountryCode: shop.whatsappCountryCode,
       whatsappNumber: shop.whatsappNumber,
-      whatsappFloatingButtonEnabled: shop.whatsappFloatingButtonEnabled,
+      whatsappFloatingButtonEnabled: flags.whatsapp_floating_button,
       disableStoreCart: shop.disableStoreCart,
       cartDisabledMode: shop.cartDisabledMode,
       socialLinks: shop.socialLinks,
       productDisplayOrientation: shop.productDisplayOrientation,
-      productImageZoomEnabled: shop.productImageZoomEnabled,
-      showCollectionMenu: shop.showCollectionMenu,
+      productImageZoomEnabled: flags.product_image_zoom,
+      showCollectionMenu: flags.collection_menu,
       taxRate: trimDecimal(shop.taxRate),
       taxInclusive: shop.taxInclusive,
       taxDisplayText: shop.taxDisplayText,

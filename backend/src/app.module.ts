@@ -20,6 +20,7 @@ import { HealthModule } from './health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { FeaturesModule } from './features/features.module';
 import { AuthModule } from './auth/auth.module';
 import { OutletsModule } from './outlets/outlets.module';
 import { ProductsModule } from './products/products.module';
@@ -135,6 +136,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
       ],
     }),
     DatabaseModule,
+    FeaturesModule,
     AuthModule,
     OutletsModule,
     ProductsModule,
