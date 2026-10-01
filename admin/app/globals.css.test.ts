@@ -23,7 +23,9 @@ describe("admin globals.css, table header alignment", () => {
     root.walkAtRules("layer", (layer) => {
       if (layer.params.trim() !== "base") return;
       layer.walkRules("th", (rule) => {
-        rule.walkDecls("text-align", (d) => found.push(d.value));
+        rule.walkDecls("text-align", (d) => {
+          found.push(d.value);
+        });
       });
     });
     expect(found).toEqual(["inherit"]);
