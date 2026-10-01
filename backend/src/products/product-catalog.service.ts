@@ -1201,6 +1201,13 @@ export class ProductCatalogService {
       await this.db.transaction(async (conn) => {
         await deleteVariantMetafieldValuesForProduct(conn, id);
         await deleteMetafieldValues(conn, 'product', [id]);
+        // Variants must go BEFORE the product: deleting the product cascades
+        // product -> productoption -> productoptionvalue, whose FKs on
+        // productvariant.optionValueNId are ON DELETE SET NULL. That UPDATE
+        // re-checks ProductVariant_productId_fkey against the product row
+        // that is already mid-delete and fails with MySQL 1452. With the
+        // variants gone first there is no row left to update.
+        await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [id]);
         await conn.query(`DELETE FROM product WHERE id = ?`, [id]);
       });
     } catch (error) {
