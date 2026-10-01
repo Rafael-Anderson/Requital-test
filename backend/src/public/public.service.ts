@@ -1385,7 +1385,27 @@ export class PublicService {
   async validateDiscount(shopSlug: string, dto: ValidateDiscountDto) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    return this.discountsService.validate(shop.id, dto);
+    if (!dto.items?.length) return this.discountsService.validate(shop.id, dto);
+    // Priced by the same resolver checkout uses, so what is shown is what is
+    // charged. A client price is never honoured on this public route.
+    const resolved = await this.productsService.resolveOrderItems(
+      shop.id,
+      dto.items.map((i) => ({
+        productId: i.productId,
+        variantId: i.variantId,
+        quantity: i.quantity,
+        giftCardAmount: i.giftCardAmount,
+      })),
+    );
+    const lines = await this.discountsService.buildLines(
+      shop.id,
+      resolved.map((r) => ({
+        productId: r.product.id as number,
+        price: r.price,
+        quantity: r.quantity,
+      })),
+    );
+    return this.discountsService.validate(shop.id, dto, lines);
   }
 
   // Every live auto-apply discount for this shop, for the storefront to
@@ -1518,8 +1538,18 @@ export class PublicService {
         shop.id,
         dto.discountCode,
       );
+      // Eligibility and the amount come from the resolved lines (server
+      // prices, server collection membership), never from client-supplied ids.
       const evaluated = await this.discountsService.evaluate(resolved, {
-        cartSubtotal: subtotal,
+        lines: await this.discountsService.buildLines(
+          shop.id,
+          itemsData.map((d) => ({
+            productId: d.productId,
+            price: d.priceAtPurchase,
+            quantity: d.quantity,
+          })),
+        ),
+        currency: shop.currency,
       });
       if (!evaluated.valid) {
         throw new BadRequestException(

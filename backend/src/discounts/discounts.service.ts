@@ -23,6 +23,12 @@ import {
   DiscountType,
 } from './discount-constants';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import {
+  computeDiscountAmount,
+  computeEligibility,
+  lineMatchesScope,
+} from './discount-eligibility';
+import type { DiscountLine } from './discount-eligibility';
 
 export interface ProductSummary {
   id: number;
@@ -231,16 +237,99 @@ export class DiscountsService {
     return { id, deleted: true };
   }
 
-  // Full endpoint logic: resolve by code, then evaluate. Used by both
-  // POST /shop/discounts/validate (admin-authenticated, draft-order builder)
-  // and POST /public/:shopSlug/discounts/validate (storefront cart/checkout
-  // — see PublicController) via the same shopId-scoped call.
+  // Full endpoint logic: resolve by code, then evaluate. Used by both the
+  // admin draft-order builder (POST /shop/discounts/validate) and the
+  // storefront cart/checkout (POST /public/:shopSlug/discounts/validate), each
+  // via the same shopId-scoped call.
+  //
+  // `lines` are built by the caller from the request's `items` through
+  // ProductsService.resolveOrderItems + buildLines(), i.e. exactly what order
+  // creation derives, so the amount shown here is the amount charged. Without
+  // them (the pre-items request shape: a cart total plus loose product ids)
+  // eligibility still works off the ids, but the amount can only be taken on
+  // the whole cart total, so such a caller can disagree with the charge for a
+  // scoped code on a mixed basket. Real callers send items.
   async validate(
     shopId: number,
     dto: ValidateDiscountDto,
+    lines?: DiscountLine[],
   ): Promise<EvaluateResult> {
     const discount = await this.resolveByCode(shopId, dto.code);
-    return this.evaluate(discount, dto);
+    const currency = await this.shopCurrency(shopId);
+    if (lines) {
+      return this.evaluate(discount, {
+        lines,
+        customerId: dto.customerId,
+        currency,
+      });
+    }
+    return this.evaluate(discount, {
+      lines: await this.legacyLines(shopId, dto),
+      wholeCartSubtotal: dto.cartSubtotal,
+      customerId: dto.customerId,
+      currency,
+    });
+  }
+
+  private async shopCurrency(shopId: number): Promise<string | null> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT currency FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    return (rows[0]?.currency as string | undefined) ?? null;
+  }
+
+  // Order-creation callers pass their RESOLVED items (server prices: the unit
+  // price already net of any auto-discount). Collection membership is read
+  // here, shop-scoped, never taken from the client.
+  async buildLines(
+    shopId: number,
+    items: { productId: number; price: string | number; quantity: number }[],
+  ): Promise<DiscountLine[]> {
+    const ids = [...new Set(items.map((i) => i.productId))];
+    const byProduct = await this.collectionIdsByProduct(shopId, ids);
+    return items.map((i) => ({
+      productId: i.productId,
+      collectionIds: byProduct.get(i.productId) ?? [],
+      amount: Number(i.price) * i.quantity,
+    }));
+  }
+
+  private async collectionIdsByProduct(shopId: number, productIds: number[]) {
+    const byProduct = new Map<number, number[]>();
+    if (productIds.length === 0) return byProduct;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT pc.productId, pc.collectionId
+         FROM productcollection pc JOIN product p ON p.id = pc.productId
+        WHERE pc.productId IN (${productIds.map(() => '?').join(', ')}) AND p.shopId = ?`,
+      [...productIds, shopId],
+    );
+    for (const r of rows) {
+      const list = byProduct.get(r.productId as number) ?? [];
+      list.push(r.collectionId as number);
+      byProduct.set(r.productId as number, list);
+    }
+    return byProduct;
+  }
+
+  // The pre-items validate shape. Client collectionIds ride along as one
+  // product-less line: it can satisfy a collection scope but never a product
+  // scope. Display-only, as it always was; nothing here is ever charged.
+  private async legacyLines(
+    shopId: number,
+    dto: ValidateDiscountDto,
+  ): Promise<DiscountLine[]> {
+    const productIds = [...new Set(dto.productIds ?? [])];
+    const byProduct = await this.collectionIdsByProduct(shopId, productIds);
+    const lines: DiscountLine[] = productIds.map((productId) => ({
+      productId,
+      collectionIds: byProduct.get(productId) ?? [],
+      amount: 0,
+    }));
+    if (dto.collectionIds?.length) {
+      lines.push({ productId: 0, collectionIds: dto.collectionIds, amount: 0 });
+    }
+    return lines;
   }
 
   async resolveByCode(
@@ -277,12 +366,19 @@ export class DiscountsService {
   async evaluate(
     discount: AssembledDiscount | null,
     input: {
-      cartSubtotal: number;
-      productIds?: number[];
-      collectionIds?: number[];
+      // Resolved order lines (see buildLines). The single source for
+      // eligibility, the eligible subtotal and the amount.
+      lines: DiscountLine[];
       customerId?: number;
+      // The order's currency; the amount is rounded to its real minor unit.
+      currency?: string | null;
+      // Legacy validate shape only; see validate().
+      wholeCartSubtotal?: number;
     },
   ): Promise<EvaluateResult> {
+    const cartSubtotal =
+      input.wholeCartSubtotal ??
+      input.lines.reduce((sum, l) => sum + l.amount, 0);
     if (!discount) return this.reject('not_found');
     if (!discount.active) return this.reject('inactive');
 
@@ -293,7 +389,7 @@ export class DiscountsService {
 
     if (
       discount.minPurchaseAmount &&
-      input.cartSubtotal < Number(discount.minPurchaseAmount)
+      cartSubtotal < Number(discount.minPurchaseAmount)
     ) {
       return this.reject('min_purchase_not_met');
     }
@@ -319,24 +415,26 @@ export class DiscountsService {
       }
     }
 
-    if (discount.appliesTo === 'SPECIFIC_PRODUCTS') {
-      const eligibleIds = new Set(discount.products.map((p) => p.id));
-      if (!(input.productIds ?? []).some((id) => eligibleIds.has(id))) {
-        return this.reject('not_eligible');
-      }
-    } else if (discount.appliesTo === 'SPECIFIC_COLLECTIONS') {
-      const eligibleIds = new Set(discount.collections.map((c) => c.id));
-      if (!(input.collectionIds ?? []).some((id) => eligibleIds.has(id))) {
-        return this.reject('not_eligible');
-      }
-    }
+    const eligibility = computeEligibility(
+      {
+        type: discount.type,
+        value: discount.value,
+        appliesTo: discount.appliesTo,
+        productIds: discount.products.map((p) => p.id),
+        collectionIds: discount.collections.map((c) => c.id),
+      },
+      input.lines,
+      input.currency,
+      input.wholeCartSubtotal,
+    );
+    if (!eligibility.eligible) return this.reject('not_eligible');
 
     return {
       valid: true,
       discountId: discount.id,
       code: discount.code ?? undefined,
       type: discount.type as DiscountType,
-      discountAmount: this.computeAmount(discount, input.cartSubtotal),
+      discountAmount: eligibility.discountAmount,
       freeShipping: discount.type === 'FREE_SHIPPING',
     };
   }
@@ -415,17 +513,19 @@ export class DiscountsService {
     autoDiscounts: PublicAutoDiscount[],
     item: { productId: number; price: number; collectionIds: number[] },
   ): number {
-    const collectionIds = new Set(item.collectionIds);
     let bestAmount = 0;
     for (const discount of autoDiscounts) {
       if (discount.type === 'FREE_SHIPPING') continue; // no effect on price
-      const applies =
-        discount.appliesTo === 'SPECIFIC_PRODUCTS'
-          ? discount.productIds.includes(item.productId)
-          : discount.appliesTo === 'SPECIFIC_COLLECTIONS'
-            ? discount.collectionIds.some((id) => collectionIds.has(id))
-            : false; // ALL_PRODUCTS is never a valid scope for an auto discount (backend-enforced at create/update time)
-      if (!applies) continue;
+      // ALL_PRODUCTS is never a valid scope for an auto discount
+      // (backend-enforced at create/update time), so it never applies here.
+      if (discount.appliesTo === 'ALL_PRODUCTS') continue;
+      if (
+        !lineMatchesScope(discount, {
+          productId: item.productId,
+          collectionIds: item.collectionIds,
+        })
+      )
+        continue;
       const amount = this.computeAmount(discount, item.price);
       if (amount > bestAmount) bestAmount = amount;
     }
@@ -444,14 +544,9 @@ export class DiscountsService {
   // an as-yet-unconverted draft order without duplicating the type/value math.
   computeAmount(
     discount: { type: string; value: string | number | null },
-    cartSubtotal: number,
+    base: number,
   ): number {
-    if (discount.type === 'FREE_SHIPPING') return 0;
-    const value = Number(discount.value ?? 0);
-    if (discount.type === 'PERCENTAGE') {
-      return Math.min(cartSubtotal, (cartSubtotal * value) / 100);
-    }
-    return Math.min(cartSubtotal, value);
+    return computeDiscountAmount(discount, base);
   }
 
   private normalizeCode(code: string): string {

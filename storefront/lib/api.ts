@@ -281,7 +281,13 @@ export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
 
 export function validateDiscount(
   shopSlug: string,
-  data: { code: string; cartSubtotal: number; productIds?: number[]; collectionIds?: number[] },
+  data: {
+    code: string;
+    cartSubtotal: number;
+    productIds?: number[];
+    collectionIds?: number[];
+    items?: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number }[];
+  },
 ) {
   return post<ValidateDiscountResult>(`/public/${shopSlug}/discounts/validate`, data);
 }
