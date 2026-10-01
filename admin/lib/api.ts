@@ -1,6 +1,7 @@
 import type {
   AbandonedCart,
   AdjustmentReason,
+  CustomDomainStatus,
   AffiliateCodeListItem,
   AffiliateListItem,
   AffiliateOrderListItem,
@@ -121,19 +122,23 @@ export const STOREFRONT_URL = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://
 const STOREFRONT_ROOT_DOMAIN = process.env.NEXT_PUBLIC_STOREFRONT_ROOT_DOMAIN ?? "requital.io";
 
 // The merchant-facing "your store's public address" — shown on Business
-// Information's "Your store is live at", the outlet QR code, and TopBar's
-// "View store" link. Mirrors ShopService.getDomainConfig's own
-// storefrontUrl computation exactly (see that method's comment): a shop on
-// a connected custom domain resolves to it directly, everyone else resolves
-// to their own {subdomain}.requital.io — never the old bare-path
-// {STOREFRONT_URL}/{subdomain} shape, which stopped being this shop's real
-// public address once per-shop domains shipped.
+// Information's "Your store is live at", the outlet QR code (printed for
+// customers), TopBar's "View store" link and the theme builder's preview
+// iframe. Mirrors the backend's resolveCanonicalOrigin: a custom domain
+// counts only once its DNS-TXT ownership check has passed
+// (customDomainStatus === 'verified'). Anything else (pending/verifying/
+// failed, or a missing status) resolves to the shop's own
+// {subdomain}.requital.io, because an unverified claimed domain is not served
+// by us and may point at someone else's site. The Settings > Domain page does
+// NOT use this: it shows the claimed domain beside its status badge straight
+// from GET /shop/domain.
 export function storefrontUrlFor(shop: {
   subdomain: string;
   domainType: "subdomain" | "custom";
   customDomain: string | null;
+  customDomainStatus?: CustomDomainStatus | null;
 }) {
-  if (shop.domainType === "custom" && shop.customDomain) {
+  if (shop.domainType === "custom" && shop.customDomain && shop.customDomainStatus === "verified") {
     return `https://${shop.customDomain}`;
   }
   return `https://${shop.subdomain}.${STOREFRONT_ROOT_DOMAIN}`;

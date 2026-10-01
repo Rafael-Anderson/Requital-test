@@ -16,6 +16,7 @@ import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import type { TenantContext } from '../common/tenant-context';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
+import { normalizePhoneToE164 } from '../common/phone';
 
 @Injectable()
 export class OutletsService {
@@ -91,6 +92,24 @@ export class OutletsService {
     return this.withComputedStatus(withRegion, shopRows[0].timezone as string);
   }
 
+  // Local numbers are read in the dial code of the shop's own country; a
+  // shop with no countryCode keeps the legacy +971 (common/phone.ts). Same
+  // as the old DTO transform otherwise: an unparseable value is stored as
+  // typed, never rejected.
+  private async normalizePhones(
+    shopId: number,
+    dto: { phone?: string; whatsapp?: string },
+  ): Promise<{ phone?: string; whatsapp?: string }> {
+    if (dto.phone === undefined && dto.whatsapp === undefined) return {};
+    const rows = await this.db.query<
+      ({ countryCode: string | null } & RowDataPacket)[]
+    >(`SELECT countryCode FROM shop WHERE id = ?`, [shopId]);
+    const cc = rows[0]?.countryCode ?? null;
+    const norm = (v?: string) =>
+      typeof v === 'string' ? (normalizePhoneToE164(v, cc) ?? v) : v;
+    return { phone: norm(dto.phone), whatsapp: norm(dto.whatsapp) };
+  }
+
   async create(ctx: TenantContext, dto: CreateOutletDto) {
     this.validateDelivery(
       dto.deliveryEnabled ?? false,
@@ -103,6 +122,7 @@ export class OutletsService {
       required: false,
     });
     const closedOverride = dto.closedOverride ?? false;
+    const phones = await this.normalizePhones(ctx.shopId, dto);
     const result = await this.db.execute(
       `INSERT INTO outlet (
         shopId, name, nameAr, email, whatsapp, active, regionId, area, phone,
@@ -114,11 +134,11 @@ export class OutletsService {
         dto.name,
         dto.nameAr ?? null,
         dto.email ?? null,
-        dto.whatsapp ?? null,
+        phones.whatsapp ?? null,
         dto.active ?? true,
         region.regionId,
         dto.area ?? null,
-        dto.phone ?? null,
+        phones.phone ?? null,
         dto.latitude ?? null,
         dto.longitude ?? null,
         dto.businessHours ? JSON.stringify(dto.businessHours) : null,
@@ -158,15 +178,16 @@ export class OutletsService {
           })
         : undefined;
 
+    const phones = await this.normalizePhones(ctx.shopId, dto);
     const set = buildSetClause({
       name: dto.name,
       nameAr: dto.nameAr,
       email: dto.email,
-      whatsapp: dto.whatsapp,
+      whatsapp: phones.whatsapp,
       active: dto.active,
       regionId: region?.regionId,
       area: dto.area,
-      phone: dto.phone,
+      phone: phones.phone,
       latitude: dto.latitude,
       longitude: dto.longitude,
       businessHours:

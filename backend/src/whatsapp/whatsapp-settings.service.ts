@@ -87,7 +87,14 @@ export class WhatsAppSettingsService {
         'Save your WhatsApp Business API credentials before sending a test message',
       );
     }
-    const to = normalizePhoneToE164(phoneNumber);
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT countryCode FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const to = normalizePhoneToE164(
+      phoneNumber,
+      shopRows[0]?.countryCode as string | null | undefined,
+    );
     if (!to) {
       throw new BadRequestException('Enter a valid phone number');
     }

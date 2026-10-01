@@ -220,6 +220,8 @@ export function sliderTestDispatch(shopId: number) {
     distanceKm: number;
     durationMinutes: number;
     vehicles: SliderQuoteVehicle[];
+    // The currency Slider prices in (AED), not the viewed shop's.
+    currency: string;
   }>(`/platform-admin/shops/${shopId}/slider-test-dispatch`, { method: "POST" });
 }
 

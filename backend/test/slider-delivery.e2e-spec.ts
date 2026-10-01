@@ -106,6 +106,8 @@ describe('Slider delivery integration (e2e)', () => {
   let adminToken: string;
   let outletId: number;
   let productId: number;
+  let platformCookieHeader: string;
+  let platformCsrfToken: string;
 
   const OUTLET_LAT = 25.2048;
   const OUTLET_LON = 55.2708;
@@ -299,8 +301,8 @@ describe('Slider delivery integration (e2e)', () => {
       })
       .expect(201);
     const platformCookies = extractCookies(platformLogin);
-    const platformCookieHeader = cookieHeader(platformCookies);
-    const platformCsrfToken = platformCookies['req-platform-csrf'];
+    platformCookieHeader = cookieHeader(platformCookies);
+    platformCsrfToken = platformCookies['req-platform-csrf'];
 
     await request(app.getHttpServer())
       .patch(`/platform-admin/shops/${shopId}/slider-account-id`)
@@ -460,6 +462,70 @@ describe('Slider delivery integration (e2e)', () => {
       .send({ vehicleType: 'any' })
       .expect(400);
     expect(messageContains(res, 'AED 350')).toBe(true);
+  });
+
+  // Slider is UAE-only. The order is created while the shop is still on its
+  // signup state (a SA shop would need a region to place a delivery order), and
+  // the shop's own row is flipped afterwards, then restored.
+  describe('non-UAE shops are refused', () => {
+    async function setCountryCode(code: string | null) {
+      await db.execute(`UPDATE shop SET countryCode = ? WHERE id = ?`, [
+        code,
+        shopId,
+      ]);
+    }
+    afterEach(async () => {
+      await setCountryCode(null);
+    });
+
+    it('quote and dispatch answer 400 for a SA shop, and still work for AE', async () => {
+      distanceKm = 5;
+      const orderId = await createOrder('cash_on_delivery');
+      await setCountryCode('SA');
+      for (const [path, payload] of [
+        ['slider-delivery/quote', {}],
+        ['slider-delivery', { vehicleType: 'any' }],
+      ] as const) {
+        const res = await request(app.getHttpServer())
+          .post(`/orders/${orderId}/${path}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(payload)
+          .expect(400);
+        expect(messageContains(res, 'UAE only')).toBe(true);
+      }
+      await setCountryCode('AE');
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/slider-delivery/quote`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+    });
+
+    it("platform test-dispatch labels fares with Slider's currency and refuses a SA shop", async () => {
+      // A shop priced in another currency must not have an AED fare relabelled.
+      await db.execute(`UPDATE shop SET currency = 'KWD' WHERE id = ?`, [
+        shopId,
+      ]);
+      try {
+        const ok = await request(app.getHttpServer())
+          .post(`/platform-admin/shops/${shopId}/slider-test-dispatch`)
+          .set('Cookie', platformCookieHeader)
+          .set('X-CSRF-Token', platformCsrfToken)
+          .expect(201);
+        expect(body<{ currency: string }>(ok).currency).toBe('AED');
+
+        await setCountryCode('SA');
+        const refused = await request(app.getHttpServer())
+          .post(`/platform-admin/shops/${shopId}/slider-test-dispatch`)
+          .set('Cookie', platformCookieHeader)
+          .set('X-CSRF-Token', platformCsrfToken)
+          .expect(400);
+        expect(messageContains(refused, 'UAE only')).toBe(true);
+      } finally {
+        await db.execute(`UPDATE shop SET currency = 'AED' WHERE id = ?`, [
+          shopId,
+        ]);
+      }
+    });
   });
 
   it('rejects a scheduleAt under 30 minutes in the future', async () => {

@@ -16,6 +16,7 @@ import {
   normalizeTrn,
   normalizeWebsiteUrl,
 } from '../../common/normalize';
+import { countryCodeFor } from '../../shop/constants';
 import { IsNotDisposableEmail } from '../../common/validators/is-not-disposable-email.validator';
 
 export const BUSINESS_TYPES = ['Retail', 'F&B', 'Services', 'Other'] as const;
@@ -25,6 +26,25 @@ export const OPERATING_MODELS = [
   'both',
 ] as const;
 export const BRANCH_COUNTS = ['1', '2-5', '6-10', '10+'] as const;
+
+// A local number is read in the dial code of the country picked in the same
+// form (countryCodeFor(obj.country)); no country, "Other" or a country we do
+// not serve keeps the legacy +971 (see common/phone.ts).
+const normalizeSignupPhone = ({
+  value,
+  obj,
+}: {
+  value: unknown;
+  obj: { country?: unknown };
+}) =>
+  typeof value === 'string'
+    ? (normalizePhoneToE164(
+        value,
+        countryCodeFor(
+          typeof obj.country === 'string' ? obj.country : undefined,
+        ),
+      ) ?? value)
+    : value;
 
 export class SignupDto {
   @IsString()
@@ -56,9 +76,7 @@ export class SignupDto {
   // real validation error instead of silently passing/emptying.
   @IsOptional()
   @IsString()
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? (normalizePhoneToE164(value) ?? value) : value,
-  )
+  @Transform(normalizeSignupPhone)
   @Matches(/^\+[1-9]\d{6,14}$/, {
     message: 'phone must be a valid phone number',
   })

@@ -13,6 +13,7 @@ import {
   type SliderQuoteVehicle,
 } from "@/lib/platform-api";
 import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
+import { formatMoney } from "@/lib/money";
 
 const SLIDER_STATUS_STYLES: Record<string, string> = {
   connected: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -36,7 +37,7 @@ export default function PlatformShopDetailPage() {
   const [shop, setShop] = useState<PlatformShopDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [accountIdInput, setAccountIdInput] = useState("");
-  const [dispatchResult, setDispatchResult] = useState<SliderQuoteVehicle[] | string | null>(
+  const [dispatchResult, setDispatchResult] = useState<{ vehicles: SliderQuoteVehicle[]; currency: string } | string | null>(
     null,
   );
 
@@ -91,7 +92,7 @@ export default function PlatformShopDetailPage() {
     setDispatchResult(null);
     try {
       const quote = await sliderTestDispatch(shopId);
-      setDispatchResult(quote.vehicles);
+      setDispatchResult({ vehicles: quote.vehicles, currency: quote.currency });
     } catch (err) {
       setDispatchResult(err instanceof Error ? err.message : "Test dispatch failed");
     } finally {
@@ -245,9 +246,9 @@ export default function PlatformShopDetailPage() {
                 dispatchResult
               ) : (
                 <ul className="space-y-1">
-                  {dispatchResult.map((v) => (
+                  {dispatchResult.vehicles.map((v) => (
                     <li key={v.vehicleType}>
-                      {v.vehicleType}: AED {v.deliveryFee} {v.isAvailable ? "" : "(unavailable)"}
+                      {v.vehicleType}: {formatMoney(v.deliveryFee, dispatchResult.currency)} {v.isAvailable ? "" : "(unavailable)"}
                     </li>
                   ))}
                 </ul>
