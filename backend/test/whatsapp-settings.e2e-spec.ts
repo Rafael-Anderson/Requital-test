@@ -209,6 +209,41 @@ describe('WhatsApp settings (e2e)', () => {
       );
     });
 
+    it("reads a local test number in the shop's own country dial code, and keeps +971 for a NULL-country shop", async () => {
+      const fetchMock = jest.fn<Promise<unknown>, [string, { body: string }]>();
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ messages: [{ id: 'wamid.cc' }] }),
+      });
+      global.fetch = fetchMock as unknown as typeof fetch;
+      const sentTo = () =>
+        JSON.parse(fetchMock.mock.calls[0][1].body) as { to: string };
+      const send = () =>
+        request(app.getHttpServer())
+          .post('/whatsapp-settings/test')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ phoneNumber: '0551234567' })
+          .expect(201);
+      try {
+        await db.execute(`UPDATE shop SET countryCode = 'SA' WHERE id = ?`, [
+          shopId,
+        ]);
+        await send();
+        expect(sentTo().to).toBe('966551234567');
+
+        fetchMock.mockClear();
+        await db.execute(`UPDATE shop SET countryCode = NULL WHERE id = ?`, [
+          shopId,
+        ]);
+        await send();
+        expect(sentTo().to).toBe('971551234567');
+      } finally {
+        await db.execute(`UPDATE shop SET countryCode = NULL WHERE id = ?`, [
+          shopId,
+        ]);
+      }
+    });
+
     it('rejects an invalid phone number', async () => {
       const res = await request(app.getHttpServer())
         .post('/whatsapp-settings/test')

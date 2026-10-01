@@ -11,6 +11,11 @@ export type SliderEnvironment = keyof typeof SLIDER_BASE_URLS;
 export const SLIDER_VEHICLE_TYPES = ['bike', 'car', 'any'] as const;
 export type SliderVehicleType = (typeof SLIDER_VEHICLE_TYPES)[number];
 
+// Slider is a UAE-only courier and prices every fare and COD cap in AED. The
+// fare endpoint returns no currency field, so this is the one place the
+// quote's denomination is stated (it is NOT the shop's currency).
+export const SLIDER_CURRENCY = 'AED';
+
 export const SLIDER_BIKE_MAX_DISTANCE_KM = 35;
 export const SLIDER_COD_CASH_CAP_AED = 350;
 export const SLIDER_COD_CARD_CAP_AED = 500;

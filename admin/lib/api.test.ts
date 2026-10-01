@@ -13,15 +13,30 @@ describe("storefrontUrlFor", () => {
     ).toBe("https://acme.requital.io");
   });
 
-  it("resolves to the connected custom domain when domainType is custom", () => {
+  it("resolves to the connected custom domain only once it is verified", () => {
     expect(
       storefrontUrlFor({
         subdomain: "acme",
         domainType: "custom",
         customDomain: "shop.acme.com",
+        customDomainStatus: "verified",
       }),
     ).toBe("https://shop.acme.com");
   });
+
+  it.each(["pending", "verifying", "failed", null, undefined] as const)(
+    "does not present an unverified claim (status %s) as the live store address",
+    (customDomainStatus) => {
+      expect(
+        storefrontUrlFor({
+          subdomain: "acme",
+          domainType: "custom",
+          customDomain: "shop.acme.com",
+          customDomainStatus,
+        }),
+      ).toBe("https://acme.requital.io");
+    },
+  );
 
   it("falls back to the subdomain shape if domainType is custom but customDomain is somehow missing", () => {
     expect(

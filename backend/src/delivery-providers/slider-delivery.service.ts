@@ -14,6 +14,7 @@ import { DeliveryProviderNotConfiguredException } from './slider-not-configured.
 import { mapSliderStatus } from './slider/slider-status-map';
 import {
   assertPaymentOnDeliveryWithinCap,
+  assertShopCountryIsUae,
   assertScheduleAtOk,
   assertVehicleDistanceOk,
 } from './slider/slider-caps';
@@ -32,6 +33,7 @@ export class SliderDeliveryService {
 
   async getQuote(ctx: TenantContext, orderId: number) {
     const order = await this.ordersService.findOne(ctx, orderId);
+    await this.assertShopIsUae(ctx.shopId);
     const credentials = await this.sliderSettingsService.resolveCredentials(
       ctx.shopId,
     );
@@ -53,6 +55,7 @@ export class SliderDeliveryService {
       order.outletId,
       'orders.manage',
     );
+    await this.assertShopIsUae(ctx.shopId);
     const credentials = await this.sliderSettingsService.resolveCredentials(
       ctx.shopId,
     );
@@ -204,6 +207,13 @@ export class SliderDeliveryService {
         longitude: deliveryPoint.longitude,
       },
     };
+  }
+
+  private async assertShopIsUae(shopId: number): Promise<void> {
+    const rows = await this.db.query<
+      ({ countryCode: string | null } & RowDataPacket)[]
+    >(`SELECT countryCode FROM shop WHERE id = ?`, [shopId]);
+    assertShopCountryIsUae(rows[0]?.countryCode ?? null);
   }
 
   // The region's English name for the printed address; nothing when the order or

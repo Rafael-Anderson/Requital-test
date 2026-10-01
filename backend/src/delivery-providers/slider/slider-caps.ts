@@ -14,6 +14,19 @@ import {
 // real API-side rule change still surfaces as a normal error from the HTTP
 // call).
 
+// Slider only operates in the UAE (and the address sent to it is suffixed
+// 'UAE'), so a shop registered in another country is refused outright. A NULL
+// countryCode ("Other"/unknown/legacy) is let through: it has never been
+// refused and nothing says it is not UAE; the currency check below still
+// applies to every order.
+export function assertShopCountryIsUae(countryCode: string | null): void {
+  if (countryCode !== null && countryCode !== 'AE') {
+    throw new BadRequestException(
+      `Slider delivers in the UAE only (this shop is registered in ${countryCode})`,
+    );
+  }
+}
+
 export function assertPaymentOnDeliveryWithinCap(
   paymentMethod: string | null,
   amountAed: number,

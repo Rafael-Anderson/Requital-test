@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -12,15 +12,9 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { normalizePhoneToE164 } from '../../common/normalize';
 
-// Both phone-shaped fields accept local/bare-country-code/full-E.164 input
-// and normalize to E.164; falls back to the raw value when unparseable
-// (these fields have no format @Matches, so an unparseable value just gets
-// stored as typed, same permissiveness as before — normalization only
-// improves the common case, never adds new rejection).
-const normalizePhoneField = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? (normalizePhoneToE164(value) ?? value) : value;
+// phone / whatsapp are normalized to E.164 in OutletsService (it knows the
+// shop's country; a DTO transform does not), not here.
 
 export class CreateOutletDto {
   @IsString()
@@ -39,7 +33,6 @@ export class CreateOutletDto {
 
   @IsOptional()
   @IsString()
-  @Transform(normalizePhoneField)
   @MaxLength(30)
   whatsapp?: string;
 
@@ -61,7 +54,6 @@ export class CreateOutletDto {
 
   @IsOptional()
   @IsString()
-  @Transform(normalizePhoneField)
   @MaxLength(30)
   phone?: string;
 

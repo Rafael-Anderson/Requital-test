@@ -236,6 +236,27 @@ describe('Order status customer email notifications (e2e)', () => {
     return body<OrderRow>(res);
   }
 
+  async function regionIdOf(countryCode: string): Promise<number> {
+    const rows = await db.query<({ id: number } & RowDataPacket)[]>(
+      `SELECT id FROM region WHERE countryCode = ? ORDER BY id LIMIT 1`,
+      [countryCode],
+    );
+    return rows[0].id;
+  }
+
+  // Flips the signed-up shop to another country the way a real one would be
+  // registered; the shop is this spec's own (setupShop signs up a fresh one).
+  async function setShopCountry(adminToken: string, countryCode: string) {
+    const me = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    await db.execute(`UPDATE shop SET countryCode = ? WHERE id = ?`, [
+      countryCode,
+      body<{ shopId: number }>(me).shopId,
+    ]);
+  }
+
   it('sends an order-confirmation email when the shop has notifications enabled and the order has a customer email', async () => {
     const { adminToken, outletId, productId } = await setupShop(
       'notify-confirm-on',
@@ -492,6 +513,23 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(metaApiCalls()).toHaveLength(0);
     });
 
+    it("reads a local customer number in the shop's own country dial code (SA), not +971", async () => {
+      const { adminToken, outletId, productId } = await setupShop(
+        'wa-stub-sa',
+        false,
+        true,
+      );
+      await setShopCountry(adminToken, 'SA');
+      const order = await createOrder(adminToken, outletId, productId, {
+        regionId: await regionIdOf('SA'),
+        customerPhone: '0551234567',
+      });
+
+      expect(whatsAppStubCalls(logSpy, '+966551234567').length).toBe(1);
+      expect(whatsAppStubCalls(logSpy, '+971551234567').length).toBe(0);
+      expect(order.id).toBeGreaterThan(0);
+    });
+
     it('does NOT fire when notifyCustomersWhatsapp is off, even if notifyEmail is on', async () => {
       const { adminToken, outletId, productId } = await setupShop(
         'wa-off',
@@ -648,6 +686,32 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(payload.to).toBe('+971507654321');
       expect(payload.body).toContain(`New order #${order.shopOrderNumber}`);
       expect(payload.orderId).toBe(order.id);
+    });
+
+    it("normalizes the outlet's phone in the shop's own country dial code (SA saves +966, not +971)", async () => {
+      const { adminToken, outletId, productId } = await setupShop(
+        'merchant-alert-sa',
+        false,
+        false,
+      );
+      await setShopCountry(adminToken, 'SA');
+      const patched = await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ phone: '0551234567' })
+        .expect(200);
+      expect(body<{ phone: string }>(patched).phone).toBe('+966551234567');
+
+      const order = await createOrder(adminToken, outletId, productId, {
+        regionId: await regionIdOf('SA'),
+      });
+      const job = await processOwnEmailJob(
+        `order:${order.id}:merchant-whatsapp-alert`,
+      );
+      expect(job).not.toBeNull();
+      expect((job!.payload as WhatsAppAlertJobPayload).to).toBe(
+        '+966551234567',
+      );
     });
 
     it("prefers the outlet's whatsapp field over its phone field", async () => {

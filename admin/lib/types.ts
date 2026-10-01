@@ -1001,6 +1001,9 @@ export interface Shop {
   // stored raw column, kept here since GET /shop returns the whole row.
   domainType: "subdomain" | "custom";
   customDomain: string | null;
+  // GET /shop returns the whole row; storefrontUrlFor only trusts a custom
+  // domain once this is "verified". CustomDomainStatus is declared further down.
+  customDomainStatus: CustomDomainStatus | null;
   // Gates storefront visibility + the platform sitemap — see the "Publish
   // your store" action on this page (Settings > Business Information) and
   // backend PublicService.assertPublished.

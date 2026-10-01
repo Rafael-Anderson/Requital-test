@@ -8,6 +8,8 @@ import { DatabaseService, type QueryParam } from '../database/database.service';
 import { AuthService } from '../auth/auth.service';
 import { SliderSettingsService } from '../delivery-providers/slider-settings.service';
 import { SliderDeliveryProvider } from '../delivery-providers/slider/slider-delivery.provider';
+import { SLIDER_CURRENCY } from '../delivery-providers/slider/slider.constants';
+import { assertShopCountryIsUae } from '../delivery-providers/slider/slider-caps';
 import { PlatformAuditLogService } from './platform-audit-log.service';
 import type { ShopRow, OutletRow } from '../db/types';
 
@@ -231,6 +233,7 @@ export class PlatformAdminService {
   }
 
   async sliderTestDispatch(shopId: number) {
+    assertShopCountryIsUae((await this.findShopOrThrow(shopId)).countryCode);
     const outlets = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE shopId = ? AND latitude IS NOT NULL AND longitude IS NOT NULL ORDER BY id ASC LIMIT 1`,
       [shopId],
@@ -244,11 +247,15 @@ export class PlatformAdminService {
     const credentials =
       await this.sliderSettingsService.buildTestCredentials(shopId);
     const point = { latitude: outlet.latitude!, longitude: outlet.longitude! };
-    return this.sliderProvider.getQuote({
+    const quote = await this.sliderProvider.getQuote({
       pickup: point,
       delivery: point,
       credentials,
     });
+    // Slider's fare endpoint carries no currency; the fares are in Slider's
+    // own (AED), not the viewed shop's, so the panel must not label them with
+    // the shop's currency.
+    return { ...quote, currency: SLIDER_CURRENCY };
   }
 
   // Configured/not-configured only, never a value — see CLAUDE.md's

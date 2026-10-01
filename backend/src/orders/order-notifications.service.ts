@@ -254,12 +254,17 @@ export class OrderNotificationsService {
   ) {
     try {
       const shopRows = await this.db.query<RowDataPacket[]>(
-        `SELECT notifyCustomersWhatsapp FROM shop WHERE id = ?`,
+        `SELECT notifyCustomersWhatsapp, countryCode FROM shop WHERE id = ?`,
         [shopId],
       );
       if (!shopRows[0]?.notifyCustomersWhatsapp) return;
 
-      const to = normalizePhoneToE164(order.customerPhone);
+      // The customer's number is a local number of the shop's own country
+      // (NULL country keeps the legacy +971 assumption, see common/phone.ts).
+      const to = normalizePhoneToE164(
+        order.customerPhone,
+        shopRows[0].countryCode as string | null,
+      );
       if (!to) {
         logger.warn(
           `order #${order.id}: customer phone could not be normalized to E.164 — skipping`,
@@ -299,14 +304,19 @@ export class OrderNotificationsService {
   private async sendMerchantAlert(shopId: number, order: NotifiableOrder) {
     try {
       const outletRows = await this.db.query<RowDataPacket[]>(
-        `SELECT phone, whatsapp FROM outlet WHERE id = ?`,
-        [order.outletId],
+        `SELECT o.phone, o.whatsapp, s.countryCode
+         FROM outlet o JOIN shop s ON s.id = o.shopId
+         WHERE o.id = ? AND o.shopId = ?`,
+        [order.outletId, shopId],
       );
       const outlet = outletRows[0];
       const rawPhone = outlet?.whatsapp || outlet?.phone;
       if (!rawPhone) return;
 
-      const to = normalizePhoneToE164(rawPhone as string);
+      const to = normalizePhoneToE164(
+        rawPhone as string,
+        outlet.countryCode as string | null,
+      );
       if (!to) {
         logger.warn(
           `order #${order.id}: outlet phone could not be normalized to E.164 — skipping merchant alert`,
