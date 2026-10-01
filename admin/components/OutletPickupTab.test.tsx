@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, render, screen } from "@testing-library/react";
 import OutletPickupTab from "./OutletPickupTab";
 import { ToastProvider } from "@/components/ui/Toast";
 import type { Outlet, Shop } from "@/lib/types";
@@ -12,54 +11,50 @@ vi.mock("@/lib/api", () => ({
   updateOutlet: vi.fn(),
   updateShop: vi.fn(),
 }));
-import { getShop } from "@/lib/api";
+import { getShop, updateShop } from "@/lib/api";
 
-function fakeShop(): Shop {
-  return {
-    pickupPaymentCardOnline: true,
-    pickupPaymentCashOnPickup: true,
-    pickupPaymentCardOnPickup: false,
-    pickupHours: null,
-    pickupTimeSlotGapMinutes: 15,
-    pickupPreparationTimeMinutes: 10,
-    pickupPreparationPlusTimeMinutes: 20,
-  } as unknown as Shop;
-}
+const shop = {
+  pickupPaymentCardOnline: true,
+  pickupPaymentCashOnPickup: true,
+  pickupPaymentCardOnPickup: false,
+  pickupHours: null,
+  pickupTimeSlotGapMinutes: 15,
+  pickupPreparationTimeMinutes: 10,
+  pickupPreparationPlusTimeMinutes: 20,
+} as unknown as Shop;
 
-function fakeOutlet(): Outlet {
-  return { id: 1, pickupEnabled: true } as unknown as Outlet;
-}
+const outlet = { id: 1, pickupEnabled: true } as unknown as Outlet;
 
-function getCombobox(labelText: string) {
-  const container = screen.getByText(labelText).closest("div");
-  return within(container as HTMLElement).getByRole("combobox");
-}
-
-describe("OutletPickupTab — Time Slot Gap picker", () => {
-  it("renders the picker as a Combobox, not a native select", async () => {
-    vi.mocked(getShop).mockResolvedValue(fakeShop());
+// The shop-wide pickup settings moved to Settings > Fulfilment > Pickup.
+describe("OutletPickupTab shop-wide summary", () => {
+  it("shows the current shop-wide values read-only, with a link to change them for all outlets", async () => {
+    vi.mocked(getShop).mockResolvedValue(shop);
     render(
       <ToastProvider>
-        <OutletPickupTab outlet={fakeOutlet()} onSaved={vi.fn()} />
+        <OutletPickupTab outlet={outlet} onSaved={vi.fn()} />
       </ToastProvider>,
     );
 
-    await waitFor(() => expect(getCombobox("Time Slot Gap")).toHaveTextContent("15 minutes"));
-    expect(document.querySelector("select")).not.toBeInTheDocument();
+    await screen.findByText("Preparation + pickup time");
+    expect(screen.getByText("Card (online), Cash on Pickup")).toBeInTheDocument();
+    expect(screen.getByText("15 min")).toBeInTheDocument();
+    expect(screen.getByText("20 min")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Change for all outlets/ })).toHaveAttribute(
+      "href",
+      "/settings/fulfilment/pickup",
+    );
   });
 
-  it("selecting a new option updates the value", async () => {
-    const user = userEvent.setup();
-    vi.mocked(getShop).mockResolvedValue(fakeShop());
+  it("has no editable shop-wide controls and never calls updateShop", async () => {
+    vi.mocked(getShop).mockResolvedValue(shop);
     render(
       <ToastProvider>
-        <OutletPickupTab outlet={fakeOutlet()} onSaved={vi.fn()} />
+        <OutletPickupTab outlet={outlet} onSaved={vi.fn()} />
       </ToastProvider>,
     );
-
-    await waitFor(() => expect(getCombobox("Time Slot Gap")).toHaveTextContent("15 minutes"));
-    await user.click(getCombobox("Time Slot Gap"));
-    await user.click(await screen.findByRole("option", { name: "45 minutes" }));
-    expect(getCombobox("Time Slot Gap")).toHaveTextContent("45 minutes");
+    await screen.findByText("Preparation + pickup time");
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(updateShop).not.toHaveBeenCalled();
   });
 });

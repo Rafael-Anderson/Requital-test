@@ -373,7 +373,7 @@ export function useAccountSetupForm() {
       // race on the uniqueness check, a network blip) shouldn't surface as
       // "account creation failed" when it didn't. This only starts the claim
       // (a pending DNS-TXT verification); the merchant finishes it, adds the
-      // DNS record, and can retry from Settings > Business Settings > Domain
+      // DNS record, and can retry from Settings > Business > Domain
       // (AccountSetup.tsx deep-links there after signup for the custom case).
       if (domainType === "custom" && customDomain.trim()) {
         try {

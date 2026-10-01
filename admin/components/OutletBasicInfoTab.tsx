@@ -2,31 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
-import { getShop, updateOutlet, updateShop } from "@/lib/api";
+import { getShop, updateOutlet } from "@/lib/api";
 import { normalizePhone } from "@/lib/validators";
 import type { Outlet, Shop } from "@/lib/types";
 import { mergeBusinessHours } from "@/lib/business-hours";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Checkbox from "@/components/ui/Checkbox";
 import Toggle from "@/components/ui/Toggle";
 import Card from "@/components/ui/Card";
-import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
-import ShopWideChangeModal from "@/components/ShopWideChangeModal";
-import { diffShopWideChanges } from "@/lib/shop-wide-fields";
+import ShopWideSummary from "@/components/ShopWideSummary";
 import { useToast } from "@/components/ui/Toast";
 
 const LANGUAGE_LABELS: Record<string, string> = { en: "English", ar: "Arabic" };
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">{label}</label>
-      {children}
-    </div>
-  );
-}
 
 export default function OutletBasicInfoTab({
   outlet,
@@ -49,37 +37,11 @@ export default function OutletBasicInfoTab({
   // their current value on this tab, never written back from it.
   const [shop, setShop] = useState<Shop | null>(null);
 
-  const [allowSameDayOrders, setAllowSameDayOrders] = useState(true);
-  const [allowNextDayOrders, setAllowNextDayOrders] = useState(true);
-  const [taxRate, setTaxRate] = useState("0");
-  const [taxInclusive, setTaxInclusive] = useState(true);
-  const [taxOnDelivery, setTaxOnDelivery] = useState(false);
-  const [savingOrderSettings, setSavingOrderSettings] = useState(false);
-  // The shop-wide payload as loaded, for the "this changes every outlet"
-  // confirm (lib/shop-wide-fields.ts). Re-baselined after a successful save
-  // so a second save of the same values does not re-prompt.
-  const [shopBaseline, setShopBaseline] = useState<Record<string, unknown> | null>(null);
-  const [pendingChanges, setPendingChanges] = useState<string[] | null>(null);
-
   const toast = useToast();
 
   useEffect(() => {
     getShop()
-      .then((s) => {
-        setShop(s);
-        setAllowSameDayOrders(s.allowSameDayOrders);
-        setAllowNextDayOrders(s.allowNextDayOrders);
-        setTaxRate(s.taxRate);
-        setTaxInclusive(s.taxInclusive);
-        setTaxOnDelivery(s.taxOnDelivery);
-        setShopBaseline({
-          allowSameDayOrders: s.allowSameDayOrders,
-          allowNextDayOrders: s.allowNextDayOrders,
-          taxRate: Number(s.taxRate) || 0,
-          taxInclusive: s.taxInclusive,
-          taxOnDelivery: s.taxOnDelivery,
-        });
-      })
+      .then(setShop)
       .catch(() => {});
   }, []);
 
@@ -105,43 +67,6 @@ export default function OutletBasicInfoTab({
       toast(err instanceof Error ? err.message : "Failed to save", "error");
     } finally {
       setSaving(false);
-    }
-  }
-
-  function buildShopPayload() {
-    return {
-      allowSameDayOrders,
-      allowNextDayOrders,
-      taxRate: Number(taxRate) || 0,
-      taxInclusive,
-      taxOnDelivery,
-    };
-  }
-
-  // Every field on this card is shop-wide, so a save that changes one of them
-  // confirms first. Nothing changed = save straight through, unchanged from
-  // before this guard existed.
-  function requestSaveOrderSettings() {
-    const changes = diffShopWideChanges(shopBaseline, buildShopPayload());
-    if (changes.length === 0) {
-      void handleSaveOrderSettings();
-      return;
-    }
-    setPendingChanges(changes);
-  }
-
-  async function handleSaveOrderSettings() {
-    setSavingOrderSettings(true);
-    try {
-      const payload = buildShopPayload();
-      await updateShop(payload);
-      setShopBaseline(payload);
-      setPendingChanges(null);
-      toast("Order settings saved");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save order settings", "error");
-    } finally {
-      setSavingOrderSettings(false);
     }
   }
 
@@ -191,8 +116,9 @@ export default function OutletBasicInfoTab({
           />
 
           <p className="sm:col-span-2 text-xs text-text-faint -mt-2">
-            Country, Time Zone, Currency, and Default Language are shop-wide. Change them under
-            Settings → Business Settings, not per outlet.
+            Country, Time Zone, Currency, and Default Language are shop-wide, not per outlet. Country and Time Zone
+            are in Settings &gt; Business Information, Currency in Settings &gt; Selling &gt; Money &amp; Tax, and
+            Default Language in Settings &gt; Store Configuration.
           </p>
         </div>
       </Card>
@@ -206,81 +132,28 @@ export default function OutletBasicInfoTab({
         </div>
       </Card>
 
-      <Card>
-        <h3 className="text-sm font-semibold mb-1">Order Setting</h3>
-        <p className="text-xs text-text-faint mb-4">
-          These apply shop-wide, across every outlet, not just this one.
-        </p>
-
-        <div className="space-y-5">
-          <div>
-            <p className="text-sm font-medium text-text-secondary dark:text-zinc-400 mb-2">
-              Select the dates customers can place orders for
-            </p>
-            <div className="space-y-2">
-              <Checkbox
-                label="Same-day orders"
-                checked={allowSameDayOrders}
-                onChange={(e) => setAllowSameDayOrders(e.target.checked)}
-              />
-              <Checkbox
-                label="Next-day orders"
-                checked={allowNextDayOrders}
-                onChange={(e) => setAllowNextDayOrders(e.target.checked)}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Tax Rate (%)"
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              value={taxRate}
-              onChange={(e) => setTaxRate(e.target.value)}
-            />
-            <Field label="Tax Type">
-              <SegmentedToggle
-                value={taxInclusive ? "inclusive" : "exclusive"}
-                onChange={(v) => setTaxInclusive(v === "inclusive")}
-                options={[
-                  { value: "exclusive", label: "Exclusive" },
-                  { value: "inclusive", label: "Inclusive" },
-                ]}
-              />
-            </Field>
-            <Field label="Tax on delivery fee">
-              <Toggle
-                checked={taxOnDelivery}
-                onChange={setTaxOnDelivery}
-                tooltip="Off applies tax to the goods only, which is how orders have always been priced here."
-              />
-            </Field>
-          </div>
-
-          <Button variant="primary" onClick={requestSaveOrderSettings} disabled={savingOrderSettings}>
-            <Check className="size-4 inline -mt-0.5 mr-1" />
-            Save changes
-          </Button>
-        </div>
-      </Card>
+      {shop && (
+        <ShopWideSummary
+          title="Order and Tax Settings"
+          rows={[
+            { label: "Same-day orders", value: shop.allowSameDayOrders ? "On" : "Off" },
+            { label: "Next-day orders", value: shop.allowNextDayOrders ? "On" : "Off" },
+            { label: "Tax Rate", value: `${Number(shop.taxRate) || 0}%` },
+            { label: "Tax Type", value: shop.taxInclusive ? "Inclusive" : "Exclusive" },
+            { label: "Tax on delivery fee", value: shop.taxOnDelivery ? "On" : "Off" },
+          ]}
+          links={[
+            { href: "/settings/selling/money-tax", label: "Change tax for all outlets" },
+            { href: "/settings/fulfilment/delivery", label: "Change order dates for all outlets" },
+          ]}
+        />
+      )}
 
       <Button variant="primary" onClick={handleSave} disabled={saving}>
         <Check className="size-4 inline -mt-0.5 mr-1" />
         Save changes
       </Button>
 
-      {pendingChanges && (
-        <ShopWideChangeModal
-          outletName={outlet.name}
-          changes={pendingChanges}
-          saving={savingOrderSettings}
-          onConfirm={() => void handleSaveOrderSettings()}
-          onCancel={() => setPendingChanges(null)}
-        />
-      )}
     </div>
   );
 }

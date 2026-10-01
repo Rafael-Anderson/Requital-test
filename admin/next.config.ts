@@ -78,7 +78,8 @@ const nextConfig: NextConfig = {
   //
   // UI polish batch: Failed Jobs moved from a top-level homepage tile into
   // Settings (an internal ops/debugging view, not a merchant-facing app) —
-  // /jobs redirects to /settings/jobs.
+  // /jobs redirects to /settings/diagnostics (it was /settings/jobs, which is
+  // now a pointer card to the same place after the Settings IA restructure).
   async redirects() {
     return [
       { source: "/categories", destination: "/inventory/categories", permanent: true },
@@ -97,7 +98,7 @@ const nextConfig: NextConfig = {
       { source: "/templates", destination: "/products/templates", permanent: true },
       { source: "/templates/new", destination: "/products/templates/new", permanent: true },
       { source: "/templates/:id/edit", destination: "/products/templates/:id/edit", permanent: true },
-      { source: "/jobs", destination: "/settings/jobs", permanent: true },
+      { source: "/jobs", destination: "/settings/diagnostics", permanent: true },
     ];
   },
   async headers() {

@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import PageShell from "@/components/ui/PageShell";
+import SettingsSearch from "@/components/SettingsSearch";
 
 export default function SettingsIndexPage() {
-  redirect("/settings/business");
+  return (
+    <PageShell>
+      <SettingsSearch />
+    </PageShell>
+  );
 }

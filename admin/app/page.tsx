@@ -43,7 +43,7 @@ const ALL_SECTIONS: SectionDef[] = [
   { href: "/customers", label: "Customers", icon: Users, description: "Profiles, orders & history", group: "Growth", adminOnly: true },
   { href: "/reports", label: "Reports", icon: BarChart3, description: "Exportable business insights", group: "Growth", adminOnly: true },
   { href: "/activity-log", label: "Activity Log", icon: History, description: "Every change, who & when", group: "System", adminOnly: true },
-  { href: "/settings", label: "Settings", icon: Settings, description: "Business info & users", group: "System", adminOnly: true },
+  { href: "/settings", label: "Settings", icon: Settings, description: "Business, selling, fulfilment & team", group: "System", adminOnly: true },
   // Delivery/payment/messaging provider config + read-only webhook
   // diagnostics — separated from Settings since it's credential-heavy and
   // staff with plain Orders access must never see it, same adminOnly gate

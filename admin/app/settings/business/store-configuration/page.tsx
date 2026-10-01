@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { getShop, updateShop } from "@/lib/api";
-import type { BusinessHours, ProductDisplayOrientation, Shop, ShopLanguage } from "@/lib/types";
+import type { BusinessHours, Shop, ShopLanguage } from "@/lib/types";
 import { defaultBusinessHours, mergeBusinessHours } from "@/lib/business-hours";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -17,20 +17,6 @@ import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
 const BUSINESS_TYPES = ["Florist", "Gift Shop", "Bakery", "Restaurant", "Grocery", "Retail", "Other"];
-
-// Gulf-region currencies plus USD — same UAE-market scope as the dial codes
-// on the Business Information tab.
-// The other six stay VISIBLE but disabled rather than being removed. A merchant
-// in Riyadh who sees SAR greyed out with a reason learns something true - it is
-// planned - whereas an AED-only dropdown reads as "this product is UAE-only".
-// The backend is the part that actually enforces this: UpdateShopDto restricts
-// shop.currency to AED and rejects anything else, so a hand-rolled API call
-// cannot get past it either. Both go away together when multi-currency ships
-// (audit D6 / I18N-4).
-// All seven are selectable since Phase 2a/A6. The backend's own
-// SUPPORTED_CURRENCIES (UpdateShopDto) is the real gate and now matches this
-// list, so there is no longer a disabled subset to model here.
-const CURRENCIES = ["AED", "SAR", "KWD", "QAR", "BHD", "OMR", "USD"];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -53,13 +39,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function StoreConfigurationPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [businessType, setBusinessType] = useState(BUSINESS_TYPES[0]);
-  const [currency, setCurrency] = useState("AED");
   const [defaultLanguage, setDefaultLanguage] = useState<ShopLanguage>("en");
   const [defaultDeliveryFee, setDefaultDeliveryFee] = useState("0");
-  const [taxDisplayText, setTaxDisplayText] = useState("");
-  const [productDisplayOrientation, setProductDisplayOrientation] = useState<ProductDisplayOrientation>("grid");
-  const [productImageZoomEnabled, setProductImageZoomEnabled] = useState(true);
-  const [showCollectionMenu, setShowCollectionMenu] = useState(true);
   const [allowPreOrders, setAllowPreOrders] = useState(false);
   const [customerConfirmationRequired, setCustomerConfirmationRequired] = useState(false);
   const [externalDeliveryEnabled, setExternalDeliveryEnabled] = useState(false);
@@ -82,13 +63,8 @@ export default function StoreConfigurationPage() {
     getShop().then((s) => {
       setShop(s);
       setBusinessType(s.businessType || BUSINESS_TYPES[0]);
-      setCurrency(s.currency);
       setDefaultLanguage(s.defaultLanguage);
       setDefaultDeliveryFee(s.defaultDeliveryFee);
-      setTaxDisplayText(s.taxDisplayText ?? "");
-      setProductDisplayOrientation(s.productDisplayOrientation);
-      setProductImageZoomEnabled(s.productImageZoomEnabled);
-      setShowCollectionMenu(s.showCollectionMenu);
       setAllowPreOrders(s.allowPreOrders);
       setCustomerConfirmationRequired(s.customerConfirmationRequired);
       setExternalDeliveryEnabled(s.externalDeliveryEnabled);
@@ -109,13 +85,8 @@ export default function StoreConfigurationPage() {
     try {
       await updateShop({
         businessType,
-        currency,
         defaultLanguage,
         defaultDeliveryFee: Number(defaultDeliveryFee) || 0,
-        taxDisplayText,
-        productDisplayOrientation,
-        productImageZoomEnabled,
-        showCollectionMenu,
         allowPreOrders,
         customerConfirmationRequired,
         externalDeliveryEnabled,
@@ -157,24 +128,6 @@ export default function StoreConfigurationPage() {
             </select>
           </Field>
 
-          <Field label="Currency">
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="flex h-9 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm shadow-sm shadow-black/5 outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-text-faint">
-              Applies to new orders. Orders already placed keep the currency they
-              were charged in, so past totals, invoices and reports do not change.
-            </p>
-          </Field>
-
           <Field label="Default Language">
             <SegmentedToggle
               value={defaultLanguage}
@@ -200,45 +153,26 @@ export default function StoreConfigurationPage() {
             </p>
           </div>
 
-          <Input
-            label="Tax Display Text"
-            placeholder="e.g. Including VAT"
-            value={taxDisplayText}
-            onChange={(e) => setTaxDisplayText(e.target.value)}
-          />
         </Section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <div className="space-y-4">
             <Card>
-              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Storefront Display</h3>
-              <div className="space-y-4">
-                <div>
-                  <Field label="Product Display Orientation">
-                    <SegmentedToggle
-                      value={productDisplayOrientation}
-                      onChange={setProductDisplayOrientation}
-                      options={[
-                        { value: "grid", label: "Grid" },
-                        { value: "list", label: "List" },
-                      ]}
-                    />
-                  </Field>
-                </div>
-
-                <div className="space-y-2">
-                  <Checkbox
-                    label="Product image zoom on detail view"
-                    checked={productImageZoomEnabled}
-                    onChange={(e) => setProductImageZoomEnabled(e.target.checked)}
-                  />
-                  <Checkbox
-                    label="Show collection menu"
-                    checked={showCollectionMenu}
-                    onChange={(e) => setShowCollectionMenu(e.target.checked)}
-                  />
-                </div>
-              </div>
+              <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-3">Moved</h3>
+              <ul className="space-y-1.5 text-sm text-text-secondary dark:text-zinc-300">
+                <li>
+                  Currency and Tax Display Text:{" "}
+                  <Link href="/settings/selling/money-tax" className="text-accent-text dark:text-accent hover:underline">
+                    Selling &gt; Money &amp; Tax
+                  </Link>
+                </li>
+                <li>
+                  Product display orientation, image zoom and collection menu:{" "}
+                  <Link href="/settings/storefront/display" className="text-accent-text dark:text-accent hover:underline">
+                    Storefront &gt; Display
+                  </Link>
+                </li>
+              </ul>
             </Card>
 
             <Card>
