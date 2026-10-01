@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl, searchProducts } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import { iconStyleProps } from "@/lib/icon-style";
 import type { IconCornerProps } from "@/lib/theme-element-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
@@ -72,6 +73,9 @@ export default function SearchBar({
         .then((res) => {
           setResults(res.results);
           setSuggestion(res.suggestion);
+          // Debounced already (one request per pause in typing), so this is one
+          // `search` event per settled query. No-op without cookie consent.
+          track("search", { query: trimmed });
         })
         .catch(() => {
           setResults([]);

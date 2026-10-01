@@ -3,41 +3,37 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
+import { cookieConsentStorageKey, getConsent, setConsent, type CookieConsentChoice } from "@/lib/consent";
+import { purgeClickIds } from "@/lib/attribution";
 
-export type CookieConsentChoice = "accepted" | "declined";
-
-export function cookieConsentStorageKey(shopSlug: string): string {
-  return `requital_storefront_cookie_consent:${shopSlug}`;
-}
+export { cookieConsentStorageKey };
+export type { CookieConsentChoice };
 
 // Bottom bar, not a modal — must never block page interaction (see task
-// spec). Shown once per shop per browser until a choice is made; no
-// analytics wiring yet, this only persists the choice (see
-// requital_storefront_cookie_consent's own comment for what a future
-// analytics-gating consumer would read).
+// spec). Shown once per shop per browser until a choice is made. This is the
+// real switch for third-party tracking: lib/analytics.ts loads no provider
+// script and lib/attribution.ts forwards no click id until the visitor accepts
+// here. Declining (or never answering) means neither ever happens.
 export default function CookieConsentBanner() {
   const { shopSlug, shopBasePath } = useShop();
   const [choice, setChoice] = useState<CookieConsentChoice | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(cookieConsentStorageKey(shopSlug));
-      if (raw === "accepted" || raw === "declined") setChoice(raw);
-    } catch {
-      // corrupt/blocked storage — fall through to showing the banner again
-    }
+    // Blocked/corrupt storage reads as "no choice yet": the banner shows again.
+    const stored = getConsent(shopSlug);
+    if (stored) setChoice(stored);
     setLoaded(true);
   }, [shopSlug]);
 
   function choose(next: CookieConsentChoice) {
     setChoice(next);
-    try {
-      localStorage.setItem(cookieConsentStorageKey(shopSlug), next);
-    } catch {
-      // storage blocked (private browsing, etc.) — the choice still applies
-      // for this page view, it just won't persist across visits
-    }
+    // Persists the choice and tells lib/analytics.ts (storage blocked, e.g.
+    // private browsing: it still applies for this page view).
+    setConsent(shopSlug, next);
+    // Declining discards the ad click ids captured on arrival: they exist only
+    // to be forwarded to an ad platform, which this visitor has refused.
+    if (next === "declined") purgeClickIds(shopSlug);
   }
 
   if (!loaded || choice) return null;

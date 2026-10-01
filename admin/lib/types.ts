@@ -121,6 +121,66 @@ export interface Order {
   // with the shop's current setting - a historical record must keep the
   // currency it was actually priced in.
   currency: string;
+  // Only populated on the single-order detail fetch. null = where this order
+  // came from was never recorded (placed before attribution, entered by staff, or
+  // the browser sent nothing): NOT the same as "direct".
+  attribution?: OrderAttributionView | null;
+}
+
+export interface AttributionTouchView {
+  source?: string;
+  medium?: string;
+  campaign?: string;
+  term?: string;
+  content?: string;
+  referrer?: string;
+  landingPath?: string;
+  capturedAt?: string;
+}
+
+// Click ids, Meta cookies and the user agent are deliberately not exposed to
+// staff by the API; only the touches and the shopper's cookie choice.
+export interface OrderAttributionView {
+  firstTouch: AttributionTouchView | null;
+  lastTouch: AttributionTouchView | null;
+  // true = accepted marketing cookies at checkout, false = declined, null = unknown.
+  consentMarketing: boolean | null;
+}
+
+// MKT-4. The Meta access token is write-only: the API only ever says whether one
+// is set.
+export interface AnalyticsSettings {
+  ga4MeasurementId: string | null;
+  metaPixelId: string | null;
+  metaCapiTokenSet: boolean;
+  metaTestEventCode: string | null;
+  tiktokPixelId: string | null;
+  snapPixelId: string | null;
+  googleAdsConversionId: string | null;
+  googleAdsConversionLabel: string | null;
+}
+
+export type AnalyticsSettingsUpdate = Partial<
+  Omit<AnalyticsSettings, "metaCapiTokenSet"> & { metaCapiToken: string | null }
+>;
+
+export type AttributionModel = "first" | "last";
+
+// One row per source / medium / campaign AND currency: a shop can hold orders in
+// several currencies over its life and they are never summed together.
+export interface AttributionReportRow {
+  source: string;
+  medium: string;
+  campaign: string;
+  currency: string;
+  orders: number;
+  revenue: number;
+}
+
+export interface AttributionReport {
+  model: AttributionModel;
+  truncated: boolean;
+  rows: AttributionReportRow[];
 }
 
 export interface SurveyResponse {

@@ -21,6 +21,7 @@ import { PolicyPagesModule } from '../policy-pages/policy-pages.module';
 import { ThemesModule } from '../themes/themes.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 import { RegionsModule } from '../regions/regions.module';
+import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { RegionsModule } from '../regions/regions.module';
     ThemesModule,
     CurrencyRatesModule,
     RegionsModule,
+    ShopAnalyticsModule,
   ],
   controllers: [
     PublicController,

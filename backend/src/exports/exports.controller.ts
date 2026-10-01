@@ -82,7 +82,15 @@ export class ExportsController {
     // body, exactly like every other endpoint.
     let offset = 0;
     let page = await definition.fetchPage(
-      { db: this.db, ctx, outletId, search: query.search },
+      {
+        db: this.db,
+        ctx,
+        outletId,
+        search: query.search,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        model: query.model,
+      },
       PAGE_SIZE,
       offset,
     );
@@ -121,7 +129,15 @@ export class ExportsController {
       // would hand over a truncated file that looks complete.
       try {
         page = await definition.fetchPage(
-          { db: this.db, ctx, outletId, search: query.search },
+          {
+        db: this.db,
+        ctx,
+        outletId,
+        search: query.search,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        model: query.model,
+      },
           PAGE_SIZE,
           offset,
         );

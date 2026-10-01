@@ -11,6 +11,7 @@ import { resolveEarliestDeliveryLabel } from "@/lib/earliest-delivery";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import type { Brand, CollectionDetail, Collection, Product } from "@/lib/types";
 import ProductCard from "@/components/ProductCard";
+import { track } from "@/lib/analytics";
 import PriceRangeSlider from "@/components/PriceRangeSlider";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
@@ -171,7 +172,15 @@ export default function CollectionPage() {
     if (shopLoading) return;
     setCollection(null);
     getCollectionBySlug(shopSlug, params.slug, defaultOutletId, previewToken)
-      .then(setCollection)
+      .then((c) => {
+        // Reports the list the visitor is looking at (first page's worth is
+        // enough: providers cap items per event anyway).
+        track("view_item_list", {
+          listName: c.name,
+          items: c.products.slice(0, 20).map((p) => ({ id: p.id, name: p.name, price: Number(p.price) })),
+        });
+        setCollection(c);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Collection not found"));
   }, [shopSlug, params.slug, defaultOutletId, shopLoading, previewToken]);
 

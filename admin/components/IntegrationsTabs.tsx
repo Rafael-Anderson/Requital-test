@@ -9,6 +9,7 @@ const TABS = [
   { href: "/integrations", label: "Delivery" },
   { href: "/integrations/payments", label: "Payments" },
   { href: "/integrations/messaging", label: "Messaging" },
+  { href: "/integrations/analytics", label: "Analytics & Pixels" },
   // "Incoming", not "Webhooks": the page is a read-only log of deliveries
   // RECEIVED from Slider/payment gateways. The bare name reads as outbound
   // webhook management, which this app does not have at all.

@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { ReportsFilterQueryDto } from './dto/reports-filter-query.dto';
 import { MarginBreakdownQueryDto } from './dto/margin-breakdown-query.dto';
+import { AttributionReportQueryDto } from './dto/attribution-report-query.dto';
 import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
 import { ListProductSalesQueryDto } from './dto/list-product-sales-query.dto';
 import { MonthlyReportFilterDto } from './dto/monthly-report-filter.dto';
@@ -55,6 +56,15 @@ export class ReportsController {
     @Query() query: ReportsFilterQueryDto,
   ) {
     return this.reportsService.getPrepTimeTruth(ctx, query);
+  }
+
+  // MKT-14: orders and revenue by source / medium / campaign.
+  @Get('attribution')
+  getAttribution(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: AttributionReportQueryDto,
+  ) {
+    return this.reportsService.getAttributionReport(ctx, query);
   }
 
   @Get('general/summary')

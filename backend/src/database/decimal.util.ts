@@ -4,6 +4,8 @@
 // so a value like 75 round-trips as "75.000000000000000000000000000000"
 // instead of Prisma.Decimal's own trimmed "75" — trim it back here so API
 // responses keep their pre-migration shape.
+import { stripAttribution } from '../shop-analytics/attribution';
+
 export function trimDecimal(value: string): string;
 export function trimDecimal(value: string | null): string | null;
 export function trimDecimal(value: string | null): string | null {
@@ -39,7 +41,9 @@ export function trimOrderRow<
   },
 >(order: T): T {
   return {
-    ...order,
+    // Raw `SELECT *` rows now carry order.attributionJson (click ids, fbp/fbc, user
+    // agent): never let it ride along into a response.
+    ...(stripAttribution(order) as T),
     deliveryFee: trimDecimal(order.deliveryFee as string | null),
     taxAmount: trimDecimal(order.taxAmount as string | null),
     discountAmount: trimDecimal(order.discountAmount as string | null),

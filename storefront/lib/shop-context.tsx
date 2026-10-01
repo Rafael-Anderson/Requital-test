@@ -9,6 +9,7 @@ import { applyRadiusCssVars, resolveThemeRadius } from "./radius";
 import { applyDensityCssVars } from "./density";
 import { applyCardHoverCssVars } from "./card-hover";
 import { captureReferralFromUrl } from "./referral";
+import { captureAttribution } from "./attribution";
 import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
 import { resolveLetterSpacing, resolveLineHeight, resolveScaleSizes, resolveTypographyPairing } from "./theme-typography";
@@ -524,6 +525,9 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
     // can land on any page (product link, homepage) and must survive
     // browsing until checkout. See lib/referral.ts.
     captureReferralFromUrl(shopSlug);
+    // MKT-14: same lifecycle for first/last-touch UTM + referrer. First-party
+    // storage only; click ids are forwarded to nobody without consent.
+    captureAttribution(shopSlug);
   }, [shopSlug]);
 
   useEffect(() => {

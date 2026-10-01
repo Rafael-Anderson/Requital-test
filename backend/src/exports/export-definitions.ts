@@ -5,6 +5,7 @@ import type { QueryParam } from '../database/database.service';
 import { PRODUCT_IMPORT_HEADERS } from '../products/products-import';
 import { buildVariantLabel } from '../products/variant-generator';
 import { toMajorUnitString } from '../common/currency-minor-units';
+import { queryAttributionRows } from '../reports/attribution-report';
 
 // ANL-11: one definition per exportable report. Adding an export is adding an
 // entry here - the controller, the streaming, the paging, the escaping and the
@@ -21,6 +22,9 @@ export interface ExportContext {
   ctx: TenantContext;
   outletId?: number;
   search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  model?: 'first' | 'last';
 }
 
 export interface ExportDefinition {
@@ -410,6 +414,34 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
           Number(r.linesWithoutCost),
         ];
       });
+    },
+  },
+
+  // MKT-14: orders and revenue by source / medium / campaign. Same query as the
+  // on-screen report (reports/attribution-report.ts), one currency per row.
+  attribution: {
+    roles: ['admin', 'viewer'],
+    filenamePrefix: 'attribution',
+    headers: ['Source', 'Medium', 'Campaign', 'Orders', 'Revenue', 'Currency'],
+    async fetchPage(
+      { db, ctx, outletId, dateFrom, dateTo, model },
+      limit,
+      offset,
+    ) {
+      const rows = await queryAttributionRows(
+        db,
+        { shopId: ctx.shopId, outletId, dateFrom, dateTo, model },
+        limit,
+        offset,
+      );
+      return rows.map((r): unknown[] => [
+        r.source,
+        r.medium,
+        r.campaign,
+        r.orders,
+        toMajorUnitString(r.revenue, r.currency),
+        r.currency,
+      ]);
     },
   },
 };

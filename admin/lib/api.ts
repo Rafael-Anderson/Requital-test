@@ -88,6 +88,10 @@ import type {
   SliderQuote,
   WebhookEvent,
   WhatsAppSettings,
+  AnalyticsSettings,
+  AnalyticsSettingsUpdate,
+  AttributionModel,
+  AttributionReport,
   PaginatedAuditLog,
   PaginatedStockMovements,
   FailedJob,
@@ -831,6 +835,26 @@ export function updatePaymentProvider(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+// MKT-4 analytics & pixels. The Meta token is write-only: send it to set or
+// replace it (null clears it); it is never returned.
+export function getAnalyticsSettings() {
+  return apiFetch<AnalyticsSettings>("/analytics-settings");
+}
+
+export function updateAnalyticsSettings(data: AnalyticsSettingsUpdate) {
+  return apiFetch<AnalyticsSettings>("/analytics-settings", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// MKT-14: orders and revenue by source / medium / campaign.
+export function getAttributionReport(filters: ReportsFilters, model: AttributionModel) {
+  const query = reportsFilterQuery(filters);
+  query.set("model", model);
+  return apiFetch<AttributionReport>(`/reports/attribution?${query.toString()}`);
 }
 
 export function getWhatsAppSettings() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { quoteCartTax } from "@/lib/order-tax";
@@ -11,7 +11,14 @@ import { generateTimeSlots, isDateBlocked } from "@/lib/slots";
 import { resolvePaymentMethods } from "@/lib/payment-methods";
 import { getStoredReferralCode } from "@/lib/referral";
 import { sanitizePhoneInput } from "@/lib/phone";
+import { track, type AnalyticsItem } from "@/lib/analytics";
+import { buildOrderAttribution } from "@/lib/attribution";
+import { buildPurchasePayload, stashPurchase } from "@/lib/purchase-tracking";
 import type { CustomerAddress, OrderType, PaymentMethod } from "@/lib/types";
+
+function cartAnalyticsItems(items: { productId: number; name: string; price: number; quantity: number; variantLabel?: string }[]): AnalyticsItem[] {
+  return items.map((i) => ({ id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant: i.variantLabel }));
+}
 
 // All checkout state, derived values, and submit handling — pulled out of
 // the page component so both the single-page and step-by-step presets (see
@@ -90,6 +97,17 @@ export function useCheckoutForm() {
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [submitting, setSubmitting] = useState(false);
+
+  // begin_checkout, once per visit to this page, as soon as the cart (restored
+  // from localStorage after mount) actually has something in it. A ref, not state:
+  // nothing renders from it.
+  const beganCheckout = useRef(false);
+  useEffect(() => {
+    if (beganCheckout.current || items.length === 0) return;
+    beganCheckout.current = true;
+    track("begin_checkout", { items: cartAnalyticsItems(items), value: subtotal });
+  }, [items, subtotal]);
+
   const [error, setError] = useState<string | null>(null);
 
   const [prefilled, setPrefilled] = useState(false);
@@ -216,6 +234,7 @@ export function useCheckoutForm() {
     setSubmitting(true);
     setError(null);
     try {
+      track("add_payment_info", { items: cartAnalyticsItems(items), value: subtotal, paymentType: paymentMethod });
       const res = await createOrder(shopSlug, {
         outletId,
         orderType,
@@ -241,11 +260,22 @@ export function useCheckoutForm() {
           note: i.note,
         })),
         giftCardCode: giftCardCode || undefined,
+        // MKT-14: where this order came from + the cookie-consent state at this
+        // moment. Click ids / fbp / fbc are included only if the visitor accepted.
+        attribution: buildOrderAttribution(shopSlug),
       });
+      const purchase = buildPurchasePayload(
+        { id: res.order.id, total: res.order.total, currency: res.order.currency },
+        cartAnalyticsItems(items),
+      );
       if (res.checkoutUrl) {
+        // Leaves for the gateway: the browser purchase event is sent when the
+        // customer returns (orders/[id]?paid=1), see lib/purchase-tracking.ts.
+        stashPurchase(res.order.id, purchase);
         window.location.href = res.checkoutUrl;
         return;
       }
+      track("purchase", purchase);
       sessionStorage.setItem(`requital_order:${res.order.id}`, JSON.stringify(res.order));
       clear();
       router.push(`${shopBasePath}/orders/${res.order.id}`);

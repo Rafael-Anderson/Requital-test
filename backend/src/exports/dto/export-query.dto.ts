@@ -1,4 +1,12 @@
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ExportQueryDto {
@@ -18,4 +26,17 @@ export class ExportQueryDto {
   @IsString()
   @MaxLength(200)
   search?: string;
+
+  // Honoured only by definitions that document them (the attribution export).
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @IsOptional()
+  @IsIn(['first', 'last'])
+  model?: 'first' | 'last';
 }
