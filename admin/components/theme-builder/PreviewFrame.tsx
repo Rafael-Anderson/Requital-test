@@ -141,21 +141,21 @@ function resolvePreviewUrl(
 // filtering happens over in SettingsPanel.tsx, a sibling panel.
 function SettingsSearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div className="relative ml-auto w-56">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
+    <div className="relative ms-auto w-56">
+      <Search className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search settings..."
-        className="h-8 w-full rounded-lg border border-black/10 bg-surface pl-8 pr-8 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 dark:border-white/15 dark:bg-zinc-900"
+        className="h-8 w-full rounded-lg border border-black/10 bg-surface ps-8 pe-8 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 dark:border-white/15 dark:bg-zinc-900"
       />
       {value && (
         <button
           type="button"
           onClick={() => onChange("")}
           aria-label="Clear search"
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
+          className="absolute end-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
         >
           <X className="size-3.5" />
         </button>
@@ -206,7 +206,7 @@ function PageSwitcher({
       <button
         type="button"
         onClick={onSelect}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
         <span className="truncate">{label}</span>
         {previewPath === value && <Check className="size-3.5 shrink-0 text-accent" />}
@@ -245,7 +245,7 @@ function PageSwitcher({
             {collections.length > 0 && (
               <>
                 <GroupHeader>Collections</GroupHeader>
-                <div className="pl-2">
+                <div className="ps-2">
                   {collections.map((c) => (
                     <Option
                       key={c.id}
@@ -260,7 +260,7 @@ function PageSwitcher({
             {products.length > 0 && (
               <>
                 <GroupHeader>Products</GroupHeader>
-                <div className="pl-2">
+                <div className="ps-2">
                   {products.map((p) => (
                     <Option
                       key={p.id}

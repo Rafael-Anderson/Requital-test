@@ -65,7 +65,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h3 className="text-sm font-semibold">Delivery Zones</h3>
         <Button variant="primary" onClick={() => setEditingZone("new")}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           New Zone
         </Button>
       </div>
@@ -126,7 +126,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
                 <TD className="text-text-muted">
                   {z.regions && z.regions.length > 0 ? z.regions.map((r) => r.nameEn).join(", ") : "-"}
                   {z.mappingConfirmedAt ? null : (
-                    <span className="ml-2 text-xs rounded-full px-2 py-0.5 border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
+                    <span className="ms-2 text-xs rounded-full px-2 py-0.5 border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
                       Needs review
                     </span>
                   )}

@@ -123,7 +123,7 @@ export default function InventoryReportPage() {
                 className="rounded-full border border-border dark:border-white/15 px-3 py-1 text-xs text-text-secondary dark:text-zinc-400"
               >
                 {r.name}
-                <span className="ml-1.5 font-semibold text-text-primary dark:text-zinc-100">
+                <span className="ms-1.5 font-semibold text-text-primary dark:text-zinc-100">
                   {stock(r.stockOnHand)} left
                 </span>
               </span>
@@ -165,7 +165,7 @@ export default function InventoryReportPage() {
                 <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">
                   {r.name}
                   {r.isDeadStock && (
-                    <span className="ml-2 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                    <span className="ms-2 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
                       Dead stock
                     </span>
                   )}

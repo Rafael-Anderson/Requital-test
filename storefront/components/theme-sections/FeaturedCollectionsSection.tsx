@@ -212,7 +212,7 @@ function ViewAll({
         style={{ ...resolveSecondaryButtonStyle(secondary), ...resolveButtonElementStyle(block.settings) }}
       >
         {label}
-        {hover.showIcon && <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />}
+        {hover.showIcon && <ArrowRight className="theme-btn-icon inline-block ms-1.5 size-4 align-[-3px]" aria-hidden="true" />}
       </a>
     );
   }

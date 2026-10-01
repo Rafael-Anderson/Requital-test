@@ -405,7 +405,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                   />
                 </div>
                 <Button type="button" variant="secondary" onClick={handleAddCollectionMember} disabled={!addCollectionId}>
-                  <Plus className="size-4 inline -mt-0.5 mr-1" />
+                  <Plus className="size-4 inline -mt-0.5 me-1" />
                   Add
                 </Button>
               </div>
@@ -469,7 +469,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                   />
                 </div>
                 <Button type="button" variant="secondary" onClick={handleAddMember} disabled={!addProductId}>
-                  <Plus className="size-4 inline -mt-0.5 mr-1" />
+                  <Plus className="size-4 inline -mt-0.5 me-1" />
                   Add
                 </Button>
               </div>

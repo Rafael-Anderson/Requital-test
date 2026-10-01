@@ -340,7 +340,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
             />
           </div>
           <Button type="button" variant="secondary" onClick={handleAddItem} disabled={!addProductId}>
-            <Plus className="size-4 inline -mt-0.5 mr-1" />
+            <Plus className="size-4 inline -mt-0.5 me-1" />
             Add
           </Button>
         </div>

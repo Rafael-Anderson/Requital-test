@@ -37,11 +37,11 @@ export default function OrderStatusTimeline({ orderId, refreshKey }: { orderId: 
       <h3 className="font-medium mb-3">Status timeline</h3>
       <ol>
         {history.map((entry, i) => (
-          <li key={i} className="relative pl-6 pb-4 last:pb-0">
+          <li key={i} className="relative ps-6 pb-4 last:pb-0">
             {i < history.length - 1 && (
-              <span className="absolute left-[5px] top-3.5 bottom-0 w-px bg-black/10 dark:bg-white/15" aria-hidden="true" />
+              <span className="absolute start-[5px] top-3.5 bottom-0 w-px bg-black/10 dark:bg-white/15" aria-hidden="true" />
             )}
-            <span className="absolute left-0 top-1 size-2.5 rounded-full bg-accent" aria-hidden="true" />
+            <span className="absolute start-0 top-1 size-2.5 rounded-full bg-accent" aria-hidden="true" />
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-sm font-medium">
                 {entry.status ? (TIMELINE_LABELS[entry.status] ?? entry.status.replace(/_/g, " ")) : "Unknown"}

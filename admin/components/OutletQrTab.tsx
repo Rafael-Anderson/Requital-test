@@ -58,7 +58,7 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
       <p className="text-xs text-text-muted break-all">{url}</p>
 
       <Button variant="secondary" onClick={handleDownload}>
-        <Download className="size-4 inline -mt-0.5 mr-1" />
+        <Download className="size-4 inline -mt-0.5 me-1" />
         Download QR Code
       </Button>
     </Card>

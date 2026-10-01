@@ -69,7 +69,7 @@ export default function TaxClassesPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Tax Classes</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           Add Tax Class
         </Button>
       </div>
@@ -97,7 +97,7 @@ export default function TaxClassesPage() {
                 <TH>Name</TH>
                 <TH>Treatment</TH>
                 <TH className="w-24">Rate</TH>
-                <TH className="w-24 text-right">Actions</TH>
+                <TH className="w-24 text-end">Actions</TH>
               </TR>
             </THead>
             <TBody>
@@ -106,7 +106,7 @@ export default function TaxClassesPage() {
                   <TD className="font-medium">
                     {c.name}
                     {c.isDefault && (
-                      <span className="ml-2 rounded px-1.5 py-0.5 text-[11px] font-semibold bg-accent-tint text-accent-text">
+                      <span className="ms-2 rounded px-1.5 py-0.5 text-[11px] font-semibold bg-accent-tint text-accent-text">
                         Default
                       </span>
                     )}

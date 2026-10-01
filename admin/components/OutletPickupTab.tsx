@@ -51,7 +51,7 @@ export default function OutletPickupTab({
             <span className="text-sm">Pickup available</span>
           </div>
           <Button variant="primary" onClick={handleSaveAvailability} disabled={savingAvailability}>
-            <Check className="size-4 inline -mt-0.5 mr-1" />
+            <Check className="size-4 inline -mt-0.5 me-1" />
             Save changes
           </Button>
         </div>

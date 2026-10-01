@@ -213,23 +213,23 @@ export default function ManageDeliveryModal({
                 <h3 className="font-medium mb-2">Customer &amp; Order Details</h3>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Customer Name</span>
-                  <span className="text-right">{order.customerName}</span>
+                  <span className="text-end">{order.customerName}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Phone</span>
-                  <span className="text-right">{order.customerPhone}</span>
+                  <span className="text-end">{order.customerPhone}</span>
                 </div>
                 <div className="flex justify-between text-sm gap-4">
                   <span className="text-text-muted shrink-0">Delivery Address</span>
-                  <span className="text-right">{formatDeliveryAddress(order)}</span>
+                  <span className="text-end">{formatDeliveryAddress(order)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Order Ref</span>
-                  <span className="text-right">#{order.id}</span>
+                  <span className="text-end">#{order.id}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Payment Mode</span>
-                  <div className="text-right">
+                  <div className="text-end">
                     <div>{payment.label}</div>
                     {payment.gatewaySubline && <div className="text-xs text-text-faint">{payment.gatewaySubline}</div>}
                   </div>
@@ -240,17 +240,17 @@ export default function ManageDeliveryModal({
                 <h3 className="font-medium mb-2">Delivery Information</h3>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Pickup Time</span>
-                  <span className="text-right">
+                  <span className="text-end">
                     {deliveryType === "schedule" && pickupTime ? formatDateTimeDisplay(pickupTime) : "Now"}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Customer Delivery</span>
-                  <span className="text-right">{customerDelivery ? formatDateTimeDisplay(customerDelivery) : "—"}</span>
+                  <span className="text-end">{customerDelivery ? formatDateTimeDisplay(customerDelivery) : "—"}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Total ETA</span>
-                  <span className="text-right">{formatDuration(quote.durationMinutes)}</span>
+                  <span className="text-end">{formatDuration(quote.durationMinutes)}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2">
                   <span className="text-text-muted text-sm">Delivery Total Charge</span>

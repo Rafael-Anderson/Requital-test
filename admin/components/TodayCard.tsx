@@ -102,7 +102,7 @@ export default function TodayCard() {
                 className="rounded-full border border-border dark:border-white/15 px-3 py-1 text-xs text-text-secondary dark:text-zinc-400"
               >
                 {s.slot}
-                <span className="ml-1.5 font-semibold text-text-primary dark:text-zinc-100">
+                <span className="ms-1.5 font-semibold text-text-primary dark:text-zinc-100">
                   {s.orders}
                 </span>
               </span>

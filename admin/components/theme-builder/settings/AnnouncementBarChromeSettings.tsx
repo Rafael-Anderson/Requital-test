@@ -65,7 +65,7 @@ export default function AnnouncementBarChromeSettings({
             ))}
           </div>
           <Button variant="secondary" size="sm" onClick={() => setMessages([...messages, ""])}>
-            <Plus className="mr-1 size-3.5" /> Add message
+            <Plus className="me-1 size-3.5" /> Add message
           </Button>
 
           <div className="flex items-center justify-between">

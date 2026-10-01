@@ -220,7 +220,7 @@ export default function VariantsSection({
         </div>
         <div className="flex items-center gap-2 mt-3">
           <Button type="button" variant="secondary" size="sm" onClick={addOption} disabled={options.length >= MAX_OPTIONS}>
-            <Plus className="size-3.5 inline -mt-0.5 mr-1" />
+            <Plus className="size-3.5 inline -mt-0.5 me-1" />
             Add option
           </Button>
           {options.length > 0 && (

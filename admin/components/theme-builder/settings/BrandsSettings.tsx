@@ -131,7 +131,7 @@ export default function BrandsSettings({
             />
           </div>
           <Button type="button" variant="secondary" onClick={addBrand} disabled={!addId}>
-            <Plus className="size-4 inline -mt-0.5 mr-1" />
+            <Plus className="size-4 inline -mt-0.5 me-1" />
             Add
           </Button>
         </div>

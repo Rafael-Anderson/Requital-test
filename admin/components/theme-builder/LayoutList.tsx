@@ -15,7 +15,7 @@ export default function LayoutList({ editor }: { editor: ThemeEditorState }) {
           key={label}
           type="button"
           onClick={() => setLayoutCategory(label)}
-          className={`rounded-lg border px-2 py-2 text-left text-sm font-medium ${
+          className={`rounded-lg border px-2 py-2 text-start text-sm font-medium ${
             layoutCategory === label
               ? "border-accent bg-accent/5"
               : "border-transparent hover:bg-black/5 dark:hover:bg-white/10"

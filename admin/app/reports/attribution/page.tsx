@@ -107,7 +107,7 @@ export default function AttributionReportPage() {
         <Button variant="primary" size="sm" onClick={() => setApplied(draft)}>
           Apply
         </Button>
-        <div className="ml-auto">
+        <div className="ms-auto">
           <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting} loading={exporting}>
             <Download className="size-4" />
             Export CSV

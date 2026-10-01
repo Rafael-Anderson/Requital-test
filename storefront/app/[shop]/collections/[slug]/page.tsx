@@ -105,7 +105,7 @@ function SortDropdown({ value, onChange }: { value: SortOption; onChange: (v: So
       {open && (
         <div
           role="listbox"
-          className={`dropdown-in absolute left-0 top-full z-20 mt-1 w-[220px] rounded-lg border border-stroke ${FILTER_FIELD_BG} py-1 shadow-lg shadow-black/10`}
+          className={`dropdown-in absolute start-0 top-full z-20 mt-1 w-[220px] rounded-lg border border-stroke ${FILTER_FIELD_BG} py-1 shadow-lg shadow-black/10`}
         >
           {SORT_OPTIONS.map((opt) => (
             <button
@@ -117,7 +117,7 @@ function SortDropdown({ value, onChange }: { value: SortOption; onChange: (v: So
                 onChange(opt.value);
                 setOpen(false);
               }}
-              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
+              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-start text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
             >
               <span>{opt.label}</span>
               {opt.value === value && <Check className="size-3.5 shrink-0 text-accent" />}
@@ -381,13 +381,13 @@ export default function CollectionPage() {
           <label className="flex-1 min-w-[240px] text-sm">
             <span className="block text-xs text-zinc-500 mb-1">Search</span>
             <div className="relative">
-              <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+              <SearchIcon className="absolute start-3.5 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
               <input
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search this collection"
-                className={`h-11 w-full rounded-lg border border-stroke ${FILTER_FIELD_BG} pl-10 pr-3 text-sm text-foreground`}
+                className={`h-11 w-full rounded-lg border border-stroke ${FILTER_FIELD_BG} ps-10 pe-3 text-sm text-foreground`}
               />
             </div>
           </label>

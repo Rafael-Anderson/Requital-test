@@ -56,7 +56,7 @@ export default function TimeSlotPicker({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`${FIELD_CLASS} flex items-center justify-between gap-2 cursor-pointer text-left`}
+        className={`${FIELD_CLASS} flex items-center justify-between gap-2 cursor-pointer text-start`}
       >
         <span className="flex items-center gap-2 truncate">
           <Clock className="size-4 shrink-0 text-zinc-400" />
@@ -67,7 +67,7 @@ export default function TimeSlotPicker({
       {open && (
         <div
           role="listbox"
-          className={`dropdown-in absolute left-0 top-full z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-stroke bg-background py-1 shadow-lg shadow-black/10`}
+          className={`dropdown-in absolute start-0 top-full z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-stroke bg-background py-1 shadow-lg shadow-black/10`}
         >
           {slots.map((s) => (
             <button
@@ -79,7 +79,7 @@ export default function TimeSlotPicker({
                 onChange(s);
                 setOpen(false);
               }}
-              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
+              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-start text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
             >
               <span>{s}</span>
               {s === value && <Check className="size-3.5 shrink-0 text-accent" />}

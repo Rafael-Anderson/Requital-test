@@ -281,3 +281,16 @@ body {
 .modal-scroll::-webkit-scrollbar-button {
   display: none;
 }
+
+/* Table header cells. The UA stylesheet gives a th `text-align: -internal-center`, which
+   Chrome resolves to "center unless the parent's computed text-align is explicitly set,
+   in which case inherit it", and it treats the keyword `start` as NOT explicit. Our table
+   chrome sets text-align on the thead, and that used to be the physical `left` (explicit,
+   so headers inherited it). With the logical `text-start` the headers would silently
+   centre. `inherit` restores "headers follow the thead" for both LTR and RTL; a TH with its
+   own text-end/text-center utility still wins (utilities sit above the base layer). */
+@layer base {
+  th {
+    text-align: inherit;
+  }
+}

@@ -173,7 +173,7 @@ export default function OnlinePresencePage() {
       )}
 
       <Button variant="primary" onClick={handleSave} disabled={saving}>
-        <Check className="size-4 inline -mt-0.5 mr-1" />
+        <Check className="size-4 inline -mt-0.5 me-1" />
         Save changes
       </Button>
       </div>

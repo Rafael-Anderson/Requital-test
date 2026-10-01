@@ -59,7 +59,7 @@ export default function PolicyPagesSettingsPage() {
                   key={type}
                   type="button"
                   onClick={() => selectType(type)}
-                  className={`w-full flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-left cursor-pointer transition-colors ${
+                  className={`w-full flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-start cursor-pointer transition-colors ${
                     selected === type
                       ? "bg-accent/10 text-accent-text dark:text-accent font-medium"
                       : "hover:bg-black/5 dark:hover:bg-white/10"

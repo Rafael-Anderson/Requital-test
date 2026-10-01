@@ -149,7 +149,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
                     .getElementById(s.id)
                     ?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
-                className={`block w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer ${
+                className={`block w-full text-start px-3 py-1.5 rounded-lg text-sm transition-colors cursor-pointer ${
                   activeSection === s.id
                     ? "bg-accent/10 text-accent-text font-medium"
                     : "text-text-secondary dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-100"

@@ -51,7 +51,7 @@ function OrderConfirmationContent() {
       {paid && <p className="text-accent mt-2">Payment received.</p>}
 
       {order?.trackingToken && (
-        <div className="mt-6 rounded-lg border border-accent/30 bg-accent/5 p-4 text-left">
+        <div className="mt-6 rounded-lg border border-accent/30 bg-accent/5 p-4 text-start">
           <p className="text-sm font-medium">Save your tracking code</p>
           <p className="text-xs text-zinc-500 mt-1">
             Use this code to check your order status any time. No account needed. If you have an account, it&apos;ll
@@ -68,7 +68,7 @@ function OrderConfirmationContent() {
       )}
 
       {order && (
-        <div className="mt-6 text-left rounded-lg border border-black/10 p-4 space-y-1 text-sm">
+        <div className="mt-6 text-start rounded-lg border border-black/10 p-4 space-y-1 text-sm">
           <div className="flex justify-between">
             <span className="text-zinc-500">Status</span>
             <span>{order.status}</span>

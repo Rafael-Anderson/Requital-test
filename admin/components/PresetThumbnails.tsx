@@ -294,7 +294,7 @@ export function CartLayoutThumbnail({ layout }: { layout: CartLayout }) {
     return (
       <div className={`${FRAME} !flex-row !p-0 overflow-hidden`}>
         <div className="flex-1 bg-zinc-100 dark:bg-zinc-800" />
-        <div className="w-8 bg-surface dark:bg-zinc-900 border-l border-border dark:border-white/10 flex flex-col gap-1 p-1">
+        <div className="w-8 bg-surface dark:bg-zinc-900 border-s border-border dark:border-white/10 flex flex-col gap-1 p-1">
           {[0, 1].map((i) => (
             <div key={i} className="h-2.5 rounded bg-accent/25" />
           ))}

@@ -104,7 +104,7 @@ export default function CustomFieldsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Custom fields</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           Add custom field
         </Button>
       </div>
@@ -138,7 +138,7 @@ export default function CustomFieldsPage() {
                       <TH>Handle</TH>
                       <TH>Type</TH>
                       <TH className="w-28">Public</TH>
-                      <TH className="w-24 text-right">Actions</TH>
+                      <TH className="w-24 text-end">Actions</TH>
                     </TR>
                   </THead>
                   <TBody>

@@ -97,7 +97,7 @@ export default function RichTextEditor({ label, value, onChange }: RichTextEdito
           contentEditable
           suppressContentEditableWarning
           onInput={handleInput}
-          className="px-3 py-2 text-sm min-h-32 outline-none [&_h2]:text-base [&_h2]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-accent-text [&_a]:underline"
+          className="px-3 py-2 text-sm min-h-32 outline-none [&_h2]:text-base [&_h2]:font-semibold [&_ul]:list-disc [&_ul]:ps-5 [&_ol]:list-decimal [&_ol]:ps-5 [&_a]:text-accent-text [&_a]:underline"
         />
       </div>
     </div>

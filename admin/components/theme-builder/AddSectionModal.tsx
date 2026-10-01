@@ -22,7 +22,7 @@ export default function AddSectionModal({
                 onPick(type);
                 requestClose();
               }}
-              className="rounded-lg border border-black/10 p-4 text-left text-sm font-medium transition-colors hover:border-accent hover:bg-accent/5 dark:border-white/10"
+              className="rounded-lg border border-black/10 p-4 text-start text-sm font-medium transition-colors hover:border-accent hover:bg-accent/5 dark:border-white/10"
             >
               {SECTION_TYPE_LABELS[type]}
             </button>

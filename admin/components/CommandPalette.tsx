@@ -176,7 +176,7 @@ export default function CommandPalette() {
                     type="button"
                     onClick={() => navigateTo(item)}
                     onMouseEnter={() => setActiveIndex(i)}
-                    className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm cursor-pointer transition-colors ${
+                    className={`flex w-full items-center gap-3 px-4 py-2 text-start text-sm cursor-pointer transition-colors ${
                       i === activeIndex ? "bg-black/5 dark:bg-white/10" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
                     }`}
                   >

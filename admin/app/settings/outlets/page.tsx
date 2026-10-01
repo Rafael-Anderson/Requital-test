@@ -49,7 +49,7 @@ export default function SettingsOutletsPage() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 className="text-lg font-bold text-text-primary dark:text-zinc-50">Branches</h2>
         <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           New outlet
         </Button>
       </div>
@@ -80,7 +80,7 @@ export default function SettingsOutletsPage() {
                 <TD>
                   <StatusBadge status={o.isOpen ? "open" : "closed"} />
                   {o.closedOverride && (
-                    <span className="ml-1.5 text-xs text-text-faint">(manual)</span>
+                    <span className="ms-1.5 text-xs text-text-faint">(manual)</span>
                   )}
                 </TD>
                 <TD className="text-text-muted">{locationLabel(o)}</TD>

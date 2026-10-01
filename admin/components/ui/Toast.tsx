@@ -25,8 +25,8 @@ type ShowToast = (message: string, type?: ToastType, options?: ToastOptions) => 
 const ToastContext = createContext<ShowToast | null>(null);
 
 const TYPE_STYLES: Record<ToastType, string> = {
-  success: "border-l-green-500",
-  error: "border-l-red-500",
+  success: "border-s-green-500",
+  error: "border-s-red-500",
 };
 
 let nextId = 0;
@@ -59,11 +59,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           globally rather than conditionally, since every page's toast
           moving up 64px is a small, harmless visual change and a
           page-aware offset would need new plumbing for one call site. */}
-      <div className="fixed bottom-20 right-4 z-50 flex flex-col gap-2">
+      <div className="fixed bottom-20 end-4 z-50 flex flex-col gap-2">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`toast-enter flex items-center gap-3 rounded-lg border-l-4 bg-white dark:bg-zinc-900 shadow-lg px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 border-y border-r border-black/10 dark:border-white/10 ${TYPE_STYLES[t.type]}`}
+            className={`toast-enter flex items-center gap-3 rounded-lg border-s-4 bg-white dark:bg-zinc-900 shadow-lg px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100 border-y border-e border-black/10 dark:border-white/10 ${TYPE_STYLES[t.type]}`}
           >
             <span>{t.message}</span>
             {t.action && (

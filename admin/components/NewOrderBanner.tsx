@@ -101,7 +101,7 @@ export default function NewOrderBanner() {
           always auto-dismisses via a timeout, see Toast.tsx). Stays until
           the merchant explicitly views or dismisses each order. */}
       {newOrders.length > 0 && (
-        <div className="fixed top-4 right-4 z-[100] w-80 max-w-[calc(100vw-2rem)] space-y-2">
+        <div className="fixed top-4 end-4 z-[100] w-80 max-w-[calc(100vw-2rem)] space-y-2">
           <div className="rounded-lg border border-accent/30 dark:border-accent/40 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10">
             <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border dark:border-white/10">
               <span className="text-sm font-semibold">

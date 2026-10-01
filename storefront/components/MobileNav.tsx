@@ -282,7 +282,7 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="fixed top-3 left-3 z-30 flex items-center justify-center size-10 rounded-full bg-header text-header-fg shadow-md md:hidden"
+        className="fixed top-3 start-3 z-30 flex items-center justify-center size-10 rounded-full bg-header text-header-fg shadow-md md:hidden"
       >
         <MenuIcon className="size-5" />
       </button>

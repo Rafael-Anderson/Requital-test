@@ -141,9 +141,9 @@ function QuickAddButton({
 // can't be transitioned — every other effect keeps the exact pre-existing
 // `hidden sm:group-hover:flex` markup, byte-identical.
 const QUICK_ADD_DEFAULT_CLASS =
-  "hidden sm:group-hover:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow";
+  "hidden sm:group-hover:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow";
 const QUICK_ADD_SLIDE_CLASS =
-  "hidden sm:flex absolute bottom-2 right-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 translate-y-2 pointer-events-none transition-all group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto";
+  "hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 translate-y-2 pointer-events-none transition-all group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto";
 
 // One product tile — its own component (not inline in the outer .map())
 // because useProductCardImageIndex is a hook and needs one instance per
@@ -260,7 +260,7 @@ function GridProductCard({
     >
       {discounted ? (
         <>
-          <span className="line-through text-price-main font-normal mr-1.5">
+          <span className="line-through text-price-main font-normal me-1.5">
             {currencyPrefix}
             {discounted.originalPrice}
           </span>
@@ -476,7 +476,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 style={resolveSecondaryButtonStyle(secondaryBtn)}
               >
                 {viewAllLabel}
-                {viewAllHover.showIcon && <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />}
+                {viewAllHover.showIcon && <ArrowRight className="theme-btn-icon inline-block ms-1.5 size-4 align-[-3px]" aria-hidden="true" />}
               </Link>
             ) : (
               <Link href={`${shopBasePath}/collections/${collectionSlug}`} className="text-sm font-medium text-accent hover:underline">

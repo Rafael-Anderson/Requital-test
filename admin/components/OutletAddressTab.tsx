@@ -71,7 +71,7 @@ export default function OutletAddressTab({
       </Card>
 
       <Button variant="primary" onClick={handleSave} disabled={saving}>
-        <Check className="size-4 inline -mt-0.5 mr-1" />
+        <Check className="size-4 inline -mt-0.5 me-1" />
         Save changes
       </Button>
     </div>

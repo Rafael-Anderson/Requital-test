@@ -43,7 +43,7 @@ export default function FloatingCustomButtons() {
 // side.
 function Stack({ buttons, side }: { buttons: FloatingCustomButton[]; side: "left" | "right" }) {
   return (
-    <div className={`fixed bottom-24 z-40 flex flex-col gap-2 ${side === "left" ? "left-5 items-start" : "right-5 items-end"}`}>
+    <div className={`fixed bottom-24 z-40 flex flex-col gap-2 ${side === "left" ? "start-5 items-start" : "end-5 items-end"}`}>
       {buttons.map((b) => {
         const icon = resolveImageUrl(b.iconUrl ?? null);
         return (

@@ -203,7 +203,7 @@ function BioPageConfigCard() {
 
       <div className="flex justify-end">
         <Button variant="primary" onClick={handleSave} disabled={saving}>
-          <Check className="size-4 inline -mt-0.5 mr-1" />
+          <Check className="size-4 inline -mt-0.5 me-1" />
           {saving ? "Saving…" : "Save changes"}
         </Button>
       </div>
@@ -296,7 +296,7 @@ export default function BioLinksPage() {
           <div className="flex items-center justify-between mb-3.5">
             <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Links</h2>
             <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus className="size-4 inline -mt-0.5 mr-1" />
+              <Plus className="size-4 inline -mt-0.5 me-1" />
               Add link
             </Button>
           </div>

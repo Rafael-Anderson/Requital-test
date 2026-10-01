@@ -111,7 +111,7 @@ export default function SlideshowHero({
               type="button"
               aria-label="Previous slide"
               onClick={() => goTo(index - 1)}
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors cursor-pointer"
+              className="absolute start-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors cursor-pointer"
             >
               <ChevronLeft className="size-5" />
             </button>
@@ -119,7 +119,7 @@ export default function SlideshowHero({
               type="button"
               aria-label="Next slide"
               onClick={() => goTo(index + 1)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors cursor-pointer"
+              className="absolute end-2 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors cursor-pointer"
             >
               <ChevronRight className="size-5" />
             </button>

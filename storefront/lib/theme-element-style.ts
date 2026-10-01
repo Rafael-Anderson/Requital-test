@@ -167,8 +167,8 @@ export function resolveButtonElementStyle(settings: Record<string, unknown>): CS
     style.borderColor = typeof s.borderColor === "string" ? s.borderColor : "transparent";
   }
   if (typeof s.paddingX === "number") {
-    style.paddingLeft = `${s.paddingX}px`;
-    style.paddingRight = `${s.paddingX}px`;
+    style.paddingInlineStart = `${s.paddingX}px`;
+    style.paddingInlineEnd = `${s.paddingX}px`;
   }
   if (typeof s.paddingY === "number") {
     style.paddingTop = `${s.paddingY}px`;
@@ -208,8 +208,8 @@ export function resolveImageBlockWrapperStyle(settings: Record<string, unknown>)
   const alignment = (settings.alignment as string) || "left";
   return {
     maxWidth: `${widthPercent}%`,
-    marginLeft: alignment === "left" ? 0 : "auto",
-    marginRight: alignment === "right" ? 0 : "auto",
+    marginInlineStart: alignment === "left" ? 0 : "auto",
+    marginInlineEnd: alignment === "right" ? 0 : "auto",
   };
 }
 

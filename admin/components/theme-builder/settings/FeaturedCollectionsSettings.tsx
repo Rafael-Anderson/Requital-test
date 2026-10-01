@@ -150,7 +150,7 @@ export default function FeaturedCollectionsSettings({
             />
           </div>
           <Button type="button" variant="secondary" onClick={addCollection} disabled={!addId}>
-            <Plus className="size-4 inline -mt-0.5 mr-1" />
+            <Plus className="size-4 inline -mt-0.5 me-1" />
             Add
           </Button>
         </div>

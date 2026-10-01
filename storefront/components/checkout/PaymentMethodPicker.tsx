@@ -41,7 +41,7 @@ export default function PaymentMethodPicker({
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(m)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-left cursor-pointer transition-colors ${
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-start cursor-pointer transition-colors ${
               selected
                 ? "border-accent bg-accent/10 text-accent"
                 : "border-stroke text-foreground hover:border-black/30"

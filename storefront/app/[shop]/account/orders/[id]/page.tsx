@@ -84,7 +84,7 @@ export default function OrderDetailPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500">Delivery address</span>
-              <span className="text-right max-w-56">{order.customerAddress}</span>
+              <span className="text-end max-w-56">{order.customerAddress}</span>
             </div>
             {order.deliveryTimeSlot && (
               <div className="flex justify-between">

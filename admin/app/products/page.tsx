@@ -298,9 +298,9 @@ function InventoryPageContent() {
           <DropdownMenu
             trigger={({ toggle, open }) => (
               <Button variant="primary" onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
-                <Plus className="size-4 inline -mt-0.5 mr-1" />
+                <Plus className="size-4 inline -mt-0.5 me-1" />
                 New product
-                <ChevronDown className="size-3.5 inline ml-1 -mt-0.5" />
+                <ChevronDown className="size-3.5 inline ms-1 -mt-0.5" />
               </Button>
             )}
           >
@@ -322,7 +322,7 @@ function InventoryPageContent() {
                     close();
                     setImporting(true);
                   }}
-                  className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <Upload className="size-3.5" />
                   Import CSV

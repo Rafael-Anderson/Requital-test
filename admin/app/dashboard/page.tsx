@@ -264,7 +264,7 @@ export default function DashboardPage() {
             <div className="space-y-3">
               {topProducts.map((p, i) => (
                 <div key={p.productId} className="flex items-center gap-3">
-                  <span className="text-xs text-text-faint w-4 text-right">{i + 1}</span>
+                  <span className="text-xs text-text-faint w-4 text-end">{i + 1}</span>
                   <Thumbnail src={p.thumbnail} size="size-10" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{p.name}</div>

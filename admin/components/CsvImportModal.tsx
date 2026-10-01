@@ -104,7 +104,7 @@ export default function CsvImportModal({
             setPreview(null);
             setError(null);
           }}
-          className="block w-full text-sm mb-4 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-black/5 dark:file:bg-white/10 file:text-sm file:cursor-pointer cursor-pointer"
+          className="block w-full text-sm mb-4 file:me-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-black/5 dark:file:bg-white/10 file:text-sm file:cursor-pointer cursor-pointer"
         />
 
         {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}

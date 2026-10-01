@@ -104,12 +104,12 @@ export default function NewsletterSubscribersPage() {
 
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search email…"
-            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-8 pr-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 ps-8 pe-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
           />
         </div>
         <Button
@@ -119,7 +119,7 @@ export default function NewsletterSubscribersPage() {
           loading={exporting}
           disabled={total === 0}
         >
-          <Download className="size-3.5 inline -mt-0.5 mr-1" />
+          <Download className="size-3.5 inline -mt-0.5 me-1" />
           Export CSV
         </Button>
       </div>

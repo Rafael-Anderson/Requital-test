@@ -27,15 +27,15 @@ const HEIGHT_CLASS: Record<string, string> = {
 };
 
 const POSITION_CLASS: Record<string, string> = {
-  "top-left": "items-start justify-start text-left",
+  "top-left": "items-start justify-start text-start",
   "top-center": "items-start justify-center text-center",
-  "top-right": "items-start justify-end text-right",
-  "center-left": "items-center justify-start text-left",
+  "top-right": "items-start justify-end text-end",
+  "center-left": "items-center justify-start text-start",
   "center-center": "items-center justify-center text-center",
-  "center-right": "items-center justify-end text-right",
-  "bottom-left": "items-end justify-start text-left",
+  "center-right": "items-center justify-end text-end",
+  "bottom-left": "items-end justify-start text-start",
   "bottom-center": "items-end justify-center text-center",
-  "bottom-right": "items-end justify-end text-right",
+  "bottom-right": "items-end justify-end text-end",
 };
 
 const MIN_SLIDE_DURATION_S = 2;
@@ -285,7 +285,7 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
             style={{ ...themeButtonBaseStyle(), ...resolveButtonFillStyle(shop?.buttonFill), ...resolveButtonElementStyle(block.settings) }}
           >
             {label}
-            {buttonHover.showIcon && <ArrowRight className="theme-btn-icon inline-block ml-1.5 size-4 align-[-3px]" aria-hidden="true" />}
+            {buttonHover.showIcon && <ArrowRight className="theme-btn-icon inline-block ms-1.5 size-4 align-[-3px]" aria-hidden="true" />}
           </a>
         );
       }

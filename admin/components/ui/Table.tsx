@@ -26,7 +26,7 @@ export function Table({ className = "", ...props }: HTMLAttributes<HTMLTableElem
 }
 
 export function THead({ className = "", ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={`border-b border-border text-left dark:border-white/10 ${className}`} {...props} />;
+  return <thead className={`border-b border-border text-start dark:border-white/10 ${className}`} {...props} />;
 }
 
 export function TBody(props: HTMLAttributes<HTMLTableSectionElement>) {

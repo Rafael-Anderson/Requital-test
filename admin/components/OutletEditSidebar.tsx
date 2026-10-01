@@ -39,7 +39,7 @@ export default function OutletEditSidebar({
               key={id}
               type="button"
               onClick={() => onSelect(id)}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer ${
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors cursor-pointer ${
                 isActive
                   ? "bg-accent/10 text-accent-text dark:text-accent"
                   : "text-text-secondary dark:text-zinc-400 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] hover:text-zinc-800 dark:hover:text-zinc-200"

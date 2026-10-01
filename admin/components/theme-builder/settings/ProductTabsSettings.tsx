@@ -138,7 +138,7 @@ export default function ProductTabsSettings({
           </ul>
         )}
         <Button type="button" variant="secondary" onClick={addTab}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           Add tab
         </Button>
         {tabs.length === 0 && (

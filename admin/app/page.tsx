@@ -137,7 +137,7 @@ export default function HomePage() {
                     {showDynamicThemeBadge && (
                       <span
                         title="Dynamic theme builder enabled"
-                        className="absolute top-3 right-3 rounded-full bg-accent-tint px-2 py-0.5 text-[10px] font-bold text-accent-text dark:bg-accent/15 dark:text-accent"
+                        className="absolute top-3 end-3 rounded-full bg-accent-tint px-2 py-0.5 text-[10px] font-bold text-accent-text dark:bg-accent/15 dark:text-accent"
                       >
                         Beta
                       </span>

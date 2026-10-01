@@ -89,17 +89,17 @@ export default function Combobox({
           aria-controls={listboxId}
           className="flex h-9 w-full items-center justify-between rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 py-2 text-sm outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         >
-          <span className={`truncate text-left ${selected ? "" : "text-text-faint"}`}>
+          <span className={`truncate text-start ${selected ? "" : "text-text-faint"}`}>
             {selected ? selected.label : placeholder}
           </span>
-          <ChevronsUpDown className="size-4 shrink-0 text-text-faint ml-2" />
+          <ChevronsUpDown className="size-4 shrink-0 text-text-faint ms-2" />
         </button>
 
         {open && (
           <div
             id={listboxId}
             role="listbox"
-            className="popover-in absolute left-0 top-full z-50 mt-1.5 w-full rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 overflow-hidden"
+            className="popover-in absolute start-0 top-full z-50 mt-1.5 w-full rounded-[10px] border border-border dark:border-white/10 bg-surface dark:bg-zinc-900 shadow-lg shadow-black/10 overflow-hidden"
           >
             <input
               ref={inputRef}
@@ -120,7 +120,7 @@ export default function Combobox({
                     onChange(option.value);
                     setOpen(false);
                   }}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-sm text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                 >
                   <span className="truncate">{option.label}</span>
                   {option.value === value && <Check className="size-4 shrink-0 text-accent" />}

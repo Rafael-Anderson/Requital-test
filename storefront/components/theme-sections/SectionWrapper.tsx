@@ -272,8 +272,8 @@ export default function SectionWrapper({
       style={{
         paddingTop: spacing.top !== undefined ? `${spacing.top}px` : bandPad,
         paddingBottom: spacing.bottom !== undefined ? `${spacing.bottom}px` : bandPad,
-        paddingLeft: spacing.left !== undefined ? `${spacing.left}px` : undefined,
-        paddingRight: spacing.right !== undefined ? `${spacing.right}px` : undefined,
+        paddingInlineStart: spacing.left !== undefined ? `${spacing.left}px` : undefined,
+        paddingInlineEnd: spacing.right !== undefined ? `${spacing.right}px` : undefined,
         ...schemeStyle,
         ...backgroundStyle(settings.background),
       }}
@@ -285,7 +285,7 @@ export default function SectionWrapper({
           type="button"
           aria-label="Drag to reorder section"
           onPointerDown={handleHandlePointerDown}
-          className="absolute left-2 top-2 z-10 flex size-7 cursor-grab items-center justify-center rounded-md border border-black/10 bg-white/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+          className="absolute start-2 top-2 z-10 flex size-7 cursor-grab items-center justify-center rounded-md border border-black/10 bg-white/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 active:cursor-grabbing"
           style={{ touchAction: "none" }}
         >
           <GripVertical className="size-4 text-zinc-500" />

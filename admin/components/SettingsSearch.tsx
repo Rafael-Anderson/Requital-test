@@ -16,14 +16,14 @@ export default function SettingsSearch() {
   return (
     <div className="space-y-6">
       <div className="relative max-w-xl">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-text-faint" aria-hidden="true" />
+        <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-text-faint" aria-hidden="true" />
         <input
           type="search"
           aria-label="Search settings"
           placeholder="Search settings, e.g. VAT, delivery hours, logo"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="flex h-10 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 pl-9 pr-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+          className="flex h-10 w-full rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 ps-9 pe-3 text-sm shadow-sm shadow-black/5 outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
         />
       </div>
 

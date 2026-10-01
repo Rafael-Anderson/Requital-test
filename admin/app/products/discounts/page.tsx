@@ -86,7 +86,7 @@ export default function DiscountsPage() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h1 className="text-2xl font-semibold">Discounts</h1>
         <Button variant="primary" onClick={() => setEditing("new")}>
-          <Plus className="size-4 inline -mt-0.5 mr-1" />
+          <Plus className="size-4 inline -mt-0.5 me-1" />
           New discount
         </Button>
       </div>

@@ -158,7 +158,7 @@ export default function OrderReturnsSection({
                       max={remaining}
                       value={selected[item.id]}
                       onChange={(e) => setQty(item.id, Number(e.target.value), remaining)}
-                      className="h-7 w-16 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
+                      className="h-7 w-16 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-end outline-none focus:border-accent"
                     />
                   )}
                 </div>
@@ -199,7 +199,7 @@ export default function OrderReturnsSection({
                 setAmountTouched(true);
                 setRefundAmount(e.target.value);
               }}
-              className="h-8 w-28 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-right outline-none focus:border-accent"
+              className="h-8 w-28 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-end outline-none focus:border-accent"
             />
             {order.currency}
           </label>

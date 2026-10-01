@@ -69,7 +69,7 @@ export default function CollectionShowcase() {
                 {showTitle && (
                   <>
                     <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0" />
-                    <span className="absolute bottom-3 left-3 right-3 text-white font-medium text-sm sm:text-base">
+                    <span className="absolute bottom-3 start-3 end-3 text-white font-medium text-sm sm:text-base">
                       {c.name}
                     </span>
                   </>

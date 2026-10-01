@@ -322,7 +322,7 @@ function MenuBarItem({
           aria-hidden="true"
         />
       </button>
-      <div className="absolute left-0 top-full z-20 hidden group-hover:block group-focus-within:block pt-1">
+      <div className="absolute start-0 top-full z-20 hidden group-hover:block group-focus-within:block pt-1">
         <div className="min-w-48 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-lg py-2">
           <span className="block px-3 pb-1 text-xs font-semibold text-popover-fg/60">{item.label}</span>
           <ul className="space-y-0.5">

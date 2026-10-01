@@ -95,7 +95,7 @@ export default function AccountSetupStepBusiness({
                   subdomainError ? "text-red-700 dark:text-red-400" : ""
                 }`}
               />
-              <span className="flex shrink-0 items-center rounded-r-lg border-l border-border dark:border-white/15 bg-zinc-100 dark:bg-zinc-800 px-3 text-sm text-text-muted dark:text-zinc-400">
+              <span className="flex shrink-0 items-center rounded-e-lg border-s border-border dark:border-white/15 bg-zinc-100 dark:bg-zinc-800 px-3 text-sm text-text-muted dark:text-zinc-400">
                 {SUBDOMAIN_SUFFIX}
               </span>
             </div>
@@ -124,13 +124,13 @@ export default function AccountSetupStepBusiness({
               <button
                 type="button"
                 onClick={() => setHowToOpen((v) => !v)}
-                className="flex w-full items-center justify-between text-left text-xs font-medium text-text-secondary dark:text-zinc-400 cursor-pointer"
+                className="flex w-full items-center justify-between text-start text-xs font-medium text-text-secondary dark:text-zinc-400 cursor-pointer"
               >
                 How to connect your domain
                 <ChevronDown className={`size-3.5 transition-transform ${howToOpen ? "rotate-180" : ""}`} />
               </button>
               {howToOpen && (
-                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-text-muted dark:text-zinc-400">
+                <ol className="mt-2 list-decimal space-y-1 ps-4 text-xs text-text-muted dark:text-zinc-400">
                   <li>Log in to your domain registrar</li>
                   <li>
                     Add an A record pointing to <span className="font-mono">{VPS_IP}</span>
