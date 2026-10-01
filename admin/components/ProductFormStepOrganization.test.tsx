@@ -66,6 +66,7 @@ function fakeForm(overrides: Partial<ProductFormState> = {}): ProductFormState {
     additionalInfo: [],
     setAdditionalInfo: vi.fn(),
     fieldErrors: {},
+    metafields: { defs: [], drafts: {}, loading: false, setDraft: vi.fn() },
     ...overrides,
   } as unknown as ProductFormState;
 }
@@ -100,5 +101,47 @@ describe("ProductFormStepOrganization — Status picker", () => {
     await user.click(await screen.findByRole("option", { name: "Draft" }));
 
     expect(setStatus).toHaveBeenCalledWith("Unavailable");
+  });
+});
+
+describe("ProductFormStepOrganization — Custom fields", () => {
+  const def = (id: number, type: string, name: string, extra = {}) => ({
+    id,
+    ownerType: "product",
+    namespace: "custom",
+    key: `k${id}`,
+    name,
+    type,
+    validation: null,
+    displayOrder: 0,
+    visibleOnStorefront: false,
+    ...extra,
+  });
+
+  it("renders nothing for a shop with no product custom fields", () => {
+    renderStep(fakeForm());
+    expect(screen.queryByText("Custom fields")).not.toBeInTheDocument();
+  });
+
+  it("renders an input per definition and writes edits back through setDraft", async () => {
+    const user = userEvent.setup();
+    const setDraft = vi.fn();
+    renderStep(
+      fakeForm({
+        metafields: {
+          defs: [
+            def(1, "text", "Care instructions"),
+            def(2, "single_select", "Origin", { validation: { options: ["UAE", "NL"] } }),
+          ],
+          drafts: { 1: "", 2: "" },
+          loading: false,
+          setDraft,
+        },
+      } as unknown as Partial<ProductFormState>),
+    );
+    expect(screen.getByText("Custom fields")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Care instructions"), "x");
+    expect(setDraft).toHaveBeenCalledWith(1, "x");
+    expect(screen.getByRole("option", { name: "NL" })).toBeInTheDocument();
   });
 });

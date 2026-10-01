@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
+import { exportCustomerMetafields } from '../metafields/metafields.service';
+import { deleteMetafieldValues } from '../metafields/metafield-cleanup';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
@@ -156,6 +158,13 @@ export class CustomerAccountService {
       profile: this.toProfileResponse(customer),
       addresses: (customer.addresses as CustomerAddress[] | null) ?? [],
       wishlist: this.readWishlist(customer),
+      // Custom-field values the merchant holds on this customer (personal
+      // data, so part of the export whatever its storefront visibility).
+      customFields: await exportCustomerMetafields(
+        this.db,
+        ctx.shopId,
+        ctx.customerId,
+      ),
       orders: orders.map((o) => this.toOrderSummary(o, false)),
     };
   }
@@ -272,6 +281,9 @@ export class CustomerAccountService {
         customerId,
       ],
     );
+    // Custom-field values on the customer are personal data: scrubbed with the
+    // rest of the profile (the definitions stay, they are the shop's own).
+    await deleteMetafieldValues(this.db, 'customer', [customerId]);
     // MKT-14: the online identifiers an order captured for ad attribution (click
     // ids, Meta browser cookies, user agent) are personal data too. The UTM
     // source/medium/campaign stay, so the merchant's attribution report does not

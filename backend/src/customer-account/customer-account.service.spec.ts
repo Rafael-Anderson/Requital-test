@@ -36,6 +36,7 @@ function createMockDb(opts: {
   items?: Record<string, unknown>[];
   authToken?: Record<string, unknown> | null;
   adminUser?: { id: number } | null;
+  customFields?: Record<string, unknown>[];
 }) {
   const query = jest.fn((sql: string) => {
     if (sql.includes('FROM customer WHERE id')) {
@@ -48,6 +49,12 @@ function createMockDb(opts: {
       return Promise.resolve(opts.items ?? []);
     }
     if (sql.includes('FROM invoice WHERE orderId IN')) {
+      return Promise.resolve([]);
+    }
+    if (sql.includes('FROM metafieldvalue v')) {
+      return Promise.resolve(opts.customFields ?? []);
+    }
+    if (sql.includes('DELETE FROM metafieldvalue')) {
       return Promise.resolve([]);
     }
     if (sql.includes('FROM customerauthtoken WHERE tokenHash')) {
@@ -79,6 +86,9 @@ function createMockAuditLog() {
 describe('CustomerAccountService.exportData', () => {
   it('returns profile/addresses/orders scoped to (ctx.customerId, ctx.shopId), and stamps lastDataExportAt', async () => {
     const db = createMockDb({
+      customFields: [
+        { namespace: 'custom', fieldKey: 'allergy', name: 'Allergy', value: 'nuts' },
+      ],
       orders: [
         {
           id: 5,
@@ -124,6 +134,15 @@ describe('CustomerAccountService.exportData', () => {
       { id: 'a1', address: '1 Main St', emirate: 'Dubai' },
     ]);
     expect(result.orders).toHaveLength(1);
+    // Custom-field values held on the customer are part of the export, read
+    // for this customer in this shop only.
+    expect(result.customFields).toEqual([
+      { key: 'custom.allergy', name: 'Allergy', value: 'nuts' },
+    ]);
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('FROM metafieldvalue v'),
+      [ctx.shopId, ctx.customerId],
+    );
     expect(db.execute).toHaveBeenCalledWith(
       expect.stringContaining('lastDataExportAt = ?'),
       [expect.any(Date), ctx.customerId],
@@ -235,6 +254,11 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       expect.stringContaining('SET name = ?, email = ?, phone = ?'),
       ['Deleted User', 'deleted-1@deleted.requital', 'DELETED-1', ctx.customerId],
     );
+    // Custom-field values on the customer are scrubbed with the profile.
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM metafieldvalue'),
+      ['customer', ctx.customerId],
+    );
     expect(db.execute).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE customerrefreshtoken'),
       [expect.any(Date), ctx.customerId],
@@ -340,6 +364,9 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
     const query = jest.fn((sql: string) => {
       if (sql.includes('FROM customer WHERE id')) {
         return Promise.resolve([customerState]);
+      }
+      if (sql.includes('DELETE FROM metafieldvalue')) {
+        return Promise.resolve([]);
       }
       if (sql.includes('FROM customerauthtoken WHERE tokenHash')) {
         return Promise.resolve([authToken]);

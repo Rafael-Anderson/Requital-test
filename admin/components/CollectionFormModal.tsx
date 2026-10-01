@@ -22,6 +22,8 @@ import ImageDropzone from "@/components/ui/ImageDropzone";
 import Modal from "@/components/ui/Modal";
 import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
+import { useMetafieldEditor } from "@/lib/useMetafieldEditor";
+import { MetafieldsSection } from "@/components/MetafieldsFields";
 
 function slugify(input: string): string {
   return input
@@ -56,6 +58,7 @@ export default function CollectionFormModal({
     resolveImageUrl(collection?.image),
   );
   const [saving, setSaving] = useState(false);
+  const metafields = useMetafieldEditor("collection", collection?.id ?? null);
   const toast = useToast();
 
   function handleFileSelected(file: File) {
@@ -74,9 +77,24 @@ export default function CollectionFormModal({
     buildCollectionTree(collections.filter((c) => !excluded.has(c.id))),
   );
 
+  // The collection itself is already saved by the time this runs, so a failure
+  // here says so rather than reporting the whole save as failed.
+  async function saveMetafields(id: number) {
+    await metafields.save(id).catch((err: unknown) => {
+      throw new Error(
+        `Collection saved, but custom fields were not: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !slug.trim()) return;
+    const metafieldError = metafields.validate();
+    if (metafieldError) {
+      toast(metafieldError, "error");
+      return;
+    }
     setSaving(true);
     try {
       const order = Number(displayOrder) || 0;
@@ -97,13 +115,15 @@ export default function CollectionFormModal({
           ...(image !== undefined && { image }),
         };
         await updateCollection(collection.id, payload);
+        await saveMetafields(collection.id);
         toast(`"${name}" updated`);
       } else {
         const payload: CollectionInput = { name, slug, displayOrder: order, isFeatured, description, image };
         if (parentCollectionId !== "") {
           payload.parentCollectionId = Number(parentCollectionId);
         }
-        await createCollection(payload);
+        const created = await createCollection(payload);
+        await saveMetafields(created.id);
         toast(`"${name}" created`);
       }
       onSaved();
@@ -171,6 +191,8 @@ export default function CollectionFormModal({
             />
             <span className="text-sm">Featured on homepage</span>
           </div>
+
+          <MetafieldsSection editor={metafields} />
         </div>
 
         <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">

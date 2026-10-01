@@ -15,6 +15,7 @@ import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { ReorderCollectionsDto } from './dto/reorder-collections.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { deleteMetafieldValues } from '../metafields/metafield-cleanup';
 
 @Injectable()
 export class CollectionsService {
@@ -122,6 +123,7 @@ export class CollectionsService {
     }
 
     await this.db.execute(`DELETE FROM collection WHERE id = ?`, [id]);
+    await deleteMetafieldValues(this.db, 'collection', [id]);
     await this.auditLogService.logCtx(ctx, {
       action: 'collection.deleted',
       entityType: 'collection',

@@ -529,6 +529,87 @@ export interface TaxClassInput {
   isDefault?: boolean;
 }
 
+// Metafields / custom fields (see backend metafields/). `key` is the API name;
+// the value's JS shape depends on `type`.
+export const METAFIELD_OWNER_TYPES = [
+  "product",
+  "variant",
+  "collection",
+  "customer",
+  "order",
+  "outlet",
+] as const;
+export type MetafieldOwnerType = (typeof METAFIELD_OWNER_TYPES)[number];
+
+export const METAFIELD_TYPES = [
+  "text",
+  "multiline",
+  "number",
+  "boolean",
+  "date",
+  "json",
+  "single_select",
+  "multi_select",
+] as const;
+export type MetafieldType = (typeof METAFIELD_TYPES)[number];
+
+export const METAFIELD_TYPE_LABELS: Record<MetafieldType, string> = {
+  text: "Single line text",
+  multiline: "Multi-line text",
+  number: "Number",
+  boolean: "Yes or no",
+  date: "Date",
+  json: "JSON",
+  single_select: "Choose one",
+  multi_select: "Choose several",
+};
+
+export const METAFIELD_OWNER_LABELS: Record<MetafieldOwnerType, string> = {
+  product: "Products",
+  variant: "Variants",
+  collection: "Collections",
+  customer: "Customers",
+  order: "Orders",
+  outlet: "Outlets",
+};
+
+export interface MetafieldValidation {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  options?: string[];
+}
+
+export interface MetafieldDefinition {
+  id: number;
+  ownerType: MetafieldOwnerType;
+  namespace: string;
+  key: string;
+  name: string;
+  type: MetafieldType;
+  validation: MetafieldValidation | null;
+  displayOrder: number;
+  visibleOnStorefront: boolean;
+}
+
+// A definition plus this record's value (null when unset).
+export interface MetafieldEntry extends MetafieldDefinition {
+  value: unknown;
+}
+
+export interface MetafieldDefinitionInput {
+  ownerType: MetafieldOwnerType;
+  namespace: string;
+  key: string;
+  name: string;
+  type: MetafieldType;
+  validation?: MetafieldValidation;
+  displayOrder?: number;
+  visibleOnStorefront?: boolean;
+}
+
 export interface BrandInput {
   name: string;
   logoUrl?: string | null;

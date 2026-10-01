@@ -33,6 +33,7 @@ import type { AttributeDraft } from "@/components/AttributesSection";
 import type { FaqDraft } from "@/components/FaqsSection";
 import type { RecipeRowDraft } from "@/components/IngredientRecipeEditor";
 import { useToast } from "@/components/ui/Toast";
+import { useMetafieldEditor } from "@/lib/useMetafieldEditor";
 
 export const PRODUCT_STATUSES = Object.keys(PRODUCT_STATUS_LABELS);
 
@@ -124,6 +125,9 @@ export function useProductForm(initialProduct: Product | undefined) {
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandId, setBrandId] = useState<number | null>(product?.brand?.id ?? null);
+  // Shop-defined custom fields (Settings > Custom fields). Saved right after the
+  // product itself, only the ones that changed.
+  const metafields = useMetafieldEditor("product", product?.id ?? null);
   const [taxClasses, setTaxClasses] = useState<TaxClass[]>([]);
   // null means "use the shop default", which is a real choice, not an empty one.
   const [taxClassId, setTaxClassId] = useState<number | null>(
@@ -276,6 +280,12 @@ export function useProductForm(initialProduct: Product | undefined) {
       return { ok: false, fieldErrors: nextFieldErrors };
     }
 
+    const metafieldError = metafields.validate();
+    if (metafieldError) {
+      toast(metafieldError, "error");
+      return { ok: false, fieldErrors: {} };
+    }
+
     setError(null);
     setSaving(true);
     try {
@@ -360,6 +370,19 @@ export function useProductForm(initialProduct: Product | undefined) {
         await commitStockChanges(stockRows, stockValues, { productId: saved.id });
       }
 
+      try {
+        await metafields.save(saved.id);
+      } catch (err) {
+        // The product itself is already saved; land on its edit page (not the
+        // list) so a retry updates it instead of trying to create it again.
+        toast(
+          `Product saved, but custom fields were not: ${err instanceof Error ? err.message : "unknown error"}`,
+          "error",
+        );
+        router.push(`/products/${saved.id}/edit`);
+        return { ok: true, fieldErrors: {} };
+      }
+
       router.push("/products");
       return { ok: true, fieldErrors: {} };
     } catch (err) {
@@ -424,6 +447,7 @@ export function useProductForm(initialProduct: Product | undefined) {
     collections, setCollections,
     brands, setBrands,
     brandId, setBrandId,
+    metafields,
     taxClasses, setTaxClasses,
     taxClassId, setTaxClassId,
     productEditorMode,

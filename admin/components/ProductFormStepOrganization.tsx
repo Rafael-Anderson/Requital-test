@@ -30,6 +30,7 @@ import {
 } from "@/lib/types";
 import { PRODUCT_STATUSES, type ProductFormState } from "@/lib/useProductForm";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import { MetafieldsSection } from "@/components/MetafieldsFields";
 
 export default function ProductFormStepOrganization({
   form,
@@ -320,6 +321,14 @@ export default function ProductFormStepOrganization({
           Variants/Attributes/FAQs, this has no separate advanced-mode
           anchor elsewhere, so it always renders exactly once here. */}
       <AdditionalInfoSection blocks={form.additionalInfo} onChange={form.setAdditionalInfo} />
+
+      {/* Shop-defined custom fields. Rendered in both editor modes (this step
+          is shared); absent entirely until the shop defines a product field. */}
+      {form.metafields.defs.length > 0 && (
+        <Card>
+          <MetafieldsSection editor={form.metafields} />
+        </Card>
+      )}
 
       {creating && (
         <Modal
