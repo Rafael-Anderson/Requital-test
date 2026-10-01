@@ -65,52 +65,75 @@ export class ProductStockService {
     );
 
     const ingredientIds = resolved.map((r) => r.target.ingredientId);
-    const currentStock = await this.db.query<RowDataPacket[]>(
-      `SELECT ingredientId, stockQuantity FROM outletingredientstock
-       WHERE outletId = ? AND ingredientId IN (${ingredientIds.map(() => '?').join(', ')})`,
-      [outletId, ...ingredientIds],
-    );
-    const currentByIngredient = new Map(
-      currentStock.map((s) => [s.ingredientId as number, s.stockQuantity as number]),
-    );
-    for (const { delta, target } of resolved) {
-      const current = currentByIngredient.get(target.ingredientId) ?? 0;
-      if (current + delta < 0) {
-        throw new BadRequestException(
-          `Adjustment would take product ${target.productId} below zero stock at this outlet`,
-        );
-      }
-    }
 
+    // One transaction for the whole batch: any line that would take stock
+    // below zero (CAS floor in the decrement's WHERE, so concurrent requests
+    // cannot both pass it) rolls back every line. Every line also writes its
+    // stockmovement row, so SUM(delta) stays equal to the stock row.
+    const crossed: (typeof resolved)[number]['target'][] = [];
+    // Fixed lock order across concurrent batches.
+    const ordered = [...resolved].sort(
+      (x, y) => x.target.ingredientId - y.target.ingredientId,
+    );
     await this.db.transaction(async (conn) => {
-      for (const { delta, target } of resolved) {
-        // upsert() can't express increment-on-conflict (see its own doc
-        // comment) — a direct ON DUPLICATE KEY UPDATE ... = col + VALUES(col)
-        // instead: inserts `delta` for a brand-new row, adds `delta` to an
-        // existing one.
+      for (const { delta, target } of ordered) {
+        if (delta < 0) {
+          const [result] = await conn.query(
+            `UPDATE outletingredientstock SET stockQuantity = stockQuantity - ?
+             WHERE outletId = ? AND ingredientId = ? AND stockQuantity >= ?`,
+            [-delta, outletId, target.ingredientId, -delta],
+          );
+          if ((result as { affectedRows: number }).affectedRows === 0) {
+            throw new ConflictException(
+              `Adjustment would take product ${target.productId} below zero stock at this outlet`,
+            );
+          }
+        } else if (delta > 0) {
+          await conn.query(
+            `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+            [outletId, target.ingredientId, delta],
+          );
+          // The row is locked by our own write, so this read is exact.
+          const [rows] = await conn.query<RowDataPacket[]>(
+            `SELECT stockQuantity FROM outletingredientstock WHERE outletId = ? AND ingredientId = ?`,
+            [outletId, target.ingredientId],
+          );
+          const after = rows[0].stockQuantity as number;
+          if (after - delta <= 0 && after > 0) crossed.push(target);
+        }
         await conn.query(
-          `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
-           VALUES (?, ?, ?)
-           ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
-          [outletId, target.ingredientId, delta],
+          `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            target.productId,
+            target.variantId,
+            target.ingredientId,
+            'ADJUSTMENT',
+            null,
+            delta,
+            outletId,
+            null,
+            'Bulk adjust',
+            ctx.userId,
+          ],
         );
       }
     });
 
-    // Back-in-stock notify — fire (not awaited) for every product/variant
-    // whose stock just crossed 0 -> positive at this outlet. Not awaited so
-    // a slow/failing email batch never delays the stock-adjustment response.
-    for (const { delta, target } of resolved) {
-      const before = currentByIngredient.get(target.ingredientId) ?? 0;
-      if (before <= 0 && before + delta > 0) {
-        this.notifySubscriptionsService
-          .triggerForProduct(
-            ctx.shopId,
-            target.productId!,
-            target.variantId ?? undefined,
-          )
-          .catch(() => {});
-      }
+    // Back-in-stock notify, after commit, for every product/variant whose
+    // stock crossed 0 -> positive at this outlet. Not awaited so a slow or
+    // failing email batch never delays the stock-adjustment response.
+    for (const target of crossed) {
+      this.notifySubscriptionsService
+        .triggerForProduct(
+          ctx.shopId,
+          target.productId!,
+          target.variantId ?? undefined,
+        )
+        .catch(() => {});
     }
 
     const stockRows = await this.db.query<RowDataPacket[]>(

@@ -129,22 +129,24 @@ export class ProductOrderItemsService {
       : [];
     const variantsById = new Map(variants.map((v) => [v.id as number, v]));
 
-    // A recipe line applies to this order line when it is either
-    // product-wide (variantId null) or written for the exact variant being
-    // ordered. Read as the recipe stands RIGHT NOW, which is the point -
-    // the same ERP discipline priceAtPurchase follows.
-    const recipeFor = (productId: number, variantId: number | null) =>
-      recipeRows
-        .filter(
-          (r) =>
-            r.productId === productId &&
-            (r.variantId === null || r.variantId === variantId),
-        )
-        .map((r) => ({
-          ingredientId: r.ingredientId as number,
-          quantityPerUnit: Number(r.quantityPerUnit),
-          costPerUnit: r.costPerUnit as string | null,
-        }));
+    // Same effective-recipe rule consumeForOrderItems applies when stock is
+    // taken: a variant's own rows REPLACE the product-wide ones wholesale
+    // when any exist, otherwise the product-wide rows apply. (Taking both
+    // double-costed an overridden ingredient, F3.) Read as the recipe stands
+    // RIGHT NOW, which is the point - the same ERP discipline priceAtPurchase
+    // follows.
+    const recipeFor = (productId: number, variantId: number | null) => {
+      const rows = recipeRows.filter((r) => r.productId === productId);
+      const overrides =
+        variantId === null ? [] : rows.filter((r) => r.variantId === variantId);
+      return (
+        overrides.length > 0 ? overrides : rows.filter((r) => r.variantId === null)
+      ).map((r) => ({
+        ingredientId: r.ingredientId as number,
+        quantityPerUnit: Number(r.quantityPerUnit),
+        costPerUnit: r.costPerUnit as string | null,
+      }));
+    };
 
     return items.map((item) => {
       const product = productsById.get(item.productId)!;
