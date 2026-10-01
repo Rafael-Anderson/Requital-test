@@ -7,8 +7,16 @@ import { toMajorUnitString } from '../common/currency-minor-units';
 // PDF from the browser" outcome without adding a new dependency.
 export interface InvoiceHtmlData {
   invoiceNumber: string;
-  type: 'INVOICE' | 'PACKING_SLIP';
+  // 'CREDIT_NOTE' reuses this renderer (same layout, same money helpers) rather
+  // than forking ~150 lines of CSS and table markup; `creditNote` then carries
+  // what it adds. The figures passed in are the credited ones.
+  type: 'INVOICE' | 'PACKING_SLIP' | 'CREDIT_NOTE';
   issuedAt: Date;
+  creditNote?: {
+    originalInvoiceNumber: string;
+    originalInvoiceIssuedAt: Date;
+    reason: string;
+  };
   subtotal: string | number;
   taxAmount: string | number;
   total: string | number;
@@ -85,7 +93,12 @@ function money(amount: string | number, currency: string): string {
 }
 
 export function renderInvoiceHtml(data: InvoiceHtmlData): string {
-  const title = data.type === 'PACKING_SLIP' ? 'Packing Slip' : 'Invoice';
+  const title =
+    data.type === 'PACKING_SLIP'
+      ? 'Packing Slip'
+      : data.type === 'CREDIT_NOTE'
+        ? 'Credit Note'
+        : 'Invoice';
   const showMoney = data.type !== 'PACKING_SLIP';
   const isCod = data.order.paymentMethod === 'cash_on_delivery';
   const isPaid = data.order.paymentStatus === 'paid';
@@ -133,7 +146,8 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   // know how much cash to collect, so this is a separate element rather
   // than a reason to flip showMoney itself. Non-COD orders render neither
   // block, on either document type.
-  const codBlock = !isCod
+  const codBlock =
+    !isCod || data.type === 'CREDIT_NOTE'
     ? ''
     : data.type === 'PACKING_SLIP'
       ? isPaid
@@ -188,7 +202,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
       ${data.order.discountAmount && Number(data.order.discountAmount) > 0 ? `<tr><td class="label">Discount${data.order.discountCode ? ` (${escapeHtml(data.order.discountCode)})` : ''}</td><td class="num">-${money(data.order.discountAmount, data.currency)}</td></tr>` : ''}
       ${data.order.deliveryFee && Number(data.order.deliveryFee) > 0 ? `<tr><td class="label">Delivery</td><td class="num">${money(data.order.deliveryFee, data.currency)}</td></tr>` : ''}
       ${data.taxInclusive ? '' : taxRow}
-      <tr class="grand-total"><td class="label">Total</td><td class="num">${money(data.total, data.currency)}</td></tr>
+      <tr class="grand-total"><td class="label">${data.type === 'CREDIT_NOTE' ? 'Total credited' : 'Total'}</td><td class="num">${money(data.total, data.currency)}</td></tr>
       ${data.taxInclusive ? taxRow : ''}
     `
     : '';
@@ -260,6 +274,11 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
       <p class="muted">
         Order #${data.order.shopOrderNumber}<br />
         ${data.order.createdAt.toLocaleDateString()}
+        ${
+          data.creditNote
+            ? `<br />Against invoice ${escapeHtml(data.creditNote.originalInvoiceNumber)} (${data.creditNote.originalInvoiceIssuedAt.toLocaleDateString()})<br />Reason: ${escapeHtml(data.creditNote.reason)}`
+            : ''
+        }
       </p>
     </div>
   </div>

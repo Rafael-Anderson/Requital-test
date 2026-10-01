@@ -229,6 +229,29 @@ export interface InvoiceRow {
   taxInclusive: boolean;
 }
 
+// A credit note: a DOCUMENT reversing (part of) an issued INVOICE (migration
+// 20261006100000). It never changes an order, payment, refund or return amount.
+// Every money column is frozen at issue and NOT NULL; `snapshotJson` (a real JSON
+// column, so mysql2 hands it back parsed) holds everything else the document
+// prints. `returnId` is set only for reason 'return', and is UNIQUE.
+export interface CreditnoteRow {
+  id: number;
+  shopId: number;
+  orderId: number;
+  invoiceId: number;
+  number: string;
+  reason: string;
+  returnId: number | null;
+  currency: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  snapshotJson: unknown;
+  snapshotVersion: number;
+  createdBy: number | null;
+  createdAt: Date;
+}
+
 export interface InvoicecounterRow {
   shopId: number;
   type: string;

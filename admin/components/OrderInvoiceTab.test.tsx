@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import OrderInvoiceTab from "./OrderInvoiceTab";
@@ -9,9 +9,27 @@ vi.mock("@/lib/api", () => ({
   listInvoicesForOrder: vi.fn(),
   generateInvoice: vi.fn(),
   getInvoiceHtml: vi.fn(),
+  listCreditNotesForOrder: vi.fn(),
+  getOrderReturns: vi.fn(),
+  issueCreditNote: vi.fn(),
+  getCreditNoteHtml: vi.fn(),
 }));
 
-import { generateInvoice, getInvoiceHtml, listInvoicesForOrder } from "@/lib/api";
+import {
+  generateInvoice,
+  getCreditNoteHtml,
+  getInvoiceHtml,
+  getOrderReturns,
+  issueCreditNote,
+  listCreditNotesForOrder,
+  listInvoicesForOrder,
+} from "@/lib/api";
+import type { CreditNote } from "@/lib/types";
+
+beforeEach(() => {
+  vi.mocked(listCreditNotesForOrder).mockResolvedValue([]);
+  vi.mocked(getOrderReturns).mockResolvedValue([]);
+});
 
 function renderTab(orderId = 1) {
   return render(
@@ -108,5 +126,49 @@ describe("OrderInvoiceTab superseded marker (C2)", () => {
     expect(
       screen.queryByText(/predates the current order/i),
     ).not.toBeInTheDocument();
+  });
+
+  describe("credit notes", () => {
+    const note: CreditNote = {
+      id: 7,
+      orderId: 1,
+      invoiceId: 10,
+      number: "CN-0001",
+      reason: "correction",
+      returnId: null,
+      currency: "KWD",
+      subtotal: "10.505",
+      taxAmount: "0.525",
+      total: "11.030",
+      createdAt: "2026-01-02T00:00:00.000Z",
+    };
+
+    it("is hidden until an invoice exists", async () => {
+      vi.mocked(listInvoicesForOrder).mockResolvedValue([]);
+      renderTab();
+      await waitFor(() => expect(screen.getByText("Generate Invoice")).toBeInTheDocument());
+      expect(screen.queryByText("Issue credit note")).not.toBeInTheDocument();
+    });
+
+    it("lists notes in their own currency and issues a full credit note", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listInvoicesForOrder).mockResolvedValue([invoice]);
+      vi.mocked(getInvoiceHtml).mockResolvedValue("<html></html>");
+      vi.mocked(listCreditNotesForOrder).mockResolvedValue([note]);
+      vi.mocked(issueCreditNote).mockResolvedValue({ ...note, id: 8, number: "CN-0002" });
+      vi.mocked(getCreditNoteHtml).mockResolvedValue("<html>Credit Note</html>");
+      renderTab(1);
+
+      // KWD keeps three decimals.
+      await waitFor(() => expect(screen.getByText("CN-0001 (11.030 KWD)")).toBeInTheDocument());
+      await user.click(screen.getByText("Issue credit note"));
+      expect(issueCreditNote).toHaveBeenCalledWith({
+        orderId: 1,
+        reason: "correction",
+        returnId: undefined,
+      });
+      await waitFor(() => expect(getCreditNoteHtml).toHaveBeenCalledWith(8));
+      await waitFor(() => expect(screen.getByTitle("Credit note preview")).toBeInTheDocument());
+    });
   });
 });

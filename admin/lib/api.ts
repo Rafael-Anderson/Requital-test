@@ -44,6 +44,8 @@ import type {
   ImportConfirmResult,
   ImportPreviewResult,
   Ingredient,
+  CreditNote,
+  CreditNoteReason,
   Invoice,
   InvoiceType,
   IngredientCategory,
@@ -982,6 +984,25 @@ export function generateInvoice(orderId: number, type: InvoiceType) {
 
 export function getInvoiceHtml(id: number) {
   return apiFetchText(`/invoices/${id}/pdf`);
+}
+
+export function listCreditNotesForOrder(orderId: number) {
+  return apiFetch<CreditNote[]>(`/credit-notes?orderId=${orderId}`);
+}
+
+export function issueCreditNote(input: {
+  orderId: number;
+  reason: CreditNoteReason;
+  returnId?: number;
+}) {
+  return apiFetch<CreditNote>("/credit-notes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getCreditNoteHtml(id: number) {
+  return apiFetchText(`/credit-notes/${id}/pdf`);
 }
 
 export function generatePaymentLink(orderId: number) {
