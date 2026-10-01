@@ -282,7 +282,7 @@ For any "Data-loss revert" row above, the actually-safe rollback procedure is: *
 
 ## Triage: custom domain connected but no cert
 
-Symptom: a merchant connected a custom domain (Settings > Business Settings >
+Symptom: a merchant connected a custom domain (Settings > Business >
 Domain shows it as **Verified**), but visiting `https://<domain>` fails the TLS
 handshake (`SSL_ERROR_*`, `ERR_SSL_PROTOCOL_ERROR`, or a browser "can't
 establish a secure connection"). Plain `http://<domain>` may redirect fine.

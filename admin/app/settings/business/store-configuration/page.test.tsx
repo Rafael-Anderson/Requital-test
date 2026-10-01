@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import StoreConfigurationPage from "./page";
 import type { Shop } from "@/lib/types";
 
@@ -14,60 +15,63 @@ vi.mock("@/components/ui/Toast", () => ({
   useToast: () => vi.fn(),
 }));
 
-import { getShop } from "@/lib/api";
+import { getShop, updateShop } from "@/lib/api";
 
 // Only the fields this page reads on mount; the rest of Shop is irrelevant here.
 const shop = {
-  currency: "AED",
   businessType: "Florist",
   defaultLanguage: "en",
-  productDisplayOrientation: "vertical",
+  defaultDeliveryFee: "0",
   businessHours: null,
 } as unknown as Shop;
 
-// Phase 2a/A6 removed the AED-only lock. This guards the UI half: before it,
-// six of the seven options were rendered `disabled` with "(coming soon)"
-// appended, so a merchant outside the UAE could see their currency but not pick
-// it. The backend half (SUPPORTED_CURRENCIES) is covered by
-// backend/test/shop-country-lock.e2e-spec.ts.
-describe("StoreConfigurationPage currency dropdown (A6)", () => {
+// Currency and Tax Display Text moved to Selling > Money & Tax, and the three
+// storefront presentation settings to Storefront > Display (Settings IA
+// restructure). This page keeps its old route, so a bookmark still lands here
+// and is told where they went. The currency dropdown tests moved with the field
+// (app/settings/selling/money-tax/page.test.tsx).
+describe("StoreConfigurationPage after the Settings restructure", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getShop).mockResolvedValue(shop);
+    vi.mocked(updateShop).mockResolvedValue(shop);
   });
 
-  it("offers all seven currencies, every one of them selectable", async () => {
+  it("no longer offers the moved fields", async () => {
     render(<StoreConfigurationPage />);
-    await waitFor(() => expect(getShop).toHaveBeenCalled());
+    await screen.findByText("Business Type");
+    expect(screen.queryByText("Currency")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tax Display Text")).not.toBeInTheDocument();
+    expect(screen.queryByText("Product Display Orientation")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Product image zoom/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Show collection menu")).not.toBeInTheDocument();
+  });
 
-    for (const code of ["AED", "SAR", "KWD", "QAR", "BHD", "OMR", "USD"]) {
-      const option = await screen.findByRole("option", { name: code });
-      expect(option).toBeInTheDocument();
-      // The assertion that actually encodes A6: none is disabled any more.
-      expect(option).not.toBeDisabled();
+  it("points at where each moved setting went", async () => {
+    render(<StoreConfigurationPage />);
+    const money = await screen.findByRole("link", { name: /Money & Tax/ });
+    expect(money).toHaveAttribute("href", "/settings/selling/money-tax");
+    expect(screen.getByRole("link", { name: /Storefront > Display/ })).toHaveAttribute(
+      "href",
+      "/settings/storefront/display",
+    );
+  });
+
+  it("does not send the moved keys when saving what is left", async () => {
+    const user = userEvent.setup();
+    render(<StoreConfigurationPage />);
+    await user.click(await screen.findByRole("button", { name: /Save changes/ }));
+    await waitFor(() => expect(updateShop).toHaveBeenCalledTimes(1));
+    const sent = vi.mocked(updateShop).mock.calls[0][0] as Record<string, unknown>;
+    for (const moved of [
+      "currency",
+      "taxDisplayText",
+      "productDisplayOrientation",
+      "productImageZoomEnabled",
+      "showCollectionMenu",
+    ]) {
+      expect(sent, moved).not.toHaveProperty(moved);
     }
-  });
-
-  // Scoped to the dropdown's own options on purpose: this page also has a
-  // legitimate, unrelated "Coming Soon" section for shop.xEnabled toggles that
-  // ship ahead of the features they gate (see CLAUDE.md). A blanket
-  // queryByText(/coming soon/i) matches that heading and would fail for the
-  // wrong reason - which is exactly what it did on the first run of this test.
-  it('no longer labels any currency option "(coming soon)"', async () => {
-    render(<StoreConfigurationPage />);
-    await waitFor(() => expect(getShop).toHaveBeenCalled());
-    const labels = screen
-      .getAllByRole("option")
-      .map((o) => o.textContent ?? "");
-    expect(labels.some((l) => /coming soon/i.test(l))).toBe(false);
-    expect(labels).toContain("KWD");
-  });
-
-  it("no longer claims only AED is supported, and says the change affects new orders only", async () => {
-    render(<StoreConfigurationPage />);
-    await waitFor(() => expect(getShop).toHaveBeenCalled());
-    expect(screen.queryByText(/Only AED is supported/i)).not.toBeInTheDocument();
-    // Because A1 captures the currency per order, past totals never re-denominate.
-    expect(screen.getByText(/Applies to new orders/i)).toBeInTheDocument();
+    expect(sent).toMatchObject({ businessType: "Florist", defaultLanguage: "en" });
   });
 });
