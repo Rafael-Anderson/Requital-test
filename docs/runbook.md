@@ -123,6 +123,96 @@ Measured, not estimated, from the 2026-09-19 drill on a 136 KB compressed dump:
 
 Not covered by this, deliberately: uploaded images and other files on the VPS disk (the app still uses local storage, not S3, for uploads), and point-in-time recovery between snapshots.
 
+### The PC copy (off-host pull to a Windows machine)
+
+The VPS cron's own off-host step is a no-op in production: with no `BACKUP_S3_BUCKET` in `/home/deploy/.requital-backup.env` every run logs `WARNING: ... exists on this VPS ONLY` and skips both the `rclone` copy and the local prune. A Windows PC therefore **pulls** the dumps down on its own schedule. Pull, not push: the VPS holds no credential for the PC and cannot reach it, so losing the VPS cannot take the second copy with it.
+
+Where everything lives:
+
+| Thing | Location |
+|---|---|
+| Dumps + `pull.log` + `last-success.txt` | `C:\RequitalBackups` on the PC |
+| Scripts the scheduled tasks run | `C:\ProgramData\Requital\backup-pull` |
+| Source of those scripts | `tools/pc-backup-pull/` in this repo |
+| SSH private key (no passphrase) | `%USERPROFILE%\.ssh\requital_backup_pull` |
+| SSH alias | `requital-backup-pull` in `%USERPROFILE%\.ssh\config` |
+| Scheduled tasks | `Requital Backup Pull` (04:30 daily), `Requital Backup Freshness Check` (12:00 daily) |
+| Server-side forced command | `/usr/local/bin/requital-backup-serve` (root:root, 0755) |
+| Server-side grant | one line in `/home/deploy/.ssh/authorized_keys`, prefixed `restrict,command="/usr/local/bin/requital-backup-serve"` |
+
+The key can do **only** `list`, `sum <file>` and `get <file>`, against filenames matching `^requital-shop_manager-[0-9]{14}\.sql\.gz$`. No shell, no forwarding, no other path. `tools/pc-backup-pull/README.md` has the design, the retention rules, and the accepted at-rest-encryption gap.
+
+#### Restoring from the PC copy
+
+The PC copy is a plain `mysqldump | gzip`, identical in format to what `tools/backup-db.sh` writes — so everything in **Drill** and **The real thing** above applies unchanged once the file is back on a box. Two routes:
+
+```powershell
+# On the PC: pick the dump, and verify it before trusting it.
+$dump = Get-ChildItem C:\RequitalBackups\*.sql.gz | Sort-Object Name -Descending | Select-Object -First 1
+(Get-FileHash $dump.FullName -Algorithm SHA256).Hash
+ssh requital-backup-pull "sum $($dump.Name)"   # same hash, if the VPS still exists
+```
+
+**Route A — restore on the PC, to inspect it or to serve from it.** Decompress and feed it to a local MySQL, into a clearly named scratch database, never over a real one:
+
+```powershell
+$sql = "$env:TEMP\restore.sql"
+$fs = [IO.File]::OpenRead($dump.FullName)
+$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress)
+$out = [IO.File]::Create($sql); $gz.CopyTo($out); $out.Dispose(); $gz.Dispose(); $fs.Dispose()
+
+mysql --user=<user> -e "CREATE DATABASE requital_restore_drill CHARACTER SET utf8mb4;"
+cmd /c "mysql --user=<user> requital_restore_drill < `"$sql`""
+Remove-Item $sql -Force     # the decompressed SQL is plaintext customer PII
+```
+
+The dump contains no `CREATE DATABASE` and no `USE`, so it lands in whatever database you point it at. Verify rather than assume: compare `COUNT(*)` for `shop`, `order`, `orderitem` and `invoice` against production, and ideally a `BIT_XOR` row witness too — a count can match while contents differ.
+
+**Route B — ship it back to the VPS and restore there.** This is the real disaster path:
+
+```bash
+scp -i ~/.ssh/hostinger_vps /c/RequitalBackups/requital-shop_manager-<ts>.sql.gz root@<VPS_HOST>:/home/deploy/backups/
+ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> 'chown deploy:deploy /home/deploy/backups/requital-shop_manager-<ts>.sql.gz'
+```
+
+Then follow **The real thing (restoring over production)** above, unchanged — same script, same `ALLOW_PRODUCTION_RESTORE=yes` guard, same `npm run db:migrate` reconciliation afterwards if the dump predates migrations that have since landed.
+
+**Check the copy is actually current before relying on it.** `last-success.txt` is written only after a fully verified run:
+
+```powershell
+Get-Content C:\RequitalBackups\last-success.txt
+Get-Content C:\RequitalBackups\pull.log -Tail 20
+```
+
+A stale copy is supposed to announce itself at 12:00 daily. Note that the pull task runs with logon type `Interactive`, because S4U registration is refused on this Windows Home install without elevation: **it does not run while nobody is logged on**, and catches up at the next logon instead.
+
+#### Removing the PC backup pull
+
+On the VPS — the grant is what actually revokes access, so do that first:
+
+```bash
+# 1. drop the authorized_keys line (identified by its comment, never by position)
+ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> \
+  "sudo -u deploy sed -i '/requital-backup-pull@/d' /home/deploy/.ssh/authorized_keys"
+# 2. confirm only the original deploy key is left
+ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> 'ssh-keygen -lf /home/deploy/.ssh/authorized_keys'
+# 3. remove the forced-command script
+ssh -i ~/.ssh/hostinger_vps root@<VPS_HOST> 'rm -f /usr/local/bin/requital-backup-serve'
+```
+
+On the PC:
+
+```powershell
+Unregister-ScheduledTask -TaskName 'Requital Backup Pull' -Confirm:$false
+Unregister-ScheduledTask -TaskName 'Requital Backup Freshness Check' -Confirm:$false
+Remove-Item "$env:USERPROFILE\.ssh\requital_backup_pull","$env:USERPROFILE\.ssh\requital_backup_pull.pub" -Force
+# then delete the `Host requital-backup-pull` block from %USERPROFILE%\.ssh\config
+Remove-Item 'C:\ProgramData\Requital\backup-pull' -Recurse -Force
+# C:\RequitalBackups holds the only off-host copy of customer data. Deleting it is
+# a deliberate decision, not cleanup:
+#   Remove-Item 'C:\RequitalBackups' -Recurse -Force
+```
+
 ## Error alerting
 
 Two independent things can fail quietly on this box: the API throwing 5xx, and the nightly backup job. Both now post to **one** webhook URL, set once.
