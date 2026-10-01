@@ -5,7 +5,7 @@ import request from 'supertest';
 import type { RowDataPacket } from 'mysql2/promise';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/database/database.service';
+import { DatabaseService, type QueryParam } from '../src/database/database.service';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface VariantRow {
@@ -109,7 +109,7 @@ describe('Product delete (e2e)', () => {
     return p;
   }
 
-  async function count(sql: string, params: unknown[]): Promise<number> {
+  async function count(sql: string, params: QueryParam[]): Promise<number> {
     const rows = await db.query<(RowDataPacket & { n: number })[]>(sql, params);
     return Number(rows[0].n);
   }
