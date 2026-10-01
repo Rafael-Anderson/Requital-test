@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
-import { DraftOrdersController } from './draft-orders.controller';
+import {
+  DiscountValidationController,
+  DraftOrdersController,
+} from './draft-orders.controller';
 import { DraftOrdersService } from './draft-orders.service';
 import { ProductsModule } from '../products/products.module';
 import { DiscountsModule } from '../discounts/discounts.module';
@@ -15,7 +18,7 @@ import { RegionsModule } from '../regions/regions.module';
     PaymentsModule,
     RegionsModule,
   ],
-  controllers: [DraftOrdersController],
+  controllers: [DraftOrdersController, DiscountValidationController],
   providers: [DraftOrdersService],
 })
 export class DraftOrdersModule {}

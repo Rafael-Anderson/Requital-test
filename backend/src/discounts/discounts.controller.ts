@@ -11,16 +11,15 @@ import {
 import { DiscountsService } from './discounts.service';
 import { CreateDiscountDto } from './dto/create-discount.dto';
 import { UpdateDiscountDto } from './dto/update-discount.dto';
-import { ValidateDiscountDto } from './dto/validate-discount.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 
 // Admin-only CRUD, same access level as Bio Links/Theme. The storefront's
 // own promo-code validation goes through PublicController's sibling route
-// (POST /public/:shopSlug/discounts/validate) instead — this controller's
-// 'validate' route is for the admin-side draft-order builder, which already
-// has an authenticated ctx.shopId.
+// (POST /public/:shopSlug/discounts/validate) instead. The admin draft-order
+// builder's POST /shop/discounts/validate is served by DraftOrders'
+// DiscountValidationController (it needs the product resolver).
 @Roles('admin')
 @Controller('shop/discounts')
 export class DiscountsController {
@@ -29,16 +28,6 @@ export class DiscountsController {
   @Get()
   findAll(@CurrentUser() ctx: TenantContext) {
     return this.discountsService.findAll(ctx);
-  }
-
-  // Registered before ':id' — see BioLinksController for why a literal
-  // segment must be declared ahead of a same-shape ':id' route.
-  @Post('validate')
-  validate(
-    @CurrentUser() ctx: TenantContext,
-    @Body() dto: ValidateDiscountDto,
-  ) {
-    return this.discountsService.validate(ctx.shopId, dto);
   }
 
   @Post()

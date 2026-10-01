@@ -8,6 +8,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { DraftOrdersService } from './draft-orders.service';
+import { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { CreateDraftOrderDto } from './dto/create-draft-order.dto';
 import { UpdateDraftOrderDto } from './dto/update-draft-order.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -73,5 +74,23 @@ export class DraftOrdersController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.draftOrdersService.sendInvoice(ctx, id);
+  }
+}
+
+// POST /shop/discounts/validate, the admin draft-order builder's live preview.
+// It lives here rather than in DiscountsController because pricing the cart's
+// lines needs the product resolver, and DiscountsModule cannot import
+// ProductsModule (which already imports it). Same URL, same admin-only access.
+@Roles('admin')
+@Controller('shop/discounts/validate')
+export class DiscountValidationController {
+  constructor(private readonly draftOrdersService: DraftOrdersService) {}
+
+  @Post()
+  validate(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: ValidateDiscountDto,
+  ) {
+    return this.draftOrdersService.validateDiscount(ctx, dto);
   }
 }

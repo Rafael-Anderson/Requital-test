@@ -360,50 +360,46 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
   });
 
   describe('SPECIFIC_PRODUCTS / SPECIFIC_COLLECTIONS codes at checkout', () => {
-    // FINDING F8. Every order-creation path (PublicService.createOrder,
-    // OrdersService.create, DraftOrdersService) calls discountsService.evaluate()
-    // with only { cartSubtotal } and no productIds/collectionIds. evaluate()
-    // rejects a scoped code as not_eligible when none are supplied, so a code
-    // scoped to specific products or collections can never be redeemed at
-    // checkout even though POST /discounts/validate (where the client DOES send
-    // productIds) says it is valid. Even if it were accepted, computeAmount runs
-    // on the whole cart subtotal, not just the eligible lines.
-    test.failing(
-      'FINDING F8: a code scoped to one product is accepted at checkout for a cart containing it, and discounts only that line',
-      async () => {
-        const { shop, standard } = await taxedShop('gdt-scoped');
-        const a = await f.stockedProduct(shop, 10, {
-          price: 100,
-          taxClassId: standard.id,
-        });
-        const b = await f.stockedProduct(shop, 10, {
-          price: 50,
-          taxClassId: standard.id,
-        });
-        await f.publish(shop);
-        const discount = await f.createDiscount(shop, {
-          type: 'PERCENTAGE',
-          value: 10,
-          appliesTo: 'SPECIFIC_PRODUCTS',
-          productIds: [a.id],
-        });
-        const res = await f.storefrontOrderRaw(
-          shop,
-          [
-            { productId: a.id, quantity: 1 },
-            { productId: b.id, quantity: 1 },
-          ],
-          { discountCode: discount.code },
-        );
-        expect(res.status).toBe(201); // actual: 400 "not eligible"
-        const row = await f.orderRow(
-          body<{ order: { id: number } }>(res).order.id,
-        );
-        expect(Number(row.discountAmount)).toBe(10); // 10% of A only, not of the 150 cart
-      },
-    );
+    // FINDING F8 (fixed). Every order-creation path used to call
+    // discountsService.evaluate() with only { cartSubtotal } and no
+    // productIds/collectionIds, so a scoped code was rejected as not_eligible
+    // at checkout while POST /discounts/validate called it valid; and the
+    // amount ran on the whole cart. Eligibility, the eligible subtotal and the
+    // amount now come from one function (discounts/discount-eligibility.ts)
+    // over the RESOLVED order lines. Full matrix: discount-eligibility.e2e-spec.ts.
+    it('FINDING F8: a code scoped to one product is accepted at checkout for a cart containing it, and discounts only that line', async () => {
+      const { shop, standard } = await taxedShop('gdt-scoped');
+      const a = await f.stockedProduct(shop, 10, {
+        price: 100,
+        taxClassId: standard.id,
+      });
+      const b = await f.stockedProduct(shop, 10, {
+        price: 50,
+        taxClassId: standard.id,
+      });
+      await f.publish(shop);
+      const discount = await f.createDiscount(shop, {
+        type: 'PERCENTAGE',
+        value: 10,
+        appliesTo: 'SPECIFIC_PRODUCTS',
+        productIds: [a.id],
+      });
+      const res = await f.storefrontOrderRaw(
+        shop,
+        [
+          { productId: a.id, quantity: 1 },
+          { productId: b.id, quantity: 1 },
+        ],
+        { discountCode: discount.code },
+      );
+      expect(res.status).toBe(201);
+      const row = await f.orderRow(
+        body<{ order: { id: number } }>(res).order.id,
+      );
+      expect(Number(row.discountAmount)).toBe(10); // 10% of A only, not of the 150 cart
+    });
 
-    it('the validate endpoint agrees the same code is valid for that cart (so the checkout rejection is the inconsistency)', async () => {
+    it('the validate endpoint and checkout agree the same code is valid for that cart', async () => {
       const { shop, standard } = await taxedShop('gdt-scoped-v');
       const a = await f.stockedProduct(shop, 10, {
         price: 100,
@@ -425,7 +421,7 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
         [{ productId: a.id, quantity: 1 }],
         { discountCode: discount.code },
       );
-      expect(checkout.status).toBe(400); // characterises the F8 mechanism
+      expect(checkout.status).toBe(201);
     });
   });
 });

@@ -103,6 +103,12 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
           code: discountCode.trim(),
           cartSubtotal: subtotal,
           productIds: items.map((i) => i.productId),
+          items: items.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            quantity: i.quantity,
+            priceOverride: Number(i.price),
+          })),
         });
         setDiscountPreview(result);
       } catch {

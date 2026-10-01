@@ -291,7 +291,6 @@ export class OrdersService {
       })),
     );
 
-    let subtotal = 0;
     const itemsData = resolvedItems.map(
       ({
         product,
@@ -304,7 +303,6 @@ export class OrdersService {
         taxClassId,
         taxRate,
       }) => {
-        subtotal += Number(price) * quantity;
         return {
           productId: product.id as number,
           productName: product.name as string,
@@ -355,7 +353,15 @@ export class OrdersService {
         dto.discountCode,
       );
       const evaluated = await this.discountsService.evaluate(resolved, {
-        cartSubtotal: subtotal,
+        lines: await this.discountsService.buildLines(
+          ctx.shopId,
+          itemsData.map((d) => ({
+            productId: d.productId,
+            price: d.priceAtPurchase,
+            quantity: d.quantity,
+          })),
+        ),
+        currency: shopSettings?.currency as string | undefined,
       });
       if (!evaluated.valid) {
         throw new BadRequestException(
@@ -872,7 +878,6 @@ export class OrdersService {
       })),
     );
 
-    let newSubtotal = 0;
     const newItemsData = resolvedItems.map(
       ({
         product,
@@ -885,7 +890,6 @@ export class OrdersService {
         taxClassId,
         taxRate,
       }) => {
-        newSubtotal += Number(price) * quantity;
         return {
           productId: product.id as number,
           productName: product.name as string,
@@ -930,9 +934,20 @@ export class OrdersService {
         ctx.shopId,
         order.discountId,
       );
+      const currencyRows = await this.db.query<RowDataPacket[]>(
+        `SELECT currency FROM shop WHERE id = ?`,
+        [ctx.shopId],
+      );
       const evaluated = await this.discountsService.evaluate(discount, {
-        cartSubtotal: newSubtotal,
-        productIds: resolvedItems.map((i) => i.product.id as number),
+        lines: await this.discountsService.buildLines(
+          ctx.shopId,
+          newItemsData.map((d) => ({
+            productId: d.productId,
+            price: d.priceAtPurchase,
+            quantity: d.quantity,
+          })),
+        ),
+        currency: currencyRows[0]?.currency as string | undefined,
         customerId: order.customerId ?? undefined,
       });
       if (evaluated.valid) {

@@ -18,7 +18,16 @@ export default function PromoCodeField({
   productIds: number[];
   onAmountChange?: (amount: number | null, freeShipping: boolean) => void;
 }) {
-  const { discountCode, setDiscountCode, subtotal } = useCart();
+  const { discountCode, setDiscountCode, subtotal, items } = useCart();
+  // The cart's lines, so the server prices them and works out which ones a
+  // product/collection-scoped code covers: the amount shown is then the
+  // amount charged. (productIds stays for a backend that predates `items`.)
+  const lineItems = items.map((i) => ({
+    productId: i.productId,
+    variantId: i.variantId,
+    quantity: i.quantity,
+    giftCardAmount: i.isGiftCard ? i.price : undefined,
+  }));
   const [input, setInput] = useState("");
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +39,7 @@ export default function PromoCodeField({
     }
     let cancelled = false;
     setChecking(true);
-    validateDiscount(shopSlug, { code: discountCode, cartSubtotal: subtotal, productIds })
+    validateDiscount(shopSlug, { code: discountCode, cartSubtotal: subtotal, productIds, items: lineItems })
       .then((res) => {
         if (cancelled) return;
         if (res.valid) {
@@ -55,7 +64,7 @@ export default function PromoCodeField({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discountCode, subtotal, shopSlug]);
+  }, [discountCode, subtotal, shopSlug, items]);
 
   async function apply() {
     const code = input.trim().toUpperCase();
@@ -63,7 +72,7 @@ export default function PromoCodeField({
     setChecking(true);
     setError(null);
     try {
-      const res = await validateDiscount(shopSlug, { code, cartSubtotal: subtotal, productIds });
+      const res = await validateDiscount(shopSlug, { code, cartSubtotal: subtotal, productIds, items: lineItems });
       if (res.valid) {
         setDiscountCode(code);
         setInput("");

@@ -2032,6 +2032,9 @@ export function validateDiscount(data: {
   productIds?: number[];
   collectionIds?: number[];
   customerId?: number;
+  // The cart's lines; the server prices them so a scoped code's amount is
+  // the amount charged.
+  items?: { productId: number; variantId?: number; quantity: number; priceOverride?: number }[];
 }) {
   return apiFetch<ValidateDiscountResult>("/shop/discounts/validate", {
     method: "POST",

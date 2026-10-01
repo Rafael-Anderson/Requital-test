@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsInt,
   IsNotEmpty,
@@ -8,6 +9,7 @@ import {
   IsPositive,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 // Shared by the admin-authenticated POST /shop/discounts/validate (used by
@@ -44,4 +46,46 @@ export class ValidateDiscountDto {
   @IsInt()
   @IsPositive()
   customerId?: number;
+
+  // Preferred over productIds/collectionIds: with the cart's lines the server
+  // derives eligibility and the amount exactly as order creation will.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ValidateDiscountItemDto)
+  items?: ValidateDiscountItemDto[];
+}
+
+// One cart line, for an exact eligibility + amount. The server prices it (the
+// same resolver order creation uses); `priceOverride` is honoured only on the
+// admin draft-order route and stripped from the public one.
+export class ValidateDiscountItemDto {
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  productId: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  variantId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  quantity: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  giftCardAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  priceOverride?: number;
 }

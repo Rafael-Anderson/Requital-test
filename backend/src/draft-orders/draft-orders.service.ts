@@ -11,6 +11,8 @@ import type { DraftorderRow, DraftorderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { ProductsService } from '../products/products.service';
 import { DiscountsService } from '../discounts/discounts.service';
+import { computeEligibility } from '../discounts/discount-eligibility';
+import type { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { OrdersService } from '../orders/orders.service';
 import { PaymentsService } from '../payments/payments.service';
 import { buildVariantLabel } from '../products/variant-generator';
@@ -40,6 +42,9 @@ interface AssembledDraftOrder extends DraftorderRow {
   region: RegionSummary | null;
   draftorderitem: AssembledDraftItem[];
   discount: { id: number; code: string; type: string; value: string | null } | null;
+  // The attached discount's amount over the draft's ELIGIBLE lines, computed
+  // by the same function checkout uses (null when no discount is attached).
+  discountAmount: number | null;
   customer: { id: number; name: string; phone: string } | null;
   outlet: { id: number; name: string };
   convertedOrder: {
@@ -93,7 +98,6 @@ export class DraftOrdersService {
     });
 
     const itemsData = await this.buildItemsData(ctx, dto.items);
-    const subtotal = this.sumItems(itemsData ?? []);
 
     // Read-only — doesn't create a customer record for what might be an
     // abandoned draft; a real row is only ever created at conversion time,
@@ -108,7 +112,7 @@ export class DraftOrdersService {
       ? await this.resolveDiscountOrThrow(
           ctx.shopId,
           dto.discountCode,
-          subtotal,
+          itemsData ?? [],
           existingCustomerId,
         )
       : null;
@@ -183,20 +187,23 @@ export class DraftOrdersService {
         : undefined;
 
     const itemsData = await this.buildItemsData(ctx, dto.items);
-    let subtotal: number;
+    let lineItems: {
+      productId: number;
+      price: string | number;
+      quantity: number;
+    }[];
     if (itemsData) {
-      subtotal = this.sumItems(itemsData);
+      lineItems = itemsData;
     } else {
       const existingItems = await this.db.query<RowDataPacket[]>(
-        `SELECT price, quantity FROM draftorderitem WHERE draftOrderId = ?`,
+        `SELECT productId, price, quantity FROM draftorderitem WHERE draftOrderId = ?`,
         [id],
       );
-      subtotal = this.sumItems(
-        existingItems.map((i) => ({
-          price: i.price as string,
-          quantity: i.quantity as number,
-        })),
-      );
+      lineItems = existingItems.map((i) => ({
+        productId: i.productId as number,
+        price: i.price as string,
+        quantity: i.quantity as number,
+      }));
     }
 
     let discountId: number | null | undefined;
@@ -211,7 +218,7 @@ export class DraftOrdersService {
       discountId = await this.resolveDiscountOrThrow(
         ctx.shopId,
         dto.discountCode,
-        subtotal,
+        lineItems,
         existingCustomerRows[0]?.id as number | undefined,
       );
     }
@@ -405,15 +412,50 @@ export class DraftOrdersService {
     return items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0);
   }
 
+  // Admin draft-order builder's live preview (POST /shop/discounts/validate,
+  // served by DiscountValidationController). Lines are priced by the same
+  // resolver order creation uses, so the preview is the charge.
+  async validateDiscount(ctx: TenantContext, dto: ValidateDiscountDto) {
+    if (!dto.items?.length) return this.discountsService.validate(ctx.shopId, dto);
+    const resolved = await this.productsService.resolveOrderItems(
+      ctx.shopId,
+      dto.items.map((i) => ({
+        productId: i.productId,
+        variantId: i.variantId,
+        quantity: i.quantity,
+        giftCardAmount: i.giftCardAmount,
+        priceOverride: i.priceOverride,
+      })),
+    );
+    const lines = await this.discountsService.buildLines(
+      ctx.shopId,
+      resolved.map((r) => ({
+        productId: r.product.id as number,
+        price: r.price,
+        quantity: r.quantity,
+      })),
+    );
+    return this.discountsService.validate(ctx.shopId, dto, lines);
+  }
+
   private async resolveDiscountOrThrow(
     shopId: number,
     code: string,
-    subtotal: number,
+    items: {
+      productId: number;
+      price: string | number;
+      quantity: number;
+    }[],
     customerId?: number,
   ) {
     const discount = await this.discountsService.resolveByCode(shopId, code);
+    const currencyRows = await this.db.query<RowDataPacket[]>(
+      `SELECT currency FROM shop WHERE id = ?`,
+      [shopId],
+    );
     const result = await this.discountsService.evaluate(discount, {
-      cartSubtotal: subtotal,
+      lines: await this.discountsService.buildLines(shopId, items),
+      currency: currencyRows[0]?.currency as string | undefined,
       customerId,
     });
     if (!result.valid) {
@@ -471,7 +513,7 @@ export class DraftOrdersService {
     const idList = ids.map(() => '?').join(', ');
     const [drafts, items] = await Promise.all([
       this.db.query<(DraftorderRow & RowDataPacket)[]>(
-        `SELECT d.*, disc.code AS discountCode, disc.type AS discountType, disc.value AS discountValue,
+        `SELECT d.*, disc.code AS discountCode, disc.type AS discountType, disc.value AS discountValue, disc.appliesTo AS discountAppliesTo,
                 c.id AS customerRowId, c.name AS customerName2, c.phone AS customerPhone2,
                 o.id AS outletRowId, o.name AS outletName,
                 co.id AS convertedOrderRowId,
@@ -518,10 +560,70 @@ export class DraftOrdersService {
       });
       itemsByDraft.set(item.draftOrderId as number, list);
     }
+    // The attached discount's scope + each item's collections, so the amount
+    // shown here comes from the same eligibility function checkout charges by
+    // (only the ELIGIBLE lines are discounted, not the whole subtotal).
+    const discountIds = [
+      ...new Set(
+        drafts.filter((d) => d.discountId).map((d) => d.discountId as number),
+      ),
+    ];
+    const [discountProducts, discountCollections] = discountIds.length
+      ? await Promise.all([
+          this.db.query<RowDataPacket[]>(
+            `SELECT discountId, productId FROM discountproduct WHERE discountId IN (${discountIds.map(() => '?').join(', ')})`,
+            discountIds,
+          ),
+          this.db.query<RowDataPacket[]>(
+            `SELECT discountId, collectionId FROM discountcollection WHERE discountId IN (${discountIds.map(() => '?').join(', ')})`,
+            discountIds,
+          ),
+        ])
+      : [[], []];
+    const itemProductIds = [
+      ...new Set(items.map((i) => i.productId as number)),
+    ];
+    const collectionsByProduct = new Map<number, number[]>();
+    if (discountIds.length && itemProductIds.length) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT pc.productId, pc.collectionId
+           FROM productcollection pc JOIN product p ON p.id = pc.productId
+          WHERE pc.productId IN (${itemProductIds.map(() => '?').join(', ')}) AND p.shopId = ?`,
+        [...itemProductIds, drafts[0].shopId],
+      );
+      for (const r of rows) {
+        const list = collectionsByProduct.get(r.productId as number) ?? [];
+        list.push(r.collectionId as number);
+        collectionsByProduct.set(r.productId as number, list);
+      }
+    }
     for (const d of await attachRegion(this.db, drafts)) {
+      const draftItems = itemsByDraft.get(d.id) ?? [];
+      const discountAmount = d.discountId
+        ? computeEligibility(
+            {
+              type: d.discountType as string,
+              value: d.discountValue as string | null,
+              appliesTo: d.discountAppliesTo as string,
+              productIds: discountProducts
+                .filter((r) => r.discountId === d.discountId)
+                .map((r) => r.productId as number),
+              collectionIds: discountCollections
+                .filter((r) => r.discountId === d.discountId)
+                .map((r) => r.collectionId as number),
+            },
+            draftItems.map((i) => ({
+              productId: i.productId,
+              collectionIds: collectionsByProduct.get(i.productId) ?? [],
+              amount: Number(i.price) * i.quantity,
+            })),
+            d.currency,
+          ).discountAmount
+        : null;
       result.set(d.id, {
         ...d,
-        draftorderitem: itemsByDraft.get(d.id) ?? [],
+        discountAmount,
+        draftorderitem: draftItems,
         discount: d.discountId
           ? {
               id: d.discountId,
@@ -571,9 +673,7 @@ export class DraftOrdersService {
       price: trimDecimal(i.price),
     }));
     const subtotal = this.sumItems(items);
-    const discountAmount = discount
-      ? this.discountsService.computeAmount(discount, subtotal)
-      : 0;
+    const discountAmount = discount ? (draft.discountAmount ?? 0) : 0;
     const total = Math.max(0, subtotal - discountAmount);
     return {
       ...rest,
