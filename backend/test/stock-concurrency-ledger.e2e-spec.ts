@@ -222,18 +222,37 @@ describe('Stock concurrency and ledger conservation (e2e)', () => {
     // key, so other specs running in parallel against the same MySQL cannot
     // satisfy it). A request that never parks (e.g. it fails validation before the
     // lock) would hang here, so the poll has a hard timeout and fails loudly.
+    //
+    // Some MySQL users (CI's service container) cannot read performance_schema
+    // (errno 1142). There the helper degrades to a fixed settle delay, which is
+    // the pre-existing W5 behaviour; locally it stays deterministic.
+    let canReadLockWaits = true;
     async function waitForLockWaiters(orderId: number, expected: number) {
+      if (!canReadLockWaits) {
+        await new Promise((r) => setTimeout(r, 800));
+        return;
+      }
       const deadline = Date.now() + 20000;
       for (;;) {
-        const rows = await db.query<RowDataPacket[]>(
-          `SELECT COUNT(*) AS c
-             FROM performance_schema.data_lock_waits w
-             JOIN performance_schema.data_locks l
-               ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
-            WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = 'order'
-              AND l.LOCK_DATA = ?`,
-          [String(orderId)],
-        );
+        let rows: RowDataPacket[];
+        try {
+          rows = await db.query<RowDataPacket[]>(
+            `SELECT COUNT(*) AS c
+               FROM performance_schema.data_lock_waits w
+               JOIN performance_schema.data_locks l
+                 ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID
+              WHERE l.OBJECT_SCHEMA = DATABASE() AND l.OBJECT_NAME = 'order'
+                AND l.LOCK_DATA = ?`,
+            [String(orderId)],
+          );
+        } catch (e) {
+          if ((e as { errno?: number }).errno === 1142) {
+            canReadLockWaits = false;
+            await new Promise((r) => setTimeout(r, 800));
+            return;
+          }
+          throw e;
+        }
         if (Number(rows[0].c) >= expected) return;
         if (Date.now() > deadline)
           throw new Error(
