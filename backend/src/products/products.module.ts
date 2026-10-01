@@ -1,6 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
+import { ProductCatalogService } from './product-catalog.service';
+import { ProductStockService } from './product-stock.service';
+import { ProductImportService } from './product-import.service';
+import { ProductBomService } from './product-bom.service';
+import { ProductOrderItemsService } from './product-order-items.service';
+import { ProductReadService } from './product-read.service';
 import { LowStockDigestService } from './low-stock-digest.service';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
@@ -21,7 +27,16 @@ import { TaxClassesModule } from '../tax-classes/tax-classes.module';
     TaxClassesModule,
   ],
   controllers: [ProductsController],
-  providers: [ProductsService, LowStockDigestService],
+  providers: [
+    ProductsService,
+    ProductCatalogService,
+    ProductStockService,
+    ProductImportService,
+    ProductBomService,
+    ProductOrderItemsService,
+    ProductReadService,
+    LowStockDigestService,
+  ],
   // Consumed by OrdersModule/PublicModule for order-time variant resolution
   // (see ProductsService.resolveOrderItems) — one shared place for "does
   // this item need a variant, and what's its effective price/label", same

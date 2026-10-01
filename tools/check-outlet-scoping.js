@@ -51,8 +51,8 @@ const ALLOWLIST = [
   // new entry point, so no independent check belongs here.
   "orders/orders.service.ts:findNegativeIngredientStock",
   "orders/orders.service.ts:adjustStockForOrder",
-  "products/products.service.ts:consumeForOrderItems",
-  "products/products.service.ts:applyImportStock",
+  "products/product-order-items.service.ts:consumeForOrderItems",
+  "products/product-import.service.ts:applyImportStock",
   "dashboard/dashboard.service.ts:revenueAndCount",
   // Read-only batch-loader queries (post-mysql2-migration replacement for
   // the Prisma include/select builders these entries used to name) —
@@ -62,9 +62,9 @@ const ALLOWLIST = [
   // zero rows in that join (the id list also requires the exact
   // product/variant ids already fetched), never leak another shop's data.
   "ingredients/ingredients.service.ts:loadIngredientRows",
-  "products/products.service.ts:loadProductsWithRelations",
-  "products/products.service.ts:loadVariantsWithRelations",
-  "products/products.service.ts:loadIngredientLinks",
+  "products/product-read.service.ts:loadProductsWithRelations",
+  "products/product-read.service.ts:loadVariantsWithRelations",
+  "products/product-read.service.ts:loadIngredientLinks",
   "public/public.service.ts:loadPublicProductsWithRelations",
   // Thin public wrapper over loadPublicProductsWithRelations (above) —
   // read-only, takes an explicit shopId that scopes its product query, and
