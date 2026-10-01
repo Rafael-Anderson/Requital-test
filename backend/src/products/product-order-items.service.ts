@@ -10,6 +10,17 @@ import { DatabaseService } from '../database/database.service';
 import { DiscountsService } from '../discounts/discounts.service';
 import { FeaturesService } from '../features/features.service';
 
+// One ingredient an order took out of stock, by the order-line identity the
+// record is keyed on (productId + variantId as the line names them, which is
+// NOT necessarily the recipe row's own variantId: a variant line can inherit
+// the product-level recipe). `quantity` is positive = units taken.
+export interface ConsumedRow {
+  productId: number;
+  variantId: number | null;
+  ingredientId: number;
+  quantity: number;
+}
+
 // Order-time item resolution (price, tax class, variant, auto-discounts) and ingredient consumption/restock for order lifecycle callers.
 @Injectable()
 export class ProductOrderItemsService {
@@ -330,8 +341,24 @@ export class ProductOrderItemsService {
       // deviation from this column's "ADJUSTMENT only" schema comment, not
       // introduced here).
       reason?: string | null;
+      // Record what this call took (direction -1 only) in
+      // orderstockconsumption, so every later restock or delta is driven by
+      // what the order actually consumed instead of today's recipe and
+      // flags. `orderId`: the order exists, write the record here, on this
+      // connection, in the same transaction as the decrement. `collect`: the
+      // order row is not inserted yet (checkout reserves stock first), the
+      // caller gets the rows and passes them to recordOrderConsumption once it
+      // has the id. Neither: no record (LEGACY orders, which keep the old
+      // recipe-driven restock).
+      orderId?: number;
+      collect?: ConsumedRow[];
     },
   ): Promise<boolean> {
+    if (direction === 1 && (options.orderId !== undefined || options.collect))
+      throw new Error(
+        'consumeForOrderItems: recording is for direction -1 only; restocks go through releaseOrderConsumption',
+      );
+    const recorded: ConsumedRow[] = [];
     if (direction === -1) {
       // Read on the caller's own connection: this runs inside the order's
       // transaction and must not take a second pool connection.
@@ -419,26 +446,197 @@ export class ProductOrderItemsService {
         const isShadow =
           row.ingredientShadowProductId !== null ||
           row.ingredientShadowVariantId !== null;
-        await conn.query(
-          `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            shopId,
-            isShadow ? item.productId : null,
-            isShadow ? row.variantId : null,
-            row.ingredientId,
-            movementType,
-            options.reason ?? null,
-            delta,
-            outletId,
-            null,
-            options.note ?? null,
-            options.actorUserId,
-          ],
-        );
+        await this.insertConsumptionMovement(conn, {
+          shopId,
+          outletId,
+          ingredientId: row.ingredientId as number,
+          productId: isShadow ? item.productId : null,
+          variantId: isShadow ? (row.variantId as number | null) : null,
+          type: movementType,
+          reason: options.reason ?? null,
+          delta,
+          note: options.note ?? null,
+          actorUserId: options.actorUserId,
+        });
+        if (direction === -1)
+          recorded.push({
+            productId: item.productId,
+            variantId: item.variantId,
+            ingredientId: row.ingredientId as number,
+            quantity: totalQty,
+          });
       }
     }
+    if (options.orderId !== undefined)
+      await this.recordOrderConsumption(conn, shopId, options.orderId, recorded);
+    options.collect?.push(...recorded);
     return consumedAnything;
+  }
+
+  private async insertConsumptionMovement(
+    conn: PoolConnection,
+    m: {
+      shopId: number;
+      outletId: number;
+      ingredientId: number;
+      productId: number | null;
+      variantId: number | null;
+      type: string;
+      reason: string | null;
+      delta: number;
+      note: string | null;
+      actorUserId: number | null;
+    },
+  ) {
+    await conn.query(
+      `INSERT INTO stockmovement (shopId, productId, variantId, ingredientId, type, reason, delta, outletId, toOutletId, note, actorUserId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        m.shopId,
+        m.productId,
+        m.variantId,
+        m.ingredientId,
+        m.type,
+        m.reason,
+        m.delta,
+        m.outletId,
+        null,
+        m.note,
+        m.actorUserId,
+      ],
+    );
+  }
+
+  // Adds `rows` to what the order holds (orderstockconsumption). Same
+  // connection as the decrement it describes, so the two commit or roll back
+  // together; the shop scope is on the row itself. A row for the same line and
+  // ingredient accumulates (an edit that raises a quantity, a confirm after
+  // nothing). Callers only invoke it for an order that carries
+  // consumptionRecordedAt: a LEGACY order must never get a partial record, or
+  // its restock would silently stop at the delta.
+  async recordOrderConsumption(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+    rows: ConsumedRow[],
+  ) {
+    for (const r of rows) {
+      await conn.query(
+        `INSERT INTO orderstockconsumption (shopId, orderId, productId, variantId, ingredientId, quantity)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+        [shopId, orderId, r.productId, r.variantId, r.ingredientId, r.quantity],
+      );
+    }
+  }
+
+  // The restock side of the record: gives back to stock what the order
+  // actually holds, NOT what today's recipe says it should have taken (F10),
+  // regardless of product.trackInventory (F11) or the toggle (F2, F9): if the
+  // order consumed nothing there are no rows and nothing is returned.
+  //
+  // `only` limits it to some lines and a fraction of each: `num` of `den`
+  // units, so returning 1 of 3 units of a line gives back a third of what that
+  // line holds (exact when the per-unit take was uniform, which is every order
+  // whose recipe was not edited mid-flight; otherwise the average per unit,
+  // rounded DOWN so a restock never exceeds what was held). num >= den gives
+  // back the whole line. Without `only`, everything the order holds (cancel).
+  //
+  // Every row is read FOR UPDATE and zeroed in place; the stock increment and
+  // its stockmovement row are written on the same connection, so the
+  // conservation invariant (sum of movements == stock) holds exactly as it does
+  // for a consume. Returns what was actually given back.
+  async releaseOrderConsumption(
+    conn: PoolConnection,
+    p: {
+      shopId: number;
+      outletId: number;
+      orderId: number;
+      actorUserId: number | null;
+      movementType: string;
+      note?: string | null;
+      reason?: string | null;
+      only?: {
+        productId: number;
+        variantId: number | null;
+        num: number;
+        den: number;
+      }[];
+    },
+  ): Promise<ConsumedRow[]> {
+    const [held] = await conn.query<RowDataPacket[]>(
+      `SELECT id, productId, variantId, ingredientId, quantity
+         FROM orderstockconsumption
+        WHERE orderId = ? AND shopId = ? AND quantity > 0
+        ORDER BY id FOR UPDATE`,
+      [p.orderId, p.shopId],
+    );
+    const released: ConsumedRow[] = [];
+    if (held.length === 0) return released;
+    // Same rule as every other stock write that takes an outletId: it must
+    // belong to the shop before stock is written to it.
+    const [outletRows] = await conn.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [p.outletId, p.shopId],
+    );
+    if (outletRows.length === 0)
+      throw new BadRequestException('Outlet not found for this shop');
+    const [ingRows] = await conn.query<RowDataPacket[]>(
+      `SELECT id, shadowProductId, shadowVariantId FROM ingredient
+        WHERE shopId = ? AND id IN (${[...new Set(held.map((h) => h.ingredientId as number))].map(() => '?').join(', ')})`,
+      [p.shopId, ...new Set(held.map((h) => h.ingredientId as number))],
+    );
+    const ingById = new Map(ingRows.map((i) => [i.id as number, i]));
+    for (const h of held) {
+      let amount = h.quantity as number;
+      if (p.only) {
+        const sel = p.only.find(
+          (o) =>
+            o.productId === h.productId &&
+            (o.variantId ?? null) === (h.variantId ?? null),
+        );
+        if (!sel) continue;
+        if (sel.num < sel.den)
+          amount = Math.floor(((h.quantity as number) * sel.num) / sel.den);
+      }
+      if (amount <= 0) continue;
+      await conn.query(
+        `UPDATE orderstockconsumption SET quantity = quantity - ? WHERE id = ?`,
+        [amount, h.id],
+      );
+      await conn.query(
+        `INSERT INTO outletingredientstock (outletId, ingredientId, stockQuantity)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE stockQuantity = stockQuantity + VALUES(stockQuantity)`,
+        [p.outletId, h.ingredientId, amount],
+      );
+      // A shadow ingredient keeps its product/variant on the movement row so
+      // Movement History's productId filter still finds it (same rule as
+      // consumeForOrderItems).
+      const ing = ingById.get(h.ingredientId as number);
+      const isShadow =
+        !!ing &&
+        (ing.shadowProductId !== null || ing.shadowVariantId !== null);
+      await this.insertConsumptionMovement(conn, {
+        shopId: p.shopId,
+        outletId: p.outletId,
+        ingredientId: h.ingredientId as number,
+        productId: isShadow ? (h.productId as number) : null,
+        variantId: isShadow ? ((ing!.shadowVariantId as number | null) ?? null) : null,
+        type: p.movementType,
+        reason: p.reason ?? null,
+        delta: amount,
+        note: p.note ?? null,
+        actorUserId: p.actorUserId,
+      });
+      released.push({
+        productId: h.productId as number,
+        variantId: h.variantId as number | null,
+        ingredientId: h.ingredientId as number,
+        quantity: amount,
+      });
+    }
+    return released;
   }
 
   // A variant's own override rows take over its recipe wholesale when any

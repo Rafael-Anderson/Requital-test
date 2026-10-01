@@ -2,6 +2,7 @@ import 'dotenv/config';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import type { RowDataPacket } from 'mysql2/promise';
 import type { DatabaseService } from '../src/database/database.service';
 import { body, bootApp, makeFixtures } from './helpers/w5-fixture';
 
@@ -172,7 +173,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
     // ReturnsService has no such gate: it always restocks. An order confirmed
     // while shop.autoDeductIngredientStock was OFF consumed nothing, and its
     // return still ADDS stock, so ingredient stock inflates.
-    test.failing(
+    it(
       'FINDING F9: returning an order that consumed no ingredients does not add ingredient stock',
       async () => {
         const { shop, rose, product } = await bomShop('rr-unconsumed');
@@ -185,7 +186,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
         expect((await f.orderRow(orderId)).ingredientsConsumedAt).toBeNull();
         expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // nothing was consumed
         await returnItems(shop, orderId, orderItemId, 2).expect(201);
-        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // actual: 112
+        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // was 112
       },
     );
 
@@ -202,7 +203,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
     // consumed. Edit a recipe between sale and cancel/return and the stock does
     // not come back to where it started. Nothing on the order records the
     // quantities consumed (only a stockmovement row per ingredient does).
-    test.failing(
+    it(
       'FINDING F10a: cancelling after the recipe changed restores what was actually consumed',
       async () => {
         const { shop, rose, product } = await bomShop('rr-recipe-cancel');
@@ -218,11 +219,11 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
           })
           .expect(200);
         await f.cancelOrder(shop, order.id).expect(201);
-        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // actual: 100 - 12 + 8 = 96
+        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // was 100 - 12 + 8 = 96
       },
     );
 
-    test.failing(
+    it(
       'FINDING F10b: returning after the recipe changed restores what was actually consumed',
       async () => {
         const { shop, rose, product } = await bomShop('rr-recipe-return');
@@ -239,7 +240,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
           })
           .expect(200);
         await returnItems(shop, orderId, orderItemId, 2).expect(201);
-        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // actual: 96
+        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // was 96
       },
     );
 
@@ -247,7 +248,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
     // consumes its (tracked) ingredients on confirm: consumeForOrderItems looks
     // only at ingredient.trackInventory. ReturnsService gates its restock on
     // product.trackInventory, so the same order's return gives nothing back.
-    test.failing(
+    it(
       'FINDING F11: a recipe product with trackInventory off gets its ingredients back on return',
       async () => {
         const { shop, rose, product } = await bomShop('rr-untracked-product', {
@@ -260,7 +261,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
         );
         expect(await f.stockOf(shop.outletId, rose.id)).toBe(100 - 12); // it DID consume
         await returnItems(shop, orderId, orderItemId, 2).expect(201);
-        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // actual: 88
+        expect(await f.stockOf(shop.outletId, rose.id)).toBe(100); // was 88
       },
     );
 
@@ -277,7 +278,7 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
       expect(await f.stockOf(shop.outletId, rose.id)).toBe(100);
     });
 
-    it('F10 precondition: the recipe edit is accepted and the later restock uses the NEW quantity', async () => {
+    it('F10 precondition: the recipe edit is accepted, so the new tests above really restock from a record and not from the changed recipe', async () => {
       const { shop, rose, product } = await bomShop('rr-recipe-pre');
       const order = await f.adminOrder(shop, [
         { productId: product.id, quantity: 2 },
@@ -288,8 +289,52 @@ describe('Return restock for a BoM-backed product (e2e)', () => {
         .set(f.auth(shop))
         .send({ ingredients: [{ ingredientId: rose.id, quantityPerUnit: 4 }] })
         .expect(200);
+      const recipe = await db.query<RowDataPacket[]>(
+        `SELECT quantityPerUnit FROM productingredient WHERE productId = ? AND ingredientId = ?`,
+        [product.id, rose.id],
+      );
+      expect(recipe.map((r) => r.quantityPerUnit as number)).toEqual([4]);
       await f.cancelOrder(shop, order.id).expect(201);
-      expect(await f.stockOf(shop.outletId, rose.id)).toBe(96); // characterises the mechanism
+      expect(await f.stockOf(shop.outletId, rose.id)).toBe(100);
+    });
+
+    // LEGACY: an order that predates the stock record (consumptionRecordedAt NULL,
+    // nothing backfilled) keeps the old recipe-driven restock. Simulated by
+    // clearing the marker and the record rows of an order placed today, so the
+    // test exercises exactly the state a pre-migration order is in.
+    async function makeLegacy(orderId: number) {
+      await db.execute(
+        `UPDATE \`order\` SET consumptionRecordedAt = NULL WHERE id = ?`,
+        [orderId],
+      );
+      await db.execute(`DELETE FROM orderstockconsumption WHERE orderId = ?`, [
+        orderId,
+      ]);
+    }
+
+    it('LEGACY (no record): cancel after a recipe change still restocks from the recipe as it reads now (documented imprecision, unchanged)', async () => {
+      const { shop, rose, product } = await bomShop('rr-legacy-cancel');
+      const order = await f.adminOrder(shop, [
+        { productId: product.id, quantity: 2 },
+      ]);
+      await f.setStatus(shop, order.id, 'confirmed');
+      await makeLegacy(order.id);
+      await request(f.http())
+        .patch(`/products/${product.id}`)
+        .set(f.auth(shop))
+        .send({ ingredients: [{ ingredientId: rose.id, quantityPerUnit: 4 }] })
+        .expect(200);
+      await f.cancelOrder(shop, order.id).expect(201);
+      expect(await f.stockOf(shop.outletId, rose.id)).toBe(96);
+    });
+
+    it('LEGACY (no record): a return restocks from the recipe and ignores what the order consumed (F9 behaviour kept for orders that predate the record)', async () => {
+      const { shop, rose, product } = await bomShop('rr-legacy-return');
+      await f.setShop(shop, { autoDeductIngredientStock: false });
+      const { orderId, orderItemId } = await deliveredOrder(shop, product.id, 2);
+      await makeLegacy(orderId);
+      await returnItems(shop, orderId, orderItemId, 2).expect(201);
+      expect(await f.stockOf(shop.outletId, rose.id)).toBe(112);
     });
   });
 });

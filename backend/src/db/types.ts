@@ -40,6 +40,9 @@ export interface OrderRow {
   paymentLinkExpiresAt: Date | null;
   trackingToken: string | null;
   ingredientsConsumedAt: Date | null;
+  // Set when the order was created (or first consumed) by code that writes
+  // orderstockconsumption. NULL = LEGACY, restocks stay recipe-driven.
+  consumptionRecordedAt: Date | null;
   cashCollectedAt: Date | null;
   cashCollectedBy: number | null;
   // ISO 4217, frozen at insert (migration 20260926210000). Reading this
@@ -142,6 +145,20 @@ export interface SurveyresponseRow {
   comment: string | null;
   respondedAt: Date | null;
   createdAt: Date;
+}
+
+// What an order currently holds out of ingredient stock, per line identity
+// (migration 20261010100000). Hand-maintained like every row type here.
+export interface OrderstockconsumptionRow {
+  id: number;
+  shopId: number;
+  orderId: number;
+  productId: number;
+  variantId: number | null;
+  ingredientId: number;
+  quantity: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface OrderitemRow {

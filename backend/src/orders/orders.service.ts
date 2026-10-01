@@ -21,6 +21,7 @@ import { generateTrackingCode } from '../common/token-hash';
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ProductsService } from '../products/products.service';
+import type { ConsumedRow } from '../products/product-order-items.service';
 import { DiscountsService } from '../discounts/discounts.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -452,6 +453,7 @@ export class OrdersService {
       // `if (!product.trackInventory) continue` behavior without a
       // redundant filter here.
       let ingredientsConsumed = false;
+      const consumedRows: ConsumedRow[] = [];
       if (options.reserveStock) {
         ingredientsConsumed = await this.productsService.consumeForOrderItems(
           conn,
@@ -466,7 +468,11 @@ export class OrdersService {
               allowNegative,
             })),
           -1,
-          { throwOnInsufficientStock: true, actorUserId: ctx.userId },
+          {
+            throwOnInsufficientStock: true,
+            actorUserId: ctx.userId,
+            collect: consumedRows,
+          },
         );
       }
 
@@ -482,15 +488,20 @@ export class OrdersService {
         async (shopOrderNumber) => {
           const [res] = await conn.query(
         `INSERT INTO \`order\` (
-          shopId, outletId, ingredientsConsumedAt, customerId, customerName, customerPhone, customerEmail,
+          shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
           ingredientsConsumed ? new Date() : null,
+          // Marks this order's stock record as authoritative from the start
+          // (see orderstockconsumption's migration). NOT conditional on having
+          // consumed anything: a deferred admin order consumes at confirm, and
+          // "nothing consumed" must read as a fact, not as LEGACY.
+          new Date(),
           customer.id,
           dto.customerName,
           dto.customerPhone,
@@ -552,6 +563,13 @@ export class OrdersService {
           ]),
         );
       }
+
+      await this.productsService.recordOrderConsumption(
+        conn,
+        ctx.shopId,
+        newOrderId,
+        consumedRows,
+      );
 
       if (discount) {
         await this.discountsService.redeem(conn, discount, newOrderId, customer.id);
@@ -771,7 +789,6 @@ export class OrdersService {
           order.id,
           order.outletId,
           -1,
-          false,
         );
       }
     });
@@ -1011,7 +1028,7 @@ export class OrdersService {
       // against a stale picture (a 409 the caller can retry), rather than
       // adjusting stock for an order that has already been restocked.
       const [lockRows] = await conn.query<RowDataPacket[]>(
-        `SELECT status, ingredientsConsumedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+        `SELECT status, ingredientsConsumedAt, consumptionRecordedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
         [orderId, ctx.shopId],
       );
       if (lockRows[0]?.status !== order.status) {
@@ -1020,6 +1037,9 @@ export class OrdersService {
         );
       }
       const ingredientsConsumedNow = lockRows[0].ingredientsConsumedAt != null;
+      // The order has a stock record (orderstockconsumption), so every delta
+      // below is driven by what it actually holds. NULL = LEGACY.
+      const hasStockRecord = lockRows[0].consumptionRecordedAt != null;
       if (stockReserved) {
         const [oldItems] = await conn.query<RowDataPacket[]>(
           `SELECT productId, variantId, quantity FROM orderitem WHERE orderId = ?`,
@@ -1041,23 +1061,27 @@ export class OrdersService {
         );
         const allKeys = new Set([...oldQtyByKey.keys(), ...newQtyByKey.keys()]);
 
-        // Stock delta adjustment (Phase A: shadow or real recipe — every
-        // product/variant resolves through consumeForOrderItems now, so
-        // there's no separate product-stock-vs-BOM-ingredient carve-out
-        // anymore) — only for an order that's actually reached 'confirmed'
-        // and already consumed ingredients once (see
-        // order.ingredientsConsumedAt). A still-pending order (even one
-        // whose stock is already reserved via
-        // IMMEDIATE_STOCK_RESERVATION_CHANNELS) has never run
-        // consumeForOrderItems yet — that only happens at the
-        // pending->confirmed transition, see adjustStockForOrder — so it has
-        // nothing to adjust by delta here; the eventual confirm will consume
-        // stock for whatever the (now-edited) item list says.
+        // Stock delta adjustment (Phase A: shadow or real recipe - every
+        // product/variant resolves through consumeForOrderItems, there is no
+        // separate product-stock-vs-BOM-ingredient carve-out anymore).
         // Adjusted by delta (not recomputed from scratch) to avoid
-        // double-deducting what confirm already took.
+        // double-deducting what the order already took.
+        //
+        // An order WITH a stock record (hasStockRecord) holds stock in exactly the
+        // cases `stockReserved` describes: reserved at creation by an immediate
+        // channel (so a still-PENDING storefront/draft order is adjusted too, F1:
+        // this used to be skipped on the false belief that a pending order has
+        // never run consumeForOrderItems), or consumed at confirm. The delta is
+        // recorded and released against the record, never against today's recipe.
+        //
+        // A LEGACY order (no record, it predates orderstockconsumption) keeps the
+        // old rule unchanged: only a CONFIRMED order that ingredientsConsumedAt
+        // says consumed is adjusted, from today's recipe. What a legacy order
+        // took was never stored, so nothing better can be derived; its pending
+        // storefront edits keep the F1 behaviour, and it is not backfilled.
         if (
-          order.status === 'confirmed' &&
-          ingredientsConsumedNow
+          hasStockRecord ||
+          (order.status === 'confirmed' && ingredientsConsumedNow)
         ) {
           // A usesIngredients:true product's recipe consumption must never
           // block the save (going negative is surfaced as a warning
@@ -1105,14 +1129,29 @@ export class OrdersService {
           }
 
           if (increasedItems.length > 0) {
-            await this.productsService.consumeForOrderItems(
+            // recorded: what this increase takes is added to the order's own
+            // record. consumeForOrderItems still re-checks the toggle for a
+            // fresh decrement, so with it off an increase takes nothing, records
+            // nothing, and a later cancel gives back only what was really taken
+            // (F2: it used to give back the full new quantity).
+            const tookStock = await this.productsService.consumeForOrderItems(
               conn,
               ctx.shopId,
               order.outletId,
               increasedItems,
               -1,
-              { throwOnInsufficientStock: true, actorUserId: ctx.userId },
+              {
+                throwOnInsufficientStock: true,
+                actorUserId: ctx.userId,
+                ...(hasStockRecord && { orderId }),
+              },
             );
+            if (hasStockRecord && tookStock) {
+              await conn.query(
+                `UPDATE \`order\` SET ingredientsConsumedAt = COALESCE(ingredientsConsumedAt, ?) WHERE id = ? AND shopId = ?`,
+                [new Date(), orderId, ctx.shopId],
+              );
+            }
             ingredientStockWarnings = await this.findNegativeIngredientStock(
               conn,
               order.outletId,
@@ -1120,14 +1159,32 @@ export class OrdersService {
             );
           }
           if (decreasedItems.length > 0) {
-            await this.productsService.consumeForOrderItems(
-              conn,
-              ctx.shopId,
-              order.outletId,
-              decreasedItems,
-              1,
-              { throwOnInsufficientStock: false, actorUserId: ctx.userId },
-            );
+            if (hasStockRecord) {
+              // Give back the share of what each line HOLDS that the removed
+              // units account for: k of oldQty units.
+              await this.productsService.releaseOrderConsumption(conn, {
+                shopId: ctx.shopId,
+                outletId: order.outletId,
+                orderId,
+                actorUserId: ctx.userId,
+                movementType: 'CONSUMED',
+                only: decreasedItems.map((d) => ({
+                  productId: d.productId,
+                  variantId: d.variantId,
+                  num: d.quantity,
+                  den: oldQtyByKey.get(key(d.productId, d.variantId)) ?? 0,
+                })),
+              });
+            } else {
+              await this.productsService.consumeForOrderItems(
+                conn,
+                ctx.shopId,
+                order.outletId,
+                decreasedItems,
+                1,
+                { throwOnInsufficientStock: false, actorUserId: ctx.userId },
+              );
+            }
           }
         }
       }
@@ -1256,7 +1313,6 @@ export class OrdersService {
             id,
             order.outletId,
             1,
-            await this.readConsumedFlag(conn, ctx.shopId, id),
           );
         }
         return;
@@ -1275,7 +1331,6 @@ export class OrdersService {
           id,
           order.outletId,
           1,
-          await this.readConsumedFlag(conn, ctx.shopId, id),
         );
         return;
       }
@@ -1330,46 +1385,51 @@ export class OrdersService {
     ];
   }
 
-  // The current value of order.ingredientsConsumedAt, read INSIDE the caller's
-  // transaction with a locking read (FOR UPDATE: a current read, never the
-  // transaction's consistent snapshot). It must be called after the status CAS
-  // has won: that UPDATE holds the order row's lock, and a confirm that raced
-  // this request has by then committed its decrement AND its
-  // ingredientsConsumedAt stamp (both are written inside the confirm's own
-  // transaction, behind the same row lock), so this read sees them. The earlier
-  // pre-transaction read of the same column did not: a cancel that read the
-  // order while it was still 'pending', then lost the row lock to a confirm,
-  // went on to win its second CAS branch ('confirmed' -> 'cancelled') acting on
-  // a NULL stamp and skipped the restock for good (finding F5).
-  private async readConsumedFlag(
+  // The order's consumption state, read INSIDE the caller's transaction with a
+  // locking read (FOR UPDATE: a current read, never the transaction's consistent
+  // snapshot). Call it after the status CAS has won: that UPDATE holds the order
+  // row's lock, and a confirm that raced this request has by then committed its
+  // decrement, its orderstockconsumption rows AND its ingredientsConsumedAt
+  // stamp (all in the confirm's own transaction, behind the same row lock), so
+  // this read sees them. A value read BEFORE the transaction does not: a cancel
+  // that read the order while it was still 'pending', then queued behind a
+  // confirm, wins its second CAS branch ('confirmed' -> 'cancelled') on a NULL
+  // stamp and skips the restock for good (finding F5).
+  //
+  //   recorded: the order carries consumptionRecordedAt, so what it holds is in
+  //     orderstockconsumption and every restock is driven by those rows.
+  //   consumed: LEGACY only (recorded = false): ingredientsConsumedAt says the
+  //     order took stock, and the restock falls back to today's recipe, which is
+  //     all that can be known about an order that predates the record.
+  private async readConsumptionState(
     conn: PoolConnection,
     shopId: number,
     orderId: number,
-  ): Promise<boolean> {
+  ): Promise<{ recorded: boolean; consumed: boolean }> {
     const [rows] = await conn.query<RowDataPacket[]>(
-      `SELECT ingredientsConsumedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+      `SELECT ingredientsConsumedAt, consumptionRecordedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
       [orderId, shopId],
     );
-    return rows[0]?.ingredientsConsumedAt != null;
+    return {
+      recorded: rows[0]?.consumptionRecordedAt != null,
+      consumed: rows[0]?.ingredientsConsumedAt != null,
+    };
   }
 
-  // ingredientsAlreadyConsumed only matters for direction 1 (restock): whether
-  // Bill of Materials ingredients were actually deducted for this specific
-  // order - never re-derived from the *current* value of
-  // shop.autoDeductIngredientStock, which may have changed since (see
-  // order.ingredientsConsumedAt's own schema comment). Callers MUST obtain it
-  // with readConsumedFlag() inside the transaction, after their status CAS won.
-  // Confirm and cancel are both CAS-guarded on `status`, but that does NOT make
-  // a value read before the transaction safe: a confirm followed by a cancel
-  // both succeed in sequence, and the cancel's earlier read predates the
-  // confirm's decrement (finding F5).
+  // direction -1 is the confirm-time decrement; direction 1 is the cancel
+  // restock. A restock never trusts a value read before the transaction: it
+  // reads the order's consumption state itself (readConsumptionState), after
+  // the caller's status CAS won. For an order WITH a stock record it gives back
+  // exactly what the record holds. A LEGACY order (no record) is restocked from
+  // the recipe as it reads today, only when ingredientsConsumedAt says it took
+  // stock: a known imprecision (a recipe edited since is not what was taken)
+  // that cannot be corrected, because what such an order took was never stored.
   private async adjustStockForOrder(
     conn: PoolConnection,
     ctx: TenantContext,
     orderId: number,
     outletId: number,
     direction: 1 | -1,
-    ingredientsAlreadyConsumed: boolean,
   ) {
     const [items] = await conn.query<RowDataPacket[]>(
       `SELECT oi.productId, oi.variantId, oi.quantity, p.trackInventory, p.usesIngredients
@@ -1416,18 +1476,15 @@ export class OrdersService {
         }
       }
     }
-    for (const target of restockNotifyTargets) {
-      this.notifySubscriptionsService
-        .triggerForProduct(ctx.shopId, target.productId, target.variantId ?? undefined)
-        .catch(() => {});
-    }
-
     // The actual stock adjustment (Phase A: shadow or real recipe, every
-    // product/variant now resolves through consumeForOrderItems) — same
+    // product/variant now resolves through consumeForOrderItems) - same
     // trigger points as before: the pending->confirmed decrement
     // (direction -1) and every cancel-restock (direction 1, but only when
     // this specific order actually consumed stock in the first place).
     if (direction === -1) {
+      // The order row is locked by the status CAS that got us here, so nothing
+      // else touches this order's consumption until this transaction ends.
+      const consumedRows: ConsumedRow[] = [];
       const consumed = await this.productsService.consumeForOrderItems(
         conn,
         ctx.shopId,
@@ -1438,15 +1495,50 @@ export class OrdersService {
           quantity: item.quantity as number,
         })),
         -1,
-        { throwOnInsufficientStock: false, actorUserId: ctx.userId },
+        {
+          throwOnInsufficientStock: false,
+          actorUserId: ctx.userId,
+          collect: consumedRows,
+        },
       );
-      if (consumed) {
-        await conn.query(`UPDATE \`order\` SET ingredientsConsumedAt = ? WHERE id = ?`, [
-          new Date(),
+      // An order created before the stock record existed (consumptionRecordedAt
+      // NULL) reaches confirm with nothing consumed yet (deferred channel,
+      // still pending), so the record can start here and be complete: it is
+      // opted in now. COALESCE keeps the creation-time stamp of a newer order.
+      // Written even when `consumed` is false (toggle off): "this order took
+      // nothing" is then a recorded fact and a later cancel/return restocks
+      // nothing, instead of reading as LEGACY.
+      await this.productsService.recordOrderConsumption(
+        conn,
+        ctx.shopId,
+        orderId,
+        consumedRows,
+      );
+      await conn.query(
+        `UPDATE \`order\` SET consumptionRecordedAt = COALESCE(consumptionRecordedAt, ?),
+                              ingredientsConsumedAt = IF(?, ?, ingredientsConsumedAt)
+         WHERE id = ? AND shopId = ?`,
+        [new Date(), consumed ? 1 : 0, new Date(), orderId, ctx.shopId],
+      );
+      return;
+    }
+
+    const state = await this.readConsumptionState(conn, ctx.shopId, orderId);
+    let restocked = false;
+    if (state.recorded) {
+      const released = await this.productsService.releaseOrderConsumption(
+        conn,
+        {
+          shopId: ctx.shopId,
+          outletId,
           orderId,
-        ]);
-      }
-    } else if (ingredientsAlreadyConsumed) {
+          actorUserId: ctx.userId,
+          movementType: 'CONSUMED',
+        },
+      );
+      restocked = released.length > 0;
+    } else if (state.consumed) {
+      // LEGACY (no record): restock from the recipe as it reads now.
       await this.productsService.consumeForOrderItems(
         conn,
         ctx.shopId,
@@ -1459,6 +1551,22 @@ export class OrdersService {
         1,
         { throwOnInsufficientStock: false, actorUserId: ctx.userId },
       );
+      restocked = true;
+    }
+    // Back-in-stock subscribers are told only once stock has really come back.
+    // Before the record this fired whenever a cancel ran, whether or not
+    // anything had been consumed (a cancel of an order that took nothing
+    // announced a restock that never happened).
+    if (restocked) {
+      for (const target of restockNotifyTargets) {
+        this.notifySubscriptionsService
+          .triggerForProduct(
+            ctx.shopId,
+            target.productId,
+            target.variantId ?? undefined,
+          )
+          .catch(() => {});
+      }
     }
   }
 

@@ -143,4 +143,16 @@ export class ProductsService {
   ) {
     return this.orderItems.consumeForOrderItems(...args);
   }
+
+  recordOrderConsumption(
+    ...args: Parameters<ProductOrderItemsService['recordOrderConsumption']>
+  ) {
+    return this.orderItems.recordOrderConsumption(...args);
+  }
+
+  releaseOrderConsumption(
+    ...args: Parameters<ProductOrderItemsService['releaseOrderConsumption']>
+  ) {
+    return this.orderItems.releaseOrderConsumption(...args);
+  }
 }
