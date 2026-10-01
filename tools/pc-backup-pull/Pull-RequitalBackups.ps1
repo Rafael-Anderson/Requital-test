@@ -37,14 +37,17 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
+    # Not Mandatory: -SelfTest needs no destination. Validated below instead.
     [string] $BackupRoot,
 
     [string] $SshAlias = 'requital-backup-pull',
 
     [int] $KeepNewest = 30,
 
-    [int] $KeepSundays = 12
+    [int] $KeepSundays = 12,
+
+    # Runs the assertion suite and exits. No network, no server, no real dumps.
+    [switch] $SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -218,7 +221,116 @@ function Protect-Folder {
     }
 }
 
+function Select-DumpRetention {
+    <# The keep/prune decision, split out from the loop that acts on it so it can be
+       tested without a server, a network, or a single real dump on disk. Deleting a
+       backup is the only irreversible thing this tool does, so it gets a check.
+
+       Returns the set of names to KEEP plus the Sunday ladder chosen, so the caller
+       can log what it decided and why. #>
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][array] $Dumps,
+        [Parameter(Mandatory = $true)][int] $KeepNewest,
+        [Parameter(Mandatory = $true)][int] $KeepSundays
+    )
+    $ordered = @($Dumps | Sort-Object -Property Stamp -Descending)
+    $keep = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($d in ($ordered | Select-Object -First $KeepNewest)) { [void]$keep.Add($d.Name) }
+
+    # Sunday dumps beyond the newest N: a cheap weekly ladder, so a fault that went
+    # unnoticed for a month is still recoverable from before it started.
+    $sundays = @(
+        $ordered | Where-Object { -not $keep.Contains($_.Name) -and $_.Stamp.DayOfWeek -eq 'Sunday' } |
+            Select-Object -First $KeepSundays
+    )
+    foreach ($d in $sundays) { [void]$keep.Add($d.Name) }
+
+    return [pscustomobject]@{ Keep = $keep; Sundays = $sundays }
+}
+
+function Invoke-SelfTest {
+    <# ponytail: assert-based, no framework. Covers the branches a real run does not
+       reach - the folder currently holds 24 dumps, all inside "newest 30", so the
+       Sunday ladder and the prune set have never once executed in anger. #>
+    $script:SelfTestFails = 0
+    function Assert-That {
+        param([string] $What, [bool] $Condition, [string] $Detail = '')
+        if ($Condition) { Write-Host "  ok   $What" -ForegroundColor Green }
+        else { Write-Host "  FAIL $What $Detail" -ForegroundColor Red; $script:SelfTestFails++ }
+    }
+
+    # 120 consecutive daily dumps starting 2026-01-01.
+    $start = [datetime]::SpecifyKind([datetime]::ParseExact('20260101230000', 'yyyyMMddHHmmss',
+        [System.Globalization.CultureInfo]::InvariantCulture), 'Utc')
+    $dumps = @(0..119 | ForEach-Object {
+        $s = $start.AddDays($_)
+        [pscustomobject]@{ Name = "requital-shop_manager-$($s.ToString('yyyyMMddHHmmss')).sql.gz"; Stamp = $s }
+    })
+
+    Write-Host 'Select-DumpRetention: 120 daily dumps, keep 30 newest + 12 Sunday'
+    $r = Select-DumpRetention -Dumps $dumps -KeepNewest 30 -KeepSundays 12
+    Assert-That 'keeps 42 in total (30 newest + 12 Sunday)' ($r.Keep.Count -eq 42) "got $($r.Keep.Count)"
+    Assert-That 'Sunday ladder is exactly 12' ($r.Sundays.Count -eq 12) "got $($r.Sundays.Count)"
+    Assert-That 'every ladder entry really is a Sunday' (@($r.Sundays | Where-Object { $_.Stamp.DayOfWeek -ne 'Sunday' }).Count -eq 0)
+    $newest30 = @($dumps | Sort-Object Stamp -Descending | Select-Object -First 30)
+    Assert-That 'all 30 newest are kept' (@($newest30 | Where-Object { -not $r.Keep.Contains($_.Name) }).Count -eq 0)
+    Assert-That 'ladder sits strictly older than the newest 30' (@($r.Sundays | Where-Object { $_.Stamp -ge $newest30[-1].Stamp }).Count -eq 0)
+    Assert-That 'prunes the remaining 78' ((120 - $r.Keep.Count) -eq 78) "would prune $(120 - $r.Keep.Count)"
+
+    Write-Host 'Select-DumpRetention: fewer dumps than the limit prunes nothing'
+    $r2 = Select-DumpRetention -Dumps @($dumps | Select-Object -First 5) -KeepNewest 30 -KeepSundays 12
+    Assert-That 'keeps all 5' ($r2.Keep.Count -eq 5) "got $($r2.Keep.Count)"
+    Assert-That 'no ladder needed' ($r2.Sundays.Count -eq 0)
+
+    Write-Host 'Select-DumpRetention: empty input is not an error'
+    $r3 = Select-DumpRetention -Dumps @() -KeepNewest 30 -KeepSundays 12
+    Assert-That 'keeps nothing, throws nothing' ($r3.Keep.Count -eq 0)
+
+    Write-Host 'Get-DumpTimestampUtc'
+    Assert-That 'parses a valid dump name' ($null -ne (Get-DumpTimestampUtc 'requital-shop_manager-20260101230000.sql.gz'))
+    Assert-That 'rejects a .part file' ($null -eq (Get-DumpTimestampUtc 'requital-shop_manager-20260101230000.sql.gz.part'))
+    Assert-That 'rejects a short timestamp' ($null -eq (Get-DumpTimestampUtc 'requital-shop_manager-2026010123000.sql.gz'))
+    Assert-That 'rejects an unrelated name' ($null -eq (Get-DumpTimestampUtc 'backup.log'))
+
+    Write-Host 'Test-GzipIntegrity'
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "rq-selftest-$([guid]::NewGuid().ToString('N')).gz"
+    try {
+        $fs = [System.IO.File]::Create($tmp)
+        $gz = [System.IO.Compression.GZipStream]::new($fs, [System.IO.Compression.CompressionMode]::Compress)
+        $b = [System.Text.Encoding]::ASCII.GetBytes("-- MySQL dump 10.13  Distrib 8.0.43`nCREATE TABLE x;`n")
+        $gz.Write($b, 0, $b.Length); $gz.Dispose(); $fs.Dispose()
+        Assert-That 'accepts a well-formed dump archive' (Test-GzipIntegrity -Path $tmp).Ok
+
+        # Truncate it: a half-downloaded file must never pass.
+        $all = [System.IO.File]::ReadAllBytes($tmp)
+        [System.IO.File]::WriteAllBytes($tmp, $all[0..([int]($all.Length / 2))])
+        Assert-That 'rejects a truncated archive' (-not (Test-GzipIntegrity -Path $tmp).Ok)
+
+        # Valid gzip, wrong content - still a useless backup.
+        $fs = [System.IO.File]::Create($tmp)
+        $gz = [System.IO.Compression.GZipStream]::new($fs, [System.IO.Compression.CompressionMode]::Compress)
+        $b = [System.Text.Encoding]::ASCII.GetBytes('this is not a database dump at all')
+        $gz.Write($b, 0, $b.Length); $gz.Dispose(); $fs.Dispose()
+        Assert-That 'rejects valid gzip of the wrong content' (-not (Test-GzipIntegrity -Path $tmp).Ok)
+    } finally {
+        if (Test-Path -LiteralPath $tmp) { [System.IO.File]::Delete($tmp) }
+    }
+
+    Write-Host ''
+    if ($script:SelfTestFails -eq 0) {
+        Write-Host 'SELF-TEST: all assertions passed' -ForegroundColor Green
+        return 0
+    }
+    Write-Host "SELF-TEST: $script:SelfTestFails assertion(s) FAILED" -ForegroundColor Red
+    return 1
+}
+
+
 # ---------------------------------------------------------------------------
+
+if ($SelfTest) { exit (Invoke-SelfTest) }
+
+if ([string]::IsNullOrWhiteSpace($BackupRoot)) { throw 'BackupRoot is required (except with -SelfTest).' }
 
 if (-not (Test-Path -LiteralPath $BackupRoot)) {
     New-Item -ItemType Directory -Path $BackupRoot -Force | Out-Null
@@ -327,17 +439,9 @@ try {
                 } | Sort-Object -Property Stamp -Descending
         )
 
-        $keep = [System.Collections.Generic.HashSet[string]]::new()
-        foreach ($d in ($dumps | Select-Object -First $KeepNewest)) { [void]$keep.Add($d.Name) }
-
-        # Sunday dumps beyond the newest N: a cheap weekly ladder, so a fault that
-        # went unnoticed for a month is still recoverable from before it started.
-        $sundays = @(
-            $dumps | Where-Object { -not $keep.Contains($_.Name) -and $_.Stamp.DayOfWeek -eq 'Sunday' } |
-                Select-Object -First $KeepSundays
-        )
-        foreach ($d in $sundays) { [void]$keep.Add($d.Name) }
-
+        $decision = Select-DumpRetention -Dumps $dumps -KeepNewest $KeepNewest -KeepSundays $KeepSundays
+        $keep = $decision.Keep
+        $sundays = $decision.Sundays
         $prune = @($dumps | Where-Object { -not $keep.Contains($_.Name) })
         Write-Log "retention: $($dumps.Count) dump(s) local; keeping $($keep.Count) (newest $KeepNewest + $($sundays.Count) Sunday); pruning $($prune.Count) - $pruneReason"
         foreach ($d in $prune) {

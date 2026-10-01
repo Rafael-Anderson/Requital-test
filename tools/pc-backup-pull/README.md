@@ -110,6 +110,20 @@ alert is worse than no alert, because the log then reads as healthy. So when
 notifications are off it drops straight to a modal `MessageBox`, which cannot be
 suppressed. No third-party modules either way.
 
+## Self-test
+
+```powershell
+.\Pull-RequitalBackups.ps1 -SelfTest
+```
+
+Assertion-based, no framework, no network, no server, and no real dump touched. It
+exists because the branch that *deletes* backups is the one a real run never
+exercises: the folder holds 24 dumps, all inside "newest 30", so the Sunday ladder
+and the prune set would otherwise ship unexecuted. It covers the 30+12 selection on
+120 synthetic daily dumps, the under-the-limit and empty cases, dump-name parsing
+(including rejecting `.part`), and `Test-GzipIntegrity` accepting a good archive
+while rejecting both a truncated one and a valid gzip of the wrong content.
+
 ## Retention
 
 Keeps the newest **30** dumps, plus up to **12** Sunday-dated dumps older than
