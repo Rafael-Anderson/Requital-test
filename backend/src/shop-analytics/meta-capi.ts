@@ -24,9 +24,14 @@ export function hashedEmail(email: string | null | undefined): string | null {
   return sha256Hex(normalised);
 }
 
-export function hashedPhone(phone: string | null | undefined): string | null {
+// `countryCode` is the SHOP's own (a local number carries no country of its own).
+// NULL keeps the legacy +971 assumption, see common/phone.ts.
+export function hashedPhone(
+  phone: string | null | undefined,
+  countryCode?: string | null,
+): string | null {
   if (!phone) return null;
-  const e164 = normalizePhoneToE164(phone);
+  const e164 = normalizePhoneToE164(phone, countryCode);
   if (!e164) return null;
   return sha256Hex(e164.replace(/\D/g, ''));
 }
@@ -40,6 +45,8 @@ export interface PurchaseEventInput {
   orderId: number;
   customerEmail: string | null;
   customerPhone: string | null;
+  // The shop's country (NULL = unknown), used to normalise the phone.
+  shopCountryCode?: string | null;
   items: { productId: number; quantity: number; unitPrice: string }[];
   attribution: AttributionData | null;
   eventSourceUrl: string;
@@ -51,7 +58,7 @@ export interface PurchaseEventInput {
 export function buildMetaPurchaseEvent(input: PurchaseEventInput) {
   const userData: Record<string, unknown> = {};
   const em = hashedEmail(input.customerEmail);
-  const ph = hashedPhone(input.customerPhone);
+  const ph = hashedPhone(input.customerPhone, input.shopCountryCode);
   if (em) userData.em = [em];
   if (ph) userData.ph = [ph];
   if (input.attribution?.fbp) userData.fbp = input.attribution.fbp;

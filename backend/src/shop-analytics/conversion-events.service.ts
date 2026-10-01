@@ -105,7 +105,8 @@ export class ConversionEventsService implements OnModuleInit {
       `SELECT o.id, o.customerEmail, o.customerPhone, o.attributionJson,
               s.subdomain AS shopSubdomain, s.domainType AS shopDomainType,
               s.customDomain AS shopCustomDomain,
-              s.customDomainStatus AS shopCustomDomainStatus
+              s.customDomainStatus AS shopCustomDomainStatus,
+              s.countryCode AS shopCountryCode
          FROM \`order\` o JOIN shop s ON s.id = o.shopId
         WHERE o.id = ? AND o.shopId = ?`,
       [payload.orderId, payload.shopId],
@@ -134,6 +135,7 @@ export class ConversionEventsService implements OnModuleInit {
       orderId: payload.orderId,
       customerEmail: order.customerEmail as string | null,
       customerPhone: order.customerPhone as string | null,
+      shopCountryCode: order.shopCountryCode as string | null,
       items: items.map((i) => ({
         productId: i.productId as number,
         quantity: i.quantity as number,

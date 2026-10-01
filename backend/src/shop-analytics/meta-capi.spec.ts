@@ -22,6 +22,10 @@ describe('Meta CAPI hashing', () => {
     expect(hashedPhone('050 123 4567')).toBe(sha('971501234567'));
     expect(hashedPhone('+971-50-123-4567')).toBe(sha('971501234567'));
     expect(hashedPhone('abc')).toBeNull();
+    // A local number takes the SHOP's dial code, not a +971 default.
+    expect(hashedPhone('050 123 4567', 'AE')).toBe(sha('971501234567'));
+    expect(hashedPhone('0501234567', 'SA')).toBe(sha('966501234567'));
+    expect(hashedPhone('0501234567', null)).toBe(sha('971501234567'));
     expect(hashedPhone(undefined)).toBeNull();
   });
 
@@ -55,6 +59,19 @@ describe('buildMetaPurchaseEvent', () => {
     expect(text).not.toContain('971501234567');
     expect(text).toContain(sha('jane@example.com'));
     expect(text).toContain(sha('971501234567'));
+  });
+
+  it('hashes a local phone with the SHOP\'s dial code (the whole event path, not just hashedPhone)', () => {
+    const sa = JSON.stringify(
+      buildMetaPurchaseEvent({ ...base, attribution: null, shopCountryCode: 'SA' }),
+    );
+    expect(sa).toContain(sha('966501234567'));
+    expect(sa).not.toContain(sha('971501234567'));
+    // Unknown country keeps the legacy +971 (byte-identical for existing shops).
+    const unknown = JSON.stringify(
+      buildMetaPurchaseEvent({ ...base, attribution: null }),
+    );
+    expect(unknown).toContain(sha('971501234567'));
   });
 
   it('uses the shared event id and keeps the third KWD decimal in value', () => {
