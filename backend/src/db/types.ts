@@ -1269,3 +1269,13 @@ export interface MetafieldvalueRow {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// Per-order check state for the payment reconciliation sweep (migration
+// 20261009100000). Operational only: never selected into an API response.
+export interface PaymentreconciliationRow {
+  orderId: number;
+  shopId: number;
+  lastCheckedAt: Date;
+  // Set when the gateway reported the session expired; never polled again.
+  settledAt: Date | null;
+}

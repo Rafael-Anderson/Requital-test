@@ -7,7 +7,10 @@ import { App } from 'supertest/types';
 import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
-import { PaymentReconciliationService } from '../src/payments/payment-reconciliation.service';
+import {
+  MAX_PER_TICK,
+  PaymentReconciliationService,
+} from '../src/payments/payment-reconciliation.service';
 import { PaymentProviderRegistry } from '../src/payments/payment-provider.registry';
 import type { CheckoutSessionOutcome } from '../src/payments/payment-provider.interface';
 import { verifySignupEmail } from './helpers/verify-signup-email';
@@ -149,16 +152,36 @@ describe('Payment reconciliation (e2e)', () => {
     return orderId;
   }
 
-  function stubStripeOutcome(outcome: CheckoutSessionOutcome | null) {
+  // Answers `outcome` for ONE session id and "unpaid" for any other, so a
+  // long-lived dirty DB's leftover candidates (which a sweep may also pick up)
+  // are neither marked paid by this test nor able to hide it. Never real Stripe.
+  function stubStripeOutcome(
+    outcome: CheckoutSessionOutcome | null,
+    sessionId: string,
+  ) {
+    return stubStripeOutcomes(new Map([[sessionId, outcome]]));
+  }
+
+  function stubStripeOutcomes(
+    outcomes: Map<string, CheckoutSessionOutcome | null>,
+  ) {
     const provider = registry.get('stripe');
     return jest
       .spyOn(
         provider as unknown as {
-          retrieveSessionOutcome: () => Promise<CheckoutSessionOutcome | null>;
+          retrieveSessionOutcome: (
+            sessionId: string,
+          ) => Promise<CheckoutSessionOutcome | null>;
         },
         'retrieveSessionOutcome',
       )
-      .mockResolvedValue(outcome);
+      .mockImplementation((sessionId: string) =>
+        Promise.resolve(
+          outcomes.has(sessionId)
+            ? (outcomes.get(sessionId) ?? null)
+            : { status: 'unpaid' },
+        ),
+      );
   }
 
   function orderRow(orderId: number) {
@@ -190,7 +213,10 @@ describe('Payment reconciliation (e2e)', () => {
     expect(before.paymentStatus).toBe('unpaid');
     expect(before.status).toBe('pending');
 
-    stubStripeOutcome({ status: 'paid', chargeReference: 'pi_rec_1' });
+    stubStripeOutcome(
+      { status: 'paid', chargeReference: 'pi_rec_1' },
+      `cs_never_${runId}`,
+    );
     expect(await reconciliation.runSweep()).toBeGreaterThanOrEqual(1);
 
     const after = await orderRow(orderId);
@@ -207,7 +233,9 @@ describe('Payment reconciliation (e2e)', () => {
     expect(txns[0].status).toBe('paid');
     expect(txns[0].providerChargeReference).toBe('pi_rec_1');
     // Distinguishable from a real delivery, and deterministic.
-    expect(String(txns[0].gatewayReference)).toBe(`reconciled:cs_never_${runId}`);
+    expect(String(txns[0].gatewayReference)).toBe(
+      `reconciled:cs_never_${runId}`,
+    );
   }, 90000);
 
   // The explicit idempotency assertion. The unique (gateway, gatewayReference)
@@ -220,7 +248,10 @@ describe('Payment reconciliation (e2e)', () => {
       `cs_twice_${runId}`,
     );
 
-    stubStripeOutcome({ status: 'paid', chargeReference: 'pi_rec_2' });
+    stubStripeOutcome(
+      { status: 'paid', chargeReference: 'pi_rec_2' },
+      `cs_twice_${runId}`,
+    );
     await reconciliation.runSweep();
     const firstTxns = await transactionsFor(orderId);
     expect(firstTxns).toHaveLength(1);
@@ -231,6 +262,11 @@ describe('Payment reconciliation (e2e)', () => {
       `UPDATE \`order\` SET paymentStatus = 'unpaid' WHERE id = ?`,
       [orderId],
     );
+    // ... and clear its check state, or the backoff would skip it and this
+    // would pass without the idempotency guard ever being exercised.
+    await db.execute(`DELETE FROM paymentreconciliation WHERE orderId = ?`, [
+      orderId,
+    ]);
     await reconciliation.runSweep();
 
     // Still exactly one transaction row: the duplicate insert hit the unique
@@ -245,7 +281,7 @@ describe('Payment reconciliation (e2e)', () => {
       `cs_unpaid_${runId}`,
     );
 
-    stubStripeOutcome({ status: 'unpaid' });
+    stubStripeOutcome({ status: 'unpaid' }, `cs_unpaid_${runId}`);
     await reconciliation.runSweep();
 
     const after = await orderRow(orderId);
@@ -261,7 +297,7 @@ describe('Payment reconciliation (e2e)', () => {
       `cs_expired_${runId}`,
     );
 
-    stubStripeOutcome({ status: 'expired' });
+    stubStripeOutcome({ status: 'expired' }, `cs_expired_${runId}`);
     await reconciliation.runSweep();
     expect((await orderRow(orderId)).paymentStatus).toBe('unpaid');
   }, 90000);
@@ -276,15 +312,16 @@ describe('Payment reconciliation (e2e)', () => {
       2,
     );
 
-    const spy = stubStripeOutcome({ status: 'paid' });
+    const spy = stubStripeOutcome({ status: 'paid' }, `cs_young_${runId}`);
     await reconciliation.runSweep();
 
-    const calls = spy.mock.calls.length;
     const after = await orderRow(orderId);
-    // Either it was never asked about, or - if another test's older order was
-    // in the same batch - this order specifically is still untouched.
     expect(after.paymentStatus).toBe('unpaid');
-    expect(calls).toBeGreaterThanOrEqual(0);
+    // This order specifically was never asked about (other orders in the same
+    // batch may have been, on a shared DB).
+    expect(spy.mock.calls.map((c) => c[0] as string)).not.toContain(
+      `cs_young_${runId}`,
+    );
   }, 90000);
 
   it('ignores a cancelled order even if its session was paid', async () => {
@@ -297,7 +334,10 @@ describe('Payment reconciliation (e2e)', () => {
       orderId,
     ]);
 
-    stubStripeOutcome({ status: 'paid', chargeReference: 'pi_rec_3' });
+    stubStripeOutcome(
+      { status: 'paid', chargeReference: 'pi_rec_3' },
+      `cs_cancelled_${runId}`,
+    );
     await reconciliation.runSweep();
 
     const after = await orderRow(orderId);
@@ -326,10 +366,132 @@ describe('Payment reconciliation (e2e)', () => {
       [orderId],
     );
 
-    stubStripeOutcome({ status: 'paid' });
+    stubStripeOutcome({ status: 'paid' }, 'cs_none');
     await reconciliation.runSweep();
 
     expect((await orderRow(orderId)).paymentStatus).toBe('unpaid');
     expect(await transactionsFor(orderId)).toHaveLength(0);
+  }, 90000);
+  // ---- Starvation: the reason the backoff state exists. ----
+
+  async function ordersAwaiting(
+    shop: { adminToken: string; outletId: number; productId: number },
+    sessionPrefix: string,
+    count: number,
+    ageMinutes: (i: number) => number,
+  ) {
+    const ids: { orderId: number; sessionId: string }[] = [];
+    for (let i = 0; i < count; i += 10) {
+      const batch = await Promise.all(
+        Array.from({ length: Math.min(10, count - i) }, async (_, k) => {
+          const sessionId = `${sessionPrefix}_${i + k}`;
+          const orderId = await anOrderAwaitingAWebhookThatNeverCame(
+            shop,
+            sessionId,
+            ageMinutes(i + k),
+          );
+          return { orderId, sessionId };
+        }),
+      );
+      ids.push(...batch);
+    }
+    return ids;
+  }
+
+  it('a paid order behind a backlog of stale unpaid sessions is reconciled within two ticks, with bounded and non-repeating Stripe calls', async () => {
+    const shop = await setupShop('rec-starve');
+    const prefix = `cs_starve_${runId}`;
+    // 120 stale unpaid sessions, all OLDER than the paid one (60-179 minutes).
+    const stale = await ordersAwaiting(
+      shop,
+      `${prefix}_stale`,
+      120,
+      (i) => 60 + i,
+    );
+    // The newer order Stripe reports paid (21 minutes: just past the grace window).
+    const [paid] = await ordersAwaiting(shop, `${prefix}_paid`, 1, () => 21);
+
+    const spy = stubStripeOutcomes(
+      new Map([
+        [paid.sessionId, { status: 'paid', chargeReference: 'pi_starve' }],
+      ]),
+    );
+    const callsPerTick: string[][] = [];
+    for (let tick = 0; tick < 2; tick++) {
+      const before = spy.mock.calls.length;
+      await reconciliation.runSweep();
+      callsPerTick.push(
+        spy.mock.calls.slice(before).map((c) => c[0] as string),
+      );
+    }
+
+    // Reached and marked paid through the real path, within two ticks.
+    const after = await orderRow(paid.orderId);
+    expect(after.paymentStatus).toBe('paid');
+    expect(after.status).toBe('confirmed');
+    expect(await transactionsFor(paid.orderId)).toHaveLength(1);
+
+    // Stripe calls per tick are bounded...
+    for (const calls of callsPerTick) {
+      expect(calls.length).toBeLessThanOrEqual(MAX_PER_TICK);
+    }
+    // ...and no session was asked about twice inside its backoff window (both
+    // ticks ran within minutes; the shortest window is 10).
+    const all = callsPerTick.flat();
+    expect(new Set(all).size).toBe(all.length);
+    // The second tick moved on to different stale sessions instead of
+    // re-polling the same oldest 50.
+    const ours = new Set(stale.map((s) => s.sessionId));
+    expect(callsPerTick[1].filter((id) => ours.has(id)).length).toBeGreaterThan(
+      0,
+    );
+  }, 180000);
+
+  it('rechecks a still-unpaid session only after its backoff window, and never again once Stripe reports it expired', async () => {
+    const shop = await setupShop('rec-backoff');
+    const [live] = await ordersAwaiting(shop, `cs_live_${runId}`, 1, () => 30);
+    const [dead] = await ordersAwaiting(shop, `cs_dead_${runId}`, 1, () => 30);
+    const spy = stubStripeOutcomes(
+      new Map([[dead.sessionId, { status: 'expired' }]]),
+    );
+    const asked = (id: string) =>
+      spy.mock.calls.filter((c) => c[0] === id).length;
+
+    await reconciliation.runSweep();
+    await reconciliation.runSweep();
+    expect(asked(live.sessionId)).toBe(1); // second tick is inside the window
+    expect(asked(dead.sessionId)).toBe(1);
+
+    // Window (10 min for a young session) elapses: the live one is asked again.
+    await db.execute(
+      `UPDATE paymentreconciliation SET lastCheckedAt = DATE_SUB(NOW(3), INTERVAL 11 MINUTE)
+        WHERE orderId IN (?, ?)`,
+      [live.orderId, dead.orderId],
+    );
+    await reconciliation.runSweep();
+    expect(asked(live.sessionId)).toBe(2);
+    // The expired one is settled for good, and its order is left untouched.
+    expect(asked(dead.sessionId)).toBe(1);
+    const deadOrder = await orderRow(dead.orderId);
+    expect(deadOrder.paymentStatus).toBe('unpaid');
+    expect(deadOrder.status).toBe('pending');
+  }, 90000);
+
+  it('two overlapping sweeps ask the gateway about an order only once', async () => {
+    const shop = await setupShop('rec-overlap');
+    const [one] = await ordersAwaiting(
+      shop,
+      `cs_overlap_${runId}`,
+      1,
+      () => 30,
+    );
+    const spy = stubStripeOutcomes(
+      new Map([[one.sessionId, { status: 'paid', chargeReference: 'pi_ov' }]]),
+    );
+    await Promise.all([reconciliation.runSweep(), reconciliation.runSweep()]);
+    expect(spy.mock.calls.filter((c) => c[0] === one.sessionId)).toHaveLength(
+      1,
+    );
+    expect(await transactionsFor(one.orderId)).toHaveLength(1);
   }, 90000);
 });
