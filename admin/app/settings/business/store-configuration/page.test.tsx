@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StoreConfigurationPage from "./page";
 import type { Shop } from "@/lib/types";
@@ -73,5 +73,19 @@ describe("StoreConfigurationPage after the Settings restructure", () => {
       expect(sent, moved).not.toHaveProperty(moved);
     }
     expect(sent).toMatchObject({ businessType: "Florist", defaultLanguage: "en" });
+  });
+
+  // shop.externalDeliveryEnabled has no consumer anywhere (backend, storefront), so its
+  // toggle belongs under Coming Soon; the field is still saved unchanged.
+  it("lists External delivery under Coming Soon and still saves it", async () => {
+    const user = userEvent.setup();
+    render(<StoreConfigurationPage />);
+    const card = (await screen.findByRole("heading", { name: "Coming Soon" })).parentElement as HTMLElement;
+    const box = within(card).getByLabelText("External delivery enabled");
+    expect(screen.queryByRole("heading", { name: /Delivery & Fulfillment/ })).not.toBeInTheDocument();
+    await user.click(box);
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
+    await waitFor(() => expect(updateShop).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateShop).mock.calls[0][0]).toMatchObject({ externalDeliveryEnabled: true });
   });
 });
