@@ -25,6 +25,7 @@ import ScrollProgressBar from "@/components/ScrollProgressBar";
 import DecorativeParallax from "@/components/DecorativeParallax";
 import RouteTransition from "@/components/RouteTransition";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
+import Analytics from "@/components/Analytics";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
@@ -230,6 +231,7 @@ function Body({ children }: { children: React.ReactNode }) {
       <WhatsAppFloatingButton />
       <FloatingCustomButtons />
       <CookieConsentBanner />
+      <Analytics />
       {previewMode && (
         <>
           <PreviewImageDragGuard />

@@ -11,6 +11,7 @@ import type {
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
 import type { OrdersService } from '../orders/orders.service';
 import type { WebhookLogService } from '../webhook-log/webhook-log.service';
+import type { ConversionEventsService } from '../shop-analytics/conversion-events.service';
 
 // None of these tests exercise generateLink() (the only method that
 // actually calls into branch-roles), so a bare mock is enough to satisfy
@@ -103,6 +104,10 @@ class FakeProvider implements PaymentProvider {
   }
 }
 
+const mockConversionEvents = {
+  enqueuePurchase: jest.fn().mockResolvedValue(null),
+} as unknown as ConversionEventsService;
+
 describe('PaymentsService.handleWebhook — idempotency (shared across every gateway)', () => {
   it('a stub provider (e.g. Telr) that has no real parseWebhookEvent implementation safely no-ops', async () => {
     const registry = new PaymentProviderRegistry();
@@ -116,6 +121,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockBranchRolesService,
       mockOrdersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     const result = await service.handleWebhook(
@@ -151,6 +157,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockBranchRolesService,
       mockOrdersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     const result = await service.handleWebhook(
@@ -189,6 +196,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockBranchRolesService,
       mockOrdersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     await expect(
@@ -216,6 +224,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockBranchRolesService,
       mockOrdersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     const result = await service.handleWebhook(
@@ -238,6 +247,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockBranchRolesService,
       mockOrdersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     await expect(
@@ -280,6 +290,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockBranchRolesService,
       ordersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -322,6 +333,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockBranchRolesService,
       ordersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -363,6 +375,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockBranchRolesService,
       ordersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     const result = await service.handleWebhook(
@@ -406,6 +419,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       mockBranchRolesService,
       ordersService,
       mockWebhookLogService,
+      mockConversionEvents,
     );
 
     await expect(

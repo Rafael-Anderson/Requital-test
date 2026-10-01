@@ -26,21 +26,58 @@ const PROD_ADMIN_ORIGIN = "https://admin.requital.io";
 // for shop-context.tsx's per-shop theme CSS custom properties, set directly
 // on the root element. Tracked as a known, reviewed tradeoff, not an
 // oversight — the other directives are still real restrictions.
+// MKT-4 analytics / ad pixels. These hosts are allowed ONLY for the four things a
+// provider needs (its script, the beacon `connect`, and the 1x1 `img`), and
+// nothing here executes unless the visitor accepted the cookie banner AND the
+// merchant configured that provider (lib/analytics.ts loads no script otherwise).
+// A static header cannot vary per shop, so the allowance is global; the real
+// gate is the consent switch, not this list. Known tradeoff, recorded in the PR:
+// googletagmanager.com is a script host that can serve arbitrary tag containers,
+// so on the (unlikely) path of an XSS that already exists it is a slightly wider
+// landing zone than a bare allowlist.
+const ANALYTICS_SCRIPT_SRC = [
+  "https://www.googletagmanager.com", // GA4 + Google Ads gtag.js
+  "https://connect.facebook.net", // Meta pixel (fbevents.js)
+  "https://analytics.tiktok.com", // TikTok pixel
+  "https://sc-static.net", // Snap pixel (scevent.min.js)
+].join(" ");
+const ANALYTICS_CONNECT_SRC = [
+  "https://www.googletagmanager.com",
+  "https://*.google-analytics.com",
+  "https://*.analytics.google.com",
+  "https://www.google.com", // Google Ads conversion
+  "https://googleads.g.doubleclick.net",
+  "https://www.facebook.com", // Meta pixel beacon
+  "https://connect.facebook.net",
+  "https://analytics.tiktok.com",
+  "https://analytics-ipv6.tiktokw.us",
+  "https://tr.snapchat.com",
+].join(" ");
+const ANALYTICS_IMG_SRC = [
+  "https://www.googletagmanager.com",
+  "https://*.google-analytics.com",
+  "https://www.google.com",
+  "https://googleads.g.doubleclick.net",
+  "https://www.facebook.com",
+  "https://analytics.tiktok.com",
+  "https://tr.snapchat.com",
+].join(" ");
+
 const CSP = [
   "default-src 'self'",
   // https://maps.googleapis.com loads the Maps JS API script itself
   // (MapPicker.tsx, checkout/account address entry) — Google's own
   // documented CSP recipe for embedding the JS API.
-  "script-src 'self' 'unsafe-inline' https://maps.googleapis.com",
+  `script-src 'self' 'unsafe-inline' https://maps.googleapis.com ${ANALYTICS_SCRIPT_SRC}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   // Map tiles/marker icons come from Google's domains; Roboto is the font
   // Google Maps' own UI (Autocomplete dropdown, etc.) requests.
-  `img-src 'self' data: ${API_ORIGIN} https://maps.googleapis.com https://maps.gstatic.com`,
+  `img-src 'self' data: ${API_ORIGIN} https://maps.googleapis.com https://maps.gstatic.com ${ANALYTICS_IMG_SRC}`,
   // 'self' only — every browser fetch() goes to the same-origin `/api/*`
   // rewrite now (Phase 5). A missed absolute call site would trip a visible
   // CSP violation here instead of silently working cross-site and failing on
   // custom domains, which is the point.
-  "connect-src 'self' https://maps.googleapis.com",
+  `connect-src 'self' https://maps.googleapis.com ${ANALYTICS_CONNECT_SRC}`,
   "font-src 'self' data: https://fonts.gstatic.com",
   "object-src 'none'",
   // 'self' covers this app embedding its own pages; the two admin origins

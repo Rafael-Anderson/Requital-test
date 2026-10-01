@@ -1,4 +1,8 @@
 import {
+  attributionAdminView,
+  stripAttribution,
+} from '../shop-analytics/attribution';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -1538,7 +1542,10 @@ export class OrdersService {
 
   private toResponse(order: AssembledOrder) {
     return {
-      ...order,
+      // order.attributionJson holds click ids / fbp / fbc / user agent: it never
+      // rides along in a list or status response. The order DETAIL gets a
+      // narrowed view of it (toDetailResponse).
+      ...stripAttribution(order),
       deliveryFee: trimDecimal(order.deliveryFee),
       taxAmount: trimDecimal(order.taxAmount),
       discountAmount: trimDecimal(order.discountAmount),
@@ -1564,6 +1571,9 @@ export class OrdersService {
         : null,
       ordernote: order.ordernote,
       surveyresponse: order.surveyresponse,
+      // MKT-14: the Source card. Null = unknown (never recorded), which the
+      // admin renders as "Not recorded", distinct from an explicit direct visit.
+      attribution: attributionAdminView(order.attributionJson),
     };
   }
 }

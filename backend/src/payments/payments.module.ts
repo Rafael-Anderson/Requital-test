@@ -21,6 +21,7 @@ import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { OrdersModule } from '../orders/orders.module';
 import { WebhookLogModule } from '../webhook-log/webhook-log.module';
 import { JobsModule } from '../jobs/jobs.module';
+import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
 import { PaymentReconciliationService } from './payment-reconciliation.service';
 
 // Every implemented gateway is registered up front — which one a given shop
@@ -53,6 +54,7 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
     BranchRolesModule,
     OrdersModule,
     WebhookLogModule,
+    ShopAnalyticsModule,
   ],
   controllers: [
     PaymentLinkController,

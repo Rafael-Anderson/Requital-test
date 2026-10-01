@@ -6,7 +6,8 @@ export type JobType =
   | 'send_merchant_whatsapp_alert'
   | 'process_slider_webhook'
   | 'compute_daily_rollup'
-  | 'recompute_customer_metrics';
+  | 'recompute_customer_metrics'
+  | 'send_conversion_event';
 
 export interface SendEmailJobPayload {
   to: string;
@@ -72,9 +73,29 @@ export interface RecomputeCustomerMetricsJobPayload {
   shopId: number;
 }
 
+// MKT-4: one server-side conversion event (Meta Conversions API) for one order.
+// Deliberately carries NO secret and NO personal data: the access token and the
+// customer's contact details are resolved by the handler at send time, from the
+// shop's encrypted config and the order row, so neither ever sits in the job
+// table (or in a dead-letter view / error message). What IS captured here is the
+// moment-of-event data - when it happened and what the order was worth - so a
+// retry hours later still reports the original event.
+export interface SendConversionEventJobPayload {
+  platform: 'meta';
+  shopId: number;
+  orderId: number;
+  eventId: string;
+  // Unix seconds, taken when the order was created / paid.
+  eventTime: number;
+  // Major units in the order's own currency, as a decimal string.
+  value: string;
+  currency: string;
+}
+
 export type JobPayload =
   | SendEmailJobPayload
   | SendMerchantWhatsAppAlertJobPayload
   | ProcessSliderWebhookJobPayload
   | ComputeDailyRollupJobPayload
-  | RecomputeCustomerMetricsJobPayload;
+  | RecomputeCustomerMetricsJobPayload
+  | SendConversionEventJobPayload;

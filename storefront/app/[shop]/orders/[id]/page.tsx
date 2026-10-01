@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import type { OrderResult } from "@/lib/types";
+import { track } from "@/lib/analytics";
+import { takeStashedPurchase } from "@/lib/purchase-tracking";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import CurrencySymbol from "@/components/CurrencySymbol";
 
@@ -28,6 +30,16 @@ function OrderConfirmationContent() {
   }, [params.id]);
 
   const paid = searchParams.get("paid") === "1";
+
+  // The browser half of an ONLINE-payment purchase: checkout parked the event
+  // data before sending the customer to the gateway (lib/purchase-tracking.ts).
+  // Taken, not read, so a reload cannot send it twice; track() is a no-op
+  // without cookie consent. The server-side event is the authoritative one.
+  useEffect(() => {
+    if (!paid) return;
+    const stashed = takeStashedPurchase(params.id);
+    if (stashed) track("purchase", stashed);
+  }, [paid, params.id]);
 
   return (
     <StorefrontPageShell variant="medium">

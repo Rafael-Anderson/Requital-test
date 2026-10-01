@@ -53,6 +53,8 @@ function buildService(db: DatabaseService) {
     unused, // currencyRatesService — not reached on the preview-auth path
     unused, // regionsService — not reached on the preview-auth path
     unused, // features — not reached on the preview-auth path
+    unused, // shopAnalyticsService
+    unused, // conversionEventsService
   );
   return { service, jwtService };
 }

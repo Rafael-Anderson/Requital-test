@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { track } from "./analytics";
 
 export interface CartItem {
   productId: number;
@@ -141,6 +142,12 @@ export function removeItemFromState(state: CartState, productId: number, variant
 export function CartProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
   const [state, setState] = useState<CartState>({ outletId: null, items: [], discountCode: null, giftCardCode: null });
   const [loaded, setLoaded] = useState(false);
+  // Latest state for callbacks that need to read it without re-creating
+  // themselves (removeItem's analytics event needs the line being removed).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     try {
@@ -163,8 +170,15 @@ export function CartProvider({ shopSlug, children }: { shopSlug: string; childre
     localStorage.setItem(storageKey(shopSlug), JSON.stringify(state));
   }, [shopSlug, state, loaded]);
 
+  // Every add-to-cart surface (PDP, quick add, add-on prompt, ...) funnels through
+  // here, so this is the one place the analytics event is raised. track() is a
+  // no-op without consent. Outside the state updater on purpose: an updater must
+  // stay pure (React may run it twice).
   const addItem = useCallback<CartContextValue["addItem"]>((item, quantity, outletId) => {
     setState((prev) => addItemToState(prev, item, quantity, outletId));
+    track("add_to_cart", {
+      items: [{ id: item.productId, name: item.name, price: item.price, quantity, variant: item.variantLabel }],
+    });
   }, []);
 
   const setQuantity = useCallback((productId: number, quantity: number, variantId?: number) => {
@@ -172,6 +186,12 @@ export function CartProvider({ shopSlug, children }: { shopSlug: string; childre
   }, []);
 
   const removeItem = useCallback((productId: number, variantId?: number) => {
+    const line = stateRef.current.items.find((i) => sameLine(i, productId, variantId));
+    if (line) {
+      track("remove_from_cart", {
+        items: [{ id: line.productId, name: line.name, price: line.price, quantity: line.quantity, variant: line.variantLabel }],
+      });
+    }
     setState((prev) => removeItemFromState(prev, productId, variantId));
   }, []);
 

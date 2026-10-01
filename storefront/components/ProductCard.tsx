@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics";
 import { useState } from "react";
 import Link from "next/link";
 import { useShop } from "@/lib/shop-context";
@@ -75,6 +76,9 @@ export default function ProductCard({
 }) {
   const { shop, shopBasePath, themeConfig, autoDiscounts = [] } = useShop();
   const discounted = computeAutoDiscountedPrice(product, autoDiscounts);
+  // No-op without consent (lib/analytics.ts); never delays the navigation.
+  const reportSelect = () =>
+    track("select_item", { items: [{ id: product.id, name: product.name, price: Number(product.price) }] });
   const outOfStock = product.stockQuantity !== null && product.stockQuantity <= 0;
   const excerpt = cardExcerpt(product);
   const productCards = themeConfig?.globalSettings.productCards;
@@ -130,6 +134,7 @@ export default function ProductCard({
       <Link
         href={`${shopBasePath}/products/${product.slug}`}
         className="flex gap-4 items-center border-b border-stroke py-4"
+        onClick={reportSelect}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={product.thumbnail} alt={product.name} className="size-20 theme-round-md object-cover shrink-0 bg-black/5" />
@@ -149,6 +154,7 @@ export default function ProductCard({
   return (
     <Link
       href={`${shopBasePath}/products/${product.slug}`}
+      onClick={reportSelect}
       className={`theme-product-card block group transition-all ${cardStyleClass}`}
       // Phase A — the `rise` hover transform animates at the card-hover motion
       // duration (300ms fallback = today), matching GridProductCard.

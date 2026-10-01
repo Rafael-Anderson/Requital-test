@@ -16,6 +16,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { OrdersService } from '../orders/orders.service';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
+import { ConversionEventsService } from '../shop-analytics/conversion-events.service';
 import { createLogger } from '../common/logging/logger';
 import type { WebhookResult } from './payment-provider.interface';
 import {
@@ -38,6 +39,7 @@ export class PaymentsService {
     private readonly branchRolesService: BranchRolesService,
     private readonly ordersService: OrdersService,
     private readonly webhookLogService: WebhookLogService,
+    private readonly conversionEventsService: ConversionEventsService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -346,6 +348,13 @@ export class PaymentsService {
           result.status,
           'duplicate',
         );
+        // At-least-once for the ad-platform conversion: if the delivery that
+        // committed the payment died before queueing it, a redelivery repairs
+        // that here. Idempotent (job key capi:purchase:<orderId>), so this can
+        // never produce a second job.
+        if (result.status === 'paid') {
+          await this.conversionEventsService.enqueuePurchase(order.id as number);
+        }
         return { received: true };
       }
       throw error;
@@ -361,6 +370,11 @@ export class PaymentsService {
       await this.affiliateService.syncOrderStatus(order.id as number, {
         paymentPaid: true,
       });
+      // MKT-4: the online-payment conversion. This method is the single place a
+      // payment outcome is applied, reached by the gateway webhooks AND by the
+      // reconciliation sweep, so queueing here covers both with one call. It
+      // never throws and queues nothing without recorded marketing consent.
+      await this.conversionEventsService.enqueuePurchase(order.id as number);
     }
 
     if (result.advanceOrderStatus) {

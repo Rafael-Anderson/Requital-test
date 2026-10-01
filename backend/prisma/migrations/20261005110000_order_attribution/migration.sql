@@ -1,0 +1,15 @@
+-- MKT-14: where an order came from, captured at the real event (checkout).
+--
+-- A real MySQL JSON column (not LONGTEXT + CHECK), so mysql2 auto-parses it. NULL
+-- means UNKNOWN: an order placed before this column existed, a staff-entered
+-- order, or a storefront order whose browser sent nothing. It is deliberately NOT
+-- backfilled and NOT defaulted to '{}' - "we never recorded where this came from"
+-- and "it came from nowhere (direct)" are different claims, and only the second
+-- is ever stored (as an explicit '(direct)' touch).
+--
+-- Shape (version 1) is produced only by shop-analytics/attribution.ts's
+-- sanitizeAttribution, which bounds every string and drops anything it does not
+-- recognise: { v, firstTouch?, lastTouch?, consent: { marketing: boolean|null },
+-- fbp?, fbc?, clientUserAgent? }. Click ids / fbp / fbc / user agent are present
+-- ONLY when the shopper consented to marketing cookies at checkout.
+ALTER TABLE `order` ADD COLUMN `attributionJson` JSON NULL;

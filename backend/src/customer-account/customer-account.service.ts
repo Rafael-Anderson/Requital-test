@@ -272,6 +272,19 @@ export class CustomerAccountService {
         customerId,
       ],
     );
+    // MKT-14: the online identifiers an order captured for ad attribution (click
+    // ids, Meta browser cookies, user agent) are personal data too. The UTM
+    // source/medium/campaign stay, so the merchant's attribution report does not
+    // change. A path that does not exist in a given row is a no-op.
+    await this.db.execute(
+      `UPDATE \`order\`
+          SET attributionJson = JSON_REMOVE(attributionJson,
+            '$.fbp', '$.fbc', '$.clientUserAgent',
+            '$.firstTouch.gclid', '$.firstTouch.fbclid', '$.firstTouch.ttclid',
+            '$.lastTouch.gclid', '$.lastTouch.fbclid', '$.lastTouch.ttclid')
+        WHERE customerId = ? AND shopId = ? AND attributionJson IS NOT NULL`,
+      [customerId, shopId],
+    );
     await this.db.execute(
       `UPDATE customerrefreshtoken SET revokedAt = ? WHERE customerId = ? AND revokedAt IS NULL`,
       [new Date(), customerId],

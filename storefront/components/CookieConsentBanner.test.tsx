@@ -46,4 +46,27 @@ describe("CookieConsentBanner", () => {
 
     expect(screen.queryByText("Accept all")).not.toBeInTheDocument();
   });
+
+  it("declining discards the ad click ids captured on arrival; accepting keeps them", async () => {
+    const seed = () =>
+      localStorage.setItem(
+        "requital_attr:test-shop",
+        JSON.stringify({ first: { source: "google", gclid: "GCL-AAA", capturedAt: new Date().toISOString() } }),
+      );
+    const user = userEvent.setup();
+
+    seed();
+    const { unmount } = render(<CookieConsentBanner />);
+    await user.click(await screen.findByText("Decline non-essential"));
+    const afterDecline = localStorage.getItem("requital_attr:test-shop") ?? "";
+    expect(afterDecline).not.toContain("GCL-AAA");
+    expect(afterDecline).toContain("google");
+    unmount();
+
+    localStorage.clear();
+    seed();
+    render(<CookieConsentBanner />);
+    await user.click(await screen.findByText("Accept all"));
+    expect(localStorage.getItem("requital_attr:test-shop")).toContain("GCL-AAA");
+  });
 });

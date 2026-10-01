@@ -53,6 +53,11 @@ export interface OrderRow {
   // and only the first belongs here. Treat NULL as unknown, never as 1.
   rateBaseCurrency: string | null;
   exchangeRate: string | null;
+  // Where the order came from (migration 20261005110000). A real JSON column, so
+  // auto-parsed. NULL = UNKNOWN, never "direct". Shape: shop-analytics/attribution.ts.
+  // Never spread this row into a response without stripping it: it can hold
+  // click ids / fbp / fbc / user agent (see stripAttribution).
+  attributionJson: unknown;
 }
 
 export interface OrdernoteRow {
@@ -1121,6 +1126,24 @@ export interface GiftcardredemptionRow {
   orderId: number;
   amountUsed: string;
   createdAt: Date;
+}
+
+// Per-shop analytics / ad-pixel config (migration 20261005100000). Every column
+// but `metaCapiTokenEnc` is a public identifier; that one is AES-256-GCM
+// ciphertext and must never reach a response, a log line or a job payload.
+export interface ShopanalyticsRow {
+  id: number;
+  shopId: number;
+  ga4MeasurementId: string | null;
+  metaPixelId: string | null;
+  metaCapiTokenEnc: string | null;
+  metaTestEventCode: string | null;
+  tiktokPixelId: string | null;
+  snapPixelId: string | null;
+  googleAdsConversionId: string | null;
+  googleAdsConversionLabel: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface JobRow {

@@ -1,3 +1,6 @@
+import type { PublicAnalyticsConfig } from "./analytics-ids";
+import type { OrderAttributionPayload } from "./attribution";
+
 export interface Shop {
   // Every other storefront-facing endpoint (products/collections/outlets/
   // checkout) 404s for an unpublished shop — this field alone is what's
@@ -135,6 +138,10 @@ export interface Shop {
   // hasn't set a separate merchant code).
   tabbyMerchantCode: string | null;
   tamaraPublicKey: string | null;
+  // MKT-4: public pixel / measurement ids, only the configured ones; null when
+  // the merchant configured none. Never contains a secret. Nothing here is
+  // loaded before the visitor accepts the cookie banner (lib/analytics.ts).
+  analytics?: PublicAnalyticsConfig | null;
 }
 
 // Curated list — kept in sync by hand with backend/src/theme/constants.ts
@@ -487,6 +494,10 @@ export interface CreateOrderPayload {
   // unknown/expired/blocked code is silently ignored server-side, never
   // blocks checkout.
   referralCode?: string;
+  // MKT-14: first/last-touch UTM + referrer, and the cookie-consent state. Click
+  // ids / fbp / fbc / user agent are present only with marketing consent. Never
+  // blocks checkout; see lib/attribution.ts.
+  attribution?: OrderAttributionPayload;
   // Re-validated and atomically claimed server-side — unlike referralCode,
   // an invalid/expired/exhausted discount code rejects the whole checkout
   // rather than being silently dropped (see backend PublicService.createOrder).
@@ -511,6 +522,9 @@ export interface OrderResult {
   discountCode: string | null;
   discountAmount: string | null;
   total: string;
+  // The currency this order was priced in (captured at creation), the one a
+  // purchase event must report - not whatever the shop is set to today.
+  currency: string;
   status: string;
   customerName: string;
   // Short code the customer needs to look their order up later — there's no

@@ -7,6 +7,7 @@ import { ShieldCheck, Truck, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useFlyToCart } from "@/lib/fly-to-cart";
+import { track } from "@/lib/analytics";
 import { getProductBySlug, listProducts, listCollections } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { stockLabel } from "@/lib/stock-label";
@@ -72,6 +73,9 @@ export default function ProductDetailClient() {
   useEffect(() => {
     getProductBySlug(shopSlug, params.slug, defaultOutletId, previewToken)
       .then((p) => {
+        track("view_item", {
+          items: [{ id: p.id, name: p.name, price: Number(p.price), brand: p.brand?.name }],
+        });
         setProduct(p);
         setSelection(p.variants[0] ? variantOptionValueIds(p.variants[0]).slice(0, p.options.length) : []);
         setGiftCardAmount(p.isGiftCard ? (p.giftCardDenominations?.[0] ?? null) : null);

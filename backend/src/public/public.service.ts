@@ -48,6 +48,12 @@ import { ThemesService } from '../themes/themes.service';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { FeaturesService } from '../features/features.service';
+import { ShopAnalyticsService } from '../shop-analytics/shop-analytics.service';
+import { ConversionEventsService } from '../shop-analytics/conversion-events.service';
+import {
+  sanitizeAttribution,
+  stripAttribution,
+} from '../shop-analytics/attribution';
 import { roundMoney } from '../common/currency-minor-units';
 import {
   POLICY_PAGE_TYPES,
@@ -128,6 +134,8 @@ export class PublicService {
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly regionsService: RegionsService,
     private readonly features: FeaturesService,
+    private readonly shopAnalyticsService: ShopAnalyticsService,
+    private readonly conversionEventsService: ConversionEventsService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -264,6 +272,7 @@ export class PublicService {
       tabbyPublicKey,
       tabbyMerchantCode,
       tamaraPublicKey,
+      analytics,
     ] = await Promise.all([
       Promise.all(
         INDEPENDENT_ONLINE_PROVIDERS.map(async (p) => ({
@@ -288,6 +297,10 @@ export class PublicService {
       this.paymentSettingsService.resolvePublicWidgetKey(shop.id, 'tabby'),
       this.paymentSettingsService.resolveTabbyMerchantCode(shop.id),
       this.paymentSettingsService.resolvePublicWidgetKey(shop.id, 'tamara'),
+      // MKT-4: public pixel / measurement ids only, and only the configured
+      // ones (null when none). The Meta CAPI token and test event code are not
+      // part of this and never leave the server.
+      this.shopAnalyticsService.resolvePublicConfig(shop.id),
     ]);
     // Only the types a merchant has actually written content for — the
     // footer never links to a policy type with no content (see
@@ -369,6 +382,7 @@ export class PublicService {
       tabbyPublicKey,
       tabbyMerchantCode,
       tamaraPublicKey,
+      analytics,
       brandColor: theme?.brandColor ?? null,
       secondaryColor: theme?.secondaryColor ?? null,
       bannerUrl: theme?.bannerUrl ?? null,
@@ -1587,6 +1601,10 @@ export class PublicService {
       total,
     );
 
+    // Never blocks the order: a malformed or absent attribution is stored as
+    // NULL (unknown) / a trimmed object, not a 400.
+    const attributionData = sanitizeAttribution(dto.attribution);
+
     const orderId = await this.db.transaction(async (conn) => {
       const capturedRate = await this.currencyRatesService.resolveForCapture(
         shop.currency,
@@ -1642,8 +1660,8 @@ export class PublicService {
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
-          currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          currency, rateBaseCurrency, exchangeRate, attributionJson
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1690,6 +1708,9 @@ export class PublicService {
           // the insert.
           capturedRate?.rateBaseCurrency ?? null,
           capturedRate?.exchangeRate ?? null,
+          // MKT-14: where the order came from, plus the cookie-consent state at
+          // this moment. NULL = the browser sent nothing (unknown).
+          attributionData ? JSON.stringify(attributionData) : null,
         ],
           );
           return res;
@@ -1795,7 +1816,9 @@ export class PublicService {
       [orderId],
     );
     const order = {
-      ...orderRows[0],
+      // attributionJson (click ids, fbp/fbc, user agent) is stripped: the
+      // customer's own checkout response has no use for it.
+      ...stripAttribution(orderRows[0]),
       id: orderRows[0].id as number,
       shopOrderNumber: orderRows[0].shopOrderNumber as number,
       // Captured on the row at creation (A1); the notification states what
@@ -1853,6 +1876,14 @@ export class PublicService {
             )
           ? dto.paymentMethod
           : null;
+    // MKT-4: an order that needs no online payment (pay on delivery / pickup,
+    // or fully covered by a gift card) is a conversion NOW. An online-payment
+    // order is not one until it is paid: PaymentsService.applyWebhookResult
+    // queues it then, which also covers the reconciliation sweep. Same job key
+    // either way, so the two triggers can never produce two events.
+    if (!(gatewayName && remainderTotal > 0)) {
+      await this.conversionEventsService.enqueuePurchase(order.id);
+    }
     // A gift card covering the order in full leaves nothing to charge — no
     // checkout session is created regardless of which online paymentMethod
     // was selected (order was already marked 'paid' at creation above).

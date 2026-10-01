@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  Allow,
   ArrayNotEmpty,
   IsArray,
   IsDateString,
@@ -145,6 +146,16 @@ export class CreatePublicOrderDto {
   @IsOptional()
   @IsString()
   receiverMessage?: string;
+
+  // MKT-14: first/last-touch UTM + referrer + click ids and the cookie-consent
+  // state, captured client-side. Deliberately a bare object here, not a nested
+  // validated DTO: attribution is untrusted marketing metadata and must never
+  // turn a real order into a 400. sanitizeAttribution (shop-analytics/
+  // attribution.ts) bounds and filters it, and drops click ids / fbp / fbc / user
+  // agent unless marketing consent is explicitly true.
+  @IsOptional()
+  @Allow()
+  attribution?: Record<string, unknown>;
 
   // Captured client-side from ?ref=<code> on any storefront page load and
   // persisted (see storefront/lib/referral.ts) — resolved server-side

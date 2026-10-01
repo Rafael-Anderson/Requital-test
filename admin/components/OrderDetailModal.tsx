@@ -25,6 +25,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import OrderNotesSection from "@/components/OrderNotesSection";
+import OrderSourceCard from "@/components/OrderSourceCard";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import OrderStatusTimeline from "@/components/OrderStatusTimeline";
 import OrderInvoiceTab from "@/components/OrderInvoiceTab";
@@ -526,6 +527,9 @@ export default function OrderDetailModal({
                     <p className="text-sm text-text-muted">{order.customerEmail}</p>
                   )}
                 </section>
+
+                {/* undefined = the detail fetch has not landed yet; null = loaded, never recorded. */}
+                {order.attribution !== undefined && <OrderSourceCard attribution={order.attribution} />}
 
                 <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10">
                   <h3 className="font-medium mb-2">Delivery address</h3>

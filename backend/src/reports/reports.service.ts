@@ -11,6 +11,10 @@ import { ListGeneralReportQueryDto } from './dto/list-general-report-query.dto';
 import { ListProductSalesQueryDto } from './dto/list-product-sales-query.dto';
 import { MonthlyReportFilterDto } from './dto/monthly-report-filter.dto';
 import { ListMonthlyReportQueryDto } from './dto/list-monthly-report-query.dto';
+import { AttributionReportQueryDto } from './dto/attribution-report-query.dto';
+import { queryAttributionRows } from './attribution-report';
+
+const ATTRIBUTION_REPORT_LIMIT = 500;
 
 // "YYYY-MM" -> the [firstOfMonth, firstOfNextMonth) date-string pair
 // General Report's own date filter already understands. dateTo deliberately
@@ -160,6 +164,36 @@ export class ReportsService {
       params.push(new Date(filters.dateTo));
     }
     return { sql: conditions.join(' AND '), params };
+  }
+
+  // MKT-14: orders and revenue by where they came from. See
+  // attribution-report.ts for exactly what is counted and why each row carries
+  // its own currency. Capped: a shop with thousands of distinct campaign names is
+  // pathological, and the CSV export (which pages) is the way to get everything.
+  async getAttributionReport(
+    ctx: TenantContext,
+    query: AttributionReportQueryDto,
+  ) {
+    const rows = await queryAttributionRows(
+      this.db,
+      {
+        shopId: ctx.shopId,
+        outletId: query.outletId,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+        model: query.model,
+      },
+      ATTRIBUTION_REPORT_LIMIT,
+      0,
+    );
+    return {
+      model: query.model ?? 'last',
+      truncated: rows.length >= ATTRIBUTION_REPORT_LIMIT,
+      rows: rows.map((r) => ({
+        ...r,
+        revenue: roundMoney(r.revenue, r.currency),
+      })),
+    };
   }
 
   // NOV-12 prep-time truth. shop.deliveryPreparationTimeMinutes and its
