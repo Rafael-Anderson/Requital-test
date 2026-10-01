@@ -194,6 +194,26 @@ export interface Invoice {
   supersededAt: string | null;
 }
 
+// A credit note: a DOCUMENT reversing an issued invoice. Issuing one never
+// changes the order, its payments or its returns. Money is frozen in the note's
+// own captured `currency` (format with formatMoney(x, note.currency)).
+export const CREDIT_NOTE_REASONS = ["return", "cancellation", "correction"] as const;
+export type CreditNoteReason = (typeof CREDIT_NOTE_REASONS)[number];
+
+export interface CreditNote {
+  id: number;
+  orderId: number;
+  invoiceId: number;
+  number: string;
+  reason: CreditNoteReason;
+  returnId: number | null;
+  currency: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  createdAt: string;
+}
+
 export interface ReportsFilters {
   dateFrom?: string;
   dateTo?: string;

@@ -7,6 +7,7 @@ import type { TenantContext } from '../common/tenant-context';
 import { OrdersService } from '../orders/orders.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import type { InvoiceType } from './invoices.constants';
+import { CREDIT_NOTE_COUNTER_TYPE } from './invoices.constants';
 import { renderInvoiceHtml } from './invoice-html';
 import { buildTaxBreakdown } from './invoice-tax';
 
@@ -23,7 +24,7 @@ import { buildTaxBreakdown } from './invoice-tax';
 export const INVOICE_SNAPSHOT_VERSION = 2;
 const SNAPSHOT_VERSION_V1 = 1;
 
-interface OrderForInvoice {
+export interface OrderForInvoice {
   id: number;
   shopOrderNumber: number;
   customerName: string;
@@ -236,7 +237,7 @@ export class InvoicesService {
     return this.buildHtml(invoice, order);
   }
 
-  private async loadOrderForInvoice(
+  async loadOrderForInvoice(
     orderId: number,
     shopId: number,
     customerId?: number,
@@ -314,7 +315,7 @@ export class InvoicesService {
   //
   // An unrecognised snapshotVersion falls back to live as well: reading fields out
   // of a shape this code no longer understands is worse than rendering fresh.
-  private resolveRenderSource(
+  resolveRenderSource(
     invoice: InvoiceRow,
     live: OrderForInvoice,
   ): { order: OrderForInvoice; fromSnapshot: boolean } {
@@ -387,10 +388,12 @@ export class InvoicesService {
   // UPDATE ... LAST_INSERT_ID(...)` idiom — the row lock this statement
   // takes serializes concurrent callers, which a read-then-write upsert is
   // not guaranteed to do. See invoicecounter's schema comment.
-  private async nextInvoiceNumber(
+  // Also numbers credit notes (CN-0001) under type 'CREDIT_NOTE': the counter's
+  // `type` is a plain VARCHAR, so a third sequence is just another row.
+  async nextInvoiceNumber(
     conn: PoolConnection,
     shopId: number,
-    type: InvoiceType,
+    type: InvoiceType | typeof CREDIT_NOTE_COUNTER_TYPE,
   ): Promise<string> {
     // `invoicecounter` has no AUTO_INCREMENT column of its own, so the
     // plain-INSERT branch (first invoice ever for this shop+type) would
@@ -409,7 +412,8 @@ export class InvoicesService {
       `SELECT LAST_INSERT_ID() AS seq`,
     );
     const n = Number(rows[0].seq);
-    const prefix = type === 'PACKING_SLIP' ? 'PS' : 'INV';
+    const prefix =
+      type === 'PACKING_SLIP' ? 'PS' : type === 'CREDIT_NOTE' ? 'CN' : 'INV';
     return `${prefix}-${String(n).padStart(4, '0')}`;
   }
 }

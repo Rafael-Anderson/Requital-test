@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { generateInvoice, getInvoiceHtml, listInvoicesForOrder } from "@/lib/api";
-import type { Invoice, InvoiceType } from "@/lib/types";
+import {
+  generateInvoice,
+  getCreditNoteHtml,
+  getInvoiceHtml,
+  getOrderReturns,
+  issueCreditNote,
+  listCreditNotesForOrder,
+  listInvoicesForOrder,
+} from "@/lib/api";
+import { formatMoney } from "@/lib/money";
+import type { CreditNote, Invoice, InvoiceType, OrderReturn } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 
 const TYPE_LABEL: Record<InvoiceType, string> = {
@@ -26,11 +36,24 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [html, setHtml] = useState<string | null>(null);
   const [loadingHtml, setLoadingHtml] = useState(false);
+  // Credit notes are documents only: issuing one never touches the order, its
+  // payments or its returns. Previewed in the same iframe as the invoice.
+  const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
+  const [returns, setReturns] = useState<OrderReturn[]>([]);
+  const [selectedCn, setSelectedCn] = useState<CreditNote | null>(null);
+  const [choice, setChoice] = useState("correction");
+  const [issuing, setIssuing] = useState(false);
 
   useEffect(() => {
     listInvoicesForOrder(orderId)
       .then(setInvoices)
       .catch(() => setInvoices([]));
+    listCreditNotesForOrder(orderId)
+      .then(setCreditNotes)
+      .catch(() => setCreditNotes([]));
+    getOrderReturns(orderId)
+      .then(setReturns)
+      .catch(() => setReturns([]));
   }, [orderId]);
 
   // Auto-select whichever invoice already exists (preferring a real
@@ -44,22 +67,43 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
   }, [invoices]);
 
   useEffect(() => {
-    if (!selected) {
+    if (!selected && !selectedCn) {
       setHtml(null);
       return;
     }
     setLoadingHtml(true);
-    getInvoiceHtml(selected.id)
+    (selectedCn ? getCreditNoteHtml(selectedCn.id) : getInvoiceHtml(selected!.id))
       .then(setHtml)
       .catch(() => setHtml(null))
       .finally(() => setLoadingHtml(false));
-  }, [selected]);
+  }, [selected, selectedCn]);
+
+  async function handleIssueCreditNote() {
+    setIssuing(true);
+    try {
+      const returnId = choice.startsWith("return:") ? Number(choice.slice(7)) : undefined;
+      const note = await issueCreditNote({
+        orderId,
+        reason: returnId ? "return" : (choice as "correction" | "cancellation"),
+        returnId,
+      });
+      setCreditNotes((prev) => [...prev, note]);
+      setSelectedCn(note);
+      setChoice("correction");
+      toast(`Credit note ${note.number} issued`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to issue credit note", "error");
+    } finally {
+      setIssuing(false);
+    }
+  }
 
   async function handleGenerate(type: InvoiceType) {
     setGenerating(type);
     try {
       const invoice = await generateInvoice(orderId, type);
       setInvoices((prev) => [...(prev ?? []).filter((i) => i.type !== type), invoice]);
+      setSelectedCn(null);
       setSelected(invoice);
       toast(`${TYPE_LABEL[type]} generated`);
     } catch (err) {
@@ -91,9 +135,12 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
           return existing ? (
             <Button
               key={type}
-              variant={selected?.id === existing.id ? "primary" : "secondary"}
+              variant={!selectedCn && selected?.id === existing.id ? "primary" : "secondary"}
               size="sm"
-              onClick={() => setSelected(existing)}
+              onClick={() => {
+                setSelectedCn(null);
+                setSelected(existing);
+              }}
             >
               View {TYPE_LABEL[type]} ({existing.invoiceNumber})
               {existing.supersededAt ? " *" : ""}
@@ -125,7 +172,58 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
         </p>
       )}
 
-      {selected && (
+      {byType("INVOICE") && (
+        <div className="space-y-2 rounded-lg border border-border dark:border-white/10 p-3">
+          <p className="text-[13px] font-medium text-text-secondary">Credit notes</p>
+          {creditNotes.length === 0 && (
+            <p className="text-[13px] text-text-faint">No credit notes issued for this order.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {creditNotes.map((cn) => (
+              <Button
+                key={cn.id}
+                variant={selectedCn?.id === cn.id ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => setSelectedCn(cn)}
+              >
+                {cn.number} ({formatMoney(cn.total, cn.currency)})
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <Select
+              label="Issue a credit note for"
+              value={choice}
+              onChange={(e) => setChoice(e.target.value)}
+              className="min-w-[220px]"
+            >
+              <option value="correction">Whole invoice (correction)</option>
+              <option value="cancellation">Whole invoice (cancellation)</option>
+              {returns
+                .filter((r) => !creditNotes.some((cn) => cn.returnId === r.id))
+                .map((r) => (
+                  <option key={r.id} value={`return:${r.id}`}>
+                    Return #{r.id}
+                  </option>
+                ))}
+            </Select>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleIssueCreditNote}
+              disabled={issuing}
+              loading={issuing}
+            >
+              Issue credit note
+            </Button>
+          </div>
+          <p className="text-[12px] text-text-faint">
+            A credit note is a document only. It does not refund, restock or change the order.
+          </p>
+        </div>
+      )}
+
+      {(selected || selectedCn) && (
         <div className="space-y-2">
           <div className="flex justify-end">
             <Button variant="secondary" size="sm" onClick={handlePrint} disabled={!html}>
@@ -137,7 +235,7 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
               <p className="text-sm text-text-faint p-4">Loading preview…</p>
             ) : (
               <iframe
-                title={`${TYPE_LABEL[selected.type]} preview`}
+                title={selectedCn ? "Credit note preview" : `${TYPE_LABEL[selected!.type]} preview`}
                 srcDoc={html ?? ""}
                 className="w-full h-[480px]"
               />
