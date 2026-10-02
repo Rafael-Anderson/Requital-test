@@ -237,11 +237,11 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
         .expect(400);
     });
 
-    it('CHARACTERIZATION (finding F7): the DEFAULT refund is priceAtPurchase x qty, ignoring the apportioned discount and the tax', async () => {
-      // Pinned, not endorsed: returning line A x1 refunds 100, though the customer
-      // paid 90 + 4.50 tax for it after the 10% discount. refundAmount is editable, and
-      // the running-total cap stops an over-refund of the ORDER, but not an over-
-      // or under-refund of the line.
+    it('F7 (fixed): the DEFAULT refund is the returned line\'s share of what the customer paid (discount and tax included)', async () => {
+      // Was pinned at priceAtPurchase x qty = 100. Returning line A x1 now refunds
+      // 94.50: 100 - 10 (its share of the 10% discount) + 4.50 tax. The detailed
+      // matrix (inclusive, KWD, partials, legacy, override, race) lives in
+      // return-refund-paid-share.e2e-spec.ts.
       const { shop, a, orderId } = await scenario('gdt-aed-def', 500);
       await f.advance(shop, orderId, 'delivered');
       const detail = await request(f.http())
@@ -260,7 +260,7 @@ describe('Gift card + discount + tax on one order (e2e)', () => {
         })
         .expect(201);
       expect(Number(body<{ refundAmount: string }>(ret).refundAmount)).toBe(
-        100,
+        94.5,
       );
     });
 
