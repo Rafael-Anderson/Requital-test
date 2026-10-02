@@ -1540,7 +1540,11 @@ export class PublicService {
     // never blocks checkout) — a discount the customer explicitly entered
     // and expects applied is a different UX contract than passive referral
     // tracking.
-    let discount: { id: number; usageLimit: number | null } | null = null;
+    let discount: {
+      id: number;
+      usageLimit: number | null;
+      usageLimitPerCustomer: number | null;
+    } | null = null;
     let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
     if (dto.discountCode) {
@@ -1652,6 +1656,15 @@ export class PublicService {
     const attributionData = sanitizeAttribution(dto.attribution);
 
     const orderId = await this.db.transaction(async (conn) => {
+      // Must stay the first statement: see assertPerCustomerLimit.
+      if (discount) {
+        await this.discountsService.assertPerCustomerLimit(
+          conn,
+          shop.id,
+          discount,
+          customer.id,
+        );
+      }
       const capturedRate = await this.currencyRatesService.resolveForCapture(
         shop.currency,
         conn,
