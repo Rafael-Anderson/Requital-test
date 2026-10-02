@@ -370,6 +370,9 @@ export class DiscountsService {
       // eligibility, the eligible subtotal and the amount.
       lines: DiscountLine[];
       customerId?: number;
+      // An order's own redemption must not count against its own per-customer
+      // limit when it is re-evaluated (updateItems); see assertPerCustomerLimit.
+      excludeOrderId?: number;
       // The order's currency; the amount is rounded to its real minor unit.
       currency?: string | null;
       // Legacy validate shape only; see validate().
@@ -406,8 +409,8 @@ export class DiscountsService {
       input.customerId !== undefined
     ) {
       const rows = await this.db.query<RowDataPacket[]>(
-        `SELECT COUNT(*) AS c FROM discountredemption WHERE discountId = ? AND customerId = ?`,
-        [discount.id, input.customerId],
+        `SELECT COUNT(*) AS c FROM discountredemption WHERE discountId = ? AND customerId = ? AND orderId <> ?`,
+        [discount.id, input.customerId, input.excludeOrderId ?? 0],
       );
       const usedByCustomer = Number(rows[0].c);
       if (usedByCustomer >= discount.usageLimitPerCustomer) {
@@ -437,6 +440,49 @@ export class DiscountsService {
       discountAmount: eligibility.discountAmount,
       freeShipping: discount.type === 'FREE_SHIPPING',
     };
+  }
+
+  // Enforces usageLimitPerCustomer authoritatively, inside the order's own
+  // transaction (evaluate() only sees committed rows and runs before the
+  // customer exists, so it is advisory). Call it as the FIRST statement of the
+  // transaction, after the customer row is resolved (findOrCreateForOrder).
+  //
+  // Race safety: locking the customer row FOR UPDATE serialises every order by
+  // the same customer for this shop, so the count below cannot interleave with
+  // a sibling's INSERT INTO discountredemption. It must be the first statement
+  // because the COUNT is a plain (snapshot) read: under REPEATABLE READ the
+  // snapshot is taken at the transaction's first consistent read, so taking the
+  // lock before any read means the snapshot is taken after the winner committed.
+  // A locking COUNT (FOR UPDATE) was rejected: it next-key/gap-locks the
+  // (discountId, customerId) index, and two different customers inserting into
+  // the same gap deadlock. Only locks when the discount has a per-customer
+  // limit, so unlimited codes pay nothing. A cancelled order's redemption keeps
+  // counting (nothing deletes it, same as timesUsed vs usageLimit).
+  async assertPerCustomerLimit(
+    conn: PoolConnection,
+    shopId: number,
+    discount: { id: number; usageLimitPerCustomer: number | null },
+    customerId: number,
+  ) {
+    if (discount.usageLimitPerCustomer === null) return;
+    const [locked] = await conn.query<RowDataPacket[]>(
+      `SELECT id FROM customer WHERE id = ? AND shopId = ? FOR UPDATE`,
+      [customerId, shopId],
+    );
+    if (locked.length === 0) {
+      throw new ConflictException('Customer could not be resolved, please retry');
+    }
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM discountredemption dr
+         JOIN discount d ON d.id = dr.discountId AND d.shopId = ?
+        WHERE dr.discountId = ? AND dr.customerId = ?`,
+      [shopId, discount.id, customerId],
+    );
+    if (Number(rows[0].c) >= discount.usageLimitPerCustomer) {
+      throw new ConflictException(
+        DISCOUNT_REJECTION_MESSAGES.per_customer_limit_reached,
+      );
+    }
   }
 
   // Atomically claims one use — CAS on usageLimit, same WHERE-guarded

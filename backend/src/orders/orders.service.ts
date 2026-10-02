@@ -345,7 +345,11 @@ export class OrdersService {
     // Resolved (not yet claimed — see redeem() inside the transaction below)
     // before the customer lookup, same "cheap read before the expensive/
     // stateful part" ordering as affiliate attribution.
-    let discount: { id: number; usageLimit: number | null } | null = null;
+    let discount: {
+      id: number;
+      usageLimit: number | null;
+      usageLimitPerCustomer: number | null;
+    } | null = null;
     let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
     if (dto.discountCode) {
@@ -436,6 +440,15 @@ export class OrdersService {
     );
 
     const orderId = await this.db.transaction(async (conn) => {
+      // Must stay the first statement: see assertPerCustomerLimit.
+      if (discount) {
+        await this.discountsService.assertPerCustomerLimit(
+          conn,
+          ctx.shopId,
+          discount,
+          customer.id,
+        );
+      }
       // Read on the transaction's own connection so a platform admin editing a
       // rate cannot land between this read and the insert below.
       const capturedRate = await this.currencyRatesService.resolveForCapture(
@@ -966,6 +979,7 @@ export class OrdersService {
         ),
         currency: currencyRows[0]?.currency as string | undefined,
         customerId: order.customerId ?? undefined,
+        excludeOrderId: order.id,
       });
       if (evaluated.valid) {
         discountAmount = evaluated.discountAmount ?? 0;
