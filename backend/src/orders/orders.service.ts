@@ -1153,8 +1153,9 @@ export class OrdersService {
           if (increasedItems.length > 0) {
             // recorded: what this increase takes is added to the order's own
             // record. consumeForOrderItems still re-checks the toggle for a
-            // fresh decrement, so with it off an increase takes nothing, records
-            // nothing, and a later cancel gives back only what was really taken
+            // fresh decrement, so with it off an increase of a RECIPE line takes
+            // nothing and records nothing (a plain line still takes and records,
+            // F12), and a later cancel gives back only what was really taken
             // (F2: it used to give back the full new quantity).
             const tookStock = await this.productsService.consumeForOrderItems(
               conn,
@@ -1165,7 +1166,7 @@ export class OrdersService {
               {
                 throwOnInsufficientStock: true,
                 actorUserId: ctx.userId,
-                ...(hasStockRecord && { orderId }),
+                ...(hasStockRecord ? { orderId } : { legacyOrder: true }),
               },
             );
             if (hasStockRecord && tookStock) {
@@ -1507,6 +1508,13 @@ export class OrdersService {
       // The order row is locked by the status CAS that got us here, so nothing
       // else touches this order's consumption until this transaction ends.
       const consumedRows: ConsumedRow[] = [];
+      // A LEGACY order (no record) keeps the old toggle rule (F12 applies to
+      // new orders only): the toggle off takes nothing, plain lines included.
+      const { recorded: hasRecord } = await this.readConsumptionState(
+        conn,
+        ctx.shopId,
+        orderId,
+      );
       const consumed = await this.productsService.consumeForOrderItems(
         conn,
         ctx.shopId,
@@ -1521,6 +1529,7 @@ export class OrdersService {
           throwOnInsufficientStock: false,
           actorUserId: ctx.userId,
           collect: consumedRows,
+          legacyOrder: !hasRecord,
         },
       );
       // An order created before the stock record existed (consumptionRecordedAt

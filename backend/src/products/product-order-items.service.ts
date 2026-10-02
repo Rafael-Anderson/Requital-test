@@ -291,7 +291,8 @@ export class ProductOrderItemsService {
   // re-deriving it from the toggle, see that column's own schema comment.
   //
   // Toggle gating is intentionally asymmetric by direction: direction -1 is
-  // a fresh "should this fire at all" decision, so it re-checks
+  // a fresh "should this fire at all" decision (F12: for RECIPE-backed lines
+  // only, plain lines always take stock, see plainOnly below), so it re-checks
   // shop.autoDeductIngredientStock itself right here — not just relying on
   // an upstream pre-filter having already checked it, the exact class of
   // bug already caught twice in this codebase (AbandonedCartsService,
@@ -352,6 +353,10 @@ export class ProductOrderItemsService {
       // recipe-driven restock).
       orderId?: number;
       collect?: ConsumedRow[];
+      // direction -1 only: the order has NO consumption record (LEGACY, it
+      // predates migration 20261010100000). Such an order keeps the old rule
+      // exactly: toggle off takes nothing, plain products included.
+      legacyOrder?: boolean;
     },
   ): Promise<boolean> {
     if (direction === 1 && (options.orderId !== undefined || options.collect))
@@ -359,11 +364,23 @@ export class ProductOrderItemsService {
         'consumeForOrderItems: recording is for direction -1 only; restocks go through releaseOrderConsumption',
       );
     const recorded: ConsumedRow[] = [];
+    // F12: the toggle governs RECIPE-BACKED lines only. With it off, a plain
+    // line still decrements; a recipe line is skipped. A line is PLAIN when
+    // every row of its effective recipe (variant override rows, else the
+    // product-level rows) points at a shadow ingredient, the auto-created
+    // quantityPerUnit = 1 stand-in a product gets for its own stock. Any real
+    // ingredient in the effective recipe makes the line recipe-backed, so a
+    // variant with its own real recipe on an otherwise plain product counts as
+    // recipe-backed. trackInventory / continueSellingOutOfStock skips are
+    // untouched (the shadow's trackInventory mirrors the product's).
+    let plainOnly = false;
     if (direction === -1) {
       // Read on the caller's own connection: this runs inside the order's
       // transaction and must not take a second pool connection.
-      if (!(await this.features.isEnabled(shopId, 'auto_deduct_ingredient_stock', conn)))
-        return false;
+      if (!(await this.features.isEnabled(shopId, 'auto_deduct_ingredient_stock', conn))) {
+        if (options.legacyOrder) return false;
+        plainOnly = true;
+      }
     }
 
     const productIds = [...new Set(items.map((i) => i.productId))];
@@ -402,6 +419,15 @@ export class ProductOrderItemsService {
         variantOverrides.length > 0
           ? variantOverrides
           : rowsForProduct.filter((r) => r.variantId === null);
+      if (
+        plainOnly &&
+        !effectiveRows.every(
+          (r) =>
+            r.ingredientShadowProductId !== null ||
+            r.ingredientShadowVariantId !== null,
+        )
+      )
+        continue;
       for (const row of effectiveRows) {
         if (!Boolean(row.ingredientTrackInventory)) continue;
         const totalQty = (row.quantityPerUnit as number) * item.quantity;

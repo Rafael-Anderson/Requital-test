@@ -71,4 +71,15 @@ describe("Business Information — Product Editor field", () => {
       expect(updateShop).toHaveBeenCalledWith(expect.objectContaining({ productEditorMode: "advanced" })),
     );
   });
+
+  it("says the auto-deduct toggle covers recipe ingredients only and plain products always deduct", async () => {
+    vi.mocked(getShop).mockResolvedValue(baseShop);
+    renderPage();
+
+    const box = await screen.findByLabelText(/Auto-deduct recipe ingredient stock/i);
+    expect(box).toBeChecked();
+    const hint = screen.getByText(/Applies to recipe ingredients only/);
+    expect(hint.textContent).toMatch(/Products without a recipe always deduct their own stock/);
+    expect(hint.textContent).not.toContain("\u2014");
+  });
 });

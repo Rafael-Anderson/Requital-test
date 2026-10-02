@@ -241,21 +241,25 @@ describe('Cancel restocks from every cancellable status (e2e)', () => {
       expect(await f.stockOf(shop.outletId, rose)).toBe(100); // not 106
     });
 
-    it('CHARACTERIZATION (finding F12): with the toggle off, a PLAIN product is not decremented either', async () => {
-      // Phase A routed plain products through consumeForOrderItems, whose
-      // direction -1 branch returns early on shop.autoDeductIngredientStock.
-      // So the toggle named for ingredients also switches off product stock
-      // and the insufficient-stock guard. Pinned as-is so a refactor cannot
-      // change it silently; whether it is intended is the coordinator's call.
+    it('F12 (owner decision): with the toggle off, a PLAIN product is still decremented and still guarded', async () => {
+      // Was a CHARACTERIZATION of the opposite behaviour (the toggle switched
+      // off product stock and the insufficient-stock guard). Changed
+      // deliberately: the toggle now governs recipe-backed products only.
+      // Full matrix in stock-auto-deduct-toggle.e2e-spec.ts.
       const shop = await f.setupShop('cr-char-toggle');
       const p = await f.stockedProduct(shop, 5);
       await f.setShop(shop, { autoDeductIngredientStock: false });
       await f.publish(shop);
       await f.storefrontOrder(shop, [{ productId: p.id, quantity: 4 }]);
-      expect(await f.productStock(shop.outletId, p.id)).toBe(5);
-      // ...and a quantity that exceeds stock is not rejected.
-      await f.storefrontOrder(shop, [{ productId: p.id, quantity: 50 }]);
-      expect(await f.productStock(shop.outletId, p.id)).toBe(5);
+      expect(await f.productStock(shop.outletId, p.id)).toBe(1);
+      // ...and a quantity that exceeds stock is rejected again.
+      await f.storefrontOrder(
+        shop,
+        [{ productId: p.id, quantity: 50 }],
+        {},
+        409,
+      );
+      expect(await f.productStock(shop.outletId, p.id)).toBe(1);
     });
   });
 });

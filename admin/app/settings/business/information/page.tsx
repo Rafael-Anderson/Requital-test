@@ -403,14 +403,15 @@ export default function BusinessInformationPage() {
       <Card>
         <p className="text-[13px] font-semibold text-text-secondary dark:text-zinc-400 mb-2">Inventory</p>
         <Checkbox
-          label="Auto-deduct ingredient stock on order completion"
+          label="Auto-deduct recipe ingredient stock on order completion"
           checked={autoDeductIngredientStock}
           onChange={(e) => setAutoDeductIngredientStock(e.target.checked)}
         />
         <p className="text-xs text-text-faint mt-1.5 ms-6">
-          On by default. When a product has a recipe linked (Inventory &gt; Products), completing an order
-          automatically deducts the linked ingredients&apos; stock at the fulfilling branch. Turn this off to keep
-          recipe data for costing purposes only, without the system touching ingredient counts.
+          On by default. Applies to recipe ingredients only. When a product has a recipe linked (Inventory &gt;
+          Products), completing an order automatically deducts the linked ingredients&apos; stock at the fulfilling
+          branch. Turn this off to keep recipe data for costing purposes only, without the system touching
+          ingredient counts. Products without a recipe always deduct their own stock, whatever this is set to.
         </p>
       </Card>
 
