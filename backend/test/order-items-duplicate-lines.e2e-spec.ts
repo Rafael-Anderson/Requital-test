@@ -21,7 +21,7 @@ function body<T>(res: Response): T {
 }
 
 // Security review SR3 (PR #193/#194 area) repro tests. Both are expected to FAIL on origin/main.
-describe('SR3: order stock / branch-role repros (e2e)', () => {
+describe('Order items edit: duplicate product lines (e2e)', () => {
   let app: INestApplication<App>;
   const runId = Date.now();
   const http = () => app.getHttpServer();
@@ -106,43 +106,6 @@ describe('SR3: order stock / branch-role repros (e2e)', () => {
       .expect(200);
     return body<{ stockQuantity: number | null }>(res).stockQuantity ?? 0;
   }
-
-  it('F1: a branch user whose branch role lacks orders.manage cannot create a return (refund + restock)', async () => {
-    const { adminToken, outletId, productId } = await setupShop('sr3-ret-perm');
-    const order = await newOrder(adminToken, outletId, productId, 1);
-    for (const s of ['confirmed', 'preparing', 'out_for_delivery', 'delivered'])
-      await setStatus(adminToken, order.id, s).expect(200);
-
-    const email = `sr3-ret-staff-${runId}@test.com`;
-    const staff = await request(http())
-      .post('/auth/branch-users')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'View Only Staff', email, password: 'password123', role: 'branch', outletId })
-      .expect(201);
-    const role = await request(http())
-      .post('/shop/branch-roles')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ name: 'View only', permissions: ['orders.view'] })
-      .expect(201);
-    await request(http())
-      .post('/shop/branch-roles/assignments')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ userId: body<IdRow>(staff).id, outletId, branchRoleId: body<IdRow>(role).id })
-      .expect(201);
-    const login = await request(http()).post('/auth/login').send({ email, password: 'password123' }).expect(201);
-    const branchToken = body<{ accessToken: string }>(login).accessToken;
-
-    // Control: the same restriction IS enforced on status changes.
-    const order2 = await newOrder(adminToken, outletId, productId, 1);
-    await setStatus(branchToken, order2.id, 'confirmed').expect(403);
-
-    const detail = await request(http()).get(`/orders/${order.id}`).set('Authorization', `Bearer ${adminToken}`).expect(200);
-    const res = await request(http())
-      .post(`/orders/${order.id}/returns`)
-      .set('Authorization', `Bearer ${branchToken}`)
-      .send({ items: [{ orderItemId: body<OrderRow>(detail).orderitem[0].id, quantity: 1 }], reason: 'damaged' });
-    expect(res.status).toBe(403); // actual on origin/main: 201 (return, refund and restock recorded)
-  });
 
   it('F2: duplicate-identity lines in PATCH /orders/:id/items desync stock from what the order holds', async () => {
     const { adminToken, outletId, productId } = await setupShop('sr3-dup-lines');

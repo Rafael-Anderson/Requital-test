@@ -1047,13 +1047,21 @@ export class OrdersService {
         );
         const key = (productId: number, variantId: number | null) =>
           `${productId}:${variantId ?? ''}`;
-        const oldQtyByKey = new Map(
+        // Lines that share a product/variant identity are SUMMED, not
+        // overwritten: the order stores every line, so the stock delta and
+        // the consumption record must describe the same total.
+        const sumByKey = (rows: [string, number][]) => {
+          const m = new Map<string, number>();
+          for (const [k, q] of rows) m.set(k, (m.get(k) ?? 0) + q);
+          return m;
+        };
+        const oldQtyByKey = sumByKey(
           oldItems.map((i) => [
             key(i.productId as number, i.variantId as number | null),
             i.quantity as number,
           ]),
         );
-        const newQtyByKey = new Map(
+        const newQtyByKey = sumByKey(
           resolvedItems.map((i) => [
             key(i.product.id as number, i.variant?.id ?? null),
             i.quantity,
