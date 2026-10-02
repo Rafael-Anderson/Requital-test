@@ -101,7 +101,7 @@ export default function BulkPriceUpdateModal({
     >
         <p className="text-sm text-text-muted -mt-2 mb-4">{products.length} product(s) selected</p>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <Select label="Field" value={field} onChange={(e) => setField(e.target.value as Field)}>
             <option value="price">Price</option>
             <option value="compareAtPrice">Compare-at price</option>

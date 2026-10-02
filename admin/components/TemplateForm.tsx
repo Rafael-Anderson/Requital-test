@@ -329,7 +329,7 @@ export default function TemplateForm({ template: initial }: { template?: Templat
                 ]}
               />
               <Input label="Tag (optional)" value={tagName} onChange={(e) => setTagName(e.target.value)} />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input label="Min price (optional)" type="number" min="0" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} />
                 <Input label="Max price (optional)" type="number" min="0" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} />
               </div>

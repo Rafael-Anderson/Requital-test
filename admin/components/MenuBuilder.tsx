@@ -550,7 +550,7 @@ export default function MenuBuilder() {
 
           <div className="space-y-3 rounded-lg border border-border dark:border-white/10 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Style</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <ColorSwatchField label="Text color" value={draftStyle.textColor} onChange={(v) => setDraftStyle((s) => ({ ...s, textColor: v }))} />
               <ColorSwatchField
                 label="Background color"

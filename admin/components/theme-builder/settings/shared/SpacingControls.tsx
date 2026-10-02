@@ -29,7 +29,7 @@ export default function SpacingControls({
       <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
         Padding (px)
       </span>
-      <div className="mt-1.5 grid grid-cols-2 gap-3">
+      <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {FIELDS.map(({ key, label }) => (
           <Input
             key={key}
