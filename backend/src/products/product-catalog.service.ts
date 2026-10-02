@@ -324,6 +324,20 @@ export class ProductCatalogService {
     // constraint, so those genuinely are left blank.
     const newSku = `${original.sku}-COPY-${randomUUID().slice(0, 6).toUpperCase()}`;
 
+    // producttag doesn't carry tagId directly in the assembled shape (only the
+    // joined tag.name) — re-resolve by name via the same upsert-by-name helper
+    // used everywhere else tags are written. Resolved BEFORE the transaction:
+    // resolveTagIds goes through the pool, and a pool call inside a
+    // transaction callback is a nested pool acquisition (deadlocks the API
+    // when DB_POOL_SIZE concurrent duplicates each hold one connection).
+    const tagIds =
+      original.producttag.length > 0
+        ? await this.resolveTagIds(
+            ctx,
+            original.producttag.map((pt) => pt.tag.name),
+          )
+        : [];
+
     let newProductId: number;
     try {
       newProductId = await this.db.transaction(async (conn) => {
@@ -414,13 +428,6 @@ export class ProductCatalogService {
           );
         }
         if (original.producttag.length > 0) {
-          // producttag doesn't carry tagId directly in the assembled shape
-          // (only the joined tag.name) — re-resolve by name via the same
-          // upsert-by-name helper used everywhere else tags are written.
-          const tagIds = await this.resolveTagIds(
-            ctx,
-            original.producttag.map((pt) => pt.tag.name),
-          );
           const placeholders = tagIds.map(() => '(?, ?)').join(', ');
           await conn.query(
             `INSERT INTO producttag (productId, tagId) VALUES ${placeholders}`,
