@@ -181,15 +181,27 @@ export class PaymentsService {
     });
     // Same reason as the storefront path: without this, a payment-link order
     // whose webhook is lost has nothing to reconcile against.
-    await this.db.execute(
-      `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?
-        WHERE id = ?`,
-      [
-        session.providerReference,
-        order.shopPaymentGateway as string,
-        order.id,
-      ],
-    );
+    //
+    // This path re-mints a session on every visit, so the reconciliation state
+    // belongs to the previous session and must not carry over: an expired
+    // session A settles the row, and without this reset a later paid session B
+    // would never be polled. Same transaction, so the new session id and the
+    // "never checked" state appear together.
+    await this.db.transaction(async (conn) => {
+      await conn.query(
+        `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?
+          WHERE id = ?`,
+        [
+          session.providerReference,
+          order.shopPaymentGateway as string,
+          order.id,
+        ],
+      );
+      await conn.query(
+        `DELETE FROM paymentreconciliation WHERE orderId = ? AND shopId = ?`,
+        [order.id, order.shopId],
+      );
+    });
     return { alreadyPaid: false as const, checkoutUrl: session.checkoutUrl };
   }
 
