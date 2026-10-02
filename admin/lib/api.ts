@@ -24,6 +24,11 @@ import type {
   Brand,
   BrandInput,
   TaxClass,
+  PurchaseOrderDetail,
+  PurchaseOrderInput,
+  PurchaseOrderLineInput,
+  PurchaseOrderListItem,
+  ReceivePurchaseOrderInput,
   SupplierContactInput,
   SupplierDetail,
   SupplierInput,
@@ -2156,4 +2161,49 @@ export function deleteSupplierItem(id: number, ingredientId: number) {
 
 export function listSupplierSuggestions() {
   return apiFetch<SupplierSuggestion[]>("/suppliers/suggestions/free-text");
+}
+
+// ---- Purchase orders (INV-2) ----
+
+export function listPurchaseOrders(params: { status?: string; supplierId?: number; outletId?: number; page?: number; pageSize?: number }) {
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") search.set(k, String(v));
+  const query = search.toString();
+  return apiFetch<{ data: PurchaseOrderListItem[]; page: number; pageSize: number; total: number }>(
+    `/purchase-orders${query ? `?${query}` : ""}`,
+  );
+}
+
+export function getPurchaseOrder(id: number) {
+  return apiFetch<PurchaseOrderDetail>(`/purchase-orders/${id}`);
+}
+
+export function createPurchaseOrder(data: PurchaseOrderInput) {
+  return apiFetch<PurchaseOrderDetail>("/purchase-orders", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updatePurchaseOrder(id: number, data: { expectedAt?: string | null; notes?: string | null }) {
+  return apiFetch<PurchaseOrderDetail>(`/purchase-orders/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function replacePurchaseOrderLines(id: number, lines: PurchaseOrderLineInput[]) {
+  return apiFetch<PurchaseOrderDetail>(`/purchase-orders/${id}/lines`, {
+    method: "PUT",
+    body: JSON.stringify({ lines }),
+  });
+}
+
+export function sendPurchaseOrder(id: number) {
+  return apiFetch<PurchaseOrderDetail>(`/purchase-orders/${id}/send`, { method: "POST" });
+}
+
+export function cancelPurchaseOrder(id: number) {
+  return apiFetch<PurchaseOrderDetail>(`/purchase-orders/${id}/cancel`, { method: "POST" });
+}
+
+export function receivePurchaseOrder(id: number, data: ReceivePurchaseOrderInput) {
+  return apiFetch<{ receiptId: number; replayed: boolean; purchaseOrder: PurchaseOrderDetail }>(
+    `/purchase-orders/${id}/receive`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
 }

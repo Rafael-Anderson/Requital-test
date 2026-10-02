@@ -29,3 +29,20 @@ export async function createStaffToken(
     .expect(201);
   return (login.body as { accessToken: string }).accessToken;
 }
+
+// Same as createStaffToken, plus the new user's id (needed to assign a
+// per-outlet branch role to them).
+export async function createStaff(
+  app: INestApplication<App>,
+  adminToken: string,
+  label: string,
+  role: 'branch' | 'order_manager' | 'viewer',
+  outletId?: number,
+): Promise<{ token: string; userId: number }> {
+  const token = await createStaffToken(app, adminToken, label, role, outletId);
+  const me = await request(app.getHttpServer())
+    .get('/auth/me')
+    .set('Authorization', `Bearer ${token}`)
+    .expect(200);
+  return { token, userId: (me.body as { id: number }).id };
+}

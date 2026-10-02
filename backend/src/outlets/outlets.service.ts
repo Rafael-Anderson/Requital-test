@@ -266,7 +266,9 @@ export class OutletsService {
   async remove(ctx: TenantContext, id: number) {
     await this.assertBelongsToShop(ctx, id);
 
-    const [orderRows, userRows] = await Promise.all([
+    // A purchase order points at its receiving outlet with a RESTRICT foreign
+    // key: refuse here with the same 409 instead of surfacing a raw FK error.
+    const [orderRows, userRows, poRows] = await Promise.all([
       this.db.query<RowDataPacket[]>(
         `SELECT COUNT(*) AS c FROM \`order\` WHERE outletId = ?`,
         [id],
@@ -275,12 +277,17 @@ export class OutletsService {
         `SELECT COUNT(*) AS c FROM user WHERE outletId = ?`,
         [id],
       ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM purchaseorder WHERE outletId = ?`,
+        [id],
+      ),
     ]);
     const orderCount = Number(orderRows[0].c);
     const userCount = Number(userRows[0].c);
-    if (orderCount > 0 || userCount > 0) {
+    const poCount = Number(poRows[0].c);
+    if (orderCount > 0 || userCount > 0 || poCount > 0) {
       throw new ConflictException(
-        `Cannot delete: this outlet has ${orderCount} order${orderCount === 1 ? '' : 's'} and ${userCount} assigned user${userCount === 1 ? '' : 's'}. Reassign or remove them first.`,
+        `Cannot delete: this outlet has ${orderCount} order${orderCount === 1 ? '' : 's'}, ${userCount} assigned user${userCount === 1 ? '' : 's'} and ${poCount} purchase order${poCount === 1 ? '' : 's'}. Reassign or remove them first.`,
       );
     }
 

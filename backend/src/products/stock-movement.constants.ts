@@ -17,5 +17,8 @@ export const STOCK_MOVEMENT_TYPES = [
   'IMPORT',
   'RECEIVED',
   'CONSUMED',
+  // Goods received against a purchase order (INV-2). Distinct from 'RECEIVED'
+  // (scan-to-stock) so the two intake routes stay separable in Movement History.
+  'PURCHASE_RECEIPT',
 ] as const;
 export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
