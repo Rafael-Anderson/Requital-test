@@ -22,6 +22,10 @@ describe('SEC: concurrent returns exhaust the DB pool (deadlock)', () => {
   let f: ReturnType<typeof makeFixtures>;
 
   beforeAll(async () => {
+    // A tiny pool makes the hang deterministic (read when the app boots): with
+    // the default 5 it only shows under heavy contention. Guard for the class
+    // "something inside a transaction asks the pool for a second connection".
+    process.env.DB_POOL_SIZE = '2';
     ({ app, db } = await bootApp());
     f = makeFixtures(app, db);
   });
@@ -32,12 +36,18 @@ describe('SEC: concurrent returns exhaust the DB pool (deadlock)', () => {
 
   it('pool-size concurrent returns on different orders all complete', async () => {
     const poolSize = Number(process.env.DB_POOL_SIZE ?? 5);
-    const orders: { shop: Awaited<ReturnType<typeof f.setupShop>>; orderId: number; lineId: number }[] = [];
+    const orders: {
+      shop: Awaited<ReturnType<typeof f.setupShop>>;
+      orderId: number;
+      lineId: number;
+    }[] = [];
     for (let i = 0; i < poolSize * 3; i++) {
       const shop = await f.setupShop(`sec-pool-${i}`);
       const p = await f.stockedProduct(shop, 10, { price: 100 });
       await f.publish(shop);
-      const res = await f.storefrontOrder(shop, [{ productId: p.id, quantity: 1 }]);
+      const res = await f.storefrontOrder(shop, [
+        { productId: p.id, quantity: 1 },
+      ]);
       const orderId = body<{ order: { id: number } }>(res).order.id;
       await f.advance(shop, orderId, 'delivered');
       const items = await f.orderItems(orderId);
@@ -47,7 +57,11 @@ describe('SEC: concurrent returns exhaust the DB pool (deadlock)', () => {
       request(f.http())
         .post(`/orders/${o.orderId}/returns`)
         .set(f.auth(o.shop))
-        .send({ reason: 'changed_mind', restock: false, items: [{ orderItemId: o.lineId, quantity: 1 }] })
+        .send({
+          reason: 'changed_mind',
+          restock: false,
+          items: [{ orderItemId: o.lineId, quantity: 1 }],
+        })
         .then((r) => r.status),
     );
     const settled = await Promise.race([

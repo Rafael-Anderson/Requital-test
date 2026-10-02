@@ -6,6 +6,7 @@ import type { OrderreturnRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { OrdersService } from '../orders/orders.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import type { PaymentProvider } from '../payments/payment-provider.interface';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -18,6 +19,13 @@ import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { ProductsService } from '../products/products.service';
 import { defaultReturnRefundMinor } from './return-refund';
 import { CreateReturnDto } from './dto/create-return.dto';
+
+interface RefundTarget {
+  provider: PaymentProvider;
+  credentials: Record<string, string> | null;
+  chargeReference: string;
+  currency: string;
+}
 
 interface AssembledOrderReturn extends OrderreturnRow {
   orderreturnitem: { id: number; orderItemId: number; quantity: number }[];
@@ -72,6 +80,15 @@ export class ReturnsService {
     }
     const restock = dto.restock ?? true;
     const factor = minorUnitFactor(order.currency);
+
+    // Everything the provider refund needs from the pool is read HERE, before
+    // the transaction. The transaction below holds one pool connection for the
+    // order row lock, so nothing inside it may ask the pool for another: with
+    // DB_POOL_SIZE concurrent returns each holding one connection and waiting
+    // for a second, the whole API would hang. Inside the lock only `conn` and
+    // the provider's own HTTP call are used. These reads are per-order stable
+    // (the paid charge, the shop's credentials).
+    const refundTarget = await this.loadRefundTarget(order.id, order.shopId);
 
     // One transaction from the order row lock to the last write. The caps (units
     // per line, cumulative refund, gift-card share) are read AFTER the lock, and
@@ -230,7 +247,7 @@ export class ReturnsService {
       const { refundMethod, providerRefundReference } =
         await this.attemptProviderRefund(
           order.id,
-          order.shopId,
+          refundTarget,
           providerRefundPortion,
         );
 
@@ -384,15 +401,62 @@ export class ReturnsService {
     return this.toResponse(returns.get(result.returnId)!);
   }
 
-  // Tries the order's most recent successful paid transaction's provider
-  // refund capability; falls back to a manual (record-only) refund whenever
-  // that's absent, the transaction has no chargeReference, or the API call
-  // itself throws — always returns a definite outcome, never propagates the
-  // provider error to the caller (see PaymentProvider.refundPayment's own
-  // comment on why this is optional).
-  private async attemptProviderRefund(
+  // Looks up the order's most recent successful paid transaction and, when its
+  // provider can refund, the credentials to do it with. Pool reads only, so it
+  // runs BEFORE the return transaction opens (see create()). Any failure means
+  // "no provider refund possible": the caller falls back to a manual refund.
+  private async loadRefundTarget(
     orderId: number,
     shopId: number,
+  ): Promise<RefundTarget | null> {
+    try {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT * FROM paymenttransaction
+         WHERE orderId = ? AND status = 'paid' AND providerChargeReference IS NOT NULL
+         ORDER BY createdAt DESC LIMIT 1`,
+        [orderId],
+      );
+      const paidTransaction = rows[0];
+      if (!paidTransaction?.providerChargeReference) return null;
+      const provider = this.providerRegistry.get(
+        paidTransaction.gateway as string,
+      );
+      if (!provider.refundPayment) return null;
+      const credentials = await this.paymentSettingsService.resolveCredentials(
+        shopId,
+        paidTransaction.gateway as string,
+      );
+      return {
+        provider,
+        credentials,
+        chargeReference: paidTransaction.providerChargeReference as string,
+        // The currency the CHARGE moved, read off the same paymenttransaction
+        // row the chargeReference came from — not the order's and not the
+        // shop's. A refund reverses one specific past charge, so that row is
+        // the only authoritative source.
+        currency: paidTransaction.currency as string,
+      };
+    } catch (error) {
+      logger.warn(
+        `provider refund lookup failed for order ${orderId}, falling back to manual`,
+        {
+          orderId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+      return null;
+    }
+  }
+
+  // Calls the provider refund for the non-gift-card slice, or falls back to a
+  // manual (record-only) refund whenever there is no target, nothing to refund,
+  // or the API call itself throws — always returns a definite outcome, never
+  // propagates the provider error to the caller (see
+  // PaymentProvider.refundPayment's own comment on why this is optional). Runs
+  // under the order row lock: it must not touch the pool (HTTP only).
+  private async attemptProviderRefund(
+    orderId: number,
+    target: RefundTarget | null,
     amount: number,
   ): Promise<{
     refundMethod: 'provider' | 'manual';
@@ -401,38 +465,15 @@ export class ReturnsService {
     // A refund fully (or, for this call, entirely-for-its-portion) covered
     // by gift-card credit has nothing left for a provider to refund —
     // never call out to a gateway for zero amount.
-    if (amount <= 0) {
+    if (amount <= 0 || !target) {
       return { refundMethod: 'manual', providerRefundReference: null };
     }
-    const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT * FROM paymenttransaction
-       WHERE orderId = ? AND status = 'paid' AND providerChargeReference IS NOT NULL
-       ORDER BY createdAt DESC LIMIT 1`,
-      [orderId],
-    );
-    const paidTransaction = rows[0];
-    if (!paidTransaction?.providerChargeReference) {
-      return { refundMethod: 'manual', providerRefundReference: null };
-    }
-
     try {
-      const provider = this.providerRegistry.get(paidTransaction.gateway as string);
-      if (!provider.refundPayment) {
-        return { refundMethod: 'manual', providerRefundReference: null };
-      }
-      const credentials = await this.paymentSettingsService.resolveCredentials(
-        shopId,
-        paidTransaction.gateway as string,
-      );
-      const result = await provider.refundPayment({
-        chargeReference: paidTransaction.providerChargeReference as string,
+      const result = await target.provider.refundPayment!({
+        chargeReference: target.chargeReference,
         amount,
-        // The currency the CHARGE moved, read off the same
-        // paymenttransaction row the chargeReference came from — not the
-        // order's and not the shop's. A refund reverses one specific past
-        // charge, so that row is the only authoritative source.
-        currency: paidTransaction.currency as string,
-        credentials,
+        currency: target.currency,
+        credentials: target.credentials,
       });
       return {
         refundMethod: 'provider',
