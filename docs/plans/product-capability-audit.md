@@ -1,9 +1,45 @@
 # Product capability audit and expansion plan — the whole application
 
 **Status:** planning, **six decisions locked 2026-09-10** (§9.1). ~~No code written, no
-branch, no PR.~~ **Stale since 2026-09-10: Phase 0, most of Phase 1 and the money half
-of Phase 2a have since shipped; see the verification pass below for exactly which, and
-how each was checked.** This document remains the plan of record.
+branch, no PR.~~ **Stale since 2026-09-10; re-verified against `main` at `6b8a5b45` on
+2026-10-02: Phase 0 (except production-side checks), all of Phase 1 and all of Phase 2
+have shipped except I18N-9 (TRN and Arabic on the invoice), SHP-2, SHP-14, SHP-16,
+GLF-26, I18N-11 and the SHP-1 per-km fee bands. Phases 3 to 5 are not started beyond
+the partial pieces named below.** This document remains the plan of record.
+
+> **What is genuinely left (2026-10-02, verified against `main` `6b8a5b45`).**
+> 1. *Owner and production actions, not code:* confirm the OPS-1 backup cron and a
+>    restore drill and `ERROR_TRACKING_WEBHOOK_URL` on the VPS; native-speaker review of
+>    the SA/KW/QA/BH/OM region seed (blocks onboarding in those markets); ToS legal review
+>    (blocks NOV-2, NOV-4); legacy zone matcher removal no earlier than 2026-10-15 and
+>    only when `zone-mapping-status` is empty.
+> 2. *Phase 2 residue, small and dependency-free:* I18N-9 (print the TRN, make `shop.trn`
+>    editable, Arabic or bilingual layout); SHP-14 blackout dates; SHP-16 free-shipping
+>    bar; GLF-26 and I18N-11 (per-country week model, per-outlet timezone; made more
+>    urgent by the dashboard timezone gap below); SHP-2 polygons; SHP-1 per-km bands.
+> 3. *Phase 3:* PLT-1, then PLT-2/3/10 and ONB-12 (blocked on the §9 D1-D5 owner
+>    decisions); PLT-14 (health endpoints exist, no status page) and PLT-15 are
+>    independent; WhatsApp tiers 1-2 in the order phone verification, templates, inbound
+>    webhook, buttons, `shopnotificationpreference`.
+> 4. *Phase 4:* CUS-6 store credit first (unblocks CUS-5, MKT-15/16, gift return); CUS-1/2/3
+>    then MKT-3, MKT-1, MKT-2, then MKT-5/21, CUS-7/13, NOV-15; CAT-10 reviews; CUS-14
+>    recipient book then CUS-15 and §12 gift mode (needs the ToS live); CUS-10/11/16/19/20
+>    and MKT-16 are small and independent; CUS-12 is half done (`customermetrics` is
+>    written nightly and read by nothing).
+> 5. *Phase 5:* INV-1 then INV-2 then INV-3/5/18/ERP-10 then INV-6; ERP-1/ERP-4 then
+>    INV-4 then INV-7/11/10; SHP-5 then SHP-7/NOV-8/SHP-15/ORD-12; SHP-3 then ORD-19 then
+>    NOV-3; MOB-3 then MOB-7/INV-17. (INV-1/INV-2 are being built in the 2026-10-02 batch.)
+> 6. *Phases 6 to 8:* untouched by this pass.
+>
+> **Newly recorded gaps (2026-10-02).** The dashboard hardcodes UTC+4 and signup never sets
+> timezone or currency from the country, so a Saudi or Kuwaiti shop starts on Dubai time and
+> AED (`dashboard.service.ts:10,261`, `auth.service.ts:93-108`); dashboard, rollup and
+> customer-LTV sums ignore `order.currency` and would mix currencies after a currency change
+> (`dashboard.service.ts:72`, `analytics-rollup.service.ts:176-200,318-322`); the seller TRN
+> is captured at signup, never printed and not editable; `customermetrics` has no reader;
+> D-7 (variant lookup without `shopId`) is still open at
+> `product-order-items.service.ts:133`; the outlet WhatsApp number that receives merchant
+> alerts is unverified (§11 Flag 4); the packing slip omits `order.receiverMessage`.
 
 > **Decisions applied — read §9 first.** §8 (phasing) and §9 (decision record) were
 > revised on 2026-09-10 after D20, D13, D6, §6-E, D15 and D12 were locked. **§9 is
@@ -79,7 +115,7 @@ document was commissioned to surface, observed live over the days it took to wri
 > | **D-3 wording** | **Partly WRONG**, corrected under D-3 | The matcher *trims*, it is not whitespace-sensitive, and it does not silently fall back to a wrong fee in the common case. |
 > | **Delivery-zone circles "never read"** | **Was true, now false** | SHP-1, this branch. See the §2.8 note. |
 >
-> | **PLT-11 feature-flag resolver (§6-F, entitlements half)** | **DONE 2026-10-01 (#177, `72daf6c`)** | `FeaturesService`, `shopfeatureoverride`, platform endpoints + page, `tools/check-feature-flags.js`. 10 booleans registered, 8 dead, the rest left out on purpose (money/policy/state). Plan layer stubbed pending PLT-1. |
+> | **PLT-11 feature-flag resolver (§6-F, entitlements half)** | **DONE 2026-10-01 (#177, `72daf6c`)** | `FeaturesService`, `shopfeatureoverride`, platform endpoints + page, `tools/check-feature-flags.js`. 10 booleans registered, all with live consumers; the 8 dead booleans are deliberately not registered, and money/policy/state booleans were left out on purpose. Plan layer stubbed pending PLT-1. |
 > | **I18N-10 credit notes** | **DONE for manual issuance 2026-10-01 (#180, `2ec13ac`)** | `creditnote` documents only, `CN-0001`, cap under row lock; no reissue, no customer route, no bilingual layout. |
 > | **D-11 split `products.service.ts`** | **DONE 2026-10-01 (#181, `b56766d`)** | 4,088 lines to a 146-line facade + six services; 134 responses deep-equal. `ProductCatalogService` is still ~1,500 lines. |
 > | **CAT-1 metafields mechanism** | **DONE 2026-10-01 (#182, `b61fb5e`)** | six owner types, eight value types, public `metafields["ns.key"]` flat shape (decide nested vs flat before Phase 6 theme binding). Vertical packs remain Phase 6. |
@@ -93,7 +129,6 @@ document was commissioned to surface, observed live over the days it took to wri
 > | Security review of the P1-P4 batch | **Resolved** | Returns skipped the branch-role `orders.manage` check; public discount validate priced unpublished products; `updateItems` overwrote duplicate product lines; the per-customer discount limit was unenforced at order creation; a new payment-link session was hidden by an earlier expired settle. Each fixed with a failing test first. |
 > | Reconciliation sweep starvation (oldest 50 unpaid re-polled forever) | **Resolved** | `paymentreconciliation` state table, backoff by order age, CAS claim before the Stripe call. |
 > | Deleting a product that has variants fails with MySQL 1452 | **Resolved** | Variants are deleted before the product inside the transaction. |
-> | **Pre-existing bug found in passing** | **OPEN** | deleting a product that has variants fails with MySQL 1452 (a raw `DELETE FROM product` fails the same way). |
 >
 > *Phase labels:* `CLAUDE.md` had called the tax and invoice work "Phase 2b/2c". Per this
 > document's §8, 2b is geography and 2c is foundations; `CLAUDE.md` now labels that work
@@ -119,6 +154,8 @@ cleared.
 
 *Context, not the deliverable. What the product actually does today, derived from
 the code and the schema. Compact on purpose; §2 is where the length goes.*
+
+> **Superseded in part (2026-10-02).** Section 1 was written on 2026-09-08 and was never re-verified. Since then: `outletstock`/`outletvariantstock` were replaced by `outletingredientstock` (`20260808120000`); multi-currency, tax classes and per-line tax, invoice snapshots, credit notes, the region model (`emirate` dropped), distance/zone matching, analytics and pixels, UTM attribution, metafields, inventory/margin/prep-time reports, scheduled summaries and exports, off-host backups, paginated platform shops and email-verification gating all shipped; `products.service.ts` is a 158-line facade (not 3,865 lines); the auto-discount defect and `chargeTax` rows are resolved. One claim was wrong even when written: the seller TRN is NOT printed on the invoice (see I18N-9). Counts now: 65 backend source directories, 119 migrations, 87 admin pages, 26 storefront pages. Treat each §1 row as history unless confirmed.
 
 ## 1.0 Shape of the thing
 
@@ -3543,8 +3580,8 @@ margin, attribution and rollups are vertical-neutral.
 
 | Item | Effort | Depends on |
 |---|---|---|
-| **MKT-4 analytics + pixel layer** (GA4, Meta + CAPI, TikTok, Snap), consent-gated **NOT BUILT, verified 2026-09-30: no pixel code exists** | M | consent banner (exists), job queue (exists) |
-| MKT-14 UTM capture and first/last-touch attribution on the order **NOT BUILT, verified 2026-09-30** | S | MKT-4 |
+| **MKT-4 analytics + pixel layer** (GA4, Meta + CAPI, TikTok, Snap), consent-gated **DONE 2026-10-01 (#179, `fa71c8f5`); was NOT BUILT at 2026-09-30** | M | consent banner (exists), job queue (exists) |
+| MKT-14 UTM capture and first/last-touch attribution on the order **DONE 2026-10-01 (#179)** | S | MKT-4 |
 | ~~**`orderitem.unitCost` captured at order time**~~ **DONE (`bdd929b`), verified 2026-09-30** | S | — |
 | ERP-13 BoM cost rollup so ingredient-backed cost is real **(purpose met at order time by `product-cost.ts`; literal `product.costPrice` sync NOT built, see verification pass)** | S | `orderitem.unitCost` |
 | ~~**ANL-6 margin and profitability reporting**~~ **DONE (`bdd929b`), verified 2026-09-30** | M | the two above |
@@ -3553,7 +3590,7 @@ margin, attribution and rollups are vertical-neutral.
 | ~~ANL-9 real-time today dashboard~~ **DONE (`00d22e7`), verified 2026-09-30** | S | — |
 | ~~MKT-8 JSON-LD · MKT-9 canonical/OG/Twitter~~ **DONE (`1d0fe95`), verified 2026-09-30** | S | — |
 | ~~NOV-12 prep-time truth (measured vs configured)~~ **DONE (`251ea00`), verified 2026-09-30** | S | order status timestamps (exist) |
-| §7.6 unit specs on the four untested money/stock paths + a stock CAS concurrency test **NOT DONE, verified 2026-09-30: no `orders.service`/`products.service` spec; concurrency coverage is partly there, see §7.6** | M | — |
+| §7.6 unit specs on the four untested money/stock paths + a stock CAS concurrency test **MOSTLY DONE (#176 `6e5f26b6`, plus the P3 batch): money/stock specs and CAS concurrency tests exist; still no `orders.service`/`products.service` unit spec and no same-order concurrent-confirm test** | M | — |
 
 **One addition from D6.** `orderitem.unitCost` must be added **with a currency column
 alongside it**, or Phase 2 immediately rewrites it. Cost in an unspecified currency is
@@ -3596,11 +3633,11 @@ Every argument for deferring it is an argument that gets weaker every week.
 
 | Item | Effort | Depends on |
 |---|---|---|
-| **PLT-11 entitlement/feature-flag resolver** replacing the `shop.xEnabled` pattern | S | — |
-| **§6-C step 1: logical-properties codemod** across both Next apps | M | — |
-| CAT-1 **metafields** (with vertical preset packs, not one florist pack — see D20) | L | — |
+| **PLT-11 entitlement/feature-flag resolver** replacing the `shop.xEnabled` pattern **DONE #177** | S | — |
+| **§6-C step 1: logical-properties codemod** across both Next apps **DONE #184, guard #189** | M | — |
+| CAT-1 **metafields** (with vertical preset packs, not one florist pack — see D20) **DONE #182 (mechanism; vertical packs are Phase 6)** | L | — |
 | **§14 settings IA restructure — built** | M | §14 spec from Phase 0 |
-| D-11 split `products.service.ts` | M | — |
+| D-11 split `products.service.ts` **DONE #181** | M | — |
 
 ### Why multi-currency moved here, in detail
 
@@ -4895,6 +4932,8 @@ time; shipping the clauses before the enforcement exists would be the mistake.
 ---
 
 # 14. ADMIN SETTINGS — INFORMATION ARCHITECTURE AUDIT
+
+> **Status 2026-10-02:** the restructure was built (#183 `d748d039`: 23 shop-wide fields, not 22). P6 (nine dead settings) and P7 (failed jobs tab) are resolved. P5 (notification settings scattered across three places) and the Plan & Billing group are NOT built. The inventory below is the pre-build state.
 
 *New scope, 2026-09-10. The settings panel is a dumping ground; this audits it
 properly, and sizes the restructure against the ~60 settings this document adds.*
