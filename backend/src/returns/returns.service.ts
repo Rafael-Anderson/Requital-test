@@ -6,6 +6,7 @@ import type { OrderreturnRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { OrdersService } from '../orders/orders.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import type { PaymentProvider } from '../payments/payment-provider.interface';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -16,7 +17,15 @@ import { minorUnitFactor, roundMoney } from '../common/currency-minor-units';
 const logger = createLogger('ReturnsService');
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { ProductsService } from '../products/products.service';
+import { defaultReturnRefundMinor } from './return-refund';
 import { CreateReturnDto } from './dto/create-return.dto';
+
+interface RefundTarget {
+  provider: PaymentProvider;
+  credentials: Record<string, string> | null;
+  chargeReference: string;
+  currency: string;
+}
 
 interface AssembledOrderReturn extends OrderreturnRow {
   orderreturnitem: { id: number; orderItemId: number; quantity: number }[];
@@ -59,6 +68,9 @@ export class ReturnsService {
     if (order.status !== 'delivered') {
       throw new BadRequestException('Only a delivered order can be returned');
     }
+    // `order` above is the tenant/outlet scope check only. Everything money- or
+    // quantity-related is re-read below under the order row lock: this snapshot
+    // can be stale by the time a concurrent return commits.
 
     const itemIds = dto.items.map((i) => i.orderItemId);
     if (new Set(itemIds).size !== itemIds.length) {
@@ -66,147 +78,188 @@ export class ReturnsService {
         'orderItemId must not repeat within a single return',
       );
     }
-    const orderItems = order.orderitem.filter((oi: { id: number }) =>
-      itemIds.includes(oi.id),
-    );
-    if (orderItems.length !== itemIds.length) {
-      throw new BadRequestException(
-        'One or more orderItemId are invalid for this order',
-      );
-    }
-
-    // Per-line-item cap: can't return more units than (original - already returned).
-    const alreadyReturnedRows = await this.db.query<RowDataPacket[]>(
-      `SELECT orderItemId, SUM(quantity) AS qty FROM orderreturnitem
-       WHERE orderItemId IN (${itemIds.map(() => '?').join(', ')})
-       GROUP BY orderItemId`,
-      itemIds,
-    );
-    const alreadyReturnedByItem = new Map(
-      alreadyReturnedRows.map((r) => [r.orderItemId as number, Number(r.qty)]),
-    );
-
-    let computedRefund = 0;
-    for (const line of dto.items) {
-      const orderItem = orderItems.find(
-        (oi: { id: number }) => oi.id === line.orderItemId,
-      )!;
-      const alreadyReturnedQty =
-        alreadyReturnedByItem.get(line.orderItemId) ?? 0;
-      if (line.quantity + alreadyReturnedQty > orderItem.quantity) {
-        throw new BadRequestException(
-          `Cannot return ${line.quantity} of order item ${line.orderItemId} — only ${orderItem.quantity - alreadyReturnedQty} remaining unreturned`,
-        );
-      }
-      computedRefund += Number(orderItem.priceAtPurchase) * line.quantity;
-    }
-
-    // Rounded once to the order currency's minor unit, like every other stored
-    // money column (a KWD/BHD/OMR figure keeps its third decimal).
-    const refundAmount = roundMoney(
-      Number(dto.refundAmount ?? computedRefund),
-      order.currency,
-    );
-
-    // Running-total cap: cumulative refunds across every return on this
-    // order must never exceed the order's original total.
-    const priorReturnsRows = await this.db.query<RowDataPacket[]>(
-      `SELECT COALESCE(SUM(refundAmount), 0) AS total, COALESCE(SUM(giftCardRefundAmount), 0) AS gift FROM orderreturn WHERE orderId = ?`,
-      [orderId],
-    );
-    const alreadyRefunded = Number(priorReturnsRows[0].total);
-    if (alreadyRefunded + refundAmount > Number(order.total)) {
-      throw new BadRequestException(
-        `Refund amount would exceed the order total — ${alreadyRefunded} already refunded of ${order.total}`,
-      );
-    }
-
-    // Split this return's refund proportionally to how the order was
-    // originally paid: order.giftCardAmount / order.total is the fraction
-    // that came off a gift card, applied to THIS return's refundAmount (not
-    // the order total) so a full return correctly reverses both portions
-    // and a partial return splits fairly. Summed across every return on an
-    // order, this can never exceed the original giftCardAmount, since total
-    // refunds across all returns are already capped at order.total above.
-    //
-    // Split in integer minor units so the two parts sum EXACTLY to
-    // refundAmount (F6): the gift-card share is rounded once, the provider
-    // share is the remainder. Across returns the gift share is capped at what
-    // is still unreturned of giftCardAmount, and the return that completes
-    // the refund returns all of it, so rounding can neither create nor lose a
-    // minor unit on the card.
-    const factor = minorUnitFactor(order.currency);
-    const refundMinor = Math.round(refundAmount * factor);
-    const giftTotalMinor = Math.round(Number(order.giftCardAmount ?? 0) * factor);
-    let giftMinor = 0;
-    if (order.giftCardId && giftTotalMinor > 0) {
-      const giftLeftMinor =
-        giftTotalMinor - Math.round(Number(priorReturnsRows[0].gift) * factor);
-      const totalMinor = Math.round(Number(order.total) * factor);
-      const completesRefund =
-        Math.round(alreadyRefunded * factor) + refundMinor >= totalMinor;
-      giftMinor = Math.max(
-        0,
-        Math.min(
-          completesRefund
-            ? giftLeftMinor
-            : Math.round((refundMinor * giftTotalMinor) / totalMinor),
-          giftLeftMinor,
-          refundMinor,
-        ),
-      );
-    }
-    const giftCardRefundAmount = giftMinor / factor;
-    const providerRefundPortion = (refundMinor - giftMinor) / factor;
-
-    // Only ever asked to refund the non-gift-card slice — a return that's
-    // fully covered by gift-card credit never touches the payment provider
-    // at all (providerRefundPortion is 0, attemptProviderRefund short-
-    // circuits to 'manual' with no reference, since there's nothing to
-    // charge/refund through a gateway for zero amount).
-    const { refundMethod, providerRefundReference } =
-      await this.attemptProviderRefund(
-        order.id,
-        order.shopId,
-        providerRefundPortion,
-      );
-
     const restock = dto.restock ?? true;
-    const productIds = [...new Set(orderItems.map((oi: { productId: number }) => oi.productId))];
-    let trackInventoryByProduct = new Map<number, boolean>();
-    if (restock && productIds.length > 0) {
-      const productRows = await this.db.query<RowDataPacket[]>(
-        `SELECT id, trackInventory FROM product WHERE id IN (${productIds.map(() => '?').join(', ')})`,
-        productIds,
-      );
-      trackInventoryByProduct = new Map(
-        productRows.map((p) => [p.id as number, Boolean(p.trackInventory)]),
-      );
-    }
+    const factor = minorUnitFactor(order.currency);
 
-    const returnId = await this.db.transaction(async (conn) => {
-      // An order with a stock record (consumptionRecordedAt) gets exactly what
-      // it holds back, not today's recipe and not today's product flags. The
-      // order row is locked first so two returns on one order cannot both read
-      // the same remaining-unit count; the count is taken here, after the lock.
-      // A LEGACY order (no record) keeps the recipe-driven restock below.
-      const [orderLock] = await conn.query<RowDataPacket[]>(
-        `SELECT consumptionRecordedAt FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+    // Everything the provider refund needs from the pool is read HERE, before
+    // the transaction. The transaction below holds one pool connection for the
+    // order row lock, so nothing inside it may ask the pool for another: with
+    // DB_POOL_SIZE concurrent returns each holding one connection and waiting
+    // for a second, the whole API would hang. Inside the lock only `conn` and
+    // the provider's own HTTP call are used. These reads are per-order stable
+    // (the paid charge, the shop's credentials).
+    const refundTarget = await this.loadRefundTarget(order.id, order.shopId);
+
+    // One transaction from the order row lock to the last write. The caps (units
+    // per line, cumulative refund, gift-card share) are read AFTER the lock, and
+    // the provider is only called once they have passed, so two concurrent
+    // returns serialise here instead of both passing a stale cap. Every query
+    // below is for this (already tenant-checked) order.
+    const result = await this.db.transaction(async (conn) => {
+      const [lockRows] = await conn.query<RowDataPacket[]>(
+        `SELECT status, total, deliveryFee, discountAmount, taxAmount, giftCardId, giftCardAmount, consumptionRecordedAt
+           FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
         [orderId, order.shopId],
       );
-      const hasStockRecord = orderLock[0]?.consumptionRecordedAt != null;
+      const locked = lockRows[0];
+      if (!locked || locked.status !== 'delivered') {
+        throw new BadRequestException('Only a delivered order can be returned');
+      }
+      const hasStockRecord = locked.consumptionRecordedAt != null;
+
+      const [lineRows] = await conn.query<RowDataPacket[]>(
+        `SELECT oi.id, oi.productId, oi.variantId, oi.quantity, oi.priceAtPurchase, oi.taxRate, oi.taxAmount,
+                COALESCE((SELECT SUM(ri.quantity) FROM orderreturnitem ri WHERE ri.orderItemId = oi.id), 0) AS returned
+           FROM orderitem oi WHERE oi.orderId = ?`,
+        [orderId],
+      );
+      const lineById = new Map(lineRows.map((l) => [l.id as number, l]));
+      if (itemIds.some((id) => !lineById.has(id))) {
+        throw new BadRequestException(
+          'One or more orderItemId are invalid for this order',
+        );
+      }
+
+      // Per-line-item cap: can't return more units than (original - already returned).
+      for (const line of dto.items) {
+        const orderItem = lineById.get(line.orderItemId)!;
+        const remaining =
+          (orderItem.quantity as number) - Number(orderItem.returned);
+        if (line.quantity > remaining) {
+          throw new BadRequestException(
+            `Cannot return ${line.quantity} of order item ${line.orderItemId} — only ${remaining} remaining unreturned`,
+          );
+        }
+      }
+
+      const [priorRows] = await conn.query<RowDataPacket[]>(
+        `SELECT COALESCE(SUM(refundAmount), 0) AS total, COALESCE(SUM(giftCardRefundAmount), 0) AS gift FROM orderreturn WHERE orderId = ?`,
+        [orderId],
+      );
+      const alreadyRefunded = Number(priorRows[0].total);
+      const alreadyMinor = Math.round(alreadyRefunded * factor);
+      const totalMinor = Math.round(Number(locked.total) * factor);
+
+      let refundMinor: number;
+      if (dto.refundAmount != null) {
+        // Staff typed it: still rounded to the currency and capped below.
+        refundMinor = Math.round(
+          roundMoney(dto.refundAmount, order.currency) * factor,
+        );
+      } else {
+        const paidShare = defaultReturnRefundMinor({
+          order: {
+            total: locked.total as string,
+            deliveryFee: locked.deliveryFee as string | null,
+            discountAmount: locked.discountAmount as string | null,
+            taxAmount: locked.taxAmount as string | null,
+            currency: order.currency,
+          },
+          orderLines: lineRows.map((l) => ({
+            id: l.id as number,
+            quantity: l.quantity as number,
+            priceAtPurchase: l.priceAtPurchase as string,
+            taxRate: l.taxRate as string | null,
+            taxAmount: l.taxAmount as string | null,
+          })),
+          priorReturned: new Map(
+            lineRows.map((l) => [l.id as number, Number(l.returned)]),
+          ),
+          returning: dto.items,
+        });
+        if (paidShare === null) {
+          // LEGACY order: no captured tax (NULL = unknown), so the paid share
+          // cannot be derived. Keep the old default, priceAtPurchase x qty.
+          refundMinor = Math.round(
+            roundMoney(
+              dto.items.reduce(
+                (s, i) =>
+                  s +
+                  Number(lineById.get(i.orderItemId)!.priceAtPurchase) *
+                    i.quantity,
+                0,
+              ),
+              order.currency,
+            ) * factor,
+          );
+        } else {
+          // The delivery fee is not refunded by default, so goods can never
+          // take more than total - delivery; this also absorbs a one minor unit
+          // rounding gap between the per-line figures and the stored total.
+          const ceiling =
+            totalMinor - Math.round(Number(locked.deliveryFee ?? 0) * factor);
+          refundMinor = Math.min(
+            paidShare,
+            Math.max(0, ceiling - alreadyMinor),
+          );
+        }
+      }
+      const refundAmount = refundMinor / factor;
+
+      // Running-total cap: cumulative refunds across every return on this
+      // order must never exceed the order's original total.
+      if (alreadyMinor + refundMinor > totalMinor) {
+        throw new BadRequestException(
+          `Refund amount would exceed the order total — ${alreadyRefunded} already refunded of ${locked.total}`,
+        );
+      }
+
+      // Split this return's refund proportionally to how the order was
+      // originally paid: giftCardAmount / total is the fraction that came off a
+      // gift card, applied to THIS return's refundAmount (not the order total)
+      // so a full return reverses both portions and a partial return splits
+      // fairly.
+      //
+      // Split in integer minor units so the two parts sum EXACTLY to
+      // refundAmount (F6): the gift-card share is rounded once, the provider
+      // share is the remainder. Across returns the gift share is capped at what
+      // is still unreturned of giftCardAmount, and the return that completes
+      // the refund returns all of it, so rounding can neither create nor lose a
+      // minor unit on the card.
+      const giftTotalMinor = Math.round(
+        Number(locked.giftCardAmount ?? 0) * factor,
+      );
+      let giftMinor = 0;
+      if (locked.giftCardId && giftTotalMinor > 0) {
+        const giftLeftMinor =
+          giftTotalMinor - Math.round(Number(priorRows[0].gift) * factor);
+        const completesRefund = alreadyMinor + refundMinor >= totalMinor;
+        giftMinor = Math.max(
+          0,
+          Math.min(
+            completesRefund
+              ? giftLeftMinor
+              : Math.round((refundMinor * giftTotalMinor) / totalMinor),
+            giftLeftMinor,
+            refundMinor,
+          ),
+        );
+      }
+      const giftCardRefundAmount = giftMinor / factor;
+      const providerRefundPortion = (refundMinor - giftMinor) / factor;
+
+      // Only ever asked to refund the non-gift-card slice — a return that's
+      // fully covered by gift-card credit never touches the payment provider
+      // at all (providerRefundPortion is 0, attemptProviderRefund short-
+      // circuits to 'manual' with no reference, since there's nothing to
+      // charge/refund through a gateway for zero amount). Called with the order
+      // row lock held and every cap already passed.
+      const { refundMethod, providerRefundReference } =
+        await this.attemptProviderRefund(
+          order.id,
+          refundTarget,
+          providerRefundPortion,
+        );
+
+      // An order with a stock record (consumptionRecordedAt) gets exactly what
+      // it holds back, not today's recipe and not today's product flags. A LEGACY
+      // order (no record) keeps the recipe-driven restock below.
       // Units of each line identity (product + variant) still with the customer
       // before this return: the denominator for "k of n units". Lines that share
       // an identity (same product, different note) pool together, since the
       // record is keyed by identity, not by line.
       const remainingByIdentity = new Map<string, number>();
       if (restock && hasStockRecord) {
-        const [lineRows] = await conn.query<RowDataPacket[]>(
-          `SELECT oi.id, oi.productId, oi.variantId, oi.quantity,
-                  COALESCE((SELECT SUM(ri.quantity) FROM orderreturnitem ri WHERE ri.orderItemId = oi.id), 0) AS returned
-             FROM orderitem oi WHERE oi.orderId = ?`,
-          [orderId],
-        );
         for (const l of lineRows) {
           const k = `${l.productId as number}:${(l.variantId as number | null) ?? ''}`;
           remainingByIdentity.set(
@@ -217,7 +270,25 @@ export class ReturnsService {
           );
         }
       }
-      const [result] = await conn.query(
+      let trackInventoryByProduct = new Map<number, boolean>();
+      const productIds = [
+        ...new Set(
+          dto.items.map(
+            (i) => lineById.get(i.orderItemId)!.productId as number,
+          ),
+        ),
+      ];
+      if (restock && productIds.length > 0) {
+        const [productRows] = await conn.query<RowDataPacket[]>(
+          `SELECT id, trackInventory FROM product WHERE id IN (${productIds.map(() => '?').join(', ')})`,
+          productIds,
+        );
+        trackInventoryByProduct = new Map(
+          productRows.map((p) => [p.id as number, Boolean(p.trackInventory)]),
+        );
+      }
+
+      const [insert] = await conn.query(
         `INSERT INTO orderreturn (orderId, reason, refundAmount, refundMethod, providerRefundReference, giftCardRefundAmount, restocked, staffUserId)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -231,27 +302,27 @@ export class ReturnsService {
           ctx.userId,
         ],
       );
-      const newReturnId = (result as { insertId: number }).insertId;
+      const newReturnId = (insert as { insertId: number }).insertId;
 
-      if (order.giftCardId && giftCardRefundAmount > 0) {
+      if (locked.giftCardId && giftCardRefundAmount > 0) {
         await this.giftCardsService.creditRefund(
           conn,
-          order.giftCardId,
+          locked.giftCardId as number,
           giftCardRefundAmount,
         );
       }
 
       for (const line of dto.items) {
-        const orderItem = orderItems.find(
-          (oi: { id: number }) => oi.id === line.orderItemId,
-        )!;
+        const orderItem = lineById.get(line.orderItemId)!;
+        const productId = orderItem.productId as number;
+        const variantId = orderItem.variantId as number | null;
         await conn.query(
           `INSERT INTO orderreturnitem (orderReturnId, orderItemId, quantity) VALUES (?, ?, ?)`,
           [newReturnId, line.orderItemId, line.quantity],
         );
 
         if (restock && hasStockRecord) {
-          const k = `${orderItem.productId}:${orderItem.variantId ?? ''}`;
+          const k = `${productId}:${variantId ?? ''}`;
           const den = remainingByIdentity.get(k) ?? 0;
           await this.productsService.releaseOrderConsumption(conn, {
             shopId: order.shopId,
@@ -261,17 +332,10 @@ export class ReturnsService {
             movementType: 'RETURN',
             note: `Return #${newReturnId}`,
             reason: dto.reason,
-            only: [
-              {
-                productId: orderItem.productId,
-                variantId: orderItem.variantId,
-                num: line.quantity,
-                den,
-              },
-            ],
+            only: [{ productId, variantId, num: line.quantity, den }],
           });
           remainingByIdentity.set(k, den - line.quantity);
-        } else if (restock && trackInventoryByProduct.get(orderItem.productId)) {
+        } else if (restock && trackInventoryByProduct.get(productId)) {
           // Phase A: routes through the same CAS-disciplined mechanism
           // every other stock-mutation path now uses (shadow or real
           // recipe) — throwOnInsufficientStock: false since a return
@@ -287,8 +351,8 @@ export class ReturnsService {
             order.outletId,
             [
               {
-                productId: orderItem.productId,
-                variantId: orderItem.variantId,
+                productId,
+                variantId,
                 quantity: line.quantity,
                 allowNegative: true,
               },
@@ -310,42 +374,89 @@ export class ReturnsService {
       // moved on. In the same transaction as the return itself.
       await markInvoicesSuperseded(conn, orderId);
 
-      return newReturnId;
-    });
+      if (alreadyMinor + refundMinor >= totalMinor) {
+        await conn.query(
+          `UPDATE \`order\` SET paymentStatus = 'refunded' WHERE id = ?`,
+          [orderId],
+        );
+      }
 
-    const cumulativeRefunded = alreadyRefunded + refundAmount;
-    if (cumulativeRefunded >= Number(order.total)) {
-      await this.db.execute(`UPDATE \`order\` SET paymentStatus = 'refunded' WHERE id = ?`, [
-        order.id,
-      ]);
-    }
+      return { returnId: newReturnId, refundAmount, refundMethod };
+    });
 
     await this.auditLogService.logCtx(ctx, {
       action: 'order.return.created',
       entityType: 'orderreturn',
-      entityId: returnId,
+      entityId: result.returnId,
       after: {
         orderId,
         reason: dto.reason,
-        refundAmount: String(refundAmount),
-        refundMethod,
+        refundAmount: String(result.refundAmount),
+        refundMethod: result.refundMethod,
         restocked: restock,
       },
     });
 
-    const returns = await this.loadReturnsWithRelations([returnId]);
-    return this.toResponse(returns.get(returnId)!);
+    const returns = await this.loadReturnsWithRelations([result.returnId]);
+    return this.toResponse(returns.get(result.returnId)!);
   }
 
-  // Tries the order's most recent successful paid transaction's provider
-  // refund capability; falls back to a manual (record-only) refund whenever
-  // that's absent, the transaction has no chargeReference, or the API call
-  // itself throws — always returns a definite outcome, never propagates the
-  // provider error to the caller (see PaymentProvider.refundPayment's own
-  // comment on why this is optional).
-  private async attemptProviderRefund(
+  // Looks up the order's most recent successful paid transaction and, when its
+  // provider can refund, the credentials to do it with. Pool reads only, so it
+  // runs BEFORE the return transaction opens (see create()). Any failure means
+  // "no provider refund possible": the caller falls back to a manual refund.
+  private async loadRefundTarget(
     orderId: number,
     shopId: number,
+  ): Promise<RefundTarget | null> {
+    try {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT * FROM paymenttransaction
+         WHERE orderId = ? AND status = 'paid' AND providerChargeReference IS NOT NULL
+         ORDER BY createdAt DESC LIMIT 1`,
+        [orderId],
+      );
+      const paidTransaction = rows[0];
+      if (!paidTransaction?.providerChargeReference) return null;
+      const provider = this.providerRegistry.get(
+        paidTransaction.gateway as string,
+      );
+      if (!provider.refundPayment) return null;
+      const credentials = await this.paymentSettingsService.resolveCredentials(
+        shopId,
+        paidTransaction.gateway as string,
+      );
+      return {
+        provider,
+        credentials,
+        chargeReference: paidTransaction.providerChargeReference as string,
+        // The currency the CHARGE moved, read off the same paymenttransaction
+        // row the chargeReference came from — not the order's and not the
+        // shop's. A refund reverses one specific past charge, so that row is
+        // the only authoritative source.
+        currency: paidTransaction.currency as string,
+      };
+    } catch (error) {
+      logger.warn(
+        `provider refund lookup failed for order ${orderId}, falling back to manual`,
+        {
+          orderId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+      return null;
+    }
+  }
+
+  // Calls the provider refund for the non-gift-card slice, or falls back to a
+  // manual (record-only) refund whenever there is no target, nothing to refund,
+  // or the API call itself throws — always returns a definite outcome, never
+  // propagates the provider error to the caller (see
+  // PaymentProvider.refundPayment's own comment on why this is optional). Runs
+  // under the order row lock: it must not touch the pool (HTTP only).
+  private async attemptProviderRefund(
+    orderId: number,
+    target: RefundTarget | null,
     amount: number,
   ): Promise<{
     refundMethod: 'provider' | 'manual';
@@ -354,38 +465,15 @@ export class ReturnsService {
     // A refund fully (or, for this call, entirely-for-its-portion) covered
     // by gift-card credit has nothing left for a provider to refund —
     // never call out to a gateway for zero amount.
-    if (amount <= 0) {
+    if (amount <= 0 || !target) {
       return { refundMethod: 'manual', providerRefundReference: null };
     }
-    const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT * FROM paymenttransaction
-       WHERE orderId = ? AND status = 'paid' AND providerChargeReference IS NOT NULL
-       ORDER BY createdAt DESC LIMIT 1`,
-      [orderId],
-    );
-    const paidTransaction = rows[0];
-    if (!paidTransaction?.providerChargeReference) {
-      return { refundMethod: 'manual', providerRefundReference: null };
-    }
-
     try {
-      const provider = this.providerRegistry.get(paidTransaction.gateway as string);
-      if (!provider.refundPayment) {
-        return { refundMethod: 'manual', providerRefundReference: null };
-      }
-      const credentials = await this.paymentSettingsService.resolveCredentials(
-        shopId,
-        paidTransaction.gateway as string,
-      );
-      const result = await provider.refundPayment({
-        chargeReference: paidTransaction.providerChargeReference as string,
+      const result = await target.provider.refundPayment!({
+        chargeReference: target.chargeReference,
         amount,
-        // The currency the CHARGE moved, read off the same
-        // paymenttransaction row the chargeReference came from — not the
-        // order's and not the shop's. A refund reverses one specific past
-        // charge, so that row is the only authoritative source.
-        currency: paidTransaction.currency as string,
-        credentials,
+        currency: target.currency,
+        credentials: target.credentials,
       });
       return {
         refundMethod: 'provider',
