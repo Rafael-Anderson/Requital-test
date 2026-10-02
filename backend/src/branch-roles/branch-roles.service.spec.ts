@@ -43,6 +43,19 @@ describe('basePermissionsFor', () => {
     expect(perms.has('orders.view')).toBe(true);
   });
 
+  it('purchasing permissions: admin and branch hold all, order_manager and viewer none', () => {
+    for (const p of [
+      'purchase_orders.view',
+      'purchase_orders.manage',
+      'purchase_orders.receive',
+    ] as const) {
+      expect(basePermissionsFor('admin').has(p)).toBe(true);
+      expect(basePermissionsFor('branch').has(p)).toBe(true);
+      expect(basePermissionsFor('order_manager').has(p)).toBe(false);
+      expect(basePermissionsFor('viewer').has(p)).toBe(false);
+    }
+  });
+
   it("order_manager lacks catalog/product permissions (matches 'no pricing, catalog, or settings access')", () => {
     const perms = basePermissionsFor('order_manager');
     expect(perms.has('products.view')).toBe(false);
