@@ -30,6 +30,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { CollectionsModule } from './collections/collections.module';
 import { BrandsModule } from './brands/brands.module';
 import { TaxClassesModule } from './tax-classes/tax-classes.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 import { MetafieldsModule } from './metafields/metafields.module';
 import { ShopAnalyticsModule } from './shop-analytics/shop-analytics.module';
 import { ShopModule } from './shop/shop.module';
@@ -148,6 +149,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     CollectionsModule,
     BrandsModule,
     TaxClassesModule,
+    SuppliersModule,
     MetafieldsModule,
     ShopAnalyticsModule,
     ShopModule,
