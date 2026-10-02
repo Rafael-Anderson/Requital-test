@@ -226,6 +226,11 @@ jobs:
       - name: Feature-flag guardrail (registry-backed shop columns read only via FeaturesService)
         run: node tools/check-feature-flags.js
 
+      - name: Nested-pool guardrail (nothing in a db.transaction callback may touch the pool)
+        run: |
+          node tools/check-nested-pool.js --self-test
+          node tools/check-nested-pool.js
+
       - name: Logical-properties guardrail (no physical ml/mr/pl/pr/left/right utilities)
         run: node tools/logical-properties-codemod.js --check
 
