@@ -5,6 +5,7 @@ import { trimDecimal } from '../database/decimal.util';
 import type { OrderreturnRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { OrdersService } from '../orders/orders.service';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -32,6 +33,7 @@ export class ReturnsService {
     private readonly auditLogService: AuditLogService,
     private readonly giftCardsService: GiftCardsService,
     private readonly productsService: ProductsService,
+    private readonly branchRolesService: BranchRolesService,
   ) {}
 
   async findAllForOrder(ctx: TenantContext, orderId: number) {
@@ -47,6 +49,13 @@ export class ReturnsService {
 
   async create(ctx: TenantContext, orderId: number, dto: CreateReturnDto) {
     const order = await this.ordersService.findOne(ctx, orderId);
+    // A return records a refund, restocks and may credit a gift card: it is a
+    // manage action, not a view. findOne only asserts orders.view.
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
     if (order.status !== 'delivered') {
       throw new BadRequestException('Only a delivered order can be returned');
     }
