@@ -1398,6 +1398,15 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    // Same rule as createOrder: an unpublished product must not be priced
+    // (or even confirmed to exist) through this unauthenticated endpoint.
+    for (const { product } of resolved) {
+      if (product.status !== 'Available') {
+        throw new BadRequestException(
+          `${product.name} is not currently available`,
+        );
+      }
+    }
     const lines = await this.discountsService.buildLines(
       shop.id,
       resolved.map((r) => ({
