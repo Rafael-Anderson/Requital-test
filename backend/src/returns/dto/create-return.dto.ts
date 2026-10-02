@@ -39,9 +39,10 @@ export class CreateReturnDto {
   @IsBoolean()
   restock?: boolean;
 
-  // Defaults to the sum of priceAtPurchase * returnedQty across the
-  // requested items — editable, same "trust but let staff override" pattern
-  // as the bulk price update.
+  // Defaults to the returned units' share of what the customer paid (price net
+  // of the apportioned order discount, plus captured tax on a tax-exclusive
+  // order; see returns/return-refund.ts) — editable, same "trust but let staff
+  // override" pattern as the bulk price update. Still capped at the order total.
   @IsOptional()
   @IsNumber()
   @Min(0)
