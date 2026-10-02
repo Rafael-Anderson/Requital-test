@@ -85,7 +85,7 @@ export default function IngredientFormModal({
         <div className="space-y-3.5">
           <ImageDropzone preview={imagePreview} onFileSelected={handleFileSelected} />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
             <Input
               label="Unit"
@@ -114,7 +114,7 @@ export default function IngredientFormModal({
             rows={2}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Cost per unit (optional)"
               type="number"

@@ -155,7 +155,7 @@ export default function AddressesPage() {
               className={TEXTAREA_CLASS}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <RegionSelect value={form.regionId} onChange={(regionId) => setForm((f) => ({ ...f, regionId }))} />
             <div>
               <label className="text-sm font-medium block mb-1">Area (optional)</label>

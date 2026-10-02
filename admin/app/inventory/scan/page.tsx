@@ -313,7 +313,7 @@ export default function ScanToStockPage() {
               values={settings.includeKeywords}
               onChange={(v) => saveSettings({ includeKeywords: v })}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
                   Default outlet

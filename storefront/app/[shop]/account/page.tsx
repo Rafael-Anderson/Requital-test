@@ -161,7 +161,7 @@ export default function AccountDashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Link
           href={`${shopBasePath}/account/orders`}
           className="rounded-lg border border-black/10 p-4 hover:border-accent/50 transition-colors"

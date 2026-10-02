@@ -12,6 +12,11 @@
 // since that file used `w-full` inputs and responsive grids throughout;
 // the bug was which PageShell variant wrapped them, not any pattern below).
 //
+// Deliberate non-responsive grids (fixed-geometry widgets, not form sections)
+// are listed in ALLOWLIST below, one entry per finding with a reason. An entry
+// is keyed by file + the exact class string (line numbers drift), and an entry
+// that no longer matches anything fails the run, so the list cannot rot.
+//
 // Run: node tools/check-form-width.js
 
 const fs = require("fs");
@@ -93,12 +98,39 @@ function checkFixedWidthInputs(file, src, violations) {
   }
 }
 
+const ALLOWLIST = [
+  { file: "admin/app/affiliate/page.tsx", detail: "grid grid-cols-3 text-center", reason: "three stat tiles (approved/pending/rejected), a summary strip not a form" },
+  { file: "admin/components/PresetThumbnails.tsx", detail: "grid grid-cols-3 gap-1 flex-1", reason: "fixed 3x3 thumbnail of a layout preset" },
+  { file: "admin/components/theme-builder/SchemePicker.tsx", detail: "grid grid-cols-4 gap-2", reason: "colour-scheme swatch tiles, fixed geometry" },
+  { file: "admin/components/theme-builder/settings/shared/NineZoneGridPicker.tsx", detail: "grid w-24 grid-cols-3 gap-1", reason: "3x3 position picker, fixed width by design" },
+  { file: "admin/components/ui/ColorPicker.tsx", detail: "grid grid-cols-8 gap-1", reason: "swatch palette popover, fixed geometry" },
+  { file: "admin/components/ui/DateTimePicker.tsx", detail: "grid grid-cols-7 gap-y-1 text-center text-xs text-text-faint mb-1", reason: "calendar weekday header, always 7 columns" },
+  { file: "admin/components/ui/DateTimePicker.tsx", detail: "grid grid-cols-7 gap-y-1 text-center text-sm mb-3", reason: "calendar day grid, always 7 columns" },
+  { file: "storefront/components/checkout/DeliveryDateCalendar.tsx", detail: "grid grid-cols-7 gap-1 mb-1", reason: "calendar weekday header, always 7 columns" },
+  { file: "storefront/components/checkout/DeliveryDateCalendar.tsx", detail: "grid grid-cols-7 gap-1", reason: "calendar day grid, always 7 columns" },
+  { file: "storefront/components/checkout/PaymentMethodPicker.tsx", detail: "grid grid-cols-2 gap-2", reason: "two-per-row payment method buttons, content is short labels" },
+];
+
 const files = SCAN_DIRS.flatMap((d) => walk(path.join(ROOT, d)));
-const violations = [];
+const found = [];
 for (const file of files) {
   const src = fs.readFileSync(file, "utf8");
-  checkNonResponsiveGrid(file, src, violations);
-  checkFixedWidthInputs(file, src, violations);
+  checkNonResponsiveGrid(file, src, found);
+  checkFixedWidthInputs(file, src, found);
+}
+const rel = (f) => path.relative(ROOT, f).replace(/\\/g, "/");
+const used = new Set();
+const violations = found.filter((v) => {
+  const i = ALLOWLIST.findIndex((a) => a.file === rel(v.file) && a.detail === v.detail);
+  if (i < 0) return true;
+  used.add(i);
+  return false;
+});
+const stale = ALLOWLIST.filter((_, i) => !used.has(i));
+if (stale.length) {
+  console.log("check-form-width: stale ALLOWLIST entries (no longer match anything, remove them):");
+  for (const a of stale) console.log(`  ${a.file}  ${a.detail}`);
+  process.exit(1);
 }
 
 if (violations.length === 0) {
@@ -108,6 +140,6 @@ if (violations.length === 0) {
 
 console.log(`check-form-width: ${violations.length} possible violation(s):\n`);
 for (const v of violations) {
-  console.log(`${path.relative(ROOT, v.file).replace(/\\/g, "/")}:${v.line}  [${v.kind}]  ${v.detail}`);
+  console.log(`${rel(v.file)}:${v.line}  [${v.kind}]  ${v.detail}`);
 }
 process.exit(1);

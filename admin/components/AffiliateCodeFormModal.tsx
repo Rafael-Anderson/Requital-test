@@ -106,7 +106,7 @@ export default function AffiliateCodeFormModal({
             <Input label="Code" value={code} onChange={(e) => setCode(e.target.value)} required />
           )}
           <Input label="Promotion For" value={promotionFor} onChange={(e) => setPromotionFor(e.target.value)} />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select
               label="Commission Type"
               value={commissionType}
@@ -127,7 +127,7 @@ export default function AffiliateCodeFormModal({
               onChange={(e) => setCommissionValue(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Valid from (optional)"
               type="date"

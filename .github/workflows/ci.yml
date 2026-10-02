@@ -212,6 +212,9 @@ jobs:
       - name: Page-width guardrail
         run: node tools/check-page-width.js
 
+      - name: Form-width guardrail (no bare multi-column grids or fixed-width text inputs)
+        run: node tools/check-form-width.js
+
       - name: No-console-log guardrail (structured logging)
         run: node tools/check-no-console-log.js
 

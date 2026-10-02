@@ -281,7 +281,7 @@ export default function VariantEditModal({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Price"
               type="number"
@@ -300,7 +300,7 @@ export default function VariantEditModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="SKU" value={sku} onChange={(e) => setSku(e.target.value)} placeholder={product.sku} />
             <Input label="Barcode" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
           </div>
