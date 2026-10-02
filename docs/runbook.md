@@ -459,3 +459,8 @@ Two more migrations, in folder order after the five above: `20261009100000_payme
 ### Deploy checksums
 
 Compare `COUNT(*)` plus `BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', <explicit column list>)), 1, 16), 16, 10) AS UNSIGNED))` per table before and after each backend stage. Do **not** use `GROUP_CONCAT`: it truncates at `group_concat_max_len` (default 1024 bytes), so the comparison silently covers only a prefix. Creating any credential or user on production needs the owner's explicit approval first.
+
+### Added since `0c18f157` (the security-review batch)
+
+No new migrations. Backend first, then storefront and admin: the storefront `PromoCodeField` and admin `DraftOrderBuilder` already send `items` on the discount validate call; the validate endpoint now also rejects non-Available products (HTTP 400) and an order that would exceed a code's per-customer limit returns 409. After the restart: place an order with a limited code twice from the `testadmin` shop's storefront (the second must 409), create and return a delivered order, and confirm the reconciliation sweep logs a clean tick. The returns endpoint now needs `orders.manage` at the outlet: a branch role that only had `orders.view` loses the ability to create returns (intended).
+
