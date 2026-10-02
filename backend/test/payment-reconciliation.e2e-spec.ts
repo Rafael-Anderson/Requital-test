@@ -494,4 +494,100 @@ describe('Payment reconciliation (e2e)', () => {
     );
     expect(await transactionsFor(one.orderId)).toHaveLength(1);
   }, 90000);
+
+  // A payment-link visit mints a NEW session and overwrites paymentSessionId.
+  // If the previous session had already been settled as expired, the new one
+  // must start from "never checked" or a paid-but-webhook-lost order is never
+  // polled again.
+  it('a new payment-link session after an expired one is polled afresh and reconciled', async () => {
+    const shop = await setupShop('rec-newsess');
+    const sessionA = `cs_A_${runId}`;
+    const sessionB = `cs_B_${runId}`;
+    const orderId = await anOrderAwaitingAWebhookThatNeverCame(shop, sessionA);
+
+    const spy = stubStripeOutcomes(
+      new Map([[sessionA, { status: 'expired' }]]),
+    );
+    const asked = (id: string) =>
+      spy.mock.calls.filter((c) => c[0] === id).length;
+    const reconRow = () =>
+      db.query<RowDataPacket[]>(
+        `SELECT settledAt FROM paymentreconciliation WHERE orderId = ?`,
+        [orderId],
+      );
+
+    await reconciliation.runSweep();
+    expect(asked(sessionA)).toBe(1);
+    expect((await reconRow())[0].settledAt).not.toBeNull();
+    await reconciliation.runSweep();
+    expect(asked(sessionA)).toBe(1); // settled: never asked again
+
+    // The customer opens a payment link: session B replaces A. Stripe is
+    // stubbed, no network.
+    jest
+      .spyOn(registry.get('stripe'), 'createCheckoutSession')
+      .mockResolvedValue({
+        checkoutUrl: 'https://stub.example/checkout-b',
+        providerReference: sessionB,
+      });
+    const link = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/payment-link`)
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .expect(201);
+    const token = body<{ token: string }>(link).token;
+    await request(app.getHttpServer()).get(`/pay/${token}`).expect(200);
+
+    const order = await db.query<RowDataPacket[]>(
+      `SELECT paymentSessionId FROM \`order\` WHERE id = ?`,
+      [orderId],
+    );
+    expect(order[0].paymentSessionId).toBe(sessionB);
+    expect(await reconRow()).toHaveLength(0); // reset: B counts as never checked
+
+    // B was paid on Stripe's page but its webhook was lost.
+    spy.mockRestore();
+    stubStripeOutcomes(
+      new Map<string, CheckoutSessionOutcome | null>([
+        [sessionA, { status: 'expired' }],
+        [sessionB, { status: 'paid', chargeReference: 'pi_rec_B' }],
+      ]),
+    );
+    await reconciliation.runSweep();
+
+    expect((await orderRow(orderId)).paymentStatus).toBe('paid');
+    const txns = await transactionsFor(orderId);
+    expect(txns).toHaveLength(1);
+    expect(String(txns[0].gatewayReference)).toBe(`reconciled:${sessionB}`);
+  }, 90000);
+
+  // A tick that read session A may still be talking to Stripe when a payment
+  // link mints B. A's "expired" must not settle the row B now owns.
+  it('an expired answer for a superseded session does not settle the row', async () => {
+    const shop = await setupShop('rec-race');
+    const sessionA = `cs_raceA_${runId}`;
+    const orderId = await anOrderAwaitingAWebhookThatNeverCame(shop, sessionA);
+    jest
+      .spyOn(
+        registry.get('stripe') as unknown as {
+          retrieveSessionOutcome: (
+            id: string,
+          ) => Promise<CheckoutSessionOutcome | null>;
+        },
+        'retrieveSessionOutcome',
+      )
+      .mockImplementation(async (id: string) => {
+        if (id !== sessionA) return { status: 'unpaid' };
+        await db.execute(
+          `UPDATE \`order\` SET paymentSessionId = ? WHERE id = ?`,
+          [`cs_raceB_${runId}`, orderId],
+        );
+        return { status: 'expired' };
+      });
+    await reconciliation.runSweep();
+    const rows = await db.query<RowDataPacket[]>(
+      `SELECT settledAt FROM paymentreconciliation WHERE orderId = ?`,
+      [orderId],
+    );
+    expect(rows[0].settledAt).toBeNull();
+  }, 90000);
 });

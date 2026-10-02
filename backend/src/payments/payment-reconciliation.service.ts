@@ -176,9 +176,15 @@ export class PaymentReconciliationService {
       // Expired is terminal for a checkout session, so stop asking. Order and
       // payment status are deliberately left exactly as they were.
       if (outcome?.status === 'expired') {
+        // Only if the order still points at the session that expired: a
+        // payment-link visit may have minted a newer one (and reset this row)
+        // while this tick was talking to Stripe, and that session must not
+        // inherit the old one's "settled".
         await this.db.execute(
-          `UPDATE paymentreconciliation SET settledAt = NOW(3) WHERE orderId = ?`,
-          [orderId],
+          `UPDATE paymentreconciliation r JOIN \`order\` o ON o.id = r.orderId
+              SET r.settledAt = NOW(3)
+            WHERE r.orderId = ? AND r.shopId = ? AND o.paymentSessionId = ?`,
+          [orderId, shopId, sessionId],
         );
       }
       return false;
