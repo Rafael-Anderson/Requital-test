@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, KeyRound, LogOut } from "lucide-react";
+import Link from "next/link";
+import { Check, KeyRound, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme";
 import { useMuteOrderSound } from "@/lib/notification-sound";
@@ -88,6 +89,16 @@ export default function UserMenu() {
             <span className="text-sm">🔔 New order sound</span>
             <Toggle checked={!muted} onChange={(checked) => setMuted(!checked)} />
           </div>
+
+          <Link
+            href="/settings/security"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <ShieldCheck className="size-3.5" />
+            Security
+          </Link>
 
           <button
             type="button"

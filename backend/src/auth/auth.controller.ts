@@ -38,6 +38,7 @@ import {
   staffCsrf,
 } from './auth.constants';
 import { sessionCookieOptions } from '../common/cookies';
+import { sessionMetaFrom } from './session-meta';
 
 // Session-cookie migration (security audit finding #1), phase 2 — every
 // token-issuing method below sets the two staff cookies and mints a CSRF
@@ -92,7 +93,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const session = await this.authService.signup(dto);
+    const session = await this.authService.signup(dto, sessionMetaFrom(req));
     setStaffSessionCookies(req, res, session);
     // devVerificationLink is a sibling field on AuthService.signup's own
     // return, not nested under `user` — dropped here entirely the first
@@ -122,7 +123,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const session = await this.authService.login(dto);
+    const session = await this.authService.login(dto, sessionMetaFrom(req));
     setStaffSessionCookies(req, res, session);
     return isTest ? session : { user: session.user };
   }
@@ -143,7 +144,10 @@ export class AuthController {
     if (typeof refreshToken !== 'string' || !refreshToken) {
       throw new UnauthorizedException('Missing refresh token');
     }
-    const session = await this.authService.refresh({ refreshToken });
+    const session = await this.authService.refresh(
+      { refreshToken },
+      sessionMetaFrom(req),
+    );
     setStaffSessionCookies(req, res, session);
     return isTest ? session : { user: session.user };
   }
@@ -192,7 +196,10 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const session = await this.authService.acceptInvite(dto);
+    const session = await this.authService.acceptInvite(
+      dto,
+      sessionMetaFrom(req),
+    );
     setStaffSessionCookies(req, res, session);
     return isTest ? session : { user: session.user };
   }

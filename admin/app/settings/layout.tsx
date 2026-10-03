@@ -6,7 +6,10 @@ import { useAuth } from "@/lib/auth-context";
 import BackButton from "@/components/ui/BackButton";
 import SettingsNav from "@/components/SettingsNav";
 
-// Admin-only section. A non-admin gets bounced home, and (unlike the
+// Admin-only section, with ONE exception: /settings/security is the signed-in
+// user's own account security (password, sessions, two-factor), so every staff
+// role reaches it. Its endpoints are scoped to the caller server-side.
+// A non-admin gets bounced home from anything else, and (unlike the
 // original gate, which only hid the page for a user it already knew was
 // not an admin) nothing under here renders until the user is known to be an
 // admin, so a new settings page can never mount and fetch for the wrong
@@ -18,11 +21,22 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
-    if (!loading && user && user.role !== "admin") router.replace("/");
-  }, [loading, user, router]);
+  const ownSecurityPage = pathname === "/settings/security";
 
-  if (user?.role !== "admin") return null;
+  useEffect(() => {
+    if (!loading && user && user.role !== "admin" && !ownSecurityPage) router.replace("/");
+  }, [loading, user, ownSecurityPage, router]);
+
+  if (user?.role !== "admin") {
+    if (!(user && ownSecurityPage)) return null;
+    return (
+      <div className="page-transition">
+        <BackButton href="/" />
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Security</h1>
+        {children}
+      </div>
+    );
+  }
 
   // The landing page is the hub, and the outlet editor has its own sidebar;
   // a second one beside it would squeeze the form.

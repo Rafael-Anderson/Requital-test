@@ -3,6 +3,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
+import { SessionsController } from './sessions.controller';
+import { SessionsService } from './sessions.service';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -24,9 +26,10 @@ const DEFAULT_TOKEN_LIFETIME = '15m';
     AuditLogModule,
     JobsModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, SessionsController],
   providers: [
     AuthService,
+    SessionsService,
     // Global guards run in registration order — see
     // https://docs.nestjs.com/guards#binding-guards. ThrottlerGuard goes
     // first so an over-limit request is rejected before AuthGuard even

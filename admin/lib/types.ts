@@ -1044,6 +1044,16 @@ export const STAFF_ROLE_LABELS: Record<UserRole, string> = {
   viewer: "Viewer (read-only — reports, orders, customers)",
 };
 
+// One signed-in device (a refresh-token family). No token material, ever.
+export interface StaffSession {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  startedAt: string;
+  lastActiveAt: string;
+  current: boolean;
+}
+
 export interface AuthUser {
   id: number;
   shopId: number;
