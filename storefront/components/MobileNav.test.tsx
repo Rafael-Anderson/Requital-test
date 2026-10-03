@@ -49,6 +49,19 @@ describe("MobileNav — bottom-bar", () => {
     expect(screen.getByText("Account")).toBeInTheDocument();
     expect(getMenu).not.toHaveBeenCalled();
   });
+
+  it("flags :root with data-bottom-nav while mounted so fixed bottom elements stack above it", () => {
+    const { unmount } = render(<MobileNav mode="bottom-bar" />);
+    expect(document.documentElement.hasAttribute("data-bottom-nav")).toBe(true);
+    unmount();
+    expect(document.documentElement.hasAttribute("data-bottom-nav")).toBe(false);
+  });
+
+  it("does not flag :root in drawer mode", () => {
+    vi.mocked(getMenu).mockResolvedValue([]);
+    render(<MobileNav mode="drawer" />);
+    expect(document.documentElement.hasAttribute("data-bottom-nav")).toBe(false);
+  });
 });
 
 describe("MobileNav — drawer/fullscreen", () => {

@@ -745,7 +745,7 @@ export default function ProductDetailClient() {
       {/* Sticky mobile bar — mirrors the real CTA above, only shown once
           that one has scrolled out of view. */}
       {!ctaVisible && (
-        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-header border-t border-stroke px-4 py-3 flex items-center gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+        <div className="sm:hidden fixed bottom-[calc(var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px))] inset-x-0 z-40 bg-header border-t border-stroke px-4 py-3 flex items-center gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
           <div className="min-w-0">
             <p className="text-xs text-zinc-500 truncate">{product.name}</p>
             <p className="font-semibold text-product-name">

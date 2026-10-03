@@ -18,7 +18,7 @@ export default function WhatsAppFloatingButton() {
   const url = buildWhatsAppUrl(shop!.whatsappCountryCode, shop!.whatsappNumber);
   if (!url) return null;
 
-  const posClass = wa?.position === "bottom_left" ? "bottom-5 start-5" : "bottom-5 end-5";
+  const posClass = wa?.position === "bottom_left" ? "bottom-[calc(1.25rem+var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px))] start-5" : "bottom-[calc(1.25rem+var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px))] end-5";
 
   return (
     <a
