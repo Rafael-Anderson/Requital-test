@@ -57,6 +57,9 @@ const ALLOWLIST = [
   // updateProduct with an outletId that classify() has already verified
   // against ctx.shopId (outlet WHERE id AND shopId) before any write is planned.
   "products/product-shopify-import.service.ts:applyStock",
+  // Read-only: only SELECTs the current stock of an outletId that classify() has
+  // already verified against ctx.shopId; it writes nothing.
+  "products/product-shopify-import.service.ts:dropUnchangedStock",
   "dashboard/dashboard.service.ts:revenueAndCount",
   // Read-only batch-loader queries (post-mysql2-migration replacement for
   // the Prisma include/select builders these entries used to name) —
