@@ -862,7 +862,9 @@ describe('Metafields (e2e)', () => {
   describe('cleanup and personal data', () => {
     it('customer export includes custom-field values and anonymisation deletes them', async () => {
       const def = await mkDef(A, 'customer', 'pdpl', 'text');
-      const phone = `0509${String(runId).slice(-6)}`;
+      // Never equal to the seeded customer's `05${last 8 of runId}`: that phone is in the shop too,
+      // and a clash (it happened in a 17-minute window every 28 hours) merges the two customers.
+      const phone = `05${String(runId + 1).slice(-8)}`;
       const reg = await request(http())
         .post(`/public/${A.slug}/auth/register`)
         .send({
