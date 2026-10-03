@@ -42,6 +42,19 @@ Output goes to `tools/responsive-audit/out/<label>/` (`report.md`, `report.json`
 tried first and did not move even a plain `overflow-x:auto` control in this headless build, so every
 swipe test must include a control element that is known to scroll (see `diagnose2.js`).
 
+## Swipe check (optional)
+
+`swipe-check.js` runs `swipe.js` against a list of selectors on a phone-sized touch context, with the control
+element first (exit 2 if the control does not scroll, i.e. the run is invalid; exit 1 if a region under test
+does not move; 0 otherwise):
+
+```bash
+node tools/responsive-audit/swipe-check.js                      # built-in list (Orders tabs and kanban, Products tabs)
+node tools/responsive-audit/swipe-check.js --url /orders --selectors 'a:has-text("Order History")|[data-scroll-fade].snap-x > div:nth-child(1)'
+```
+
+`repro-products-loading.js` loads /products on a one-product shop with a healthy, a slow and a failing API.
+
 ## Not covered
 
 Routes that need data the seed does not create are listed under "Skipped" in `report.md`. Platform-admin

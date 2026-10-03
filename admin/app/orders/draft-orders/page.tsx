@@ -8,6 +8,8 @@ import { DRAFT_ORDER_STATUS_LABELS, type DraftOrder, type DraftOrderStatus } fro
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardListSkeleton } from "@/components/ui/CardList";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -40,6 +42,13 @@ export default function DraftOrdersPage() {
     refresh();
   }, [refresh]);
 
+  const placeholder =
+    drafts === null && error ? (
+      <LoadFailed what="draft orders" onRetry={refresh} />
+    ) : drafts !== null && drafts.length === 0 && !error ? (
+      <EmptyState title="No draft orders yet" description="Build an order on a customer's behalf to get started." />
+    ) : null;
+
   return (
     <PageShell>
       <BranchBar left={<BackButton href="/orders" />} />
@@ -56,7 +65,38 @@ export default function DraftOrdersPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table>
+      {drafts === null && !error ? (
+        <CardListSkeleton rows={5} selectable={false} />
+      ) : placeholder ? (
+        <div className="rounded-2xl border border-border bg-surface md:hidden dark:border-white/10 dark:bg-zinc-900">
+          {placeholder}
+        </div>
+      ) : (
+        <CardList>
+          {(drafts ?? []).map((d) => (
+            <CardListItem
+              key={d.id}
+              href={`/orders/draft-orders/${d.id}`}
+              openLabel={`Open draft order for ${d.customerName}`}
+              actions={
+                <span className={`text-xs font-medium ${STATUS_CLASS[d.status]}`}>{DRAFT_ORDER_STATUS_LABELS[d.status]}</span>
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{d.customerName}</div>
+              <div className="truncate text-xs text-text-muted">{d.customerPhone}</div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
+                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(d.total, d.currency)}</span>
+                <span className="text-text-muted">
+                  {d.items.length} item{d.items.length === 1 ? "" : "s"}
+                </span>
+                <span className="text-xs text-text-faint">{new Date(d.createdAt).toLocaleDateString()}</span>
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table className="hidden md:block">
         <THead>
           <tr>
             <TH>Customer</TH>
@@ -67,23 +107,18 @@ export default function DraftOrdersPage() {
           </tr>
         </THead>
         <TBody>
-          {drafts === null ? (
+          {drafts === null && !error ? (
             <tr>
               <td colSpan={5}>
                 <TableSkeleton rows={6} cols={5} />
               </td>
             </tr>
-          ) : drafts.length === 0 && !error ? (
+          ) : placeholder ? (
             <tr>
-              <td colSpan={5}>
-                <EmptyState
-                  title="No draft orders yet"
-                  description="Build an order on a customer's behalf to get started."
-                />
-              </td>
+              <td colSpan={5}>{placeholder}</td>
             </tr>
           ) : (
-            drafts.map((d) => (
+            (drafts ?? []).map((d) => (
               <TR key={d.id}>
                 <TD>
                   <Link href={`/orders/draft-orders/${d.id}`} className="font-medium hover:underline">

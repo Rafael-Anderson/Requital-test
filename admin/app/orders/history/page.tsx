@@ -13,6 +13,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardListSkeleton } from "@/components/ui/CardList";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import BulkActionBar from "@/components/ui/BulkActionBar";
@@ -136,6 +138,20 @@ export default function OrderHistoryPage() {
     toast(`Exported ${rows.length} order${rows.length === 1 ? "" : "s"}`);
   }
 
+  // Stand-in for the rows when there are none to show (also keeps a failed
+  // first load from sitting on the skeleton forever).
+  const placeholder =
+    orders === null && error ? (
+      <LoadFailed what="orders" onRetry={refresh} />
+    ) : orders !== null && orders.length === 0 && !error ? (
+      <EmptyState
+        title={search ? "No matching orders" : "No orders yet"}
+        description={
+          search ? "Try a different ref no, name, or phone number." : "Orders will show up here once placed."
+        }
+      />
+    ) : null;
+
   return (
     <PageShell>
       <BranchBar left={<BackButton href="/orders" />} />
@@ -182,7 +198,47 @@ export default function OrderHistoryPage() {
         </Button>
       </div>
 
-      <Table>
+      {/* Below md: a tappable card per order (tap opens it); md and up: the table. */}
+      {orders === null && !error ? (
+        <CardListSkeleton rows={6} />
+      ) : placeholder ? (
+        <div className="rounded-2xl border border-border bg-surface md:hidden dark:border-white/10 dark:bg-zinc-900">
+          {placeholder}
+        </div>
+      ) : (
+        <CardList
+          selectAll={{ checked: selection.allSelected, onChange: selection.toggleAll, label: "Select all orders" }}
+        >
+          {(orders ?? []).map((order) => (
+            <CardListItem
+              key={order.id}
+              onOpen={() => setSelectedOrderId(order.id)}
+              openLabel={`View order #${order.shopOrderNumber}`}
+              select={{
+                checked: selection.selected.has(order.id),
+                onChange: () => selection.toggle(order.id),
+                label: `Select order #${order.shopOrderNumber}`,
+              }}
+              actions={<StatusBadge status={order.status} />}
+            >
+              <div className="text-sm font-semibold text-text-primary dark:text-zinc-100">
+                #{order.shopOrderNumber} <span className="font-normal text-text-secondary">{order.customerName}</span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
+                <span className="font-bold text-text-primary dark:text-zinc-100">
+                  {formatMoney(order.total, order.currency)}
+                </span>
+                <span className="capitalize text-text-muted">{order.paymentStatus.replace(/_/g, " ")}</span>
+              </div>
+              <div className="mt-0.5 truncate text-xs capitalize text-text-muted">
+                {order.orderType ?? "-"} · {new Date(order.createdAt).toLocaleDateString()}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table className="hidden md:block">
         <THead>
           <tr>
             <TH className="w-8">
@@ -204,27 +260,18 @@ export default function OrderHistoryPage() {
           </tr>
         </THead>
         <TBody>
-          {orders === null ? (
+          {orders === null && !error ? (
             <tr>
               <td colSpan={10}>
                 <TableSkeleton rows={8} cols={10} />
               </td>
             </tr>
-          ) : orders.length === 0 && !error ? (
+          ) : placeholder ? (
             <tr>
-              <td colSpan={10}>
-                <EmptyState
-                  title={search ? "No matching orders" : "No orders yet"}
-                  description={
-                    search
-                      ? "Try a different ref no, name, or phone number."
-                      : "Orders will show up here once placed."
-                  }
-                />
-              </td>
+              <td colSpan={10}>{placeholder}</td>
             </tr>
           ) : (
-            orders.map((order) => {
+            (orders ?? []).map((order) => {
               const latestTxn = order.paymenttransaction?.[0];
               return (
                 <TR key={order.id}>
@@ -267,7 +314,7 @@ export default function OrderHistoryPage() {
       </Table>
 
       {orders !== null && orders.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-sm text-text-muted">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-text-muted">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

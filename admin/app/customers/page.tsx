@@ -14,6 +14,9 @@ import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
+import LoadFailed from "@/components/ui/LoadFailed";
+import Select from "@/components/ui/Select";
+import { CardList, CardListItem, CardListSkeleton } from "@/components/ui/CardList";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import BulkActionBar from "@/components/ui/BulkActionBar";
@@ -135,6 +138,20 @@ export default function CustomersPage() {
     toast(`Exported ${rows.length} customer${rows.length === 1 ? "" : "s"}`);
   }
 
+  // Stand-in for the rows when there are none to show (also keeps a failed
+  // first load from sitting on the skeleton forever).
+  const placeholder =
+    customers === null && error ? (
+      <LoadFailed what="customers" onRetry={refresh} />
+    ) : customers !== null && customers.length === 0 && !error ? (
+      <EmptyState
+        title={search ? "No matching customers" : "No customers yet"}
+        description={
+          search ? "Try a different name or phone number." : "Customers appear here automatically once an order is placed."
+        }
+      />
+    ) : null;
+
   return (
     <PageShell>
       <BackButton href="/" />
@@ -168,7 +185,77 @@ export default function CustomersPage() {
         </BulkActionBar>
       )}
 
-      <Table>
+      {/* Below md: a tappable card per customer, with a sort control standing in
+          for the table's sortable headers; md and up: the table. */}
+      <div className="mb-3 flex items-center gap-2 md:hidden">
+        <div className="min-w-0 flex-1">
+          <Select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortField)}
+            aria-label="Sort customers by"
+          >
+            {COLUMNS.map(({ field, label }) => (
+              <option key={field} value={field}>
+                Sort: {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+          aria-label={sortDir === "asc" ? "Sorted ascending, switch to descending" : "Sorted descending, switch to ascending"}
+        >
+          {sortDir === "asc" ? "▲" : "▼"}
+        </Button>
+      </div>
+      {customers === null && !error ? (
+        <CardListSkeleton rows={6} selectable={!isSimple} />
+      ) : placeholder ? (
+        <div className="rounded-2xl border border-border bg-surface md:hidden dark:border-white/10 dark:bg-zinc-900">
+          {placeholder}
+        </div>
+      ) : (
+        <CardList
+          selectAll={
+            isSimple
+              ? undefined
+              : { checked: selection.allSelected, onChange: selection.toggleAll, label: "Select all customers" }
+          }
+        >
+          {(customers ?? []).map((c) => (
+            <CardListItem
+              key={c.id}
+              href={`/customers/${c.id}`}
+              openLabel={`Open ${c.name}`}
+              select={
+                isSimple
+                  ? undefined
+                  : {
+                      checked: selection.selected.has(c.id),
+                      onChange: () => selection.toggle(c.id),
+                      label: `Select ${c.name}`,
+                    }
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</div>
+              <div className="truncate text-[13.5px] text-text-muted">{isSimple && c.email ? c.email : c.phone}</div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
+                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(c.lifetimeValue, currency)}</span>
+                <span className="text-text-muted">
+                  {c.orderCount} order{c.orderCount === 1 ? "" : "s"}
+                </span>
+                <span className="text-xs text-text-faint">
+                  {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "No orders yet"}
+                </span>
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table className="hidden md:block">
         <THead>
           <tr>
             {!isSimple && (
@@ -196,27 +283,18 @@ export default function CustomersPage() {
           </tr>
         </THead>
         <TBody>
-          {customers === null ? (
+          {customers === null && !error ? (
             <tr>
               <td colSpan={colCount}>
                 <TableSkeleton rows={8} cols={colCount} />
               </td>
             </tr>
-          ) : customers.length === 0 && !error ? (
+          ) : placeholder ? (
             <tr>
-              <td colSpan={colCount}>
-                <EmptyState
-                  title={search ? "No matching customers" : "No customers yet"}
-                  description={
-                    search
-                      ? "Try a different name or phone number."
-                      : "Customers appear here automatically once an order is placed."
-                  }
-                />
-              </td>
+              <td colSpan={colCount}>{placeholder}</td>
             </tr>
           ) : (
-            customers.map((c) => (
+            (customers ?? []).map((c) => (
               <TR
                 key={c.id}
                 className="cursor-pointer"
@@ -246,7 +324,7 @@ export default function CustomersPage() {
       </Table>
 
       {customers !== null && customers.length > 0 && (
-        <div className="flex items-center justify-between mt-3 text-[13px] text-text-faint">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-text-faint">
           <span>
             {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
           </span>

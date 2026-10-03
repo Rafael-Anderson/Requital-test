@@ -159,7 +159,7 @@ export default function MarginReportPage() {
             ))}
           </div>
 
-          <Table>
+          <Table stickyFirst>
             <THead>
               <tr>
                 <TH>{DIMENSIONS.find((d) => d.value === dimension)?.label}</TH>

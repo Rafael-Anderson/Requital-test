@@ -132,7 +132,7 @@ export default function InventoryReportPage() {
         </Card>
       )}
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Product</TH>

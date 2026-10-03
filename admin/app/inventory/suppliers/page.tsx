@@ -115,7 +115,7 @@ export default function SuppliersPage() {
           description="Add the people you buy flowers, packaging and other stock from, with their terms and prices."
         />
       ) : (
-        <Table>
+        <Table stickyFirst>
           <THead>
             <TR>
               <TH className="text-start">Supplier</TH>

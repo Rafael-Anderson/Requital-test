@@ -147,7 +147,7 @@ export default function AttributionReportPage() {
         ))}
       </div>
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Source</TH>

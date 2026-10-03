@@ -146,3 +146,22 @@ describe("OrdersPage — simple/advanced mode", () => {
     expect(screen.queryByText("SIMPLE-MODAL-101")).not.toBeInTheDocument();
   });
 });
+
+describe("OrdersPage kanban on a phone", () => {
+  it("is a snapping scroller whose columns leave the next one peeking, with an edge fade", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    vi.mocked(listOrders).mockResolvedValue({ data: [order], total: 1 } as never);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
+    const board = screen.getByText("New Orders").closest("[data-scroll-fade]") as HTMLElement;
+    expect(board.className).toContain("snap-x");
+    expect(board.className).toContain("snap-mandatory");
+    const columns = Array.from(board.children) as HTMLElement[];
+    expect(columns).toHaveLength(4);
+    for (const col of columns) {
+      // 85% of the board: the next column's edge is always visible on a phone
+      expect(col.className).toContain("basis-[85%]");
+      expect(col.className).toContain("snap-start");
+    }
+  });
+});

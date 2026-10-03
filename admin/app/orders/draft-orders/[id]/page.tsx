@@ -94,15 +94,19 @@ export default function DraftOrderDetailPage() {
       <BackButton href="/orders/draft-orders" />
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
+      {/* A failed load shows only the error above (it used to sit on this
+          skeleton forever). */}
       {!draft ? (
-        <PageShell variant="form">
-          <CardSkeleton />
-        </PageShell>
+        error ? null : (
+          <PageShell variant="form">
+            <CardSkeleton />
+          </PageShell>
+        )
       ) : draft.status === "OPEN" ? (
         <>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h1 className="text-2xl font-semibold">Draft order for {draft.customerName}</h1>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="danger" onClick={handleCancel} disabled={busy}>
                 Cancel order
               </Button>

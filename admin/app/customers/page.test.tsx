@@ -40,15 +40,17 @@ function renderPage() {
   );
 }
 
+// Each row renders twice (a card list below md, the table from md up); jsdom applies
+// no CSS, so the queries below accept either.
 describe("CustomersPage — simple/advanced mode", () => {
   it("simple mode: shows an Email column and no selection checkboxes", async () => {
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
     vi.mocked(listCustomers).mockResolvedValue({ data: [customer], total: 1, page: 1, pageSize: 20 } as never);
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Sara Ahmed").length).toBeGreaterThan(0));
     expect(screen.getByText("Email")).toBeInTheDocument();
-    expect(screen.getByText("sara@example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("sara@example.com").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Select all customers")).not.toBeInTheDocument();
   });
 
@@ -57,7 +59,7 @@ describe("CustomersPage — simple/advanced mode", () => {
     vi.mocked(listCustomers).mockResolvedValue({ data: [customer], total: 1, page: 1, pageSize: 20 } as never);
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Sara Ahmed").length).toBeGreaterThan(0));
     expect(screen.queryByText("Export CSV")).not.toBeInTheDocument();
   });
 
@@ -66,9 +68,9 @@ describe("CustomersPage — simple/advanced mode", () => {
     vi.mocked(listCustomers).mockResolvedValue({ data: [customer], total: 1, page: 1, pageSize: 20 } as never);
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Sara Ahmed").length).toBeGreaterThan(0));
     expect(screen.queryByText("Email")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Select all customers")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Select all customers").length).toBeGreaterThan(0);
   });
 
   it("advanced mode: bulk action bar appears once a row is selected", async () => {
@@ -76,8 +78,8 @@ describe("CustomersPage — simple/advanced mode", () => {
     vi.mocked(listCustomers).mockResolvedValue({ data: [customer], total: 1, page: 1, pageSize: 20 } as never);
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
-    screen.getByLabelText("Select Sara Ahmed").click();
+    await waitFor(() => expect(screen.getAllByText("Sara Ahmed").length).toBeGreaterThan(0));
+    screen.getAllByLabelText("Select Sara Ahmed")[0].click();
     await waitFor(() => expect(screen.getByText("Export CSV")).toBeInTheDocument());
   });
 
