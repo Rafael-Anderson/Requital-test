@@ -97,29 +97,17 @@ describe("normalizePhone", () => {
 });
 
 describe("validatePassword", () => {
+  // NIST-style: length only, NO composition rules, so all-lowercase, digits-only
+  // and passphrases are all fine client-side (the API rejects common/breached).
   const valid = [
-    "Password1!",
-    "Abcdefg1@",
-    "MySecure#Pass9",
-    "Str0ng*Pass",
-    "Aa1!aaaa",
-    "P@ssw0rd",
-    "Zzzzzzz9$",
-    "Valid1?Pass",
-    // No lowercase requirement in the spec/regex — an all-uppercase
-    // password satisfying the other three conditions is valid.
-    "NOLOWERCASE1!",
-  ];
-  const invalid = [
-    "",
-    "short1!",
-    "nouppercase1!",
-    "NoNumber!",
-    "NoSpecial123",
+    "correct horse battery staple",
+    "alllowercaseletters",
     "12345678",
-    "Password",
-    "!!!!!!!!",
+    "Aa1!aaaa",
+    "é".repeat(36),
+    "😀".repeat(8),
   ];
+  const invalid = ["", "short1!", "1234567", "x".repeat(73), "🔐".repeat(25)];
 
   it.each(valid)("accepts %s", (password) => {
     expect(validatePassword(password)).toEqual({ valid: true });
@@ -130,24 +118,35 @@ describe("validatePassword", () => {
     expect(result.valid).toBe(false);
     expect(result.message).toBeTruthy();
   });
+
+  it("counts BYTES against the 72 limit, not characters", () => {
+    expect(validatePassword("é".repeat(37)).valid).toBe(false);
+    expect(validatePassword("é".repeat(37)).message).toMatch(/72 bytes/);
+  });
+
+  it("rejects a password equal to the email, its local part, the name or the shop name", () => {
+    const identity = { email: "Zed.Admin@Example.com", name: "Zed Admin", shopName: "Zed Flowers" };
+    for (const pw of ["zed.admin@example.com", "zed.admin", "Zed Admin", "zedflowers"]) {
+      expect(validatePassword(pw, identity).valid).toBe(false);
+    }
+    expect(validatePassword("zed.admin-with-more-words", identity).valid).toBe(true);
+  });
 });
 
 describe("passwordRequirements", () => {
-  it("reports all four unmet for an empty password", () => {
-    expect(passwordRequirements("").every((r) => !r.met)).toBe(true);
+  it("reports the length rule unmet and the byte cap met for an empty password", () => {
+    const [len, max] = passwordRequirements("");
+    expect(len.met).toBe(false);
+    expect(max.met).toBe(true);
   });
 
-  it("reports all four met for a fully valid password", () => {
-    expect(passwordRequirements("Password1!").every((r) => r.met)).toBe(true);
+  it("reports all met for a reasonable password", () => {
+    expect(passwordRequirements("correct horse battery").every((r) => r.met)).toBe(true);
   });
 
-  it("reports exactly the length requirement unmet for a too-short password", () => {
-    const reqs = passwordRequirements("Ab1!");
-    const byLabel = Object.fromEntries(reqs.map((r) => [r.label, r.met]));
-    expect(byLabel["At least 8 characters"]).toBe(false);
-    expect(byLabel["1 uppercase letter (A–Z)"]).toBe(true);
-    expect(byLabel["1 number (0–9)"]).toBe(true);
-    expect(byLabel["1 special character (@#$%^&*!?)"]).toBe(true);
+  it("flags too short and too many bytes independently", () => {
+    expect(passwordRequirements("abc").find((r) => r.label.startsWith("At least"))?.met).toBe(false);
+    expect(passwordRequirements("🔐".repeat(25)).find((r) => r.label.startsWith("At most"))?.met).toBe(false);
   });
 });
 

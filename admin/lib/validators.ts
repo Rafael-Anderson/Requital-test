@@ -17,7 +17,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 // before this ever runs) — so this only needs to match the canonical E.164
 // shape, not every raw format a user might type.
 const PHONE_REGEX = /^\+[1-9]\d{6,14}$/;
-const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[@#$%^&*!?]).{8,}$/;
 // Also validated post-normalization (normalizeTrn strips dashes/spaces
 // before this runs) — lenient on the digit count since UAE TRNs are usually
 // a longer digit string, not a real checksum.
@@ -131,25 +130,54 @@ export interface PasswordRequirement {
   met: boolean;
 }
 
+// Mirrors backend/src/common/password-policy/password-policy.service.ts by
+// hand: NIST-style, so a minimum length and a byte cap (bcrypt only reads the
+// first 72 BYTES), and deliberately NO composition rules (no required
+// uppercase/number/symbol). The "too common" and "found in a data breach"
+// checks need a server-side list and a network call, so they are enforced by
+// the API only and surface as its 400 message.
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_BYTES = 72;
+
+function passwordBytes(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 // Backs both validatePassword() and PasswordRequirements.tsx's live
-// checklist — one source of truth for the four conditions instead of the
-// checklist silently drifting from what the regex actually enforces.
+// checklist, so the checklist cannot drift from what actually gates the field.
 export function passwordRequirements(value: string): PasswordRequirement[] {
   return [
-    { label: "At least 8 characters", met: value.length >= 8 },
-    { label: "1 uppercase letter (A–Z)", met: /[A-Z]/.test(value) },
-    { label: "1 number (0–9)", met: /[0-9]/.test(value) },
-    { label: "1 special character (@#$%^&*!?)", met: /[@#$%^&*!?]/.test(value) },
+    { label: `At least ${PASSWORD_MIN_LENGTH} characters`, met: [...value].length >= PASSWORD_MIN_LENGTH },
+    { label: `At most ${PASSWORD_MAX_BYTES} bytes`, met: passwordBytes(value) <= PASSWORD_MAX_BYTES },
   ];
 }
 
-export function validatePassword(value: string): ValidationResult {
+export interface PasswordIdentity {
+  email?: string;
+  name?: string;
+  shopName?: string;
+}
+
+const squash = (v: string) => v.toLowerCase().replace(/\s+/g, "");
+
+export function validatePassword(value: string, identity: PasswordIdentity = {}): ValidationResult {
   if (!value) return { valid: false, message: "Password is required" };
-  if (!PASSWORD_REGEX.test(value)) {
+  if ([...value].length < PASSWORD_MIN_LENGTH) {
+    return { valid: false, message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` };
+  }
+  if (passwordBytes(value) > PASSWORD_MAX_BYTES) {
     return {
       valid: false,
-      message: "Password must be 8+ characters with an uppercase letter, a number, and a special character",
+      message: `Password is too long: the limit is ${PASSWORD_MAX_BYTES} bytes (characters outside basic Latin count for more than one)`,
     };
+  }
+  const p = squash(value);
+  const email = identity.email ? squash(identity.email) : "";
+  const same = [email, email.split("@")[0], identity.name, identity.shopName].some(
+    (c) => c && squash(c) === p,
+  );
+  if (same) {
+    return { valid: false, message: "Password must not be the same as your email, name or shop name" };
   }
   return { valid: true };
 }

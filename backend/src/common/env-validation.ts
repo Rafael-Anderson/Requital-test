@@ -98,6 +98,12 @@ const SPECS: EnvVarSpec[] = [
     hint: 'must be a valid URL',
   },
   {
+    name: 'PASSWORD_BREACH_API_URL',
+    required: false,
+    validate: isValidUrl,
+    hint: 'must be a valid URL (base of a Pwned Passwords range endpoint)',
+  },
+  {
     name: 'TAMARA_API_URL',
     required: false,
     validate: isValidUrl,

@@ -94,11 +94,11 @@ describe("AccountSetup wizard", () => {
     const passwordInput = screen.getByLabelText("Password");
     expect(screen.getByText("At least 8 characters").className).toMatch(/text-text-faint/);
 
-    await user.type(passwordInput, "Password1!");
+    await user.type(passwordInput, "correct horse battery");
     await waitFor(() => expect(screen.getByText("At least 8 characters").className).toMatch(/text-green/));
-    expect(screen.getByText("1 uppercase letter (A–Z)").className).toMatch(/text-green/);
-    expect(screen.getByText("1 number (0–9)").className).toMatch(/text-green/);
-    expect(screen.getByText("1 special character (@#$%^&*!?)").className).toMatch(/text-green/);
+    expect(screen.getByText("At most 72 bytes").className).toMatch(/text-green/);
+    // NIST style: no composition rules are shown or required.
+    expect(screen.queryByText("1 uppercase letter (A–Z)")).not.toBeInTheDocument();
   });
 
   it("advances to Step 2 once Step 1 is valid, and Back returns to Step 1 with data intact", async () => {

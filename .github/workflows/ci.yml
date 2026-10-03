@@ -282,6 +282,10 @@ jobs:
         run: npm run build
       - name: Start backend (background)
         working-directory: backend
+        env:
+          # The seed's password is in public breach corpora, and a CI run must not
+          # depend on a third-party API being reachable (the check fails open anyway).
+          PASSWORD_BREACH_CHECK: "off"
         run: nohup node dist/main.js > /tmp/backend.log 2>&1 &
       - name: Wait for backend
         run: |
