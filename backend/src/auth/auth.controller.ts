@@ -17,6 +17,8 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { LoginMfaDto } from './dto/login-mfa.dto';
+import { AllowPendingMfa } from './decorators/allow-pending-mfa.decorator';
 import { CreateBranchUserDto } from './dto/create-branch-user.dto';
 import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -124,6 +126,25 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const session = await this.authService.login(dto, sessionMetaFrom(req));
+    // Password OK but a second factor is on: NO cookies, only the pending token.
+    if ('mfaRequired' in session) return session;
+    setStaffSessionCookies(req, res, session);
+    return isTest ? session : { user: session.user };
+  }
+
+  // Step two of login. A pre-session endpoint exactly like /auth/login (it
+  // creates the session a CSRF cookie would be checked against), so it is in
+  // createTierCsrf's skipCsrfProtection list; the per-IP throttle here plus the
+  // per-user failed-code lockout in MfaStore are what protect it.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Public()
+  @Post('login/mfa')
+  async loginMfa(
+    @Body() dto: LoginMfaDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.authService.loginMfa(dto, sessionMetaFrom(req));
     setStaffSessionCookies(req, res, session);
     return isTest ? session : { user: session.user };
   }
@@ -216,6 +237,7 @@ export class AuthController {
   // the response header every time, reusing the existing cookie's value
   // rather than rotating it (a rotation here would silently invalidate the
   // token any other already-open tab is still holding).
+  @AllowPendingMfa()
   @Get('me')
   async me(
     @CurrentUser() ctx: TenantContext,

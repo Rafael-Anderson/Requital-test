@@ -10,6 +10,7 @@ import * as bcrypt from 'bcryptjs';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
+import type { TwoFactorService } from '../two-factor/two-factor.service';
 import type { DatabaseService } from '../database/database.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { AuditLogService } from '../audit-log/audit-log.service';
@@ -83,6 +84,11 @@ function createMockJobsService() {
   } as unknown as JobsService;
 }
 
+// No second factor enrolled: login behaves exactly as before.
+function createMockTwoFactor(): TwoFactorService {
+  return { isEnrolled: jest.fn().mockResolvedValue(false) } as unknown as TwoFactorService;
+}
+
 describe('AuthService.login — progressive lockout', () => {
   it('a correct password succeeds and resets the failed-attempt counter', async () => {
     const user = fakeUserRow({
@@ -99,6 +105,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -120,6 +127,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.login({ email: user.email, password: 'wrong' }),
@@ -144,6 +152,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.login({ email: 'nobody@nowhere.test', password: 'whatever' }),
@@ -171,6 +180,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.login({ email: user.email, password: 'correct' }),
@@ -199,6 +209,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -223,6 +234,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -242,6 +254,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await service.forgotPassword({ email: user.email });
 
@@ -270,6 +283,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await service.resendVerification({
       userId: user.id,
@@ -297,6 +311,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await service.changePassword(
       { userId: user.id, shopId: user.shopId, role: 'admin', outletId: null },
@@ -329,6 +344,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.resetPassword({
@@ -356,6 +372,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.resetPassword({
@@ -383,6 +400,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.resetPassword({
@@ -402,6 +420,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockAuditLog(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      createMockTwoFactor(),
     );
     await expect(
       service.verifyEmail({ token: 'not-a-real-token' }),

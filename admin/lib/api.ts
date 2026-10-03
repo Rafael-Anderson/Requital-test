@@ -13,6 +13,7 @@ import type {
   ZoneMappingProposal,
   AuthUser,
   StaffSession,
+  TwoFactorStatus,
   BranchRole,
   BranchRoleAssignment,
   Permission,
@@ -235,6 +236,9 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    // Stable machine-readable reason some endpoints add (for example
+    // "mfa_locked", "mfa_enrollment_required"). Absent on most errors.
+    public code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -309,7 +313,7 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
       notifyUnauthorized();
     }
     const body = await res.json().catch(() => null);
-    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.code);
   }
   if (res.status === 204) return undefined as T;
   // A 200 with an empty body (no Content-Length, or 0) isn't valid JSON —
@@ -414,11 +418,65 @@ export async function downloadExport(
   URL.revokeObjectURL(url);
 }
 
+// Password step. When the account has two-factor on, there is NO session yet:
+// the response is a short-lived pending token for loginMfa() instead.
 export function login(email: string, password: string) {
-  return apiFetch<{ user: AuthUser }>("/auth/login", {
+  return apiFetch<{ user: AuthUser } | { mfaRequired: true; mfaToken: string }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+}
+
+export function loginMfa(mfaToken: string, code: string) {
+  return apiFetch<{ user: AuthUser }>("/auth/login/mfa", {
+    method: "POST",
+    body: JSON.stringify({ mfaToken, code }),
+  });
+}
+
+// STF-3: own second factor + the shop-wide requirement.
+export async function getTwoFactorStatus(): Promise<TwoFactorStatus> {
+  const s = await apiFetch<Omit<TwoFactorStatus, "required"> & { shopRequired: boolean }>("/auth/2fa");
+  return { enabled: s.enabled, pendingEnrollment: s.pendingEnrollment, recoveryCodesRemaining: s.recoveryCodesRemaining, required: s.shopRequired };
+}
+
+export function startTwoFactorEnrollment(currentPassword: string) {
+  return apiFetch<{ secret: string; otpauthUri: string }>("/auth/2fa/enroll/start", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword }),
+  });
+}
+
+export function confirmTwoFactorEnrollment(code: string) {
+  return apiFetch<{ recoveryCodes: string[] }>("/auth/2fa/enroll/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function disableTwoFactor(code: string) {
+  return apiFetch<{ success: boolean }>("/auth/2fa/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function regenerateRecoveryCodes(currentPassword: string, code: string) {
+  return apiFetch<{ recoveryCodes: string[] }>("/auth/2fa/recovery-codes", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, code }),
+  });
+}
+
+export function setShopTwoFactorPolicy(required: boolean, code?: string) {
+  return apiFetch<{ shopRequired: boolean }>("/auth/2fa/shop-policy", {
+    method: "PUT",
+    body: JSON.stringify(code ? { required, code } : { required }),
+  });
+}
+
+export function resetUserTwoFactor(userId: number) {
+  return apiFetch<{ success: boolean }>(`/auth/2fa/users/${userId}/reset`, { method: "POST" });
 }
 
 export function signup(data: {

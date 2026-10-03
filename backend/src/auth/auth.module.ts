@@ -10,6 +10,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { JobsModule } from '../jobs/jobs.module';
+import { TwoFactorModule } from '../two-factor/two-factor.module';
 
 // The access-token lifetime itself is set per-call in AuthService.issueTokenPair
 // (ACCESS_TOKEN_LIFETIME) — refresh-token rotation means a short-lived access
@@ -25,6 +26,7 @@ const DEFAULT_TOKEN_LIFETIME = '15m';
     }),
     AuditLogModule,
     JobsModule,
+    TwoFactorModule,
   ],
   controllers: [AuthController, SessionsController],
   providers: [

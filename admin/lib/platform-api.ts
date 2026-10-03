@@ -32,6 +32,7 @@ export class PlatformApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message);
     this.name = "PlatformApiError";
@@ -78,6 +79,7 @@ async function platformFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new PlatformApiError(
       errBody?.message ?? `Request failed (${res.status})`,
       res.status,
+      errBody?.code,
     );
   }
   if (res.status === 204) return undefined as T;
@@ -91,10 +93,54 @@ export interface PlatformAdmin {
   name: string;
 }
 
+// Password step. With a second factor enrolled there is no session yet, only a
+// short-lived pending token for platformLoginMfa().
 export function platformLogin(email: string, password: string) {
-  return platformFetch<{ admin: PlatformAdmin }>("/platform-auth/login", {
+  return platformFetch<{ admin: PlatformAdmin } | { mfaRequired: true; mfaToken: string }>("/platform-auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  });
+}
+
+export function platformLoginMfa(mfaToken: string, code: string) {
+  return platformFetch<{ admin: PlatformAdmin }>("/platform-auth/login/mfa", {
+    method: "POST",
+    body: JSON.stringify({ mfaToken, code }),
+  });
+}
+
+// Own second factor. `required` mirrors the PLATFORM_REQUIRE_2FA deployment switch.
+export interface PlatformTwoFactorStatus {
+  enabled: boolean;
+  pendingEnrollment: boolean;
+  recoveryCodesRemaining: number;
+  required: boolean;
+}
+export function platformTwoFactorStatus() {
+  return platformFetch<PlatformTwoFactorStatus>("/platform-auth/2fa");
+}
+export function platformStartTwoFactor(currentPassword: string) {
+  return platformFetch<{ secret: string; otpauthUri: string }>("/platform-auth/2fa/enroll/start", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword }),
+  });
+}
+export function platformConfirmTwoFactor(code: string) {
+  return platformFetch<{ recoveryCodes: string[] }>("/platform-auth/2fa/enroll/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+export function platformDisableTwoFactor(code: string) {
+  return platformFetch<{ success: boolean }>("/platform-auth/2fa/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+export function platformRegenerateRecoveryCodes(currentPassword: string, code: string) {
+  return platformFetch<{ recoveryCodes: string[] }>("/platform-auth/2fa/recovery-codes", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, code }),
   });
 }
 

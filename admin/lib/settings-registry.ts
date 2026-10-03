@@ -82,7 +82,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     question: "Who can do what?",
     pages: [
       { href: "/settings/users", label: "Users", description: "Staff accounts, invitations and branch roles" },
-      { href: "/settings/security", label: "Security", description: "Your password and the devices you are signed in on" },
+      { href: "/settings/security", label: "Security", description: "Your password, two-factor authentication and the devices you are signed in on" },
     ],
   },
   {
@@ -181,6 +181,8 @@ const SETTINGS: SettingEntry[] = [
   // Security
   { label: "Active sessions", page: "/settings/security", keywords: "devices sign out log out revoke" },
   { label: "Change password", page: "/settings/security", keywords: "breach" },
+  { label: "Two-factor authentication", page: "/settings/security", keywords: "2fa totp authenticator app recovery codes" },
+  { label: "Require two-factor for all staff", page: "/settings/security", keywords: "2fa mandatory enforce" },
   // Diagnostics
   { label: "Webhook activity", page: "/settings/diagnostics", keywords: "log delivery payment did it arrive" },
   { label: "Failed jobs", page: "/settings/diagnostics", keywords: "retry dismiss background queue" },

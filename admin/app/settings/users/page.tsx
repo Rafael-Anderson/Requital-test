@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, ShieldOff, Trash2 } from "lucide-react";
 import {
   deleteBranchRole,
   deleteStaffUser,
@@ -9,6 +9,7 @@ import {
   listBranchRoles,
   listOutlets,
   listShopUsers,
+  resetUserTwoFactor,
   unassignBranchRole,
 } from "@/lib/api";
 import type { AuthUser, BranchRole, BranchRoleAssignment, Outlet } from "@/lib/types";
@@ -23,8 +24,24 @@ import AssignBranchRoleModal from "@/components/AssignBranchRoleModal";
 import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/components/ui/Toast";
 
 export default function SettingsUsersPage() {
+  const { user: me } = useAuth();
+  const toast = useToast();
+
+  // For a colleague who lost their device and recovery codes. Never offered for
+  // yourself (the API refuses it; use Turn off on the Security page).
+  async function handleResetTwoFactor(u: AuthUser) {
+    if (!window.confirm(`Reset two-factor for ${u.name}? They will be signed out everywhere and sign in with their password until they set it up again.`)) return;
+    try {
+      await resetUserTwoFactor(u.id);
+      toast(`Two-factor reset for ${u.name}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to reset two-factor", "error");
+    }
+  }
   const [outlets, setOutlets] = useState<Outlet[] | null>(null);
   const [users, setUsers] = useState<AuthUser[] | null>(null);
   const [addingUser, setAddingUser] = useState(false);
@@ -148,6 +165,17 @@ export default function SettingsUsersPage() {
                             <Pencil className="size-4" />
                           </button>
                         </Tooltip>
+                        {u.id !== me?.id && (
+                          <Tooltip label={`Reset two-factor for ${u.name}`}>
+                            <button
+                              onClick={() => handleResetTwoFactor(u)}
+                              className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                              aria-label={`Reset two-factor for ${u.name}`}
+                            >
+                              <ShieldOff className="size-4" />
+                            </button>
+                          </Tooltip>
+                        )}
                         <Tooltip label={`Delete ${u.name}. This cannot be undone.`} align="end">
                           <button
                             onClick={() => handleDeleteUser(u)}

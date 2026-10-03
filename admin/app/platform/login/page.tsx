@@ -7,7 +7,9 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 
 export default function PlatformLoginPage() {
-  const { login } = usePlatformAuth();
+  const { login, completeMfa } = usePlatformAuth();
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,13 +20,30 @@ export default function PlatformLoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      if (mfaToken) {
+        await completeMfa(mfaToken, code.trim());
+      } else {
+        const pending = await login(email, password);
+        if (pending) setMfaToken(pending.mfaToken);
+      }
     } catch (err) {
       const status = err instanceof PlatformApiError ? err.status : undefined;
+      const apiCode = err instanceof PlatformApiError ? err.code : undefined;
+      if (mfaToken && status === 401 && apiCode !== "mfa_invalid") {
+        // pending token expired: start again
+        setMfaToken(null);
+        setCode("");
+      }
       setError(
         status === 429
-          ? "Too many attempts. Please wait a moment."
-          : "Incorrect email or password.",
+          ? apiCode === "mfa_locked" && err instanceof Error
+            ? err.message
+            : "Too many attempts. Please wait a moment."
+          : mfaToken
+            ? apiCode === "mfa_invalid"
+              ? "That code is not valid."
+              : "Your sign-in expired. Start again."
+            : "Incorrect email or password.",
       );
     } finally {
       setSubmitting(false);
@@ -41,6 +60,23 @@ export default function PlatformLoginPage() {
           <p className="mt-1 text-xs text-slate-400">Platform staff sign-in only</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {mfaToken ? (
+            <>
+              <Input
+                label="Authentication code"
+                autoComplete="one-time-code"
+                autoFocus
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="border-slate-700 bg-slate-950 text-slate-100"
+              />
+              <p className="text-xs text-slate-400">
+                Enter the 6 digit code from your authenticator app, or a recovery code.
+              </p>
+            </>
+          ) : (
+            <>
           <Input
             label="Email"
             type="email"
@@ -59,6 +95,8 @@ export default function PlatformLoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="border-slate-700 bg-slate-950 text-slate-100"
           />
+            </>
+          )}
           {error && (
             <div
               role="alert"
@@ -73,8 +111,21 @@ export default function PlatformLoginPage() {
             loading={submitting}
             className="w-full justify-center"
           >
-            Sign in
+            {mfaToken ? "Verify" : "Sign in"}
           </Button>
+          {mfaToken && (
+            <button
+              type="button"
+              className="w-full text-center text-xs text-slate-400 underline"
+              onClick={() => {
+                setMfaToken(null);
+                setCode("");
+                setError(null);
+              }}
+            >
+              Back to sign in
+            </button>
+          )}
         </form>
       </div>
     </div>

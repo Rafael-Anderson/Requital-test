@@ -10,6 +10,7 @@ const NAV = [
   { href: "/platform/settings", label: "Settings" },
   { href: "/platform/webhooks", label: "Webhooks" },
   { href: "/platform/audit-log", label: "Audit log" },
+  { href: "/platform/security", label: "Security" },
 ];
 
 // Deliberately a completely different look from the merchant admin's TopBar

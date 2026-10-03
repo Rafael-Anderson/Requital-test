@@ -588,6 +588,8 @@ export interface ShopRow {
   // false preserves the behaviour order-pricing.ts has always had (tax on the
   // goods subtotal only). Read by the per-line computation, not by B1.
   taxOnDelivery: boolean;
+  // STF-3 (migration 20261021110000): every staff user must have two-factor.
+  require2fa: boolean;
 }
 
 export interface ShopfeatureoverrideRow {
@@ -1046,6 +1048,44 @@ export interface RefreshtokenRow {
   // STF-4 (migration 20261021100000). NULL = written before the column existed.
   userAgent: string | null;
   ip: string | null;
+}
+
+// STF-3 (migration 20261021110000). Secrets are encrypted at rest, recovery
+// codes are SHA-256 only; these tables are never joined into account responses.
+export interface UsertotpRow {
+  userId: number;
+  secretEnc: string;
+  confirmedAt: Date | null;
+  lastStep: number | null;
+  failedAttempts: number;
+  lockedUntil: Date | null;
+  createdAt: Date;
+}
+
+export interface UserrecoverycodeRow {
+  id: number;
+  userId: number;
+  codeHash: string;
+  usedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface PlatformadmintotpRow {
+  platformAdminId: number;
+  secretEnc: string;
+  confirmedAt: Date | null;
+  lastStep: number | null;
+  failedAttempts: number;
+  lockedUntil: Date | null;
+  createdAt: Date;
+}
+
+export interface PlatformadminrecoverycodeRow {
+  id: number;
+  platformAdminId: number;
+  codeHash: string;
+  usedAt: Date | null;
+  createdAt: Date;
 }
 
 export interface AuthtokenRow {

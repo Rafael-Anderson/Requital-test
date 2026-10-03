@@ -1,14 +1,18 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../../database/database.service';
 import { PLATFORM_ACCESS_COOKIE } from '../platform-auth.constants';
+import { ALLOW_PENDING_MFA_KEY } from '../../auth/decorators/allow-pending-mfa.decorator';
+import { platformRequires2fa } from '../platform-two-factor.service';
 
 export interface PlatformAdminContext {
   id: number;
@@ -39,6 +43,7 @@ export class PlatformAdminGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly db: DatabaseService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -55,11 +60,34 @@ export class PlatformAdminGuard implements CanActivate {
     if (payload.typ !== 'platform') throw new NotFoundException();
 
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id, email, name FROM platformadmin WHERE id = ?`,
+      `SELECT a.id, a.email, a.name,
+              EXISTS(SELECT 1 FROM platformadmintotp t
+                     WHERE t.platformAdminId = a.id AND t.confirmedAt IS NOT NULL) AS mfaEnrolled
+       FROM platformadmin a WHERE a.id = ?`,
       [payload.sub],
     );
     const admin = rows[0];
     if (!admin) throw new NotFoundException();
+
+    // PLATFORM_REQUIRE_2FA=1: an admin who has not enrolled may only reach the
+    // routes marked @AllowPendingMfa (me, the 2FA enrolment endpoints). They
+    // are already authenticated, so unlike every other failure here this one
+    // says why (403 with a code) instead of pretending the route is missing.
+    if (
+      platformRequires2fa() &&
+      !admin.mfaEnrolled &&
+      !this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_MFA_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message:
+          'Platform sign-in requires two-factor authentication. Set it up to continue.',
+        code: 'mfa_enrollment_required',
+      });
+    }
 
     (
       request as Request & { platformAdmin: PlatformAdminContext }

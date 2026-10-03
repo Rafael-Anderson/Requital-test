@@ -8,7 +8,12 @@ import { forgetImpersonatingShop, rememberImpersonatingShop } from "./impersonat
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  // Resolves to a pending token when the account has two-factor on (no session
+  // exists yet: finish with completeMfa), otherwise to null once signed in.
+  login: (email: string, password: string) => Promise<{ mfaToken: string } | null>;
+  completeMfa: (mfaToken: string, code: string) => Promise<void>;
+  // Re-reads GET /auth/me (for example after enrolling in two-factor).
+  refreshUser: () => Promise<void>;
   // Resolves with the raw signup response (not just void) so the signup
   // page can surface devVerificationLink — the dev-only stand-in for a real
   // verification email, see backend/src/common/email.ts.
@@ -83,6 +88,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await api.login(email, password);
+    if ("mfaRequired" in result) return { mfaToken: result.mfaToken };
+    setUser(result.user);
+    return null;
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    setUser(await api.me());
+  }, []);
+
+  const completeMfa = useCallback(async (mfaToken: string, code: string) => {
+    const result = await api.loginMfa(mfaToken, code);
     setUser(result.user);
   }, []);
 
@@ -123,8 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, signup, acceptInvite, logout }),
-    [user, loading, login, signup, acceptInvite, logout],
+    () => ({ user, loading, login, completeMfa, refreshUser, signup, acceptInvite, logout }),
+    [user, loading, login, completeMfa, refreshUser, signup, acceptInvite, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

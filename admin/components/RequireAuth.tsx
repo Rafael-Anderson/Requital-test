@@ -57,7 +57,12 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
       router.replace("/login");
     }
     if (user && isGuestOnlyPath) router.replace("/");
-  }, [loading, user, isPublicPath, isGuestOnlyPath, isPlatformPath, router]);
+    // The shop requires two-factor and this user has none: the API refuses every
+    // other route, so send them to the one page that can fix it.
+    if (user?.twoFactor?.enrollmentRequired && pathname !== "/settings/security") {
+      router.replace("/settings/security");
+    }
+  }, [loading, user, isPublicPath, isGuestOnlyPath, isPlatformPath, pathname, router]);
 
   if (isPlatformPath) return <>{children}</>;
   if (loading) return null;

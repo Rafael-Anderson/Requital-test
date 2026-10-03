@@ -7,7 +7,10 @@ import type { PlatformAdmin } from "./platform-api";
 interface PlatformAuthContextValue {
   admin: PlatformAdmin | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  // Resolves to a pending token when two-factor is enrolled (finish with
+  // completeMfa), otherwise null once signed in.
+  login: (email: string, password: string) => Promise<{ mfaToken: string } | null>;
+  completeMfa: (mfaToken: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -39,6 +42,13 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await platformApi.platformLogin(email, password);
+    if ("mfaRequired" in result) return { mfaToken: result.mfaToken };
+    setAdmin(result.admin);
+    return null;
+  }, []);
+
+  const completeMfa = useCallback(async (mfaToken: string, code: string) => {
+    const result = await platformApi.platformLoginMfa(mfaToken, code);
     setAdmin(result.admin);
   }, []);
 
@@ -51,8 +61,8 @@ export function PlatformAuthProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const value = useMemo(
-    () => ({ admin, loading, login, logout }),
-    [admin, loading, login, logout],
+    () => ({ admin, loading, login, completeMfa, logout }),
+    [admin, loading, login, completeMfa, logout],
   );
 
   return <PlatformAuthContext.Provider value={value}>{children}</PlatformAuthContext.Provider>;
