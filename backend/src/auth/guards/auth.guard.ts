@@ -11,6 +11,7 @@ import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../../database/database.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { ALLOW_PENDING_MFA_KEY } from '../decorators/allow-pending-mfa.decorator';
 import { STAFF_ACCESS_COOKIE } from '../auth.constants';
 import type { TenantContext, UserRole } from '../../common/tenant-context';
 
@@ -94,7 +95,10 @@ export class AuthGuard implements CanActivate {
       `SELECT u.id, u.shopId, u.role, u.outletId, s.suspendedAt,
               EXISTS(SELECT 1 FROM refreshtoken r
                      WHERE r.familyId = ? AND r.userId = u.id
-                       AND r.revokedAt IS NULL AND r.expiresAt > ?) AS sessionLive
+                       AND r.revokedAt IS NULL AND r.expiresAt > ?) AS sessionLive,
+              s.require2fa AS shopRequires2fa,
+              EXISTS(SELECT 1 FROM usertotp t
+                     WHERE t.userId = u.id AND t.confirmedAt IS NOT NULL) AS mfaEnrolled
        FROM user u JOIN shop s ON s.id = u.shopId
        WHERE u.id = ?`,
       [sid ?? '', new Date(), payload.sub],
@@ -112,6 +116,31 @@ export class AuthGuard implements CanActivate {
     // philosophy for role/outlet changes. See PlatformAdminService.suspend.
     if (user.suspendedAt) {
       throw new ForbiddenException('This shop has been suspended');
+    }
+
+    // Shop-wide "require two-factor" (STF-3). Evaluated on EVERY request from
+    // the row just read, so flipping the switch restricts users who are already
+    // signed in at once, and enrolling lifts it on the same session. A session
+    // that still has to enrol may only call the routes marked
+    // @AllowPendingMfa (me, the 2FA enrolment endpoints); everything else is a
+    // 403 with a stable code. Impersonation is exempt: the platform admin's
+    // own second factor is the control there, and the enrolment endpoints
+    // themselves refuse an impersonation token.
+    if (
+      !isImpersonation &&
+      user.shopRequires2fa &&
+      !user.mfaEnrolled &&
+      !this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_MFA_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message:
+          'Your shop requires two-factor authentication. Set it up to continue.',
+        code: 'mfa_enrollment_required',
+      });
     }
 
     const tenantContext: TenantContext = {

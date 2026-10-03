@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { PlatformadminRow } from '../db/types';
 import type { PlatformLoginDto } from './dto/platform-login.dto';
+import { PlatformTwoFactorService } from './platform-two-factor.service';
 
 const TOKEN_LIFETIME = '12h';
 const TOKEN_LIFETIME_SECONDS = 12 * 60 * 60;
@@ -21,6 +22,7 @@ export class PlatformAuthService {
   constructor(
     private readonly db: DatabaseService,
     private readonly jwtService: JwtService,
+    private readonly twoFactor: PlatformTwoFactorService,
   ) {}
 
   async login(dto: PlatformLoginDto) {
@@ -39,6 +41,27 @@ export class PlatformAuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Enrolled: a partial login. No cookie is issued until /login/mfa succeeds.
+    if (await this.twoFactor.isEnrolled(admin.id)) {
+      return {
+        mfaRequired: true as const,
+        mfaToken: await this.twoFactor.issueMfaToken(admin),
+      };
+    }
+    return this.completeLogin(admin);
+  }
+
+  async loginMfa(dto: { mfaToken: string; code: string }) {
+    const { adminId, pwf } = await this.twoFactor.readMfaToken(dto.mfaToken);
+    const admin = await this.findById(adminId);
+    if (!admin || !this.twoFactor.matchesPassword(pwf, admin.passwordHash)) {
+      throw new UnauthorizedException('Your sign-in expired. Start again.');
+    }
+    await this.twoFactor.verifyLoginCode(admin.id, dto.code);
+    return this.completeLogin(admin);
+  }
+
+  private async completeLogin(admin: PlatformadminRow) {
     await this.db.execute(
       `UPDATE platformadmin SET failedLoginAttempts = 0, lastFailedLoginAt = NULL, lastLoginAt = ? WHERE id = ?`,
       [new Date(), admin.id],
@@ -72,6 +95,14 @@ export class PlatformAuthService {
     );
     const elapsedMs = Date.now() - admin.lastFailedLoginAt.getTime();
     return elapsedMs < delaySeconds * 1000;
+  }
+
+  private async findById(id: number): Promise<PlatformadminRow | null> {
+    const rows = await this.db.query<(PlatformadminRow & RowDataPacket)[]>(
+      `SELECT * FROM platformadmin WHERE id = ?`,
+      [id],
+    );
+    return rows[0] ?? null;
   }
 
   private async findByEmail(email: string): Promise<PlatformadminRow | null> {

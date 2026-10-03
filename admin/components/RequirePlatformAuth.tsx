@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { usePlatformAuth } from "@/lib/platform-auth-context";
+import { platformTwoFactorStatus } from "@/lib/platform-api";
 
 // Platform-tier twin of RequireAuth.tsx — mounted only inside
 // app/platform/layout.tsx, so it never runs for a merchant route. UX
@@ -19,6 +20,17 @@ export default function RequirePlatformAuth({ children }: { children: React.Reac
     if (!admin && !isLoginPath) router.replace("/platform/login");
     if (admin && isLoginPath) router.replace("/platform/shops");
   }, [loading, admin, isLoginPath, router]);
+
+  // PLATFORM_REQUIRE_2FA: an admin who has not enrolled can only reach the
+  // security page, so send them there (the API enforces it regardless).
+  useEffect(() => {
+    if (loading || !admin || isLoginPath || pathname === "/platform/security") return;
+    platformTwoFactorStatus()
+      .then((s) => {
+        if (s.required && !s.enabled) router.replace("/platform/security");
+      })
+      .catch(() => undefined);
+  }, [loading, admin, isLoginPath, pathname, router]);
 
   if (loading) return null;
   if (!admin && !isLoginPath) return null;

@@ -236,7 +236,10 @@ export class AppModule implements NestModule {
     // forging a login attempt with credentials they don't have.
     consumer
       .apply(platformCsrf.doubleCsrfProtection)
-      .exclude({ path: 'platform-auth/login', method: RequestMethod.POST })
+      .exclude(
+        { path: 'platform-auth/login', method: RequestMethod.POST },
+        { path: 'platform-auth/login/mfa', method: RequestMethod.POST },
+      )
       .forRoutes('platform-auth', 'platform-admin');
     // Phase 2/3 — staff and customer sit behind their own session cookie on
     // essentially every controller in the app (not a closed prefix like

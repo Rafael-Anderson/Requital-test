@@ -25,8 +25,8 @@ function describeLoginError(err: unknown): string {
   const status = err instanceof ApiError ? err.status : undefined;
 
   if (status !== undefined) {
-    if (status === 401) return "Incorrect email or password.";
-    if (status === 429) return "Too many attempts. Please wait a moment.";
+    if (status === 401) return err instanceof ApiError && err.code === "mfa_invalid" ? "That code is not valid." : "Incorrect email or password.";
+    if (status === 429) return err instanceof ApiError && err.code === "mfa_locked" ? err.message : "Too many attempts. Please wait a moment.";
     if (status === 423) return "Account locked. Please reset your password.";
     return "Something went wrong. Please try again.";
   }
@@ -45,7 +45,11 @@ function describeLoginError(err: unknown): string {
 }
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, completeMfa } = useAuth();
+  // Set once the password was right but a second factor is on: no session
+  // exists yet, only this short-lived pending token.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +65,18 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
+      if (mfaToken) {
+        await completeMfa(mfaToken, code.trim());
+      } else {
+        const pending = await login(email, password);
+        if (pending) setMfaToken(pending.mfaToken);
+      }
     } catch (err) {
+      // A pending token that expired (5 minutes) or went stale: start over.
+      if (mfaToken && err instanceof ApiError && err.status === 401 && err.code !== "mfa_invalid") {
+        setMfaToken(null);
+        setCode("");
+      }
       setError(describeLoginError(err));
       setShakeKey((k) => k + 1);
     } finally {
@@ -72,6 +86,51 @@ export default function LoginPage() {
 
   function clearErrorOnChange() {
     if (error) setError(null);
+  }
+
+  if (mfaToken) {
+    return (
+      <AuthCard heading="Requital" subtitle="Two-factor authentication" hideWordmark>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div key={`code-${shakeKey}`} className={error ? "shake" : undefined}>
+            <Input
+              label="Authentication code"
+              inputMode="text"
+              autoComplete="one-time-code"
+              autoFocus
+              required
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                clearErrorOnChange();
+              }}
+              aria-invalid={error ? true : undefined}
+              className={`${AUTH_INPUT_CLASS} ${error ? ERROR_INPUT_CLASS : ""}`}
+            />
+            <p className="mt-1 text-xs text-text-muted">
+              Enter the 6 digit code from your authenticator app, or one of your recovery codes.
+            </p>
+            {error && <InlineErrorMessage className="mt-2">{error}</InlineErrorMessage>}
+          </div>
+          <Button type="submit" variant="primary" className="w-full" disabled={submitting}>
+            {submitting ? "Verifying…" : "Verify"}
+          </Button>
+          <p className="text-sm text-center">
+            <button
+              type="button"
+              className="underline text-text-muted"
+              onClick={() => {
+                setMfaToken(null);
+                setCode("");
+                setError(null);
+              }}
+            >
+              Back to sign in
+            </button>
+          </p>
+        </form>
+      </AuthCard>
+    );
   }
 
   return (

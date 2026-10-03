@@ -1044,6 +1044,15 @@ export const STAFF_ROLE_LABELS: Record<UserRole, string> = {
   viewer: "Viewer (read-only — reports, orders, customers)",
 };
 
+// GET /auth/2fa (staff) and, normalised by the platform adapter, the platform tier.
+export interface TwoFactorStatus {
+  enabled: boolean;
+  pendingEnrollment: boolean;
+  recoveryCodesRemaining: number;
+  // The shop (or, for platform admins, the deployment) requires two-factor.
+  required: boolean;
+}
+
 // One signed-in device (a refresh-token family). No token material, ever.
 export interface StaffSession {
   id: string;
@@ -1070,6 +1079,10 @@ export interface AuthUser {
   // PlatformAdminService.impersonate) — drives ImpersonationBanner. Absent
   // (not merely false) on every normal merchant session.
   impersonating?: boolean;
+  // GET /auth/me only. enrollmentRequired: the shop requires two-factor and this
+  // user has not set it up, so the API refuses everything but the enrolment
+  // endpoints until they do.
+  twoFactor?: { enabled: boolean; enrollmentRequired: boolean };
 }
 
 // Fixed vocabulary — mirrors backend/src/common/permissions.ts exactly.

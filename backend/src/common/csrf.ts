@@ -113,7 +113,8 @@ export function createTierCsrf(opts: {
       // any query string.
       const reqPath = (req.originalUrl || req.path).split('?')[0];
       // Pre-session credential POSTs: staff /auth/login + /auth/signup,
-      // customer /public/<slug>/auth/login + .../register. These are the
+      // customer /public/<slug>/auth/login + .../register, and the second step
+      // of a 2FA login, /auth/login/mfa. These are the
       // request that *creates* the session a CSRF cookie would be checked
       // against — there's nothing valid to check yet, and an attacker
       // forging one only logs the victim into an account whose credentials
@@ -130,7 +131,7 @@ export function createTierCsrf(opts: {
       // does not match — the char before `auth` there is `-`, not `/`.)
       if (
         req.method === 'POST' &&
-        /(^|\/)auth\/(login|signup|register)$/.test(reqPath)
+        /(^|\/)auth\/(login|login\/mfa|signup|register)$/.test(reqPath)
       ) {
         return true;
       }

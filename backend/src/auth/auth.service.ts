@@ -34,6 +34,7 @@ import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
 import type { TenantContext, UserRole } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
+import { TwoFactorService } from '../two-factor/two-factor.service';
 import { NO_SESSION_META, type SessionMeta } from './session-meta';
 
 const BCRYPT_ROUNDS = 10;
@@ -78,6 +79,7 @@ export class AuthService {
     private readonly auditLogService: AuditLogService,
     private readonly jobsService: JobsService,
     private readonly passwordPolicy: PasswordPolicyService,
+    private readonly twoFactor: TwoFactorService,
   ) {}
 
   async signup(dto: SignupDto, meta: SessionMeta = NO_SESSION_META) {
@@ -220,9 +222,49 @@ export class AuthService {
         [user.id],
       );
     }
+    // A second factor turns the password step into a PARTIAL login: no session
+    // (no cookies, no refresh row) exists until POST /auth/login/mfa succeeds.
+    // The only thing handed back is a 5 minute pending token that is not
+    // accepted anywhere as a session (see TwoFactorService.issueMfaToken).
+    if (await this.twoFactor.isEnrolled(user.id)) {
+      return {
+        mfaRequired: true as const,
+        mfaToken: await this.twoFactor.issueMfaToken(user),
+      };
+    }
     await this.auditLogService.log(
       { shopId: user.shopId, actorUserId: user.id },
       { action: 'auth.login', entityType: 'auth', entityId: user.id },
+    );
+    return this.issueTokenPair(user, { meta });
+  }
+
+  // Step two of a login for a user with two-factor on: the pending token plus a
+  // current TOTP code or an unused recovery code. A wrong code counts toward
+  // the per-user lockout inside MfaStore (it also covers password-less guessing
+  // of the token, which needs the password first).
+  async loginMfa(
+    dto: { mfaToken: string; code: string },
+    meta: SessionMeta = NO_SESSION_META,
+  ) {
+    const { userId, pwf } = await this.twoFactor.readMfaToken(dto.mfaToken);
+    const user = await this.findById(userId);
+    // The pending token is bound to the password it was minted for.
+    if (!user || !this.twoFactor.matchesPassword(pwf, user.passwordHash)) {
+      throw new UnauthorizedException('Your sign-in expired. Start again.');
+    }
+    if (user.shop?.suspendedAt) {
+      throw new ForbiddenException('This shop has been suspended');
+    }
+    const kind = await this.twoFactor.verifyLoginCode(user.id, dto.code);
+    await this.auditLogService.log(
+      { shopId: user.shopId, actorUserId: user.id },
+      {
+        action: 'auth.login',
+        entityType: 'auth',
+        entityId: user.id,
+        metadata: { mfa: kind },
+      },
     );
     return this.issueTokenPair(user, { meta });
   }
@@ -337,6 +379,9 @@ export class AuthService {
       // normal session so a stale/older frontend build simply never
       // notices the field, no behavior change.
       impersonating: ctx.impersonatedByPlatformAdminId !== undefined,
+      // Drives the Security page and the "set up two-factor to continue"
+      // redirect. Never carries a secret.
+      twoFactor: await this.twoFactor.meState(ctx),
     };
   }
 
