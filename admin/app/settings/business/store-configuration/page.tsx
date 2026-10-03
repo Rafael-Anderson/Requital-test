@@ -245,7 +245,7 @@ export default function StoreConfigurationPage() {
                 <span className="text-sm">Customer survey for order enabled</span>
               </div>
               <p className="text-xs text-text-faint mt-3">
-                Emails the customer a short rating + comment survey once their order is marked delivered.
+                Emails the customer a short rating + comment survey once their order is marked delivered. Customers can agree to show their feedback on your store; you choose which to show under Customers &gt; Reviews.
               </p>
             </Card>
 

@@ -43,6 +43,8 @@ import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandone
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { SubmitSurveyDto } from './dto/submit-survey.dto';
+import { ReviewsService } from '../reviews/reviews.service';
+import { FeaturedReviewsQueryDto } from '../reviews/dto/featured-reviews-query.dto';
 import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
 import { PolicyPagesService } from '../policy-pages/policy-pages.service';
 import { ThemesService } from '../themes/themes.service';
@@ -138,6 +140,7 @@ export class PublicService {
     private readonly features: FeaturesService,
     private readonly shopAnalyticsService: ShopAnalyticsService,
     private readonly conversionEventsService: ConversionEventsService,
+    private readonly reviewsService: ReviewsService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -202,6 +205,15 @@ export class PublicService {
       throw new BadRequestException(`Unknown policy page type '${type}'`);
     }
     return this.policyPagesService.findPublic(shop.id, type as PolicyPageType);
+  }
+
+  // Merchant-approved reviews only; see ReviewsService.listFeatured for the
+  // gate and the exact fields returned. resolveShop 404s a missing or
+  // suspended shop, assertPublished an unpublished one.
+  async listFeaturedReviews(shopSlug: string, query: FeaturedReviewsQueryDto) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    return this.reviewsService.listFeatured(shop.id, query);
   }
 
   async captureAbandonedCart(shopSlug: string, dto: CaptureAbandonedCartDto) {
@@ -1376,10 +1388,21 @@ export class PublicService {
     if (survey.respondedAt) {
       throw new BadRequestException('This survey has already been submitted');
     }
-    await this.db.execute(
-      `UPDATE surveyresponse SET rating = ?, comment = ?, respondedAt = ? WHERE token = ?`,
-      [dto.rating, dto.comment ?? null, new Date(), token],
+    // publishConsent stays NULL (unknown) unless the client says which way the
+    // customer went; the storefront form always sends true or false. The
+    // respondedAt IS NULL guard makes the write single-shot, so a second
+    // submit cannot overwrite the rating, comment or the consent given first.
+    const consent =
+      dto.publishConsent === undefined ? null : dto.publishConsent ? 1 : 0;
+    const result = await this.db.execute(
+      `UPDATE surveyresponse
+          SET rating = ?, comment = ?, publishConsent = ?, respondedAt = ?
+        WHERE token = ? AND respondedAt IS NULL`,
+      [dto.rating, dto.comment?.trim() || null, consent, new Date(), token],
     );
+    if (result.affectedRows === 0) {
+      throw new BadRequestException('This survey has already been submitted');
+    }
     return { success: true };
   }
 

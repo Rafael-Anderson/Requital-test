@@ -18,6 +18,8 @@ function SurveyContent() {
   const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  // Unchecked by default: sharing the feedback publicly is opt-in.
+  const [publishConsent, setPublishConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -47,7 +49,7 @@ function SurveyContent() {
     setSubmitting(true);
     setError(null);
     try {
-      await submitSurvey(token, { rating, comment: comment.trim() || undefined });
+      await submitSurvey(token, { rating, comment: comment.trim() || undefined, publishConsent });
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't submit your survey");
@@ -112,6 +114,16 @@ function SurveyContent() {
                 className={FIELD_CLASS}
               />
             </div>
+            <label htmlFor="survey-publish-consent" className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                id="survey-publish-consent"
+                type="checkbox"
+                checked={publishConsent}
+                onChange={(e) => setPublishConsent(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-accent"
+              />
+              <span>You may show my feedback on the store&apos;s website.</span>
+            </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button type="submit" disabled={submitting || rating < 1} className={BUTTON_PRIMARY_CLASS}>
               {submitting ? "Submitting…" : "Submit"}

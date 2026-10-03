@@ -437,6 +437,28 @@ export interface NewsletterSubscriber {
   createdAt: string;
 }
 
+// One answered post-purchase survey, as the admin Reviews page sees it.
+// publishConsent: null = unknown (answered before the checkbox existed),
+// 1 = the customer agreed to show it on the store, 0 = they did not.
+export interface ReviewItem {
+  id: number;
+  orderNumber: number;
+  customerName: string;
+  rating: number | null;
+  comment: string | null;
+  respondedAt: string;
+  publishConsent: number | null;
+  featuredAt: string | null;
+  canFeature: boolean;
+}
+
+export interface PaginatedReviews {
+  data: ReviewItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface PaginatedNewsletterSubscribers {
   data: NewsletterSubscriber[];
   page: number;
@@ -1959,7 +1981,10 @@ export const BLOCK_TYPES: Record<BlockContainer, string[]> = {
   hero: ["heading", "subheading", "cta", "image"],
   featured_collections: ["collection_header", "product_card"],
   product_grid: ["product_card"],
-  testimonials: ["heading", "testimonial"],
+  // Manual `testimonial` blocks are no longer addable: the section shows real,
+  // merchant-approved reviews. Old blocks in saved themes are tolerated, ignored
+  // at render and never deleted.
+  testimonials: ["heading"],
   rich_text: ["text", "image"],
   image_text: ["image", "text"],
   newsletter: ["heading", "text", "email_form"],

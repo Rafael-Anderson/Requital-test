@@ -297,6 +297,15 @@ export class CustomerAccountService {
         WHERE customerId = ? AND shopId = ? AND attributionJson IS NOT NULL`,
       [customerId, shopId],
     );
+    // Deleting the account withdraws any consent to publish their feedback:
+    // the review stops being served at once (the public read requires
+    // publishConsent = 1) while the merchant's own order record is kept.
+    await this.db.execute(
+      `UPDATE surveyresponse s JOIN \`order\` o ON o.id = s.orderId
+          SET s.publishConsent = 0, s.featuredAt = NULL
+        WHERE o.customerId = ? AND o.shopId = ?`,
+      [customerId, shopId],
+    );
     await this.db.execute(
       `UPDATE customerrefreshtoken SET revokedAt = ? WHERE customerId = ? AND revokedAt IS NULL`,
       [new Date(), customerId],

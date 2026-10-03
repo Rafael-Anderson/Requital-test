@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -17,4 +18,10 @@ export class SubmitSurveyDto {
   @IsString()
   @MaxLength(2000)
   comment?: string;
+
+  // The customer's answer to "You may show my feedback on the store's
+  // website". Omitted by an older client = unknown (NULL), never consent.
+  @IsOptional()
+  @IsBoolean()
+  publishConsent?: boolean;
 }

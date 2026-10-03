@@ -158,13 +158,14 @@ function trustBar(order: number, items: { icon: string; text: string }[], rating
   });
 }
 
-function testimonials(order: number, quotes: { quote: string; author: string; rating?: number }[], opts: SectionOpts = {}): ThemeSection {
+// Real reviews only. The section carries just its heading: the storefront fills
+// it from reviews the merchant has approved (surveyresponse.featuredAt) and
+// renders nothing at all until there is at least one. No invented quote,
+// author or rating ever ships in a template.
+function testimonials(order: number, opts: SectionOpts = {}): ThemeSection {
   return section('testimonials', order, {
     ...opts,
-    blocks: [
-      block('heading', { text: 'What our customers say' }),
-      ...quotes.map((q) => block('testimonial', { quote: q.quote, author: q.author, ...(q.rating ? { rating: q.rating } : {}) })),
-    ],
+    blocks: [block('heading', { text: 'Customer reviews' })],
   });
 }
 
@@ -351,10 +352,10 @@ const market: ThemeConfig = (() => {
         { icon: 'truck', text: 'Same-day delivery' },
         { icon: 'shield', text: 'Freshness guarantee' },
         { icon: 'check', text: 'Secure checkout' },
-        { icon: 'star', text: 'Rated 4.8 / 5' },
       ],
-      // §8.7 item 3 — closes out Market's deferred trust_bar rating count-up.
-      { rating: 4.8, label: '2,000+ reviews', countUp: true },
+      // No rating badge in a template: a score and a review count must come
+      // from the merchant's real numbers (they can add the block themselves).
+      null,
       { entrance: 'fade-in', schemeId: 'scheme-2' },
     ),
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
@@ -433,14 +434,10 @@ const bloom: ThemeConfig = (() => {
     featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }),
     imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up', schemeId: 'scheme-2' }),
     productGrid(4, { entrance: 'scale-in', settings: { columns: 3, cardStyle: 'elevated', imageAspect: 'portrait', motion: { entrance: 'scale-in', animateOnce: false } } }),
-    testimonials(5, [
-      { quote: 'Arrived exactly on time and looked even better than the photo.', author: 'Reem A.', rating: 5 },
-      { quote: 'The gift box is gorgeous. Ordering again for every birthday.', author: 'Daniel K.', rating: 5 },
-      { quote: 'So easy to personalise. My mum loved it.', author: 'Priya S.', rating: 5 },
-    ], { entrance: 'rotate-in', settings: { motion: { stagger: true } } }),
+    testimonials(5, { entrance: 'rotate-in', settings: { motion: { stagger: true } } }),
     trustBar(6, [
       { icon: 'truck', text: 'Next-day delivery' },
-      { icon: 'star', text: 'Thousands of 5-star gifts' },
+      { icon: 'star', text: 'Personalised gift notes' },
       { icon: 'shield', text: 'Happiness guarantee' },
     ], null),
     newsletter(7, 'Join the club', 'Early access to new gifts and seasonal drops.', { settings: { successAnimation: true } }), // §8.7 item 5
@@ -541,15 +538,15 @@ const heritage: ThemeConfig = (() => {
 
   c.sections = [
     announcementOff(0),
-    hero(1, 'Traditional florists since 1985', 'Shop the collection', { entrance: 'fade-in', settings: { contentPosition: 'center-center', height: 'medium', heroLayout: 'inset', cornerRadius: 4 } }),
+    hero(1, 'Traditional florists, delivered with care', 'Shop the collection', { entrance: 'fade-in', settings: { contentPosition: 'center-center', height: 'medium', heroLayout: 'inset', cornerRadius: 4 } }),
     trustBar(2, [
-      { icon: 'shield', text: 'Established 1985' },
+      { icon: 'shield', text: 'Hand-tied by our florists' },
       { icon: 'truck', text: 'Nationwide delivery' },
       { icon: 'check', text: 'Corporate accounts welcome' },
-    ], { rating: 4.9, label: 'Trusted by thousands' }, { entrance: 'fade-in' }),
+    ], null, { entrance: 'fade-in' }),
     featuredCollections(3, 'Our collections', { entrance: 'fade-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: false } }, true), // §8.13.C item 2
     productGrid(4, { settings: { columns: 3, cardStyle: 'bordered', imageAspect: 'landscape' } }),
-    imageText(5, 'A family business for four decades, serving homes, hotels, and offices across the country.', { entrance: 'none', schemeId: 'scheme-2' }),
+    imageText(5, 'A florist you can rely on, serving homes, hotels, and offices across the country.', { entrance: 'none', schemeId: 'scheme-2' }),
     richText(6, '<p>Sympathy tributes, corporate contracts, and weekly office flowers. Speak to our team for bespoke arrangements.</p>', { entrance: 'fade-in' }),
     newsletter(7, 'Seasonal updates', 'Sign up for occasional news and offers.'),
   ];

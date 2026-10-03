@@ -564,6 +564,15 @@ export interface OrderLookupResult {
   hasAccount: boolean;
 }
 
+// One merchant-approved review (GET /public/:shop/reviews/featured). Exactly
+// these four fields: no id, contact detail, order or full name ever arrives.
+export interface FeaturedReview {
+  name: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
 export interface SurveyLookupResult {
   shopName: string;
   rating: number | null;

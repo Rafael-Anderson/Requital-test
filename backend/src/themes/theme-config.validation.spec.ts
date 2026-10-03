@@ -221,6 +221,22 @@ describe('assertValidThemeConfig', () => {
       expect(() => assertValidThemeConfig(config)).not.toThrow();
     });
 
+    it('tolerates a legacy testimonials section with manual testimonial blocks plus the new maxItems/minRating keys (real-reviews change)', () => {
+      const config = baseConfig();
+      config.sections.push({
+        id: 'sec-testimonials',
+        type: 'testimonials',
+        visible: true,
+        order: config.sections.length,
+        settings: { maxItems: 9, minRating: 4 },
+        blocks: [
+          { id: 'h', type: 'heading', visible: true, order: 0, settings: { text: 'Customer reviews' } },
+          { id: 'q1', type: 'testimonial', visible: true, order: 1, settings: { quote: 'Legacy manual quote', author: 'Someone', rating: 5 } },
+        ],
+      });
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+    });
+
     it('does NOT 400 a malformed globalSettings.floatingElements blob', () => {
       const config = baseConfig();
       // adversarial: wrong types throughout — the validator treats
