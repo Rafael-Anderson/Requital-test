@@ -77,6 +77,7 @@ import { WebhookLogModule } from './webhook-log/webhook-log.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
 import { PlatformAuthModule } from './platform-auth/platform-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
+import { PasswordPolicyModule } from './common/password-policy/password-policy.service';
 
 // Throttling is skipped wholesale under Jest: dozens of e2e specs
 // legitimately call /auth/signup or /auth/login many times in quick
@@ -199,6 +200,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     NewsletterModule,
     PlatformAuthModule,
     PlatformAdminModule,
+    PasswordPolicyModule,
   ],
   controllers: [AppController],
   providers: [

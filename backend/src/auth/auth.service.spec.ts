@@ -9,6 +9,7 @@
 import * as bcrypt from 'bcryptjs';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
 import type { DatabaseService } from '../database/database.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { AuditLogService } from '../audit-log/audit-log.service';
@@ -97,6 +98,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -117,6 +119,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login({ email: user.email, password: 'wrong' }),
@@ -140,6 +143,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login({ email: 'nobody@nowhere.test', password: 'whatever' }),
@@ -166,6 +170,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login({ email: user.email, password: 'correct' }),
@@ -193,6 +198,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -216,6 +222,7 @@ describe('AuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.login({ email: user.email, password: 'correct' });
 
@@ -234,6 +241,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.forgotPassword({ email: user.email });
 
@@ -261,6 +269,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.resendVerification({
       userId: user.id,
@@ -287,6 +296,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.changePassword(
       { userId: user.id, shopId: user.shopId, role: 'admin', outletId: null },
@@ -318,6 +328,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.resetPassword({
@@ -344,6 +355,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.resetPassword({
@@ -370,6 +382,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.resetPassword({
@@ -388,6 +401,7 @@ describe('AuthService — token supersession and invalidation', () => {
       createMockJwt(),
       createMockAuditLog(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.verifyEmail({ token: 'not-a-real-token' }),

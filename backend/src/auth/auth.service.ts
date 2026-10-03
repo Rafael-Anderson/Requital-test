@@ -29,6 +29,7 @@ import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
 import type { TenantContext, UserRole } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
 
 const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
@@ -71,6 +72,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly auditLogService: AuditLogService,
     private readonly jobsService: JobsService,
+    private readonly passwordPolicy: PasswordPolicyService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -85,6 +87,13 @@ export class AuthService {
       throw new ConflictException('This subdomain is already taken');
     }
 
+    await this.passwordPolicy.assertAcceptable(dto.password, {
+      email: dto.email,
+      name: dto.name,
+      shopName: dto.shopName,
+      subdomain: dto.subdomain,
+      phone: dto.phone,
+    });
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     let userId: number;
@@ -326,6 +335,13 @@ export class AuthService {
       outletId = outletRows[0].id as number;
     }
 
+    if (dto.password) {
+      await this.passwordPolicy.assertAcceptable(dto.password, {
+        email: dto.email,
+        name: dto.name,
+        shopName: await this.shopNameOf(ctx.shopId),
+      });
+    }
     // No password supplied (the normal admin-UI path) — the account is
     // created locked with an unguessable random hash and can only become
     // usable via the emailed invite link (see acceptInvite below). A caller
@@ -381,6 +397,9 @@ export class AuthService {
         'This invite link is invalid or has expired',
       );
     }
+    // Policy BEFORE the single-use claim, so a rejected weak password does
+    // not burn the invite link.
+    await this.assertPasswordForUser(dto.password, stored.userId as number);
     const claimed = await this.db.execute(
       `UPDATE authtoken SET usedAt = ? WHERE id = ? AND usedAt IS NULL`,
       [new Date(), stored.id],
@@ -547,6 +566,11 @@ export class AuthService {
     if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
       throw new UnauthorizedException('Current password is incorrect');
     }
+    await this.passwordPolicy.assertAcceptable(dto.newPassword, {
+      email: user.email,
+      name: user.name,
+      shopName: user.shop?.name,
+    });
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     await this.db.transaction(async (conn) => {
       await conn.query(`UPDATE user SET passwordHash = ? WHERE id = ?`, [
@@ -642,6 +666,9 @@ export class AuthService {
         'This reset link is invalid or has expired',
       );
     }
+    // Policy BEFORE the single-use claim, so a rejected weak password does
+    // not burn the reset link.
+    await this.assertPasswordForUser(dto.newPassword, stored.userId as number);
     // CAS on usedAt — a single-use token claimed exactly once even if the
     // reset form is somehow submitted twice concurrently.
     const claimed = await this.db.execute(
@@ -959,6 +986,23 @@ export class AuthService {
       [id],
     );
     return rows[0] ? this.rowToUser(rows[0]) : null;
+  }
+
+  private async shopNameOf(shopId: number): Promise<string | null> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT name FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    return (rows[0]?.name as string | undefined) ?? null;
+  }
+
+  private async assertPasswordForUser(password: string, userId: number) {
+    const user = await this.findById(userId);
+    await this.passwordPolicy.assertAcceptable(password, {
+      email: user?.email,
+      name: user?.name,
+      shopName: user?.shop?.name,
+    });
   }
 
   private async findByIdOrThrow(id: number): Promise<UserWithRelations> {

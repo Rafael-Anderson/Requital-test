@@ -9,6 +9,7 @@ import { CustomerAuthService } from './customer-auth.service';
 import type { DatabaseService } from '../database/database.service';
 import type { JwtService } from '@nestjs/jwt';
 import type { JobsService } from '../jobs/jobs.service';
+import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
 
 jest.mock('bcryptjs');
 const mockCompare = bcrypt.compare as unknown as jest.Mock;
@@ -70,6 +71,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.login('test-shop', {
       identifier: customer.phone,
@@ -97,6 +99,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login('test-shop', {
@@ -123,6 +126,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login('test-shop', {
@@ -147,6 +151,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login('test-shop', {
@@ -175,6 +180,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await expect(
       service.login('test-shop', {
@@ -202,6 +208,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.login('test-shop', {
       identifier: customer.phone,
@@ -226,6 +233,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       db,
       createMockJwt(),
       createMockJobsService(),
+      new PasswordPolicyService(),
     );
     await service.login('test-shop', {
       identifier: customer.phone,

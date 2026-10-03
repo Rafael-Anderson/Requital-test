@@ -1,5 +1,8 @@
 import './helpers/force-prod-env'; // MUST be first — sets NODE_ENV=production
 import 'dotenv/config';
+// NODE_ENV=production here, so the password policy is fully on (no test relaxation).
+// No real network in tests: skip the remote breach check, the offline list still applies.
+process.env.PASSWORD_BREACH_CHECK = 'off';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
@@ -62,7 +65,7 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
       .send({
         name: 'CD Cookie',
         email: `${prefix}-${runId}@test.com`,
-        password: 'password123',
+        password: 'violet-harbour-lamp-52',
         shopName: `${prefix} Shop`,
         subdomain: `${prefix}-${runId}`,
       })
@@ -83,7 +86,7 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
       .send({
         name: 'Shopper',
         phone: `+9715${String(runId).slice(-8)}`,
-        password: 'password123',
+        password: 'violet-harbour-lamp-52',
       })
       .expect(201);
 
@@ -127,7 +130,7 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
     const staff = await signupStaff('cdc-staff');
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: staff.email, password: 'password123' })
+      .send({ email: staff.email, password: 'violet-harbour-lamp-52' })
       .expect(201);
 
     const at = findCookie(login, '__Host-req-staff-at=');

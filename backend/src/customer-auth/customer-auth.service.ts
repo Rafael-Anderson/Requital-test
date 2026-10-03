@@ -19,6 +19,7 @@ import { LoginCustomerDto } from './dto/login-customer.dto';
 import { ForgotCustomerPasswordDto } from './dto/forgot-customer-password.dto';
 import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
 import { storefrontUrl } from '../common/storefront-url';
+import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
 
 const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
@@ -47,6 +48,7 @@ export class CustomerAuthService {
     private readonly db: DatabaseService,
     private readonly jwtService: JwtService,
     private readonly jobsService: JobsService,
+    private readonly passwordPolicy: PasswordPolicyService,
   ) {}
 
   // "Register" is "claim" — find the [shopId, phone] row guest checkout
@@ -85,6 +87,13 @@ export class CustomerAuthService {
       );
     }
 
+    await this.passwordPolicy.assertAcceptable(dto.password, {
+      email: dto.email,
+      name: dto.name,
+      shopName: shop.name,
+      subdomain: shop.subdomain,
+      phone: dto.phone,
+    });
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     let customerId: number;
     if (existing) {
@@ -311,6 +320,26 @@ export class CustomerAuthService {
         'This reset link is invalid or has expired',
       );
     }
+    // Policy BEFORE the single-use claim, so a rejected weak password does
+    // not burn the reset link.
+    const custRows = await this.db.query<RowDataPacket[]>(
+      `SELECT name, email, phone, shopId FROM customer WHERE id = ?`,
+      [stored.customerId],
+    );
+    const cust = custRows[0];
+    const shopRows = cust
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT name, subdomain FROM shop WHERE id = ?`,
+          [cust.shopId],
+        )
+      : [];
+    await this.passwordPolicy.assertAcceptable(dto.newPassword, {
+      email: cust?.email as string | null | undefined,
+      name: cust?.name as string | null | undefined,
+      phone: cust?.phone as string | null | undefined,
+      shopName: shopRows[0]?.name as string | undefined,
+      subdomain: shopRows[0]?.subdomain as string | undefined,
+    });
     const claimed = await this.db.execute(
       `UPDATE customerauthtoken SET usedAt = ? WHERE id = ? AND usedAt IS NULL`,
       [new Date(), stored.id],
