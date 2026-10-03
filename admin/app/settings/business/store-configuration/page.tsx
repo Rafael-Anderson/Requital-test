@@ -15,6 +15,7 @@ import Toggle from "@/components/ui/Toggle";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 const BUSINESS_TYPES = ["Florist", "Gift Shop", "Bakery", "Restaurant", "Grocery", "Retail", "Other"];
 
@@ -108,7 +109,7 @@ export default function StoreConfigurationPage() {
     }
   }
 
-  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!shop) return <SettingsContentSkeleton />;
 
   return (
     <PageShell>

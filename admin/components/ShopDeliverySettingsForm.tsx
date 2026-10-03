@@ -13,6 +13,7 @@ import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
 import { useToast } from "@/components/ui/Toast";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 // The shop-wide delivery settings, moved here from an outlet's Delivery tab
 // (audit §14.4). Same fields, same updateShop() payload as the tab sent; the
@@ -80,7 +81,7 @@ export default function ShopDeliverySettingsForm() {
     }
   }
 
-  if (!loaded) return <p className="text-sm text-text-muted">Loading delivery settings…</p>;
+  if (!loaded) return <SettingsContentSkeleton />;
 
   return (
     <div className="space-y-4">

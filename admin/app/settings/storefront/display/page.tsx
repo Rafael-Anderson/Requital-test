@@ -10,6 +10,7 @@ import Checkbox from "@/components/ui/Checkbox";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 // Storefront > Display: the three presentation settings that used to sit in
 // Store Configuration (audit §14.3 P9). Everything else presentational lives
@@ -43,7 +44,7 @@ export default function StorefrontDisplayPage() {
     }
   }
 
-  if (!loaded) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!loaded) return <SettingsContentSkeleton />;
 
   return (
     <PageShell>

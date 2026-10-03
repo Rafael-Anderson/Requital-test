@@ -14,6 +14,8 @@ import OutletDeliveryTab from "@/components/OutletDeliveryTab";
 import OutletPickupTab from "@/components/OutletPickupTab";
 import OutletQrTab from "@/components/OutletQrTab";
 import PageShell from "@/components/ui/PageShell";
+import ScrollFade from "@/components/ui/ScrollFade";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 export default function EditOutletPage() {
   const params = useParams<{ outletId: string }>();
@@ -56,19 +58,22 @@ export default function EditOutletPage() {
       {!outlet && !error ? (
         <div className="space-y-4">
           <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-40 w-full" />
+          <SettingsContentSkeleton cards={2} />
         </div>
       ) : outlet ? (
         <>
           <h1 className="text-2xl font-semibold mb-6">Edit &quot;{outlet.name}&quot;</h1>
-          <div className="flex gap-8 flex-col sm:flex-row">
+          {/* Two columns at every width; below sm the pair scrolls sideways in
+              its own container (see settings/layout.tsx for the same rule). */}
+          <ScrollFade startFade={false}>
+          <div className="flex gap-4 sm:gap-8 min-w-[501px] sm:min-w-0">
             <OutletEditSidebar
               active={activeTab}
               onSelect={setActiveTab}
               outletActive={outlet.active}
               onToggleActive={handleToggleActive}
             />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-[340px] sm:min-w-0">
               {activeTab === "basic" && <OutletBasicInfoTab outlet={outlet} onSaved={refresh} />}
               {activeTab === "address" && <OutletAddressTab outlet={outlet} onSaved={refresh} />}
               {activeTab === "delivery" && <OutletDeliveryTab outlet={outlet} onSaved={refresh} />}
@@ -76,6 +81,7 @@ export default function EditOutletPage() {
               {activeTab === "qr" && <OutletQrTab outlet={outlet} />}
             </div>
           </div>
+          </ScrollFade>
         </>
       ) : null}
     </PageShell>

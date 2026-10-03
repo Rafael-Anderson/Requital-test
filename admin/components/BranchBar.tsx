@@ -31,7 +31,7 @@ export default function BranchBar({ left, right }: { left?: ReactNode; right?: R
   return (
     <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
       {left}
-      <div className="flex items-center gap-2.5">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2.5">
         <OutletSwitcher />
         {right}
       </div>

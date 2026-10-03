@@ -13,10 +13,13 @@ export default function SettingsNav() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Settings" className="sm:w-[220px] shrink-0 space-y-4">
+    <nav
+      aria-label="Settings"
+      className="w-[145px] sm:w-[220px] shrink-0 space-y-4 sticky start-0 z-10 self-start bg-background"
+    >
       {SETTINGS_GROUPS.map((group) => (
         <div key={group.id}>
-          <p className="px-3.5 mb-1 text-[11px] font-bold uppercase tracking-wide text-text-faint">{group.label}</p>
+          <p className="px-2.5 sm:px-3.5 mb-1 truncate text-[11px] font-bold uppercase tracking-wide text-text-faint">{group.label}</p>
           <div className="flex flex-col gap-0.5">
             {group.pages.map(({ href, label, external }) => {
               const active = !external && pathname.startsWith(href);
@@ -25,14 +28,15 @@ export default function SettingsNav() {
                   key={href}
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex items-center justify-between px-3.5 py-2 rounded-[10px] text-[13.5px] font-bold transition-colors ${
+                  title={label}
+                  className={`flex items-center justify-between gap-1 px-2.5 sm:px-3.5 py-2 rounded-[10px] text-[13px] sm:text-[13.5px] font-bold transition-colors ${
                     active
                       ? "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent"
                       : "text-text-secondary dark:text-zinc-400 hover:bg-neutral-chip-bg dark:hover:bg-white/10"
                   }`}
                 >
-                  {label}
-                  {external && <ArrowUpRight className="size-3.5 opacity-60" aria-hidden="true" />}
+                  <span className="min-w-0 truncate">{label}</span>
+                  {external && <ArrowUpRight className="size-3 sm:size-3.5 shrink-0 opacity-60" aria-hidden="true" />}
                 </Link>
               );
             })}

@@ -6,7 +6,7 @@ import { POLICY_PAGE_TYPES, POLICY_PAGE_LABELS, type PolicyPage, type PolicyPage
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import RichTextEditor from "@/components/ui/RichTextEditor";
-import { CardSkeleton } from "@/components/ui/Skeleton";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -45,7 +45,7 @@ export default function PolicyPagesSettingsPage() {
     }
   }
 
-  if (!pages) return <CardSkeleton />;
+  if (!pages) return <SettingsContentSkeleton cards={5} fieldsPerCard={1} />;
 
   return (
     <PageShell variant="wide">
