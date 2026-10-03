@@ -130,6 +130,10 @@ export class PurchaseOrdersService {
     const pageSize = Math.min(query.pageSize ?? 20, 100);
     // A branch user's own outlet always wins over what the request asked for.
     const outletId = resolveOutletFilter(ctx, query.outletId);
+    // A resolved outlet is a single-outlet read: a branch-role override that lacks view applies.
+    if (outletId !== undefined) {
+      await this.branchRolesService.assertPermission(ctx, outletId, 'purchase_orders.view');
+    }
     const conditions = ['po.shopId = ?'];
     const params: (string | number)[] = [ctx.shopId];
     if (outletId !== undefined) {
