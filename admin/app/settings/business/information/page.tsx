@@ -17,6 +17,7 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 // Saves immediately on toggle (same pattern as the Payment Gateways page's
 // Cash on Delivery switch) — this is a "go live" action, not a field
@@ -227,7 +228,7 @@ export default function BusinessInformationPage() {
     }
   }
 
-  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!shop) return <SettingsContentSkeleton />;
 
   return (
     // "wide", not "form" — this page's own Card already manages a real

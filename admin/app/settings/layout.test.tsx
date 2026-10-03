@@ -96,11 +96,38 @@ describe("Settings layout role gate", () => {
     expect(replace).toHaveBeenCalledWith("/");
   });
 
-  it("renders nothing while the session is still loading", () => {
+  it("renders the chrome and a skeleton, never the page, while the session is still loading", () => {
     auth = { user: null, loading: true };
+    pathname = "/settings/selling/money-tax";
     render(<SettingsLayout><SettingsIndexPage /></SettingsLayout>);
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Loading settings")).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByLabelText("Search settings")).not.toBeInTheDocument();
     expect(getShop).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("renders nothing once the session is known to be signed out", () => {
+    auth = { user: null, loading: false };
+    pathname = "/settings/selling/money-tax";
+    render(<SettingsLayout><div>page</div></SettingsLayout>);
+    expect(screen.queryByRole("heading", { name: "Settings" })).not.toBeInTheDocument();
+  });
+
+  it("keeps sidebar and content side by side at every width (no stacking), in a sideways scroller below sm", () => {
+    auth = { user: { role: "admin" }, loading: false };
+    pathname = "/settings/selling/money-tax";
+    render(<SettingsLayout><div data-testid="content" /></SettingsLayout>);
+    const nav = screen.getByRole("navigation", { name: "Settings" });
+    const row = nav.parentElement!;
+    expect(row.className).not.toMatch(/flex-col/);
+    expect(row.className).toMatch(/min-w-\[501px\]/);
+    expect(nav.className).toMatch(/w-\[145px\]/);
+    expect(nav.className).toMatch(/sticky/);
+    expect(nav.className).toMatch(/start-0/);
+    expect(screen.getByTestId("content").parentElement!.className).toMatch(/min-w-\[340px\]/);
+    expect(row.parentElement!.hasAttribute("data-scroll-fade")).toBe(true);
   });
 
   it.each(NEW_ROUTES)("an admin gets %s", (route, page, marker) => {
@@ -112,6 +139,17 @@ describe("Settings layout role gate", () => {
     // Pages that load first show their content asynchronously; the landing
     // page and the pointer card are synchronous.
     if (route === "/settings" || route === "/settings/jobs") expect(has(marker)).toBe(true);
+  });
+
+  it.each([
+    ["/settings/selling/money-tax", () => <MoneyTaxPage />],
+    ["/settings/storefront/display", () => <StorefrontDisplayPage />],
+    ["/settings/fulfilment/delivery", () => <FulfilmentDeliveryPage />],
+  ])("%s shows a skeleton, not a blank column, while its data loads", (route, page) => {
+    auth = { user: { role: "admin" }, loading: false };
+    pathname = route;
+    render(<SettingsLayout>{page()}</SettingsLayout>);
+    expect(screen.getByLabelText("Loading settings")).toBeInTheDocument();
   });
 
   it("shows the grouped sidebar on a settings page but not on the landing page or the outlet editor", () => {

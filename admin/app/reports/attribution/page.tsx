@@ -78,7 +78,7 @@ export default function AttributionReportPage() {
   return (
     <PageShell>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
           <Calendar className="size-4 text-text-faint shrink-0" />
           <input
             type="date"

@@ -15,6 +15,7 @@ import Card from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 import { validateCustomDomain, normalizeCustomDomain } from "@/lib/validators";
 
 // While a claim is pending/verifying, re-fetch on this cadence so a
@@ -182,9 +183,7 @@ export default function DomainSettingsPage() {
   if (!config) {
     return (
       <PageShell variant="form">
-        <Card>
-          <div className="h-40 animate-pulse rounded-lg bg-neutral-chip-bg dark:bg-zinc-800" />
-        </Card>
+        <SettingsContentSkeleton cards={1} />
       </PageShell>
     );
   }

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { listOutlets, deleteOutlet } from "@/lib/api";
 import type { Outlet } from "@/lib/types";
-import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
+import { THead, TBody, TH, TR, TD } from "@/components/ui/Table";
+import ScrollFade from "@/components/ui/ScrollFade";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
@@ -54,7 +55,10 @@ export default function SettingsOutletsPage() {
         </Button>
       </div>
 
-      <Table>
+      {/* Its own sideways scroller with an edge fade (not the shared Table's
+          silent overflow), so every column is reachable and visibly so. */}
+      <ScrollFade className="rounded-2xl border border-border bg-surface dark:border-white/10 dark:bg-zinc-900">
+      <table className="w-full min-w-[640px] whitespace-nowrap text-sm">
         <THead>
           <tr>
             <TH>Name</TH>
@@ -114,7 +118,8 @@ export default function SettingsOutletsPage() {
             ))
           )}
         </TBody>
-      </Table>
+      </table>
+      </ScrollFade>
 
       {showCreateModal && <OutletFormModal onClose={() => setShowCreateModal(false)} />}
     </PageShell>

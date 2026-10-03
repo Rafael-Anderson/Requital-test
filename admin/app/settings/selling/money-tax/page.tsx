@@ -11,6 +11,7 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 // Gulf-region currencies plus USD. SUPPORTED_CURRENCIES in the backend's
 // UpdateShopDto is the real gate and matches this list (Phase 2a/A6).
@@ -70,7 +71,7 @@ export default function MoneyTaxPage() {
     }
   }
 
-  if (!loaded) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!loaded) return <SettingsContentSkeleton />;
 
   return (
     <PageShell>

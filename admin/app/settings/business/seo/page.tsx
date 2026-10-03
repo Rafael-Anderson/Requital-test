@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 export default function SeoSettingsPage() {
   const toast = useToast();
@@ -56,7 +57,7 @@ export default function SeoSettingsPage() {
     }
   }
 
-  if (!seo) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!seo) return <SettingsContentSkeleton />;
 
   return (
     <PageShell variant="form">

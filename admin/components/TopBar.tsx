@@ -27,7 +27,7 @@ export default function TopBar() {
   if (!user) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-10 py-4 text-sm dark:border-white/10 dark:bg-zinc-950">
+    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-4 md:px-10 text-sm dark:border-white/10 dark:bg-zinc-950">
       <Link href="/" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-extrabold text-white" aria-label="Requital home">
         R
       </Link>

@@ -42,3 +42,15 @@ describe("ReportsFilterBar — outlet/order type/status/payment mode pickers", (
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ status: "confirmed" }));
   });
 });
+
+describe("ReportsFilterBar: phone layout", () => {
+  it("lets the two date inputs wrap and shrink instead of widening the page", () => {
+    const { container } = render(<ReportsFilterBar value={{}} onChange={vi.fn()} outlets={outlets} onApply={vi.fn()} />);
+    const dates = container.querySelectorAll('input[type="date"]');
+    expect(dates).toHaveLength(2);
+    const group = dates[0].parentElement as HTMLElement;
+    expect(group.className).toMatch(/\bflex-wrap\b/);
+    expect(group.className).toMatch(/\bmax-w-full\b/);
+    for (const d of dates) expect(d.className).toMatch(/\bmin-w-0\b/);
+  });
+});

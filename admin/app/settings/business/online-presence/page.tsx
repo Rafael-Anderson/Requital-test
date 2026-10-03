@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
 
 // lucide-react has no brand/social icons (removed upstream for trademark
 // reasons — confirmed against the installed version) — these are generic
@@ -113,7 +114,7 @@ export default function OnlinePresencePage() {
     }
   }
 
-  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!shop) return <SettingsContentSkeleton />;
 
   return (
     // "wide", not "form" — same PageShell variant-misclassification as

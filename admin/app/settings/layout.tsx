@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import BackButton from "@/components/ui/BackButton";
 import SettingsNav from "@/components/SettingsNav";
+import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import ScrollFade from "@/components/ui/ScrollFade";
 
 // Admin-only section, with ONE exception: /settings/security is the signed-in
 // user's own account security (password, sessions, two-factor), so every staff
@@ -27,7 +29,12 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     if (!loading && user && user.role !== "admin" && !ownSecurityPage) router.replace("/");
   }, [loading, user, ownSecurityPage, router]);
 
-  if (user?.role !== "admin") {
+  // While the session resolves, render the chrome and a skeleton instead of
+  // nothing, but never the page itself: no settings page may mount (and fetch)
+  // before the user is known to be an admin.
+  const resolving = loading && !user;
+
+  if (user?.role !== "admin" && !resolving) {
     if (!(user && ownSecurityPage)) return null;
     return (
       <div className="page-transition">
@@ -40,19 +47,27 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
   // The landing page is the hub, and the outlet editor has its own sidebar;
   // a second one beside it would squeeze the form.
-  const showNav = pathname !== "/settings" && !/^\/settings\/outlets\/[^/]+/.test(pathname);
+  const isOutletEditor = /^\/settings\/outlets\/[^/]+/.test(pathname);
+  const showNav = pathname !== "/settings" && !isOutletEditor;
+  const body = resolving ? <SettingsContentSkeleton /> : children;
 
   return (
     <div className="page-transition">
       <BackButton href={pathname === "/settings" ? "/" : "/settings"} />
       <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Settings</h1>
       {showNav ? (
-        <div className="flex gap-8 flex-col sm:flex-row">
-          <SettingsNav />
-          <div className="flex-1 min-w-0">{children}</div>
-        </div>
+        // Two columns at every width. Below sm the pair lives in its own sideways
+        // scroller (the document never overflows); the sidebar sticks to the
+        // start edge while the content scrolls under it. From sm up the columns
+        // fit and nothing scrolls.
+        <ScrollFade startFade={false}>
+          <div className="flex gap-4 sm:gap-8 min-w-[501px] sm:min-w-0">
+            <SettingsNav />
+            <div className="flex-1 min-w-[340px] sm:min-w-0">{body}</div>
+          </div>
+        </ScrollFade>
       ) : (
-        children
+        body
       )}
     </div>
   );

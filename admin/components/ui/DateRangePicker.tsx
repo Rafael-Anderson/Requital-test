@@ -22,7 +22,7 @@ export function defaultDateRange(days = 30): DateRange {
 }
 
 const dateInputClass =
-  "h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 text-[13.5px] font-semibold outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
+  "h-9 min-w-0 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-3 text-[13.5px] font-semibold outline-none cursor-pointer transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20";
 
 export default function DateRangePicker({
   value,
@@ -33,7 +33,7 @@ export default function DateRangePicker({
 }) {
   const today = toDateKey(new Date());
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
       <input
         type="date"
         value={value.from}
