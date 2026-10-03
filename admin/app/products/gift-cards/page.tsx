@@ -101,7 +101,7 @@ export default function GiftCardsPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Code</TH>

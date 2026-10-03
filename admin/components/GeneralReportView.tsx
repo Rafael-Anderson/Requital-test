@@ -108,7 +108,7 @@ export default function GeneralReportView({
         </div>
       </div>
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Order Reference No</TH>

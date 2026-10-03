@@ -107,7 +107,7 @@ export default function ExternalDeliveryOrdersTabPage() {
         </div>
       </div>
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Order Ref</TH>

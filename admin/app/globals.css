@@ -81,6 +81,44 @@
   --color-neutral-chip-text: #8b9391;
 }
 
+/* ScrollFade (components/ui/ScrollFade.tsx): an edge fade on each side of a
+   horizontal scroller that still has content hidden past it. Physical edges
+   on purpose (lo = left, hi = right): the component already swaps them for an
+   RTL scroller. A mask, so it needs no background colour and works on both
+   the page canvas and a white card. */
+.scroll-fade {
+  --fade-lo: 0px;
+  --fade-hi: 0px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-lo), #000 calc(100% - var(--fade-hi)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-lo), #000 calc(100% - var(--fade-hi)), transparent 100%);
+}
+.scroll-fade[data-fade-lo="1"]:not([data-no-start-fade]) {
+  --fade-lo: 28px;
+}
+.scroll-fade[data-fade-hi="1"] {
+  --fade-hi: 28px;
+}
+/* Content that spans a whole table (EmptyState, LoadFailed in a colSpan cell)
+   would otherwise centre on the full scrollable width, off screen on a phone.
+   Pinned to the start edge at the scroller's visible width instead. */
+.scroll-fade-fill {
+  position: sticky;
+  inset-inline-start: 0;
+  box-sizing: border-box;
+  width: var(--sf-w, auto);
+}
+/* A sticky first column covers the start edge itself, so it gets a shadow
+   instead of a fade there. */
+.scroll-fade[data-sticky-first="1"] :is(th, td):first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+.scroll-fade[data-sticky-first="1"][data-fade-lo="1"] :is(th, td):first-child {
+  box-shadow: 6px 0 8px -6px rgba(15, 23, 22, 0.25);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -293,4 +331,8 @@ body {
   th {
     text-align: inherit;
   }
+}
+
+.dark .scroll-fade[data-sticky-first="1"] :is(th, td):first-child {
+  background: #18181b;
 }

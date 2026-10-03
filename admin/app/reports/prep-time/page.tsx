@@ -112,7 +112,7 @@ export default function PrepTimeReportPage() {
         )}
       </Card>
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Outlet</TH>

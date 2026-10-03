@@ -18,6 +18,7 @@ import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
+import ScrollFade from "@/components/ui/ScrollFade";
 import { formatMoney } from "@/lib/money";
 
 const POLL_INTERVAL_MS = 20_000;
@@ -157,17 +158,20 @@ function OrdersPageContent() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      {/* Phones: one column at a time, snapping, each 85% of the container so
+          the next column's edge peeks in and the fade says there is more.
+          sm and up: the columns share the row (min 16rem) as before. */}
+      <ScrollFade className="flex snap-x snap-mandatory gap-4 pb-2 sm:snap-none">
         {orders === null
           ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex-1 min-w-64">
+              <div key={i} className="min-w-0 shrink-0 basis-[85%] snap-start sm:min-w-64 sm:flex-1 sm:basis-0">
                 <CardSkeleton />
               </div>
             ))
           : columns.map((col) => (
               <div
                 key={col.key}
-                className="flex-1 min-w-64 rounded-2xl bg-[#EFF1F0] dark:bg-white/[0.03] dark:border dark:border-white/10 p-4"
+                className="min-w-0 shrink-0 basis-[85%] snap-start sm:min-w-64 sm:flex-1 sm:basis-0 rounded-2xl bg-[#EFF1F0] dark:bg-white/[0.03] dark:border dark:border-white/10 p-4"
               >
                 <div className="flex items-center justify-between mb-3.5">
                   <h2 className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">{col.title}</h2>
@@ -247,7 +251,7 @@ function OrdersPageContent() {
                 </div>
               </div>
             ))}
-      </div>
+      </ScrollFade>
 
       {isSimple ? (
         <SimpleOrderDetailModal

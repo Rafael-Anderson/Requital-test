@@ -6,7 +6,7 @@ export default function EmptyState({
   description?: string;
 }) {
   return (
-    <div className="flex min-h-[160px] flex-col items-center justify-center gap-2.5 py-16 text-center">
+    <div className="scroll-fade-fill flex min-h-[160px] flex-col items-center justify-center gap-2.5 py-16 text-center">
       <svg
         viewBox="0 0 24 24"
         fill="none"

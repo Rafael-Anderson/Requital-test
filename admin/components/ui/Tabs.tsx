@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ScrollFade from "@/components/ui/ScrollFade";
 
 export interface TabItem {
   href: string;
@@ -24,13 +25,17 @@ export interface TabItem {
 export default function Tabs({ tabs, className = "mb-4" }: { tabs: TabItem[]; className?: string }) {
   const pathname = usePathname();
   return (
-    <div className={`flex gap-7 overflow-x-auto border-b border-gray-200 dark:border-white/10 ${className}`}>
+    <ScrollFade
+      activeSelector='[aria-current="page"]'
+      className={`flex gap-7 border-b border-gray-200 dark:border-white/10 ${className}`}
+    >
       {tabs.map((tab) => {
         const active = tab.exact === false ? pathname.startsWith(tab.href) : pathname === tab.href;
         return (
           <Link
             key={tab.href}
             href={tab.href}
+            aria-current={active ? "page" : undefined}
             className={`whitespace-nowrap border-b-2 pb-3 text-sm font-semibold transition-colors ${
               active
                 ? "border-accent text-accent-text dark:text-accent"
@@ -41,6 +46,6 @@ export default function Tabs({ tabs, className = "mb-4" }: { tabs: TabItem[]; cl
           </Link>
         );
       })}
-    </div>
+    </ScrollFade>
   );
 }

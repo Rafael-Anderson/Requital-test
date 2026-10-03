@@ -1,9 +1,9 @@
-﻿"use client";
+﻿﻿"use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeftRight, ChevronDown, Copy, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, Copy, MoreVertical, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import {
   bulkDeleteProducts,
   bulkUpdateProductStatus,
@@ -34,7 +34,9 @@ import { useRowSelection } from "@/lib/useRowSelection";
 import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { CardList, CardListItem, CardListSkeleton } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import Select from "@/components/ui/Select";
@@ -59,6 +61,15 @@ export default function InventoryPage() {
   );
 }
 
+function isLowStock(p: Product) {
+  return (
+    p.trackInventory &&
+    p.stockQuantity !== null &&
+    p.lowStockThreshold !== null &&
+    p.stockQuantity <= p.lowStockThreshold
+  );
+}
+
 function InventoryPageContent() {
   const currency = useShopCurrency();
   const router = useRouter();
@@ -76,18 +87,31 @@ function InventoryPageContent() {
   const deleteWithUndo = useUndoableDelete();
   const { selectedOutletId, outlets } = useOutletFilter();
 
-  const refresh = useCallback(async () => {
-    try {
-      const [productList, collectionList] = await Promise.all([
-        listProducts(selectedOutletId ?? undefined),
-        listCollections(),
-      ]);
-      setProducts(productList);
-      setCollections(collectionList);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load products");
-    }
+  // Products and collections load independently: the table must not wait on
+  // (or be lost to) the collections request, which only feeds the filter. A
+  // failed products request ends in an error state with a Retry (below), never
+  // an endless skeleton. `latest` drops a response that a newer refresh (an
+  // outlet switch) has already superseded.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listProducts(selectedOutletId ?? undefined)
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setProducts(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load products");
+      });
+    listCollections()
+      .then((list) => {
+        if (mine === latest.current) setCollections(list);
+      })
+      .catch(() => {
+        /* the filter just stays at "All collections" */
+      });
   }, [selectedOutletId]);
 
   useEffect(() => {
@@ -272,31 +296,46 @@ function InventoryPageContent() {
     toast(`Exported ${source.length} product${source.length === 1 ? "" : "s"}`);
   }
 
+  // What stands in for the rows when there are none to show. A failed load is
+  // its own state with a way out; before, `products` stayed null on any error
+  // and the skeleton was shown forever beneath the error message.
+  const placeholder =
+    visibleProducts === null && error ? (
+      <LoadFailed what="products" onRetry={refresh} />
+    ) : visibleProducts !== null && visibleProducts.length === 0 && !error ? (
+      <EmptyState title="No products yet" description="Products you add to the catalog will show up here." />
+    ) : null;
+
   return (
     <PageShell>
       <BranchBar left={<BackButton href="/" />} />
       <ProductsTabs />
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Products</h1>
-        <div className="flex items-center gap-2">
+      {/* One wrapping row. Below sm the primary action rides on the title's row
+          and the filters wrap beneath it (order-*), so nothing is ever wider
+          than the container; from sm up it is the single row it always was. */}
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <h1 className="me-auto order-1 text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Products</h1>
+        <div className="order-3 sm:order-2">
           <Button size="sm" variant="secondary" onClick={handleExportAll}>
             Export all
           </Button>
-          <div className="w-44">
-            <Select
-              value={collectionFilter}
-              onChange={(e) => setCollectionFilter(e.target.value)}
-              aria-label="Filter by collection"
-            >
-              <option value="">All collections</option>
-              {collectionRows.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {"- ".repeat(c.depth)}
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+        </div>
+        <div className="order-4 w-44 min-w-0 max-w-full sm:order-3">
+          <Select
+            value={collectionFilter}
+            onChange={(e) => setCollectionFilter(e.target.value)}
+            aria-label="Filter by collection"
+          >
+            <option value="">All collections</option>
+            {collectionRows.map((c) => (
+              <option key={c.id} value={c.id}>
+                {"- ".repeat(c.depth)}
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="order-2 sm:order-4">
           <DropdownMenu
             trigger={({ toggle, open }) => (
               <Button variant="primary" onClick={toggle} aria-haspopup="menu" aria-expanded={open}>
@@ -375,7 +414,149 @@ function InventoryPageContent() {
         </Button>
       </BulkActionBar>
 
-      <Table>
+      {/* Below md: one tappable card per product (tap opens the editor), the
+          table's columns do not fit a phone. md and up: the table. */}
+      {visibleProducts === null && !error ? (
+        <CardListSkeleton />
+      ) : placeholder ? (
+        <div className="rounded-2xl border border-border bg-surface md:hidden dark:border-white/10 dark:bg-zinc-900">
+          {placeholder}
+        </div>
+      ) : (
+        <CardList
+          selectAll={{ checked: selection.allSelected, onChange: selection.toggleAll, label: "Select all products" }}
+        >
+          {(visibleProducts ?? []).map((p) => {
+            const lowStock = isLowStock(p);
+            const active = p.status === "Available";
+            return (
+              <CardListItem
+                key={p.id}
+                href={`/products/${p.id}/edit`}
+                openLabel={`Edit ${p.name}`}
+                select={{
+                  checked: selection.selected.has(p.id),
+                  onChange: () => selection.toggle(p.id),
+                  label: `Select ${p.name}`,
+                }}
+                actions={
+                  <div className="flex flex-col items-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(p)}
+                      aria-label={`${active ? "Disable" : "Activate"} ${p.name}`}
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold transition-colors cursor-pointer ${
+                        active
+                          ? "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent"
+                          : "bg-neutral-chip-bg text-neutral-chip-text dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      {active ? "Active" : "Disabled"}
+                    </button>
+                    <DropdownMenu
+                      panelClassName="w-52"
+                      trigger={({ toggle, open }) => (
+                        <button
+                          type="button"
+                          onClick={toggle}
+                          aria-haspopup="menu"
+                          aria-expanded={open}
+                          aria-label={`More actions for ${p.name}`}
+                          className="inline-flex rounded p-1.5 text-text-muted hover:bg-black/5 dark:hover:bg-white/10"
+                        >
+                          <MoreVertical className="size-4" />
+                        </button>
+                      )}
+                    >
+                      {(close) => (
+                        <>
+                          {p.trackInventory && selectedOutletId && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                close();
+                                setAdjustingProduct(p);
+                              }}
+                              className="flex w-full items-center gap-2 px-3.5 py-2 text-start text-sm hover:bg-black/5 dark:hover:bg-white/10"
+                            >
+                              <SlidersHorizontal className="size-3.5" />
+                              Adjust stock
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              close();
+                              setTransferringProduct(p);
+                            }}
+                            className="flex w-full items-center gap-2 px-3.5 py-2 text-start text-sm hover:bg-black/5 dark:hover:bg-white/10"
+                          >
+                            <ArrowLeftRight className="size-3.5" />
+                            Transfer stock
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              close();
+                              handleDuplicate(p);
+                            }}
+                            className="flex w-full items-center gap-2 px-3.5 py-2 text-start text-sm hover:bg-black/5 dark:hover:bg-white/10"
+                          >
+                            <Copy className="size-3.5" />
+                            Duplicate
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              close();
+                              handleDelete(p);
+                            }}
+                            className="flex w-full items-center gap-2 px-3.5 py-2 text-start text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </DropdownMenu>
+                  </div>
+                }
+              >
+                <div className="flex items-start gap-3">
+                  <Thumbnail src={p.thumbnail} size="size-12" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{p.name}</span>
+                      {p.isGiftCard && (
+                        <span className="inline-flex shrink-0 items-center rounded-full bg-neutral-chip-bg px-2 py-0.5 text-[11px] font-bold text-neutral-chip-text dark:bg-zinc-800 dark:text-zinc-400">
+                          Gift card
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
+                      <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(p.price, currency)}</span>
+                      {p.trackInventory && p.stockQuantity !== null ? (
+                        <span className={lowStock ? "font-bold text-danger-text" : "text-text-muted"}>
+                          {p.stockQuantity} in stock{lowStock ? " (low)" : ""}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-text-muted">
+                      {p.totalSold} sold · {p.sku}
+                    </div>
+                  </div>
+                </div>
+              </CardListItem>
+            );
+          })}
+        </CardList>
+      )}
+
+      <Table className="hidden md:block">
         <THead>
           <tr>
             <TH className="w-8">
@@ -400,28 +581,19 @@ function InventoryPageContent() {
           </tr>
         </THead>
         <TBody>
-          {visibleProducts === null ? (
+          {visibleProducts === null && !error ? (
             <tr>
               <td colSpan={13}>
                 <TableSkeleton rows={5} cols={13} />
               </td>
             </tr>
-          ) : visibleProducts.length === 0 && !error ? (
+          ) : placeholder ? (
             <tr>
-              <td colSpan={13}>
-                <EmptyState
-                  title="No products yet"
-                  description="Products you add to the catalog will show up here."
-                />
-              </td>
+              <td colSpan={13}>{placeholder}</td>
             </tr>
           ) : (
-            visibleProducts.map((p) => {
-              const lowStock =
-                p.trackInventory &&
-                p.stockQuantity !== null &&
-                p.lowStockThreshold !== null &&
-                p.stockQuantity <= p.lowStockThreshold;
+            (visibleProducts ?? []).map((p) => {
+              const lowStock = isLowStock(p);
               const active = p.status === "Available";
               return (
                 <TR key={p.id}>

@@ -109,7 +109,7 @@ export default function ProductSaleReportPage() {
         </div>
       </div>
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>

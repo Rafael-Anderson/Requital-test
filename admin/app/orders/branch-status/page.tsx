@@ -76,7 +76,7 @@ export default function BranchStatusPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Name</TH>
