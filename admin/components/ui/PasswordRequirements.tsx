@@ -5,7 +5,7 @@ import { passwordRequirements } from "@/lib/validators";
 
 // Live checklist below the Account Setup wizard's password field — grey
 // dash for an unmet requirement, green check once it's met. Reads the same
-// four conditions validatePassword() enforces (see lib/validators.ts) so the
+// conditions validatePassword() enforces (see lib/validators.ts) so the
 // checklist can't silently drift from what actually gates the field.
 export default function PasswordRequirements({ password }: { password: string }) {
   return (
@@ -21,6 +21,9 @@ export default function PasswordRequirements({ password }: { password: string })
           {req.label}
         </li>
       ))}
+      <li className="text-xs text-text-faint">
+        Longer is better. A few unrelated words works well. Common or breached passwords are not accepted.
+      </li>
     </ul>
   );
 }
