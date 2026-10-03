@@ -3093,3 +3093,85 @@ export interface RegionsResponse {
   country: { code: string; regionLabel: string } | null;
   regions: (Region & { sortOrder: number })[];
 }
+
+// ---- Suppliers (INV-1) ----
+// currency NULL means unknown, never AED. Money arrives as a trimmed string.
+export const SUPPLIER_CURRENCIES = ["AED", "SAR", "KWD", "QAR", "BHD", "OMR", "USD"] as const;
+
+export interface Supplier {
+  id: number;
+  name: string;
+  status: "active" | "archived";
+  paymentTerms: string | null;
+  leadTimeDays: number | null;
+  currency: string | null;
+  minimumOrderAmount: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierListItem extends Supplier {
+  itemCount: number;
+  primaryContactName: string | null;
+  primaryContactEmail: string | null;
+  primaryContactPhone: string | null;
+}
+
+export interface SupplierContact {
+  id: number;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+}
+
+export interface SupplierItem {
+  id: number;
+  ingredientId: number;
+  ingredientName: string;
+  ingredientUnit: string;
+  supplierSku: string | null;
+  unitCost: string | null;
+  currency: string | null;
+  minOrderQty: number | null;
+  leadTimeDays: number | null;
+}
+
+export interface SupplierDetail extends Supplier {
+  contacts: SupplierContact[];
+  items: SupplierItem[];
+}
+
+export interface SupplierInput {
+  name?: string;
+  status?: "active" | "archived";
+  paymentTerms?: string | null;
+  leadTimeDays?: number | null;
+  currency?: string | null;
+  minimumOrderAmount?: number | null;
+  notes?: string | null;
+}
+
+export interface SupplierContactInput {
+  name?: string;
+  role?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  isPrimary?: boolean;
+}
+
+export interface SupplierItemInput {
+  supplierSku?: string | null;
+  unitCost?: number | null;
+  currency?: string | null;
+  minOrderQty?: number | null;
+  leadTimeDays?: number | null;
+}
+
+export interface SupplierSuggestion {
+  name: string;
+  source: string;
+  uses: number;
+}

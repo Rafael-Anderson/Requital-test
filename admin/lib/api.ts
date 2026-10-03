@@ -24,6 +24,12 @@ import type {
   Brand,
   BrandInput,
   TaxClass,
+  SupplierContactInput,
+  SupplierDetail,
+  SupplierInput,
+  SupplierItemInput,
+  SupplierListItem,
+  SupplierSuggestion,
   TaxClassInput,
   MetafieldDefinition,
   MetafieldDefinitionInput,
@@ -2098,4 +2104,56 @@ export function commitScan(imageUrl: string, items: ScanCommitItem[]) {
     method: "POST",
     body: JSON.stringify({ imageUrl, items }),
   });
+}
+
+// ---- Suppliers (INV-1) ----
+
+export function listSuppliers(status?: "active" | "archived") {
+  return apiFetch<SupplierListItem[]>(`/suppliers${status ? `?status=${status}` : ""}`);
+}
+
+export function getSupplier(id: number) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}`);
+}
+
+export function createSupplier(data: SupplierInput) {
+  return apiFetch<SupplierDetail>("/suppliers", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateSupplier(id: number, data: SupplierInput) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteSupplier(id: number) {
+  return apiFetch<{ id: number; deleted: boolean; archived: boolean }>(`/suppliers/${id}`, { method: "DELETE" });
+}
+
+export function addSupplierContact(id: number, data: SupplierContactInput) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}/contacts`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateSupplierContact(id: number, contactId: number, data: SupplierContactInput) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}/contacts/${contactId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteSupplierContact(id: number, contactId: number) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}/contacts/${contactId}`, { method: "DELETE" });
+}
+
+export function saveSupplierItem(id: number, ingredientId: number, data: SupplierItemInput) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}/items/${ingredientId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteSupplierItem(id: number, ingredientId: number) {
+  return apiFetch<SupplierDetail>(`/suppliers/${id}/items/${ingredientId}`, { method: "DELETE" });
+}
+
+export function listSupplierSuggestions() {
+  return apiFetch<SupplierSuggestion[]>("/suppliers/suggestions/free-text");
 }

@@ -1296,3 +1296,47 @@ export interface PaymentreconciliationRow {
   // Set when the gateway reported the session expired; never polled again.
   settledAt: Date | null;
 }
+
+// INV-1. `currency` NULL = unknown (never defaulted). Money is DECIMAL(65,30),
+// arrives as a string, and is trimmed with trimDecimal at the API boundary.
+export interface SupplierRow {
+  id: number;
+  shopId: number;
+  name: string;
+  // 'active' | 'archived'
+  status: string;
+  paymentTerms: string | null;
+  leadTimeDays: number | null;
+  currency: string | null;
+  minimumOrderAmount: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SuppliercontactRow {
+  id: number;
+  supplierId: number;
+  shopId: number;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SupplieritemRow {
+  id: number;
+  shopId: number;
+  supplierId: number;
+  ingredientId: number;
+  supplierSku: string | null;
+  unitCost: string | null;
+  currency: string | null;
+  minOrderQty: number | null;
+  leadTimeDays: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}

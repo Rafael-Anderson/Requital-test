@@ -6,6 +6,7 @@ const TABS = [
   { href: "/inventory", label: "Ingredients" },
   { href: "/inventory/categories", label: "Categories" },
   { href: "/inventory/scan", label: "Scan to Stock" },
+  { href: "/inventory/suppliers", label: "Suppliers", exact: false },
   { href: "/inventory/movements", label: "Movement History" },
 ];
 
