@@ -102,7 +102,7 @@ export default function IngredientsPage() {
       <InventoryTabs />
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Ingredients</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex max-w-full flex-wrap items-center gap-2">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -169,7 +169,7 @@ export default function IngredientsPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Name</TH>

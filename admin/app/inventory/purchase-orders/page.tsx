@@ -92,7 +92,7 @@ export default function PurchaseOrdersPage() {
       ) : rows.length === 0 ? (
         <EmptyState title="No purchase orders yet" description="Raise one to order stock from a supplier, then receive it into an outlet's stock when it arrives." />
       ) : (
-        <Table>
+        <Table stickyFirst>
           <THead>
             <TR>
               <TH className="text-start">Number</TH>

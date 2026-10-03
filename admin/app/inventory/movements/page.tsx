@@ -84,7 +84,7 @@ export default function StockMovementsPage() {
       </div>
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table>
+      <Table stickyFirst>
         <THead>
           <tr>
             <TH>Product / Ingredient</TH>

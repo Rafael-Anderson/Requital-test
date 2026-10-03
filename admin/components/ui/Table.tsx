@@ -15,13 +15,24 @@
 // treatments — a full `Button` with visible text, and a plain underlined
 // text link — existed on different list pages before being converged onto
 // this one; don't reintroduce either for a new list page's row actions.
+import ScrollFade from "@/components/ui/ScrollFade";
 import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 
-export function Table({ className = "", ...props }: HTMLAttributes<HTMLTableElement>) {
+// Scrolls sideways inside its own rounded container with an edge fade (see
+// ScrollFade) when the columns do not fit; `stickyFirst` pins the first column
+// for a wide table whose row identity lives there.
+export function Table({
+  className = "",
+  stickyFirst = false,
+  ...props
+}: HTMLAttributes<HTMLTableElement> & { stickyFirst?: boolean }) {
   return (
-    <div className={`overflow-x-auto rounded-2xl border border-border bg-surface dark:border-white/10 dark:bg-zinc-900 ${className}`}>
+    <ScrollFade
+      stickyFirst={stickyFirst}
+      className={`rounded-2xl border border-border bg-surface dark:border-white/10 dark:bg-zinc-900 ${className}`}
+    >
       <table className="w-full text-sm" {...props} />
-    </div>
+    </ScrollFade>
   );
 }
 
