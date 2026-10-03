@@ -26,10 +26,23 @@ the partial pieces named below.** This document remains the plan of record.
 >    recipient book then CUS-15 and §12 gift mode (needs the ToS live); CUS-10/11/16/19/20
 >    and MKT-16 are small and independent; CUS-12 is half done (`customermetrics` is
 >    written nightly and read by nothing).
-> 5. *Phase 5:* INV-1 then INV-2 then INV-3/5/18/ERP-10 then INV-6; ERP-1/ERP-4 then
+> 5. *Phase 5:* ~~INV-1 then INV-2~~ (done 2026-10-03: #208, #209) then INV-3/5/18/ERP-10 then INV-6; ERP-1/ERP-4 then
 >    INV-4 then INV-7/11/10; SHP-5 then SHP-7/NOV-8/SHP-15/ORD-12; SHP-3 then ORD-19 then
->    NOV-3; MOB-3 then MOB-7/INV-17. (INV-1/INV-2 are being built in the 2026-10-02 batch.)
+>    NOV-3; MOB-3 then MOB-7/INV-17.
 > 6. *Phases 6 to 8:* untouched by this pass.
+>
+> **Update 2026-10-03 (verified against `main` `b9aed0f7`).** Shipped since the list above:
+> INV-1, INV-2, STF-3, STF-4 (staff tier), STF-5, ONB-4, the Shopify product importer
+> (ONB-1 in part, ONB-6 for that path), the nested-pool guardrail, the `check-form-width`
+> guardrail wired into CI, and a real nested-pool bug in `ProductCatalogService.duplicate`.
+> **Still genuinely left from those themes:** ONB-1's collections, customers and orders and
+> ONB-2 (Salla/Zid) which reuse its framework; INV-3 (receive-against-PO from the scan
+> flow), INV-5, INV-18, INV-6 (needs a currency on `ingredient.costPerUnit` first); a
+> platform-admin path to reset a SHOP admin's 2FA, remember-this-device, forced rotation
+> on a breach hit; `trust proxy` (the session IP column and every per-IP throttle see the
+> proxy's address); STF-4 for platform admins. An owner decision is open on whether a
+> cancelled order should release its discount redemptions (see `CLAUDE.md`, "Open
+> follow-ups").
 >
 > **Newly recorded gaps (2026-10-02).** The dashboard hardcodes UTC+4 and signup never sets
 > timezone or currency from the country, so a Saudi or Kuwaiti shop starts on Dubai time and
@@ -746,8 +759,8 @@ an inventory module that cannot answer "what dies on Thursday".
 
 | ID | Proposal | Effort | Type | Class | Depends on | Touches | Ship |
 |---|---|---|---|---|---|---|---|
-| **INV-1** | **Supplier as a first-class entity** (contacts, terms, lead time, currency, min order, per-supplier SKU + cost) | **M** | feature | TABLE STAKES | none | new `supplier`, `supplierproduct`; `ingredient.supplier` and `product.vendor` migrate to FKs | **YES** |
-| **INV-2** | **Purchase orders** — draft → sent → partially received → received → closed, with per-line receiving | **L** | feature | TABLE STAKES | INV-1 | new `purchaseorder`/`purchaseorderitem`, stock-in through the existing `stockmovement` ledger | **YES** |
+| ~~**INV-1**~~ **RESOLVED 2026-10-03** (#208, merge `9f190534`; migration `20261020100000`; free-text columns deliberately not migrated) | **Supplier as a first-class entity** (contacts, terms, lead time, currency, min order, per-supplier SKU + cost) | **M** | feature | TABLE STAKES | none | new `supplier`, `supplierproduct`; `ingredient.supplier` and `product.vendor` migrate to FKs | **YES** |
+| ~~**INV-2**~~ **RESOLVED 2026-10-03** (#209, merge `150d6c4d`; migration `20261020110000`; no `closed` status, a short-shipped PO stays `partially_received`) | **Purchase orders** — draft → sent → partially received → received → closed, with per-line receiving | **L** | feature | TABLE STAKES | INV-1 | new `purchaseorder`/`purchaseorderitem`, stock-in through the existing `stockmovement` ledger | **YES** |
 | INV-3 | Receive-against-PO from the existing OCR scan flow (match the delivery note to an open PO) | M | feature | DIFFERENTIATOR | INV-2, scan (exists) | `scan.service` matching layer, PO reconciliation | **YES** |
 | **INV-4** | **Lot / batch tracking with expiry**, FEFO allocation, expiring-soon report, auto-markdown trigger | **L** | feature | DIFFERENTIATOR | none | new `stocklot`, allocation in `adjustStockForOrder`, a sweep job, dashboard card | **YES** |
 | INV-5 | Reorder points and suggested-PO generation (per outlet, from velocity + lead time) | M | feature | DIFFERENTIATOR | INV-1, INV-2 | a computed endpoint + an admin surface | **YES** |
@@ -1606,9 +1619,9 @@ the multi-outlet work was built for — that is the binding constraint.
 |---|---|---|---|---|---|---|---|
 | **STF-1** | **Expand `ALL_PERMISSIONS` to full module coverage** and support shop-wide custom roles, not just per-outlet overrides | **M** | infra | TABLE STAKES | none | `permissions.ts`, `branchrole` generalised to `role`, every controller's `@Roles` | **YES** |
 | STF-2 | Approval workflows — refunds over X, discounts over Y%, stock write-offs, price changes | M | feature | DIFFERENTIATOR | STF-1 | an `approvalrequest` entity, a gate in the relevant services | **YES** |
-| **STF-3** | **2FA (TOTP) on staff and platform-admin tiers**, enforceable per shop | **M** | infra | TABLE STAKES | none | auth service, login flow, a recovery-code path | **YES** |
-| STF-4 | Active session list with remote revoke, per tier | S | infra | TABLE STAKES | `refreshtoken` exists | an account-security page, a revoke endpoint | **YES** |
-| STF-5 | Password policy, breach-list check, and forced rotation on compromise | S | infra | TABLE STAKES | none | auth service | **YES** |
+| ~~**STF-3**~~ **RESOLVED 2026-10-03** (#215, merge `b9aed0f7`; migration `20261021110000`; remember-this-device and customer-tier 2FA not built) | **2FA (TOTP) on staff and platform-admin tiers**, enforceable per shop | **M** | infra | TABLE STAKES | none | auth service, login flow, a recovery-code path | **YES** |
+| ~~STF-4~~ **RESOLVED 2026-10-03 for the staff tier** (#213, merge `d01f209f`; migration `20261021100000`; platform-admin sessions have no refresh row so no list or revoke) | Active session list with remote revoke, per tier | S | infra | TABLE STAKES | `refreshtoken` exists | an account-security page, a revoke endpoint | **YES** |
+| ~~STF-5~~ **RESOLVED 2026-10-03** (#212, merge `dfcd7af6`; no migration; forced rotation on compromise and flagging of existing weak passwords not built) | Password policy, breach-list check, and forced rotation on compromise | S | infra | TABLE STAKES | none | auth service | **YES** |
 | STF-6 | SSO (Google Workspace / Microsoft) for merchant staff | M | integration | — | none | an OIDC path alongside password auth | LATER |
 | STF-7 | Audit-log export, retention policy, and search across a wider action vocabulary | S | feature | TABLE STAKES | none | `auditlog` querying, an export endpoint | **YES** |
 | STF-8 | Field-level audit diffing on the entities that matter (price, stock, discount, settings) | S | infra | TABLE STAKES | `auditlog.before`/`after` exist | more call sites writing to the existing shape | **YES** |
@@ -1652,12 +1665,12 @@ means re-entering a catalog by hand and losing every inbound link.
 
 | ID | Proposal | Effort | Type | Class | Depends on | Touches | Ship |
 |---|---|---|---|---|---|---|---|
-| **ONB-1** | **Shopify importer** — products, variants, images by URL, collections, customers, orders, redirects | **L** | integration | TABLE STAKES | CAT-1 for unmapped fields | a new import module, the job queue for long-running work | **YES** |
+| **ONB-1 PARTLY RESOLVED 2026-10-03** (#211, merge `aad99cc4`): products, variants, images by URL, stock and a dry-run diff are built; collections, customers and orders from Shopify are NOT | **Shopify importer** — products, variants, images by URL, collections, customers, orders, redirects | **L** | integration | TABLE STAKES | CAT-1 for unmapped fields | a new import module, the job queue for long-running work | **YES** |
 | ONB-2 | Salla and Zid importers | M each | integration | TABLE STAKES | ONB-1's framework | per-platform mappers | **YES** |
 | ONB-3 | WooCommerce importer (REST API or a WXR file) | M | integration | TABLE STAKES | ONB-1's framework | a mapper | LATER |
-| **ONB-4** | **URL redirect map** — import old URLs, 301 them, so SEO survives the move | **S** | infra | TABLE STAKES | none | a `urlredirect` table, `proxy.ts` lookup | **YES** |
+| ~~**ONB-4**~~ **RESOLVED 2026-10-03** (#210, merge `b4c349fa`; migration `20261022100000`) | **URL redirect map** — import old URLs, 301 them, so SEO survives the move | **S** | infra | TABLE STAKES | none | a `urlredirect` table, `proxy.ts` lookup | **YES** |
 | ONB-5 | Image import by URL (fetch, sniff, resize, store) as a shared importer primitive | S | infra | TABLE STAKES | storage (exists) | a job type | **YES** |
-| ONB-6 | Import dry-run with a diff report before committing | S | feature | TABLE STAKES | ONB-1 | the existing preview/confirm pattern generalised | **YES** |
+| ONB-6 **done for the Shopify product path** (#211); the generic importer's preview has no per-field diff | Import dry-run with a diff report before committing | S | feature | TABLE STAKES | ONB-1 | the existing preview/confirm pattern generalised | **YES** |
 | ONB-7 | Guided setup checklist with real completion detection (products added, payment connected, domain verified, theme published, policies written) | S | feature | TABLE STAKES | `publish-readiness` exists | expand it into a real checklist UI | **YES** |
 | ONB-8 | Demo/sample data a merchant can install and then wipe | S | feature | TABLE STAKES | seed script exists | a per-shop seed + a clean teardown | **YES** |
 | ONB-9 | Migration concierge tooling for Requital staff (run an import on a merchant's behalf from the platform admin) | S | feature | DIFFERENTIATOR | ONB-1 | a platform-admin surface | **YES** |
