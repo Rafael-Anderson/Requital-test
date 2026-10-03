@@ -354,6 +354,29 @@ export interface ProductRow {
   brandId: number | null;
 }
 
+export interface UrlRedirectRow {
+  id: number;
+  shopId: number;
+  fromPath: string;
+  toTarget: string;
+  statusCode: number;
+  active: boolean;
+  hitCount: number;
+  lastHitAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface NotFoundLogRow {
+  id: number;
+  shopId: number;
+  path: string;
+  hitCount: number;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  lastReferrer: string | null;
+}
+
 export interface BrandRow {
   id: number;
   shopId: number;

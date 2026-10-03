@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, ChevronDown, Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
-import { getCollectionBySlug, listBrands, listCollections, resolveImageUrl } from "@/lib/api";
+import { HttpError, getCollectionBySlug, listBrands, listCollections, resolveImageUrl } from "@/lib/api";
+import NotFoundContent from "@/components/NotFoundContent";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { resolveEarliestDeliveryLabel } from "@/lib/earliest-delivery";
 import CurrencySymbol from "@/components/CurrencySymbol";
@@ -165,6 +166,8 @@ export default function CollectionPage() {
   const [allCollections, setAllCollections] = useState<Collection[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // A real 404 (old or mistyped URL): the not-found state, reported to the 404 log.
+  const [missing, setMissing] = useState(false);
 
   const defaultOutletId = outlets[0]?.id;
 
@@ -181,7 +184,10 @@ export default function CollectionPage() {
         });
         setCollection(c);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Collection not found"));
+      .catch((err) => {
+        if (err instanceof HttpError && err.status === 404) setMissing(true);
+        else setError(err instanceof Error ? err.message : "Collection not found");
+      });
   }, [shopSlug, params.slug, defaultOutletId, shopLoading, previewToken]);
 
   useEffect(() => {
@@ -275,6 +281,7 @@ export default function CollectionPage() {
   }, [loadMoreStyle, filtered.length]);
 
   if (shopError) return <StorefrontErrorState variant="error" />;
+  if (missing) return <NotFoundContent />;
   if (error) return <p className="text-red-600">{error}</p>;
   if (shopLoading || collection === null) return <StorefrontLoadingSkeleton />;
 

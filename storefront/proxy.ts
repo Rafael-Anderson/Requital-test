@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalHost } from "./lib/is-local-host";
+import { createRedirectStore } from "./lib/redirect-map";
 
 // Runs on every real navigation (see matcher below) before the app/[shop]/...
 // route tree ever sees the request. Requital's own tenant resolution is a
@@ -21,6 +22,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 // returns null. docs/plans/custom-domain-resolver.md Phase 6.
 const GRACE_MS = 5 * 60 * 1000;
 const lastGood = new Map<string, { subdomain: string; at: number }>();
+
+// ONB-4 URL redirects: a per-shop cached map, matched in-process (see
+// lib/redirect-map.ts for why this is not a backend call per request).
+const redirects = createRedirectStore({ apiUrl: API_URL });
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -81,6 +86,25 @@ export async function proxy(request: NextRequest) {
     return NextResponse.rewrite(new URL("/store-not-found", request.url), {
       status: 404,
     });
+  }
+
+  // Old-URL redirects (ONB-4), before the page tree can 404 on them. Only for
+  // page reads, never the home page, and never allowed to break the request:
+  // any failure inside the store already resolves to "no redirect".
+  if ((request.method === "GET" || request.method === "HEAD") && pathname !== "/") {
+    const hit = await redirects.lookup(subdomain, pathname, search).catch(() => null);
+    if (hit) {
+      // A relative Location is valid (RFC 9110) and needs no guess at the
+      // public origin behind Caddy. 301s are cached by browsers for an hour,
+      // not forever, so a mistaken redirect heals soon after it is fixed.
+      return new NextResponse(null, {
+        status: hit.status,
+        headers: {
+          Location: hit.location,
+          "Cache-Control": hit.status === 301 ? "public, max-age=3600" : "no-store",
+        },
+      });
+    }
   }
 
   return NextResponse.rewrite(

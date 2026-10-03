@@ -73,6 +73,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { href: "/settings/business/online-presence", label: "Online Presence", description: "Social media links" },
       { href: "/settings/business/seo", label: "SEO", description: "Meta title, description and sharing image" },
       { href: "/settings/business/policy-pages", label: "Policy Pages", description: "Terms, privacy, refund, payment and shipping policies" },
+      { href: "/settings/storefront/redirects", label: "Redirects", description: "Old URLs that forward to the right page, and a report of missing pages" },
     ],
   },
   {
@@ -172,6 +173,8 @@ const SETTINGS: SettingEntry[] = [
   { label: "Social links", page: "/settings/business/online-presence", keywords: "instagram tiktok facebook snapchat youtube" },
   { label: "Meta title and description", page: "/settings/business/seo", keywords: "search engine google" },
   { label: "Terms and conditions", page: "/settings/business/policy-pages", keywords: "privacy refund shipping legal" },
+  { label: "URL redirects", page: "/settings/storefront/redirects", keywords: "301 302 old url migration forward seo moved" },
+  { label: "404 report", page: "/settings/storefront/redirects", keywords: "missing page not found broken link" },
   // Team
   { label: "Staff accounts", page: "/settings/users", keywords: "invite user roles permissions branch role" },
   // Diagnostics

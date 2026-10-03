@@ -35,6 +35,11 @@ import type {
   SupplierItemInput,
   SupplierListItem,
   SupplierSuggestion,
+  UrlRedirect,
+  UrlRedirectInput,
+  UrlRedirectList,
+  RedirectImportReport,
+  NotFoundLogList,
   TaxClassInput,
   MetafieldDefinition,
   MetafieldDefinitionInput,
@@ -2206,4 +2211,58 @@ export function receivePurchaseOrder(id: number, data: ReceivePurchaseOrderInput
     `/purchase-orders/${id}/receive`,
     { method: "POST", body: JSON.stringify(data) },
   );
+}
+
+// ---- URL redirects and the 404 report (ONB-4) ----
+
+export function listUrlRedirects(params: { search?: string; sort?: "hits" | "recent"; page?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.page) qs.set("page", String(params.page));
+  const query = qs.toString();
+  return apiFetch<UrlRedirectList>(`/url-redirects${query ? `?${query}` : ""}`);
+}
+
+export function createUrlRedirect(data: UrlRedirectInput) {
+  return apiFetch<UrlRedirect>("/url-redirects", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateUrlRedirect(id: number, data: Partial<UrlRedirectInput>) {
+  return apiFetch<UrlRedirect>(`/url-redirects/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteUrlRedirect(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/url-redirects/${id}`, { method: "DELETE" });
+}
+
+// Same stateless pair as the product import: confirm re-uploads the file and
+// the server re-validates it, nothing from the preview is trusted.
+export function previewUrlRedirectImport(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<RedirectImportReport>("/url-redirects/import/preview", { method: "POST", body: formData });
+}
+
+export function confirmUrlRedirectImport(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<RedirectImportReport>("/url-redirects/import/confirm", { method: "POST", body: formData });
+}
+
+export function listNotFoundLog(params: { search?: string; sort?: "hits" | "recent"; page?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.page) qs.set("page", String(params.page));
+  const query = qs.toString();
+  return apiFetch<NotFoundLogList>(`/url-redirects/not-found-log${query ? `?${query}` : ""}`);
+}
+
+export function dismissNotFoundEntry(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/url-redirects/not-found-log/${id}`, { method: "DELETE" });
+}
+
+export function clearNotFoundLog() {
+  return apiFetch<{ cleared: number }>("/url-redirects/not-found-log", { method: "DELETE" });
 }
