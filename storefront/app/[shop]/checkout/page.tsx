@@ -7,6 +7,7 @@ import CheckoutSinglePage from "@/components/checkout/CheckoutSinglePage";
 import CheckoutSteps from "@/components/checkout/CheckoutSteps";
 import AddonPrompt from "@/components/checkout/AddonPrompt";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import EmptyCartState from "@/components/EmptyCartState";
 
 // Dispatches on theme.checkoutLayout — both presets share the exact same
 // state/validation/submission logic (useCheckoutForm), so a layout switch
@@ -19,8 +20,8 @@ export default function CheckoutPage() {
 
   if (state.items.length === 0) {
     return (
-      <StorefrontPageShell variant="medium">
-        <p className="text-zinc-500">Your cart is empty.</p>
+      <StorefrontPageShell variant="wide">
+        <EmptyCartState />
       </StorefrontPageShell>
     );
   }

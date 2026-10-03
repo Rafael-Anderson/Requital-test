@@ -8,6 +8,7 @@ import { quoteCartTax } from "@/lib/order-tax";
 import PromoCodeField from "@/components/PromoCodeField";
 import CartLineItems from "@/components/CartLineItems";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
+import EmptyCartState from "@/components/EmptyCartState";
 import { storeButtonClassName } from "@/lib/button-style";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { formatPriceAmount } from "@/lib/currency";
@@ -30,12 +31,8 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <StorefrontPageShell variant="medium">
-        <h1 className="text-2xl font-semibold mb-4">Your cart</h1>
-        <p className="text-zinc-500">Your cart is empty.</p>
-        <Link href={shopBasePath || "/"} className="text-accent hover:underline mt-2 inline-block">
-          Continue shopping
-        </Link>
+      <StorefrontPageShell variant="wide">
+        <EmptyCartState />
       </StorefrontPageShell>
     );
   }

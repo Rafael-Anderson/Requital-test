@@ -10,6 +10,7 @@ import { useAnimatedNumber } from "@/lib/use-animated-number";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { iconStyleProps } from "@/lib/icon-style";
 import CartLineItems from "@/components/CartLineItems";
+import EmptyCartState from "@/components/EmptyCartState";
 import { formatPriceAmount } from "@/lib/currency";
 
 // §8.13.C item 13 — drawers.animation open transitions. `slide` (and absent)
@@ -83,11 +84,8 @@ export default function CartDrawer() {
         </div>
 
         {items.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
-            <p className="text-zinc-500">Your cart is empty.</p>
-            <button type="button" onClick={closeDrawer} className="text-sm text-accent hover:underline cursor-pointer">
-              Continue shopping
-            </button>
+          <div className="flex-1 flex items-center justify-center">
+            <EmptyCartState variant="drawer" onContinue={closeDrawer} />
           </div>
         ) : (
           <>

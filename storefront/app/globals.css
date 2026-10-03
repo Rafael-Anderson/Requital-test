@@ -56,6 +56,15 @@
   --gutter-x-lg: 1.5rem; /* = sm:px-6 (the >=640px value) */
 }
 
+/* Height of the fixed bottom-bar mobile nav (MobileNav.tsx, h-14, hidden from md
+   up), published only while that nav is mounted. Fixed bottom elements add it to
+   their own offset: bottom-[calc(<base>+var(--bottom-nav-h,0px)+...)]. */
+@media (max-width: 767px) {
+  :root[data-bottom-nav] {
+    --bottom-nav-h: 3.5rem;
+  }
+}
+
 /* Phase A (motion foundation) — ONE blanket prefers-reduced-motion rule,
    replacing the five near-identical per-class blocks this file used to carry
    (one each for .marquee-track, .theme-nav-link--anim, the .theme-anim-*

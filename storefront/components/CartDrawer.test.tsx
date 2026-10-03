@@ -93,3 +93,12 @@ describe("CartDrawer drawers chrome (§8.18 follow-up)", () => {
     expect(p.className).not.toContain("shadow-2xl");
   });
 });
+
+describe("CartDrawer empty state", () => {
+  it("renders the compact shared empty state (no suggestions) when the cart is empty", () => {
+    const { container, getByRole } = render(<CartDrawer />);
+    expect(getByRole("heading", { name: "Your cart is empty" })).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="empty-cart-skeleton"]')).toBeNull();
+    expect(getByRole("button", { name: "Continue shopping" })).toBeInTheDocument();
+  });
+});

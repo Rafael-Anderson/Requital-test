@@ -50,7 +50,7 @@ export default function BioPage() {
 
   return (
     <div
-      className="rounded-2xl -mx-4 sm:mx-0"
+      className="sm:rounded-2xl"
       style={
         backgroundImage
           ? { backgroundImage: `url(${backgroundImage})`, backgroundSize: "cover", backgroundPosition: "center" }

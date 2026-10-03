@@ -108,6 +108,16 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
       .catch(() => setItems([]));
   }, [mode, shopSlug, previewToken]);
 
+  // The bottom bar is a fixed 3.5rem strip under md. Other fixed bottom
+  // elements (WhatsApp, floating buttons, back-to-top, the PDP add-to-cart bar)
+  // stack above it through --bottom-nav-h, which globals.css sets from this
+  // attribute only below md (where the bar is shown).
+  useEffect(() => {
+    if (mode !== "bottom-bar") return;
+    document.documentElement.setAttribute("data-bottom-nav", "");
+    return () => document.documentElement.removeAttribute("data-bottom-nav");
+  }, [mode]);
+
   // Lock page scroll while the drawer/fullscreen panel is open.
   useEffect(() => {
     if (mode === "bottom-bar" || !open) return;
@@ -229,7 +239,7 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
     return (
       <nav
         aria-label="Mobile navigation"
-        className="fixed bottom-0 inset-x-0 z-30 h-14 flex items-stretch border-t border-stroke bg-header text-header-fg md:hidden"
+        className="fixed bottom-[var(--cookie-banner-h,0px)] inset-x-0 z-30 h-14 flex items-stretch border-t border-stroke bg-header text-header-fg md:hidden"
       >
         <Link href={shopBasePath || "/"} className={tabClass}>
           <Home className="size-5" />
