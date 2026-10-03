@@ -1,0 +1,48 @@
+# Responsive audit harness
+
+Measures every admin and storefront page for horizontal overflow, header width, elements past the
+viewport, genuine sideways scrollers and fixed elements, at 360x780, 390x844, 430x932, 768x1024 and
+1440x900. Local servers and a freshly seeded DB only, never production.
+
+## Run it
+
+```bash
+# backend (NODE_ENV=test is REQUIRED: the default 100 req/min per-IP throttle otherwise returns 429
+# to the pages themselves and the audit measures error states), admin and storefront as production builds
+NODE_ENV=test PORT=3000 node backend/dist/main.js          # DB migrated, any empty database
+cd admin && NEXT_PUBLIC_API_URL=http://localhost:3000 npm run build && npx next start -p 3001
+cd storefront && NEXT_PUBLIC_API_URL=http://localhost:3000 npm run build && npx next start -p 3002
+
+node tools/responsive-audit/audit.js --label before            # all routes, all viewports, ~60 min
+node tools/responsive-audit/audit.js --label x --viewports 390x844 --only /orders,/dashboard --no-shots
+node tools/responsive-audit/diagnose.js --label before          # numbers for the Phase 0.3 symptoms
+node tools/responsive-audit/diagnose2.js --label before         # slow-API settings, touch swipes, cookie banner
+```
+
+Override servers with `AUDIT_API_URL`, `AUDIT_ADMIN_URL`, `AUDIT_STOREFRONT_URL`; the browser with
+`AUDIT_CHROME`; the seeded shop's editor mode with `AUDIT_MODE=simple` (default `advanced`).
+Output goes to `tools/responsive-audit/out/<label>/` (`report.md`, `report.json`, `fixture.json`,
+`shots/*.png` viewport screenshots, never full-page).
+
+## How to read a result
+
+- `docOverflow` compares `documentElement.scrollWidth` with `documentElement.clientWidth`, NOT
+  `window.innerWidth`. On a mobile page that overflows, Chrome zooms the visual viewport out to fit the
+  content, so `innerWidth` grows to the content width while the layout viewport and the header keep the
+  device width. That is exactly the "header stops partway with empty space beside it" symptom.
+- `offenders` are topmost elements whose box extends past the layout viewport and that are NOT inside an
+  `overflow-x: auto|scroll` ancestor. `clipped` are the same but inside an `overflow: hidden|clip`
+  ancestor (content silently cut off). `scrollers` are the genuine sideways scroll containers.
+- Wait rule: network idle AND no visible `.animate-pulse` / `[aria-busy]` / nprogress bar.
+
+## Touch swipes
+
+`swipe.js` drives a real touch drag through `Input.dispatchTouchEvent` in a context created with
+`hasTouch` and `isMobile`, and reports `scrollLeft` before and after. `Input.synthesizeScrollGesture` was
+tried first and did not move even a plain `overflow-x:auto` control in this headless build, so every
+swipe test must include a control element that is known to scroll (see `diagnose2.js`).
+
+## Not covered
+
+Routes that need data the seed does not create are listed under "Skipped" in `report.md`. Platform-admin
+routes (`/platform/*`) need a separate login and are excluded.
