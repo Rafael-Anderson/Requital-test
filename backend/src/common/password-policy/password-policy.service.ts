@@ -52,6 +52,9 @@ export function checkPasswordRules(
     return 'too_long';
   }
   const p = squash(password);
+  // Nothing but whitespace is the weakest password there is, and squash() would
+  // otherwise hide it from the repeated-character and common-list checks.
+  if (p === '') return 'too_common';
   const email = identity.email ? squash(identity.email) : '';
   const candidates = [
     email,
