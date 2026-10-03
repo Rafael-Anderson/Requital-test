@@ -12,6 +12,7 @@ import type {
   RegionsResponse,
   ZoneMappingProposal,
   AuthUser,
+  StaffSession,
   BranchRole,
   BranchRoleAssignment,
   Permission,
@@ -488,6 +489,19 @@ export function changePassword(data: { currentPassword: string; newPassword: str
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+// STF-4: active sessions. `userId` (admin only) lists a colleague's sessions.
+export function listSessions(userId?: number) {
+  return apiFetch<StaffSession[]>(`/auth/sessions${userId ? `?userId=${userId}` : ""}`);
+}
+
+export function revokeSession(id: string) {
+  return apiFetch<{ success: boolean }>(`/auth/sessions/${id}`, { method: "DELETE" });
+}
+
+export function revokeOtherSessions() {
+  return apiFetch<{ success: boolean; revoked: number }>("/auth/sessions", { method: "DELETE" });
 }
 
 export function forgotPassword(email: string) {

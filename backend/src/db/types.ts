@@ -1043,6 +1043,9 @@ export interface RefreshtokenRow {
   expiresAt: Date;
   revokedAt: Date | null;
   createdAt: Date;
+  // STF-4 (migration 20261021100000). NULL = written before the column existed.
+  userAgent: string | null;
+  ip: string | null;
 }
 
 export interface AuthtokenRow {

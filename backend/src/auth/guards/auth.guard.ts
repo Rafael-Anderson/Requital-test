@@ -23,6 +23,8 @@ interface JwtPayload {
   // real access-control decision still runs off the re-fetched user row
   // below, same as every other claim this guard reads.
   imp?: number;
+  // Session id = refresh-token family id (see AuthService.issueTokenPair).
+  sid?: string;
 }
 
 @Injectable()
@@ -70,15 +72,39 @@ export class AuthGuard implements CanActivate {
     // different outlet, or deleting the account, takes effect on the very
     // next request rather than lingering for the rest of the token's 7-day
     // lifetime.
+    //
+    // The same single query also answers "is this token's session still live?"
+    // (STF-4): a normal session token carries `sid` (its refresh-token
+    // family) and is only honoured while that family has an unrevoked,
+    // unexpired refresh row. That is what makes a remote revoke, a logout, a
+    // password change or a refresh-token reuse alarm cut access immediately
+    // rather than after the 15 minute access token. Token shapes:
+    //   - normal session token: has `sid`, must be live.
+    //   - impersonation token (`imp`): minted with no refresh row at all, so no
+    //     session to check; it simply expires on its own after 1 hour.
+    //   - anything else (no sid, no imp): a token issued before this check
+    //     existed. Rejected, and self-heals through the admin app's 401 ->
+    //     silent-refresh flow, exactly like the missing-`typ` case above.
+    const isImpersonation = payload.imp !== undefined;
+    if (!isImpersonation && typeof payload.sid !== 'string') {
+      throw new UnauthorizedException('Invalid session');
+    }
+    const sid = isImpersonation ? null : payload.sid!;
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT u.id, u.shopId, u.role, u.outletId, s.suspendedAt
+      `SELECT u.id, u.shopId, u.role, u.outletId, s.suspendedAt,
+              EXISTS(SELECT 1 FROM refreshtoken r
+                     WHERE r.familyId = ? AND r.userId = u.id
+                       AND r.revokedAt IS NULL AND r.expiresAt > ?) AS sessionLive
        FROM user u JOIN shop s ON s.id = u.shopId
        WHERE u.id = ?`,
-      [payload.sub],
+      [sid ?? '', new Date(), payload.sub],
     );
     const user = rows[0];
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
+    }
+    if (sid !== null && !user.sessionLive) {
+      throw new UnauthorizedException('Session ended');
     }
     // Re-checked every request, not just at login — a shop suspended by a
     // platform admin mid-session must be locked out on its very next
@@ -96,6 +122,7 @@ export class AuthGuard implements CanActivate {
       ...(payload.imp !== undefined
         ? { impersonatedByPlatformAdminId: payload.imp }
         : {}),
+      ...(sid !== null ? { sessionId: sid } : {}),
     };
     (request as Request & { user: TenantContext }).user = tenantContext;
     return true;

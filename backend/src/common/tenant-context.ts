@@ -23,4 +23,8 @@ export interface TenantContext {
   // the DB) — the platform admin id currently impersonating this session.
   // Undefined for every normal merchant session.
   impersonatedByPlatformAdminId?: number;
+  // The caller's session (refresh-token family) id, from the access token's
+  // `sid` claim, verified live by AuthGuard. Absent on an impersonation token,
+  // which has no refresh row and therefore no session.
+  sessionId?: string;
 }

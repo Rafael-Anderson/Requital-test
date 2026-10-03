@@ -12,7 +12,11 @@ import * as bcrypt from 'bcryptjs';
 import { DatabaseService } from '../database/database.service';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { buildSetClause } from '../database/update.util';
-import type { RowDataPacket } from 'mysql2/promise';
+import type {
+  PoolConnection,
+  ResultSetHeader,
+  RowDataPacket,
+} from 'mysql2/promise';
 import type { UserRow } from '../db/types';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 import { escapeHtml } from '../common/email';
@@ -30,6 +34,7 @@ import { UpdateStaffUserDto } from './dto/update-staff-user.dto';
 import type { TenantContext, UserRole } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
+import { NO_SESSION_META, type SessionMeta } from './session-meta';
 
 const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
@@ -75,7 +80,7 @@ export class AuthService {
     private readonly passwordPolicy: PasswordPolicyService,
   ) {}
 
-  async signup(dto: SignupDto) {
+  async signup(dto: SignupDto, meta: SessionMeta = NO_SESSION_META) {
     if (RESERVED_SUBDOMAINS.includes(dto.subdomain)) {
       throw new BadRequestException('This subdomain is reserved');
     }
@@ -162,7 +167,7 @@ export class AuthService {
     const user = await this.findByIdOrThrow(userId);
     const devVerificationLink = await this.sendVerificationEmail(user);
     return {
-      ...(await this.issueTokenPair(user)),
+      ...(await this.issueTokenPair(user, { meta })),
       ...(devVerificationLink ? { devVerificationLink } : {}),
     };
   }
@@ -184,7 +189,7 @@ export class AuthService {
   // cooldown window — bcrypt.compare is skipped in the cooldown case (same
   // as the already-existing no-such-user fast path), so this doesn't add a
   // new distinguishable timing/response class beyond what already existed.
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, meta: SessionMeta = NO_SESSION_META) {
     const user = await this.findByEmail(dto.email);
 
     if (user && this.isWithinLoginCooldown(user)) {
@@ -219,7 +224,7 @@ export class AuthService {
       { shopId: user.shopId, actorUserId: user.id },
       { action: 'auth.login', entityType: 'auth', entityId: user.id },
     );
-    return this.issueTokenPair(user);
+    return this.issueTokenPair(user, { meta });
   }
 
   private isWithinLoginCooldown(user: {
@@ -246,7 +251,10 @@ export class AuthService {
   // valid for a second use. See the CAS comment below for why a second
   // presentation of the same token — genuine theft or two requests racing
   // the same token — is treated identically.
-  async refresh(dto: { refreshToken: string }) {
+  async refresh(
+    dto: { refreshToken: string },
+    meta: SessionMeta = NO_SESSION_META,
+  ) {
     const tokenHash = hashToken(dto.refreshToken);
     const storedRows = await this.db.query<RowDataPacket[]>(
       `SELECT * FROM refreshtoken WHERE tokenHash = ?`,
@@ -259,16 +267,32 @@ export class AuthService {
     if ((stored.expiresAt as Date) < new Date()) {
       throw new UnauthorizedException('Refresh token expired');
     }
+    // Read before the transaction below: nothing inside it may touch the pool.
+    const user = await this.findById(stored.userId as number);
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
 
     // CAS, same pattern as the order-status transition in orders.service.ts:
     // the WHERE re-checks revokedAt at the moment this UPDATE takes its row
     // lock, so only one caller can ever "win" rotating a given token even
-    // under concurrency.
-    const claimed = await this.db.execute(
-      `UPDATE refreshtoken SET revokedAt = ? WHERE id = ? AND revokedAt IS NULL`,
-      [new Date(), stored.id],
-    );
-    if (claimed.affectedRows === 0) {
+    // under concurrency. The claim and the INSERT of the successor row are ONE
+    // transaction on purpose: AuthGuard rejects an access token whose session
+    // (family) has no live refresh row, so a gap between "old row revoked" and
+    // "new row inserted" would 401 a concurrent request of a healthy session.
+    const rotated = await this.db.transaction(async (conn) => {
+      const [claimed] = await conn.query<ResultSetHeader>(
+        `UPDATE refreshtoken SET revokedAt = ? WHERE id = ? AND revokedAt IS NULL`,
+        [new Date(), stored.id],
+      );
+      if (claimed.affectedRows === 0) return null;
+      return this.issueTokenPair(user, {
+        familyId: stored.familyId as string,
+        meta,
+        conn,
+      });
+    });
+    if (!rotated) {
       // Lost the race, or this token was already rotated earlier — either
       // way, someone is presenting a token that's no longer the live edge
       // of this session's chain. Kill the whole family rather than just
@@ -282,12 +306,7 @@ export class AuthService {
         'Refresh token reuse detected — all sessions revoked, please log in again',
       );
     }
-
-    const user = await this.findById(stored.userId as number);
-    if (!user) {
-      throw new UnauthorizedException('User no longer exists');
-    }
-    return this.issueTokenPair(user, stored.familyId as string);
+    return rotated;
   }
 
   // Revokes the whole session family the presented token belongs to (one
@@ -382,7 +401,10 @@ export class AuthService {
   // also marks the account verified (clicking a link only they could have
   // received from their own inbox is itself a verification) and logs them
   // straight in, same as signup does.
-  async acceptInvite(dto: AcceptInviteDto) {
+  async acceptInvite(
+    dto: AcceptInviteDto,
+    meta: SessionMeta = NO_SESSION_META,
+  ) {
     const storedRows = await this.db.query<RowDataPacket[]>(
       `SELECT * FROM authtoken WHERE tokenHash = ?`,
       [hashToken(dto.token)],
@@ -414,7 +436,7 @@ export class AuthService {
       [passwordHash, stored.userId],
     );
     const user = await this.findByIdOrThrow(stored.userId as number);
-    return this.issueTokenPair(user);
+    return this.issueTokenPair(user, { meta });
   }
 
   async listUsers(ctx: TenantContext) {
@@ -745,23 +767,37 @@ export class AuthService {
     };
   }
 
-  private async issueTokenPair(user: UserWithRelations, familyId?: string) {
+  // The session id (`sid` claim) IS the refresh-token family id: one login =
+  // one family, rotated on every refresh. AuthGuard re-checks on every request
+  // that the family still has a live refresh row, which is what makes a
+  // revoked session (STF-4), a logout and a password change lose access
+  // immediately instead of when the 15 minute access token runs out.
+  private async issueTokenPair(
+    user: UserWithRelations,
+    opts: {
+      familyId?: string;
+      meta?: SessionMeta;
+      conn?: PoolConnection;
+    } = {},
+  ) {
+    const familyId = opts.familyId ?? randomUUID();
+    const meta = opts.meta ?? NO_SESSION_META;
     const accessToken = await this.jwtService.signAsync(
-      { sub: user.id, typ: 'staff' },
+      { sub: user.id, typ: 'staff', sid: familyId },
       { expiresIn: ACCESS_TOKEN_LIFETIME },
     );
     const rawRefreshToken = generateOpaqueToken();
-    await this.db.execute(
-      `INSERT INTO refreshtoken (userId, familyId, tokenHash, expiresAt) VALUES (?, ?, ?, ?)`,
-      [
-        user.id,
-        familyId ?? randomUUID(),
-        hashToken(rawRefreshToken),
-        new Date(
-          Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
-        ),
-      ],
-    );
+    const sql = `INSERT INTO refreshtoken (userId, familyId, tokenHash, expiresAt, userAgent, ip) VALUES (?, ?, ?, ?, ?, ?)`;
+    const params = [
+      user.id,
+      familyId,
+      hashToken(rawRefreshToken),
+      new Date(Date.now() + REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+      meta.userAgent,
+      meta.ip,
+    ];
+    if (opts.conn) await opts.conn.query(sql, params);
+    else await this.db.execute(sql, params);
     return {
       accessToken,
       accessTokenExpiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,

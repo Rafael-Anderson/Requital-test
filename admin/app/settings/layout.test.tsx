@@ -70,6 +70,32 @@ describe("Settings layout role gate", () => {
     });
   });
 
+  describe.each(["branch", "viewer", "order_manager", "admin"])("own security page as %s", (role) => {
+    it("is reachable by every staff role, without the admin sidebar for non-admins", () => {
+      auth = { user: { role }, loading: false };
+      pathname = "/settings/security";
+      render(
+        <SettingsLayout>
+          <div>security page body</div>
+        </SettingsLayout>,
+      );
+      expect(screen.getByText("security page body")).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+    });
+  });
+
+  it("a non-admin still cannot reach a lookalike path", () => {
+    auth = { user: { role: "viewer" }, loading: false };
+    pathname = "/settings/security/extra";
+    render(
+      <SettingsLayout>
+        <div>nope</div>
+      </SettingsLayout>,
+    );
+    expect(screen.queryByText("nope")).not.toBeInTheDocument();
+    expect(replace).toHaveBeenCalledWith("/");
+  });
+
   it("renders nothing while the session is still loading", () => {
     auth = { user: null, loading: true };
     render(<SettingsLayout><SettingsIndexPage /></SettingsLayout>);

@@ -82,6 +82,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     question: "Who can do what?",
     pages: [
       { href: "/settings/users", label: "Users", description: "Staff accounts, invitations and branch roles" },
+      { href: "/settings/security", label: "Security", description: "Your password and the devices you are signed in on" },
     ],
   },
   {
@@ -177,6 +178,9 @@ const SETTINGS: SettingEntry[] = [
   { label: "404 report", page: "/settings/storefront/redirects", keywords: "missing page not found broken link" },
   // Team
   { label: "Staff accounts", page: "/settings/users", keywords: "invite user roles permissions branch role" },
+  // Security
+  { label: "Active sessions", page: "/settings/security", keywords: "devices sign out log out revoke" },
+  { label: "Change password", page: "/settings/security", keywords: "breach" },
   // Diagnostics
   { label: "Webhook activity", page: "/settings/diagnostics", keywords: "log delivery payment did it arrive" },
   { label: "Failed jobs", page: "/settings/diagnostics", keywords: "retry dismiss background queue" },
