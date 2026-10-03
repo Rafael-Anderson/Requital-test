@@ -24,6 +24,16 @@ Override servers with `AUDIT_API_URL`, `AUDIT_ADMIN_URL`, `AUDIT_STOREFRONT_URL`
 Output goes to `tools/responsive-audit/out/<label>/` (`report.md`, `report.json`, `fixture.json`,
 `shots/*.png` viewport screenshots, never full-page).
 
+## Gotchas (found the hard way)
+
+- The backend's `ADMIN_ORIGINS` must include the audited admin origin (e.g. `http://localhost:3201`), or every
+  page sits on /login and the audit reads "0 failing". Check a screenshot before trusting a clean run.
+- Stopping an app by killing the `npx` pid leaves the old `next-server` alive, serving chunks from a deleted
+  `.next` (500s). Stop a server by its port (`fuser -k PORT/tcp`), never with `pkill -f <pattern>` (the pattern
+  matches your own shell).
+- The harness logs in once per viewport; the login route is throttled per IP when the backend is not
+  `NODE_ENV=test`.
+
 ## How to read a result
 
 - `docOverflow` compares `documentElement.scrollWidth` with `documentElement.clientWidth`, NOT
