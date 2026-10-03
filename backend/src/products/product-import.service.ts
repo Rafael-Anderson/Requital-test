@@ -318,7 +318,7 @@ export class ProductImportService {
   // positive, so the caller can fire the back-in-stock notify-me trigger
   // once the transaction actually commits (same before/after-tx split as
   // adjustStock/transferStock use — never fired from inside the tx itself).
-  private async applyImportStock(
+  async applyImportStock(
     conn: PoolConnection,
     ctx: TenantContext,
     target: {
@@ -377,7 +377,7 @@ export class ProductImportService {
   // separate rather than parameterizing resolveTagIds's `this.db` call,
   // since every other write in the import commit path must go through the
   // same conn for the batch to be one real transaction (see confirmImportProducts).
-  private async resolveTagIdsTx(
+  async resolveTagIdsTx(
     conn: PoolConnection,
     ctx: TenantContext,
     names: string[],
@@ -655,7 +655,7 @@ export class ProductImportService {
   // Returns null for either side the shop genuinely lacks (a shop whose classes
   // were deleted), which leaves taxClassId NULL and lets B2's shop-default
   // fallback handle it - never an invented class and never a wrong one.
-  private async resolveChargeTaxClassIds(
+  async resolveChargeTaxClassIds(
     shopId: number,
   ): Promise<{ standard: number | null; zero: number | null }> {
     const rows = await this.db.query<RowDataPacket[]>(

@@ -27,6 +27,8 @@ import { BulkProductIdsDto } from './dto/bulk-product-ids.dto';
 import { BulkUpdateProductStatusDto } from './dto/bulk-update-product-status.dto';
 import { BulkPriceUpdateDto } from './dto/bulk-price-update.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { ImportQueryDto } from './dto/import-query.dto';
+import { ProductShopifyImportService } from './product-shopify-import.service';
 import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
@@ -46,6 +48,7 @@ export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,
     private readonly storageService: StorageService,
+    private readonly shopifyImport: ProductShopifyImportService,
   ) {}
 
   @Get()
@@ -100,26 +103,34 @@ export class ProductsController {
   @UseInterceptors(FileInterceptor('file', csvUploadOptions))
   previewImport(
     @CurrentUser() ctx: TenantContext,
+    @Query() query: ImportQueryDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
+    }
+    if (query.source === 'shopify') {
+      return this.shopifyImport.preview(ctx, file, query);
     }
     return this.productsService.previewImportProducts(ctx, file);
   }
 
   // The client re-submits the same file rather than a preview id — see
   // ProductsService.confirmImportProducts for why this pair is stateless.
+  // `?source=shopify` runs the Shopify column mapper on the same contract.
   @Roles('admin')
   @Post('import/confirm')
   @UseInterceptors(FileInterceptor('file', csvUploadOptions))
   confirmImport(
     @CurrentUser() ctx: TenantContext,
-    @Query() query: ListProductsQueryDto,
+    @Query() query: ImportQueryDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) {
       throw new BadRequestException('No file uploaded');
+    }
+    if (query.source === 'shopify') {
+      return this.shopifyImport.confirm(ctx, file, query);
     }
     return this.productsService.confirmImportProducts(
       ctx,

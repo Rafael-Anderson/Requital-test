@@ -27,6 +27,7 @@ import TransferStockModal from "@/components/TransferStockModal";
 import AdjustStockModal from "@/components/AdjustStockModal";
 import BulkPriceUpdateModal from "@/components/BulkPriceUpdateModal";
 import CsvImportModal from "@/components/CsvImportModal";
+import ShopifyImportModal from "@/components/ShopifyImportModal";
 import DropdownMenu from "@/components/ui/DropdownMenu";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { useRowSelection } from "@/lib/useRowSelection";
@@ -110,6 +111,7 @@ function InventoryPageContent() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkPricing, setBulkPricing] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingShopify, setImportingShopify] = useState(false);
 
   async function handleToggleStatus(product: Product) {
     const nextStatus = product.status === "Available" ? "Unavailable" : "Available";
@@ -326,6 +328,18 @@ function InventoryPageContent() {
                 >
                   <Upload className="size-3.5" />
                   Import CSV
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    close();
+                    setImportingShopify(true);
+                  }}
+                  className="flex w-full items-center gap-2 px-3.5 py-2 text-sm text-start hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Upload className="size-3.5" />
+                  Import from Shopify
                 </button>
               </>
             )}
@@ -565,6 +579,14 @@ function InventoryPageContent() {
             selection.clear();
             refresh();
           }}
+        />
+      )}
+
+      {importingShopify && (
+        <ShopifyImportModal
+          defaultOutletId={selectedOutletId}
+          onClose={() => setImportingShopify(false)}
+          onImported={refresh}
         />
       )}
 

@@ -3346,3 +3346,51 @@ export interface NotFoundLogList {
   pageSize: number;
   total: number;
 }
+
+// ONB-1: Shopify product import report (backend/src/products/product-shopify-import.service.ts).
+export interface ShopifyFieldChange {
+  field: string;
+  from: string | null;
+  to: string | null;
+}
+export interface ShopifyProductReport {
+  handle: string;
+  rowNumber: number;
+  name: string;
+  action: "create" | "update" | "skip" | "error";
+  reason: string | null;
+  changes: ShopifyFieldChange[];
+  variantChanges: (ShopifyFieldChange & { sku: string })[];
+  variants: { total: number; toCreate: number; toUpdate: number; notMatched: number };
+  images: { total: number; toAdd: number; urls: string[] };
+  stockUpdates: number;
+  warnings: string[];
+  errors: string[];
+}
+export interface ShopifyImportReport {
+  source: "shopify";
+  currency: string;
+  currencyNote: string;
+  outletId: number | null;
+  collectionId: number | null;
+  onExisting: "update" | "skip";
+  totals: {
+    products: number;
+    create: number;
+    update: number;
+    skip: number;
+    error: number;
+    variants: number;
+    images: number;
+    stockUpdates: number;
+  };
+  products: ShopifyProductReport[];
+  truncated: boolean;
+  warnings: string[];
+  unsupportedColumns: string[];
+}
+export interface ShopifyImportOptions {
+  collectionId?: number;
+  outletId?: number;
+  onExisting: "update" | "skip";
+}

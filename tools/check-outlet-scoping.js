@@ -53,6 +53,10 @@ const ALLOWLIST = [
   "orders/orders.service.ts:adjustStockForOrder",
   "products/product-order-items.service.ts:consumeForOrderItems",
   "products/product-import.service.ts:applyImportStock",
+  // Private to the Shopify importer: only ever called from createProduct/
+  // updateProduct with an outletId that classify() has already verified
+  // against ctx.shopId (outlet WHERE id AND shopId) before any write is planned.
+  "products/product-shopify-import.service.ts:applyStock",
   "dashboard/dashboard.service.ts:revenueAndCount",
   // Read-only batch-loader queries (post-mysql2-migration replacement for
   // the Prisma include/select builders these entries used to name) —
