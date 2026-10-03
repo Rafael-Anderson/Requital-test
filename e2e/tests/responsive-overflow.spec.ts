@@ -9,6 +9,20 @@ import { readSeedState } from '../state';
 // never innerWidth. See tools/responsive-audit/README.md for the full harness.
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 test.describe.configure({ mode: 'serial' });
+// CI serves admin and storefront with `next dev`, which compiles each route on first visit.
+test.setTimeout(150_000);
+
+// The login route is throttled per IP (5 a minute) and the earlier specs have just used most of that
+// window, so a 429 here means "wait for the window", not "broken". Bounded: three tries.
+async function loginAdmin(page: Page, email: string, password: string) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await page.request.post(`${API_URL}/auth/login`, { data: { email, password } });
+    if (res.ok()) return res;
+    if (res.status() !== 429) throw new Error(`admin login failed: ${res.status()}`);
+    await page.waitForTimeout(62_000);
+  }
+  throw new Error('admin login stayed throttled');
+}
 
 async function settle(page: Page) {
   // Never waits unbounded: a page that polls forever (orders refreshes every 20s) still ends here.
@@ -49,8 +63,7 @@ const ADMIN_ROUTES = [
 
 test('admin pages fit a 390px phone and keep a full-width header', async ({ page }) => {
   const seed = readSeedState();
-  const login = await page.request.post(`${API_URL}/auth/login`, { data: { email: seed.adminEmail, password: seed.adminPassword } });
-  expect(login.ok()).toBeTruthy();
+  const login = await loginAdmin(page, seed.adminEmail, seed.adminPassword);
   // The advanced editor shows the full dashboard (branch and date-range filters), the widest layout.
   await page.request.patch(`${API_URL}/shop`, {
     data: { productEditorMode: 'advanced' },
