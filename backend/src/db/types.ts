@@ -145,6 +145,11 @@ export interface SurveyresponseRow {
   comment: string | null;
   respondedAt: Date | null;
   createdAt: Date;
+  // NULL = unknown/legacy (never consent), 1 = agreed, 0 = declined
+  // (migration 20261023100000).
+  publishConsent: number | null;
+  // NULL = not shown on the storefront.
+  featuredAt: Date | null;
 }
 
 // What an order currently holds out of ingredient stock, per line identity

@@ -89,6 +89,7 @@ import type {
   PaginatedExternalDeliveries,
   PaginatedGeneralReportOrders,
   PaginatedNewsletterSubscribers,
+  PaginatedReviews,
   MarginDimension,
   MarginRow,
   MarginSummary,
@@ -1798,6 +1799,21 @@ export function listNewsletterSubscribers(params: ListNewsletterSubscribersParam
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
   if (params.search) query.set("search", params.search);
   return apiFetch<PaginatedNewsletterSubscribers>(`/newsletter-subscribers?${query.toString()}`);
+}
+
+// Admin-only server-side (see backend ReviewsController).
+export function listReviews(params: { page?: number; pageSize?: number } = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.pageSize) query.set("pageSize", String(params.pageSize));
+  return apiFetch<PaginatedReviews>(`/reviews?${query.toString()}`);
+}
+
+export function setReviewFeatured(id: number, featured: boolean) {
+  return apiFetch<{ id: number; featured: boolean }>(`/reviews/${id}/featured`, {
+    method: "PATCH",
+    body: JSON.stringify({ featured }),
+  });
 }
 
 export function getCustomer(id: number) {

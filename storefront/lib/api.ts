@@ -25,6 +25,7 @@ import type {
   SearchResponse,
   Shop,
   SurveyLookupResult,
+  FeaturedReview,
   ValidateDiscountResult,
   ValidateGiftCardResult,
   PaymentLinkSummary,
@@ -384,7 +385,15 @@ export function lookupSurvey(token: string) {
   return get<SurveyLookupResult>(`/public/surveys/lookup?token=${encodeURIComponent(token)}`);
 }
 
-export function submitSurvey(token: string, data: { rating: number; comment?: string }) {
+export function listFeaturedReviews(shopSlug: string, opts: { limit?: number; minRating?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (opts.limit) qs.set("limit", String(opts.limit));
+  if (opts.minRating) qs.set("minRating", String(opts.minRating));
+  const q = qs.toString();
+  return get<FeaturedReview[]>(`/public/${shopSlug}/reviews/featured${q ? `?${q}` : ""}`);
+}
+
+export function submitSurvey(token: string, data: { rating: number; comment?: string; publishConsent?: boolean }) {
   return post<{ success: boolean }>(`/public/surveys/submit?token=${encodeURIComponent(token)}`, data);
 }
 

@@ -22,6 +22,7 @@ import { ThemesModule } from '../themes/themes.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 import { RegionsModule } from '../regions/regions.module';
 import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
+import { ReviewsModule } from '../reviews/reviews.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
     CurrencyRatesModule,
     RegionsModule,
     ShopAnalyticsModule,
+    ReviewsModule,
   ],
   controllers: [
     PublicController,

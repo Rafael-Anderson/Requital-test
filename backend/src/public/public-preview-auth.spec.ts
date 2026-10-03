@@ -55,6 +55,7 @@ function buildService(db: DatabaseService) {
     unused, // features — not reached on the preview-auth path
     unused, // shopAnalyticsService
     unused, // conversionEventsService
+    unused, // reviewsService
   );
   return { service, jwtService };
 }

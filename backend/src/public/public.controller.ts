@@ -15,6 +15,7 @@ import { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandoned-cart.dto';
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
 import { SubscribeNewsletterDto } from './dto/subscribe-newsletter.dto';
+import { FeaturedReviewsQueryDto } from '../reviews/dto/featured-reviews-query.dto';
 
 // Unauthenticated, shop-scoped by a path-prefixed slug (shop.subdomain) —
 // the storefront app resolves which shop it's serving from its own URL
@@ -112,6 +113,15 @@ export class PublicController {
       preview: preview === 'true',
       themeId: themeId ? Number(themeId) : undefined,
     });
+  }
+
+  @Public()
+  @Get('reviews/featured')
+  listFeaturedReviews(
+    @Param('shopSlug') shopSlug: string,
+    @Query() query: FeaturedReviewsQueryDto,
+  ) {
+    return this.publicService.listFeaturedReviews(shopSlug, query);
   }
 
   @Public()

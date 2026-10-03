@@ -29,6 +29,21 @@ describe.each(TEMPLATE_KEYS)('THEME_TEMPLATES.%s', (key) => {
     expect(TEMPLATE_META[key].blurb.length).toBeGreaterThan(0);
   });
 
+  // Real reviews only: a template must never ship an invented testimonial,
+  // rating, review count or "trusted by" claim. The testimonials section
+  // carries just its heading; a merchant's real numbers are theirs to add.
+  it('ships no fabricated social proof', () => {
+    const all = JSON.stringify(template);
+    expect(all).not.toMatch(/"type":"testimonial"/);
+    expect(all).not.toMatch(/"type":"rating_badge"/);
+    expect(all).not.toMatch(
+      /Arrived exactly on time|gift box is gorgeous|So easy to personali|Reem A\.|Daniel K\.|Priya S\./,
+    );
+    expect(all).not.toMatch(
+      /Trusted by|\d[\d,]*\+? reviews|Rated \d|5-star|since \d{4}|Established \d{4}|four decades/i,
+    );
+  });
+
   it('stays well under the 200KB config safety cap', () => {
     expect(Buffer.byteLength(JSON.stringify(template))).toBeLessThan(MAX_CONFIG_BYTES);
   });

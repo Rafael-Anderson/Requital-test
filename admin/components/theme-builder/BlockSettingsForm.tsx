@@ -128,6 +128,10 @@ export default function BlockSettingsForm({
       const rating = (block.settings.rating as number) ?? 0;
       return (
         <div className="space-y-3">
+          <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+            This manual testimonial is no longer shown on your store. The section now displays real reviews
+            you approve under Customers &gt; Reviews. You can delete this block.
+          </p>
           <RichTextBlockEditor
             blockId={block.id}
             label="Quote"
