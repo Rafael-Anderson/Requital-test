@@ -40,6 +40,8 @@ import type {
   UrlRedirectList,
   RedirectImportReport,
   NotFoundLogList,
+  ShopifyImportOptions,
+  ShopifyImportReport,
   TaxClassInput,
   MetafieldDefinition,
   MetafieldDefinitionInput,
@@ -1386,6 +1388,33 @@ export function confirmImportProducts(file: File, outletId?: number) {
   formData.append("file", file);
   const query = outletId ? `?outletId=${outletId}` : "";
   return apiFetch<ImportConfirmResult>(`/products/import/confirm${query}`, { method: "POST", body: formData });
+}
+
+// ONB-1: the Shopify column mapper on the same stateless preview/confirm pair.
+// Confirm re-uploads the file and the server re-parses and re-validates it.
+function shopifyImportQuery(options: ShopifyImportOptions) {
+  const qs = new URLSearchParams({ source: "shopify", onExisting: options.onExisting });
+  if (options.collectionId) qs.set("collectionId", String(options.collectionId));
+  if (options.outletId) qs.set("outletId", String(options.outletId));
+  return qs.toString();
+}
+
+export function previewShopifyImport(file: File, options: ShopifyImportOptions) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<ShopifyImportReport>(`/products/import/preview?${shopifyImportQuery(options)}`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function confirmShopifyImport(file: File, options: ShopifyImportOptions) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch<{ created: number; updated: number; skipped: number; errors: number; report: ShopifyImportReport }>(
+    `/products/import/confirm?${shopifyImportQuery(options)}`,
+    { method: "POST", body: formData },
+  );
 }
 
 // Full replace of the option/value set — see backend ProductsService.updateOptions
