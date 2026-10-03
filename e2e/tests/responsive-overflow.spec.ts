@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { ADMIN_URL, API_URL, STOREFRONT_URL } from '../urls';
-import { readSeedState } from '../state';
+import { seedShop, type SeedState } from '../seed';
 
 // Phone-width regression guard. The failure it exists for: a page whose content is wider than the
 // device. Chrome on a phone then zooms the visual viewport out, the 390px header covers only part of
@@ -9,6 +9,13 @@ import { readSeedState } from '../state';
 // never innerWidth. See tools/responsive-audit/README.md for the full harness.
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 test.describe.configure({ mode: 'serial' });
+// This spec seeds its OWN shop: the shared fixture's admin password is changed by password-reset.spec.ts,
+// which runs before this file, so logging in as that admin here would be a 401.
+let seed: SeedState;
+test.beforeAll(async () => {
+  seed = await seedShop();
+});
+
 // CI serves admin and storefront with `next dev`, which compiles each route on first visit.
 test.setTimeout(150_000);
 
@@ -62,7 +69,6 @@ const ADMIN_ROUTES = [
 ];
 
 test('admin pages fit a 390px phone and keep a full-width header', async ({ page }) => {
-  const seed = readSeedState();
   const login = await loginAdmin(page, seed.adminEmail, seed.adminPassword);
   // The advanced editor shows the full dashboard (branch and date-range filters), the widest layout.
   await page.request.patch(`${API_URL}/shop`, {
@@ -76,7 +82,6 @@ test('admin pages fit a 390px phone and keep a full-width header', async ({ page
 });
 
 test('storefront pages fit a 390px phone', async ({ page }) => {
-  const seed = readSeedState();
   const base = `${STOREFRONT_URL}/${seed.subdomain}`;
   for (const route of ['', '/cart', `/products/${seed.simpleProduct.slug}`]) {
     await page.goto(`${base}${route}`);
