@@ -19,6 +19,11 @@ const PAGE_SIZE = 20;
 const TYPE_LABEL: Record<StockMovementType, string> = {
   ADJUSTMENT: "Adjustment",
   TRANSFER: "Transfer",
+  RETURN: "Return",
+  IMPORT: "Import",
+  RECEIVED: "Received",
+  CONSUMED: "Consumed",
+  PURCHASE_RECEIPT: "Purchase receipt",
 };
 
 function deltaLabel(m: StockMovement): string {
@@ -74,6 +79,7 @@ export default function StockMovementsPage() {
           <option value="">All movements</option>
           <option value="ADJUSTMENT">Adjustments only</option>
           <option value="TRANSFER">Transfers only</option>
+          <option value="PURCHASE_RECEIPT">Purchase receipts only</option>
         </select>
       </div>
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}

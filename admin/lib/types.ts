@@ -1076,6 +1076,9 @@ export const ALL_PERMISSIONS = [
   "outlets.view_own",
   "delivery_zones.view",
   "payments.generate_link",
+  "purchase_orders.view",
+  "purchase_orders.manage",
+  "purchase_orders.receive",
 ] as const;
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
@@ -1090,6 +1093,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "outlets.view_own": "View own outlet details",
   "delivery_zones.view": "View delivery zones",
   "payments.generate_link": "Generate payment links",
+  "purchase_orders.view": "View purchase orders",
+  "purchase_orders.manage": "Manage purchase orders (create, edit, send, cancel)",
+  "purchase_orders.receive": "Receive purchase order deliveries into stock",
 };
 
 // A named, admin-defined bundle of permissions that can be assigned to a
@@ -2752,7 +2758,14 @@ export const ADJUSTMENT_REASON_LABELS: Record<AdjustmentReason, string> = {
   other: "Other",
 };
 
-export type StockMovementType = "ADJUSTMENT" | "TRANSFER";
+export type StockMovementType =
+  | "ADJUSTMENT"
+  | "TRANSFER"
+  | "RETURN"
+  | "IMPORT"
+  | "RECEIVED"
+  | "CONSUMED"
+  | "PURCHASE_RECEIPT";
 
 // Exactly one of productId/ingredientId is ever set on a given row — see
 // backend/prisma/schema.prisma's comment on the stockmovement model.
@@ -3174,4 +3187,104 @@ export interface SupplierSuggestion {
   name: string;
   source: string;
   uses: number;
+}
+
+// ---- Purchase orders (INV-2) ----
+// Money arrives as trimmed strings and always travels with its own currency; a
+// PO is single-currency, so amounts on one PO are never mixed with another's.
+export type PurchaseOrderStatus = "draft" | "sent" | "partially_received" | "received" | "cancelled";
+
+export const PURCHASE_ORDER_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  partially_received: "Partially received",
+  received: "Received",
+  cancelled: "Cancelled",
+};
+
+export interface PurchaseOrderLine {
+  id: number;
+  ingredientId: number | null;
+  productId: number | null;
+  variantId: number | null;
+  supplierSku: string | null;
+  description: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  unitCost: string;
+  currency: string;
+  lineTotal: string;
+}
+
+export interface PurchaseOrderReceipt {
+  id: number;
+  deliveryNoteRef: string | null;
+  note: string | null;
+  currency: string;
+  total: string;
+  receivedAt: string;
+  lines: { id: number; poLineId: number; quantity: number; unitCost: string; lineTotal: string }[];
+}
+
+export interface PurchaseOrderListItem {
+  id: number;
+  poNumber: string;
+  status: PurchaseOrderStatus;
+  supplierId: number;
+  supplierName: string;
+  outletId: number;
+  outletName: string;
+  currency: string;
+  total: string;
+  expectedAt: string | null;
+  unitsOrdered: number;
+  unitsReceived: number;
+  createdAt: string;
+}
+
+export interface PurchaseOrderDetail {
+  id: number;
+  poNumber: string;
+  status: PurchaseOrderStatus;
+  supplierId: number;
+  outletId: number;
+  currency: string;
+  subtotal: string;
+  total: string;
+  expectedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  cancelledAt: string | null;
+  receivedAt: string | null;
+  supplier: { id: number; name: string; status: string; currency: string | null } | null;
+  outlet: { id: number; name: string } | null;
+  lines: PurchaseOrderLine[];
+  receipts: PurchaseOrderReceipt[];
+}
+
+export interface PurchaseOrderLineInput {
+  ingredientId?: number;
+  productId?: number;
+  variantId?: number;
+  quantity: number;
+  unitCost?: number;
+  supplierSku?: string;
+  description?: string;
+}
+
+export interface PurchaseOrderInput {
+  supplierId: number;
+  outletId?: number;
+  currency?: string;
+  expectedAt?: string;
+  notes?: string;
+  lines: PurchaseOrderLineInput[];
+}
+
+export interface ReceivePurchaseOrderInput {
+  lines: { lineId: number; quantity: number; unitCost?: number }[];
+  deliveryNoteRef?: string;
+  note?: string;
+  idempotencyKey?: string;
 }

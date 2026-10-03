@@ -170,10 +170,29 @@ export class SuppliersService {
     return this.findOne(ctx, id);
   }
 
-  // Hard delete: nothing references a supplier in this change. The purchase
-  // orders change (INV-2) archives instead when a PO points at the supplier.
+  // A supplier that any purchase order points at is ARCHIVED, not deleted: the
+  // order history must keep its supplier (the FK is RESTRICT, so a hard delete
+  // would fail anyway). A supplier no order has used is deleted outright.
   async remove(ctx: TenantContext, id: number) {
     const supplier = await this.getOwned(ctx.shopId, id);
+    const used = await this.db.query<RowDataPacket[]>(
+      `SELECT 1 FROM purchaseorder WHERE supplierId = ? AND shopId = ? LIMIT 1`,
+      [id, ctx.shopId],
+    );
+    if (used.length > 0) {
+      await this.db.execute(
+        `UPDATE supplier SET status = 'archived', updatedAt = ? WHERE id = ? AND shopId = ?`,
+        [new Date(), id, ctx.shopId],
+      );
+      await this.auditLogService.logCtx(ctx, {
+        action: 'supplier.archived',
+        entityType: 'supplier',
+        entityId: id,
+        before: { name: supplier.name, status: supplier.status },
+        metadata: { reason: 'referenced by a purchase order' },
+      });
+      return { id, deleted: false, archived: true };
+    }
     await this.db.execute(`DELETE FROM supplier WHERE id = ? AND shopId = ?`, [
       id,
       ctx.shopId,

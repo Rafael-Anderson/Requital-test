@@ -18,6 +18,13 @@ export const ALL_PERMISSIONS = [
   'outlets.view_own',
   'delivery_zones.view',
   'payments.generate_link',
+  // INV-2. Admin and branch hold all three by construction (the vocabulary is
+  // their ceiling); order_manager and viewer hold none, so no override can grant
+  // purchasing to them. `receive` is separate from `manage` so an outlet's goods-in
+  // staff can book a delivery without being able to raise or cancel orders.
+  'purchase_orders.view',
+  'purchase_orders.manage',
+  'purchase_orders.receive',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

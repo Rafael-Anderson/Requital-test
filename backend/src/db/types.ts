@@ -1340,3 +1340,74 @@ export interface SupplieritemRow {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// INV-2. Money is DECIMAL(65,30) (string from mysql2, trimmed at the API
+// boundary). `currency` on every money row is the currency that row was
+// captured in, never inferred from the shop.
+export interface PurchaseorderRow {
+  id: number;
+  shopId: number;
+  outletId: number;
+  supplierId: number;
+  poNumber: string;
+  // 'draft' | 'sent' | 'partially_received' | 'received' | 'cancelled'
+  status: string;
+  currency: string;
+  subtotal: string;
+  total: string;
+  expectedAt: string | null;
+  notes: string | null;
+  createdByUserId: number | null;
+  sentAt: Date | null;
+  cancelledAt: Date | null;
+  receivedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PurchaseorderlineRow {
+  id: number;
+  poId: number;
+  shopId: number;
+  ingredientId: number | null;
+  productId: number | null;
+  variantId: number | null;
+  supplierSku: string | null;
+  description: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  unitCost: string;
+  currency: string;
+  lineTotal: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PurchaseorderreceiptRow {
+  id: number;
+  poId: number;
+  shopId: number;
+  outletId: number;
+  receivedByUserId: number | null;
+  deliveryNoteRef: string | null;
+  note: string | null;
+  idempotencyKey: string | null;
+  currency: string;
+  total: string;
+  receivedAt: Date;
+}
+
+export interface PurchaseorderreceiptlineRow {
+  id: number;
+  receiptId: number;
+  poId: number;
+  poLineId: number;
+  shopId: number;
+  ingredientId: number | null;
+  quantity: number;
+  unitCost: string;
+  currency: string;
+  lineTotal: string;
+  stockMovementId: number | null;
+  createdAt: Date;
+}
