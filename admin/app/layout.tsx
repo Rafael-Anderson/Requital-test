@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { OutletFilterProvider } from "@/lib/outlet-context";
@@ -8,15 +8,22 @@ import AppChrome from "@/components/AppChrome";
 import NavigationProgress from "@/components/ui/NavigationProgress";
 import "./globals.css";
 
-const inter = Inter({
+// Self-hosted (app/fonts, latin subset, OFL; the licence texts sit beside the files), same as
+// the storefront. next/font/google makes an outbound Google Fonts request at dev and build time;
+// on a CI runner that fetch failing turned every admin page into a 500 ("next/font/google queries
+// have exactly one entry") and the Playwright job never got as far as running a test.
+const inter = localFont({
   variable: "--font-inter",
-  weight: ["400", "500", "600", "700", "800"],
-  subsets: ["latin"],
+  src: "./fonts/Inter-latin-variable.woff2",
+  weight: "100 900",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  src: "./fonts/GeistMono-latin-variable.woff2",
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
