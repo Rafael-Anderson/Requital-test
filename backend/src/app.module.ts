@@ -29,6 +29,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CollectionsModule } from './collections/collections.module';
 import { BrandsModule } from './brands/brands.module';
+import { UrlRedirectsModule } from './url-redirects/url-redirects.module';
 import { TaxClassesModule } from './tax-classes/tax-classes.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
@@ -149,6 +150,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     PaymentsModule,
     CollectionsModule,
     BrandsModule,
+    UrlRedirectsModule,
     TaxClassesModule,
     SuppliersModule,
     PurchaseOrdersModule,

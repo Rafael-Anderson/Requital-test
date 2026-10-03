@@ -114,3 +114,20 @@ export function storefrontUrl(shop: ShopUrlFields, path: string): string {
   if (devBase) return `${devBase}/${shop.subdomain}${suffix}`;
   return `${resolveCanonicalOrigin(shop)}${suffix}`;
 }
+
+// Every hostname that is THIS shop's own public address: its platform subdomain
+// host, plus its custom domain when (and only when) that is verified, for the
+// same reason resolveCanonicalOrigin gates on it. Lowercased. Used by the URL
+// redirect map to decide whether an absolute redirect target stays on the
+// shop's own site.
+export function shopOwnHosts(shop: ShopUrlFields): string[] {
+  const hosts = [`${shop.subdomain}.${STOREFRONT_ROOT_DOMAIN}`.toLowerCase()];
+  if (
+    shop.domainType === 'custom' &&
+    shop.customDomain &&
+    shop.customDomainStatus === 'verified'
+  ) {
+    hosts.push(shop.customDomain.toLowerCase());
+  }
+  return hosts;
+}

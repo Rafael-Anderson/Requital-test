@@ -57,11 +57,23 @@ export function resolveImageUrl(path: string | null | undefined): string | null 
   return path.startsWith("/") ? `${API_URL}${path}` : path;
 }
 
+// An Error that remembers the HTTP status, so a page can tell "this thing does
+// not exist" (404) from "the request failed" without parsing the message.
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message ?? `Request failed (${res.status})`);
+    throw new HttpError(body?.message ?? `Request failed (${res.status})`, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -297,6 +309,18 @@ export function validateDiscount(
 // into a struck-through price.
 export function listActiveAutoDiscounts(shopSlug: string) {
   return get<AutoDiscount[]>(`/public/${shopSlug}/discounts/auto`);
+}
+
+// ONB-4 404 log: reported by the not-found state so the merchant can see which
+// missing URLs are actually being requested. Fire-and-forget and advisory: it
+// never throws and never affects the page. Sends only a path and the referrer.
+export function reportNotFound(shopSlug: string, path: string, referrer: string): void {
+  fetch(`${apiBase()}/public/${shopSlug}/404-log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, ...(referrer ? { referrer } : {}) }),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 export function validateGiftCard(shopSlug: string, code: string) {

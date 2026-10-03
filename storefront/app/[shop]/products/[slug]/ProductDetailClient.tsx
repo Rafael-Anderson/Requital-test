@@ -8,7 +8,8 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useFlyToCart } from "@/lib/fly-to-cart";
 import { track } from "@/lib/analytics";
-import { getProductBySlug, listProducts, listCollections } from "@/lib/api";
+import { HttpError, getProductBySlug, listProducts, listCollections } from "@/lib/api";
+import NotFoundContent from "@/components/NotFoundContent";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { stockLabel } from "@/lib/stock-label";
 import { resolveDeliveryTimeEstimate, formatDeliveryTimeLabel } from "@/lib/delivery-time";
@@ -69,6 +70,9 @@ export default function ProductDetailClient() {
   // page's own product fetch doesn't return, so they're separate requests.
   const [collections, setCollections] = useState<Collection[]>([]);
   const [addons, setAddons] = useState<Product[]>([]);
+  // True only for a real 404 (an old or mistyped URL), as opposed to a failed
+  // request; shows the not-found state and reports it to the 404 log.
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     getProductBySlug(shopSlug, params.slug, defaultOutletId, previewToken)
@@ -81,7 +85,10 @@ export default function ProductDetailClient() {
         setGiftCardAmount(p.isGiftCard ? (p.giftCardDenominations?.[0] ?? null) : null);
         setCustomGiftCardAmount("");
       })
-      .catch(() => setProduct(null));
+      .catch((err) => {
+        setProduct(null);
+        setMissing(err instanceof HttpError && err.status === 404);
+      });
   }, [shopSlug, params.slug, defaultOutletId, previewToken]);
 
   useEffect(() => {
@@ -129,6 +136,7 @@ export default function ProductDetailClient() {
     return () => observer.disconnect();
   }, [product?.id]);
 
+  if (missing) return <NotFoundContent />;
   if (!product) return <p className="text-zinc-500">Loading…</p>;
 
   const displayPrice = product.isGiftCard ? (giftCardAmount ?? 0) : (selectedVariant?.price ?? product.price);

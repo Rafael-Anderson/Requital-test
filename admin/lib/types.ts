@@ -3288,3 +3288,61 @@ export interface ReceivePurchaseOrderInput {
   note?: string;
   idempotencyKey?: string;
 }
+
+// ONB-4: URL redirect map + 404 report (backend/src/url-redirects).
+export interface UrlRedirect {
+  id: number;
+  fromPath: string;
+  toTarget: string;
+  statusCode: 301 | 302;
+  active: boolean;
+  hitCount: number;
+  lastHitAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface UrlRedirectInput {
+  fromPath: string;
+  toTarget: string;
+  statusCode?: 301 | 302;
+  active?: boolean;
+}
+export interface UrlRedirectList {
+  data: UrlRedirect[];
+  page: number;
+  pageSize: number;
+  total: number;
+  limit: number;
+}
+export interface RedirectImportRow {
+  rowNumber: number;
+  from: string;
+  to: string;
+  status: number;
+  action: "create" | "update" | "skip" | "error";
+  errors: string[];
+}
+export interface RedirectImportReport {
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  rows: RedirectImportRow[];
+  truncated: boolean;
+}
+export interface NotFoundLogEntry {
+  id: number;
+  path: string;
+  hitCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastReferrer: string | null;
+  hasRedirect: boolean;
+}
+export interface NotFoundLogList {
+  data: NotFoundLogEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
