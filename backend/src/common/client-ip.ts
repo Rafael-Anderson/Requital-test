@@ -17,15 +17,19 @@ export function throttleKey(ip: string | undefined): string {
   const h = head ? head.split(':') : [];
   const t = tail === undefined ? [] : tail ? tail.split(':') : [];
   const groups =
-    tail === undefined ? h : [...h, ...Array(8 - h.length - t.length).fill('0'), ...t];
+    tail === undefined
+      ? h
+      : [...h, ...new Array<string>(8 - h.length - t.length).fill('0'), ...t];
   // ::ffff:7f00:1 is the hex spelling of the mapped form above.
   if (groups.slice(0, 5).every((g) => /^0+$/.test(g)) && groups[5] === 'ffff') {
     const hi = parseInt(groups[6], 16);
     const lo = parseInt(groups[7], 16);
     return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
   }
-  return groups
-    .slice(0, 4)
-    .map((g) => g.replace(/^0+(?=.)/, ''))
-    .join(':') + '::/64';
+  return (
+    groups
+      .slice(0, 4)
+      .map((g) => g.replace(/^0+(?=.)/, ''))
+      .join(':') + '::/64'
+  );
 }

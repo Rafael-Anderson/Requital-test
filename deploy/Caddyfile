@@ -21,6 +21,12 @@
 #                             Cert: on-demand TLS, gated by the `ask` hook above.
 #                             This is the ONLY block that uses on-demand TLS.
 #
+# Client IP (backend TRUST_PROXY=loopback, docs/runbook.md "Client IP behind the
+# proxies"): the backend's real-client-IP logic depends on Caddy's DEFAULT of
+# overwriting X-Forwarded-For with the client's socket address. Do NOT add
+# `servers { trusted_proxies ... }` or any header_up X-Forwarded-For here
+# unless the host really sits behind a CDN (then follow the runbook).
+#
 # CLOUDFLARE_API_TOKEN lives in /etc/caddy/caddy.env (systemd EnvironmentFile,
 # mode 600) — a secret, NOT committed here, same as backend/.env.
 

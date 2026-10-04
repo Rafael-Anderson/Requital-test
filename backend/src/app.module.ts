@@ -232,7 +232,9 @@ export class AppModule implements NestModule, OnModuleInit {
   onModuleInit() {
     const trust = parseTrustProxy(process.env.TRUST_PROXY);
     if (trust === false) return;
-    this.adapterHost.httpAdapter.getInstance<Express>().set('trust proxy', trust);
+    this.adapterHost.httpAdapter
+      .getInstance<Express>()
+      .set('trust proxy', trust);
   }
 
   configure(consumer: MiddlewareConsumer) {

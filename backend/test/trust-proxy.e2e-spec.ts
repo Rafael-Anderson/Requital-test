@@ -19,7 +19,9 @@ const body = <T>(res: Response) => res.body as T;
 const runId = Date.now();
 let seq = 0;
 
-async function buildApp(trust: string | undefined): Promise<INestApplication<App>> {
+async function buildApp(
+  trust: string | undefined,
+): Promise<INestApplication<App>> {
   if (trust === undefined) delete process.env.TRUST_PROXY;
   else process.env.TRUST_PROXY = trust;
   const moduleFixture = await Test.createTestingModule({
@@ -132,9 +134,9 @@ describe('TRUST_PROXY (e2e)', () => {
     afterAll(() => app.close());
 
     it('chain A/B: the client address Caddy appended is what the session records', async () => {
-      expect(await sessionIpFor(app, { 'X-Forwarded-For': '203.0.113.7' })).toBe(
-        '203.0.113.7',
-      );
+      expect(
+        await sessionIpFor(app, { 'X-Forwarded-For': '203.0.113.7' }),
+      ).toBe('203.0.113.7');
     });
 
     it('a client-supplied entry to the LEFT of the trusted one never chooses the address', async () => {
@@ -197,7 +199,12 @@ describe('TRUST_PROXY (e2e)', () => {
       const real = '203.0.113.103';
       await burst(app, { 'X-Forwarded-For': real });
       expect(await loginStatus(app, { 'X-Forwarded-For': real })).toBe(429);
-      for (const spoof of ['1.1.1.1', '2.2.2.2', '127.0.0.1', '203.0.113.104']) {
+      for (const spoof of [
+        '1.1.1.1',
+        '2.2.2.2',
+        '127.0.0.1',
+        '203.0.113.104',
+      ]) {
         expect(
           await loginStatus(app, { 'X-Forwarded-For': `${spoof}, ${real}` }),
         ).toBe(429);
@@ -232,9 +239,9 @@ describe('TRUST_PROXY (e2e)', () => {
     afterAll(() => app.close());
 
     it('the session records the socket address, not the forwarded one', async () => {
-      expect(await sessionIpFor(app, { 'X-Forwarded-For': '203.0.113.7' })).toBe(
-        '127.0.0.1',
-      );
+      expect(
+        await sessionIpFor(app, { 'X-Forwarded-For': '203.0.113.7' }),
+      ).toBe('127.0.0.1');
     });
 
     it('rotating X-Forwarded-For does not buy a fresh throttle bucket', async () => {
@@ -295,4 +302,3 @@ describe('TRUST_PROXY (e2e)', () => {
     ])('refuses %s', (value) => expectRefused(value));
   });
 });
-
