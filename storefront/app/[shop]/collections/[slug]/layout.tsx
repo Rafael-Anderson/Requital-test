@@ -3,6 +3,8 @@ import { getCollectionBySlug, getShop } from "@/lib/api";
 import { buildCollectionMetadata, canonicalUrlFor } from "@/lib/seo";
 import { breadcrumbJsonLd } from "@/lib/structured-data";
 import JsonLd from "@/components/JsonLd";
+import RenderWhenShopLoaded from "@/components/RenderWhenShopLoaded";
+import { notFoundIfMissing } from "@/lib/not-found-gate";
 
 // Collection pages had no generateMetadata at all: every one of them
 // inherited the shop-level title from [shop]/layout.tsx, so a shop's
@@ -36,11 +38,14 @@ export default async function CollectionLayout({
   children: React.ReactNode;
 }) {
   const { shop: shopSlug, slug } = await params;
+  // A missing collection is a real 404 (see lib/not-found-gate.ts); the probe
+  // is the same fetch collectionBreadcrumb makes below, deduped by Next.
+  await notFoundIfMissing(shopSlug, () => getCollectionBySlug(shopSlug, slug));
   const breadcrumb = await collectionBreadcrumb(shopSlug, slug);
   return (
     <>
       {breadcrumb && <JsonLd data={breadcrumb} />}
-      {children}
+      <RenderWhenShopLoaded>{children}</RenderWhenShopLoaded>
     </>
   );
 }

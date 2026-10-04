@@ -19,10 +19,12 @@ export function loggedPath(pathname: string, shopBasePath: string): string {
 // merchant's 404 log (ONB-4) at most once per path per tab, and never from the
 // theme builder's preview iframe.
 export default function NotFoundContent() {
-  const { shopSlug, shopBasePath, previewMode } = useShop();
+  const { shopSlug, shopBasePath, previewMode, loading } = useShop();
 
   useEffect(() => {
-    if (previewMode) return;
+    // `loading`: the server-rendered hidden copy mounts before the shop loads;
+    // only the visible copy reports, so a path is logged once.
+    if (previewMode || loading) return;
     const path = loggedPath(window.location.pathname, shopBasePath);
     const key = `requital_404_reported:${shopSlug}:${path}`;
     try {
@@ -32,7 +34,7 @@ export default function NotFoundContent() {
       // Storage blocked: report anyway; the server de-duplicates by counting.
     }
     reportNotFound(shopSlug, path, document.referrer);
-  }, [shopSlug, shopBasePath, previewMode]);
+  }, [shopSlug, shopBasePath, previewMode, loading]);
 
   return (
     <StorefrontPageShell variant="narrow">

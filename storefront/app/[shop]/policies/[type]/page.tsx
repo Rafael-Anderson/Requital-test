@@ -4,22 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getPolicyPage } from "@/lib/api";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
-import { POLICY_PAGE_LABELS, type PolicyPageType } from "@/lib/types";
+import { POLICY_PAGE_LABELS } from "@/lib/types";
+import { POLICY_SLUG_TO_TYPE } from "@/lib/policy-slugs";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
-
-// URL segment -> PolicyPageType — mirrors components/Footer.tsx's
-// POLICY_URL_SLUGS by hand (the reverse direction of that same map).
-const SLUG_TO_TYPE: Record<string, PolicyPageType> = {
-  terms: "TERMS",
-  privacy: "PRIVACY",
-  refund: "REFUND",
-  payment: "PAYMENT",
-  shipping: "SHIPPING",
-};
 
 export default function PolicyPage() {
   const params = useParams<{ shop: string; type: string }>();
-  const type = SLUG_TO_TYPE[params.type];
+  const type = POLICY_SLUG_TO_TYPE[params.type];
 
   const [content, setContent] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
