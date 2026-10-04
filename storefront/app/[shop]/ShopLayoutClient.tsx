@@ -195,7 +195,7 @@ function Body({ children }: { children: React.ReactNode }) {
   const { shop, loading, previewMode, themeConfig } = useShop();
   // C2 — reserve space for the fixed bottom-bar mobile nav so it never
   // overlaps the last bit of page content/footer.
-  const bottomBarSpacingClass = themeConfig?.header.settings.mobileNav === "bottom-bar" ? "pb-[var(--bottom-nav-h,0px)]" : "";
+  const bottomBarSpacing = themeConfig?.header.settings.mobileNav === "bottom-bar";
 
   // While the shop itself is still resolving, render ONLY the neutral
   // skeleton — never the branded chrome (TopBar/MenuBar), which at this
@@ -225,10 +225,13 @@ function Body({ children }: { children: React.ReactNode }) {
       <ScrollProgressBar />
       <DecorativeParallax />
       <Header />
-      <main className={`flex-1 ${bottomBarSpacingClass}`}>
+      <main className="flex-1">
         <RouteTransition>{children}</RouteTransition>
       </main>
       <Footer />
+      {/* Reserve the fixed bottom bar's height AFTER the footer (it used to be padding on <main>, which left the
+          footer's last line under the bar at the end of the page). --bottom-nav-h is unset from md up. */}
+      {bottomBarSpacing && <div aria-hidden="true" className="h-[var(--bottom-nav-h,0px)]" data-bottom-nav-spacer />}
       <WhatsAppFloatingButton />
       <FloatingCustomButtons />
       <CookieConsentBanner />
