@@ -93,6 +93,20 @@ async function burst(
   return out;
 }
 
+// An app that unexpectedly starts is closed before the assertion fails, so a
+// regression reports a failed test instead of hanging jest on open handles.
+async function expectRefused(value: string) {
+  let app: INestApplication<App> | undefined;
+  try {
+    app = await buildApp(value);
+  } catch (err) {
+    expect((err as Error).message).toMatch(/TRUST_PROXY/);
+    return;
+  }
+  await app.close();
+  throw new Error(`TRUST_PROXY=${value} was accepted`);
+}
+
 describe('TRUST_PROXY (e2e)', () => {
   const prevThrottle = process.env.THROTTLE_IN_TESTS;
   const prevTrust = process.env.TRUST_PROXY;
@@ -267,9 +281,7 @@ describe('TRUST_PROXY (e2e)', () => {
   describe('invalid values are rejected at init', () => {
     it.each(['true', 'TRUE', 'false', '*', 'all', '0', '11', '-1', '1.5'])(
       'refuses %s',
-      async (value) => {
-        await expect(buildApp(value)).rejects.toThrow(/TRUST_PROXY/);
-      },
+      (value) => expectRefused(value),
     );
     it.each([
       '0.0.0.0/0',
@@ -280,9 +292,7 @@ describe('TRUST_PROXY (e2e)', () => {
       'loopback,,',
       'loopback;10.0.0.1',
       '1.2.3.4/8/9',
-    ])('refuses %s', async (value) => {
-      await expect(buildApp(value)).rejects.toThrow(/TRUST_PROXY/);
-    });
+    ])('refuses %s', (value) => expectRefused(value));
   });
 });
 
