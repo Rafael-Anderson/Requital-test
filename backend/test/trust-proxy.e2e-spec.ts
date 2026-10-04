@@ -46,6 +46,10 @@ async function buildApp(
 
 // Signs a shop up from `xff` and returns the session list's IP column, which
 // is the only place the backend shows what it believed the client's address was.
+// The test client's socket address: Node reports 127.0.0.1 on an IPv4-only host and
+// ::ffff:127.0.0.1 on a dual-stack one (GitHub's runners), so accept both.
+const SOCKET_LOOPBACK = /^(::ffff:)?127\.0\.0\.1$/;
+
 async function sessionIpFor(
   app: INestApplication<App>,
   headers: Record<string, string | string[]>,
@@ -177,7 +181,7 @@ describe('TRUST_PROXY (e2e)', () => {
           Forwarded: 'for=8.8.8.8',
           'CF-Connecting-IP': '9.9.9.9',
         }),
-      ).toBe('127.0.0.1');
+      ).toMatch(SOCKET_LOOPBACK);
     });
 
     it('an IPv6 client is recorded as sent', async () => {
@@ -241,7 +245,7 @@ describe('TRUST_PROXY (e2e)', () => {
     it('the session records the socket address, not the forwarded one', async () => {
       expect(
         await sessionIpFor(app, { 'X-Forwarded-For': '203.0.113.7' }),
-      ).toBe('127.0.0.1');
+      ).toMatch(SOCKET_LOOPBACK);
     });
 
     it('rotating X-Forwarded-For does not buy a fresh throttle bucket', async () => {
