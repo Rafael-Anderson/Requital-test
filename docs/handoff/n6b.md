@@ -271,6 +271,6 @@ storefront: tsc clean, vitest 106 files / 865 tests passed, lint baseline 33 (de
 ## Known and not done
 
 `measure.js` cannot see this class (final rects are in bounds). A `docOverflow` check (scrollWidth vs
-clientWidth, which it already records) is what catches it, and the old audit's 0-failing result for the
+clientWidth, which it already records) is what catches it. INFERRED: the old audit's 0-failing result for the
 templates came from cells measured after a scroll/reload that happened to land on 390; the stale value is
 timing dependent (395/397/398), so it can pass by luck.
