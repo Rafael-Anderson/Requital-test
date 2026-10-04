@@ -63,6 +63,19 @@ describe("ScrollAnimatedWrapper", () => {
     expect(ioInstances).toHaveLength(0);
   });
 
+  it("clips the entrance's sideways travel in a parent box, so the page cannot overflow horizontally", () => {
+    for (const entrance of ["slide-left", "slide-right", "rotate-in"] as const) {
+      const { container, unmount } = render(
+        <ScrollAnimatedWrapper motion={M({ entrance })}>
+          <p>hi</p>
+        </ScrollAnimatedWrapper>,
+      );
+      const parent = container.querySelector(`.theme-anim-${entrance}`)!.parentElement!;
+      expect(parent.classList.contains("overflow-x-clip")).toBe(true);
+      unmount();
+    }
+  });
+
   it("maps a new entrance value to its class and toggles theme-anim-visible on intersect", () => {
     const { container } = render(
       <ScrollAnimatedWrapper motion={M({ entrance: "blur-in" })}>

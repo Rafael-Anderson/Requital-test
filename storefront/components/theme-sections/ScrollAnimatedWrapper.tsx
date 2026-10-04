@@ -73,13 +73,19 @@ export default function ScrollAnimatedWrapper({
 
   if (motion.entrance === "none") return <>{children}</>;
 
+  // The outer box clips the entrance's sideways travel (slide-left/right, rotate-in, staggered
+  // children). Without it, Chrome leaves the page's scrollWidth at whatever a mid-animation frame
+  // measured (a few px past the viewport) and the whole page drags sideways on a phone. `clip`,
+  // unlike `hidden`, makes no scroll container, so sticky children and the y axis are untouched.
   return (
-    <div
-      ref={ref}
-      className={`${ANIMATION_CLASS[motion.entrance]} ${visible ? "theme-anim-visible" : ""}`}
-      {...(stagger ? { "data-stagger": "true" } : {})}
-    >
-      {children}
+    <div className="overflow-x-clip">
+      <div
+        ref={ref}
+        className={`${ANIMATION_CLASS[motion.entrance]} ${visible ? "theme-anim-visible" : ""}`}
+        {...(stagger ? { "data-stagger": "true" } : {})}
+      >
+        {children}
+      </div>
     </div>
   );
 }
