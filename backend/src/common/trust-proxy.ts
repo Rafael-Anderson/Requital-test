@@ -1,4 +1,4 @@
-import { isIP } from 'net';
+import { BlockList, isIP } from 'net';
 
 // TRUST_PROXY: which direct peers may tell us the real client address via
 // X-Forwarded-For. Express's `trust proxy` setting, validated strictly.
@@ -36,9 +36,20 @@ function isValidEntry(entry: string): boolean {
   if (prefix === undefined) return true;
   if (!/^\d{1,3}$/.test(prefix)) return false;
   const bits = Number(prefix);
-  return family === 4
-    ? bits >= MIN_V4_PREFIX && bits <= 32
-    : bits >= MIN_V6_PREFIX && bits <= 128;
+  if (family === 4) return bits >= MIN_V4_PREFIX && bits <= 32;
+  if (bits < MIN_V6_PREFIX || bits > 128) return false;
+  return !coversIpv4Space(addr, bits);
+}
+
+// An IPv6 range that contains the IPv4-mapped block (::ffff:0:0/96, e.g.
+// ::/16 or ::ffff:0:0/96) matches every IPv4 peer, which is trust-all by
+// another spelling: node (and proxy-addr) test an IPv4 address against it as
+// its mapped form. Probe with unrelated public addresses instead of parsing.
+const IPV4_PROBES = ['8.8.8.8', '1.1.1.1', '203.0.113.9', '192.0.2.2'];
+function coversIpv4Space(addr: string, bits: number): boolean {
+  const list = new BlockList();
+  list.addSubnet(addr, bits, 'ipv6');
+  return IPV4_PROBES.every((p) => list.check(p, 'ipv4'));
 }
 
 export function parseTrustProxy(raw: string | undefined): TrustProxySetting {

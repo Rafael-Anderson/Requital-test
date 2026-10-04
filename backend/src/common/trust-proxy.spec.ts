@@ -47,6 +47,9 @@ describe('parseTrustProxy', () => {
     '::/0',
     '10.0.0.0/7',
     '2000::/15',
+    '::ffff:0:0/96', // contains every IPv4-mapped peer: trust-all by another spelling
+    '::ffff:0:0/16',
+    '::/16',
     '1.2.3.4/33',
     '::1/129',
     '1.2.3.4/8/9',
