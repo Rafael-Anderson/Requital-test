@@ -81,5 +81,7 @@ describe("globals.css — interaction states (N4)", () => {
     const pad = decl("html", "scroll-padding-bottom");
     expect(pad?.value).toContain("--cookie-banner-h");
     expect(pad?.value).toContain("--bottom-nav-h");
+    // the last footer links need real room under them while the banner shows
+    expect(decl("body", "padding-bottom")?.value).toContain("--cookie-banner-h");
   });
 });

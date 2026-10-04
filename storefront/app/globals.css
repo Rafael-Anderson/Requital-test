@@ -94,6 +94,11 @@ textarea:focus-visible {
 html {
   scroll-padding-bottom: calc(var(--cookie-banner-h, 0px) + var(--bottom-nav-h, 0px) + 1rem);
 }
+/* ...and the end of the page needs room for the banner too: scroll-padding cannot scroll past the last pixel, so the
+   footer's last links stayed under it. --cookie-banner-h exists only while the banner shows. */
+body {
+  padding-bottom: var(--cookie-banner-h, 0px);
+}
 
 /* Phase A (motion foundation) — ONE blanket prefers-reduced-motion rule,
    replacing the five near-identical per-class blocks this file used to carry
