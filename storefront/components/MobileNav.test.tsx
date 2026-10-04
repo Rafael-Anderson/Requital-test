@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MobileNav, { MobileNavTrigger } from "./MobileNav";
 import { MobileNavProvider, OPEN_SEARCH_EVENT } from "@/lib/mobile-nav";
@@ -184,6 +184,19 @@ describe("MobileNav — keyboard, focus and scroll (N4)", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("returns focus to the hamburger even when the click never focused it (Safari does not focus buttons on click)", async () => {
+    vi.mocked(getMenu).mockResolvedValue([]);
+    renderNav("drawer");
+    const trigger = screen.getByRole("button", { name: "Open menu" });
+    expect(document.activeElement).not.toBe(trigger);
+    fireEvent.click(trigger); // a click that moves no focus
+    await screen.findByRole("dialog");
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')!.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(document.activeElement).toBe(trigger);
   });
 
