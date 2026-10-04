@@ -64,13 +64,13 @@ export default function LoginPage() {
 
       <div className="text-sm text-zinc-500 space-y-1">
         <p>
-          <Link href={`${shopBasePath}/account/forgot-password`} className="text-accent hover:underline">
+          <Link href={`${shopBasePath}/account/forgot-password`} className="text-accent-text hover:underline">
             Forgot your password?
           </Link>
         </p>
         <p>
           No account yet?{" "}
-          <Link href={`${shopBasePath}/account/register`} className="text-accent hover:underline">
+          <Link href={`${shopBasePath}/account/register`} className="text-accent-text hover:underline">
             Create one
           </Link>
         </p>

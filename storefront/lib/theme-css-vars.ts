@@ -11,6 +11,8 @@
 // entry in WIRED_THEME_COLOR_FIELDS now (Page Background Color, defaulting to
 // white), always resolved from the merchant's own setting, never a visitor's
 // OS preference the shop never opted into.
+import { resolveAccentText } from "./accent-text";
+import { resolveFocusRingCssVars } from "./focus-ring";
 import { getReadableTextColor } from "./color-contrast";
 import { parseJsonField } from "./notification-text";
 import { resolveScheme } from "./theme-color-scheme";
@@ -39,6 +41,8 @@ export function resolveThemeCssVars(shop: Shop | null): Record<string, string> {
 
   const vars: Record<string, string> = {
     "--color-accent": accent,
+    // placeholder, replaced below once the page background override is known
+    "--color-accent-text": accent,
     "--color-accent-hover": accentHover,
     "--color-accent-foreground": getReadableTextColor(accent),
     "--font-sans": `var(--font-${shop?.fontFamily ?? "inter"})`,
@@ -58,6 +62,11 @@ export function resolveThemeCssVars(shop: Shop | null): Record<string, string> {
     // garbage merchant input.
     vars[field.cssVar] = override && HEX_COLOR.test(override) ? override : field.default;
   }
+
+  // The accent as text, against the page background this shop actually uses (its Page Background Color
+  // override, else white).
+  const pageBackground = HEX_COLOR.test(vars["--background"] ?? "") ? vars["--background"] : "#ffffff";
+  vars["--color-accent-text"] = resolveAccentText(accent, pageBackground);
 
   // Add to Cart Text is the one exception among the wired fields: an
   // explicit override is honored (handled by the loop above), but an unset
@@ -97,12 +106,14 @@ export function resolveSchemeCssVars(scheme: ColorScheme | null | undefined): Re
     "--color-accent": scheme.button,
     "--color-accent-hover": scheme.button,
     "--color-accent-foreground": scheme.buttonLabel,
+    "--color-accent-text": resolveAccentText(scheme.button, scheme.background),
     "--color-secondary-button-label": scheme.secondaryButtonLabel,
     "--background": scheme.background,
     "--color-header": scheme.background,
     "--foreground": scheme.text,
     "--color-header-fg": scheme.text,
     "--color-product-name": scheme.text,
+    ...resolveFocusRingCssVars(scheme.text, scheme.background),
   };
 }
 

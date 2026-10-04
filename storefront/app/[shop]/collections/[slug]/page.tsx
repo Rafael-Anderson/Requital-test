@@ -121,7 +121,7 @@ function SortDropdown({ value, onChange }: { value: SortOption; onChange: (v: So
               className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-start text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
             >
               <span>{opt.label}</span>
-              {opt.value === value && <Check className="size-3.5 shrink-0 text-accent" />}
+              {opt.value === value && <Check className="size-3.5 shrink-0 text-accent-text" />}
             </button>
           ))}
         </div>

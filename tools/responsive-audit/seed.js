@@ -33,7 +33,24 @@ async function optional(label, fn) {
   }
 }
 
+// AUDIT_UPLOADS_DIR=<backend>/uploads writes the placeholder images the seed points at (the sandbox, and CI, cannot
+// reach placehold.co). The backend serves that folder at /uploads, so AUDIT_IMAGE_BASE=http://localhost:<port>/uploads.
+function writeAuditAssets() {
+  const dir = process.env.AUDIT_UPLOADS_DIR;
+  if (!dir) return;
+  const fs = require('fs');
+  fs.mkdirSync(dir, { recursive: true });
+  ['e8c4d4', 'c9dcc5', 'd8c9e8', 'f3d9a4', 'b9d3e6', 'e6b9c9'].forEach((c, i) =>
+    fs.writeFileSync(`${dir}/audit-${i}.svg`, `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><rect width='400' height='400' fill='#${c}'/><circle cx='200' cy='200' r='90' fill='#ffffff' fill-opacity='.6'/></svg>`),
+  );
+  fs.writeFileSync(
+    `${dir}/audit-logo.svg`,
+    "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='64' viewBox='0 0 320 64'><rect width='320' height='64' rx='8' fill='#5a6b54'/><text x='160' y='42' font-family='sans-serif' font-size='26' fill='#fff' text-anchor='middle'>Maison Fleur &amp; Co</text></svg>",
+  );
+}
+
 async function seed() {
+  writeAuditAssets();
   const runId = Date.now().toString();
   const subdomain = `audit-${runId}`;
   const email = `audit-${runId}@test.com`;
@@ -71,7 +88,7 @@ async function seed() {
           body: JSON.stringify({
             name: names[i],
             price: 40 + i * 15,
-            thumbnail: 'https://placehold.co/400x400.png',
+            thumbnail: process.env.AUDIT_IMAGE_BASE ? `${process.env.AUDIT_IMAGE_BASE}/audit-${i}.svg` : 'https://placehold.co/400x400.png',
             sku: `AUD-${runId}-${i}`,
             status: 'Available',
             collectionIds: [collections[i % collections.length].id],
@@ -88,6 +105,35 @@ async function seed() {
     s,
   );
   await call('/shop', { method: 'PATCH', body: JSON.stringify({ published: true }) }, s);
+  // AUDIT_IMAGE_BASE also sets a wide image logo (320x64): a real logo is what squeezes a header, a text name truncates.
+  if (process.env.AUDIT_IMAGE_BASE && process.env.AUDIT_LOGO !== '0') {
+    await optional('logo', () => call('/shop', { method: 'PATCH', body: JSON.stringify({ logoUrl: `${process.env.AUDIT_IMAGE_BASE}/audit-logo.svg` }) }, s));
+  }
+  // AUDIT_CART_LAYOUT=drawer opens the cart in a drawer instead of the cart page (drawer open-state audit).
+  if (process.env.AUDIT_CART_LAYOUT) {
+    await call('/theme', { method: 'PATCH', body: JSON.stringify({ cartLayout: process.env.AUDIT_CART_LAYOUT }) }, s);
+  }
+
+  // AUDIT_TEMPLATE=atelier|market|bloom|heritage: create that starter template as a Sections theme and
+  // publish it (so the storefront renders the theme-driven chrome and homepage instead of the legacy
+  // layout), plus brands so a template that shows a brands strip has something to show.
+  let themeId = null;
+  let brandIds = [];
+  const template = process.env.AUDIT_TEMPLATE || '';
+  if (template) {
+    for (const name of ['Maison Fleur', 'Petal & Co', 'Green Atelier']) {
+      const b = await optional(`brand ${name}`, () => call('/brands', { method: 'POST', body: JSON.stringify({ name }) }, s));
+      if (b) brandIds.push(b.id);
+    }
+    for (let i = 0; i < products.length && brandIds.length; i++) {
+      await optional(`brand on product ${i}`, () =>
+        call(`/products/${products[i].id}`, { method: 'PATCH', body: JSON.stringify({ brandId: brandIds[i % brandIds.length] }) }, s),
+      );
+    }
+    const theme = await call('/themes', { method: 'POST', body: JSON.stringify({ name: `Audit ${template}`, fromTemplate: template }) }, s);
+    await call(`/themes/${theme.id}/publish`, { method: 'POST', body: JSON.stringify({}) }, s);
+    themeId = theme.id;
+  }
 
   const orders = [];
   for (let i = 0; i < 4; i++) {
@@ -133,6 +179,9 @@ async function seed() {
     orderIds: orders.map((o) => o.id),
     orderTrackingTokens: orders.map((o) => o.trackingToken).filter(Boolean),
     discountId: discount && discount.id,
+    template: template || null,
+    themeId,
+    brandIds,
   };
 }
 

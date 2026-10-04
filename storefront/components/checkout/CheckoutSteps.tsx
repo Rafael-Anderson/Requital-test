@@ -25,7 +25,7 @@ function StepHeader({ step }: { step: number }) {
           <div className="flex items-center gap-2">
             <span
               className={`flex items-center justify-center size-6 rounded-full text-xs font-medium shrink-0 ${
-                i < step ? "bg-accent text-accent-foreground" : i === step ? "border-2 border-accent text-accent" : "border border-black/15 text-zinc-400"
+                i < step ? "bg-accent text-accent-foreground" : i === step ? "border-2 border-accent text-accent-text" : "border border-black/15 text-zinc-400"
               }`}
             >
               {i < step ? <Check className="size-3.5" /> : i + 1}
@@ -106,7 +106,7 @@ export default function CheckoutSteps(state: CheckoutFormState) {
                     type="button"
                     onClick={() => setOrderType("delivery")}
                     className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
-                      orderType === "delivery" ? "border-accent bg-accent/10 text-accent" : "border-black/15 bg-white text-zinc-600"
+                      orderType === "delivery" ? "border-accent bg-accent/10 text-accent-text" : "border-black/15 bg-white text-zinc-600"
                     }`}
                   >
                     Delivery
@@ -117,7 +117,7 @@ export default function CheckoutSteps(state: CheckoutFormState) {
                     type="button"
                     onClick={() => setOrderType("pickup")}
                     className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
-                      orderType === "pickup" ? "border-accent bg-accent/10 text-accent" : "border-black/15 bg-white text-zinc-600"
+                      orderType === "pickup" ? "border-accent bg-accent/10 text-accent-text" : "border-black/15 bg-white text-zinc-600"
                     }`}
                   >
                     Pickup

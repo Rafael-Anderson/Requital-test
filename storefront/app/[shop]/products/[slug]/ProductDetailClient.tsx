@@ -7,6 +7,7 @@ import { ShieldCheck, Truck, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useFlyToCart } from "@/lib/fly-to-cart";
+import { usePublishHeight } from "@/lib/use-publish-height";
 import { track } from "@/lib/analytics";
 import { HttpError, getProductBySlug, listProducts, listCollections } from "@/lib/api";
 import NotFoundContent from "@/components/NotFoundContent";
@@ -128,6 +129,9 @@ export default function ProductDetailClient() {
   // if the page is long".
   const ctaRef = useRef<HTMLDivElement>(null);
   const [ctaVisible, setCtaVisible] = useState(true);
+  // The sticky mobile bar publishes its height so the floating buttons stack above it (see usePublishHeight).
+  const stickyBarRef = useRef<HTMLDivElement>(null);
+  usePublishHeight(stickyBarRef, "--sticky-bar-h", !ctaVisible);
   useEffect(() => {
     const el = ctaRef.current;
     if (!el) return;
@@ -745,7 +749,7 @@ export default function ProductDetailClient() {
       {/* Sticky mobile bar — mirrors the real CTA above, only shown once
           that one has scrolled out of view. */}
       {!ctaVisible && (
-        <div className="sm:hidden fixed bottom-[calc(var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px))] inset-x-0 z-40 bg-header border-t border-stroke px-4 py-3 flex items-center gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+        <div ref={stickyBarRef} className="sm:hidden fixed bottom-[calc(var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px))] inset-x-0 z-40 bg-header border-t border-stroke px-4 py-3 flex items-center gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
           <div className="min-w-0">
             <p className="text-xs text-zinc-500 truncate">{product.name}</p>
             <p className="font-semibold text-product-name">

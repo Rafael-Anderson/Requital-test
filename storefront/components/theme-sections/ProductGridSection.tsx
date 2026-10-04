@@ -140,10 +140,14 @@ function QuickAddButton({
 // a separate className (not layered onto the default) since display:none/flex
 // can't be transitioned — every other effect keeps the exact pre-existing
 // `hidden sm:group-hover:flex` markup, byte-identical.
-const QUICK_ADD_DEFAULT_CLASS =
-  "hidden sm:group-hover:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow";
-const QUICK_ADD_SLIDE_CLASS =
-  "hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 translate-y-2 pointer-events-none transition-all group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto";
+// The desktop quick-add is revealed on hover AND on keyboard focus. The default variant used to be
+// `hidden sm:group-hover:flex` (display: none until the pointer is over the card), which a keyboard user can
+// never focus; the slide variant could take focus but stayed at opacity-0 while focused (an invisible,
+// focused button). Both now fade in with the card's hover or with focus anywhere inside the card.
+export const QUICK_ADD_DEFAULT_CLASS =
+  "hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto";
+export const QUICK_ADD_SLIDE_CLASS =
+  "hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 translate-y-2 pointer-events-none transition-all group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0 group-focus-within:pointer-events-auto";
 
 // One product tile — its own component (not inline in the outer .map())
 // because useProductCardImageIndex is a hook and needs one instance per
@@ -460,7 +464,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
   return (
     <div className="theme-gutter-x theme-section-py mx-auto" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
       {(sectionTitle || (showViewAll && collectionSlug)) && (
-        <div className="flex items-center justify-between theme-heading-gap">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 theme-heading-gap">
           {sectionTitle && (
             <h2
               className="text-xl font-semibold"
@@ -479,7 +483,7 @@ export default function ProductGridSection({ sectionId, settings, blocks }: { se
                 {viewAllHover.showIcon && <ArrowRight className="theme-btn-icon inline-block ms-1.5 size-4 align-[-3px]" aria-hidden="true" />}
               </Link>
             ) : (
-              <Link href={`${shopBasePath}/collections/${collectionSlug}`} className="text-sm font-medium text-accent hover:underline">
+              <Link href={`${shopBasePath}/collections/${collectionSlug}`} className="text-sm font-medium text-accent-text hover:underline">
                 {viewAllLabel}
               </Link>
             ))}

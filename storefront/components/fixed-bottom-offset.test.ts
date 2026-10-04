@@ -38,3 +38,13 @@ describe("fixed bottom elements offset by the cookie banner", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// The PDP's sticky add-to-cart bar (under sm) publishes --sticky-bar-h; the three floating corner buttons must
+// stack above it, or the back-to-top / WhatsApp / custom buttons sit underneath it on a phone.
+describe("floating corner buttons stack above the PDP sticky bar", () => {
+  for (const file of ["components/BackToTopButton.tsx", "components/WhatsAppFloatingButton.tsx", "components/FloatingCustomButtons.tsx"]) {
+    it(`${file} adds --sticky-bar-h`, () => {
+      expect(readFileSync(join(ROOT, file), "utf8")).toContain("var(--sticky-bar-h,0px)");
+    });
+  }
+});

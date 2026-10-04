@@ -41,7 +41,7 @@ export default function ForgotPasswordPage() {
           {devResetLink && (
             <p className="text-xs text-zinc-400 break-all">
               Dev mode, reset link:{" "}
-              <Link href={devResetLink.replace(/^https?:\/\/[^/]+/, "")} className="text-accent hover:underline">
+              <Link href={devResetLink.replace(/^https?:\/\/[^/]+/, "")} className="text-accent-text hover:underline">
                 {devResetLink}
               </Link>
             </p>

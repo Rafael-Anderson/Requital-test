@@ -73,6 +73,7 @@ function storefrontRoutes(fx) {
       if (name === 'shop') return fx.subdomain;
       if (/products$/.test(p)) return fx.products[0].slug;
       if (/collections$/.test(p)) return fx.collectionSlugs[0];
+      if (/brands$/.test(p) && fx.brandIds && fx.brandIds[0]) return fx.brandIds[0];
       if (/policies$/.test(p)) return 'TERMS';
       if (/orders$/.test(p) && fx.orderTrackingTokens[0]) return fx.orderTrackingTokens[0];
       return undefined;
@@ -80,6 +81,8 @@ function storefrontRoutes(fx) {
     if (r.skip) skipped.push({ app: 'storefront', file: path.relative(ROOT, f), reason: r.skip });
     else routes.push({ app: 'storefront', url: r.url, kind: 'public' });
   }
+  // The catch-all renders the shop's not-found state; visit one unknown path so it is measured.
+  routes.push({ app: 'storefront', url: `/${fx.subdomain}/no-such-page`, kind: 'public' });
   return { routes: dedupe(routes), skipped };
 }
 

@@ -48,7 +48,7 @@ function Logo({ shopSlug, shop }: { shopSlug: string; shop: Shop | null }) {
     <Link href={shopBasePath || "/"} className="flex items-center gap-2 min-w-0">
       {shop?.logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={resolveImageUrl(shop.logoUrl) ?? undefined} alt={shop.displayName ?? shop.name} className="h-8 max-w-40 object-contain shrink-0" />
+        <img src={resolveImageUrl(shop.logoUrl) ?? undefined} alt={shop.displayName ?? shop.name} className="h-8 max-w-40 object-contain min-w-0" />
       ) : (
         <span className="font-semibold text-lg truncate">{shop?.displayName ?? shop?.name ?? shopSlug}</span>
       )}
@@ -144,7 +144,7 @@ function TopBarLogoCenter(props: TopBarProps) {
   const iconProps = iconStyleProps(props.shop?.iconStyle, 1.75);
   const contactNumber = firstContactNumber(props.shop);
   return (
-    <div className={`mx-auto max-w-7xl px-4 ${headerPadding(props.shop)} grid grid-cols-3 items-center gap-4`}>
+    <div className={`mx-auto max-w-7xl px-4 ${headerPadding(props.shop)} grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4`}>
       <div className="flex items-center gap-1">
         {contactNumber && (
           <a href={`tel:${contactNumber}`} title={`Call ${contactNumber}`} className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors">
@@ -188,16 +188,16 @@ function TopBarMinimal(props: TopBarProps) {
       {menuOpen && (
         <div className="flex flex-col gap-1 pt-2 mt-2 border-t border-stroke">
           {contactNumber && (
-            <a href={`tel:${contactNumber}`} className="flex items-center gap-2 py-2 text-sm hover:text-accent">
+            <a href={`tel:${contactNumber}`} className="flex items-center gap-2 py-2 text-sm hover:text-accent-text">
               <Phone className="size-4" {...iconProps} /> Call {contactNumber}
             </a>
           )}
-          <Link href={`${shopBasePath}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent" onClick={() => setMenuOpen(false)}>
+          <Link href={`${shopBasePath}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent-text" onClick={() => setMenuOpen(false)}>
             <PackageSearch className="size-4" {...iconProps} /> Track an order
           </Link>
           <Link
             href={props.customer ? `${shopBasePath}/account` : `${shopBasePath}/account/login`}
-            className="flex items-center gap-2 py-2 text-sm hover:text-accent"
+            className="flex items-center gap-2 py-2 text-sm hover:text-accent-text"
             onClick={() => setMenuOpen(false)}
           >
             <User className="size-4" {...iconProps} /> {props.customer ? props.customer.name : "Sign in"}

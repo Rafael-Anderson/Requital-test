@@ -42,3 +42,46 @@ describe("globals.css — Tailwind v4 namespace hygiene", () => {
     expect(() => postcss.parse(CSS, { from: "globals.css" })).not.toThrow();
   });
 });
+
+describe("globals.css — interaction states (N4)", () => {
+  const root = postcss.parse(CSS, { from: "globals.css" });
+  const decl = (selector: string, prop: string) => {
+    let found: postcss.Declaration | undefined;
+    root.walkRules((rule) => {
+      if (!rule.selectors.includes(selector)) return;
+      rule.walkDecls(prop, (d) => {
+        found = d;
+      });
+    });
+    return found;
+  };
+
+  it("the border-fill hover label colour wins over the secondary button's inline label colour", () => {
+    // An inline style beats a plain stylesheet declaration; only !important beats the inline style.
+    const color = decl(".theme-btn-border-fill:hover", "color");
+    expect(color?.value).toBe("var(--color-accent-foreground)");
+    expect(color?.important).toBe(true);
+  });
+
+  it("draws a two-tone :focus-visible ring from the theme tokens, on links, buttons and form controls", () => {
+    const rules: string[] = [];
+    root.walkRules((r) => {
+      if (r.selector.includes(":focus-visible") && r.nodes.some((n) => n.type === "decl" && n.prop === "outline")) rules.push(r.selector);
+    });
+    const joined = rules.join(" ");
+    for (const target of ["a[href]", "button", "input:focus-visible", "select:focus-visible", "textarea:focus-visible"]) {
+      expect(joined).toContain(target);
+    }
+    const outline = decl("input:focus-visible", "outline");
+    expect(outline?.value).toContain("var(--theme-focus-ring");
+    expect(decl("input:focus-visible", "box-shadow")?.value).toContain("var(--theme-focus-halo");
+  });
+
+  it("keeps keyboard-focused controls clear of the cookie banner and the bottom-bar nav", () => {
+    const pad = decl("html", "scroll-padding-bottom");
+    expect(pad?.value).toContain("--cookie-banner-h");
+    expect(pad?.value).toContain("--bottom-nav-h");
+    // the last footer links need real room under them while the banner shows
+    expect(decl("body", "padding-bottom")?.value).toContain("--cookie-banner-h");
+  });
+});

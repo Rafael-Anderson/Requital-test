@@ -60,7 +60,7 @@ export default function OrderDetailPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href={`${shopBasePath}/account/orders`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href={`${shopBasePath}/account/orders`} className="text-sm text-zinc-500 hover:text-accent-text mb-3 inline-block">
         ← Back to order history
       </Link>
       <h1 className="text-2xl font-semibold mb-4">Order #{orderId}</h1>
@@ -162,7 +162,7 @@ export default function OrderDetailPage() {
             {order.trackingToken && (
               <Link
                 href={`${shopBasePath}/orders/track?token=${order.trackingToken}`}
-                className="text-sm text-accent hover:underline"
+                className="text-sm text-accent-text hover:underline"
               >
                 Track this order
               </Link>
@@ -172,7 +172,7 @@ export default function OrderDetailPage() {
                 type="button"
                 onClick={handleDownloadInvoice}
                 disabled={downloadingInvoice}
-                className="text-sm text-accent hover:underline disabled:opacity-50 cursor-pointer"
+                className="text-sm text-accent-text hover:underline disabled:opacity-50 cursor-pointer"
               >
                 {downloadingInvoice ? "Loading…" : "Download Invoice"}
               </button>

@@ -24,6 +24,26 @@ Override servers with `AUDIT_API_URL`, `AUDIT_ADMIN_URL`, `AUDIT_STOREFRONT_URL`
 Output goes to `tools/responsive-audit/out/<label>/` (`report.md`, `report.json`, `fixture.json`,
 `shots/*.png` viewport screenshots, never full-page).
 
+## Storefront templates, interaction states and the theme-builder preview (N4)
+
+```bash
+# one shop per starter template (published, with brands, a wide image logo and local placeholder images;
+# AUDIT_UPLOADS_DIR writes them into the backend's uploads folder, which it serves at /uploads)
+AUDIT_TEMPLATE=heritage AUDIT_IMAGE_BASE=http://localhost:3000/uploads AUDIT_UPLOADS_DIR=backend/uploads \
+  node tools/responsive-audit/audit.js --label heritage --apps storefront
+# add AUDIT_CART_LAYOUT=drawer to seed.js (prints the fixture) for the cart-drawer checks
+node tools/responsive-audit/states.js --fixture out/<label>/fixture.json --label x     # focus ring + hover per Tab stop
+node tools/responsive-audit/open-states.js --fixture drawer-fixture.json --label x      # mobile menu, search, bottom bar, cart drawer
+node tools/responsive-audit/preview.js --fixture out/<label>/fixture.json --label x     # builder preview iframe (admin on AUDIT_ADMIN_URL)
+```
+
+`measure.js` now also reports `clippedPrimary` (a link, button, input, heading, price or image cut by an
+`overflow: hidden|clip` ancestor), `obscuredPrimary` (covered by an unrelated fixed element in the upper half of the
+viewport; the cookie banner and lower-half bars are excluded on purpose) and `overlapping` (two in-flow interactive boxes
+that intersect). `states.js` judges a focus ring by pixel diff (focused vs blurred, and the contrast of the changed pixels),
+so a ring that exists in CSS but cannot be seen counts as missing. `states.js` scrolls each control into view, which makes a
+`shrink` header (Market) compact: its "Call us" hover "shift" is that scroll, not the hover.
+
 ## Gotchas (found the hard way)
 
 - The backend's `ADMIN_ORIGINS` must include the audited admin origin (e.g. `http://localhost:3201`), or every

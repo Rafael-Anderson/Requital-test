@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SearchBar from "./SearchBar";
+import { OPEN_SEARCH_EVENT } from "@/lib/mobile-nav";
 
 afterEach(cleanup);
 
@@ -120,5 +121,40 @@ describe("SearchBar", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("stroke-linecap")).toBe("round");
     expect(svg.getAttribute("stroke-linejoin")).toBe("round");
+  });
+});
+
+describe("SearchBar keyboard, positioning and the bottom-bar request (N4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Escape closes the dropdown and puts focus back on the search button", async () => {
+    const user = userEvent.setup();
+    render(<SearchBar />);
+    await openSearch(user);
+    expect(screen.getByPlaceholderText("Search products…")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByPlaceholderText("Search products…")).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Search" }));
+  });
+
+  it("the open panel is pinned inside the viewport under sm (it ran off the left edge of a 360px phone)", async () => {
+    const user = userEvent.setup();
+    render(<SearchBar />);
+    const input = await openSearch(user);
+    const panel = input.closest("[class*='shadow-']") as HTMLElement;
+    expect(panel.className).toContain("max-sm:fixed");
+    expect(panel.className).toContain("max-sm:inset-x-3");
+    expect(panel.className).toContain("max-sm:w-auto");
+  });
+
+  it("opens when the bottom-bar Search tab asks for it", async () => {
+    render(<SearchBar />);
+    expect(screen.queryByPlaceholderText("Search products…")).not.toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new CustomEvent(OPEN_SEARCH_EVENT));
+    });
+    expect(await screen.findByPlaceholderText("Search products…")).toBeInTheDocument();
   });
 });

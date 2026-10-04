@@ -16,6 +16,7 @@ import { useHeaderScrollState } from "@/lib/use-header-scroll-state";
 import { iconStyleProps } from "@/lib/icon-style";
 import SearchBar from "@/components/SearchBar";
 import MenuBar from "@/components/MenuBar";
+import { MobileNavTrigger } from "@/components/MobileNav";
 import ThemeImageBlock from "./ThemeImageBlock";
 import { backgroundStyle } from "./SectionWrapper";
 import type { Customer, Shop } from "@/lib/types";
@@ -40,6 +41,11 @@ const SOCIAL_LABEL: Record<string, string> = {
 };
 
 const ZONES = ["left", "center", "right"] as const;
+
+// left / centre / right. The side zones share the room equally (1fr each) and the middle takes what
+// its content needs. It used to be three EQUAL columns, which gave a logo only a third of the row
+// (99px of a 360px phone) and let a centred nav overflow its third into the logo and the icons.
+const THREE_ZONE_COLUMNS = "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]";
 
 // C1 — header.settings.height. Each render path keeps its own current
 // padding as the 'default'/absent case (the rows path and the classic
@@ -139,6 +145,9 @@ export default function ThemeDrivenHeader({
   // entirely; absent/'contained' (default) keeps today's var() cap.
   const contentMaxWidth = config.settings.contentWidth === "full" ? undefined : "var(--theme-max-width, 80rem)";
   const contentStyle: CSSProperties | undefined = contentMaxWidth ? { maxWidth: contentMaxWidth } : undefined;
+  // header.settings.mobileNav 'drawer' | 'fullscreen': the hamburger is a real item in the header row
+  // (under md) and the inline nav menu steps aside, because the panel carries the same links.
+  const mobileMenuPanel = config.settings.mobileNav === "drawer" || config.settings.mobileNav === "fullscreen";
 
   // Bug 9 fix: was solid-only (see backgroundStyle's own comment) - now
   // resolves gradient/image the same as every section does.
@@ -187,7 +196,7 @@ export default function ThemeDrivenHeader({
                 // §8.7 item 2 — 'shrink' scales the logo down via a toggled
                 // class (transform, compositor-only, no reflow) rather than
                 // touching the --theme-logo-height var mechanism.
-                className={`theme-logo-img max-w-40 object-contain shrink-0 ${shrunk ? "theme-logo-shrink" : ""}`}
+                className={`theme-logo-img max-w-40 object-contain min-w-0 ${shrunk ? "theme-logo-shrink" : ""}`}
                 style={resolveImageElementStyle(block.settings)}
               />
             ) : (
@@ -294,7 +303,13 @@ export default function ThemeDrivenHeader({
       // both the rows path and (for robustness) the classic zone path if a
       // merchant adds one without configuring rows.
       case "nav_menu":
-        return <MenuBar key={block.id} inline />;
+        // min-w-0 lets the inline scroller shrink inside its grid cell instead of overflowing into the
+        // logo and icons; under md it is dropped when the mobile menu panel carries the links.
+        return (
+          <div key={block.id} className={`min-w-0 ${mobileMenuPanel || block.settings.showOnMobile === false ? "hidden md:block" : ""}`}>
+            <MenuBar inline />
+          </div>
+        );
       case "contact_bar_item": {
         const kind = (block.settings.kind as string) ?? "text";
         const value = (block.settings.value as string) ?? "";
@@ -391,6 +406,8 @@ export default function ThemeDrivenHeader({
   const rows = resolveHeaderRows(config.settings, blocks);
   if (rows) {
     const rowsPy = HEADER_ROWS_PY[heightKey] ?? HEADER_ROWS_PY.default;
+    // The hamburger goes in the row that holds the logo (the main row), else the last one.
+    const triggerRowId = (rows.find((r) => r.blocks.some((b) => b.type === "logo")) ?? rows[rows.length - 1]).id;
     return (
       <div className={outerClass} style={style}>
         {rows.map((row, i) => (
@@ -415,14 +432,15 @@ export default function ThemeDrivenHeader({
               // / icons-right actually group instead of `justify-between`
               // spreading every block edge to edge.
               <div
-                className={`mx-auto px-4 ${rowsPy} grid grid-cols-3 items-center gap-4 ${shrinkTransitionClass}`}
+                className={`mx-auto px-4 ${rowsPy} grid ${THREE_ZONE_COLUMNS} items-center gap-4 ${shrinkTransitionClass}`}
                 style={contentStyle}
               >
                 {ZONES.map((zone) => (
                   <div
                     key={zone}
-                    className={`flex items-center gap-1 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
+                    className={`flex items-center gap-1 min-w-0 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
                   >
+                    {zone === "left" && mobileMenuPanel && row.id === triggerRowId && <MobileNavTrigger />}
                     {applyLogoRelativePosition(
                       row.blocks.filter(
                         (b) =>
@@ -438,6 +456,7 @@ export default function ThemeDrivenHeader({
                 className={`mx-auto px-4 ${rowsPy} flex items-center gap-3 flex-wrap ${ROW_JUSTIFY[row.align] ?? "justify-start"} ${shrinkTransitionClass}`}
                 style={contentStyle}
               >
+                {mobileMenuPanel && row.id === triggerRowId && <MobileNavTrigger />}
                 {applyLogoRelativePosition(row.blocks).map((b) => renderBlock(b))}
               </div>
             )}
@@ -450,14 +469,15 @@ export default function ThemeDrivenHeader({
   return (
     <div className={outerClass} style={style}>
       <div
-        className={`mx-auto px-4 ${HEADER_CLASSIC_PY[heightKey] ?? HEADER_CLASSIC_PY.default} grid grid-cols-3 items-center gap-4 ${shrinkTransitionClass}`}
+        className={`mx-auto px-4 ${HEADER_CLASSIC_PY[heightKey] ?? HEADER_CLASSIC_PY.default} grid ${THREE_ZONE_COLUMNS} items-center gap-4 ${shrinkTransitionClass}`}
         style={contentStyle}
       >
         {ZONES.map((zone) => (
           <div
             key={zone}
-            className={`flex items-center gap-1 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
+            className={`flex items-center gap-1 min-w-0 ${zone === "left" ? "justify-start" : zone === "center" ? "justify-center" : "justify-end"}`}
           >
+            {zone === "left" && mobileMenuPanel && <MobileNavTrigger />}
             {applyLogoRelativePosition(
               blocks.filter(
                 (b) =>

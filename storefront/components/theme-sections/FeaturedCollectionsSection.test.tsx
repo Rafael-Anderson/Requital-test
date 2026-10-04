@@ -190,3 +190,20 @@ describe("FeaturedCollectionsSection", () => {
     });
   });
 });
+
+describe("FeaturedCollectionsSection header wrapping (N4)", () => {
+  it("lets the heading and an outline View all button wrap instead of overflowing a narrow row", async () => {
+    listCollections.mockResolvedValue([collection(1)]);
+    const { findAllByRole } = render(
+      <FeaturedCollectionsSection
+        sectionId="sec-1"
+        settings={{} as unknown as SectionSettings}
+        blocks={headerWithViewAll({ style: "button" })}
+      />,
+    );
+    const viewAll = (await findAllByRole("link")).find((a) => a.textContent?.includes("View all"))!;
+    const header = viewAll.parentElement!;
+    expect(header.className).toContain("flex-wrap");
+    expect(header.className).toContain("justify-between");
+  });
+});

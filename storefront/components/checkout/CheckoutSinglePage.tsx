@@ -71,7 +71,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
               onClick={() => setOrderType("delivery")}
               className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
                 orderType === "delivery"
-                  ? "border-accent bg-accent/10 text-accent"
+                  ? "border-accent bg-accent/10 text-accent-text"
                   : "border-black/15 bg-white text-zinc-600"
               }`}
             >
@@ -84,7 +84,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
               onClick={() => setOrderType("pickup")}
               className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
                 orderType === "pickup"
-                  ? "border-accent bg-accent/10 text-accent"
+                  ? "border-accent bg-accent/10 text-accent-text"
                   : "border-black/15 bg-white text-zinc-600"
               }`}
             >

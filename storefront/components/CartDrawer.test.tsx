@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import CartDrawer from "./CartDrawer";
 
 vi.stubGlobal("matchMedia", vi.fn().mockImplementation((q: string) => ({
@@ -15,16 +15,21 @@ vi.mock("@/lib/shop-context", () => ({
 vi.mock("@/lib/cart", () => ({
   useCart: () => ({ items, subtotal, setQuantity: vi.fn(), removeItem: vi.fn() }),
 }));
-vi.mock("@/lib/cart-drawer", () => ({ useCartDrawer: () => ({ open: true, closeDrawer: vi.fn() }) }));
+let drawerOpen = true;
+const closeDrawer = vi.fn();
+vi.mock("@/lib/cart-drawer", () => ({ useCartDrawer: () => ({ open: drawerOpen, closeDrawer }) }));
 
 afterEach(() => {
   cleanup();
   themeConfig = null;
   items = [];
+  drawerOpen = true;
+  closeDrawer.mockClear();
 });
 
-function panel(container: HTMLElement) {
-  return container.querySelector('[role="dialog"]') as HTMLElement;
+// The drawer is portalled to <body>, so look there rather than in the render container.
+function panel(_container?: HTMLElement) {
+  return document.querySelector('[role="dialog"]') as HTMLElement;
 }
 
 describe("CartDrawer drawers.animation (§8.13.C item 13)", () => {
@@ -100,5 +105,40 @@ describe("CartDrawer empty state", () => {
     expect(getByRole("heading", { name: "Your cart is empty" })).toBeInTheDocument();
     expect(container.querySelector('[data-testid="empty-cart-skeleton"]')).toBeNull();
     expect(getByRole("button", { name: "Continue shopping" })).toBeInTheDocument();
+  });
+});
+
+describe("CartDrawer keyboard and focus (N4)", () => {
+  it("is portalled to <body>, above the z-40 cookie banner (inside <header> its z-50 only counted within the header)", () => {
+    const { container } = render(<CartDrawer />);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.closest("header")).toBeNull();
+    expect(document.body.contains(dialog)).toBe(true);
+  });
+
+  it("moves focus to the Close button on open, and Escape asks the context to close", () => {
+    render(<CartDrawer />);
+    return waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close cart" }))).then(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(closeDrawer).toHaveBeenCalled();
+    });
+  });
+
+  it("is inert and not a dialog while closed", () => {
+    drawerOpen = false;
+    render(<CartDrawer />);
+    const panel = document.querySelector('[aria-label="Cart"]') as HTMLElement;
+    expect(panel.hasAttribute("inert")).toBe(true);
+    expect(panel.getAttribute("role")).toBeNull();
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+
+  it("locks page scroll while open", () => {
+    document.body.style.overflow = "";
+    const { unmount } = render(<CartDrawer />);
+    expect(document.body.style.overflow).toBe("hidden");
+    unmount();
+    expect(document.body.style.overflow).toBe("");
   });
 });

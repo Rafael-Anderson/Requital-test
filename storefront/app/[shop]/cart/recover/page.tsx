@@ -71,7 +71,7 @@ function RecoverContent() {
           <p className="text-sm text-zinc-500 mb-4">
             That cart has already been checked out, or this recovery link is no longer valid.
           </p>
-          <Link href={shopBasePath || "/"} className="text-accent hover:underline">
+          <Link href={shopBasePath || "/"} className="text-accent-text hover:underline">
             Continue shopping
           </Link>
         </div>

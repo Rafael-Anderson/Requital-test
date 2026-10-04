@@ -56,13 +56,48 @@
   --gutter-x-lg: 1.5rem; /* = sm:px-6 (the >=640px value) */
 }
 
-/* Height of the fixed bottom-bar mobile nav (MobileNav.tsx, h-14, hidden from md
+/* Height of the fixed bottom-bar mobile nav (MobileNav.tsx, 3.5rem plus the home-indicator inset, hidden from md
    up), published only while that nav is mounted. Fixed bottom elements add it to
    their own offset: bottom-[calc(<base>+var(--bottom-nav-h,0px)+...)]. */
 @media (max-width: 767px) {
   :root[data-bottom-nav] {
-    --bottom-nav-h: 3.5rem;
+    --bottom-nav-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Keyboard focus ring (N4). Until now the storefront relied on the browser's
+   default ring, which is weak on several template surfaces (a cream page, a
+   dark band) and is explicitly removed (`outline-none` plus a 25% accent
+   glow) on every text field. A TWO-TONE ring (an outline in the scheme text
+   colour, a halo in the scheme background colour between the element and the
+   outline) is visible on any surface, because one of the two tones always
+   contrasts with it: lib/focus-ring.ts picks the pair and guarantees that
+   (--theme-focus-ring / --theme-focus-halo are written with the scheme, the
+   fallbacks here are the page tokens). :focus-visible, so a mouse click on a
+   button shows nothing and a Tab always does. The link/button rule sits in
+   :where() (zero specificity) so a component's own focus-visible utility still
+   wins; form controls use plain element selectors so they beat a stray
+   `.outline-none`. Token names are outside every Tailwind theme namespace on
+   purpose. */
+:where(a[href], button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--theme-focus-ring, var(--foreground, #171717));
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--theme-focus-halo, var(--background, #ffffff));
+}
+
+/* A focused control must never end up under a fixed bar: keyboard focus
+   scrolls it into view, and this padding keeps it clear of the cookie banner
+   (--cookie-banner-h) and the bottom-bar mobile nav (--bottom-nav-h). */
+html {
+  scroll-padding-bottom: calc(var(--cookie-banner-h, 0px) + var(--bottom-nav-h, 0px) + 1rem);
+}
+/* ...and the end of the page needs room for the banner too: scroll-padding cannot scroll past the last pixel, so the
+   footer's last links stayed under it. --cookie-banner-h exists only while the banner shows. */
+body {
+  padding-bottom: var(--cookie-banner-h, 0px);
 }
 
 /* Phase A (motion foundation) — ONE blanket prefers-reduced-motion rule,
@@ -169,6 +204,11 @@
   --color-accent: #069494;
   --color-accent-hover: #057a7a;
   --color-accent-foreground: #ffffff;
+  /* The accent as TEXT (text-accent-text): the accent itself when it reads on the page, else a shade of the
+     same hue that does (lib/accent-text.ts). It had no definition here, so the 15 `text-accent-text`
+     utilities already in the storefront rendered nothing and the text kept its inherited colour. Written
+     per shop at runtime next to --color-accent. #058080 is the default teal darkened to 4.5:1 on white. */
+  --color-accent-text: #058080;
 
   /* Granular Appearance Color palette (Theme > Appearance Color in admin) —
      the 11 of ~22 saved colors that have a real storefront element to apply
@@ -441,7 +481,11 @@ body {
 }
 .theme-btn-border-fill:hover {
   background-color: var(--color-accent);
-  color: var(--color-accent-foreground);
+  /* !important: the secondary button carries its label colour as an INLINE style
+     (resolveSecondaryButtonStyle), which beats this rule. Where that label equals
+     the accent (Market and Bloom: #E24A6A / #7C5CFF on both) the hover fill made
+     the label disappear (contrast 1:1). */
+  color: var(--color-accent-foreground) !important;
 }
 
 .theme-btn-icon {

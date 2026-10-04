@@ -82,7 +82,7 @@ export default function TimeSlotPicker({
               className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-start text-sm text-foreground hover:bg-black/5 transition-colors cursor-pointer"
             >
               <span>{s}</span>
-              {s === value && <Check className="size-3.5 shrink-0 text-accent" />}
+              {s === value && <Check className="size-3.5 shrink-0 text-accent-text" />}
             </button>
           ))}
         </div>

@@ -86,7 +86,7 @@ export default function RegisterPage() {
 
       <p className="text-sm text-zinc-500">
         Already have an account?{" "}
-        <Link href={`${shopBasePath}/account/login`} className="text-accent hover:underline">
+        <Link href={`${shopBasePath}/account/login`} className="text-accent-text hover:underline">
           Sign in
         </Link>
       </p>
