@@ -106,7 +106,7 @@ async function main() {
         rec.error = String(e.message || e).slice(0, 200);
       }
       results.push(rec);
-      process.stdout.write(rec.error ? 'E' : rec.docOverflow || (rec.header && !rec.header.fullWidth) || (rec.offenders && rec.offenders.length) ? 'x' : '.');
+      process.stdout.write(rec.error ? 'E' : rec.docOverflow || (rec.header && !rec.header.fullWidth) || (rec.offenders && rec.offenders.length) || (rec.clippedPrimary && rec.clippedPrimary.length) || (rec.obscuredPrimary && rec.obscuredPrimary.length) ? 'x' : '.');
     }
     await ctx.close();
   }
@@ -119,7 +119,7 @@ async function main() {
 }
 
 function markdown(label, results, skipped) {
-  const bad = (r) => r.docOverflow || (r.header && !r.header.fullWidth) || (r.offenders && r.offenders.length > 0);
+  const bad = (r) => r.docOverflow || (r.header && !r.header.fullWidth) || (r.offenders && r.offenders.length > 0) || (r.clippedPrimary && r.clippedPrimary.length > 0) || (r.obscuredPrimary && r.obscuredPrimary.length > 0);
   const lines = [`# Responsive audit: ${label}`, ''];
   const byRoute = new Map();
   for (const r of results) {
@@ -142,6 +142,8 @@ function markdown(label, results, skipped) {
       if (r.docOverflow) bits.push(`doc +${r.overflowPx}px`);
       if (r.header && !r.header.fullWidth) bits.push(`header ${r.header.w}/${r.innerWidth}`);
       if (r.offenders.length) bits.push(`${r.offenders.length} past`);
+      if (r.clippedPrimary && r.clippedPrimary.length) bits.push(`${r.clippedPrimary.length} clipped`);
+      if (r.obscuredPrimary && r.obscuredPrimary.length) bits.push(`${r.obscuredPrimary.length} obscured`);
       if (r.loadingTimedOut) bits.push('loading?');
       return bits.length ? bits.join(', ') : 'ok';
     });
@@ -153,6 +155,8 @@ function markdown(label, results, skipped) {
       lines.push(`### ${k} @ ${r.viewport}${r.docOverflow ? `: document ${r.docScrollWidth}px vs ${r.innerWidth}px` : ''}${r.header && !r.header.fullWidth ? `, header ${r.header.w}px` : ''}`);
       for (const o of r.offenders.slice(0, 6)) lines.push(`- \`${o.el}\` x=${o.box.x} w=${o.box.w} right=${o.box.right}`);
       if (r.offenders.length > 6) lines.push(`- (+${r.offenders.length - 6} more)`);
+      for (const o of (r.obscuredPrimary || []).slice(0, 6)) lines.push(`- obscured \`${o.el}\` by fixed \`${o.by}\``);
+      for (const o of (r.clippedPrimary || []).slice(0, 6)) lines.push(`- clipped \`${o.el}\` cut ${o.cutX}x${o.cutY} by \`${o.clippedBy}\``);
     }
   }
   lines.push('', '## Skipped (no fixture)', '', ...skipped.map((s) => `- ${s.app} \`${s.file}\`: ${s.reason}`));

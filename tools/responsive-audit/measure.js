@@ -56,6 +56,59 @@ function measurePage() {
     offenders.push({ el: describe(el), box: box(el.getBoundingClientRect()) });
   }
 
+  // Primary elements (links, buttons, form controls, headings, prices, images) that are PARTLY cut off by an
+  // overflow hidden|clip ancestor (any axis) while visible in the viewport. `clipped` above only sees
+  // elements past the viewport edge; this sees a logo or CTA sliced inside the page. Elements fully outside
+  // their clipper (an off-canvas slide) are intended and skipped; so is text under text-overflow: ellipsis.
+  const PRIMARY = 'a[href],button,input,select,textarea,h1,h2,h3,img,[class*="price" i]';
+  const clippedPrimary = [];
+  for (const el of document.body.querySelectorAll(PRIMARY)) {
+    if (el.closest('svg')) continue;
+    const r = el.getBoundingClientRect();
+    if (!visible(el, r) || r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > vw) continue;
+    if (el.closest('[aria-hidden="true"],[inert],.sr-only')) continue;
+    for (let p = el.parentElement; p && p !== document.body && p !== de; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      const cx = cs.overflowX === 'hidden' || cs.overflowX === 'clip';
+      const cy = cs.overflowY === 'hidden' || cs.overflowY === 'clip';
+      if (!cx && !cy) continue;
+      if (cs.textOverflow === 'ellipsis') break;
+      const pr = p.getBoundingClientRect();
+      const inter = r.left < pr.right && r.right > pr.left && r.top < pr.bottom && r.bottom > pr.top;
+      if (!inter) break;
+      const cutX = cx ? Math.max(0, pr.left - r.left, r.right - pr.right) : 0;
+      const cutY = cy ? Math.max(0, pr.top - r.top, r.bottom - pr.bottom) : 0;
+      if (cutX > 2 || cutY > 2) {
+        clippedPrimary.push({ el: describe(el), box: box(r), clippedBy: describe(p), clipBox: box(pr), cutX: Math.round(cutX), cutY: Math.round(cutY) });
+        break;
+      }
+    }
+  }
+
+  // Primary elements whose own centre/edge points are covered by an unrelated FIXED element (a floating button over
+  // the logo, a bar over a link). The cookie banner is a transient overlay and is excluded on purpose.
+  const obscuredPrimary = [];
+  for (const el of document.body.querySelectorAll(PRIMARY)) {
+    if (el.closest('svg') || el.closest('[aria-hidden="true"],[inert],.sr-only')) continue;
+    const r = el.getBoundingClientRect();
+    if (!visible(el, r) || r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > vw) continue;
+    let hit = null;
+    for (const fx of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
+      for (const fy of [0.3, 0.7]) {
+        const x = r.left + r.width * fx;
+        const y = r.top + r.height * fy;
+        if (x < 0 || x >= vw || y < 0 || y >= window.innerHeight) continue;
+        const top = document.elementFromPoint(x, y);
+        if (!top || top === el || el.contains(top) || top.contains(el)) continue;
+        if (top.closest('[data-cookie-banner]') || !insideFixed(top)) continue;
+        hit = { el: describe(el), box: box(r), by: describe(top), at: Math.round(x) };
+        break;
+      }
+      if (hit) break;
+    }
+    if (hit) obscuredPrimary.push(hit);
+  }
+
   const scrollers = [];
   for (const el of all) {
     const o = getComputedStyle(el).overflowX;
@@ -92,6 +145,8 @@ function measurePage() {
     colorScheme: html.colorScheme,
     offenders,
     clipped: clipped.slice(0, 12),
+    clippedPrimary: clippedPrimary.slice(0, 20),
+    obscuredPrimary: obscuredPrimary.slice(0, 20),
     scrollers,
     fixed,
     title: document.title,

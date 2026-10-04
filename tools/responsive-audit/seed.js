@@ -71,7 +71,7 @@ async function seed() {
           body: JSON.stringify({
             name: names[i],
             price: 40 + i * 15,
-            thumbnail: 'https://placehold.co/400x400.png',
+            thumbnail: process.env.AUDIT_IMAGE_BASE ? `${process.env.AUDIT_IMAGE_BASE}/audit-${i}.svg` : 'https://placehold.co/400x400.png',
             sku: `AUD-${runId}-${i}`,
             status: 'Available',
             collectionIds: [collections[i % collections.length].id],
@@ -88,6 +88,31 @@ async function seed() {
     s,
   );
   await call('/shop', { method: 'PATCH', body: JSON.stringify({ published: true }) }, s);
+  // AUDIT_CART_LAYOUT=drawer opens the cart in a drawer instead of the cart page (drawer open-state audit).
+  if (process.env.AUDIT_CART_LAYOUT) {
+    await call('/theme', { method: 'PATCH', body: JSON.stringify({ cartLayout: process.env.AUDIT_CART_LAYOUT }) }, s);
+  }
+
+  // AUDIT_TEMPLATE=atelier|market|bloom|heritage: create that starter template as a Sections theme and
+  // publish it (so the storefront renders the theme-driven chrome and homepage instead of the legacy
+  // layout), plus brands so a template that shows a brands strip has something to show.
+  let themeId = null;
+  let brandIds = [];
+  const template = process.env.AUDIT_TEMPLATE || '';
+  if (template) {
+    for (const name of ['Maison Fleur', 'Petal & Co', 'Green Atelier']) {
+      const b = await optional(`brand ${name}`, () => call('/brands', { method: 'POST', body: JSON.stringify({ name }) }, s));
+      if (b) brandIds.push(b.id);
+    }
+    for (let i = 0; i < products.length && brandIds.length; i++) {
+      await optional(`brand on product ${i}`, () =>
+        call(`/products/${products[i].id}`, { method: 'PATCH', body: JSON.stringify({ brandId: brandIds[i % brandIds.length] }) }, s),
+      );
+    }
+    const theme = await call('/themes', { method: 'POST', body: JSON.stringify({ name: `Audit ${template}`, fromTemplate: template }) }, s);
+    await call(`/themes/${theme.id}/publish`, { method: 'POST', body: JSON.stringify({}) }, s);
+    themeId = theme.id;
+  }
 
   const orders = [];
   for (let i = 0; i < 4; i++) {
@@ -133,6 +158,9 @@ async function seed() {
     orderIds: orders.map((o) => o.id),
     orderTrackingTokens: orders.map((o) => o.trackingToken).filter(Boolean),
     discountId: discount && discount.id,
+    template: template || null,
+    themeId,
+    brandIds,
   };
 }
 
