@@ -218,6 +218,76 @@ export class OrderNotificationsService {
     );
   }
 
+  // Sent once, right after a customer submits a survey with the "you may show
+  // my feedback" box ticked (never when they did not tick it). It restates
+  // what they agreed to and carries the link back to the survey page, where
+  // the Withdraw button lives (a GET link never withdraws by itself, so a mail
+  // scanner that prefetches links cannot do it either). Same gating as the
+  // survey request itself: notify_email on and an email address on the order.
+  // Idempotent per survey response.
+  async notifySurveyConsentGiven(
+    shopId: number,
+    surveyId: number,
+    orderId: number,
+  ) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT s.token, o.customerEmail, o.customerName, o.shopOrderNumber,
+              sh.subdomain, sh.name, sh.displayName,
+              sh.customDomain, sh.customDomainStatus, sh.domainType
+         FROM surveyresponse s
+         JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
+         JOIN shop sh ON sh.id = s.shopId
+        WHERE s.id = ? AND s.shopId = ? AND s.orderId = ?`,
+      [surveyId, shopId, orderId],
+    );
+    const row = rows[0];
+    if (!row || !row.customerEmail) return;
+    if (!(await this.features.isEnabled(shopId, 'notify_email'))) return;
+
+    const link = storefrontUrl(
+      {
+        subdomain: row.subdomain as string,
+        domainType: row.domainType as string | null,
+        customDomain: row.customDomain as string | null,
+        customDomainStatus: row.customDomainStatus as string | null,
+      },
+      `/survey?token=${row.token as string}`,
+    );
+    const shopDisplayName =
+      (row.displayName as string | null) ?? (row.name as string);
+    const customerName = row.customerName as string;
+    const html = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
+<tr><td style="padding:40px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(customerName)},</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Thank you for your feedback on order <strong>#${row.shopOrderNumber as number}</strong> from ${escapeHtml(shopDisplayName)}.</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">You agreed that ${escapeHtml(shopDisplayName)} may show your feedback on its website, with your first name and last initial. You can withdraw that agreement at any time; it will stop being shown straight away.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Manage my feedback</a></td></tr></table>
+<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
+<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${link}</p>
+</td></tr>
+<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
+<tr><td style="padding:24px 40px 40px;text-align:center;">
+<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by ${escapeHtml(shopDisplayName)} via Requital.</p>
+<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
+</td></tr>
+</table>
+</td></tr></table>`;
+    await this.jobsService.enqueue(
+      shopId,
+      'send_email',
+      {
+        to: row.customerEmail as string,
+        subject: `Your feedback on order #${row.shopOrderNumber as number}`,
+        bodyText: `Hi ${customerName}, thank you for your feedback. You agreed that ${shopDisplayName} may show it on its website, with your first name and last initial. You can withdraw that agreement at any time: ${link}`,
+        html,
+        fromName: shopDisplayName,
+      },
+      `survey:${surveyId}:consent-email`,
+    );
+  }
+
   private async sendEmail(
     shopId: number,
     order: NotifiableOrder,

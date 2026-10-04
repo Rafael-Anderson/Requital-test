@@ -393,6 +393,11 @@ export function listFeaturedReviews(shopSlug: string, opts: { limit?: number; mi
   return get<FeaturedReview[]>(`/public/${shopSlug}/reviews/featured${q ? `?${q}` : ""}`);
 }
 
+// Token-only, idempotent. Re-granting is not supported: the survey is single-shot.
+export function withdrawSurveyConsent(token: string) {
+  return post<{ withdrawn: boolean }>(`/public/surveys/withdraw-consent?token=${encodeURIComponent(token)}`, {});
+}
+
 export function submitSurvey(token: string, data: { rating: number; comment?: string; publishConsent?: boolean }) {
   return post<{ success: boolean }>(`/public/surveys/submit?token=${encodeURIComponent(token)}`, data);
 }

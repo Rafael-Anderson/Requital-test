@@ -17,10 +17,11 @@ const base = {
 const REVIEWS = [
   { ...base, id: 1, rating: 5, comment: "Lovely", publishConsent: 1, canFeature: true },
   { ...base, id: 2, rating: 3, comment: "Fine", publishConsent: null, canFeature: false },
+  { ...base, id: 3, rating: 4, comment: "Withdrawn one", publishConsent: 0, canFeature: false },
 ];
 
 beforeEach(() => {
-  vi.mocked(listReviews).mockResolvedValue({ data: REVIEWS, total: 2, page: 1, pageSize: 20 } as never);
+  vi.mocked(listReviews).mockResolvedValue({ data: REVIEWS, total: 3, page: 1, pageSize: 20 } as never);
 });
 afterEach(() => {
   cleanup();
@@ -39,5 +40,17 @@ describe("Reviews page", () => {
     expect(screen.getByText(/did not agree to publish this feedback/)).toBeInTheDocument();
     fireEvent.click(switches[0]);
     await waitFor(() => expect(setReviewFeatured).toHaveBeenCalledWith(1, true));
+  });
+});
+
+describe("Reviews page, withdrawn consent", () => {
+  it("labels consent 0 as declined or withdrawn and keeps its switch off and disabled with the reason", async () => {
+    render(<ReviewsPage />);
+    expect(await screen.findByText("Withdrawn one")).toBeInTheDocument();
+    expect(screen.getByText("Declined or withdrawn")).toBeInTheDocument();
+    const sw = screen.getAllByRole("switch")[2];
+    expect(sw).toBeDisabled();
+    expect(sw).not.toBeChecked();
+    expect(screen.getByText(/declined, or withdrew their consent/)).toBeInTheDocument();
   });
 });

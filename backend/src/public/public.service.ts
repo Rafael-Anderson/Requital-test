@@ -1370,7 +1370,49 @@ export class PublicService {
       rating: survey.rating,
       comment: survey.comment,
       respondedAt: survey.respondedAt,
+      // The customer's own answer, echoed back to them only: true = agreed
+      // and not withdrawn, false = declined or withdrawn, null = never asked
+      // or not answered. Drives the withdraw control on the survey page.
+      publishConsent:
+        survey.publishConsent == null
+          ? null
+          : Number(survey.publishConsent) === 1,
     };
+  }
+
+  // Withdraw consent to publish. The token is the only credential, exactly as
+  // for lookup/submit. One conditional UPDATE keyed by the token does the
+  // work: consent goes to 0 AND the review leaves the featured set in the same
+  // statement, so there is no read-then-write window. It only touches an
+  // ANSWERED survey (respondedAt IS NOT NULL) and never raises consent, and
+  // submitSurvey is single-shot (respondedAt IS NULL), so nothing in this
+  // codebase can turn a 0 back into a 1: re-granting is not supported.
+  // mysql2 reports CHANGED rows, so a repeat call (already withdrawn) matches
+  // zero; the follow-up SELECT only tells "already withdrawn" from "no such
+  // token" / "not answered yet" and runs after the write, never before it.
+  async withdrawSurveyConsent(token?: string) {
+    if (!token?.trim()) {
+      throw new BadRequestException('A survey token is required');
+    }
+    const result = await this.db.execute(
+      `UPDATE surveyresponse
+          SET publishConsent = 0, featuredAt = NULL
+        WHERE token = ? AND respondedAt IS NOT NULL`,
+      [token],
+    );
+    if (result.affectedRows === 0) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT respondedAt FROM surveyresponse WHERE token = ? LIMIT 1`,
+        [token],
+      );
+      if (!rows[0]) {
+        throw new NotFoundException('No survey found for that token');
+      }
+      if (!rows[0].respondedAt) {
+        throw new BadRequestException('This survey has not been answered yet');
+      }
+    }
+    return { withdrawn: true };
   }
 
   async submitSurvey(token: string | undefined, dto: SubmitSurveyDto) {
@@ -1402,6 +1444,18 @@ export class PublicService {
     );
     if (result.affectedRows === 0) {
       throw new BadRequestException('This survey has already been submitted');
+    }
+    // A thank-you with the withdraw link, only for a customer who agreed to
+    // publication. Best effort: the answer is already saved and a failed
+    // enqueue must never turn it into an error.
+    if (consent === 1) {
+      await this.orderNotificationsService
+        .notifySurveyConsentGiven(survey.shopId, survey.id, survey.orderId)
+        .catch((err: unknown) =>
+          logger.error(`survey #${survey.id}: consent thank-you failed`, {
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
     }
     return { success: true };
   }
