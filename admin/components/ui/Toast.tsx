@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 type ToastType = "success" | "error";
 interface ToastAction {
@@ -33,6 +33,17 @@ let nextId = 0;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // Pending auto-dismiss timers, cleared on unmount: one left running fires
+  // setToasts after the provider (or, in tests, the whole jsdom window) is gone
+  // and surfaces as an unhandled "window is not defined" that fails the run.
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach(clearTimeout);
+      pending.clear();
+    };
+  }, []);
 
   const dismiss = useCallback((id: number) => {
     setToasts((t) => t.filter((toast) => toast.id !== id));
@@ -42,7 +53,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (message, type = "success", options) => {
       const id = nextId++;
       setToasts((t) => [...t, { id, message, type, action: options?.action }]);
-      setTimeout(() => dismiss(id), options?.duration ?? 3000);
+      const timer = setTimeout(() => {
+        timers.current.delete(timer);
+        dismiss(id);
+      }, options?.duration ?? 3000);
+      timers.current.add(timer);
     },
     [dismiss],
   );
