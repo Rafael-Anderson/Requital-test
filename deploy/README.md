@@ -26,6 +26,13 @@ on-demand TLS. Only genuinely-custom merchant domains hit the `https://`
 catch-all and trigger an on-demand cert, and only if `GET /domains/verify` on the
 backend returns 200 for that host.
 
+### Client IP
+
+`reverse_proxy` overwrites `X-Forwarded-For` with the client's socket address
+(Caddy's default, since no `trusted_proxies` is configured), and the backend's
+`TRUST_PROXY=loopback` reads it. Keep it that way: see `docs/runbook.md`, "Client
+IP behind the proxies".
+
 ### Secrets — not in this repo
 
 `*.requital.io`'s `tls { dns cloudflare {env.CLOUDFLARE_API_TOKEN} }` reads

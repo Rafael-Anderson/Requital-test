@@ -289,6 +289,55 @@ curl -X POST -H 'Content-Type: application/json' \
 
 (That test payload carries both keys on purpose so the one command works against Slack or Discord. The app itself always sends exactly one.)
 
+## Client IP behind the proxies (`TRUST_PROXY`)
+
+Without this the backend sees every request from `127.0.0.1` (Caddy, or the storefront's Next server), so every per-IP throttle (`/auth/login`, `/auth/refresh` and the other 5 per minute routes, signup, MFA, the 404 log, surveys) is **one shared bucket for all users**, and Settings > Security shows a useless IP. `TRUST_PROXY` (backend env, read once at start) tells Express which direct peers may report the client's address in `X-Forwarded-For`. Code: `backend/src/common/trust-proxy.ts` (parser), `AppModule.onModuleInit` (applies it, in `main.ts` and in the e2e harness alike), `common/client-ip-throttler.guard.ts` (throttle key).
+
+### The exact value
+
+```
+TRUST_PROXY=loopback
+```
+
+in `/home/deploy/requital/backend/.env`, then `sudo -u deploy pm2 restart requital-backend`. That single value is correct for **both** entry paths, which hit the same backend process:
+
+| Path | Hops | Backend's socket peer | `X-Forwarded-For` the backend receives | `req.ip` |
+|---|---|---|---|---|
+| A. admin browser to `api.requital.io` | client, Caddy, backend | 127.0.0.1 (Caddy) | `<client>` (Caddy overwrites whatever the client sent) | `<client>` |
+| B. storefront browser to `*.requital.io` or a custom domain, `/api/*` rewrite | client, Caddy, Next :3002, backend | 127.0.0.1 (Next) | `<client>` (Next 16 adds nothing; it forwards Caddy's header untouched) | `<client>` |
+
+Express takes the right-most `X-Forwarded-For` entry that is not trusted. With only loopback trusted, the proxy's own entries are skipped and the first non-loopback address wins, and anything a client typed sits to the left of what Caddy wrote, so it is never reached. **Do not use a hop count here:** `1` happens to work for both chains today (each has exactly one entry plus the socket), but a hop count believes whoever is on the socket, including a request that reached port 3000 directly, and it silently breaks if a proxy ever appends a hop. `loopback` is the same for both chains and refuses a non-local peer outright.
+
+Accepted syntax (anything else, `true`, `*`, `0.0.0.0/0`, `::/0`, a range wider than IPv4 /8 or IPv6 /16, a hop count over 10, makes the backend refuse to start with a message naming `TRUST_PROXY`): a hop count 1 to 10, or a comma-separated list of `loopback`, `linklocal`, `uniquelocal`, addresses and CIDR ranges. Unset, or blank, means no trust: `req.ip` is the socket address and a forwarded header is ignored (exactly the behaviour before this existed).
+
+### What this relies on (verified 2026-10-04 with Caddy v2.10.0 and Next 16.3.0 on local ports, see docs/handoff/n6c.md)
+
+- **Caddy overwrites `X-Forwarded-For`** for any client that is not in `trusted_proxies` (the default is none), writing the client's socket address. A spoofed `X-Forwarded-For` from the internet never reaches the backend. `X-Real-IP`, `Forwarded` and `CF-Connecting-IP` are **not** touched by Caddy and arrive client-controlled; the backend never reads them. **Do not add `trusted_proxies` to the Caddyfile for the DNS-only setup**: it makes Caddy keep a client's own header.
+- **The Next `/api/*` rewrite adds no `X-Forwarded-For`** (`proxy-request.js` does not set httpxy's `xfwd`; it only sets `x-forwarded-host`). It copies the incoming header through, so the value Caddy wrote reaches the backend. If a future Next release starts appending the peer, that peer is `127.0.0.1`, which `loopback` skips, so the result is unchanged.
+- **The backend and the storefront server must not be reachable from the internet on :3000 and :3002.** :3000 is safe even if open (a non-loopback peer is not trusted, so its header is ignored). **:3002 is not**: Next forwards a client's own `X-Forwarded-For` untouched and the backend then sees loopback as the peer, so a client that can reach :3002 directly could choose its IP. Whether the VPS firewalls these ports is **not recorded in this repo (INFERRED: closed, because Caddy is the only listener the docs describe)**. Check it from outside before enabling: `curl -m 5 http://187.52.114.246:3002/` and `:3000`, both must fail to connect. If either answers, bind the app to 127.0.0.1 or firewall it first.
+- **Cloudflare is not recorded either.** INFERRED not proxying the storefront hosts (a proxied wildcard record needs a Cloudflare Enterprise plan, custom domains point at the VPS directly, and the wildcard certificate is issued by DNS-01, not through the proxy). If `api.requital.io` or another host turns out to be proxied, Caddy sees a Cloudflare edge address as the client and the session IP column will show Cloudflare addresses after the deploy. The fix is both of: Caddy global option `servers { trusted_proxies static <Cloudflare IPv4 and IPv6 ranges from cloudflare.com/ips> }` (Caddy then appends instead of overwriting, producing `client-spoof, real-client, edge`, verified locally with a stand-in range), and `TRUST_PROXY=loopback,<the same ranges>` on the backend. Then the right-most address outside both lists is the real client and everything to its left is ignored. The ranges change rarely but they do change; keep the two lists identical.
+
+### Server-side storefront fetches (SSR, `proxy.ts`)
+
+`getShop` and the other server-component fetches, the domain resolver and the redirect map are made by the Next server with no browser attached, to `NEXT_PUBLIC_API_URL`. They all arrive from one address (the VPS, or loopback if that variable is `http://localhost:3000`) and share **one** bucket of the global 100 per minute default for every shop's page renders. That was already true before `TRUST_PROXY` and is not changed by it; the difference is that they no longer share that bucket with real browsers, which is an improvement. It is a latent ceiling on server-rendered page views per minute across all shops (not fixed here).
+
+### Deploy
+
+1. Check :3000 and :3002 are unreachable from outside (above).
+2. Add `TRUST_PROXY=loopback` to `backend/.env`; `sudo -u deploy pm2 restart requital-backend`; check the logs for a clean start. No Caddy reload and no storefront or admin rebuild is needed: Caddy already overwrites the header and the Next rewrite already forwards it. The Caddyfile and next.config.ts have no functional change in this PR.
+3. Verify (both chains, no debug endpoint exists and none should be added):
+   - **Chain A:** sign in to the admin as `testadmin` (shop 1) from a phone on mobile data and from the office network. Settings > Security shows each device's own public address (compare with what an IP-echo site reports for that network), not `127.0.0.1`, not the VPS address, not a Cloudflare range.
+   - **Chain B and the throttle:** from network 1 send six wrong customer logins to the test shop, `for i in 1 2 3 4 5 6; do curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{"email":"nobody@example.com","password":"wrong-password-1"}' https://<testadmin-host>/api/public/<testadmin-slug>/auth/login; done`: the first five are 400/401, the sixth is 429. Immediately repeat once from network 2 (a phone on mobile data): that must be 400/401, not 429. If network 2 is limited too, the header is not being honoured (check step 1 and the Caddyfile for a stray `trusted_proxies`).
+   - **Spoof check:** `curl -H 'X-Forwarded-For: 6.6.6.6' ...` on the same login from network 1 must still be the limited one (429 after the five).
+
+### Rollback
+
+Remove `TRUST_PROXY` from `backend/.env` and `sudo -u deploy pm2 restart requital-backend`. Behaviour returns to the previous one (one shared bucket, proxy address in the session list). Nothing else changed, nothing to migrate.
+
+### Known limits
+
+An IPv6 client is throttled per /64 (so it cannot rotate addresses to escape a limit), which means two users on the same /64 share a bucket. The session list IP column records the full address. Per-account protections (the progressive login delay, the MFA lockout) never depended on the IP and are unchanged.
+
 ## Migration rollback reference
 
 This project's migrations are hand-authored `migration.sql` files applied by `npm run db:migrate` (`backend/scripts/migrate.ts`, see CLAUDE.md) — nothing generates a down migration for any of them, and the runner has no "rollback" command. The table below is the manual down-path for every migration currently in the repo, so a rollback is a deliberate, reviewed action rather than a guess made under pressure.

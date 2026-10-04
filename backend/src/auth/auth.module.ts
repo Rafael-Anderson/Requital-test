@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ClientIpThrottlerGuard } from '../common/client-ip-throttler.guard';
 import { AuthController } from './auth.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
@@ -39,7 +39,7 @@ const DEFAULT_TOKEN_LIFETIME = '15m';
     // like login/signup, which AuthGuard doesn't otherwise gate at all).
     // AuthGuard (bearer token -> TenantContext) then runs before RolesGuard
     // (admin-only route check).
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: ClientIpThrottlerGuard },
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

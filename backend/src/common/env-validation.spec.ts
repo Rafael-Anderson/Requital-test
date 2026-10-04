@@ -104,6 +104,27 @@ describe('validateEnv', () => {
     expect(String(logger.errorCalls[0][0])).toContain('STORAGE_PROVIDER');
   });
 
+  it.each(['true', '*', '0.0.0.0/0', 'garbage'])(
+    'fails fast, naming TRUST_PROXY, when it is %s (never trust-all)',
+    (value) => {
+      process.env.TRUST_PROXY = value;
+      const logger = fakeLogger();
+      validateEnv(logger);
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(String(logger.errorCalls[0][0])).toContain('TRUST_PROXY');
+    },
+  );
+
+  it.each(['loopback', '1', 'loopback,173.245.48.0/20'])(
+    'accepts TRUST_PROXY=%s, and boots with it unset',
+    (value) => {
+      process.env.TRUST_PROXY = value;
+      validateEnv(fakeLogger());
+      expect(exitSpy).not.toHaveBeenCalled();
+    },
+  );
+
   it('accepts STORAGE_PROVIDER=s3 by itself — the S3_* vars-required-together check happens at StorageModule registration, not here', () => {
     process.env.STORAGE_PROVIDER = 's3';
     const logger = fakeLogger();
