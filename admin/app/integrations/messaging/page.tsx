@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   clearWhatsAppCredentials,
   getShop,
@@ -16,6 +16,7 @@ import SecretField from "@/components/ui/SecretField";
 import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -42,19 +43,51 @@ export default function MessagingIntegrationsPage() {
   const [testNumber, setTestNumber] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
 
-  async function refresh() {
-    const [s, c] = await Promise.all([getShop(), getWhatsAppSettings()]);
-    setShop(s);
-    setCountryCode(s.whatsappCountryCode ?? "+971");
-    setNumber(s.whatsappNumber ?? "");
-    setNotifyCustomers(s.notifyCustomersWhatsapp);
-    setFloatingButton(s.whatsappFloatingButtonEnabled);
-    setCredentials(c);
-    setCredentialValues({});
+  // The shop (number and toggles) and the credentials load on independent
+  // chains: neither card waits on, or is lost to, the other. Each ends in an
+  // error with Try again.
+  const [shopError, setShopError] = useState<string | null>(null);
+  const [credentialsError, setCredentialsError] = useState<string | null>(null);
+  const latestShop = useRef(0);
+  const latestCredentials = useRef(0);
+
+  function refreshShop() {
+    const mine = ++latestShop.current;
+    getShop()
+      .then((s) => {
+        if (mine !== latestShop.current) return;
+        setShop(s);
+        setShopError(null);
+        setCountryCode(s.whatsappCountryCode ?? "+971");
+        setNumber(s.whatsappNumber ?? "");
+        setNotifyCustomers(s.notifyCustomersWhatsapp);
+        setFloatingButton(s.whatsappFloatingButtonEnabled);
+      })
+      .catch((err) => {
+        if (mine !== latestShop.current) return;
+        setShopError(err instanceof Error ? err.message : "Failed to load WhatsApp settings");
+      });
+  }
+
+  function refreshCredentials() {
+    const mine = ++latestCredentials.current;
+    getWhatsAppSettings()
+      .then((c) => {
+        if (mine !== latestCredentials.current) return;
+        setCredentials(c);
+        setCredentialsError(null);
+        setCredentialValues({});
+      })
+      .catch((err) => {
+        if (mine !== latestCredentials.current) return;
+        setCredentialsError(err instanceof Error ? err.message : "Failed to load WhatsApp credentials");
+      });
   }
 
   useEffect(() => {
-    refresh();
+    refreshShop();
+    refreshCredentials();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSaveNumberAndToggles() {
@@ -131,19 +164,18 @@ export default function MessagingIntegrationsPage() {
     }
   }
 
-  if (!shop || !credentials) {
-    return (
-      <PageShell variant="form">
-        <div className="space-y-4">
-          <CardSkeleton />
-        </div>
-      </PageShell>
-    );
-  }
-
   return (
     <PageShell variant="form">
       <div className="space-y-4">
+        {!shop ? (
+          shopError ? (
+            <Card>
+              <LoadFailed what="WhatsApp settings" onRetry={refreshShop} />
+            </Card>
+          ) : (
+            <CardSkeleton />
+          )
+        ) : (
         <Card className="space-y-4">
           <div>
             <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">WhatsApp</h3>
@@ -214,7 +246,17 @@ export default function MessagingIntegrationsPage() {
             </Button>
           </div>
         </Card>
+        )}
 
+        {!credentials ? (
+          credentialsError ? (
+            <Card>
+              <LoadFailed what="WhatsApp credentials" onRetry={refreshCredentials} />
+            </Card>
+          ) : (
+            <CardSkeleton />
+          )
+        ) : (
         <Card className="space-y-3">
           <div>
             <h3 className="text-sm font-semibold">WhatsApp Business API</h3>
@@ -264,6 +306,7 @@ export default function MessagingIntegrationsPage() {
             </div>
           )}
         </Card>
+        )}
       </div>
     </PageShell>
   );

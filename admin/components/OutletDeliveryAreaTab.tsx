@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { deleteDeliveryZone, getRegions, getZoneMappingProposal, listDeliveryZones, updateDeliveryZone } from "@/lib/api";
 import type { DeliveryZone, RegionsResponse, ZoneMappingProposal } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Button from "@/components/ui/Button";
 import DeliveryZoneFormModal from "@/components/DeliveryZoneFormModal";
 import ZoneRegionsModal from "@/components/ZoneRegionsModal";
@@ -24,10 +25,30 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
   const regions = regionsRes?.regions ?? [];
   const regionLabel = regionsRes?.country?.regionLabel ?? "Region";
 
-  const refresh = useCallback(async () => {
-    const [list, prop] = await Promise.all([listDeliveryZones(outletId), getZoneMappingProposal(outletId)]);
-    setZones(list);
-    setProposal(prop);
+  // The zones and the mapping proposal load on independent chains: the table
+  // must not wait on (or be lost to) the proposal, which only feeds the review
+  // prompts. A failed zones request ends in an error with Try again.
+  const [zonesError, setZonesError] = useState<string | null>(null);
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listDeliveryZones(outletId)
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setZones(list);
+        setZonesError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setZonesError(err instanceof Error ? err.message : "Failed to load delivery zones");
+      });
+    getZoneMappingProposal(outletId)
+      .then((prop) => {
+        if (mine === latest.current) setProposal(prop);
+      })
+      .catch(() => {
+        /* the review prompts just do not show */
+      });
   }, [outletId]);
 
   useEffect(() => {
@@ -98,7 +119,7 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
           {zones === null ? (
             <tr>
               <td colSpan={8}>
-                <TableSkeleton rows={3} cols={8} />
+                {zonesError ? <LoadFailed what="delivery zones" onRetry={refresh} /> : <TableSkeleton rows={3} cols={8} />}
               </td>
             </tr>
           ) : zones.length === 0 ? (

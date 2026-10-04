@@ -13,7 +13,7 @@ import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
 import { useToast } from "@/components/ui/Toast";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 // The shop-wide delivery settings, moved here from an outlet's Delivery tab
 // (audit §14.4). Same fields, same updateShop() payload as the tab sent; the
@@ -38,24 +38,38 @@ export default function ShopDeliverySettingsForm() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setPaymentMethods({
-        cardOnline: s.deliveryPaymentCardOnline,
-        cashOnFulfillment: s.deliveryPaymentCashOnDelivery,
-        cardOnFulfillment: s.deliveryPaymentCardOnDelivery,
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setLoadError(null);
+        setPaymentMethods({
+          cardOnline: s.deliveryPaymentCardOnline,
+          cashOnFulfillment: s.deliveryPaymentCashOnDelivery,
+          cardOnFulfillment: s.deliveryPaymentCardOnDelivery,
+        });
+        setHours(mergeBusinessHours(s.deliveryHours));
+        setTimeSlotGapMinutes(s.deliveryTimeSlotGapMinutes);
+        setPreparationTimeMinutes(s.deliveryPreparationTimeMinutes);
+        setPreparationPlusDeliveryTimeMinutes(s.deliveryPreparationPlusDeliveryTimeMinutes);
+        setEstimatedFrom(s.estimatedDeliveryTimeFrom);
+        setEstimatedTo(s.estimatedDeliveryTimeTo);
+        setEstimatedUnit(s.estimatedDeliveryTimeUnit);
+        setSameDayCutoff(s.sameDayCutoffTime ?? "");
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
       });
-      setHours(mergeBusinessHours(s.deliveryHours));
-      setTimeSlotGapMinutes(s.deliveryTimeSlotGapMinutes);
-      setPreparationTimeMinutes(s.deliveryPreparationTimeMinutes);
-      setPreparationPlusDeliveryTimeMinutes(s.deliveryPreparationPlusDeliveryTimeMinutes);
-      setEstimatedFrom(s.estimatedDeliveryTimeFrom);
-      setEstimatedTo(s.estimatedDeliveryTimeTo);
-      setEstimatedUnit(s.estimatedDeliveryTimeUnit);
-      setSameDayCutoff(s.sameDayCutoffTime ?? "");
-      setLoaded(true);
-    });
-  }, []);
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -81,7 +95,18 @@ export default function ShopDeliverySettingsForm() {
     }
   }
 
-  if (!loaded) return <SettingsContentSkeleton />;
+  if (!loaded) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton />
+    );
+  }
 
   return (
     <div className="space-y-4">

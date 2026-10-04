@@ -7,6 +7,7 @@ import type { SliderSettings } from "@/lib/types";
 import Card from "@/components/ui/Card";
 import Toggle from "@/components/ui/Toggle";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -26,13 +27,24 @@ export default function DeliveryIntegrationsPage() {
   const [settings, setSettings] = useState<SliderSettings | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function refresh() {
-    setSettings(await getSliderSettings());
-  }
-
+  // A failed first load ends in an error with Try again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    refresh();
-  }, []);
+    let live = true;
+    getSliderSettings()
+      .then((s) => {
+        if (!live) return;
+        setSettings(s);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load delivery settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleToggle(next: boolean) {
     setSaving(true);
@@ -50,7 +62,19 @@ export default function DeliveryIntegrationsPage() {
     return (
       <PageShell variant="form">
         <div className="space-y-4">
-          <CardSkeleton />
+          {loadError ? (
+            <Card>
+              <LoadFailed
+                what="delivery settings"
+                onRetry={() => {
+                  setLoadError(null);
+                  setReloadKey((k) => k + 1);
+                }}
+              />
+            </Card>
+          ) : (
+            <CardSkeleton />
+          )}
         </div>
       </PageShell>
     );

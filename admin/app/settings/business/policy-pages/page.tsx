@@ -6,7 +6,7 @@ import { POLICY_PAGE_TYPES, POLICY_PAGE_LABELS, type PolicyPage, type PolicyPage
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import RichTextEditor from "@/components/ui/RichTextEditor";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -17,13 +17,27 @@ export default function PolicyPagesSettingsPage() {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getPolicyPages().then((rows) => {
-      setPages(rows);
-      setDraft(rows.find((p) => p.type === selected)?.content ?? "");
-    });
+    let live = true;
+    getPolicyPages()
+      .then((rows) => {
+        if (!live) return;
+        setLoadError(null);
+        setPages(rows);
+        setDraft(rows.find((p) => p.type === selected)?.content ?? "");
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      });
+    return () => {
+      live = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reloadKey]);
 
   function selectType(type: PolicyPageType) {
     setSelected(type);
@@ -45,7 +59,18 @@ export default function PolicyPagesSettingsPage() {
     }
   }
 
-  if (!pages) return <SettingsContentSkeleton cards={5} fieldsPerCard={1} />;
+  if (!pages) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton cards={5} fieldsPerCard={1} />
+    );
+  }
 
   return (
     <PageShell variant="wide">

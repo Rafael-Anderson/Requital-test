@@ -17,7 +17,7 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 // Saves immediately on toggle (same pattern as the Payment Gateways page's
 // Cash on Delivery switch) — this is a "go live" action, not a field
@@ -154,31 +154,45 @@ export default function BusinessInformationPage() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setShop(s);
-      setName(s.name);
-      setDisplayName(s.displayName ?? "");
-      setLegalName(s.legalName ?? "");
-      setTrademarkFormat(s.trademarkFormat);
-      setLogoUrl(s.logoUrl);
-      setLogoPreview(resolveImageUrl(s.logoUrl));
-      setEmail(s.email ?? "");
-      setDescription(s.description ?? "");
-      setCountry(s.country ?? "");
-      setCountryLocked(!!s.country);
-      setAddress(s.address ?? "");
-      setTimezone(s.timezone);
-      setNotifyEmail(s.notifyEmail);
-      setNotifyAbandonedCart(s.notifyAbandonedCart);
-      setAbandonedCartWindowMinutes(s.abandonedCartWindowMinutes);
-      setNotifyLowStockDigest(s.notifyLowStockDigest);
-      setNotifyDailySalesSummary(s.notifyDailySalesSummary);
-      setNotifyWeeklyDigest(s.notifyWeeklyDigest);
-      setAutoDeductIngredientStock(s.autoDeductIngredientStock);
-      setProductEditorMode(s.productEditorMode);
-    });
-  }, []);
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setLoadError(null);
+        setShop(s);
+        setName(s.name);
+        setDisplayName(s.displayName ?? "");
+        setLegalName(s.legalName ?? "");
+        setTrademarkFormat(s.trademarkFormat);
+        setLogoUrl(s.logoUrl);
+        setLogoPreview(resolveImageUrl(s.logoUrl));
+        setEmail(s.email ?? "");
+        setDescription(s.description ?? "");
+        setCountry(s.country ?? "");
+        setCountryLocked(!!s.country);
+        setAddress(s.address ?? "");
+        setTimezone(s.timezone);
+        setNotifyEmail(s.notifyEmail);
+        setNotifyAbandonedCart(s.notifyAbandonedCart);
+        setAbandonedCartWindowMinutes(s.abandonedCartWindowMinutes);
+        setNotifyLowStockDigest(s.notifyLowStockDigest);
+        setNotifyDailySalesSummary(s.notifyDailySalesSummary);
+        setNotifyWeeklyDigest(s.notifyWeeklyDigest);
+        setAutoDeductIngredientStock(s.autoDeductIngredientStock);
+        setProductEditorMode(s.productEditorMode);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   function handleLogoSelected(file: File) {
     setLogoFile(file);
@@ -228,7 +242,18 @@ export default function BusinessInformationPage() {
     }
   }
 
-  if (!shop) return <SettingsContentSkeleton />;
+  if (!shop) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton />
+    );
+  }
 
   return (
     // "wide", not "form" — this page's own Card already manages a real

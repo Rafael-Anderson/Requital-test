@@ -19,7 +19,7 @@ import BranchBar from "@/components/BranchBar";
 import Card from "@/components/ui/Card";
 import PageShell from "@/components/ui/PageShell";
 import EmptyState from "@/components/ui/EmptyState";
-import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 
@@ -37,39 +37,81 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [daily, setDaily] = useState<DailyRevenuePoint[] | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Summary, daily revenue and top products load on three independent
+  // requests: one failing or hanging never holds another section on its
+  // skeleton. Each ends in an error with Try again (the `reload*` counters
+  // re-run only that request).
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [dailyError, setDailyError] = useState<string | null>(null);
+  const [topError, setTopError] = useState<string | null>(null);
+  const [reloadSummary, setReloadSummary] = useState(0);
+  const [reloadDaily, setReloadDaily] = useState(0);
+  const [reloadTop, setReloadTop] = useState(0);
   const { selectedOutletId } = useOutletFilter();
   const mode = useShopMode();
   const isSimple = mode === "simple";
 
+  // Simple mode renders SimpleDashboard instead (its own, separate fetch,
+  // pinned to today) — skip this page's own 30-day-range fetches entirely
+  // rather than firing them in the background just to discard the result.
   useEffect(() => {
-    // Simple mode renders SimpleDashboard instead (its own, separate fetch,
-    // pinned to today) — skip this page's own 30-day-range fetch entirely
-    // rather than firing it in the background just to discard the result.
     if (isSimple) return;
+    let live = true;
     setSummary(null);
-    setDaily(null);
-    setTopProducts(null);
-    const params = { ...range, outletId: selectedOutletId ?? undefined };
-    Promise.all([
-      getDashboardSummary(params),
-      getDailyRevenue(params),
-      getTopProducts({ ...params, limit: 5 }),
-    ])
-      .then(([s, d, p]) => {
+    getDashboardSummary({ ...range, outletId: selectedOutletId ?? undefined })
+      .then((s) => {
+        if (!live) return;
         setSummary(s);
-        setDaily(d);
-        setTopProducts(p);
+        setSummaryError(null);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"));
-  }, [range, selectedOutletId, isSimple]);
+      .catch((err) => {
+        if (live) setSummaryError(err instanceof Error ? err.message : "Failed to load the summary");
+      });
+    return () => {
+      live = false;
+    };
+  }, [range, selectedOutletId, isSimple, reloadSummary]);
+
+  useEffect(() => {
+    if (isSimple) return;
+    let live = true;
+    setDaily(null);
+    getDailyRevenue({ ...range, outletId: selectedOutletId ?? undefined })
+      .then((d) => {
+        if (!live) return;
+        setDaily(d);
+        setDailyError(null);
+      })
+      .catch((err) => {
+        if (live) setDailyError(err instanceof Error ? err.message : "Failed to load revenue");
+      });
+    return () => {
+      live = false;
+    };
+  }, [range, selectedOutletId, isSimple, reloadDaily]);
+
+  useEffect(() => {
+    if (isSimple) return;
+    let live = true;
+    setTopProducts(null);
+    getTopProducts({ ...range, outletId: selectedOutletId ?? undefined, limit: 5 })
+      .then((p) => {
+        if (!live) return;
+        setTopProducts(p);
+        setTopError(null);
+      })
+      .catch((err) => {
+        if (live) setTopError(err instanceof Error ? err.message : "Failed to load top products");
+      });
+    return () => {
+      live = false;
+    };
+  }, [range, selectedOutletId, isSimple, reloadTop]);
 
   const maxStage = useMemo(() => {
     if (!summary) return 1;
     return Math.max(1, ...STAGES.map((s) => summary.ordersByStage[s.key]));
   }, [summary]);
-
-  if (error) return <InlineErrorMessage>{error}</InlineErrorMessage>;
 
   if (isSimple) {
     return (
@@ -93,7 +135,17 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {!summary ? (
+        {!summary && summaryError ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <LoadFailed
+              what="the summary"
+              onRetry={() => {
+                setSummaryError(null);
+                setReloadSummary((k) => k + 1);
+              }}
+            />
+          </div>
+        ) : !summary ? (
           <>
             <CardSkeleton />
             <CardSkeleton />
@@ -142,7 +194,21 @@ export default function DashboardPage() {
       {/* Sale overview */}
       <Card className="mb-5">
         <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-5">Sale Overview</h2>
-        {daily === null ? <Skeleton className="h-56 w-full" /> : <SalesOverviewChart data={daily} />}
+        {daily === null ? (
+          dailyError ? (
+            <LoadFailed
+              what="revenue"
+              onRetry={() => {
+                setDailyError(null);
+                setReloadDaily((k) => k + 1);
+              }}
+            />
+          ) : (
+            <Skeleton className="h-56 w-full" />
+          )
+        ) : (
+          <SalesOverviewChart data={daily} />
+        )}
       </Card>
 
       {/* Outlet / Sales activity / Customer growth */}
@@ -150,7 +216,7 @@ export default function DashboardPage() {
         <Card>
           <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-[18px]">Outlet Distribution</h2>
           {!summary ? (
-            <Skeleton className="h-32 w-32 rounded-full mx-auto" />
+            summaryError ? null : <Skeleton className="h-32 w-32 rounded-full mx-auto" />
           ) : summary.outlets.length === 0 ? (
             <EmptyState title="No outlets yet." />
           ) : (
@@ -180,7 +246,7 @@ export default function DashboardPage() {
         <Card>
           <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50 mb-[18px]">Sales Activity</h2>
           {!summary ? (
-            <div className="space-y-3">
+            summaryError ? null : <div className="space-y-3">
               {STAGES.map((s) => (
                 <Skeleton key={s.key} className="h-6 w-full" />
               ))}
@@ -209,7 +275,7 @@ export default function DashboardPage() {
         </Card>
 
         {!summary ? (
-          <CardSkeleton />
+          summaryError ? null : <CardSkeleton />
         ) : (
           <StatCard
             label="Customer Growth"
@@ -226,7 +292,7 @@ export default function DashboardPage() {
         <Card className="flex min-h-[200px] flex-col">
           <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Sales Distribution by Channel</h2>
           {!summary ? (
-            <Skeleton className="h-32 w-full" />
+            summaryError ? null : <Skeleton className="h-32 w-full" />
           ) : summary.channels.length === 0 ? (
             <div className="flex flex-1 items-center justify-center">
               <EmptyState title="No orders in this range." />
@@ -257,7 +323,15 @@ export default function DashboardPage() {
 
         <Card className="flex min-h-[200px] flex-col">
           <h2 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Top Selling Products</h2>
-          {topProducts === null ? (
+          {topProducts === null && topError ? (
+            <LoadFailed
+              what="top products"
+              onRetry={() => {
+                setTopError(null);
+                setReloadTop((k) => k + 1);
+              }}
+            />
+          ) : topProducts === null ? (
             <div className="space-y-3">
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />

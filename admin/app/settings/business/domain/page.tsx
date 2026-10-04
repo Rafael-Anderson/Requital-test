@@ -15,7 +15,7 @@ import Card from "@/components/ui/Card";
 import Modal from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { validateCustomDomain, normalizeCustomDomain } from "@/lib/validators";
 
 // While a claim is pending/verifying, re-fetch on this cadence so a
@@ -87,9 +87,17 @@ export default function DomainSettingsPage() {
     setConfig(await getShopDomain());
   }, []);
 
-  useEffect(() => {
-    refresh();
+  // A failed first load ends in an error with Try again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const load = useCallback(() => {
+    refresh()
+      .then(() => setLoadError(null))
+      .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load the domain settings"));
   }, [refresh]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Poll only while a verification is in flight.
   const polling = config?.status === "pending" || config?.status === "verifying";
@@ -183,7 +191,7 @@ export default function DomainSettingsPage() {
   if (!config) {
     return (
       <PageShell variant="form">
-        <SettingsContentSkeleton cards={1} />
+        {loadError ? <SettingsLoadFailed what="the domain settings" onRetry={load} /> : <SettingsContentSkeleton cards={1} />}
       </PageShell>
     );
   }

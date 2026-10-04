@@ -15,7 +15,7 @@ import Toggle from "@/components/ui/Toggle";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 const BUSINESS_TYPES = ["Florist", "Gift Shop", "Bakery", "Restaurant", "Grocery", "Retail", "Other"];
 
@@ -60,26 +60,40 @@ export default function StoreConfigurationPage() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setShop(s);
-      setBusinessType(s.businessType || BUSINESS_TYPES[0]);
-      setDefaultLanguage(s.defaultLanguage);
-      setDefaultDeliveryFee(s.defaultDeliveryFee);
-      setAllowPreOrders(s.allowPreOrders);
-      setCustomerConfirmationRequired(s.customerConfirmationRequired);
-      setExternalDeliveryEnabled(s.externalDeliveryEnabled);
-      setAsapDeliveryEnabled(s.asapDeliveryEnabled);
-      setDeliveryCalendarEnabled(s.deliveryCalendarEnabled);
-      setBusinessHours(mergeBusinessHours(s.businessHours));
-      setBirthdayDiscountEnabled(s.birthdayDiscountEnabled);
-      setCustomerSurveyEnabled(s.customerSurveyEnabled);
-      setDynamicThemeBuilderEnabled(s.dynamicThemeBuilderEnabled);
-      setNotifyWhatsapp(s.notifyWhatsapp);
-      setDisableStoreCart(s.disableStoreCart);
-      setCartDisabledMode(s.cartDisabledMode);
-    });
-  }, []);
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setLoadError(null);
+        setShop(s);
+        setBusinessType(s.businessType || BUSINESS_TYPES[0]);
+        setDefaultLanguage(s.defaultLanguage);
+        setDefaultDeliveryFee(s.defaultDeliveryFee);
+        setAllowPreOrders(s.allowPreOrders);
+        setCustomerConfirmationRequired(s.customerConfirmationRequired);
+        setExternalDeliveryEnabled(s.externalDeliveryEnabled);
+        setAsapDeliveryEnabled(s.asapDeliveryEnabled);
+        setDeliveryCalendarEnabled(s.deliveryCalendarEnabled);
+        setBusinessHours(mergeBusinessHours(s.businessHours));
+        setBirthdayDiscountEnabled(s.birthdayDiscountEnabled);
+        setCustomerSurveyEnabled(s.customerSurveyEnabled);
+        setDynamicThemeBuilderEnabled(s.dynamicThemeBuilderEnabled);
+        setNotifyWhatsapp(s.notifyWhatsapp);
+        setDisableStoreCart(s.disableStoreCart);
+        setCartDisabledMode(s.cartDisabledMode);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -109,7 +123,18 @@ export default function StoreConfigurationPage() {
     }
   }
 
-  if (!shop) return <SettingsContentSkeleton />;
+  if (!shop) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton />
+    );
+  }
 
   return (
     <PageShell>
