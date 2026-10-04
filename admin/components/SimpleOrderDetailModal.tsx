@@ -10,6 +10,7 @@ import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
@@ -51,14 +52,24 @@ export default function SimpleOrderDetailModal({
     }
   }
 
+  // Try again bumps `reloadKey`; a failed load ends in an error, never the skeleton for good.
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     if (orderId === null) return;
     setOrder(null);
     setError(null);
+    let live = true;
     getOrder(orderId)
-      .then(setOrder)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load order"));
-  }, [orderId]);
+      .then((o) => {
+        if (live) setOrder(o);
+      })
+      .catch((err) => {
+        if (live) setError(err instanceof Error ? err.message : "Failed to load order");
+      });
+    return () => {
+      live = false;
+    };
+  }, [orderId, reloadKey]);
 
   if (orderId === null) return null;
 
@@ -147,13 +158,17 @@ export default function SimpleOrderDetailModal({
           : undefined
       }
     >
-      {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
+      {error && order && <InlineErrorMessage>{error}</InlineErrorMessage>}
 
       {!order ? (
+        error ? (
+          <LoadFailed what="the order" onRetry={() => setReloadKey((k) => k + 1)} />
+        ) : (
         <div className="space-y-4 pb-6">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="h-24 w-full" />
         </div>
+      )
       ) : (
         <div className="space-y-4">
           <div className="text-sm text-text-muted">

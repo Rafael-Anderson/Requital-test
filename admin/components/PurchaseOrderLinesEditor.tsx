@@ -13,13 +13,21 @@ import Tooltip from "@/components/ui/Tooltip";
 // Everything a line can point at: ingredients, plus plain (non-recipe) products
 // and their variants, which the server resolves to their own stock ingredient.
 export function usePurchasePickerOptions(): ComboboxOption[] {
-  const [options, setOptions] = useState<ComboboxOption[]>([]);
+  // Ingredients and products load on independent requests, so a failure of one
+  // still leaves the other's options pickable.
+  const [ingredientOptions, setIngredientOptions] = useState<ComboboxOption[]>([]);
+  const [productOptions, setProductOptions] = useState<ComboboxOption[]>([]);
   useEffect(() => {
     let live = true;
-    Promise.all([listIngredients(), listProducts()])
-      .then(([ingredients, products]) => {
+    listIngredients()
+      .then((ingredients) => {
+        if (live) setIngredientOptions(ingredients.map((i) => ({ value: `i:${i.id}`, label: `${i.name} (${i.unit})` })));
+      })
+      .catch(() => {});
+    listProducts()
+      .then((products) => {
         if (!live) return;
-        const rows: ComboboxOption[] = ingredients.map((i) => ({ value: `i:${i.id}`, label: `${i.name} (${i.unit})` }));
+        const rows: ComboboxOption[] = [];
         for (const p of products) {
           if (p.usesIngredients) continue;
           if (p.hasVariants) {
@@ -28,14 +36,14 @@ export function usePurchasePickerOptions(): ComboboxOption[] {
             rows.push({ value: `p:${p.id}`, label: p.name });
           }
         }
-        setOptions(rows);
+        setProductOptions(rows);
       })
       .catch(() => {});
     return () => {
       live = false;
     };
   }, []);
-  return options;
+  return useMemo(() => [...ingredientOptions, ...productOptions], [ingredientOptions, productOptions]);
 }
 
 function lineAmount(d: LineDraft): number | null {

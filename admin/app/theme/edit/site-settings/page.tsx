@@ -14,6 +14,7 @@ import BannerImageGallery from "@/components/BannerImageGallery";
 import HeaderFooterPreview from "@/components/HeaderFooterPreview";
 import TagInput from "@/components/ui/TagInput";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -53,18 +54,44 @@ export default function ThemeSiteSettingsPage() {
 
   const [saving, setSaving] = useState(false);
 
+  // The shop and the theme load on independent chains (neither waits on the
+  // other); the form needs both, so a failed one shows an error with Try again
+  // that re-requests only the failed one.
+  const [shopError, setShopError] = useState<string | null>(null);
+  const [themeError, setThemeError] = useState<string | null>(null);
+  const [reloadShop, setReloadShop] = useState(0);
+  const [reloadTheme, setReloadTheme] = useState(0);
+
   useEffect(() => {
-    Promise.all([getShop(), getTheme()]).then(([shopRes, themeRes]) => {
-      setShop(shopRes);
+    let live = true;
+    getShop()
+      .then((shopRes) => {
+        if (!live) return;
+        setShop(shopRes);
+        setShopError(null);
+        setSiteTitle(shopRes.displayName ?? "");
+        setSiteDescription(shopRes.description ?? "");
+        setContactEmail(shopRes.email ?? "");
+      })
+      .catch((err) => {
+        if (live) setShopError(err instanceof Error ? err.message : "Failed to load the shop");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadShop]);
+
+  useEffect(() => {
+    let live = true;
+    getTheme().then((themeRes) => {
+      if (!live) return;
       setTheme(themeRes);
+      setThemeError(null);
       // Site Title / Site Description map onto shop.displayName/description
       // (already the storefront-facing name/description override, edited on
       // Business Information too) rather than new theme-only fields — Theme
       // groups them here because they're "what customers see," but there's
       // only one underlying value, edited from either page.
-      setSiteTitle(shopRes.displayName ?? "");
-      setSiteDescription(shopRes.description ?? "");
-      setContactEmail(shopRes.email ?? "");
       setNotificationText(themeRes.notificationText ?? []);
       setAnnouncementBarEnabled(themeRes.announcementBarEnabled);
       setAnnouncementBarScrolling(themeRes.announcementBarScrolling);
@@ -77,8 +104,13 @@ export default function ThemeSiteSettingsPage() {
       setLogoPreview(resolveImageUrl(themeRes.logoUrl));
       setFaviconPreview(resolveImageUrl(themeRes.faviconUrl));
       setFooterLogoPreview(resolveImageUrl(themeRes.footerLogoUrl));
+    }).catch((err) => {
+      if (live) setThemeError(err instanceof Error ? err.message : "Failed to load the theme");
     });
-  }, []);
+    return () => {
+      live = false;
+    };
+  }, [reloadTheme]);
 
   async function handleSave() {
     setSaving(true);
@@ -125,6 +157,23 @@ export default function ThemeSiteSettingsPage() {
   }
 
   if (!shop || !theme) {
+    if (shopError || themeError) {
+      return (
+        <SettingsLoadFailed
+          what={shopError && themeError ? "the site settings" : shopError ? "the shop details" : "the theme"}
+          onRetry={() => {
+            if (!shop) {
+              setShopError(null);
+              setReloadShop((k) => k + 1);
+            }
+            if (!theme) {
+              setThemeError(null);
+              setReloadTheme((k) => k + 1);
+            }
+          }}
+        />
+      );
+    }
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <CardSkeleton />

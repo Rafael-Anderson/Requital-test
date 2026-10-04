@@ -7,6 +7,7 @@ import type { TodaySnapshot } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 
@@ -44,8 +45,14 @@ export default function TodayCard() {
   if (!snapshot) {
     return (
       <Card className="mb-4">
-        <Skeleton className="h-5 w-32 mb-3" />
-        <Skeleton className="h-8 w-full" />
+        {error ? (
+          <LoadFailed what="today's figures" onRetry={refresh} />
+        ) : (
+          <>
+            <Skeleton className="h-5 w-32 mb-3" />
+            <Skeleton className="h-8 w-full" />
+          </>
+        )}
       </Card>
     );
   }

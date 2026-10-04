@@ -11,6 +11,7 @@ import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
@@ -162,7 +163,9 @@ function OrdersPageContent() {
           the next column's edge peeks in and the fade says there is more.
           sm and up: the columns share the row (min 16rem) as before. */}
       <ScrollFade className="flex snap-x snap-mandatory gap-4 pb-2 sm:snap-none">
-        {orders === null
+        {orders === null && error ? (
+          <LoadFailed what="orders" onRetry={refresh} />
+        ) : orders === null
           ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="min-w-0 shrink-0 basis-[85%] snap-start sm:min-w-64 sm:flex-1 sm:basis-0">
                 <CardSkeleton />

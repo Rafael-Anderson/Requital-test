@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { getTemplate } from "@/lib/api";
 import type { Template } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
-import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import TemplateForm from "@/components/TemplateForm";
 import PageShell from "@/components/ui/PageShell";
 
@@ -17,17 +17,33 @@ export default function EditTemplatePage() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Try again bumps `reloadKey`; the load runs in promise callbacks.
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    let live = true;
     getTemplate(templateId)
-      .then(setTemplate)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load template"));
-  }, [templateId]);
+      .then((t) => {
+        if (live) setTemplate(t);
+      })
+      .catch((err) => {
+        if (live) setError(err instanceof Error ? err.message : "Failed to load template");
+      });
+    return () => {
+      live = false;
+    };
+  }, [templateId, reloadKey]);
 
-  if (error) {
+  if (error && !template) {
     return (
       <PageShell>
         <BackButton href="/products/templates" />
-        <InlineErrorMessage>{error}</InlineErrorMessage>
+        <LoadFailed
+          what="the template"
+          onRetry={() => {
+            setError(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
       </PageShell>
     );
   }

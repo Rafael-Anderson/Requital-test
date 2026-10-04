@@ -10,6 +10,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
 
@@ -30,8 +31,22 @@ export default function ThemeLibraryPage() {
   const [templates, setTemplates] = useState<ThemeTemplateMeta[]>([]);
   const [creating, setCreating] = useState<string | null>(null);
 
+  // A failed theme or theme-list request ends in an error with Try again (the
+  // two are independent), never a card skeleton for good.
+  const [themeError, setThemeError] = useState<string | null>(null);
+  const [themesError, setThemesError] = useState<string | null>(null);
+
+  function refreshTheme() {
+    getTheme()
+      .then((t) => {
+        setTheme(t);
+        setThemeError(null);
+      })
+      .catch((err) => setThemeError(err instanceof Error ? err.message : "Failed to load the theme"));
+  }
+
   useEffect(() => {
-    getTheme().then(setTheme);
+    refreshTheme();
     refreshThemes();
     listThemeTemplates()
       .then(setTemplates)
@@ -40,8 +55,11 @@ export default function ThemeLibraryPage() {
 
   function refreshThemes() {
     listThemes()
-      .then(setThemes)
-      .catch(() => setThemes([]));
+      .then((list) => {
+        setThemes(list);
+        setThemesError(null);
+      })
+      .catch((err) => setThemesError(err instanceof Error ? err.message : "Failed to load your themes"));
   }
 
   const brandColor = theme?.brandColor ?? "#069494";
@@ -94,7 +112,7 @@ export default function ThemeLibraryPage() {
       <p className="text-[13.5px] text-text-faint mb-6">Your storefront's current look, content, and layout.</p>
 
       {!theme ? (
-        <CardSkeleton />
+        themeError ? <SettingsLoadFailed what="the theme" onRetry={refreshTheme} /> : <CardSkeleton />
       ) : (
         <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-[18px] mb-8">
           <div
@@ -171,7 +189,7 @@ export default function ThemeLibraryPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {themes === null ? (
-          <CardSkeleton />
+          themesError ? <SettingsLoadFailed what="your themes" onRetry={refreshThemes} /> : <CardSkeleton />
         ) : (
           themes.map((t) => (
             <Card key={t.id} className="flex items-center gap-3.5 p-[18px]">
