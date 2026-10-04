@@ -90,8 +90,9 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
   // / "tiles" ⇒ byte-identical to before.
   const quickIcons = settings.displayStyle === "quick_icons";
 
+  // flex-wrap: a long heading plus an outline "View all" button no longer overflows a 360px row (Heritage).
   const header = (titleBlock?.visible !== false || viewAllBlock?.visible) && (
-    <div className="flex items-center justify-between theme-heading-gap">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 theme-heading-gap">
       {titleBlock?.visible !== false && (
         <h2
           className="text-xl font-semibold"
@@ -220,7 +221,7 @@ function ViewAll({
     <Link
       href={href}
       {...attrs}
-      className="text-sm font-medium text-accent hover:underline"
+      className="text-sm font-medium text-accent-text hover:underline"
       style={{
         textTransform: "var(--theme-button-text-transform, none)" as CSSProperties["textTransform"],
         ...resolveButtonElementStyle(block.settings),

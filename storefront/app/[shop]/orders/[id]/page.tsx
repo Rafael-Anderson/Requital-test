@@ -48,7 +48,7 @@ function OrderConfirmationContent() {
       <p className="text-zinc-600 mt-2">
         Order #{params.id} has been placed{order ? ` with ${order.orderType}` : ""}.
       </p>
-      {paid && <p className="text-accent mt-2">Payment received.</p>}
+      {paid && <p className="text-accent-text mt-2">Payment received.</p>}
 
       {order?.trackingToken && (
         <div className="mt-6 rounded-lg border border-accent/30 bg-accent/5 p-4 text-start">
@@ -60,7 +60,7 @@ function OrderConfirmationContent() {
           <p className="mt-2 font-mono text-lg tracking-wide">{order.trackingToken}</p>
           <Link
             href={`${shopBasePath}/orders/track?token=${order.trackingToken}`}
-            className="inline-block mt-2 text-sm text-accent hover:underline"
+            className="inline-block mt-2 text-sm text-accent-text hover:underline"
           >
             Track this order →
           </Link>
@@ -110,7 +110,7 @@ function OrderConfirmationContent() {
           </div>
         </div>
       )}
-      <Link href={shopBasePath || "/"} className="inline-block mt-6 text-accent hover:underline">
+      <Link href={shopBasePath || "/"} className="inline-block mt-6 text-accent-text hover:underline">
         Continue shopping
       </Link>
     </div>

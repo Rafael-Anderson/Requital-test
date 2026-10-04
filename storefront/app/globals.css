@@ -199,6 +199,11 @@ html {
   --color-accent: #069494;
   --color-accent-hover: #057a7a;
   --color-accent-foreground: #ffffff;
+  /* The accent as TEXT (text-accent-text): the accent itself when it reads on the page, else a shade of the
+     same hue that does (lib/accent-text.ts). It had no definition here, so the 15 `text-accent-text`
+     utilities already in the storefront rendered nothing and the text kept its inherited colour. Written
+     per shop at runtime next to --color-accent. #058080 is the default teal darkened to 4.5:1 on white. */
+  --color-accent-text: #058080;
 
   /* Granular Appearance Color palette (Theme > Appearance Color in admin) —
      the 11 of ~22 saved colors that have a real storefront element to apply
@@ -471,7 +476,11 @@ body {
 }
 .theme-btn-border-fill:hover {
   background-color: var(--color-accent);
-  color: var(--color-accent-foreground);
+  /* !important: the secondary button carries its label colour as an INLINE style
+     (resolveSecondaryButtonStyle), which beats this rule. Where that label equals
+     the accent (Market and Bloom: #E24A6A / #7C5CFF on both) the hover fill made
+     the label disappear (contrast 1:1). */
+  color: var(--color-accent-foreground) !important;
 }
 
 .theme-btn-icon {

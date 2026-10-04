@@ -188,16 +188,16 @@ function TopBarMinimal(props: TopBarProps) {
       {menuOpen && (
         <div className="flex flex-col gap-1 pt-2 mt-2 border-t border-stroke">
           {contactNumber && (
-            <a href={`tel:${contactNumber}`} className="flex items-center gap-2 py-2 text-sm hover:text-accent">
+            <a href={`tel:${contactNumber}`} className="flex items-center gap-2 py-2 text-sm hover:text-accent-text">
               <Phone className="size-4" {...iconProps} /> Call {contactNumber}
             </a>
           )}
-          <Link href={`${shopBasePath}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent" onClick={() => setMenuOpen(false)}>
+          <Link href={`${shopBasePath}/orders/track`} className="flex items-center gap-2 py-2 text-sm hover:text-accent-text" onClick={() => setMenuOpen(false)}>
             <PackageSearch className="size-4" {...iconProps} /> Track an order
           </Link>
           <Link
             href={props.customer ? `${shopBasePath}/account` : `${shopBasePath}/account/login`}
-            className="flex items-center gap-2 py-2 text-sm hover:text-accent"
+            className="flex items-center gap-2 py-2 text-sm hover:text-accent-text"
             onClick={() => setMenuOpen(false)}
           >
             <User className="size-4" {...iconProps} /> {props.customer ? props.customer.name : "Sign in"}

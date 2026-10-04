@@ -33,7 +33,24 @@ async function optional(label, fn) {
   }
 }
 
+// AUDIT_UPLOADS_DIR=<backend>/uploads writes the placeholder images the seed points at (the sandbox, and CI, cannot
+// reach placehold.co). The backend serves that folder at /uploads, so AUDIT_IMAGE_BASE=http://localhost:<port>/uploads.
+function writeAuditAssets() {
+  const dir = process.env.AUDIT_UPLOADS_DIR;
+  if (!dir) return;
+  const fs = require('fs');
+  fs.mkdirSync(dir, { recursive: true });
+  ['e8c4d4', 'c9dcc5', 'd8c9e8', 'f3d9a4', 'b9d3e6', 'e6b9c9'].forEach((c, i) =>
+    fs.writeFileSync(`${dir}/audit-${i}.svg`, `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'><rect width='400' height='400' fill='#${c}'/><circle cx='200' cy='200' r='90' fill='#ffffff' fill-opacity='.6'/></svg>`),
+  );
+  fs.writeFileSync(
+    `${dir}/audit-logo.svg`,
+    "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='64' viewBox='0 0 320 64'><rect width='320' height='64' rx='8' fill='#5a6b54'/><text x='160' y='42' font-family='sans-serif' font-size='26' fill='#fff' text-anchor='middle'>Maison Fleur &amp; Co</text></svg>",
+  );
+}
+
 async function seed() {
+  writeAuditAssets();
   const runId = Date.now().toString();
   const subdomain = `audit-${runId}`;
   const email = `audit-${runId}@test.com`;

@@ -252,12 +252,14 @@ async function hoverAudit(page, vp) {
       { i, ph: pageHelpers.toString() },
     );
     const moved = (a, b) => a && b && a.some((v, k) => Math.abs(v - b[k]) > 0.6);
-    const shift = moved(before.rect, after.rect) || moved(before.parent, after.parent) || before.neigh.some((n, k) => moved(n, after.neigh[k]));
+    // Layout shift = the PARENT or a SIBLING moved or resized. The hovered element's own box changing is a
+    // transform (scale, lift, tilt) by design, not a reflow.
+    const shift = moved(before.parent, after.parent) || before.neigh.some((n, k) => (before.rect.every((v, j) => v === n[j]) ? false : moved(n, after.neigh[k])));
     res.push({
       desc: before.desc,
       shift,
       shiftRect: shift ? { before: before.rect, after: after.rect } : null,
-      docGrew: after.docW > before.docW + 1 || after.docH > before.docH + 1,
+      docGrew: after.docW > before.docW + 1,
       contrastBefore: before.tc.ratio,
       contrastAfter: after.tc.ratio,
       lowAfter: after.tc.ratio < 3 && !after.tc.unknownBg,

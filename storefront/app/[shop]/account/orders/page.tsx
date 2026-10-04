@@ -35,7 +35,7 @@ export default function OrderHistoryPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href={`${shopBasePath}/account`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href={`${shopBasePath}/account`} className="text-sm text-zinc-500 hover:text-accent-text mb-3 inline-block">
         ← Back to account
       </Link>
       <h1 className="text-2xl font-semibold mb-4">Order history</h1>

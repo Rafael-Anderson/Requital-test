@@ -108,7 +108,7 @@ export default function AddressesPage() {
 
   return (
     <StorefrontPageShell variant="medium">
-      <Link href={`${shopBasePath}/account`} className="text-sm text-zinc-500 hover:text-accent mb-3 inline-block">
+      <Link href={`${shopBasePath}/account`} className="text-sm text-zinc-500 hover:text-accent-text mb-3 inline-block">
         ← Back to account
       </Link>
       <div className="flex items-center justify-between mb-4">
@@ -192,7 +192,7 @@ export default function AddressesPage() {
               </p>
             </div>
             <div className="flex flex-col gap-1 shrink-0">
-              <button onClick={() => startEdit(a)} className="text-xs text-accent hover:underline cursor-pointer">
+              <button onClick={() => startEdit(a)} className="text-xs text-accent-text hover:underline cursor-pointer">
                 Edit
               </button>
               <button onClick={() => handleDelete(a.id)} className="text-xs text-red-600 hover:underline cursor-pointer">

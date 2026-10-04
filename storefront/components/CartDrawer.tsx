@@ -121,7 +121,7 @@ export default function CartDrawer() {
               >
                 Proceed to checkout
               </Link>
-              <Link href={`${shopBasePath}/cart`} onClick={closeDrawer} className="block w-full text-center text-sm text-zinc-500 hover:text-accent">
+              <Link href={`${shopBasePath}/cart`} onClick={closeDrawer} className="block w-full text-center text-sm text-zinc-500 hover:text-accent-text">
                 View full cart
               </Link>
             </div>
