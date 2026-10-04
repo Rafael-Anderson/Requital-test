@@ -88,3 +88,49 @@ test('storefront pages fit a 390px phone', async ({ page }) => {
     await expectNoOverflow(page, `storefront ${route || '/'}`);
   }
 });
+
+// The home page of each starter template. Their sections enter with sideways or rotated transforms
+// (slide-left, rotate-in, staggered children); when such an entrance finishes, Chrome can leave the
+// page's scrollWidth at a mid-animation value a few px past the viewport, so the whole page drags
+// sideways on a phone. A freshly loaded home is checked first, then again after scrolling through it
+// (below-the-fold sections only animate once they are reached), each time after every finite
+// animation has finished.
+const TEMPLATES = ['atelier', 'market', 'bloom', 'heritage'] as const;
+
+async function expectHomeFits(page: Page, label: string) {
+  await settle(page);
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every((a) => a.playState === 'finished' || a.effect?.getComputedTiming().iterations === Infinity),
+    null,
+    { timeout: 10_000 },
+  );
+  const m = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(m.scrollWidth, `${label}: document is ${m.scrollWidth}px wide in a ${m.clientWidth}px viewport`).toBeLessThanOrEqual(m.clientWidth);
+}
+
+test('storefront home fits a 390px phone on every starter template', async ({ page }) => {
+  test.setTimeout(300_000);
+  const login = await loginAdmin(page, seed.adminEmail, seed.adminPassword);
+  const csrf = { 'X-CSRF-Token': login.headers()['x-csrf-token'] ?? '' };
+  for (const template of TEMPLATES) {
+    const created = await page.request.post(`${API_URL}/themes`, { data: { name: `Overflow ${template}`, fromTemplate: template }, headers: csrf });
+    expect(created.ok(), `create ${template} theme: ${created.status()}`).toBe(true);
+    const { id } = (await created.json()) as { id: number };
+    const published = await page.request.post(`${API_URL}/themes/${id}/publish`, { data: {}, headers: csrf });
+    expect(published.ok(), `publish ${template} theme: ${published.status()}`).toBe(true);
+
+    await page.goto(`${STOREFRONT_URL}/${seed.subdomain}`);
+    await expectHomeFits(page, `storefront home, ${template}, on load`);
+    for (let y = 0; y < (await page.evaluate(() => document.documentElement.scrollHeight)); y += 400) {
+      await page.evaluate((top) => window.scrollTo(0, top), y);
+      await page.waitForTimeout(120);
+    }
+    await expectHomeFits(page, `storefront home, ${template}, after scrolling`);
+  }
+});
