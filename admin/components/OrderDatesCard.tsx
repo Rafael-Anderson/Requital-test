@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { getShop, updateShop } from "@/lib/api";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Checkbox from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
 
@@ -18,13 +19,26 @@ export default function OrderDatesCard() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // A failed load ends in an error with Try again, not a card that silently never appears.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setAllowSameDayOrders(s.allowSameDayOrders);
-      setAllowNextDayOrders(s.allowNextDayOrders);
-      setLoaded(true);
-    });
-  }, []);
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setAllowSameDayOrders(s.allowSameDayOrders);
+        setAllowNextDayOrders(s.allowNextDayOrders);
+        setLoadError(null);
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load order dates");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -38,7 +52,19 @@ export default function OrderDatesCard() {
     }
   }
 
-  if (!loaded) return null;
+  if (!loaded) {
+    return loadError ? (
+      <Card>
+        <LoadFailed
+          what="order dates"
+          onRetry={() => {
+            setLoadError(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      </Card>
+    ) : null;
+  }
 
   return (
     <Card>

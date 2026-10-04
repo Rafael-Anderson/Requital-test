@@ -41,11 +41,13 @@ export default function TransferStockModal({
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    listOutlets().then((list) => {
-      setOutlets(list);
-      if (list[0]) setFromOutletId(String(list[0].id));
-      if (list[1]) setToOutletId(String(list[1].id));
-    });
+    listOutlets()
+      .then((list) => {
+        setOutlets(list);
+        if (list[0]) setFromOutletId(String(list[0].id));
+        if (list[1]) setToOutletId(String(list[1].id));
+      })
+      .catch((err) => toast(err instanceof Error ? err.message : "Failed to load branches", "error"));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

@@ -99,6 +99,7 @@ const ENTRIES: Entry[] = [
   page("settings: tax classes", () => import("./settings/business/tax-classes/page")),
   page("settings: diagnostics", () => import("./settings/diagnostics/page")),
   page("settings: delivery", () => import("./settings/fulfilment/delivery/page")),
+  page("settings: pickup", () => import("./settings/fulfilment/pickup/page")),
   page("settings: outlets", () => import("./settings/outlets/page")),
   page("settings: edit outlet", () => import("./settings/outlets/[outletId]/edit/page")),
   page("settings: money and tax", () => import("./settings/selling/money-tax/page")),
@@ -136,6 +137,13 @@ const ENTRIES: Entry[] = [
     async () => {
       const { default: M } = await import("@/components/TodayCard");
       return <M />;
+    },
+  ],
+  [
+    "outlet QR code",
+    async () => {
+      const { default: M } = await import("@/components/OutletQrTab");
+      return <M outlet={{ id: 1, name: "Main" } as never} />;
     },
   ],
   [

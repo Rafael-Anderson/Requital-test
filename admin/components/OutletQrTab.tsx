@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { getShop, storefrontUrlFor } from "@/lib/api";
 import type { Outlet, Shop } from "@/lib/types";
 import Card from "@/components/ui/Card";
@@ -17,9 +18,22 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
   const [shop, setShop] = useState<Shop | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // A failed load ends in an error with Try again, never "Loading" for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then(setShop);
-  }, []);
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (live) setShop(s);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load the shop");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   function handleDownload() {
     const canvas = canvasRef.current?.querySelector("canvas");
@@ -32,7 +46,19 @@ export default function OutletQrTab({ outlet }: { outlet: Outlet }) {
     document.body.removeChild(a);
   }
 
-  if (!shop) return <p className="text-sm text-text-muted">Loading…</p>;
+  if (!shop) {
+    return loadError ? (
+      <LoadFailed
+        what="the QR code"
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <p className="text-sm text-text-muted">Loading…</p>
+    );
+  }
 
   const url = storefrontUrlFor(shop);
 

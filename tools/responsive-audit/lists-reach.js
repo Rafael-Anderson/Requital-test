@@ -83,17 +83,21 @@ function measureAfterScroll() {
   for (const t of Array.from(document.querySelectorAll('table')).filter(vis)) {
     let sc = null;
     for (let p = t.parentElement; p; p = p.parentElement) { const o = getComputedStyle(p).overflowX; if (o === 'auto' || o === 'scroll') { sc = p; break; } }
-    // reachable = the element can be brought into the viewport by scrolling its OWN container and is then the topmost element at its centre
+    // reachable = scrolling the element's OWN scrollers (innermost first, then any outer sideways scroller such as
+    // the settings columns) can bring it inside the viewport
     const reach = (c) => {
-      if (sc && sc !== document.body) { const r0 = c.getBoundingClientRect(); const s0 = sc.getBoundingClientRect(); sc.scrollLeft += r0.left + r0.width / 2 - (s0.left + s0.width / 2); }
-      const r = c.getBoundingClientRect(); if (r.left < -1 || r.right > vw + 1) return false;
-      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && (c === top || c.contains(top) || top.contains(c));
+      for (let p = c.parentElement; p && p !== document.body; p = p.parentElement) {
+        const o = getComputedStyle(p).overflowX;
+        if ((o === 'auto' || o === 'scroll') && p.scrollWidth > p.clientWidth + 1) { const r0 = c.getBoundingClientRect(); const s0 = p.getBoundingClientRect(); p.scrollLeft += r0.left + r0.width / 2 - (s0.left + s0.width / 2); }
+      }
+      const r = c.getBoundingClientRect();
+      return r.left >= -1 && r.right <= vw + 1;
     };
     const ths = Array.from(t.querySelectorAll('thead th')).filter(vis);
     const row = Array.from(t.querySelectorAll('tbody tr')).find((tr) => tr.querySelector('td') && !tr.querySelector('td[colspan]') && vis(tr));
     const last = row ? Array.from(row.querySelectorAll('td:last-child a[href],td:last-child button,td:last-child input')).filter(vis) : [];
     out.push({ headersUnreachableAtEnd: ths.filter((h) => !reach(h)).map((h) => h.innerText.trim().slice(0, 20) || '(blank)'), lastCellUnreachable: last.filter((c) => !reach(c)).length, lastCellCount: last.length });
-    if (sc) sc.scrollLeft = 0;
+    document.querySelectorAll('[data-scroll-fade]').forEach((e) => (e.scrollLeft = 0));
   }
   return out;
 }
