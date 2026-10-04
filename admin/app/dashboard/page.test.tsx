@@ -26,6 +26,7 @@ const summary: DashboardSummary = {
   avgBasketValue: { current: 100, previous: 95, changePct: 5 },
   totalOrders: 4,
   customerGrowth: { current: 2, previous: 1, changePct: 1 },
+  experienceRating: { average: null, count: 0 },
   ordersByStage: { placed: 1, accepted: 1, preparing: 1, shipped: 0, delivered: 1 },
   outlets: [{ outletId: 1, name: "Main", orderCount: 4, percentage: 100 }],
   channels: [{ channel: "storefront", count: 4, percentage: 100 }],
@@ -76,5 +77,33 @@ describe("DashboardPage", () => {
     expect(getDashboardSummary).toHaveBeenCalled();
     expect(getDailyRevenue).toHaveBeenCalled();
     expect(getTopProducts).toHaveBeenCalled();
+  });
+
+  async function renderWith(experienceRating: DashboardSummary["experienceRating"]) {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    vi.mocked(getDashboardSummary).mockResolvedValue({ ...summary, experienceRating });
+    vi.mocked(getDailyRevenue).mockResolvedValue([{ date: "2026-08-04", revenue: 500 }]);
+    vi.mocked(getTopProducts).mockResolvedValue(topProducts);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Experience Rating")).toBeInTheDocument());
+  }
+
+  it("shows the real average with the review count", async () => {
+    await renderWith({ average: 4.3, count: 12 });
+    expect(screen.getByText("4.3")).toBeInTheDocument();
+    expect(screen.getByText("12 reviews")).toBeInTheDocument();
+    expect(screen.queryByText("No reviews yet")).not.toBeInTheDocument();
+  });
+
+  it("uses the singular for one review and keeps a trailing .0", async () => {
+    await renderWith({ average: 5, count: 1 });
+    expect(screen.getByText("5.0")).toBeInTheDocument();
+    expect(screen.getByText("1 review")).toBeInTheDocument();
+  });
+
+  it("says 'No reviews yet' (never 0.0) only when there are none in the period", async () => {
+    await renderWith({ average: null, count: 0 });
+    expect(screen.getByText("No reviews yet")).toBeInTheDocument();
+    expect(screen.queryByText("0.0")).not.toBeInTheDocument();
   });
 });

@@ -176,10 +176,6 @@ function announcementOff(order: number): ThemeSection {
   });
 }
 
-function announcement(order: number, text: string): ThemeSection {
-  return section('announcement_bar', order, { blocks: [block('announcement', { text })] });
-}
-
 // Settings-only, no blocks (BLOCK_TYPES.brands = []). `scrolling: true` is the
 // post-G0-batch marquee mode; the section renders nothing on a shop with no
 // brands configured yet (graceful, not an error).
@@ -258,7 +254,7 @@ const atelier: ThemeConfig = (() => {
     richText(2, '<p>A studio practice. Seasonal stems, considered arrangements, and a small number of weddings and events each year.</p>', { entrance: 'fade-in', schemeId: 'scheme-2', settings: { contentWidth: 'narrow' } }),
     featuredCollections(3, 'Collections', { entrance: 'mask-reveal', settings: { columns: 3, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }),
     productGrid(4, { entrance: 'fade-in', settings: { columns: 2, cardStyle: 'minimal', imageAspect: 'portrait', motion: { stagger: true } } }),
-    imageText(5, 'Every arrangement is made to order in our studio the morning of delivery.', { entrance: 'slide-left' }),
+    imageText(5, 'Every arrangement is made to order in our studio.', { entrance: 'slide-left' }),
     newsletter(6, 'Seasonal notes', 'Occasional letters on what is in season.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
 
@@ -344,14 +340,13 @@ const market: ThemeConfig = (() => {
   }
 
   c.sections = [
-    announcement(0, 'Same-day delivery before 6pm'),
-    hero(1, 'Fresh flowers, delivered today', 'Shop best sellers', { entrance: 'slide-up', settings: { height: 'medium', heroLayout: 'inset', cornerRadius: 12, indicatorStyle: 'progress' } }), // §8.13.C item 11
+    announcementOff(0),
+    hero(1, 'Fresh flowers for every occasion', 'Shop now', { entrance: 'slide-up', settings: { height: 'medium', heroLayout: 'inset', cornerRadius: 12, indicatorStyle: 'progress' } }), // §8.13.C item 11
     trustBar(
       2,
       [
-        { icon: 'truck', text: 'Same-day delivery' },
-        { icon: 'shield', text: 'Freshness guarantee' },
         { icon: 'check', text: 'Secure checkout' },
+        { icon: 'truck', text: 'Order tracking' },
       ],
       // No rating badge in a template: a score and a review count must come
       // from the merchant's real numbers (they can add the block themselves).
@@ -361,7 +356,7 @@ const market: ThemeConfig = (() => {
     featuredCollections(3, 'Shop by occasion', { entrance: 'fade-in', settings: { columns: 4, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }, true), // §8.13.C item 2
     productGrid(4, { entrance: 'fade-in', settings: { columns: 4, cardStyle: 'shadowed', imageAspect: 'square' } }, ['product_vendor', 'product_stock']), // §8.13.C item 18
     brands(5, { settings: { scrolling: true } }),
-    newsletter(6, 'Get 10% off your first order', 'Delivery updates and seasonal offers.', { settings: { successAnimation: true } }), // §8.7 item 5
+    newsletter(6, 'Stay in the loop', 'Sign up for news and updates from the shop.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
 
   return c;
@@ -429,18 +424,17 @@ const bloom: ThemeConfig = (() => {
   }
 
   c.sections = [
-    announcement(0, 'Free gift wrap on every order'),
+    announcementOff(0),
     hero(1, 'Gifting made joyful', 'Start a gift', { entrance: 'blur-in', settings: { height: 'large', showSlideIndicators: true, parallax: true } }), // parallax: §8.13.C item 15
     featuredCollections(2, 'Shop by moment', { entrance: 'scale-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: true, motion: { stagger: true } } }),
     imageText(3, 'Pick it. Personalise it. We deliver it. Three steps to a gift they will remember.', { entrance: 'slide-up', schemeId: 'scheme-2' }),
     productGrid(4, { entrance: 'scale-in', settings: { columns: 3, cardStyle: 'elevated', imageAspect: 'portrait', motion: { entrance: 'scale-in', animateOnce: false } } }),
     testimonials(5, { entrance: 'rotate-in', settings: { motion: { stagger: true } } }),
     trustBar(6, [
-      { icon: 'truck', text: 'Next-day delivery' },
-      { icon: 'star', text: 'Personalised gift notes' },
-      { icon: 'shield', text: 'Happiness guarantee' },
+      { icon: 'check', text: 'Secure checkout' },
+      { icon: 'truck', text: 'Order tracking' },
     ], null),
-    newsletter(7, 'Join the club', 'Early access to new gifts and seasonal drops.', { settings: { successAnimation: true } }), // §8.7 item 5
+    newsletter(7, 'Stay in touch', 'News about new gifts and seasonal arrivals.', { settings: { successAnimation: true } }), // §8.7 item 5
   ];
 
   return c;
@@ -541,14 +535,14 @@ const heritage: ThemeConfig = (() => {
     hero(1, 'Traditional florists, delivered with care', 'Shop the collection', { entrance: 'fade-in', settings: { contentPosition: 'center-center', height: 'medium', heroLayout: 'inset', cornerRadius: 4 } }),
     trustBar(2, [
       { icon: 'shield', text: 'Hand-tied by our florists' },
-      { icon: 'truck', text: 'Nationwide delivery' },
+      { icon: 'truck', text: 'Order tracking' },
       { icon: 'check', text: 'Corporate accounts welcome' },
     ], null, { entrance: 'fade-in' }),
     featuredCollections(3, 'Our collections', { entrance: 'fade-in', settings: { columns: 3, aspectRatio: 'landscape', overlayText: false } }, true), // §8.13.C item 2
     productGrid(4, { settings: { columns: 3, cardStyle: 'bordered', imageAspect: 'landscape' } }),
-    imageText(5, 'A florist you can rely on, serving homes, hotels, and offices across the country.', { entrance: 'none', schemeId: 'scheme-2' }),
+    imageText(5, 'A florist you can rely on, serving homes, hotels, and offices.', { entrance: 'none', schemeId: 'scheme-2' }),
     richText(6, '<p>Sympathy tributes, corporate contracts, and weekly office flowers. Speak to our team for bespoke arrangements.</p>', { entrance: 'fade-in' }),
-    newsletter(7, 'Seasonal updates', 'Sign up for occasional news and offers.'),
+    newsletter(7, 'Seasonal updates', 'Sign up for occasional news and updates.'),
   ];
 
   return c;

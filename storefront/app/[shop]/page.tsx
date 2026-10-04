@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, listProducts } from "@/lib/api";
 import type { Collection, HomepageLayout, Product } from "@/lib/types";
-import TrustStrip from "@/components/TrustStrip";
 import CollectionShowcase from "@/components/CollectionShowcase";
 import TemplateSections from "@/components/home-layouts/TemplateSections";
 import ClassicHero from "@/components/home-layouts/ClassicHero";
@@ -93,7 +92,7 @@ function HomeContent() {
   if (shopLoading) return <StorefrontLoadingSkeleton />;
 
   // New visual theme builder's homepage body, checked first — supersedes
-  // the entire legacy homepage (hero + TrustStrip + CollectionShowcase/
+  // the entire legacy homepage (hero + CollectionShowcase/
   // TemplateSections) when the shop has a published new-system theme.
   // Header/Footer are handled independently by TopBar.tsx/Footer.tsx, not
   // here. Falls through to the unchanged legacy dispatch below when
@@ -138,11 +137,6 @@ function HomeContent() {
             ClassicHero.tsx) — harmless no-op on every other layout/state. */}
         <div id="shop" />
       </StorefrontPageShell>
-      {/* Full-bleed (own border-y spans edge to edge), not nested inside
-          the shell above — TrustStrip manages its own contained inner row,
-          same "full-width band, contained content" pattern as the hero.
-          See TrustStrip.tsx and the storefront layout-bugs report. */}
-      <TrustStrip />
       <StorefrontPageShell variant="wide">
         {homeTabMode === "collections" ? <CollectionShowcase /> : <TemplateSections />}
       </StorefrontPageShell>

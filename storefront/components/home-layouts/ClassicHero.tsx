@@ -41,9 +41,9 @@ export default function ClassicHero({ bannerUrl, heroText }: { bannerUrl: string
         <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight text-balance">
           {shop.displayName ?? shop.name}
         </h1>
-        <p className="mt-4 text-sm sm:text-base text-zinc-500 max-w-md mx-auto">
-          {shop.description || "Thoughtfully curated, delivered to your door."}
-        </p>
+        {shop.description && (
+          <p className="mt-4 text-sm sm:text-base text-zinc-500 max-w-md mx-auto">{shop.description}</p>
+        )}
         {/* Deliberately still on the legacy button colour (--color-button):
             this whole component is part of the legacy Layout-mode homepage
             dispatch (app/[shop]/page.tsx), which only ever renders when NO

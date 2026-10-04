@@ -108,14 +108,21 @@ export default function DashboardPage() {
               icon={<Wallet className="size-4" />}
               change={{ pct: summary.avgBasketValue.changePct }}
             />
-            {/* No review/rating model exists in the schema — placeholder
-                state rather than a fabricated score, per the feasibility
-                check this dashboard rebuild started from. */}
+            {/* Real answered survey ratings for orders placed in this period
+                (and outlet); "No reviews yet" only when there are none. */}
             <StatCard
               label="Experience Rating"
-              value="0.0"
+              value={
+                summary.experienceRating.average === null
+                  ? "No reviews yet"
+                  : summary.experienceRating.average.toFixed(1)
+              }
               icon={<Star className="size-4" />}
-              subtext="No reviews yet"
+              subtext={
+                summary.experienceRating.count === 0
+                  ? undefined
+                  : `${summary.experienceRating.count} ${summary.experienceRating.count === 1 ? "review" : "reviews"}`
+              }
             />
             <StatCard
               label="Total Orders"
