@@ -14,6 +14,6 @@ afterEach(cleanup);
 describe("WhatsAppFloatingButton", () => {
   it("offsets its bottom by the cookie banner height so it never sits under the banner", () => {
     render(<WhatsAppFloatingButton />);
-    expect(screen.getByLabelText("Chat with us on WhatsApp").className).toContain("bottom-[calc(1.25rem+var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px))]");
+    expect(screen.getByLabelText("Chat with us on WhatsApp").className).toContain("bottom-[calc(1.25rem+var(--bottom-nav-h,0px)+var(--cookie-banner-h,0px)+var(--sticky-bar-h,0px))]");
   });
 });
