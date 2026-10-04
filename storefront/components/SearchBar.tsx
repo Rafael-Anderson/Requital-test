@@ -56,7 +56,7 @@ export default function SearchBar({
   // view: the header scrolls away with the page).
   useEffect(() => {
     function onOpenRequest() {
-      rootRef.current?.scrollIntoView({ block: "nearest" });
+      rootRef.current?.scrollIntoView?.({ block: "nearest" });
       setOpen(true);
     }
     window.addEventListener(OPEN_SEARCH_EVENT, onOpenRequest);
