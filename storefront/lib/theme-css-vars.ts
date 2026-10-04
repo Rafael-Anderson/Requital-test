@@ -11,6 +11,7 @@
 // entry in WIRED_THEME_COLOR_FIELDS now (Page Background Color, defaulting to
 // white), always resolved from the merchant's own setting, never a visitor's
 // OS preference the shop never opted into.
+import { resolveFocusRingCssVars } from "./focus-ring";
 import { getReadableTextColor } from "./color-contrast";
 import { parseJsonField } from "./notification-text";
 import { resolveScheme } from "./theme-color-scheme";
@@ -103,6 +104,7 @@ export function resolveSchemeCssVars(scheme: ColorScheme | null | undefined): Re
     "--foreground": scheme.text,
     "--color-header-fg": scheme.text,
     "--color-product-name": scheme.text,
+    ...resolveFocusRingCssVars(scheme.text, scheme.background),
   };
 }
 

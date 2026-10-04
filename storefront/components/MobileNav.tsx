@@ -8,7 +8,10 @@ import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useCartDrawer } from "@/lib/cart-drawer";
 import { useAuth } from "@/lib/auth";
-import { getMenu } from "@/lib/api";
+import { getMenu, listCollections } from "@/lib/api";
+import { OPEN_SEARCH_EVENT, useMobileNav } from "@/lib/mobile-nav";
+import { useDialogBehavior } from "@/lib/use-dialog-behavior";
+import { iconStyleProps } from "@/lib/icon-style";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
 import type { MenuItem } from "@/lib/types";
 import type { MobileNavMode } from "@/lib/theme-config-types";
@@ -57,14 +60,14 @@ function MenuItemRow({ item, shopBasePath, onNavigate }: { item: MenuItem; shopB
   if (item.type === "LINK") {
     if (!item.collection) return null;
     return (
-      <Link href={`${shopBasePath}/collections/${item.collection.slug}`} onClick={onNavigate} className="block px-4 py-3 text-base border-b border-white/10">
+      <Link href={`${shopBasePath}/collections/${item.collection.slug}`} onClick={onNavigate} className="block px-4 py-3 text-base border-b border-current/10">
         {item.label}
       </Link>
     );
   }
   const links = flattenLinks(item, shopBasePath);
   return (
-    <details className="group border-b border-white/10">
+    <details className="group border-b border-current/10">
       <summary className="flex items-center justify-between px-4 py-3 text-base cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         {item.label}
         <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
@@ -77,6 +80,27 @@ function MenuItemRow({ item, shopBasePath, onNavigate }: { item: MenuItem; shopB
         ))}
       </div>
     </details>
+  );
+}
+
+// The hamburger. Rendered IN the header row by ThemeDrivenHeader (not floated over it: a fixed
+// button at the top-left sat on top of the logo on every phone), under md only. It shares its open
+// state with <MobileNav> through lib/mobile-nav.tsx.
+export function MobileNavTrigger() {
+  const { shop } = useShop();
+  const { open, setOpen, triggerRef } = useMobileNav();
+  return (
+    <button
+      ref={triggerRef}
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Open menu"
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      className="flex items-center justify-center size-9 shrink-0 rounded-full hover:bg-mouse-over/10 transition-colors cursor-pointer md:hidden"
+    >
+      <MenuIcon className="size-5" {...iconStyleProps(shop?.iconStyle, 1.75)} />
+    </button>
   );
 }
 
@@ -96,7 +120,9 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
   const { customer } = useAuth();
   const reducedMotion = useReducedMotion();
   const [items, setItems] = useState<MenuItem[] | null>(null);
-  const [open, setOpen] = useState(false);
+  // No menu configured: the same fallback MenuBar shows, the top-level collections.
+  const [fallbackLinks, setFallbackLinks] = useState<FlatLink[]>([]);
+  const { open, setOpen, triggerRef } = useMobileNav();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // bottom-bar has no hamburger-triggered panel and no menu-item fetch — its
@@ -104,9 +130,19 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
   useEffect(() => {
     if (mode === "bottom-bar") return;
     getMenu(shopSlug, previewToken)
-      .then(setItems)
+      .then((menu) => {
+        setItems(menu);
+        if (menu.length > 0) return;
+        return listCollections(shopSlug, previewToken).then((all) =>
+          setFallbackLinks(
+            all
+              .filter((c) => c.parentCollectionId === null)
+              .map((c) => ({ id: c.id, label: c.name, href: `${shopBasePath}/collections/${c.slug}` })),
+          ),
+        );
+      })
       .catch(() => setItems([]));
-  }, [mode, shopSlug, previewToken]);
+  }, [mode, shopSlug, previewToken, shopBasePath]);
 
   // The bottom bar is a fixed 3.5rem strip under md. Other fixed bottom
   // elements (WhatsApp, floating buttons, back-to-top, the PDP add-to-cart bar)
@@ -118,24 +154,13 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
     return () => document.documentElement.removeAttribute("data-bottom-nav");
   }, [mode]);
 
-  // Lock page scroll while the drawer/fullscreen panel is open.
-  useEffect(() => {
-    if (mode === "bottom-bar" || !open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [mode, open]);
-
-  useEffect(() => {
-    if (mode === "bottom-bar" || !open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [mode, open]);
+  // Escape, focus trap, focus in/out and page scroll lock (shared with the cart drawer).
+  useDialogBehavior({
+    open: mode !== "bottom-bar" && open,
+    onClose: () => setOpen(false),
+    containerRef: panelRef,
+    returnFocusRef: triggerRef,
+  });
 
   // Discrete threshold swipe-from-edge to open — 'drawer' only (a closed
   // fullscreen overlay has no edge affordance to swipe from). Tracks on
@@ -239,7 +264,7 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
     return (
       <nav
         aria-label="Mobile navigation"
-        className="fixed bottom-[var(--cookie-banner-h,0px)] inset-x-0 z-30 h-14 flex items-stretch border-t border-stroke bg-header text-header-fg md:hidden"
+        className="fixed bottom-[var(--cookie-banner-h,0px)] inset-x-0 z-30 h-[var(--bottom-nav-h,3.5rem)] pb-[env(safe-area-inset-bottom)] flex items-stretch border-t border-stroke bg-header text-header-fg md:hidden"
       >
         <Link href={shopBasePath || "/"} className={tabClass}>
           <Home className="size-5" />
@@ -253,7 +278,9 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
           <Store className="size-5" />
           Shop
         </Link>
-        <button type="button" onClick={() => setOpen((o) => !o)} className={`${tabClass} cursor-pointer`}>
+        {/* Opens the header's own search (SearchBar listens for this event). This button used to
+            toggle a panel that bottom-bar mode never renders, so it did nothing. */}
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_SEARCH_EVENT))} className={`${tabClass} cursor-pointer`}>
           <Search className="size-5" />
           Search
         </button>
@@ -288,14 +315,6 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Open menu"
-        className="fixed top-3 start-3 z-30 flex items-center justify-center size-10 rounded-full bg-header text-header-fg shadow-md md:hidden"
-      >
-        <MenuIcon className="size-5" />
-      </button>
       {createPortal(
         <div className={`fixed inset-0 z-40 md:hidden ${open ? "" : "pointer-events-none"}`}>
           <div
@@ -307,21 +326,29 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
             onPointerDown={handlePanelPointerDown}
             aria-label="Menu"
             // The panel stays mounted at all times (so the CSS transition
-            // plays on close, not just open) — role/aria-modal only apply
-            // while actually open, so a closed-but-still-in-the-DOM drawer
-            // never reads as an open dialog to assistive tech.
-            {...(open ? { role: "dialog", "aria-modal": true } : { "aria-hidden": true })}
-            className={`absolute ${panelPositionClass} bg-header text-header-fg shadow-xl overflow-y-auto ${transitionClass} ${panelTransform}`}
+            // plays on close, not just open). While closed it is `inert`:
+            // its links and Close button leave the tab order and the
+            // accessibility tree (before, a keyboard user tabbed into an
+            // invisible off-screen menu). role/aria-modal only apply while open.
+            inert={!open}
+            {...(open ? { role: "dialog", "aria-modal": true } : {})}
+            className={`absolute ${panelPositionClass} bg-header text-header-fg shadow-xl overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] ${transitionClass} ${panelTransform}`}
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-current/10">
               <span className="text-sm font-semibold">Menu</span>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="flex items-center justify-center size-8">
+              <button type="button" data-autofocus onClick={() => setOpen(false)} aria-label="Close menu" className="flex items-center justify-center size-10 rounded-full">
                 <X className="size-5" />
               </button>
             </div>
             {(items ?? []).map((item) => (
               <MenuItemRow key={item.id} item={item} shopBasePath={shopBasePath} onNavigate={() => setOpen(false)} />
             ))}
+            {items !== null && items.length === 0 &&
+              fallbackLinks.map((l) => (
+                <Link key={l.id} href={l.href} onClick={() => setOpen(false)} className="block px-4 py-3 text-base border-b border-current/10">
+                  {l.label}
+                </Link>
+              ))}
           </div>
         </div>,
         document.body,

@@ -88,6 +88,10 @@ async function seed() {
     s,
   );
   await call('/shop', { method: 'PATCH', body: JSON.stringify({ published: true }) }, s);
+  // AUDIT_IMAGE_BASE also sets a wide image logo (320x64): a real logo is what squeezes a header, a text name truncates.
+  if (process.env.AUDIT_IMAGE_BASE && process.env.AUDIT_LOGO !== '0') {
+    await optional('logo', () => call('/shop', { method: 'PATCH', body: JSON.stringify({ logoUrl: `${process.env.AUDIT_IMAGE_BASE}/audit-logo.svg` }) }, s));
+  }
   // AUDIT_CART_LAYOUT=drawer opens the cart in a drawer instead of the cart page (drawer open-state audit).
   if (process.env.AUDIT_CART_LAYOUT) {
     await call('/theme', { method: 'PATCH', body: JSON.stringify({ cartLayout: process.env.AUDIT_CART_LAYOUT }) }, s);

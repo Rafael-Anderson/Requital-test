@@ -24,6 +24,7 @@ vi.mock("@/lib/cart-drawer", () => ({ useCartDrawer: () => ({ openDrawer: vi.fn(
 vi.mock("@/lib/api", () => ({ resolveImageUrl: (u: string | null) => u }));
 vi.mock("@/components/SearchBar", () => ({ default: () => <span data-testid="search" /> }));
 vi.mock("@/components/MenuBar", () => ({ default: () => <span data-testid="menubar" /> }));
+vi.mock("@/components/MobileNav", () => ({ MobileNavTrigger: () => <button type="button" data-testid="hamburger" /> }));
 vi.mock("./ThemeImageBlock", () => ({ default: () => <span data-testid="imageblock" /> }));
 vi.mock("./SectionWrapper", () => ({ backgroundStyle: () => ({}) }));
 
@@ -38,7 +39,7 @@ function renderHeader(config: HeaderFooterConfig) {
 describe("ThemeDrivenHeader — rows-absent regression (Phase 3)", () => {
   it("renders the classic single 3-zone grid, byte-for-byte, when settings.rows is absent", () => {
     const { container } = renderHeader(CLASSIC_HEADER);
-    const grid = container.querySelector(".grid.grid-cols-3");
+    const grid = container.querySelector(".grid.items-center.gap-4");
     expect(grid).not.toBeNull();
     // exactly the three zone columns
     expect(grid!.children).toHaveLength(3);
@@ -51,7 +52,7 @@ describe("ThemeDrivenHeader — rows-absent regression (Phase 3)", () => {
   it("is unaffected by an empty rows array (still the classic grid)", () => {
     const cfg: HeaderFooterConfig = { ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, rows: [] } };
     const { container } = renderHeader(cfg);
-    expect(container.querySelector(".grid.grid-cols-3")).not.toBeNull();
+    expect(container.querySelector(".grid.items-center.gap-4")).not.toBeNull();
   });
 });
 
@@ -78,22 +79,22 @@ describe("ThemeDrivenHeader — icon showLabel (C1)", () => {
 describe("ThemeDrivenHeader — height/contentWidth (C1)", () => {
   it("defaults to today's py-3 classic padding and the var() max-width cap", () => {
     const { container } = renderHeader(CLASSIC_HEADER);
-    const inner = container.querySelector(".grid.grid-cols-3") as HTMLElement;
+    const inner = container.querySelector(".grid.items-center.gap-4") as HTMLElement;
     expect(inner.className).toContain("py-3");
     expect(inner.style.maxWidth).toBe("var(--theme-max-width, 80rem)");
   });
 
   it("applies a compact/tall padding class per settings.height", () => {
     const compact = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, height: "compact" } });
-    expect((compact.container.querySelector(".grid.grid-cols-3") as HTMLElement).className).toContain("py-2");
+    expect((compact.container.querySelector(".grid.items-center.gap-4") as HTMLElement).className).toContain("py-2");
     compact.unmount();
     const tall = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, height: "tall" } });
-    expect((tall.container.querySelector(".grid.grid-cols-3") as HTMLElement).className).toContain("py-5");
+    expect((tall.container.querySelector(".grid.items-center.gap-4") as HTMLElement).className).toContain("py-5");
   });
 
   it("drops the max-width cap when contentWidth is 'full'", () => {
     const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { ...CLASSIC_HEADER.settings, contentWidth: "full" } });
-    const inner = container.querySelector(".grid.grid-cols-3") as HTMLElement;
+    const inner = container.querySelector(".grid.items-center.gap-4") as HTMLElement;
     expect(inner.style.maxWidth).toBe("");
   });
 });
@@ -114,7 +115,7 @@ describe("ThemeDrivenHeader — rows present (Phase 3)", () => {
       ],
     };
     const { container, getByText, getAllByTestId } = renderHeader(cfg);
-    expect(container.querySelector(".grid.grid-cols-3")).toBeNull();
+    expect(container.querySelector(".grid.items-center.gap-4")).toBeNull();
     expect(getByText("Call us")).toBeInTheDocument();
     // nav_menu placed in a row renders the inline <MenuBar />
     expect(getAllByTestId("menubar").length).toBe(1);
@@ -154,11 +155,69 @@ describe("ThemeDrivenHeader — scrollBehavior precedence + 'shrink' (§8.7 item
 
   it("'shrink' swaps to compact padding past the threshold and back above it", () => {
     const { container } = renderHeader({ ...CLASSIC_HEADER, settings: { scrollBehavior: "shrink" } });
-    const grid = container.querySelector(".grid.grid-cols-3") as HTMLElement;
+    const grid = container.querySelector(".grid.items-center.gap-4") as HTMLElement;
     expect(grid.className).toContain("py-3"); // default, unscrolled
     act(() => setScrollY(100));
     expect(grid.className).toContain("py-2"); // compact, shrunk
     act(() => setScrollY(0));
     expect(grid.className).toContain("py-3");
+  });
+});
+
+
+describe("ThemeDrivenHeader — mobile menu trigger and zone columns (N4)", () => {
+  const withNav = (mobileNav: string | undefined, extra: Record<string, unknown> = {}): HeaderFooterConfig => ({
+    ...CLASSIC_HEADER,
+    settings: { ...CLASSIC_HEADER.settings, ...(mobileNav ? { mobileNav } : {}), ...extra },
+  });
+
+  it("renders no hamburger for scroll, bottom-bar or an unset mobileNav", () => {
+    for (const mode of [undefined, "scroll", "bottom-bar"]) {
+      const { queryByTestId, unmount } = renderHeader(withNav(mode));
+      expect(queryByTestId("hamburger")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("puts the hamburger IN the left zone, before the logo (it used to float over the logo)", () => {
+    for (const mode of ["drawer", "fullscreen"]) {
+      const { container, getAllByTestId, unmount } = renderHeader(withNav(mode));
+      expect(getAllByTestId("hamburger")).toHaveLength(1);
+      const leftZone = container.querySelector(".grid.items-center.gap-4")!.children[0] as HTMLElement;
+      expect(leftZone.firstElementChild).toBe(getAllByTestId("hamburger")[0]);
+      expect(leftZone.textContent).toContain("Test Shop");
+      unmount();
+    }
+  });
+
+  it("with header rows, renders it once, in the row that holds the logo", () => {
+    const cfg = withNav("drawer", {
+      rows: [
+        { id: "r1", blockIds: ["hdr-search"], align: "right" },
+        { id: "r2", blockIds: ["hdr-logo", "hdr-cart"], align: "zones" },
+      ],
+    });
+    const { container, getAllByTestId } = renderHeader(cfg);
+    expect(getAllByTestId("hamburger")).toHaveLength(1);
+    const rows = Array.from(container.querySelectorAll(":scope > div > div")) as HTMLElement[];
+    expect(rows[0].querySelector('[data-testid="hamburger"]')).toBeNull();
+    expect(rows[1].querySelector('[data-testid="hamburger"]')).not.toBeNull();
+  });
+
+  it("the zone grid gives the side zones equal room and the middle what it needs (not three equal thirds)", () => {
+    const { container } = renderHeader(CLASSIC_HEADER);
+    const grid = container.querySelector(".grid.items-center.gap-4")!;
+    expect(grid.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
+    expect(grid.className).not.toContain("grid-cols-3");
+  });
+
+  it("an inline nav menu steps aside below md when the mobile menu panel carries the links", () => {
+    const rows = [{ id: "r1", blockIds: ["hdr-logo", "hdr-nav-menu"], align: "zones" }];
+    const hidden = renderHeader(withNav("drawer", { rows }));
+    expect(hidden.getByTestId("menubar").parentElement!.className).toContain("hidden md:block");
+    hidden.unmount();
+    const shown = renderHeader(withNav(undefined, { rows }));
+    expect(shown.getByTestId("menubar").parentElement!.className).not.toContain("hidden");
+    expect(shown.getByTestId("menubar").parentElement!.className).toContain("min-w-0");
   });
 });

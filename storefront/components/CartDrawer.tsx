@@ -1,10 +1,13 @@
 "use client";
 
+import { useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import { useCartDrawer } from "@/lib/cart-drawer";
+import { useDialogBehavior } from "@/lib/use-dialog-behavior";
 import { storeButtonClassName } from "@/lib/button-style";
 import { useAnimatedNumber } from "@/lib/use-animated-number";
 import CurrencySymbol from "@/components/CurrencySymbol";
@@ -39,6 +42,9 @@ export default function CartDrawer() {
   const { shop, shopBasePath, themeConfig } = useShop();
   const { items, subtotal } = useCart();
   const { open, closeDrawer } = useCartDrawer();
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Escape, focus trap, focus in and back out, page scroll lock.
+  useDialogBehavior({ open, onClose: closeDrawer, containerRef: panelRef });
 
   const subtotalAnim = themeConfig?.globalSettings.cart?.subtotalAnimation;
   const countedSubtotal = useAnimatedNumber(subtotal, subtotalAnim === "count");
@@ -53,7 +59,10 @@ export default function CartDrawer() {
     drawers?.dropShadow === false ? "" : "shadow-2xl"
   }`;
 
-  return (
+  // Portalled to <body>: mounted inside <header> (a z-30 stacking context) the drawer's own z-50 only
+  // counted within the header, so the z-40 cookie banner painted over the drawer's checkout button.
+  if (typeof document === "undefined") return null;
+  return createPortal(
     // A single fixed, viewport-sized, overflow-clipped shell holds both the
     // backdrop and the panel. The closed panel sits at translate-x-full
     // (off-screen right) — as a bare `fixed` element its in-flow content used
@@ -68,17 +77,20 @@ export default function CartDrawer() {
         aria-hidden={!open}
       />
       <div
+        ref={panelRef}
+        // Mounted while closed (the slide transition needs it) but inert: its links and buttons are out
+        // of the tab order and the accessibility tree, and it is not announced as an open dialog.
+        inert={!open}
         className={`absolute top-0 right-0 h-full w-full max-w-sm bg-drawer text-drawer-fg ${drawerChrome} flex flex-col ${open ? "pointer-events-auto " : ""}${motion.transition} ${
           open ? motion.open : motion.closed
         }`}
         style={{ transitionDuration: "var(--motion-duration-base, 300ms)" }}
-        role="dialog"
-        aria-modal="true"
+        {...(open ? { role: "dialog", "aria-modal": true } : {})}
         aria-label="Cart"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-stroke shrink-0">
           <h2 className="font-semibold">Your cart</h2>
-          <button type="button" onClick={closeDrawer} aria-label="Close cart" className="flex items-center justify-center size-8 rounded-full hover:bg-mouse-over/10 cursor-pointer">
+          <button type="button" data-autofocus onClick={closeDrawer} aria-label="Close cart" className="flex items-center justify-center size-10 rounded-full hover:bg-mouse-over/10 cursor-pointer">
             <X className="size-4" {...iconStyleProps(shop?.iconStyle, 1.75)} />
           </button>
         </div>
@@ -89,10 +101,10 @@ export default function CartDrawer() {
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto px-4">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-4">
               <CartLineItems />
             </div>
-            <div className="border-t border-stroke px-4 py-4 space-y-3 shrink-0">
+            <div className="border-t border-stroke px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3 shrink-0">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-500">Subtotal</span>
                 <span
@@ -116,6 +128,7 @@ export default function CartDrawer() {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

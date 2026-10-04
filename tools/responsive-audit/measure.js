@@ -101,12 +101,48 @@ function measurePage() {
         const top = document.elementFromPoint(x, y);
         if (!top || top === el || el.contains(top) || top.contains(el)) continue;
         if (top.closest('[data-cookie-banner]') || !insideFixed(top)) continue;
+      // a fixed element anchored in the lower half (bottom nav, floating buttons) always covers part of whatever
+      // scrolls under it; that is what fixed bars are. Only covers in the upper half count as defects.
+      let fx0 = top;
+      while (fx0 && getComputedStyle(fx0).position !== 'fixed') fx0 = fx0.parentElement;
+      if (fx0 && fx0.getBoundingClientRect().top > window.innerHeight / 2) continue;
         hit = { el: describe(el), box: box(r), by: describe(top), at: Math.round(x) };
         break;
       }
       if (hit) break;
     }
     if (hit) obscuredPrimary.push(hit);
+  }
+
+  // Interactive elements that overlap each other (a nav row laid over the logo, icons on top of a link): pairs of
+  // in-flow interactive boxes that intersect by more than a few px and where neither contains the other. Absolutely
+  // positioned and fixed ones are overlays by design (badges, the wishlist heart) and are covered by obscuredPrimary.
+  const INTERACTIVE = 'a[href],button,input,select,textarea';
+  const boxes = [];
+  for (const el of document.body.querySelectorAll(INTERACTIVE)) {
+    if (el.closest('svg') || el.closest('[aria-hidden="true"],[inert],.sr-only') || insideFixed(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (!visible(el, r) || r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > vw) continue;
+    let overlay = false;
+    for (let p = el; p && p !== document.body; p = p.parentElement) if (getComputedStyle(p).position === 'absolute') overlay = true;
+    if (overlay) continue;
+    const clip = ancestorClip(el);
+    if (clip && clip.scrolls) continue; // inside a sideways scroller: only part is on screen
+    boxes.push({ el, r });
+  }
+  const overlapping = [];
+  for (let i = 0; i < boxes.length && overlapping.length < 20; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      const w = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+      const h = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+      if (w > 4 && h > 4) {
+        overlapping.push({ a: describe(a.el), b: describe(b.el), w: Math.round(w), h: Math.round(h) });
+        break;
+      }
+    }
   }
 
   const scrollers = [];
@@ -147,6 +183,7 @@ function measurePage() {
     clipped: clipped.slice(0, 12),
     clippedPrimary: clippedPrimary.slice(0, 20),
     obscuredPrimary: obscuredPrimary.slice(0, 20),
+    overlapping,
     scrollers,
     fixed,
     title: document.title,

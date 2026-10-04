@@ -23,8 +23,9 @@ afterEach(() => {
   items = [];
 });
 
-function panel(container: HTMLElement) {
-  return container.querySelector('[role="dialog"]') as HTMLElement;
+// The drawer is portalled to <body>, so look there rather than in the render container.
+function panel(_container?: HTMLElement) {
+  return document.querySelector('[role="dialog"]') as HTMLElement;
 }
 
 describe("CartDrawer drawers.animation (§8.13.C item 13)", () => {

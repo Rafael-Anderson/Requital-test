@@ -46,3 +46,13 @@ export function getReadableTextColor(hex: string | null | undefined): "#ffffff" 
   const contrastWithBlack = contrastRatio(l, 0);
   return contrastWithBlack > contrastWithWhite ? "#0a0a0a" : "#ffffff";
 }
+
+// WCAG contrast ratio (1 to 21) between two #rrggbb colours, or null when
+// either is not a plain 6-digit hex (a named colour, rgb(), color-mix()...).
+// Callers must treat null as "unknown", never as a pass.
+export function contrastBetween(a: string | null | undefined, b: string | null | undefined): number | null {
+  const ra = a ? hexToRgb(a) : null;
+  const rb = b ? hexToRgb(b) : null;
+  if (!ra || !rb) return null;
+  return contrastRatio(relativeLuminance(ra), relativeLuminance(rb));
+}

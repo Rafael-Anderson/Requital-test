@@ -182,7 +182,7 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   }
 
   if (items === null) return null;
-  if (items.length === 0) return <CollectionNav />;
+  if (items.length === 0) return <CollectionNav inline={inline} />;
 
   const navBlock = themeConfig?.header.blocks.find((b) => b.type === "nav_menu");
   // Nav-row background, independent of the header row above it: the nav
