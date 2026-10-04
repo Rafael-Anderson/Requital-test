@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -24,10 +24,38 @@ export default function TopBar() {
       .catch(() => setStoreUrl(null));
   }, [user]);
 
+  // Below md the bar stays pinned while the page scrolls (a phone has no other
+  // way back to the menu), and publishes its height as --topbar-h so a page's
+  // own sticky element (the product wizard's stepper) can sit beneath it. From
+  // md up it is a plain static block exactly as before: the md: resets restore
+  // position, top and z-index, and the variable is removed.
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const sync = () => {
+      if (getComputedStyle(el).position === "sticky") root.style.setProperty("--topbar-h", `${el.offsetHeight}px`);
+      else root.style.removeProperty("--topbar-h");
+    };
+    sync();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
+    ro?.observe(el);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", sync);
+      root.style.removeProperty("--topbar-h");
+    };
+  }, [user]);
+
   if (!user) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-4 md:px-10 text-sm dark:border-white/10 dark:bg-zinc-950">
+    <div
+      ref={barRef}
+      className="sticky top-0 z-30 md:static md:top-auto md:z-auto flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-4 md:px-10 text-sm dark:border-white/10 dark:bg-zinc-950"
+    >
       <Link href="/" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-extrabold text-white" aria-label="Requital home">
         R
       </Link>

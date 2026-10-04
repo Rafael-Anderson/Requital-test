@@ -5,6 +5,7 @@ import { getPrepTimeReport, listOutlets } from "@/lib/api";
 import type { Outlet, PrepTimeBucket, PrepTimeReport, ReportsFilters } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -137,7 +138,7 @@ export default function PrepTimeReportPage() {
           {buckets === null ? (
             <tr>
               <td colSpan={8}>
-                <TableSkeleton rows={7} cols={8} />
+                {error ? <LoadFailed what="the report" onRetry={refresh} /> : <TableSkeleton rows={7} cols={8} />}
               </td>
             </tr>
           ) : buckets.length === 0 && !error ? (

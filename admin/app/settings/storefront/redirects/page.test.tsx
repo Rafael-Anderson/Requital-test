@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/ui/Toast";
 import RedirectsPage from "./page";
@@ -67,19 +67,23 @@ function renderPage() {
 describe("Redirects settings page", () => {
   it("lists redirects with their visit counts", async () => {
     renderPage();
-    expect(await screen.findByText("/old-page")).toBeTruthy();
-    expect(screen.getByText("/new-page")).toBeTruthy();
-    expect(screen.getByText("7")).toBeTruthy();
+    // jsdom applies no CSS, so both the phone card list and the table are in the DOM; these address the table.
+    await screen.findAllByText("/old-page");
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("/old-page")).toBeTruthy();
+    expect(table.getByText("/new-page")).toBeTruthy();
+    expect(table.getByText("7")).toBeTruthy();
   });
 
   it("the 404 report row opens the redirect form pre-filled with that path", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("/old-page");
+    await screen.findAllByText("/old-page");
     await user.click(screen.getByRole("button", { name: "404 report" }));
-    expect(await screen.findByText("/missing/thing")).toBeTruthy();
-    expect(screen.getByText("google.com")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Create redirect from /missing/thing" }));
+    await screen.findAllByText("/missing/thing");
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("google.com")).toBeTruthy();
+    await user.click(table.getByRole("button", { name: "Create redirect from /missing/thing" }));
     const from = (await screen.findByLabelText("Old URL path")) as HTMLInputElement;
     expect(from.value).toBe("/missing/thing");
     await user.type(screen.getByLabelText("Send visitors to"), "/products/new");
@@ -98,7 +102,7 @@ describe("Redirects settings page", () => {
     vi.mocked(createUrlRedirect).mockRejectedValueOnce(new Error("Target must not start with // (that would leave the site)"));
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("/old-page");
+    await screen.findAllByText("/old-page");
     await user.click(screen.getByRole("button", { name: /Add redirect/ }));
     await user.type(await screen.findByLabelText("Old URL path"), "/a");
     await user.type(screen.getByLabelText("Send visitors to"), "//evil.com");
