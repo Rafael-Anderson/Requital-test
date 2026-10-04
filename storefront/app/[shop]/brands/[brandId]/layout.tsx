@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import { getShop, listBrands } from "@/lib/api";
+import { getShop, HttpError, listBrands } from "@/lib/api";
 import { buildBrandMetadata } from "@/lib/seo";
+import RenderWhenShopLoaded from "@/components/RenderWhenShopLoaded";
+import { notFoundIfMissing } from "@/lib/not-found-gate";
 
 // Server Component so this can export generateMetadata — same split as
 // [shop]/products/[slug]/layout.tsx (the page below is "use client" for its
@@ -22,6 +24,19 @@ export async function generateMetadata({
   }
 }
 
-export default function BrandLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+export default async function BrandLayout({
+  params,
+  children,
+}: {
+  params: Promise<{ shop: string; brandId: string }>;
+  children: React.ReactNode;
+}) {
+  const { shop: shopSlug, brandId } = await params;
+  // Brands have no by-id endpoint: the public list (brands with an Available
+  // product, what the page itself looks the brand up in) is the existence test.
+  await notFoundIfMissing(shopSlug, async () => {
+    const brands = await listBrands(shopSlug);
+    if (!brands.some((b) => b.id === Number(brandId))) throw new HttpError("Brand not found", 404);
+  });
+  return <RenderWhenShopLoaded>{children}</RenderWhenShopLoaded>;
 }

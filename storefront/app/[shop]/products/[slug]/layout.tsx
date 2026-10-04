@@ -11,6 +11,8 @@ import { buildProductMetadata, canonicalUrlFor } from "@/lib/seo";
 import { breadcrumbJsonLd, productJsonLd } from "@/lib/structured-data";
 import { computeAutoDiscountedPrice } from "@/lib/auto-discounts";
 import JsonLd from "@/components/JsonLd";
+import RenderWhenShopLoaded from "@/components/RenderWhenShopLoaded";
+import { notFoundIfMissing } from "@/lib/not-found-gate";
 
 // Server Component so this can export generateMetadata — same split as
 // [shop]/layout.tsx/ShopLayoutClient.tsx (the actual page below is "use
@@ -66,13 +68,18 @@ export default async function ProductLayout({
   children: React.ReactNode;
 }) {
   const { shop: shopSlug, slug } = await params;
+  // A missing product is a real 404 (see lib/not-found-gate.ts); the probe is
+  // the same fetch productStructuredData makes below, deduped by Next.
+  await notFoundIfMissing(shopSlug, () =>
+    /^\d+$/.test(slug) ? getProduct(shopSlug, Number(slug)) : getProductBySlug(shopSlug, slug),
+  );
   const jsonLd = await productStructuredData(shopSlug, slug);
   return (
     <>
       {jsonLd.map((data, i) => (
         <JsonLd key={i} data={data} />
       ))}
-      {children}
+      <RenderWhenShopLoaded>{children}</RenderWhenShopLoaded>
     </>
   );
 }

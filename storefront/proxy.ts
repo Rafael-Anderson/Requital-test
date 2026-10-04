@@ -94,13 +94,16 @@ export async function proxy(request: NextRequest) {
   if ((request.method === "GET" || request.method === "HEAD") && pathname !== "/") {
     const hit = await redirects.lookup(subdomain, pathname, search).catch(() => null);
     if (hit) {
-      // A relative Location is valid (RFC 9110) and needs no guess at the
-      // public origin behind Caddy. 301s are cached by browsers for an hour,
-      // not forever, so a mistaken redirect heals soon after it is fixed.
+      // Next's middleware adapter runs `new URL(Location)` on a response and a
+      // bare relative path throws (a 500 in dev and prod), so resolve it against
+      // the request first. When it lands on the request's own host Next turns it
+      // back into a relative Location, so the client still sees a relative one.
+      // 301s are cached by browsers for an hour, not forever, so a mistaken
+      // redirect heals soon after it is fixed.
       return new NextResponse(null, {
         status: hit.status,
         headers: {
-          Location: hit.location,
+          Location: new URL(hit.location, request.url).toString(),
           "Cache-Control": hit.status === 301 ? "public, max-age=3600" : "no-store",
         },
       });

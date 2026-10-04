@@ -191,8 +191,17 @@ function CustomCss() {
 // independently published-gated server-side (PublicService.assertPublished)
 // regardless of what renders here, so this is purely a friendlier preview
 // experience, not a new way to leak an unpublished shop's content.
+// Route params whose server layer decides the HTTP status: [...rest] (the
+// catch-all, which always calls notFound()) and the slug/brandId/type segments
+// whose layouts call notFoundIfMissing (lib/not-found-gate.ts). Every route
+// using one of these names MUST either throw synchronously or wrap its children
+// in RenderWhenShopLoaded, because Body renders them while the shop loads.
+const SSR_STATUS_PARAMS = ["rest", "slug", "brandId", "type"];
+
 function Body({ children }: { children: React.ReactNode }) {
   const { shop, loading, previewMode, themeConfig } = useShop();
+  const params = useParams();
+  const serverDecidesStatus = SSR_STATUS_PARAMS.some((k) => k in params);
   // C2 — reserve space for the fixed bottom-bar mobile nav so it never
   // overlaps the last bit of page content/footer.
   const bottomBarSpacing = themeConfig?.header.settings.mobileNav === "bottom-bar";
@@ -202,7 +211,18 @@ function Body({ children }: { children: React.ReactNode }) {
   // point has no shop/theme and would flash the raw slug text plus default
   // Requital iconography before the merchant's real theme loads.
   if (loading) {
-    return <StorefrontLoadingSkeleton />;
+    // ShopProvider fetches in an effect, so the server render is always this
+    // branch. Dropping `children` here meant a notFound() thrown by the route
+    // was never seen by the server render and every missing URL left as a
+    // streamed 200 (soft 404). On the routes that decide their own status the
+    // children are rendered hidden so the server sees the throw: the response
+    // becomes a real 404 with the branded not-found state and noindex.
+    return (
+      <>
+        <StorefrontLoadingSkeleton />
+        {serverDecidesStatus && <div hidden>{children}</div>}
+      </>
+    );
   }
 
   if (!loading && shop && !shop.published && !previewMode) {

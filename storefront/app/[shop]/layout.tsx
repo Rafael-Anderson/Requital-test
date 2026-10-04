@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getShop, getThemeConfig, resolveImageUrl } from "@/lib/api";
+import { notFound } from "next/navigation";
+import { getShop, getThemeConfig, HttpError, resolveImageUrl } from "@/lib/api";
 import { resolveThemeVarsWithScheme } from "@/lib/theme-css-vars";
 import { buildShopMetadata, canonicalUrlFor } from "@/lib/seo";
 import { organizationJsonLd } from "@/lib/structured-data";
@@ -71,9 +72,12 @@ export default async function ShopLayout({
       .join(";");
     const url = canonicalUrlFor(shop, "/");
     if (url) organization = organizationJsonLd(shop, { url });
-  } catch {
-    // Unknown/unreachable shop — the client renders the real error state; a
-    // missing pre-paint style block just means the old light-default behavior.
+  } catch (err) {
+    // A definite 404 (unknown slug, or a suspended shop, which the API answers
+    // identically on purpose) becomes a real 404 here, before anything streams.
+    if (err instanceof HttpError && err.status === 404) notFound();
+    // Unreachable shop (backend blip) — the client renders the real error
+    // state; a missing pre-paint style block just means the light default.
   }
 
   return (
