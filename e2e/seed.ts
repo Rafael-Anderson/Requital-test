@@ -30,6 +30,9 @@ export interface SeedState {
   customerName: string;
   customerPhone: string;
   seededOrderId: number;
+  // The admin session signup returned, for specs that need one more admin call and must not
+  // spend a login on the per-IP throttle. Short-lived (the access token is 15 minutes).
+  session?: AdminSession;
 }
 
 // Session-cookie migration (security audit finding #1) — the admin session
@@ -275,5 +278,6 @@ export async function seedShop(): Promise<SeedState> {
     customerName,
     customerPhone,
     seededOrderId: orderResult.order.id,
+    session,
   };
 }
