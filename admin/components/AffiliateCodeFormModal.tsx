@@ -42,7 +42,9 @@ export default function AffiliateCodeFormModal({
 
   useEffect(() => {
     if (!affiliateCode) {
-      listAffiliates({ pageSize: 100 }).then((res) => setAffiliates(res.data));
+      listAffiliates({ pageSize: 100 })
+        .then((res) => setAffiliates(res.data))
+        .catch((err) => toast(err instanceof Error ? err.message : "Failed to load affiliates", "error"));
     }
   }, [affiliateCode]);
 

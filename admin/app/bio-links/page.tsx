@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, GripVertical, MousePointerClick, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   deleteBioLink,
@@ -26,6 +26,7 @@ import {
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import ImageDropzone from "@/components/ui/ImageDropzone";
@@ -62,16 +63,29 @@ function BioPageConfigCard() {
   const [metaDescription, setMetaDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Try again bumps `reloadKey`; a failed request ends in an error, never the skeleton forever.
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getBioPageConfig().then((c) => {
-      setConfig(c);
-      setLogoPreview(resolveImageUrl(c.logoUrl));
-      setBackgroundPreview(resolveImageUrl(c.backgroundUrl));
-      setDescription(c.description ?? "");
-      setMetaTitle(c.metaTitle ?? "");
-      setMetaDescription(c.metaDescription ?? "");
-    });
-  }, []);
+    let live = true;
+    getBioPageConfig()
+      .then((c) => {
+        if (!live) return;
+        setConfig(c);
+        setConfigError(null);
+        setLogoPreview(resolveImageUrl(c.logoUrl));
+        setBackgroundPreview(resolveImageUrl(c.backgroundUrl));
+        setDescription(c.description ?? "");
+        setMetaTitle(c.metaTitle ?? "");
+        setMetaDescription(c.metaDescription ?? "");
+      })
+      .catch((err) => {
+        if (live) setConfigError(err instanceof Error ? err.message : "Failed to load bio page settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   function handleLogoSelected(file: File) {
     setLogoFile(file);
@@ -126,7 +140,21 @@ function BioPageConfigCard() {
     }
   }
 
-  if (!config) return <CardSkeleton />;
+  if (!config) {
+    return configError ? (
+      <Card>
+        <LoadFailed
+          what="bio page settings"
+          onRetry={() => {
+            setConfigError(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      </Card>
+    ) : (
+      <CardSkeleton />
+    );
+  }
 
   return (
     <Card className="space-y-4">
@@ -223,13 +251,21 @@ export default function BioLinksPage() {
   const toast = useToast();
   const deleteWithUndo = useUndoableDelete();
 
-  const refresh = useCallback(async () => {
-    try {
-      setBioLinks(await listBioLinks());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load bio links");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listBioLinks()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setBioLinks(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load bio links");
+      });
   }, []);
 
   useEffect(() => {
@@ -305,7 +341,7 @@ export default function BioLinksPage() {
 
           <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden bg-surface dark:bg-zinc-900">
             {bioLinks === null ? (
-              <TableSkeleton rows={4} cols={3} />
+              error ? <LoadFailed what="bio links" onRetry={refresh} /> : <TableSkeleton rows={4} cols={3} />
             ) : bioLinks.length === 0 ? (
               <EmptyState title="No bio links yet" description="Add a link to start building your bio page." />
             ) : (

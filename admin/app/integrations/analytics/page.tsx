@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import SecretField from "@/components/ui/SecretField";
 import Button from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -45,15 +46,25 @@ export default function AnalyticsIntegrationsPage() {
   const [saving, setSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
 
+  // A failed first load ends in an error with Try again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
+    let live = true;
     getAnalyticsSettings()
       .then((s) => {
+        if (!live) return;
         setSettings(s);
         setValues(toValues(s));
+        setLoadError(null);
       })
-      .catch((err) => toast(err instanceof Error ? err.message : "Failed to load analytics settings", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load analytics settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   const set = (field: AnalyticsIdField) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues((prev) => ({ ...prev, [field]: e.target.value }));
@@ -91,7 +102,19 @@ export default function AnalyticsIntegrationsPage() {
     return (
       <PageShell variant="form">
         <div className="space-y-4">
-          <CardSkeleton />
+          {loadError ? (
+            <Card>
+              <LoadFailed
+                what="analytics settings"
+                onRetry={() => {
+                  setLoadError(null);
+                  setReloadKey((k) => k + 1);
+                }}
+              />
+            </Card>
+          ) : (
+            <CardSkeleton />
+          )}
         </div>
       </PageShell>
     );

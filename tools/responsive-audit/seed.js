@@ -114,7 +114,7 @@ async function seed() {
   }
   const discount = await optional('discount', () =>
     call(
-      '/discounts',
+      '/shop/discounts',
       { method: 'POST', body: JSON.stringify({ code: `WELCOME${runId.slice(-4)}`, type: 'PERCENTAGE', value: 10, appliesTo: 'ALL_PRODUCTS', discountType: 'code' }) },
       s,
     ),
@@ -136,7 +136,7 @@ async function seed() {
   };
 }
 
-module.exports = { seed };
+module.exports = { seed, call, jar, optional };
 
 if (require.main === module) {
   seed().then(

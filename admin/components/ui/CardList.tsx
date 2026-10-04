@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { MoreVertical } from "lucide-react";
 import Checkbox from "@/components/ui/Checkbox";
+import DropdownMenu from "@/components/ui/DropdownMenu";
 
 // The phone layout of a list page (below md): one tappable card per row in
 // place of a table whose columns cannot fit. The page keeps its Table for md
@@ -93,5 +95,57 @@ export function CardListSkeleton({
         </li>
       ))}
     </ul>
+  );
+}
+
+// The row actions of a card, kept as one overflow menu so a card never needs
+// more width than its name. Same menu the Products cards use; `danger` items
+// are red. Rendered inside CardListItem's `actions` slot (above the open link).
+export interface CardMenuItem {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}
+
+export function CardRowMenu({ label, items }: { label: string; items: CardMenuItem[] }) {
+  return (
+    <DropdownMenu
+      panelClassName="w-52"
+      trigger={({ toggle, open }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={label}
+          className="inline-flex rounded p-2 text-text-muted hover:bg-black/5 dark:hover:bg-white/10"
+        >
+          <MoreVertical className="size-4" />
+        </button>
+      )}
+    >
+      {(close) => (
+        <>
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                close();
+                item.onClick();
+              }}
+              className={`flex w-full items-center gap-2 px-3.5 py-2 text-start text-sm ${
+                item.danger ? "text-red-600 hover:bg-red-50 dark:hover:bg-red-950" : "hover:bg-black/5 dark:hover:bg-white/10"
+              }`}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </>
+      )}
+    </DropdownMenu>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -8,6 +8,7 @@ import { listNewsletterSubscribers, downloadExport } from "@/lib/api";
 import type { NewsletterSubscriber } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -52,19 +53,26 @@ export default function NewsletterSubscribersPage() {
     setPage(1);
   }, [search]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listNewsletterSubscribers({
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listNewsletterSubscribers({
         page,
         pageSize: PAGE_SIZE,
         search: search || undefined,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setSubscribers(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load newsletter subscribers");
       });
-      setSubscribers(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load newsletter subscribers");
-    }
   }, [page, search]);
 
   useEffect(() => {
@@ -141,11 +149,19 @@ export default function NewsletterSubscribersPage() {
         </THead>
         <TBody>
           {subscribers === null ? (
-            <tr>
-              <td colSpan={3}>
-                <TableSkeleton rows={8} cols={3} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={3}>
+                  <LoadFailed what="newsletter subscribers" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={3}>
+                  <TableSkeleton rows={8} cols={3} />
+                </td>
+              </tr>
+            )
           ) : subscribers.length === 0 && !error ? (
             <tr>
               <td colSpan={3}>

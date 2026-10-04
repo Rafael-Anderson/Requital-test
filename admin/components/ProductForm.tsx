@@ -247,7 +247,7 @@ export default function ProductForm({ product: initialProduct }: { product?: Pro
   return (
     <PageShell variant="wide">
       <div className="space-y-4">
-        <div className="sticky top-0 z-10 bg-[var(--background)] pb-4">
+        <div className="sticky top-[var(--topbar-h,0px)] z-10 bg-[var(--background)] pb-4">
           <Stepper steps={steps} onStepClick={handleStepperClick} />
         </div>
 

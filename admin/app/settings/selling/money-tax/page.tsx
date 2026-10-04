@@ -11,7 +11,7 @@ import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 // Gulf-region currencies plus USD. SUPPORTED_CURRENCIES in the backend's
 // UpdateShopDto is the real gate and matches this list (Phase 2a/A6).
@@ -42,16 +42,30 @@ export default function MoneyTaxPage() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setCurrency(s.currency);
-      setTaxRate(s.taxRate);
-      setTaxInclusive(s.taxInclusive);
-      setTaxOnDelivery(s.taxOnDelivery);
-      setTaxDisplayText(s.taxDisplayText ?? "");
-      setLoaded(true);
-    });
-  }, []);
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setLoadError(null);
+        setCurrency(s.currency);
+        setTaxRate(s.taxRate);
+        setTaxInclusive(s.taxInclusive);
+        setTaxOnDelivery(s.taxOnDelivery);
+        setTaxDisplayText(s.taxDisplayText ?? "");
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -71,7 +85,18 @@ export default function MoneyTaxPage() {
     }
   }
 
-  if (!loaded) return <SettingsContentSkeleton />;
+  if (!loaded) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton />
+    );
+  }
 
   return (
     <PageShell>

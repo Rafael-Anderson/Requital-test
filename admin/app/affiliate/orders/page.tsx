@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listAffiliateOrders, updateAffiliateOrderStatus } from "@/lib/api";
 import type { AffiliateOrderListItem } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -27,15 +29,22 @@ export default function AffiliateOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<number | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const res = await listAffiliateOrders({ page, pageSize: PAGE_SIZE });
-      setOrders(res.data);
-      setTotal(res.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load affiliate orders");
-    }
+  // `latest` drops a response a newer refresh (page change) has superseded; a
+  // failure ends in an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listAffiliateOrders({ page, pageSize: PAGE_SIZE })
+      .then((res) => {
+        if (mine !== latest.current) return;
+        setOrders(res.data);
+        setTotal(res.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load affiliate orders");
+      });
   }, [page]);
 
   useEffect(() => {
@@ -49,7 +58,7 @@ export default function AffiliateOrdersPage() {
     try {
       await updateAffiliateOrderStatus(id, status);
       toast(`Commission ${status}`);
-      await refresh();
+      refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update commission status", "error");
     } finally {
@@ -61,7 +70,43 @@ export default function AffiliateOrdersPage() {
     <PageShell>
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {orders !== null && orders.length > 0 && (
+        <CardList>
+          {orders.map((o) => (
+            <CardListItem
+              key={o.id}
+              openLabel={`Order #${o.orderId}`}
+              actions={
+                <div className="flex flex-col items-end gap-1.5">
+                  <span className={`text-xs capitalize font-medium ${STATUS_CLASS[o.status] ?? ""}`}>{o.status}</span>
+                  {o.status === "pending" && (
+                    <div className="flex gap-1.5">
+                      <Button size="sm" variant="primary" disabled={updating === o.id} onClick={() => decide(o.id, "approved")}>
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled={updating === o.id} onClick={() => decide(o.id, "blocked")}>
+                        Block
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">
+                #{o.orderId} {o.customerName}
+              </div>
+              <div className="truncate text-xs text-text-muted">
+                {o.affiliateName} ({o.code})
+              </div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                Order {o.orderTotal.toFixed(2)} · commission {o.commissionAmount.toFixed(2)}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={orders !== null && orders.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Order</TH>
@@ -74,11 +119,19 @@ export default function AffiliateOrdersPage() {
         </THead>
         <TBody>
           {orders === null ? (
-            <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={8} cols={6} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={6}>
+                  <LoadFailed what="affiliate orders" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={6}>
+                  <TableSkeleton rows={8} cols={6} />
+                </td>
+              </tr>
+            )
           ) : orders.length === 0 && !error ? (
             <tr>
               <td colSpan={6}>

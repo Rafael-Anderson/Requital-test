@@ -140,15 +140,17 @@ export default function ScanToStockPage() {
   const [rawTextOpen, setRawTextOpen] = useState(false);
   const [committing, setCommitting] = useState(false);
 
+  // Each read is independent; a failure toasts instead of becoming an unhandled rejection.
+  const failed = (what: string) => (err: unknown) => toast(err instanceof Error ? err.message : `Failed to load ${what}`, "error");
   function refreshCatalog() {
-    listProducts().then(setProducts);
-    listIngredients().then(setIngredients);
+    listProducts().then(setProducts).catch(failed("products"));
+    listIngredients().then(setIngredients).catch(failed("ingredients"));
   }
 
   useEffect(() => {
-    getScanSettings().then(setSettings);
-    listOutlets().then(setOutlets);
-    listCollections().then(setCollections);
+    getScanSettings().then(setSettings).catch(failed("scan settings"));
+    listOutlets().then(setOutlets).catch(failed("branches"));
+    listCollections().then(setCollections).catch(failed("collections"));
     refreshCatalog();
   }, []);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteIngredientCategory, listIngredientCategories } from "@/lib/api";
 import type { IngredientCategory } from "@/lib/types";
@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import IngredientCategoryFormModal from "@/components/IngredientCategoryFormModal";
 import InventoryTabs from "@/components/InventoryTabs";
@@ -22,13 +23,21 @@ export default function IngredientCategoriesPage() {
   const [creating, setCreating] = useState(false);
   const deleteWithUndo = useUndoableDelete();
 
-  const refresh = useCallback(async () => {
-    try {
-      setIngredientCategories(await listIngredientCategories());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load ingredient categories");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listIngredientCategories()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setIngredientCategories(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load ingredient categories");
+      });
   }, []);
 
   useEffect(() => {
@@ -63,7 +72,11 @@ export default function IngredientCategoriesPage() {
 
       <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden bg-surface dark:bg-zinc-900">
         {ingredientCategories === null ? (
-          <TableSkeleton rows={4} cols={2} />
+          error ? (
+            <LoadFailed what="ingredient categories" onRetry={refresh} />
+          ) : (
+            <TableSkeleton rows={4} cols={2} />
+          )
         ) : ingredientCategories.length === 0 ? (
           <EmptyState
             title="No ingredient categories yet"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getMarginBreakdown, getMarginSummary, listOutlets } from "@/lib/api";
 import type {
@@ -12,6 +12,7 @@ import type {
 } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -49,19 +50,39 @@ export default function MarginReportPage() {
       .catch(() => setOutlets([]));
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      const [nextSummary, nextRows] = await Promise.all([
-        getMarginSummary(appliedFilters),
-        getMarginBreakdown(appliedFilters, dimension),
-      ]);
-      setSummary(nextSummary);
-      setRows(nextRows);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load margin report");
-    }
+  // The summary and the breakdown load on independent chains: the table must
+  // not wait on (or be lost to) the summary cards, nor the reverse. A failed
+  // breakdown ends in an error with Try again; `latest` drops superseded responses.
+  const latestSummary = useRef(0);
+  const refreshSummary = useCallback(() => {
+    const mine = ++latestSummary.current;
+    getMarginSummary(appliedFilters)
+      .then((next) => {
+        if (mine === latestSummary.current) setSummary(next);
+      })
+      .catch(() => {
+        /* the cards simply do not show; the breakdown has its own error */
+      });
+  }, [appliedFilters]);
+
+  const latestRows = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latestRows.current;
+    getMarginBreakdown(appliedFilters, dimension)
+      .then((next) => {
+        if (mine !== latestRows.current) return;
+        setRows(next);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestRows.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load margin report");
+      });
   }, [appliedFilters, dimension]);
+
+  useEffect(() => {
+    refreshSummary();
+  }, [refreshSummary]);
 
   useEffect(() => {
     refresh();
@@ -174,7 +195,7 @@ export default function MarginReportPage() {
               {rows === null ? (
                 <tr>
                   <td colSpan={6}>
-                    <TableSkeleton rows={8} cols={6} />
+                    {error ? <LoadFailed what="the margin report" onRetry={refresh} /> : <TableSkeleton rows={8} cols={6} />}
                   </td>
                 </tr>
               ) : rows.length === 0 && !error ? (

@@ -17,6 +17,7 @@ import SecretField from "@/components/ui/SecretField";
 import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -133,9 +134,24 @@ export default function PaymentIntegrationsPage() {
     setCodEnabled(rows.find((r) => r.provider === "cod")?.enabled ?? false);
   }
 
+  // A failed first load ends in an error with Try again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    refresh();
-  }, []);
+    let live = true;
+    refresh().then(
+      () => {
+        if (live) setLoadError(null);
+      },
+      (err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load payment settings");
+      },
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey]);
 
   function rowFor(provider: string) {
     return settings?.find((r) => r.provider === provider) ?? null;
@@ -199,8 +215,22 @@ export default function PaymentIntegrationsPage() {
     return (
       <PageShell variant="form">
         <div className="space-y-4">
-          <CardSkeleton />
-          <CardSkeleton />
+          {loadError ? (
+            <Card>
+              <LoadFailed
+                what="payment settings"
+                onRetry={() => {
+                  setLoadError(null);
+                  setReloadKey((k) => k + 1);
+                }}
+              />
+            </Card>
+          ) : (
+            <>
+              <CardSkeleton />
+              <CardSkeleton />
+            </>
+          )}
         </div>
       </PageShell>
     );

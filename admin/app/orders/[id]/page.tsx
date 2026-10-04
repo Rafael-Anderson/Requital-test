@@ -19,6 +19,7 @@ import BackButton from "@/components/ui/BackButton";
 import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 import OrderNotesSection from "@/components/OrderNotesSection";
@@ -112,7 +113,19 @@ export default function OrderDetailPage() {
     }
   }
 
-  if (error) return <InlineErrorMessage>{error}</InlineErrorMessage>;
+  if (error) {
+    return order ? (
+      <InlineErrorMessage>{error}</InlineErrorMessage>
+    ) : (
+      <LoadFailed
+        what="the order"
+        onRetry={() => {
+          setError(null);
+          void refresh();
+        }}
+      />
+    );
+  }
   if (!order) {
     return (
       <div className="max-w-3xl space-y-4">

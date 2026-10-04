@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getInventoryMovement } from "@/lib/api";
 import type { InventoryMovementReport, InventoryMovementRow } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -37,19 +38,25 @@ export default function InventoryReportPage() {
   const [report, setReport] = useState<InventoryMovementReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      setReport(
-        await getInventoryMovement({
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    getInventoryMovement({
           days,
           deadStockDays,
           outletId: selectedOutletId ?? undefined,
-        }),
-      );
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load inventory report");
-    }
+        })
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setReport(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load inventory report");
+      });
   }, [days, deadStockDays, selectedOutletId]);
 
   useEffect(() => {
@@ -145,11 +152,19 @@ export default function InventoryReportPage() {
         </THead>
         <TBody>
           {rows === null ? (
-            <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={8} cols={6} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={6}>
+                  <LoadFailed what="the report" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={6}>
+                  <TableSkeleton rows={8} cols={6} />
+                </td>
+              </tr>
+            )
           ) : rows.length === 0 && !error ? (
             <tr>
               <td colSpan={6}>

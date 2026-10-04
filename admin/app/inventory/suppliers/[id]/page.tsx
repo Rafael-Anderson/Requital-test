@@ -15,6 +15,9 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
+import LoadFailed from "@/components/ui/LoadFailed";
+import ScrollFade from "@/components/ui/ScrollFade";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import InventoryTabs from "@/components/InventoryTabs";
 import StatusBadge from "@/components/StatusBadge";
 import SupplierFormModal from "@/components/SupplierFormModal";
@@ -70,7 +73,8 @@ export default function SupplierDetailPage() {
     <PageShell variant="wide">
       <BackButton href="/inventory/suppliers" />
       <InventoryTabs />
-      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {error && supplier && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {error && !supplier && <LoadFailed what="the supplier" onRetry={refresh} />}
       {supplier && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <Card className="lg:col-span-2">
@@ -168,7 +172,43 @@ export default function SupplierDetailPage() {
                 description="List the ingredients this supplier sells, with their SKU and price, so purchase orders can be filled in for you."
               />
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <CardList>
+                {supplier.items.map((i) => (
+                  <CardListItem
+                    key={i.id}
+                    onOpen={isAdmin ? () => setItemModal(i) : undefined}
+                    openLabel={`Edit ${i.ingredientName}`}
+                    actions={
+                      isAdmin ? (
+                        <CardRowMenu
+                          label={`More actions for ${i.ingredientName}`}
+                          items={[
+                            { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setItemModal(i) },
+                            {
+                              label: "Remove",
+                              icon: <Trash2 className="size-3.5" />,
+                              onClick: () => run(() => deleteSupplierItem(id, i.ingredientId), "Failed to remove item"),
+                              danger: true,
+                            },
+                          ]}
+                        />
+                      ) : undefined
+                    }
+                  >
+                    <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">
+                      {i.ingredientName} <span className="font-normal text-text-muted">({i.ingredientUnit})</span>
+                    </div>
+                    <div className="mt-0.5 text-[13.5px] font-bold text-text-primary dark:text-zinc-100">
+                      {i.unitCost !== null && i.currency ? formatMoney(i.unitCost, i.currency) : <span className="font-normal text-text-muted">No price</span>}
+                    </div>
+                    <div className="mt-0.5 text-xs text-text-muted">
+                      {i.supplierSku ?? "No SKU"} · min {i.minOrderQty ?? "not set"} · {i.leadTimeDays === null ? "lead time not set" : `${i.leadTimeDays} d lead`}
+                    </div>
+                  </CardListItem>
+                ))}
+              </CardList>
+              <ScrollFade stickyFirst className="hidden md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-start text-[11.5px] font-bold uppercase tracking-wide text-text-faint">
@@ -216,7 +256,8 @@ export default function SupplierDetailPage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollFade>
+              </>
             )}
           </Card>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import {
   clearNotFoundLog,
@@ -21,6 +21,8 @@ import PageShell from "@/components/ui/PageShell";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Select from "@/components/ui/Select";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Toggle from "@/components/ui/Toggle";
 import Tooltip from "@/components/ui/Tooltip";
@@ -41,7 +43,8 @@ export default function RedirectsPage() {
   const [tab, setTab] = useState<Tab>("redirects");
   const [redirects, setRedirects] = useState<UrlRedirectList | null>(null);
   const [log, setLog] = useState<NotFoundLogList | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [redirectsError, setRedirectsError] = useState<string | null>(null);
+  const [logError, setLogError] = useState<string | null>(null);
   const [redirectSearch, setRedirectSearch] = useState("");
   const [redirectPage, setRedirectPage] = useState(1);
   const [logSearch, setLogSearch] = useState("");
@@ -54,22 +57,36 @@ export default function RedirectsPage() {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
-  const refreshRedirects = useCallback(async () => {
-    try {
-      setRedirects(await listUrlRedirects({ search: redirectSearch || undefined, sort: "recent", page: redirectPage }));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load redirects");
-    }
+  // The two lists load on independent chains (neither waits on the other), each
+  // with a stale-response guard and its own error with Try again.
+  const latestRedirects = useRef(0);
+  const refreshRedirects = useCallback(() => {
+    const mine = ++latestRedirects.current;
+    listUrlRedirects({ search: redirectSearch || undefined, sort: "recent", page: redirectPage })
+      .then((list) => {
+        if (mine !== latestRedirects.current) return;
+        setRedirects(list);
+        setRedirectsError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestRedirects.current) return;
+        setRedirectsError(err instanceof Error ? err.message : "Failed to load redirects");
+      });
   }, [redirectSearch, redirectPage]);
 
-  const refreshLog = useCallback(async () => {
-    try {
-      setLog(await listNotFoundLog({ search: logSearch || undefined, sort: logSort, page: logPage }));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load the 404 report");
-    }
+  const latestLog = useRef(0);
+  const refreshLog = useCallback(() => {
+    const mine = ++latestLog.current;
+    listNotFoundLog({ search: logSearch || undefined, sort: logSort, page: logPage })
+      .then((list) => {
+        if (mine !== latestLog.current) return;
+        setLog(list);
+        setLogError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestLog.current) return;
+        setLogError(err instanceof Error ? err.message : "Failed to load the 404 report");
+      });
   }, [logSearch, logSort, logPage]);
 
   useEffect(() => {
@@ -83,7 +100,7 @@ export default function RedirectsPage() {
   async function toggleActive(row: UrlRedirect, active: boolean) {
     try {
       await updateUrlRedirect(row.id, { active });
-      await refreshRedirects();
+      refreshRedirects();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to update redirect", "error");
     }
@@ -95,7 +112,8 @@ export default function RedirectsPage() {
       await deleteUrlRedirect(row.id);
       toast("Redirect deleted");
       setConfirmDelete(null);
-      await Promise.all([refreshRedirects(), refreshLog()]);
+      refreshRedirects();
+      refreshLog();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to delete redirect", "error");
     } finally {
@@ -106,7 +124,7 @@ export default function RedirectsPage() {
   async function handleDismiss(id: number) {
     try {
       await dismissNotFoundEntry(id);
-      await refreshLog();
+      refreshLog();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to dismiss", "error");
     }
@@ -118,7 +136,7 @@ export default function RedirectsPage() {
       await clearNotFoundLog();
       toast("404 report cleared");
       setConfirmClear(false);
-      await refreshLog();
+      refreshLog();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to clear the report", "error");
     } finally {
@@ -162,7 +180,9 @@ export default function RedirectsPage() {
         />
       </div>
 
-      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {(tab === "redirects" ? redirectsError : logError) && (
+        <InlineErrorMessage className="mb-3">{tab === "redirects" ? redirectsError : logError}</InlineErrorMessage>
+      )}
 
       {tab === "redirects" && (
         <Card>
@@ -178,7 +198,7 @@ export default function RedirectsPage() {
             />
           </div>
           {redirects === null ? (
-            <TableSkeleton rows={4} cols={5} />
+            redirectsError ? <LoadFailed what="redirects" onRetry={refreshRedirects} /> : <TableSkeleton rows={4} cols={5} />
           ) : redirects.data.length === 0 ? (
             <EmptyState
               title="No redirects yet"
@@ -186,7 +206,34 @@ export default function RedirectsPage() {
             />
           ) : (
             <>
-              <Table>
+              <CardList>
+                {redirects.data.map((r) => (
+                  <CardListItem
+                    key={r.id}
+                    onOpen={() => setForm({ redirect: r })}
+                    openLabel={`Edit redirect from ${r.fromPath}`}
+                    actions={
+                      <div className="flex flex-col items-end gap-1">
+                        <Toggle checked={r.active} onChange={(v) => toggleActive(r, v)} />
+                        <CardRowMenu
+                          label={`More actions for the redirect from ${r.fromPath}`}
+                          items={[
+                            { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setForm({ redirect: r }) },
+                            { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => setConfirmDelete(r), danger: true },
+                          ]}
+                        />
+                      </div>
+                    }
+                  >
+                    <div className="break-all font-mono text-[13px] text-text-primary dark:text-zinc-100">{r.fromPath}</div>
+                    <div className="break-all font-mono text-xs text-text-muted">to {r.toTarget}</div>
+                    <div className="mt-0.5 text-xs text-text-muted">
+                      {r.statusCode === 301 ? "Permanent" : "Temporary"} · {r.hitCount} visit{r.hitCount === 1 ? "" : "s"}
+                    </div>
+                  </CardListItem>
+                ))}
+              </CardList>
+              <Table className="hidden md:block">
                 <THead>
                   <TR>
                     <TH>Old address</TH>
@@ -300,7 +347,7 @@ export default function RedirectsPage() {
             an exact figure.
           </p>
           {log === null ? (
-            <TableSkeleton rows={4} cols={5} />
+            logError ? <LoadFailed what="the 404 report" onRetry={refreshLog} /> : <TableSkeleton rows={4} cols={5} />
           ) : log.data.length === 0 ? (
             <EmptyState
               title="No missing pages recorded"
@@ -308,7 +355,45 @@ export default function RedirectsPage() {
             />
           ) : (
             <>
-              <Table>
+              <CardList>
+                {log.data.map((entry) => (
+                  <CardListItem
+                    key={entry.id}
+                    onOpen={() => {
+                      setTab("redirects");
+                      setForm({ redirect: null, initialFrom: entry.path });
+                    }}
+                    openLabel={`Create redirect from ${entry.path}`}
+                    actions={
+                      <CardRowMenu
+                        label={`More actions for ${entry.path}`}
+                        items={[
+                          {
+                            label: "Create redirect",
+                            icon: <ArrowRightLeft className="size-3.5" />,
+                            onClick: () => {
+                              setTab("redirects");
+                              setForm({ redirect: null, initialFrom: entry.path });
+                            },
+                          },
+                          { label: "Dismiss", icon: <Trash2 className="size-3.5" />, onClick: () => handleDismiss(entry.id), danger: true },
+                        ]}
+                      />
+                    }
+                  >
+                    <div className="break-all font-mono text-[13px] text-text-primary dark:text-zinc-100">
+                      {entry.path}
+                      {entry.hasRedirect && (
+                        <span className="ms-2 rounded px-1.5 py-0.5 text-[11px] font-semibold bg-accent-tint text-accent-text">Has redirect</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-xs text-text-muted">
+                      {entry.hitCount} request{entry.hitCount === 1 ? "" : "s"} · last seen {formatDate(entry.lastSeenAt)}
+                    </div>
+                  </CardListItem>
+                ))}
+              </CardList>
+              <Table className="hidden md:block">
                 <THead>
                   <TR>
                     <TH>Address</TH>

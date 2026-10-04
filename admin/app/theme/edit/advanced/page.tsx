@@ -45,6 +45,7 @@ import {
   ButtonStyleThumbnail,
 } from "@/components/PresetThumbnails";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 
@@ -75,23 +76,41 @@ export default function ThemeLayoutPage() {
   const [buttonFill, setButtonFill] = useState<ButtonFill>("solid");
   const [saving, setSaving] = useState(false);
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = () => {
+    setLoadError(null);
+    setReloadKey((k) => k + 1);
+  };
   useEffect(() => {
-    getTheme().then((data) => {
-      setTheme(data);
-      setHomepageLayout(data.homepageLayout);
-      setHomeTabMode(data.homeTabMode);
-      setTopBarLayout(data.topBarLayout);
-      setPdpLayout(data.pdpLayout);
-      setCartLayout(data.cartLayout);
-      setCheckoutLayout(data.checkoutLayout);
-      setFooterLayout(data.footerLayout);
-      setHeaderDensity(data.headerDensity);
-      setFooterDensity(data.footerDensity);
-      setIconStyle(data.iconStyle);
-      setButtonRadius(data.buttonRadius);
-      setButtonFill(data.buttonFill);
-    });
-  }, []);
+    let live = true;
+    getTheme()
+      .then((data) => {
+        if (!live) return;
+        setLoadError(null);
+        setTheme(data);
+        setHomepageLayout(data.homepageLayout);
+        setHomeTabMode(data.homeTabMode);
+        setTopBarLayout(data.topBarLayout);
+        setPdpLayout(data.pdpLayout);
+        setCartLayout(data.cartLayout);
+        setCheckoutLayout(data.checkoutLayout);
+        setFooterLayout(data.footerLayout);
+        setHeaderDensity(data.headerDensity);
+        setFooterDensity(data.footerDensity);
+        setIconStyle(data.iconStyle);
+        setButtonRadius(data.buttonRadius);
+        setButtonFill(data.buttonFill);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load the theme");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -118,7 +137,9 @@ export default function ThemeLayoutPage() {
     }
   }
 
-  if (!theme) return <CardSkeleton />;
+  if (!theme) {
+    return loadError ? <SettingsLoadFailed what="the layout settings" onRetry={retry} /> : <CardSkeleton />;
+  }
 
   return (
     <PageShell variant="wide">

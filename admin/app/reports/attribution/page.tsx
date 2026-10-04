@@ -6,6 +6,7 @@ import { downloadExport, getAttributionReport, listOutlets } from "@/lib/api";
 import type { AttributionModel, AttributionReport, Outlet, ReportsFilters } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -42,6 +43,8 @@ export default function AttributionReportPage() {
 
   // The `.then` callback form, not a refresh() closure called from the effect:
   // same behaviour, and it does not trip react-hooks/set-state-in-effect.
+  // Try again bumps `reloadKey`.
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     getAttributionReport(applied, model)
@@ -56,7 +59,7 @@ export default function AttributionReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [applied, model]);
+  }, [applied, model, reloadKey]);
 
   async function handleExport() {
     setExporting(true);
@@ -161,7 +164,17 @@ export default function AttributionReportPage() {
           {report === null ? (
             <tr>
               <td colSpan={5}>
-                <TableSkeleton rows={8} cols={5} />
+                {error ? (
+                  <LoadFailed
+                    what="the attribution report"
+                    onRetry={() => {
+                      setError(null);
+                      setReloadKey((k) => k + 1);
+                    }}
+                  />
+                ) : (
+                  <TableSkeleton rows={8} cols={5} />
+                )}
               </td>
             </tr>
           ) : report.rows.length === 0 && !error ? (

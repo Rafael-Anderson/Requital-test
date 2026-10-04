@@ -15,7 +15,7 @@ import OutletPickupTab from "@/components/OutletPickupTab";
 import OutletQrTab from "@/components/OutletQrTab";
 import PageShell from "@/components/ui/PageShell";
 import ScrollFade from "@/components/ui/ScrollFade";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 export default function EditOutletPage() {
   const params = useParams<{ outletId: string }>();
@@ -29,6 +29,7 @@ export default function EditOutletPage() {
   const refresh = useCallback(async () => {
     try {
       setOutlet(await getOutlet(outletId));
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load outlet");
     }
@@ -60,7 +61,9 @@ export default function EditOutletPage() {
           <Skeleton className="h-8 w-64" />
           <SettingsContentSkeleton cards={2} />
         </div>
-      ) : outlet ? (
+      ) : !outlet ? (
+        <SettingsLoadFailed what="the outlet" onRetry={refresh} />
+      ) : (
         <>
           <h1 className="text-2xl font-semibold mb-6">Edit &quot;{outlet.name}&quot;</h1>
           {/* Two columns at every width; below sm the pair scrolls sideways in
@@ -83,7 +86,7 @@ export default function EditOutletPage() {
           </div>
           </ScrollFade>
         </>
-      ) : null}
+      )}
     </PageShell>
   );
 }

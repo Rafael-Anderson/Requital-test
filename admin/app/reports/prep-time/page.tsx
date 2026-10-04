@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getPrepTimeReport, listOutlets } from "@/lib/api";
 import type { Outlet, PrepTimeBucket, PrepTimeReport, ReportsFilters } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -40,13 +41,21 @@ export default function PrepTimeReportPage() {
       .catch(() => setOutlets([]));
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      setReport(await getPrepTimeReport(appliedFilters));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load report");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    getPrepTimeReport(appliedFilters)
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setReport(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load report");
+      });
   }, [appliedFilters]);
 
   useEffect(() => {
@@ -129,7 +138,7 @@ export default function PrepTimeReportPage() {
           {buckets === null ? (
             <tr>
               <td colSpan={8}>
-                <TableSkeleton rows={7} cols={8} />
+                {error ? <LoadFailed what="the report" onRetry={refresh} /> : <TableSkeleton rows={7} cols={8} />}
               </td>
             </tr>
           ) : buckets.length === 0 && !error ? (

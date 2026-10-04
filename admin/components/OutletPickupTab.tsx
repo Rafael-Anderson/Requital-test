@@ -25,7 +25,11 @@ export default function OutletPickupTab({
   const toast = useToast();
 
   useEffect(() => {
-    getShop().then(setShop);
+    getShop()
+      .then(setShop)
+      .catch(() => {
+        /* the read-only summary just does not show; the editable settings link stays */
+      });
   }, []);
 
   async function handleSaveAvailability() {

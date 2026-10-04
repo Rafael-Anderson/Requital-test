@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getWebhookLog } from "@/lib/api";
 import type { WebhookEvent } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 
@@ -50,11 +51,25 @@ export default function WebhookActivityPanel() {
   const [events, setEvents] = useState<WebhookEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getWebhookLog()
-      .then(setEvents)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load webhook activity"));
+  // Try again bumps `reloadKey`; the fetch itself runs in promise callbacks.
+  const [reloadKey, setReloadKey] = useState(0);
+  const refresh = useCallback(() => {
+    setError(null);
+    setReloadKey((k) => k + 1);
   }, []);
+  useEffect(() => {
+    let live = true;
+    getWebhookLog()
+      .then((list) => {
+        if (live) setEvents(list);
+      })
+      .catch((err) => {
+        if (live) setError(err instanceof Error ? err.message : "Failed to load webhook activity");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   return (
     <>
@@ -76,11 +91,19 @@ export default function WebhookActivityPanel() {
         </THead>
         <TBody>
           {events === null ? (
-            <tr>
-              <td colSpan={4}>
-                <TableSkeleton rows={6} cols={4} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={4}>
+                  <LoadFailed what="webhook activity" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={4}>
+                  <TableSkeleton rows={6} cols={4} />
+                </td>
+              </tr>
+            )
           ) : events.length === 0 && !error ? (
             <tr>
               <td colSpan={4}>

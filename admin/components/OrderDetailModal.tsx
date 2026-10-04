@@ -22,6 +22,7 @@ import Input from "@/components/ui/Input";
 import Combobox from "@/components/ui/Combobox";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import OrderNotesSection from "@/components/OrderNotesSection";
@@ -74,15 +75,25 @@ export default function OrderDetailModal({
   const [tab, setTab] = useState<"details" | "invoice">("details");
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed load ends in an error, never the skeleton for good.
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     if (orderId === null) return;
     setOrder(null);
     setError(null);
     setTab("details");
+    let live = true;
     getOrder(orderId)
-      .then(setOrder)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load order"));
-  }, [orderId]);
+      .then((o) => {
+        if (live) setOrder(o);
+      })
+      .catch((err) => {
+        if (live) setError(err instanceof Error ? err.message : "Failed to load order");
+      });
+    return () => {
+      live = false;
+    };
+  }, [orderId, reloadKey]);
 
   // Fetched once per mount rather than per order — the tax caption is a
   // shop-wide setting, not order data.
@@ -257,14 +268,18 @@ export default function OrderDetailModal({
           : undefined
       }
     >
-        {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
+        {error && order && <InlineErrorMessage>{error}</InlineErrorMessage>}
 
         {!order ? (
+          error ? (
+            <LoadFailed what="the order" onRetry={() => setReloadKey((k) => k + 1)} />
+          ) : (
           <div className="space-y-4 pb-6">
             <Skeleton className="h-6 w-40" />
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-32 w-full" />
           </div>
+          )
         ) : (
           <>
             <div className="flex items-center gap-4 flex-wrap text-sm text-text-muted mb-6">

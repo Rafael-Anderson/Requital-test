@@ -76,11 +76,15 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    listOutlets().then((list) => {
-      setOutlets(list);
-      if (!draft && list[0]) setOutletId(list[0].id);
-    });
-    listProducts().then(setProducts);
+    listOutlets()
+      .then((list) => {
+        setOutlets(list);
+        if (!draft && list[0]) setOutletId(list[0].id);
+      })
+      .catch((err) => toast(err instanceof Error ? err.message : "Failed to load branches", "error"));
+    listProducts()
+      .then(setProducts)
+      .catch((err) => toast(err instanceof Error ? err.message : "Failed to load products", "error"));
     getRegions()
       .then(setRegionsRes)
       .catch(() => setRegionsRes(null));

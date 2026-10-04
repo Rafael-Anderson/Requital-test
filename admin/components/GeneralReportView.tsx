@@ -6,6 +6,7 @@ import type { GeneralReportOrderRow, GeneralReportSummary } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
@@ -30,6 +31,9 @@ export default function GeneralReportView({
   summary,
   orders,
   error,
+  summaryError,
+  onRetrySummary,
+  onRetryOrders,
   searchInput,
   onSearchInputChange,
   search,
@@ -41,7 +45,11 @@ export default function GeneralReportView({
 }: {
   summary: GeneralReportSummary | null;
   orders: GeneralReportOrderRow[] | null;
+  // The summary cards and the order list are separate requests; each has its own error and retry.
   error: string | null;
+  summaryError: string | null;
+  onRetrySummary: () => void;
+  onRetryOrders: () => void;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
   search: string;
@@ -59,7 +67,11 @@ export default function GeneralReportView({
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {!summary ? (
+        {!summary && summaryError ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <LoadFailed what="the summary" onRetry={onRetrySummary} />
+          </div>
+        ) : !summary ? (
           <>
             <CardSkeleton />
             <CardSkeleton />
@@ -126,7 +138,7 @@ export default function GeneralReportView({
           {orders === null ? (
             <tr>
               <td colSpan={9}>
-                <TableSkeleton rows={8} cols={9} />
+                {error ? <LoadFailed what="orders" onRetry={onRetryOrders} /> : <TableSkeleton rows={8} cols={9} />}
               </td>
             </tr>
           ) : orders.length === 0 && !error ? (

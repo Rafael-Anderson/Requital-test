@@ -13,6 +13,8 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
+import LoadFailed from "@/components/ui/LoadFailed";
+import ScrollFade from "@/components/ui/ScrollFade";
 import InventoryTabs from "@/components/InventoryTabs";
 import PurchaseOrderStatusBadge from "@/components/PurchaseOrderStatusBadge";
 import ReceivePurchaseOrderModal from "@/components/ReceivePurchaseOrderModal";
@@ -68,7 +70,8 @@ export default function PurchaseOrderDetailPage() {
     <PageShell variant="wide">
       <BackButton href="/inventory/purchase-orders" />
       <InventoryTabs />
-      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {error && po && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {error && !po && <LoadFailed what="the purchase order" onRetry={refresh} />}
       {po && (
         <div className="space-y-5">
           <Card>
@@ -140,7 +143,7 @@ export default function PurchaseOrderDetailPage() {
 
           <Card>
             <h2 className="mb-3 text-base font-bold text-text-primary dark:text-zinc-50">Lines</h2>
-            <div className="overflow-x-auto">
+            <ScrollFade stickyFirst>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-[11.5px] font-bold uppercase tracking-wide text-text-faint">
@@ -165,7 +168,7 @@ export default function PurchaseOrderDetailPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollFade>
           </Card>
 
           <Card>

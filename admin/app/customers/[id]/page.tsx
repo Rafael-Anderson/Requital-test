@@ -10,6 +10,7 @@ import { normalizePhone } from "@/lib/validators";
 import type { CustomerDetail } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Skeleton, { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import StatCard from "@/components/ui/StatCard";
 import Card from "@/components/ui/Card";
@@ -88,9 +89,17 @@ export default function CustomerDetailPage() {
       <BackButton href="/customers" />
       <h1 className="text-2xl font-semibold mb-4">{customer?.name ?? "Customer"}</h1>
 
-      {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {error && customer && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      {!customer && !error ? (
+      {!customer && error ? (
+        <LoadFailed
+          what="the customer"
+          onRetry={() => {
+            setError(null);
+            void refresh();
+          }}
+        />
+      ) : !customer ? (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <CardSkeleton />
@@ -100,7 +109,7 @@ export default function CustomerDetailPage() {
           </div>
           <Skeleton className="h-48 w-full" />
         </div>
-      ) : customer ? (
+      ) : (
         <div className="space-y-6">
           {!isSimple && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -188,7 +197,7 @@ export default function CustomerDetailPage() {
             </Table>
           </div>
         </div>
-      ) : null}
+      )}
     </PageShell>
   );
 }

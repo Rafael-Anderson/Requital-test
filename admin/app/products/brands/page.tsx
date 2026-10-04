@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { deleteBrand, listBrands } from "@/lib/api";
 import type { Brand } from "@/lib/types";
@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Thumbnail from "@/components/ui/Thumbnail";
 import Tooltip from "@/components/ui/Tooltip";
@@ -25,13 +26,21 @@ export default function BrandsPage() {
   const [creating, setCreating] = useState(false);
   const deleteWithUndo = useUndoableDelete();
 
-  const refresh = useCallback(async () => {
-    try {
-      setBrands(await listBrands());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load brands");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listBrands()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setBrands(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load brands");
+      });
   }, []);
 
   useEffect(() => {
@@ -85,7 +94,11 @@ export default function BrandsPage() {
       )}
 
       {brands === null ? (
-        <TableSkeleton rows={4} cols={3} />
+        error ? (
+          <LoadFailed what="brands" onRetry={refresh} />
+        ) : (
+          <TableSkeleton rows={4} cols={3} />
+        )
       ) : brands.length === 0 ? (
         <EmptyState
           title="No brands yet"

@@ -1,5 +1,4 @@
 "use client";
-
 // Shared shell for every modal in the admin, replacing 21 independent
 // hand-rolled `fixed inset-0 ... bg-black/40` panels (see CLAUDE.md's Admin
 // frontend notes) with one component that gets sizing, scroll, and
@@ -19,6 +18,7 @@
 // break `type="submit"`). The `footer` prop is only for non-form modals
 // (confirm dialogs) that don't need that.
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import Tooltip from "./Tooltip";
 
@@ -77,7 +77,7 @@ export default function Modal({
     };
   }, []);
 
-  return (
+  const dialog = (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 ${closing ? "" : "backdrop-in"}`}
     >
@@ -115,4 +115,10 @@ export default function Modal({
       </div>
     </div>
   );
+
+  // Rendered into document.body, not where the caller sits: a modal opened from
+  // inside a sideways scroller (the settings columns) was masked by that
+  // scroller's edge fade and trapped in its stacking context, which put it BELOW
+  // the pinned top bar on a phone. In the body it is above both.
+  return typeof document === "undefined" ? null : createPortal(dialog, document.body);
 }

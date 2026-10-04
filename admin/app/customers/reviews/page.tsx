@@ -13,6 +13,7 @@ import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
@@ -103,20 +104,28 @@ export default function ReviewsPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      {reviews === null && !error ? (
+      {reviews === null && error ? (
+        <LoadFailed
+          what="reviews"
+          onRetry={() => {
+            setError(null);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      ) : reviews === null ? (
         <div className="space-y-3">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
         </div>
-      ) : reviews !== null && reviews.length === 0 && !error ? (
+      ) : reviews.length === 0 && !error ? (
         <EmptyState
           title="No survey responses yet"
           description="Turn on the customer survey in Store Configuration. Responses appear here after customers answer."
         />
       ) : (
         <ul className="space-y-3">
-          {(reviews ?? []).map((r) => {
+          {reviews.map((r) => {
             const reason = disabledReason(r);
             return (
               <li key={r.id}>

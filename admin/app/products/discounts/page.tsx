@@ -1,11 +1,13 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteDiscount, listCollections, listDiscounts, listProducts, updateDiscount } from "@/lib/api";
 import { DISCOUNT_TYPE_LABELS, type Collection, type Discount, type Product } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
@@ -33,20 +35,37 @@ export default function DiscountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Discount | null | "new">(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const [discountList, productList, collectionList] = await Promise.all([
-        listDiscounts(),
-        listProducts(),
-        listCollections(),
-      ]);
-      setDiscounts(discountList);
-      setProducts(productList);
-      setCollections(collectionList);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load discounts");
-    }
+  // The discounts, the products and the collections load independently: the
+  // table must not wait on (or be lost to) the two lists that only feed the
+  // edit modal. A failed discounts request ends in an error with Try again,
+  // never an endless skeleton; `latest` drops a superseded response.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listDiscounts()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setDiscounts(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load discounts");
+      });
+    listProducts()
+      .then((list) => {
+        if (mine === latest.current) setProducts(list);
+      })
+      .catch(() => {
+        /* the modal's product picker just stays empty */
+      });
+    listCollections()
+      .then((list) => {
+        if (mine === latest.current) setCollections(list);
+      })
+      .catch(() => {
+        /* the modal's collection picker just stays empty */
+      });
   }, []);
 
   useEffect(() => {
@@ -93,7 +112,56 @@ export default function DiscountsPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {discounts !== null && discounts.length > 0 && (
+        <CardList>
+          {discounts.map((d) => (
+            <CardListItem
+              key={d.id}
+              onOpen={() => setEditing(d)}
+              openLabel={`Edit ${discountLabel(d)}`}
+              actions={
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(d)}
+                    aria-label={`${d.active ? "Deactivate" : "Activate"} ${discountLabel(d)}`}
+                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-bold transition-colors cursor-pointer ${
+                      d.active
+                        ? "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent"
+                        : "bg-neutral-chip-bg text-neutral-chip-text dark:bg-zinc-800 dark:text-zinc-400"
+                    }`}
+                  >
+                    {d.active ? "Active" : "Inactive"}
+                  </button>
+                  <CardRowMenu
+                    label={`More actions for ${discountLabel(d)}`}
+                    items={[
+                      { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setEditing(d) },
+                      { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => handleDelete(d), danger: true },
+                    ]}
+                  />
+                </div>
+              }
+            >
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{discountLabel(d)}</span>
+                <span className="shrink-0 rounded border border-black/10 px-1.5 py-0.5 text-[11px] text-text-muted dark:border-white/15">
+                  {d.discountType === "auto" ? "Auto" : "Code"}
+                </span>
+              </div>
+              <div className="mt-0.5 text-[13.5px] font-bold text-text-primary dark:text-zinc-100">
+                {d.type === "FREE_SHIPPING" ? "Free shipping" : d.type === "PERCENTAGE" ? `${d.value}% off` : `${d.value} off`}
+              </div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                {DISCOUNT_TYPE_LABELS[d.type]} · used {d.timesUsed}
+                {d.usageLimit !== null ? ` / ${d.usageLimit}` : ""} · {formatValidity(d.startsAt, d.endsAt)}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={discounts !== null && discounts.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Code</TH>
@@ -108,11 +176,19 @@ export default function DiscountsPage() {
         </THead>
         <TBody>
           {discounts === null ? (
-            <tr>
-              <td colSpan={8}>
-                <TableSkeleton rows={6} cols={8} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={8}>
+                  <LoadFailed what="discounts" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={8}>
+                  <TableSkeleton rows={6} cols={8} />
+                </td>
+              </tr>
+            )
           ) : discounts.length === 0 && !error ? (
             <tr>
               <td colSpan={8}>

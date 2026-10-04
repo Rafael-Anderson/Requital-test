@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { getMonthlyReportSummary, listMonthlyReportOrders, listOutlets } from "@/lib/api";
 import type { GeneralReportOrderRow, GeneralReportSummary, Outlet, ReportsFilters } from "@/lib/types";
@@ -36,6 +36,7 @@ export default function MonthlyReportPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     listOutlets().then(setOutlets).catch(() => setOutlets([]));
@@ -50,25 +51,47 @@ export default function MonthlyReportPage() {
     setPage(1);
   }, [search, appliedFilters, appliedMonth]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const filters = { ...appliedFilters, month: appliedMonth };
-      const [summaryResult, ordersResult] = await Promise.all([
-        getMonthlyReportSummary(filters),
-        listMonthlyReportOrders(filters, { page, pageSize: PAGE_SIZE, search: search || undefined }),
-      ]);
-      setSummary(summaryResult);
-      setOrders(ordersResult.data);
-      setTotal(ordersResult.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load report");
-    }
+  // The summary cards and the order list load on independent chains: neither
+  // waits on, or is lost to, the other. Each ends in an error with Try again,
+  // and a `latest` counter drops a response a newer refresh has superseded.
+  const latestSummary = useRef(0);
+  const refreshSummary = useCallback(() => {
+    const mine = ++latestSummary.current;
+    getMonthlyReportSummary({ ...appliedFilters, month: appliedMonth })
+      .then((result) => {
+        if (mine !== latestSummary.current) return;
+        setSummary(result);
+        setSummaryError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestSummary.current) return;
+        setSummaryError(err instanceof Error ? err.message : "Failed to load the summary");
+      });
+  }, [appliedFilters, appliedMonth]);
+
+  const latestOrders = useRef(0);
+  const refreshOrders = useCallback(() => {
+    const mine = ++latestOrders.current;
+    listMonthlyReportOrders({ ...appliedFilters, month: appliedMonth }, { page, pageSize: PAGE_SIZE, search: search || undefined })
+      .then((result) => {
+        if (mine !== latestOrders.current) return;
+        setOrders(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestOrders.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load report");
+      });
   }, [appliedFilters, appliedMonth, page, search]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    refreshSummary();
+  }, [refreshSummary]);
+
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
 
   return (
     <PageShell>
@@ -99,6 +122,9 @@ export default function MonthlyReportPage() {
         summary={summary}
         orders={orders}
         error={error}
+        summaryError={summaryError}
+        onRetrySummary={refreshSummary}
+        onRetryOrders={refreshOrders}
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
         search={search}

@@ -8,6 +8,7 @@ import { getReadableTextColor, getContrastWarning } from "@/lib/color-contrast";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { CardSkeleton } from "@/components/ui/Skeleton";
+import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 import ColorPicker from "@/components/ui/ColorPicker";
@@ -26,14 +27,32 @@ export default function ThemeAppearanceColorPage() {
   const [secondaryColor, setSecondaryColor] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = () => {
+    setLoadError(null);
+    setReloadKey((k) => k + 1);
+  };
   useEffect(() => {
-    getTheme().then((data) => {
-      setTheme(data);
-      setColors(data.colors ?? {});
-      setBrandColor(data.brandColor ?? "#069494");
-      setSecondaryColor(data.secondaryColor ?? "");
-    });
-  }, []);
+    let live = true;
+    getTheme()
+      .then((data) => {
+        if (!live) return;
+        setLoadError(null);
+        setTheme(data);
+        setColors(data.colors ?? {});
+        setBrandColor(data.brandColor ?? "#069494");
+        setSecondaryColor(data.secondaryColor ?? "");
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load the theme");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   function setColor(key: string, value: string) {
     setColors((prev) => ({ ...prev, [key]: value }));
@@ -63,7 +82,9 @@ export default function ThemeAppearanceColorPage() {
   const brandTextColor = getReadableTextColor(brandColor);
 
   if (!theme) {
-    return (
+    return loadError ? (
+      <SettingsLoadFailed what="the colors" onRetry={retry} />
+    ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <CardSkeleton />
         <CardSkeleton />

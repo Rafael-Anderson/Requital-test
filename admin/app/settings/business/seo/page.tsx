@@ -10,7 +10,7 @@ import Button from "@/components/ui/Button";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 export default function SeoSettingsPage() {
   const toast = useToast();
@@ -23,15 +23,29 @@ export default function SeoSettingsPage() {
   const [ogImagePreview, setOgImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getSeo().then((data) => {
-      setSeo(data);
-      setMetaTitle(data.metaTitle ?? "");
-      setMetaDescription(data.metaDescription ?? "");
-      setKeywords(data.keywords ?? "");
-      setOgImagePreview(resolveImageUrl(data.ogImage));
-    });
-  }, []);
+    let live = true;
+    getSeo()
+      .then((data) => {
+        if (!live) return;
+        setLoadError(null);
+        setSeo(data);
+        setMetaTitle(data.metaTitle ?? "");
+        setMetaDescription(data.metaDescription ?? "");
+        setKeywords(data.keywords ?? "");
+        setOgImagePreview(resolveImageUrl(data.ogImage));
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   function handleOgImageSelected(file: File) {
     setOgImageFile(file);
@@ -57,7 +71,18 @@ export default function SeoSettingsPage() {
     }
   }
 
-  if (!seo) return <SettingsContentSkeleton />;
+  if (!seo) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton />
+    );
+  }
 
   return (
     <PageShell variant="form">

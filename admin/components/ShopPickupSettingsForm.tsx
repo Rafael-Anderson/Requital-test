@@ -9,6 +9,7 @@ import { TIME_SLOT_PRESETS } from "@/lib/time-slot-presets";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Card from "@/components/ui/Card";
+import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import Combobox from "@/components/ui/Combobox";
 import BusinessHoursEditor from "@/components/BusinessHoursEditor";
 import PaymentMethodsEditor, { type PaymentMethodsValue } from "@/components/PaymentMethodsEditor";
@@ -30,20 +31,33 @@ export default function ShopPickupSettingsForm() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try again, never "Loading" for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setPaymentMethods({
-        cardOnline: s.pickupPaymentCardOnline,
-        cashOnFulfillment: s.pickupPaymentCashOnPickup,
-        cardOnFulfillment: s.pickupPaymentCardOnPickup,
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setLoadError(null);
+        setPaymentMethods({
+          cardOnline: s.pickupPaymentCardOnline,
+          cashOnFulfillment: s.pickupPaymentCashOnPickup,
+          cardOnFulfillment: s.pickupPaymentCardOnPickup,
+        });
+        setHours(mergeBusinessHours(s.pickupHours));
+        setTimeSlotGapMinutes(s.pickupTimeSlotGapMinutes);
+        setPreparationTimeMinutes(s.pickupPreparationTimeMinutes);
+        setPreparationPlusTimeMinutes(s.pickupPreparationPlusTimeMinutes);
+        setLoaded(true);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load pickup settings");
       });
-      setHours(mergeBusinessHours(s.pickupHours));
-      setTimeSlotGapMinutes(s.pickupTimeSlotGapMinutes);
-      setPreparationTimeMinutes(s.pickupPreparationTimeMinutes);
-      setPreparationPlusTimeMinutes(s.pickupPreparationPlusTimeMinutes);
-      setLoaded(true);
-    });
-  }, []);
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -65,7 +79,19 @@ export default function ShopPickupSettingsForm() {
     }
   }
 
-  if (!loaded) return <p className="text-sm text-text-muted">Loading pickup settings…</p>;
+  if (!loaded) {
+    return loadError ? (
+      <SettingsLoadFailed
+        what="pickup settings"
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <p className="text-sm text-text-muted">Loading pickup settings…</p>
+    );
+  }
 
   return (
     <div className="space-y-4">

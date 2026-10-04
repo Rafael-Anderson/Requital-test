@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, ShieldOff, Trash2 } from "lucide-react";
 import {
   deleteBranchRole,
@@ -15,6 +15,8 @@ import {
 import type { AuthUser, BranchRole, BranchRoleAssignment, Outlet } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BranchUserFormModal from "@/components/BranchUserFormModal";
@@ -57,18 +59,73 @@ export default function SettingsUsersPage() {
   const [assigning, setAssigning] = useState(false);
   const deleteAssignmentWithUndo = useUndoableDelete();
 
-  const refresh = useCallback(async () => {
-    const [outletList, userList] = await Promise.all([listOutlets(), listShopUsers()]);
-    setOutlets(outletList);
-    setUsers(userList);
+  // Every section loads on its own chain: one failed or slow request must not
+  // hold another section on its skeleton. Each ends in an error with Try
+  // again; a `latest` counter per chain drops a superseded response.
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+  const latestUsers = useRef(0);
+  const latestOutlets = useRef(0);
+  const latestRoles = useRef(0);
+  const latestAssignments = useRef(0);
+
+  const refreshUsers = useCallback(() => {
+    const mine = ++latestUsers.current;
+    listShopUsers()
+      .then((list) => {
+        if (mine !== latestUsers.current) return;
+        setUsers(list);
+        setUsersError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestUsers.current) return;
+        setUsersError(err instanceof Error ? err.message : "Failed to load staff");
+      });
   }, []);
 
-  const refreshBranchRoles = useCallback(async () => {
-    setBranchRoles(await listBranchRoles());
+  const refreshOutlets = useCallback(() => {
+    const mine = ++latestOutlets.current;
+    listOutlets()
+      .then((list) => {
+        if (mine === latestOutlets.current) setOutlets(list);
+      })
+      .catch(() => {
+        /* the add and assign buttons just stay disabled */
+      });
   }, []);
 
-  const refreshAssignments = useCallback(async () => {
-    setAssignments(await listBranchRoleAssignments());
+  const refresh = useCallback(() => {
+    refreshUsers();
+    refreshOutlets();
+  }, [refreshUsers, refreshOutlets]);
+
+  const refreshBranchRoles = useCallback(() => {
+    const mine = ++latestRoles.current;
+    listBranchRoles()
+      .then((list) => {
+        if (mine !== latestRoles.current) return;
+        setBranchRoles(list);
+        setRolesError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestRoles.current) return;
+        setRolesError(err instanceof Error ? err.message : "Failed to load branch roles");
+      });
+  }, []);
+
+  const refreshAssignments = useCallback(() => {
+    const mine = ++latestAssignments.current;
+    listBranchRoleAssignments()
+      .then((list) => {
+        if (mine !== latestAssignments.current) return;
+        setAssignments(list);
+        setAssignmentsError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestAssignments.current) return;
+        setAssignmentsError(err instanceof Error ? err.message : "Failed to load assignments");
+      });
   }, []);
 
   useEffect(() => {
@@ -130,7 +187,37 @@ export default function SettingsUsersPage() {
             </Button>
           </div>
 
-          <Table>
+          {users !== null && users.length > 0 && (
+            <CardList>
+              {users.map((u) => (
+                <CardListItem
+                  key={u.id}
+                  onOpen={() => setEditingUser(u)}
+                  openLabel={`Edit ${u.name}`}
+                  actions={
+                    <CardRowMenu
+                      label={`More actions for ${u.name}`}
+                      items={[
+                        { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setEditingUser(u) },
+                        ...(u.id !== me?.id
+                          ? [{ label: "Reset two-factor", icon: <ShieldOff className="size-3.5" />, onClick: () => handleResetTwoFactor(u) }]
+                          : []),
+                        { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => handleDeleteUser(u), danger: true },
+                      ]}
+                    />
+                  }
+                >
+                  <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{u.name}</div>
+                  <div className="truncate text-xs text-text-muted">{u.email}</div>
+                  <div className="mt-0.5 text-xs text-text-muted">
+                    <span className="capitalize">{u.role}</span> · {u.outlet?.name ?? "All branches"}
+                  </div>
+                </CardListItem>
+              ))}
+            </CardList>
+          )}
+
+          <Table className={users !== null && users.length > 0 ? "hidden md:block" : ""}>
             <THead>
               <tr>
                 <TH>Name</TH>
@@ -144,7 +231,7 @@ export default function SettingsUsersPage() {
               {users === null ? (
                 <tr>
                   <td colSpan={5}>
-                    <TableSkeleton rows={2} cols={5} />
+                    {usersError ? <LoadFailed what="staff accounts" onRetry={refreshUsers} /> : <TableSkeleton rows={2} cols={5} />}
                   </td>
                 </tr>
               ) : (
@@ -211,7 +298,7 @@ export default function SettingsUsersPage() {
 
           <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden">
             {branchRoles === null ? (
-              <TableSkeleton rows={2} cols={2} />
+              rolesError ? <LoadFailed what="branch roles" onRetry={refreshBranchRoles} /> : <TableSkeleton rows={2} cols={2} />
             ) : branchRoles.length === 0 ? (
               <EmptyState
                 title="No branch roles yet"
@@ -276,7 +363,30 @@ export default function SettingsUsersPage() {
             </Button>
           </div>
 
-          <Table>
+          {assignments !== null && assignments.length > 0 && (
+            <CardList>
+              {assignments.map((a) => (
+                <CardListItem
+                  key={a.id}
+                  openLabel={`${a.user.name} at ${a.outlet.name}`}
+                  actions={
+                    <CardRowMenu
+                      label={`More actions for ${a.user.name} at ${a.outlet.name}`}
+                      items={[{ label: "Remove assignment", icon: <Trash2 className="size-3.5" />, onClick: () => handleUnassign(a), danger: true }]}
+                    />
+                  }
+                >
+                  <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{a.user.name}</div>
+                  <div className="truncate text-xs text-text-muted">{a.user.email}</div>
+                  <div className="mt-0.5 text-xs text-text-muted">
+                    {a.branchrole.name} · {a.outlet.name}
+                  </div>
+                </CardListItem>
+              ))}
+            </CardList>
+          )}
+
+          <Table className={assignments !== null && assignments.length > 0 ? "hidden md:block" : ""}>
             <THead>
               <tr>
                 <TH>Staff member</TH>
@@ -289,7 +399,11 @@ export default function SettingsUsersPage() {
               {assignments === null ? (
                 <tr>
                   <td colSpan={4}>
-                    <TableSkeleton rows={2} cols={4} />
+                    {assignmentsError ? (
+                      <LoadFailed what="assignments" onRetry={refreshAssignments} />
+                    ) : (
+                      <TableSkeleton rows={2} cols={4} />
+                    )}
                   </td>
                 </tr>
               ) : assignments.length === 0 ? (

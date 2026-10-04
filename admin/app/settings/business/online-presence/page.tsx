@@ -9,7 +9,7 @@ import Input from "@/components/ui/Input";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import SettingsContentSkeleton from "@/components/SettingsContentSkeleton";
+import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 
 // lucide-react has no brand/social icons (removed upstream for trademark
 // reasons — confirmed against the installed version) — these are generic
@@ -63,14 +63,28 @@ export default function OnlinePresencePage() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
+  // Try again bumps `reloadKey`; a failed request ends in an error with Try
+  // again, never the skeleton for good.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
-    getShop().then((s) => {
-      setShop(s);
-      const links = s.socialLinks ?? {};
-      setEnabled(new Set(Object.keys(links) as SocialPlatform[]));
-      setUrls(links);
-    });
-  }, []);
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (!live) return;
+        setLoadError(null);
+        setShop(s);
+        const links = s.socialLinks ?? {};
+        setEnabled(new Set(Object.keys(links) as SocialPlatform[]));
+        setUrls(links);
+      })
+      .catch((err) => {
+        if (live) setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   function toggle(platform: SocialPlatform) {
     setEnabled((prev) => {
@@ -114,7 +128,18 @@ export default function OnlinePresencePage() {
     }
   }
 
-  if (!shop) return <SettingsContentSkeleton />;
+  if (!shop) {
+    return loadError ? (
+      <SettingsLoadFailed
+        onRetry={() => {
+          setLoadError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    ) : (
+      <SettingsContentSkeleton />
+    );
+  }
 
   return (
     // "wide", not "form" — same PageShell variant-misclassification as

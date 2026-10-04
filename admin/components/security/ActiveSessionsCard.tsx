@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 
 // A short, human label for a User-Agent string. Best effort and display-only:
@@ -42,15 +43,18 @@ export default function ActiveSessionsCard() {
   // synchronous setState in the effect body).
   const [reload, setReload] = useState(0);
   const refresh = () => setReload((n) => n + 1);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     listSessions()
-      .then((list) => alive && setSessions(list))
-      .catch((err) => {
+      .then((list) => {
         if (!alive) return;
-        toast(err instanceof Error ? err.message : "Failed to load sessions", "error");
-        setSessions([]);
+        setSessions(list);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load sessions");
       });
     return () => {
       alive = false;
@@ -110,7 +114,21 @@ export default function ActiveSessionsCard() {
         </THead>
         <TBody>
           {sessions === null ? (
-            <TableSkeleton rows={2} cols={5} />
+            <tr>
+              <td colSpan={5}>
+                {loadError ? (
+                  <LoadFailed
+                    what="sessions"
+                    onRetry={() => {
+                      setLoadError(null);
+                      refresh();
+                    }}
+                  />
+                ) : (
+                  <TableSkeleton rows={2} cols={5} />
+                )}
+              </td>
+            </tr>
           ) : sessions.length === 0 ? (
             <tr>
               <td colSpan={5}>
