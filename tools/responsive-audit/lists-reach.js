@@ -67,9 +67,11 @@ function measureLists() {
       empty: !!t.querySelector('tbody td[colspan]'),
     };
   });
-  const cards = document.querySelectorAll('ul.space-y-2 > li').length;
+  const cardEls = Array.from(document.querySelectorAll('ul.space-y-2 > li')).filter(vis);
+  const cardCtl = cardEls[0] ? Array.from(cardEls[0].querySelectorAll('a[href],button,input,[role=switch]')).filter(vis).map((c) => ({ t: txt(c), inView: inView(c.getBoundingClientRect()) })) : [];
+  const cards = cardEls.length;
   const de = document.documentElement;
-  return { vw, docOverflow: de.scrollWidth > de.clientWidth, tables, cards, h1: (document.querySelector('h1') || {}).innerText || '', url: location.pathname };
+  return { vw, docOverflow: de.scrollWidth > de.clientWidth, tables, cards, cardCtl, h1: (document.querySelector('h1') || {}).innerText || '', url: location.pathname };
 }
 
 // After scrolling every table's scroller to its end: is every header and last-cell control inside the
@@ -81,12 +83,15 @@ function measureAfterScroll() {
   for (const t of Array.from(document.querySelectorAll('table')).filter(vis)) {
     let sc = null;
     for (let p = t.parentElement; p; p = p.parentElement) { const o = getComputedStyle(p).overflowX; if (o === 'auto' || o === 'scroll') { sc = p; break; } }
-    if (sc && sc !== document.body) sc.scrollLeft = sc.scrollWidth;
-    const reach = (c) => { const r = c.getBoundingClientRect(); if (r.left < -1 || r.right > vw + 1) return false; const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && (c === top || c.contains(top) || top.contains(c)); };
+    // reachable = the element can be brought into the viewport by scrolling its OWN container and is then the topmost element at its centre
+    const reach = (c) => {
+      if (sc && sc !== document.body) { const r0 = c.getBoundingClientRect(); const s0 = sc.getBoundingClientRect(); sc.scrollLeft += r0.left + r0.width / 2 - (s0.left + s0.width / 2); }
+      const r = c.getBoundingClientRect(); if (r.left < -1 || r.right > vw + 1) return false;
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && (c === top || c.contains(top) || top.contains(c));
+    };
     const ths = Array.from(t.querySelectorAll('thead th')).filter(vis);
     const row = Array.from(t.querySelectorAll('tbody tr')).find((tr) => tr.querySelector('td') && !tr.querySelector('td[colspan]') && vis(tr));
     const last = row ? Array.from(row.querySelectorAll('td:last-child a[href],td:last-child button,td:last-child input')).filter(vis) : [];
-    // Every column must have been inside the viewport at SOME scroll position: check the end, and the start was measured at rest.
     out.push({ headersUnreachableAtEnd: ths.filter((h) => !reach(h)).map((h) => h.innerText.trim().slice(0, 20) || '(blank)'), lastCellUnreachable: last.filter((c) => !reach(c)).length, lastCellCount: last.length });
     if (sc) sc.scrollLeft = 0;
   }
@@ -132,7 +137,7 @@ async function main() {
         // real swipe on the first sideways-scrolling table, then programmatic end-of-scroll reach
         const scrolling = rec.tables.findIndex((t) => t.scroller && t.scroller.scrollWidth > t.scroller.clientWidth + 1);
         if (scrolling >= 0) {
-          const sw = await swipeHorizontally(page, `table >> nth=${scrolling} >> thead th >> nth=0`).catch(() => null);
+          const sw = await swipeHorizontally(page, `table >> nth=${scrolling} >> tbody tr:has(td:nth-child(2)) >> nth=0`).catch(() => null);
           rec.swipe = sw ? { scrolled: sw.scrolled, before: sw.before, after: sw.after } : null;
           await page.evaluate(() => document.querySelectorAll('[data-scroll-fade]').forEach((e) => (e.scrollLeft = 0)));
         }
@@ -147,13 +152,13 @@ async function main() {
   }
   await browser.close();
   fs.writeFileSync(path.join(OUT, 'lists.json'), JSON.stringify({ label: LABEL, results }, null, 2));
-  const lines = ['| route | vp | tables | cols (off at rest) | last-cell controls off at rest | scroll | swipe | unreachable after scroll |', '|---|---|---|---|---|---|---|---|'];
+  const lines = ['| route | vp | tables / cards | cols (off at rest) | last-cell controls off at rest | scroll | swipe | unreachable after scroll | card controls off screen |', '|---|---|---|---|---|---|---|---|---|'];
   for (const r of results) {
     if (r.error) { lines.push(`| ${r.url} | ${r.viewport} | ERR ${r.error} |||||| `); continue; }
     const t = r.tables.filter((x) => !x.empty);
     const emptyOnly = r.tables.length > 0 && t.length === 0;
     const a = r.afterScroll || [];
-    lines.push(`| ${r.url} | ${r.viewport} | ${r.tables.length}${r.cards ? ` +${r.cards} cards` : ''}${emptyOnly ? ' (empty)' : ''} | ${r.tables.map((x) => `${x.cols}(${x.offCount})`).join(', ')} | ${r.tables.map((x) => `${x.lastCellOff}/${x.lastCellControls.length}`).join(', ')} | ${r.tables.map((x) => (x.scroller ? `${x.scroller.clientWidth}/${x.scroller.scrollWidth}${x.scroller.stickyFirst ? ' sticky' : ''}` : '-')).join(', ')} | ${r.swipe ? (r.swipe.scrolled ? 'ok' : 'NO') : '-'} | ${a.map((x) => x.headersUnreachableAtEnd.length + x.lastCellUnreachable).join(', ')} |`);
+    lines.push(`| ${r.url} | ${r.viewport} | ${r.tables.length}${r.cards ? ` +${r.cards} cards` : ''}${emptyOnly ? ' (empty)' : ''} | ${r.tables.map((x) => `${x.cols}(${x.offCount})`).join(', ')} | ${r.tables.map((x) => `${x.lastCellOff}/${x.lastCellControls.length}`).join(', ')} | ${r.tables.map((x) => (x.scroller ? `${x.scroller.clientWidth}/${x.scroller.scrollWidth}${x.scroller.stickyFirst ? ' sticky' : ''}` : '-')).join(', ')} | ${r.swipe ? (r.swipe.scrolled ? 'ok' : 'NO') : '-'} | ${a.map((x) => x.headersUnreachableAtEnd.length + x.lastCellUnreachable).join(', ')} | ${r.cards ? r.cardCtl.filter((c) => !c.inView).length + '/' + r.cardCtl.length : '-'} |`);
   }
   fs.writeFileSync(path.join(OUT, 'lists.md'), lines.join('\n') + '\n');
   console.log(`\nwrote ${path.join(OUT, 'lists.md')}${invalid ? ' (INVALID: control did not scroll)' : ''}`);
