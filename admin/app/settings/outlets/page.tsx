@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { listOutlets, deleteOutlet } from "@/lib/api";
@@ -8,6 +8,8 @@ import type { Outlet } from "@/lib/types";
 import { THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import ScrollFade from "@/components/ui/ScrollFade";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
 import OutletFormModal from "@/components/OutletFormModal";
@@ -26,8 +28,22 @@ export default function SettingsOutletsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const toast = useToast();
 
-  const refresh = useCallback(async () => {
-    setOutlets(await listOutlets());
+  const [error, setError] = useState<string | null>(null);
+
+  // `latest` drops a superseded response; a failure ends in an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listOutlets()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setOutlets(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load branches");
+      });
   }, []);
 
   useEffect(() => {
@@ -57,7 +73,39 @@ export default function SettingsOutletsPage() {
 
       {/* Its own sideways scroller with an edge fade (not the shared Table's
           silent overflow), so every column is reachable and visibly so. */}
-      <ScrollFade className="rounded-2xl border border-border bg-surface dark:border-white/10 dark:bg-zinc-900">
+      {outlets !== null && outlets.length > 0 && (
+        <CardList>
+          {outlets.map((o) => (
+            <CardListItem
+              key={o.id}
+              href={`/settings/outlets/${o.id}/edit`}
+              openLabel={`Edit ${o.name}`}
+              actions={
+                <div className="flex flex-col items-end gap-1">
+                  <StatusBadge status={o.isOpen ? "open" : "closed"} />
+                  <CardRowMenu
+                    label={`More actions for ${o.name}`}
+                    items={[{ label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => handleDelete(o), danger: true }]}
+                  />
+                </div>
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{o.name}</div>
+              <div className="truncate text-xs text-text-muted">{locationLabel(o)}</div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                Delivery {o.deliveryEnabled ? `${o.deliveryRadiusKm ?? "?"}km` : "off"} · Pickup {o.pickupEnabled ? "on" : "off"}
+                {o.closedOverride ? " · manual" : ""}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <ScrollFade
+        className={`rounded-2xl border border-border bg-surface dark:border-white/10 dark:bg-zinc-900 ${
+          outlets !== null && outlets.length > 0 ? "hidden md:block" : ""
+        }`}
+      >
       <table className="w-full min-w-[640px] whitespace-nowrap text-sm">
         <THead>
           <tr>
@@ -74,7 +122,7 @@ export default function SettingsOutletsPage() {
           {outlets === null ? (
             <tr>
               <td colSpan={7}>
-                <TableSkeleton rows={3} cols={7} />
+                {error ? <LoadFailed what="branches" onRetry={refresh} /> : <TableSkeleton rows={3} cols={7} />}
               </td>
             </tr>
           ) : (

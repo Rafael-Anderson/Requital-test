@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Tag, Users, UserCheck, Clock, Wallet } from "lucide-react";
 import { getAffiliateSummary, listAffiliates } from "@/lib/api";
 import type { AffiliateListItem, AffiliateSummary } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -31,6 +33,7 @@ export default function AffiliatePage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [editing, setEditing] = useState<AffiliateListItem | null | "new">(null);
 
   useEffect(() => {
@@ -42,24 +45,52 @@ export default function AffiliatePage() {
     setPage(1);
   }, [search]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const [summaryRes, listRes] = await Promise.all([
-        getAffiliateSummary(),
-        listAffiliates({ page, pageSize: PAGE_SIZE, search: search || undefined }),
-      ]);
-      setSummary(summaryRes);
-      setAffiliates(listRes.data);
-      setTotal(listRes.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load affiliates");
-    }
+  // The summary cards and the list load on independent chains: neither waits
+  // on, or is lost to, the other. Each ends in an error with Try again, and a
+  // `latest` counter drops a response a newer refresh has superseded.
+  const latestSummary = useRef(0);
+  const refreshSummary = useCallback(() => {
+    const mine = ++latestSummary.current;
+    getAffiliateSummary()
+      .then((res) => {
+        if (mine !== latestSummary.current) return;
+        setSummary(res);
+        setSummaryError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestSummary.current) return;
+        setSummaryError(err instanceof Error ? err.message : "Failed to load the summary");
+      });
+  }, []);
+
+  const latestList = useRef(0);
+  const refreshList = useCallback(() => {
+    const mine = ++latestList.current;
+    listAffiliates({ page, pageSize: PAGE_SIZE, search: search || undefined })
+      .then((res) => {
+        if (mine !== latestList.current) return;
+        setAffiliates(res.data);
+        setTotal(res.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latestList.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load affiliates");
+      });
   }, [page, search]);
 
+  const refresh = useCallback(() => {
+    refreshSummary();
+    refreshList();
+  }, [refreshSummary, refreshList]);
+
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    refreshSummary();
+  }, [refreshSummary]);
+
+  useEffect(() => {
+    refreshList();
+  }, [refreshList]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -83,7 +114,11 @@ export default function AffiliatePage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {!summary ? (
+        {!summary && summaryError ? (
+          <div className="sm:col-span-2 lg:col-span-4">
+            <LoadFailed what="the summary" onRetry={refreshSummary} />
+          </div>
+        ) : !summary ? (
           <>
             <CardSkeleton />
             <CardSkeleton />
@@ -115,7 +150,7 @@ export default function AffiliatePage() {
           />
         )}
         {!summary ? (
-          <CardSkeleton />
+          summaryError ? null : <CardSkeleton />
         ) : (
           <Card>
             <p className="text-[13.5px] text-text-muted mb-4">Affiliate Code Status ({summary.codeStatus.approved + summary.codeStatus.pending + summary.codeStatus.blocked})</p>
@@ -139,7 +174,33 @@ export default function AffiliatePage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {affiliates !== null && affiliates.length > 0 && (
+        <CardList>
+          {affiliates.map((a) => (
+            <CardListItem
+              key={a.id}
+              onOpen={() => setEditing(a)}
+              openLabel={`Edit ${a.name}`}
+              actions={
+                <span
+                  className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[11.5px] font-bold capitalize ${STATUS_CLASS[a.status] ?? "bg-neutral-chip-bg text-neutral-chip-text"}`}
+                >
+                  {a.status}
+                </span>
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{a.name}</div>
+              <div className="truncate text-xs text-text-muted">{a.mobile}</div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                {a.codesCount} code{a.codesCount === 1 ? "" : "s"} · {a.ordersCount} order{a.ordersCount === 1 ? "" : "s"} ·{" "}
+                {new Date(a.createdAt).toLocaleDateString()}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={affiliates !== null && affiliates.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Name</TH>
@@ -155,7 +216,7 @@ export default function AffiliatePage() {
           {affiliates === null ? (
             <tr>
               <td colSpan={7}>
-                <TableSkeleton rows={8} cols={7} />
+                {error ? <LoadFailed what="affiliates" onRetry={refreshList} /> : <TableSkeleton rows={8} cols={7} />}
               </td>
             </tr>
           ) : affiliates.length === 0 && !error ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteIngredientCategory, listIngredientCategories } from "@/lib/api";
 import type { IngredientCategory } from "@/lib/types";
@@ -23,13 +23,21 @@ export default function IngredientCategoriesPage() {
   const [creating, setCreating] = useState(false);
   const deleteWithUndo = useUndoableDelete();
 
-  const refresh = useCallback(async () => {
-    try {
-      setIngredientCategories(await listIngredientCategories());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load ingredient categories");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listIngredientCategories()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setIngredientCategories(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load ingredient categories");
+      });
   }, []);
 
   useEffect(() => {

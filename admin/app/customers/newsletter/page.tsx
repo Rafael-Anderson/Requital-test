@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -53,19 +53,26 @@ export default function NewsletterSubscribersPage() {
     setPage(1);
   }, [search]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listNewsletterSubscribers({
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listNewsletterSubscribers({
         page,
         pageSize: PAGE_SIZE,
         search: search || undefined,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setSubscribers(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load newsletter subscribers");
       });
-      setSubscribers(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load newsletter subscribers");
-    }
   }, [page, search]);
 
   useEffect(() => {

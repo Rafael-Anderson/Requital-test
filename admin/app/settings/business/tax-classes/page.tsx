@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteTaxClass, listTaxClasses } from "@/lib/api";
 import { TAX_CLASS_TYPE_LABELS, type TaxClass } from "@/lib/types";
@@ -12,6 +12,7 @@ import Modal from "@/components/ui/Modal";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
@@ -26,15 +27,23 @@ export default function TaxClassesPage() {
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
 
-  const refresh = useCallback(async () => {
-    try {
-      setClasses(await listTaxClasses());
-      setError(null);
-    } catch (err) {
-      setError(
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listTaxClasses()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setClasses(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(
         err instanceof Error ? err.message : "Failed to load tax classes",
       );
-    }
+      });
   }, []);
 
   useEffect(() => {
@@ -96,7 +105,38 @@ export default function TaxClassesPage() {
             description="Add a class to start assigning VAT treatments to your products."
           />
         ) : (
-          <Table>
+          <>
+          <CardList>
+            {classes.map((c) => (
+              <CardListItem
+                key={c.id}
+                onOpen={() => setEditing(c)}
+                openLabel={`Edit ${c.name}`}
+                actions={
+                  <CardRowMenu
+                    label={`More actions for ${c.name}`}
+                    items={[
+                      { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setEditing(c) },
+                      ...(c.isDefault
+                        ? []
+                        : [{ label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => setConfirmDelete(c), danger: true }]),
+                    ]}
+                  />
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</span>
+                  {c.isDefault && (
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold bg-accent-tint text-accent-text">Default</span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-text-muted">
+                  {TAX_CLASS_TYPE_LABELS[c.type] ?? c.type} · {Number(c.rate)}%
+                </div>
+              </CardListItem>
+            ))}
+          </CardList>
+          <Table className="hidden md:block">
             <THead>
               <TR>
                 <TH>Name</TH>
@@ -152,6 +192,7 @@ export default function TaxClassesPage() {
               ))}
             </TBody>
           </Table>
+          </>
         )}
       </Card>
 

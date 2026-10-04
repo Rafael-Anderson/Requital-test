@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { listExternalDeliveryReport, listOutlets } from "@/lib/api";
 import type { ExternalDeliveryRow, Outlet, ReportsFilters } from "@/lib/types";
@@ -47,19 +47,26 @@ export default function ExternalDeliveryReportPage() {
     setPage(1);
   }, [search, appliedFilters]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listExternalDeliveryReport(appliedFilters, {
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listExternalDeliveryReport(appliedFilters, {
         page,
         pageSize: PAGE_SIZE,
         search: search || undefined,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setRows(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load report");
       });
-      setRows(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load report");
-    }
   }, [appliedFilters, page, search]);
 
   useEffect(() => {

@@ -15,6 +15,8 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import Select from "@/components/ui/Select";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
@@ -108,14 +110,52 @@ export default function SuppliersPage() {
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       {suppliers === null ? (
-        <TableSkeleton rows={4} cols={5} />
+        error ? <LoadFailed what="suppliers" onRetry={refresh} /> : <TableSkeleton rows={4} cols={5} />
       ) : suppliers.length === 0 ? (
         <EmptyState
           title="No suppliers yet"
           description="Add the people you buy flowers, packaging and other stock from, with their terms and prices."
         />
       ) : (
-        <Table stickyFirst>
+        <>
+        {/* Below md one tappable card per supplier (tap opens it); md and up the table. */}
+        <CardList>
+          {suppliers.map((s) => (
+            <CardListItem
+              key={s.id}
+              href={`/inventory/suppliers/${s.id}`}
+              openLabel={`Open ${s.name}`}
+              actions={
+                isAdmin ? (
+                  <CardRowMenu
+                    label={`More actions for ${s.name}`}
+                    items={[
+                      { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setEditing(s) },
+                      s.status === "active"
+                        ? { label: "Archive", icon: <Archive className="size-3.5" />, onClick: () => setStatus(s, "archived") }
+                        : { label: "Restore", icon: <ArchiveRestore className="size-3.5" />, onClick: () => setStatus(s, "active") },
+                      { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => handleDelete(s), danger: true },
+                    ]}
+                  />
+                ) : undefined
+              }
+            >
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{s.name}</span>
+                <StatusBadge status={s.status} />
+              </div>
+              <div className="truncate text-xs text-text-muted">
+                {s.primaryContactName ?? "No contact"}
+                {s.primaryContactEmail ? ` · ${s.primaryContactEmail}` : ""}
+              </div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                {s.paymentTerms ?? "No terms"} · {s.leadTimeDays === null ? "lead time not set" : `${s.leadTimeDays} d lead`} · {s.itemCount} item
+                {s.itemCount === 1 ? "" : "s"}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+        <Table stickyFirst className="hidden md:block">
           <THead>
             <TR>
               <TH className="text-start">Supplier</TH>
@@ -181,6 +221,7 @@ export default function SuppliersPage() {
             ))}
           </TBody>
         </Table>
+        </>
       )}
 
       {(creating || editing) && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -22,6 +22,7 @@ import Modal from "@/components/ui/Modal";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
@@ -39,13 +40,21 @@ export default function CustomFieldsPage() {
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
 
-  const refresh = useCallback(async () => {
-    try {
-      setDefs(await listMetafieldDefinitions());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load custom fields");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listMetafieldDefinitions()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setDefs(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load custom fields");
+      });
   }, []);
 
   // Initial load. Written with .then callbacks (not a call to refresh()) so
@@ -136,7 +145,33 @@ export default function CustomFieldsPage() {
             {METAFIELD_OWNER_TYPES.filter((t) => byOwner(t).length > 0).map((t) => (
               <div key={t}>
                 <h2 className="text-sm font-semibold mb-2">{METAFIELD_OWNER_LABELS[t]}</h2>
-                <Table>
+                <CardList>
+                  {byOwner(t).map((d) => (
+                    <CardListItem
+                      key={d.id}
+                      onOpen={() => setEditing(d)}
+                      openLabel={`Edit ${d.name}`}
+                      actions={
+                        <CardRowMenu
+                          label={`More actions for ${d.name}`}
+                          items={[
+                            { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setEditing(d) },
+                            { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => setConfirmDelete(d), danger: true },
+                          ]}
+                        />
+                      }
+                    >
+                      <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{d.name}</div>
+                      <div className="truncate font-mono text-xs text-text-muted">
+                        {d.namespace}.{d.key}
+                      </div>
+                      <div className="mt-0.5 text-xs text-text-muted">
+                        {METAFIELD_TYPE_LABELS[d.type] ?? d.type} · {d.visibleOnStorefront ? "public" : "not public"}
+                      </div>
+                    </CardListItem>
+                  ))}
+                </CardList>
+                <Table className="hidden md:block">
                   <THead>
                     <TR>
                       <TH>Name</TH>

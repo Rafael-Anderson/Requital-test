@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Power } from "lucide-react";
 import { createGiftCard, listGiftCards, updateGiftCard } from "@/lib/api";
 import type { GiftCard } from "@/lib/types";
@@ -12,6 +12,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem } from "@/components/ui/CardList";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import Tooltip from "@/components/ui/Tooltip";
@@ -33,13 +34,21 @@ export default function GiftCardsPage() {
   const [expiresAt, setExpiresAt] = useState("");
   const [issuing, setIssuing] = useState(false);
 
-  const refresh = useCallback(async () => {
-    try {
-      setCards(await listGiftCards());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load gift cards");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listGiftCards()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setCards(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load gift cards");
+      });
   }, []);
 
   useEffect(() => {
@@ -102,7 +111,42 @@ export default function GiftCardsPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {cards !== null && cards.length > 0 && (
+        <CardList>
+          {cards.map((c) => (
+            <CardListItem
+              key={c.id}
+              openLabel={c.code}
+              actions={
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`text-xs rounded px-2 py-1 border capitalize ${STATUS_STYLE[c.status]}`}>{c.status}</span>
+                  {(c.status === "active" || c.status === "disabled") && (
+                    <button
+                      type="button"
+                      onClick={() => toggleDisabled(c)}
+                      aria-label={c.status === "disabled" ? `Enable ${c.code}` : `Disable ${c.code}`}
+                      className="inline-flex rounded p-2 text-text-muted hover:bg-black/5 dark:hover:bg-white/10"
+                    >
+                      <Power className="size-4" />
+                    </button>
+                  )}
+                </div>
+              }
+            >
+              <div className="truncate font-mono text-xs text-text-primary dark:text-zinc-100">{c.code}</div>
+              <div className="mt-0.5 text-[13.5px]">
+                <span className="font-bold text-text-primary dark:text-zinc-100">{c.remainingBalance}</span>
+                <span className="text-text-muted"> left of {c.initialValue}</span>
+              </div>
+              <div className="mt-0.5 truncate text-xs text-text-muted">
+                {c.purchasedByCustomer?.name ? `Bought by ${c.purchasedByCustomer.name}` : "Issued by the shop"}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={cards !== null && cards.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Code</TH>

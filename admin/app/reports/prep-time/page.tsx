@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getPrepTimeReport, listOutlets } from "@/lib/api";
 import type { Outlet, PrepTimeBucket, PrepTimeReport, ReportsFilters } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -40,13 +40,21 @@ export default function PrepTimeReportPage() {
       .catch(() => setOutlets([]));
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      setReport(await getPrepTimeReport(appliedFilters));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load report");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    getPrepTimeReport(appliedFilters)
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setReport(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load report");
+      });
   }, [appliedFilters]);
 
   useEffect(() => {

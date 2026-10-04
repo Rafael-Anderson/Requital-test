@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listAuditLog, listAuditLogActors } from "@/lib/api";
 import type { AuditLogEntry } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -74,20 +74,27 @@ export default function ActivityLogPage() {
   const [actors, setActors] = useState<{ id: number; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listAuditLog({
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listAuditLog({
         page,
         pageSize: PAGE_SIZE,
         entityType: entityType || undefined,
         actorUserId: actorUserId ? Number(actorUserId) : undefined,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setEntries(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load activity log");
       });
-      setEntries(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load activity log");
-    }
   }, [page, entityType, actorUserId]);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, ChevronDown, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import {
   confirmImportIngredients,
@@ -15,6 +15,7 @@ import { useOutletFilter } from "@/lib/outlet-context";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
@@ -48,13 +49,21 @@ export default function IngredientsPage() {
   const deleteWithUndo = useUndoableDelete();
   const { selectedOutletId, outlets } = useOutletFilter();
 
-  const refresh = useCallback(async () => {
-    try {
-      setIngredients(await listIngredients(selectedOutletId ?? undefined, categoryFilter ? Number(categoryFilter) : undefined));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load ingredients");
-    }
+  // `latest` drops a response a newer refresh (outlet or category switch) has
+  // already superseded; a failure ends in an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listIngredients(selectedOutletId ?? undefined, categoryFilter ? Number(categoryFilter) : undefined)
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setIngredients(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load ingredients");
+      });
   }, [selectedOutletId, categoryFilter]);
 
   useEffect(() => {
@@ -170,7 +179,58 @@ export default function IngredientsPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {ingredients !== null && visibleIngredients.length > 0 && (
+        <CardList>
+          {visibleIngredients.map((ingredient) => {
+            const lowStock =
+              ingredient.stockQuantity !== null &&
+              ingredient.lowStockThreshold !== null &&
+              ingredient.stockQuantity <= ingredient.lowStockThreshold;
+            return (
+              <CardListItem
+                key={ingredient.id}
+                onOpen={() => setEditing(ingredient)}
+                openLabel={`Edit ${ingredient.name}`}
+                actions={
+                  <CardRowMenu
+                    label={`More actions for ${ingredient.name}`}
+                    items={[
+                      { label: "Edit", icon: <Pencil className="size-3.5" />, onClick: () => setEditing(ingredient) },
+                      ...(selectedOutletId
+                        ? [{ label: "Adjust stock", icon: <SlidersHorizontal className="size-3.5" />, onClick: () => setAdjusting(ingredient) }]
+                        : []),
+                      { label: "Transfer stock", icon: <ArrowLeftRight className="size-3.5" />, onClick: () => setTransferring(ingredient) },
+                      { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => handleDelete(ingredient), danger: true },
+                    ]}
+                  />
+                }
+              >
+                <div className="flex items-start gap-3">
+                  <Thumbnail src={ingredient.image} size="size-12" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{ingredient.name}</div>
+                    <div className="mt-0.5 text-[13.5px]">
+                      {ingredient.stockQuantity !== null ? (
+                        <span className={lowStock ? "font-bold text-danger-text" : "text-text-primary dark:text-zinc-100"}>
+                          {ingredient.stockQuantity} {ingredient.unit}
+                          {lowStock ? " (low)" : ""}
+                        </span>
+                      ) : (
+                        <span className="text-text-faint">Pick a branch to see stock</span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-text-muted">
+                      {ingredient.categoryName ?? "No category"} · per {ingredient.unit}
+                    </div>
+                  </div>
+                </div>
+              </CardListItem>
+            );
+          })}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={ingredients !== null && visibleIngredients.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Name</TH>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteCollection, listCollections, reorderCollections } from "@/lib/api";
 import { buildCollectionTree, flattenCollectionTree, type Collection } from "@/lib/types";
@@ -26,13 +26,21 @@ export default function CollectionsPage() {
   const deleteWithUndo = useUndoableDelete();
   const toast = useToast();
 
-  const refresh = useCallback(async () => {
-    try {
-      setCollections(await listCollections());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load collections");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listCollections()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setCollections(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load collections");
+      });
   }, []);
 
   useEffect(() => {

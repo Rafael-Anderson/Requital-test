@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { listExternalDeliveryReport, listOutlets } from "@/lib/api";
 import type { ExternalDeliveryRow, Outlet, ReportsFilters } from "@/lib/types";
@@ -8,6 +8,7 @@ import { useShopMode } from "@/lib/useShopMode";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
@@ -58,19 +59,26 @@ export default function ExternalDeliveryOrdersTabPage() {
     setPage(1);
   }, [search, appliedFilters]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listExternalDeliveryReport(appliedFilters, {
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listExternalDeliveryReport(appliedFilters, {
         page,
         pageSize: PAGE_SIZE,
         search: search || undefined,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setRows(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load external deliveries");
       });
-      setRows(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load external deliveries");
-    }
   }, [appliedFilters, page, search]);
 
   useEffect(() => {
@@ -108,7 +116,42 @@ export default function ExternalDeliveryOrdersTabPage() {
         </div>
       </div>
 
-      <Table stickyFirst>
+      {rows !== null && rows.length > 0 && (
+        <CardList>
+          {rows.map((row) => (
+            <CardListItem
+              key={row.id}
+              onOpen={() => setSelectedOrderId(row.orderId)}
+              openLabel={`Open order #${row.orderId}`}
+              actions={<StatusBadge status={row.status} />}
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">
+                #{row.orderId} {row.customerName}
+              </div>
+              <div className="truncate text-xs text-text-muted">
+                {row.carrier}
+                {row.driverName ? ` · ${row.driverName}` : ""}
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
+                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(row.price, row.currency)}</span>
+                <span className="text-xs text-text-muted">{new Date(row.createdAt).toLocaleString()}</span>
+                {row.trackingUrl && (
+                  <a
+                    href={row.trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative z-10 text-xs text-accent-text hover:underline dark:text-accent"
+                  >
+                    Track
+                  </a>
+                )}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={rows !== null && rows.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Order Ref</TH>

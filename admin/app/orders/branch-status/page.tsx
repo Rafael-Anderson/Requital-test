@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listOutlets, updateOutletStatus } from "@/lib/api";
 import type { Outlet } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem } from "@/components/ui/CardList";
 import Toggle from "@/components/ui/Toggle";
 import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -43,13 +44,19 @@ export default function BranchStatusPage() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const toast = useToast();
 
-  const refresh = useCallback(async () => {
-    try {
-      setOutlets(await listOutlets());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load outlets");
-    }
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listOutlets()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setOutlets(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load outlets");
+      });
   }, []);
 
   useEffect(() => {
@@ -77,7 +84,34 @@ export default function BranchStatusPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {outlets !== null && outlets.length > 0 && (
+        <CardList>
+          {outlets.map((outlet) => (
+            <CardListItem key={outlet.id} openLabel={outlet.name}>
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{outlet.name}</div>
+              <div className="mt-2 space-y-2">
+                {(
+                  [
+                    ["pickupEnabled", "Accepting pickup orders"],
+                    ["deliveryEnabled", "Accepting delivery orders"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <div key={field} className="flex items-center justify-between gap-3">
+                    <span className="text-[13.5px] text-text-secondary dark:text-zinc-300">{label}</span>
+                    <Toggle
+                      checked={outlet[field]}
+                      disabled={savingId === outlet.id}
+                      onChange={(next) => handleToggle(outlet, field, next)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={outlets !== null && outlets.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Name</TH>

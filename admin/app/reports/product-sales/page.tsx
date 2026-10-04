@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { listOutlets, listProductSales, resolveImageUrl } from "@/lib/api";
 import type { Outlet, ProductSalesRow, ReportsFilters } from "@/lib/types";
@@ -53,21 +53,28 @@ export default function ProductSaleReportPage() {
     setPage(1);
   }, [search, appliedFilters, sortBy, sortDir]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listProductSales(appliedFilters, {
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listProductSales(appliedFilters, {
         page,
         pageSize: PAGE_SIZE,
         search: search || undefined,
         sortBy,
         sortDir,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setRows(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load report");
       });
-      setRows(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load report");
-    }
   }, [appliedFilters, page, search, sortBy, sortDir]);
 
   useEffect(() => {

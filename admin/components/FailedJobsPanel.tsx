@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listFailedJobs, retryFailedJob, dismissFailedJob } from "@/lib/api";
 import type { FailedJob } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -24,14 +24,21 @@ export default function FailedJobsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listFailedJobs();
-      setJobs(result);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load failed jobs");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listFailedJobs()
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setJobs(result);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load failed jobs");
+      });
   }, []);
 
   useEffect(() => {

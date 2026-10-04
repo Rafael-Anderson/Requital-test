@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Copy } from "lucide-react";
 import { listAffiliateCodes } from "@/lib/api";
 import type { AffiliateCodeListItem } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem } from "@/components/ui/CardList";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -49,15 +50,22 @@ export default function AffiliateCodesPage() {
     setPage(1);
   }, [search]);
 
-  const refresh = useCallback(async () => {
-    try {
-      const res = await listAffiliateCodes({ page, pageSize: PAGE_SIZE, search: search || undefined });
-      setCodes(res.data);
-      setTotal(res.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load affiliate codes");
-    }
+  // `latest` drops a response a newer refresh (page or search change) has
+  // superseded; a failure ends in an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listAffiliateCodes({ page, pageSize: PAGE_SIZE, search: search || undefined })
+      .then((res) => {
+        if (mine !== latest.current) return;
+        setCodes(res.data);
+        setTotal(res.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load affiliate codes");
+      });
   }, [page, search]);
 
   useEffect(() => {
@@ -94,7 +102,39 @@ export default function AffiliateCodesPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {codes !== null && codes.length > 0 && (
+        <CardList>
+          {codes.map((c) => (
+            <CardListItem
+              key={c.id}
+              onOpen={() => setEditing(c)}
+              openLabel={`Edit ${c.code}`}
+              actions={
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`text-xs capitalize font-medium ${STATUS_CLASS[c.status] ?? ""}`}>{c.status}</span>
+                  <button
+                    type="button"
+                    onClick={() => copyUrl(c.url)}
+                    aria-label={`Copy link for ${c.code}`}
+                    className="inline-flex rounded p-2 text-text-muted hover:bg-black/5 dark:hover:bg-white/10"
+                  >
+                    <Copy className="size-4" />
+                  </button>
+                </div>
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{c.code}</div>
+              <div className="truncate text-xs text-text-muted">{c.promotionFor}</div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                {c.commissionType === "percentage" ? `${c.commissionValue}%` : c.commissionValue.toFixed(2)} {c.commissionType} ·{" "}
+                {c.ordersCount} order{c.ordersCount === 1 ? "" : "s"} · {formatValidity(c.validFrom, c.validUntil)}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={codes !== null && codes.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Code</TH>

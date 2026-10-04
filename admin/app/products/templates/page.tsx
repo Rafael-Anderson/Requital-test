@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteTemplate, listTemplates } from "@/lib/api";
@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
+import { CardList, CardListItem, CardRowMenu } from "@/components/ui/CardList";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import ProductsTabs from "@/components/ProductsTabs";
@@ -22,13 +23,21 @@ export default function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const deleteWithUndo = useUndoableDelete();
 
-  const refresh = useCallback(async () => {
-    try {
-      setTemplates(await listTemplates());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load templates");
-    }
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listTemplates()
+      .then((list) => {
+        if (mine !== latest.current) return;
+        setTemplates(list);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load templates");
+      });
   }, []);
 
   useEffect(() => {
@@ -64,7 +73,43 @@ export default function TemplatesPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <Table stickyFirst>
+      {templates !== null && templates.length > 0 && (
+        <CardList>
+          {templates.map((c) => (
+            <CardListItem
+              key={c.id}
+              href={`/products/templates/${c.id}/edit`}
+              openLabel={`Edit ${c.title}`}
+              actions={
+                <div className="flex flex-col items-end gap-1">
+                  <span
+                    className={`text-xs rounded px-2 py-1 border ${
+                      c.isActive
+                        ? "border-green-400 text-green-700 dark:text-green-400"
+                        : "border-red-300 text-red-600 dark:border-red-800 dark:text-red-400"
+                    }`}
+                  >
+                    {c.isActive ? "Active" : "Inactive"}
+                  </span>
+                  <CardRowMenu
+                    label={`More actions for ${c.title}`}
+                    items={[
+                      { label: "Delete", icon: <Trash2 className="size-3.5" />, onClick: () => handleDelete(c), danger: true },
+                    ]}
+                  />
+                </div>
+              }
+            >
+              <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{c.title}</div>
+              <div className="mt-0.5 text-xs text-text-muted">
+                {TEMPLATE_TYPE_LABELS[c.type]} · {c.productCount} product{c.productCount === 1 ? "" : "s"}
+              </div>
+            </CardListItem>
+          ))}
+        </CardList>
+      )}
+
+      <Table stickyFirst className={templates !== null && templates.length > 0 ? "hidden md:block" : ""}>
         <THead>
           <tr>
             <TH>Title</TH>

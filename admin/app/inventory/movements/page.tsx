@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listStockMovements } from "@/lib/api";
 import { ADJUSTMENT_REASON_LABELS, type StockMovement, type StockMovementType } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
@@ -40,20 +40,27 @@ export default function StockMovementsPage() {
   const [typeFilter, setTypeFilter] = useState<StockMovementType | "">("");
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await listStockMovements({
+  // `latest` drops a response a newer refresh has superseded; a failure ends in
+  // an error with Try again.
+  const latest = useRef(0);
+  const refresh = useCallback(() => {
+    const mine = ++latest.current;
+    listStockMovements({
         page,
         pageSize: PAGE_SIZE,
         outletId: selectedOutletId ?? undefined,
         type: typeFilter || undefined,
+      })
+      .then((result) => {
+        if (mine !== latest.current) return;
+        setMovements(result.data);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((err) => {
+        if (mine !== latest.current) return;
+        setError(err instanceof Error ? err.message : "Failed to load movement history");
       });
-      setMovements(result.data);
-      setTotal(result.total);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load movement history");
-    }
   }, [page, selectedOutletId, typeFilter]);
 
   useEffect(() => {
