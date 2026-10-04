@@ -106,8 +106,8 @@ function defaultBlocksForType(type: ThemeSectionType): ThemeBlock[] {
       return [];
     case "trust_bar":
       return [
-        newBlock("trust_item", 0, { text: "Same-day delivery", icon: "truck" }),
-        newBlock("trust_item", 1, { text: "100% fresh guarantee", icon: "shield" }),
+        newBlock("trust_item", 0, { text: "Secure checkout", icon: "shield" }),
+        newBlock("trust_item", 1, { text: "Order tracking", icon: "truck" }),
       ];
   }
 }

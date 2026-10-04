@@ -44,6 +44,23 @@ describe.each(TEMPLATE_KEYS)('THEME_TEMPLATES.%s', (key) => {
     );
   });
 
+  // No promise with nothing behind it: a template is starter copy a merchant
+  // may publish unchanged, so it must not carry an offer, a free-* promise, a
+  // guarantee, a delivery-speed or coverage claim, or urgency/scarcity text.
+  // Those are the merchant's to write, against their own settings.
+  it('ships no offer, guarantee, delivery-speed or urgency promise', () => {
+    const texts: string[] = [];
+    const walk = (v: unknown): void => {
+      if (typeof v === 'string') texts.push(v);
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    };
+    walk(template);
+    const promise =
+      /\d+\s*%\s*off|%\s*off|\boff your\b|first order|free (shipping|delivery|gift|wrap|returns?)|guarantee|money.?back|same.?day|next.?day|delivered (today|tomorrow)|within \d+|nationwide|across the country|early access|limited (time|stock|offer)|only \d+ left|selling fast|hurry|don'?t miss|best sellers?|\boffers?\b|\bsale\b ends|countdown/i;
+    for (const t of texts) expect(t).not.toMatch(promise);
+  });
+
   it('stays well under the 200KB config safety cap', () => {
     expect(Buffer.byteLength(JSON.stringify(template))).toBeLessThan(MAX_CONFIG_BYTES);
   });

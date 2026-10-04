@@ -25,6 +25,7 @@ const summary: DashboardSummary = {
   avgBasketValue: { current: 175, previous: 0, changePct: null },
   totalOrders: 2,
   customerGrowth: { current: 1, previous: 0, changePct: null },
+  experienceRating: { average: null, count: 0 },
   ordersByStage: { placed: 1, accepted: 0, preparing: 1, shipped: 0, delivered: 0 },
   outlets: [{ outletId: 1, name: "Main", orderCount: 2, percentage: 100 }],
   channels: [{ channel: "storefront", count: 2, percentage: 100 }],

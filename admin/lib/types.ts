@@ -2313,6 +2313,9 @@ export interface DashboardSummary {
   avgBasketValue: PeriodMetric;
   totalOrders: number;
   customerGrowth: PeriodMetric;
+  // Average of answered post-purchase surveys of orders placed in the period
+  // (one decimal), or null with count 0 when there are none.
+  experienceRating: { average: number | null; count: number };
   ordersByStage: {
     placed: number;
     accepted: number;

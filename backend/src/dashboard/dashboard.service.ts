@@ -6,6 +6,7 @@ import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { dateKeyInTimezone } from '../outlets/outlet-status';
+import { averageRatingOneDecimal } from './experience-rating';
 
 // UAE/Gulf merchants run on UTC+4 year-round (no DST) — day boundaries are
 // computed in that offset rather than server-local/UTC time.
@@ -113,6 +114,7 @@ export class DashboardService {
       channelGroups,
       outletCounts,
       outlets,
+      ratingRows,
     ] = await Promise.all([
       this.revenueAndCount(ctx.shopId, outletId, from, toExclusive),
       this.revenueAndCount(ctx.shopId, outletId, prevFrom, prevToExclusive),
@@ -156,7 +158,22 @@ export class DashboardService {
         `SELECT id, name FROM outlet WHERE shopId = ? ${outletId !== undefined ? 'AND id = ?' : ''}`,
         outletId !== undefined ? [ctx.shopId, outletId] : [ctx.shopId],
       ),
+      // Experience rating: answered post-purchase surveys only. A review
+      // belongs to an order, so the period and outlet filters are the ORDER's
+      // (o.createdAt, o.outletId), the same basis every figure above uses,
+      // not when the customer answered. Both rows are scoped to the shop.
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c, COALESCE(SUM(s.rating), 0) AS total
+           FROM surveyresponse s
+           JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
+          WHERE s.shopId = ? AND o.shopId = ?
+            AND s.respondedAt IS NOT NULL AND s.rating IS NOT NULL
+            AND o.createdAt >= ? AND o.createdAt < ?
+            ${outletId !== undefined ? 'AND o.outletId = ?' : ''}`,
+        [ctx.shopId, ctx.shopId, from, toExclusive, ...outletParam],
+      ),
     ]);
+    const ratingCount = Number(ratingRows[0].c);
     const totalOrders = Number(totalOrdersRows[0].c);
 
     const aov = (r: { revenue: number; orderCount: number }) =>
@@ -231,6 +248,13 @@ export class DashboardService {
         current: currentNewCustomers,
         previous: previousNewCustomers,
         changePct: this.changePct(currentNewCustomers, previousNewCustomers),
+      },
+      experienceRating: {
+        average: averageRatingOneDecimal(
+          Number(ratingRows[0].total),
+          ratingCount,
+        ),
+        count: ratingCount,
       },
       ordersByStage,
       outlets: outletBreakdown,
