@@ -26,4 +26,13 @@ export class PublicSurveyController {
   ) {
     return this.publicService.submitSurvey(token, dto);
   }
+
+  // Idempotent. Same throttle as submit: an unauthenticated write keyed only
+  // by a token must not be guessable at speed.
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Public()
+  @Post('withdraw-consent')
+  withdrawConsent(@Query('token') token?: string) {
+    return this.publicService.withdrawSurveyConsent(token);
+  }
 }

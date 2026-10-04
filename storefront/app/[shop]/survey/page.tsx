@@ -3,10 +3,10 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
-import { lookupSurvey, submitSurvey } from "@/lib/api";
+import { lookupSurvey, submitSurvey, withdrawSurveyConsent } from "@/lib/api";
 import type { SurveyLookupResult } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
-import { AUTH_CARD_CLASS, AUTH_HEADING_CLASS, FIELD_CLASS, BUTTON_PRIMARY_CLASS } from "@/lib/form-styles";
+import { AUTH_CARD_CLASS, AUTH_HEADING_CLASS, FIELD_CLASS, BUTTON_OUTLINE_CLASS, BUTTON_PRIMARY_CLASS } from "@/lib/form-styles";
 
 function SurveyContent() {
   const { shop } = useShop();
@@ -22,6 +22,9 @@ function SurveyContent() {
   const [publishConsent, setPublishConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawn, setWithdrawn] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   async function runLookup() {
     if (!token) {
@@ -58,8 +61,26 @@ function SurveyContent() {
     }
   }
 
+  // Withdrawal is token-only and one-way: there is no control to agree again
+  // once the survey is answered.
+  async function handleWithdraw() {
+    setWithdrawing(true);
+    setWithdrawError(null);
+    try {
+      await withdrawSurveyConsent(token);
+      setWithdrawn(true);
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : "Couldn't withdraw your consent. Please try again.");
+    } finally {
+      setWithdrawing(false);
+    }
+  }
+
   const alreadyResponded = !!survey?.respondedAt;
   const displayRating = submitted ? rating : (survey?.rating ?? 0);
+  // What the customer agreed to: what they just ticked, or what the server has.
+  const consentGiven = submitted ? publishConsent : survey?.publishConsent === true;
+  const consentDeclined = submitted ? !publishConsent : survey?.publishConsent === false;
 
   return (
     <StorefrontPageShell variant="narrow">
@@ -76,6 +97,26 @@ function SurveyContent() {
               Thanks for your feedback{shop?.name ? `. ${shop.name} appreciates it!` : "!"}
             </p>
             {displayRating > 0 && <p className="text-sm">Rating: {displayRating}/5</p>}
+            {withdrawn ? (
+              <p role="status" className="mt-4 text-sm">
+                Your feedback will no longer be shown on the store&apos;s website.
+              </p>
+            ) : consentGiven ? (
+              <div className="mt-4 space-y-3">
+                <p className="text-sm">
+                  You agreed that {survey.shopName} may show your feedback on its website, with your first name and
+                  last initial. You can withdraw that at any time.
+                </p>
+                <button type="button" onClick={handleWithdraw} disabled={withdrawing}
+                  className={`min-h-11 px-4 rounded-lg font-medium hover:opacity-80 transition-opacity disabled:opacity-50 cursor-pointer ${BUTTON_OUTLINE_CLASS}`}
+                >
+                  {withdrawing ? "Withdrawing…" : "Withdraw my consent"}
+                </button>
+                {withdrawError && <p className="text-sm text-red-600">{withdrawError}</p>}
+              </div>
+            ) : consentDeclined ? (
+              <p className="mt-4 text-sm text-zinc-500">Your feedback is not shown on the store&apos;s website.</p>
+            ) : null}
           </div>
         )}
 

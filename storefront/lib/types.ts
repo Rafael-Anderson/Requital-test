@@ -578,6 +578,9 @@ export interface SurveyLookupResult {
   rating: number | null;
   comment: string | null;
   respondedAt: string | null;
+  // true = agreed to publication and not withdrawn; false = declined or
+  // withdrawn; null = not answered (or no answer recorded).
+  publishConsent: boolean | null;
 }
 
 // Mirrors backend/src/bio-links/bio-link-constants.ts by hand.
