@@ -5,6 +5,7 @@ import { listAuditLog, listAuditLogActors } from "@/lib/api";
 import type { AuditLogEntry } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
@@ -149,11 +150,19 @@ export default function ActivityLogPage() {
         </THead>
         <TBody>
           {entries === null ? (
-            <tr>
-              <td colSpan={5}>
-                <TableSkeleton rows={10} cols={5} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={5}>
+                  <LoadFailed what="the activity log" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={5}>
+                  <TableSkeleton rows={10} cols={5} />
+                </td>
+              </tr>
+            )
           ) : entries.length === 0 && !error ? (
             <tr>
               <td colSpan={5}>

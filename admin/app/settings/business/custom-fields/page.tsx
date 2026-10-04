@@ -21,6 +21,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Modal from "@/components/ui/Modal";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
@@ -120,7 +121,11 @@ export default function CustomFieldsPage() {
 
       <Card>
         {defs === null ? (
-          <TableSkeleton rows={3} cols={5} />
+          error ? (
+            <LoadFailed what="custom fields" onRetry={refresh} />
+          ) : (
+            <TableSkeleton rows={3} cols={5} />
+          )
         ) : defs.length === 0 ? (
           <EmptyState
             title="No custom fields yet"

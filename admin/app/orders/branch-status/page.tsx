@@ -5,6 +5,7 @@ import { listOutlets, updateOutletStatus } from "@/lib/api";
 import type { Outlet } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import Toggle from "@/components/ui/Toggle";
 import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -88,11 +89,19 @@ export default function BranchStatusPage() {
         </THead>
         <TBody>
           {outlets === null ? (
-            <tr>
-              <td colSpan={5}>
-                <TableSkeleton rows={4} cols={5} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={5}>
+                  <LoadFailed what="branch status" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={5}>
+                  <TableSkeleton rows={4} cols={5} />
+                </td>
+              </tr>
+            )
           ) : outlets.length === 0 ? (
             <tr>
               <td colSpan={5} className="text-center text-sm text-text-faint py-8">

@@ -7,6 +7,7 @@ import type { ExternalDeliveryRow, Outlet, ReportsFilters } from "@/lib/types";
 import { useShopMode } from "@/lib/useShopMode";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/StatusBadge";
@@ -121,11 +122,19 @@ export default function ExternalDeliveryOrdersTabPage() {
         </THead>
         <TBody>
           {rows === null ? (
-            <tr>
-              <td colSpan={7}>
-                <TableSkeleton rows={8} cols={7} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={7}>
+                  <LoadFailed what="external deliveries" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={7}>
+                  <TableSkeleton rows={8} cols={7} />
+                </td>
+              </tr>
+            )
           ) : rows.length === 0 && !error ? (
             <tr>
               <td colSpan={7}>

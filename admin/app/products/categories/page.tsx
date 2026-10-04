@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import CollectionFormModal from "@/components/CollectionFormModal";
 import ProductsTabs from "@/components/ProductsTabs";
@@ -95,7 +96,11 @@ export default function CollectionsPage() {
 
       <div className="rounded-lg border border-border dark:border-white/10 overflow-hidden">
         {collections === null ? (
-          <TableSkeleton rows={4} cols={3} />
+          error ? (
+            <LoadFailed what="collections" onRetry={refresh} />
+          ) : (
+            <TableSkeleton rows={4} cols={3} />
+          )
         ) : rows.length === 0 ? (
           <EmptyState
             title="No collections yet"

@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import IngredientCategoryFormModal from "@/components/IngredientCategoryFormModal";
 import InventoryTabs from "@/components/InventoryTabs";
@@ -63,7 +64,11 @@ export default function IngredientCategoriesPage() {
 
       <div className="rounded-2xl border border-border dark:border-white/10 overflow-hidden bg-surface dark:bg-zinc-900">
         {ingredientCategories === null ? (
-          <TableSkeleton rows={4} cols={2} />
+          error ? (
+            <LoadFailed what="ingredient categories" onRetry={refresh} />
+          ) : (
+            <TableSkeleton rows={4} cols={2} />
+          )
         ) : ingredientCategories.length === 0 ? (
           <EmptyState
             title="No ingredient categories yet"

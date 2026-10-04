@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import ProductsTabs from "@/components/ProductsTabs";
@@ -76,11 +77,19 @@ export default function TemplatesPage() {
         </THead>
         <TBody>
           {templates === null ? (
-            <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={3} cols={6} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={6}>
+                  <LoadFailed what="templates" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={6}>
+                  <TableSkeleton rows={3} cols={6} />
+                </td>
+              </tr>
+            )
           ) : templates.length === 0 ? (
             <tr>
               <td colSpan={6}>

@@ -6,6 +6,7 @@ import { listOutlets, listProductSales, resolveImageUrl } from "@/lib/api";
 import type { Outlet, ProductSalesRow, ReportsFilters } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -139,11 +140,19 @@ export default function ProductSaleReportPage() {
         </THead>
         <TBody>
           {rows === null ? (
-            <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={8} cols={6} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={6}>
+                  <LoadFailed what="the report" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={6}>
+                  <TableSkeleton rows={8} cols={6} />
+                </td>
+              </tr>
+            )
           ) : rows.length === 0 && !error ? (
             <tr>
               <td colSpan={6}>

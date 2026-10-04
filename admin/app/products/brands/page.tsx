@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Thumbnail from "@/components/ui/Thumbnail";
 import Tooltip from "@/components/ui/Tooltip";
@@ -85,7 +86,11 @@ export default function BrandsPage() {
       )}
 
       {brands === null ? (
-        <TableSkeleton rows={4} cols={3} />
+        error ? (
+          <LoadFailed what="brands" onRetry={refresh} />
+        ) : (
+          <TableSkeleton rows={4} cols={3} />
+        )
       ) : brands.length === 0 ? (
         <EmptyState
           title="No brands yet"

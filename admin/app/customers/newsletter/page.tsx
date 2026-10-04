@@ -8,6 +8,7 @@ import { listNewsletterSubscribers, downloadExport } from "@/lib/api";
 import type { NewsletterSubscriber } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -141,11 +142,19 @@ export default function NewsletterSubscribersPage() {
         </THead>
         <TBody>
           {subscribers === null ? (
-            <tr>
-              <td colSpan={3}>
-                <TableSkeleton rows={8} cols={3} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={3}>
+                  <LoadFailed what="newsletter subscribers" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={3}>
+                  <TableSkeleton rows={8} cols={3} />
+                </td>
+              </tr>
+            )
           ) : subscribers.length === 0 && !error ? (
             <tr>
               <td colSpan={3}>

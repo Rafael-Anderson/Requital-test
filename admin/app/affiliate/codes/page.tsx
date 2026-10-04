@@ -6,6 +6,7 @@ import { listAffiliateCodes } from "@/lib/api";
 import type { AffiliateCodeListItem } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
@@ -109,11 +110,19 @@ export default function AffiliateCodesPage() {
         </THead>
         <TBody>
           {codes === null ? (
-            <tr>
-              <td colSpan={9}>
-                <TableSkeleton rows={8} cols={9} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={9}>
+                  <LoadFailed what="affiliate codes" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={9}>
+                  <TableSkeleton rows={8} cols={9} />
+                </td>
+              </tr>
+            )
           ) : codes.length === 0 && !error ? (
             <tr>
               <td colSpan={9}>

@@ -11,6 +11,7 @@ import Input from "@/components/ui/Input";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import Tooltip from "@/components/ui/Tooltip";
@@ -114,11 +115,19 @@ export default function GiftCardsPage() {
         </THead>
         <TBody>
           {cards === null ? (
-            <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={3} cols={6} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={6}>
+                  <LoadFailed what="gift cards" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={6}>
+                  <TableSkeleton rows={3} cols={6} />
+                </td>
+              </tr>
+            )
           ) : cards.length === 0 ? (
             <tr>
               <td colSpan={6}>

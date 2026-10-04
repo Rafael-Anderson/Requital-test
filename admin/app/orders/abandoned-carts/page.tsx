@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { listAbandonedCarts } from "@/lib/api";
 import type { AbandonedCart } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
@@ -8,6 +8,7 @@ import BranchBar from "@/components/BranchBar";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
@@ -24,11 +25,25 @@ export default function AbandonedCartsPage() {
   const [carts, setCarts] = useState<AbandonedCart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    listAbandonedCarts()
-      .then(setCarts)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load abandoned carts"));
+  // Try again bumps `reloadKey`; the fetch itself runs in promise callbacks.
+  const [reloadKey, setReloadKey] = useState(0);
+  const refresh = useCallback(() => {
+    setError(null);
+    setReloadKey((k) => k + 1);
   }, []);
+  useEffect(() => {
+    let live = true;
+    listAbandonedCarts()
+      .then((list) => {
+        if (live) setCarts(list);
+      })
+      .catch((err) => {
+        if (live) setError(err instanceof Error ? err.message : "Failed to load abandoned carts");
+      });
+    return () => {
+      live = false;
+    };
+  }, [reloadKey]);
 
   return (
     <PageShell>
@@ -54,11 +69,19 @@ export default function AbandonedCartsPage() {
         </THead>
         <TBody>
           {carts === null ? (
-            <tr>
-              <td colSpan={5}>
-                <TableSkeleton rows={3} cols={5} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={5}>
+                  <LoadFailed what="abandoned carts" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={5}>
+                  <TableSkeleton rows={3} cols={5} />
+                </td>
+              </tr>
+            )
           ) : carts.length === 0 ? (
             <tr>
               <td colSpan={5}>

@@ -11,6 +11,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Modal from "@/components/ui/Modal";
 import PageShell from "@/components/ui/PageShell";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import Tooltip from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
@@ -84,7 +85,11 @@ export default function TaxClassesPage() {
 
       <Card>
         {classes === null ? (
-          <TableSkeleton rows={3} cols={4} />
+          error ? (
+            <LoadFailed what="tax classes" onRetry={refresh} />
+          ) : (
+            <TableSkeleton rows={3} cols={4} />
+          )
         ) : classes.length === 0 ? (
           <EmptyState
             title="No tax classes yet"

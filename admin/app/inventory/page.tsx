@@ -14,6 +14,7 @@ import type { Ingredient, IngredientCategory } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
@@ -184,11 +185,19 @@ export default function IngredientsPage() {
         </THead>
         <TBody>
           {ingredients === null ? (
-            <tr>
-              <td colSpan={8}>
-                <TableSkeleton rows={3} cols={8} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={8}>
+                  <LoadFailed what="ingredients" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={8}>
+                  <TableSkeleton rows={3} cols={8} />
+                </td>
+              </tr>
+            )
           ) : visibleIngredients.length === 0 ? (
             <tr>
               <td colSpan={8}>

@@ -5,6 +5,7 @@ import { listFailedJobs, retryFailedJob, dismissFailedJob } from "@/lib/api";
 import type { FailedJob } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
@@ -83,11 +84,19 @@ export default function FailedJobsPanel() {
         </THead>
         <TBody>
           {jobs === null ? (
-            <tr>
-              <td colSpan={6}>
-                <TableSkeleton rows={6} cols={6} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={6}>
+                  <LoadFailed what="failed jobs" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={6}>
+                  <TableSkeleton rows={6} cols={6} />
+                </td>
+              </tr>
+            )
           ) : jobs.length === 0 && !error ? (
             <tr>
               <td colSpan={6}>

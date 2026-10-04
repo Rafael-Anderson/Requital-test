@@ -6,6 +6,7 @@ import { deleteDiscount, listCollections, listDiscounts, listProducts, updateDis
 import { DISCOUNT_TYPE_LABELS, type Collection, type Discount, type Product } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import LoadFailed from "@/components/ui/LoadFailed";
 import EmptyState from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
@@ -108,11 +109,19 @@ export default function DiscountsPage() {
         </THead>
         <TBody>
           {discounts === null ? (
-            <tr>
-              <td colSpan={8}>
-                <TableSkeleton rows={6} cols={8} />
-              </td>
-            </tr>
+            error ? (
+              <tr>
+                <td colSpan={8}>
+                  <LoadFailed what="discounts" onRetry={refresh} />
+                </td>
+              </tr>
+            ) : (
+              <tr>
+                <td colSpan={8}>
+                  <TableSkeleton rows={6} cols={8} />
+                </td>
+              </tr>
+            )
           ) : discounts.length === 0 && !error ? (
             <tr>
               <td colSpan={8}>
