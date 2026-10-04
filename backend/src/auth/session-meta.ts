@@ -8,9 +8,9 @@ export interface SessionMeta {
   ip: string | null;
 }
 
-// req.ip, not X-Forwarded-For: main.ts sets no `trust proxy`, so behind a
-// reverse proxy this is the proxy's address until that is configured (an infra
-// decision, since trusting the header lets a client choose its own IP).
+// req.ip, never a raw header: req.ip is where TRUST_PROXY is applied
+// (common/trust-proxy.ts). With it unset this is the socket address, i.e. the
+// proxy's behind Caddy.
 export function sessionMetaFrom(req: Request): SessionMeta {
   const ua = req.headers['user-agent'];
   return {

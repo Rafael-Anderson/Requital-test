@@ -2,13 +2,15 @@ import {
   MiddlewareConsumer,
   Module,
   NestModule,
+  OnModuleInit,
   RequestMethod,
 } from '@nestjs/common';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, HttpAdapterHost } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import type { ExecutionContext } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Express, Request } from 'express';
+import { parseTrustProxy } from './common/trust-proxy';
 import cookieParser from 'cookie-parser';
 import { RequestContextMiddleware } from './common/logging/request-context.middleware';
 import { platformCsrf } from './platform-auth/platform-auth.constants';
@@ -217,7 +219,22 @@ function isSignupRequest(context: ExecutionContext): boolean {
     },
   ],
 })
-export class AppModule implements NestModule {
+export class AppModule implements NestModule, OnModuleInit {
+  constructor(private readonly adapterHost: HttpAdapterHost) {}
+
+  // TRUST_PROXY (see common/trust-proxy.ts) is applied here, not in main.ts,
+  // for the same reason cookie-parser and the CSRF middleware are: main.ts's
+  // bootstrap() never runs under Jest, so the e2e specs would exercise a
+  // different trust boundary than production. onModuleInit runs at app.init()
+  // in both, after the HTTP adapter exists (it does not yet at compile()).
+  // Unset leaves Express's default (trust nothing); an invalid value throws,
+  // and main.ts's validateEnv has already refused it with a readable message.
+  onModuleInit() {
+    const trust = parseTrustProxy(process.env.TRUST_PROXY);
+    if (trust === false) return;
+    this.adapterHost.httpAdapter.getInstance<Express>().set('trust proxy', trust);
+  }
+
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(RequestContextMiddleware).forRoutes('*');
     // Registered here, not via app.use(cookieParser()) in main.ts, for the

@@ -1,4 +1,5 @@
 import type { LoggerService } from '@nestjs/common';
+import { isValidTrustProxy } from './trust-proxy';
 
 // Runs at the very top of main.ts, before NestFactory.create() even starts —
 // a misconfigured deployment should fail immediately and loudly, not boot
@@ -73,6 +74,12 @@ const SPECS: EnvVarSpec[] = [
     required: false,
     validate: isNumeric,
     hint: 'must be numeric',
+  },
+  {
+    name: 'TRUST_PROXY',
+    required: false,
+    validate: isValidTrustProxy,
+    hint: 'must be a hop count (1-10) or a comma-separated list of loopback/linklocal/uniquelocal, IPs or CIDRs; "true" and trust-all ranges are refused (see docs/runbook.md)',
   },
   {
     name: 'ADMIN_ORIGINS',
