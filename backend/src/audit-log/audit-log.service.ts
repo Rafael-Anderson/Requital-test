@@ -27,14 +27,18 @@ export class AuditLogService {
   // succeeding but the request 500ing because the log insert hit some
   // unrelated DB hiccup — the delete already happened, the error would be a
   // lie).
-  async log(actor: { shopId: number; actorUserId: number }, entry: LogEntry) {
+  async log(
+    actor: { shopId: number; actorUserId: number | null; actorLabel?: string },
+    entry: LogEntry,
+  ) {
     try {
       await this.db.execute(
-        `INSERT INTO auditlog (shopId, actorUserId, action, entityType, entityId, \`before\`, \`after\`, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO auditlog (shopId, actorUserId, actorLabel, action, entityType, entityId, \`before\`, \`after\`, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           actor.shopId,
           actor.actorUserId,
+          actor.actorLabel ?? null,
           entry.action,
           entry.entityType,
           entry.entityId ?? null,
@@ -49,6 +53,19 @@ export class AuditLogService {
   }
 
   async logCtx(ctx: TenantContext, entry: LogEntry) {
+    // A delivery-run driver has no user row: attribute by label, never by a
+    // borrowed staff id.
+    if (ctx.driver) {
+      await this.log(
+        {
+          shopId: ctx.shopId,
+          actorUserId: null,
+          actorLabel: `driver ${ctx.driver.name}`,
+        },
+        entry,
+      );
+      return;
+    }
     await this.log({ shopId: ctx.shopId, actorUserId: ctx.userId }, entry);
   }
 
@@ -76,9 +93,10 @@ export class AuditLogService {
 
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT al.id, al.action, al.entityType, al.entityId, al.\`before\`, al.\`after\`,
-              al.metadata, al.createdAt, u.id AS actorId, u.name AS actorName
+              al.metadata, al.createdAt, u.id AS actorId,
+              COALESCE(u.name, al.actorLabel) AS actorName
        FROM auditlog al
-       JOIN user u ON u.id = al.actorUserId
+       LEFT JOIN user u ON u.id = al.actorUserId
        WHERE ${whereClause}
        ORDER BY al.createdAt DESC
        LIMIT ? OFFSET ?`,
@@ -94,7 +112,7 @@ export class AuditLogService {
         before: r.before,
         after: r.after,
         metadata: r.metadata,
-        actorId: r.actorId as number,
+        actorId: r.actorId as number | null,
         actorName: r.actorName as string,
         createdAt: r.createdAt as Date,
       })),
@@ -110,19 +128,23 @@ export class AuditLogService {
     ctx: TenantContext,
     entityType: string,
     entityId: number,
-    action?: string,
+    action?: string | string[],
   ) {
     const conditions = ['al.shopId = ?', 'al.entityType = ?', 'al.entityId = ?'];
     const params: (string | number)[] = [ctx.shopId, entityType, entityId];
-    if (action) {
+    if (Array.isArray(action)) {
+      conditions.push(`al.action IN (${action.map(() => '?').join(', ')})`);
+      params.push(...action);
+    } else if (action) {
       conditions.push('al.action = ?');
       params.push(action);
     }
 
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT al.id, al.action, al.\`before\`, al.\`after\`, al.createdAt, u.name AS actorName
+      `SELECT al.id, al.action, al.\`before\`, al.\`after\`, al.createdAt,
+              COALESCE(u.name, al.actorLabel) AS actorName
        FROM auditlog al
-       JOIN user u ON u.id = al.actorUserId
+       LEFT JOIN user u ON u.id = al.actorUserId
        WHERE ${conditions.join(' AND ')}
        ORDER BY al.createdAt ASC`,
       params,

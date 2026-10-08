@@ -45,6 +45,9 @@ export interface OrderRow {
   consumptionRecordedAt: Date | null;
   cashCollectedAt: Date | null;
   cashCollectedBy: number | null;
+  // Set instead of cashCollectedBy when a delivery-run DRIVER took the cash
+  // (migration 20261030100000). At most one of the two is non-NULL.
+  cashCollectedByDriverId: number | null;
   // ISO 4217, frozen at insert (migration 20260926210000). Reading this
   // rather than shop.currency is what stops a later shop-setting change
   // from re-denominating rows that are already written.
@@ -74,7 +77,10 @@ export interface OrdernoteRow {
 export interface AuditlogRow {
   id: number;
   shopId: number;
-  actorUserId: number;
+  // NULL when a delivery-run driver acted (migration 20261030100000); the
+  // attribution is then actorLabel, e.g. "driver Ahmed".
+  actorUserId: number | null;
+  actorLabel: string | null;
   action: string;
   entityType: string;
   entityId: number | null;
@@ -1480,5 +1486,84 @@ export interface PurchaseorderreceiptlineRow {
   currency: string;
   lineTotal: string;
   stockMovementId: number | null;
+  createdAt: Date;
+}
+
+export interface DriverRow {
+  id: number;
+  shopId: number;
+  outletId: number;
+  name: string;
+  phone: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type DeliveryRunStatus =
+  | 'draft'
+  | 'dispatched'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export interface DeliveryrunRow {
+  id: number;
+  shopId: number;
+  outletId: number;
+  driverId: number;
+  status: DeliveryRunStatus;
+  runDate: string | null;
+  notes: string | null;
+  proofRequirement: 'photo_or_otp' | 'photo' | 'otp' | 'none';
+  createdByUserId: number | null;
+  dispatchedAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeliveryrunstopRow {
+  id: number;
+  shopId: number;
+  runId: number;
+  orderId: number;
+  position: number;
+  status: 'pending' | 'delivered' | 'failed';
+  // orderId while pending inside a live run, else NULL (UNIQUE: one active run
+  // per order). See the migration.
+  activeOrderId: number | null;
+  failureReason: string | null;
+  deliveredAt: Date | null;
+  failedAt: Date | null;
+  proofType: 'photo' | 'otp' | 'both' | 'none' | null;
+  proofPhotoKey: string | null;
+  proofPhotoUrl: string | null;
+  proofPhotoAt: Date | null;
+  otpSalt: string | null;
+  otpHash: string | null;
+  otpExpiresAt: Date | null;
+  otpAttempts: number;
+  otpSendCount: number;
+  otpSentAt: Date | null;
+  codExpected: string | null;
+  cashCollectedAmount: string | null;
+  cashCurrency: string | null;
+  cashDiscrepancy: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DeliveryrunlinkRow {
+  id: number;
+  shopId: number;
+  runId: number;
+  driverId: number;
+  tokenHash: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+  createdByUserId: number | null;
   createdAt: Date;
 }

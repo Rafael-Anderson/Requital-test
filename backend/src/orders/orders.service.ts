@@ -723,9 +723,13 @@ export class OrdersService {
       );
     }
     if (order.cashCollectedAt === null) {
+      // A delivery-run driver is recorded in its own column, never as a staff
+      // user (cashCollectedBy is an FK to `user`). The cashCollectedAt IS NULL
+      // guard in the WHERE makes a double call a no-op instead of a re-stamp.
       await this.db.execute(
-        `UPDATE \`order\` SET cashCollectedAt = NOW(3), cashCollectedBy = ? WHERE id = ? AND shopId = ?`,
-        [ctx.userId, id, ctx.shopId],
+        `UPDATE \`order\` SET cashCollectedAt = NOW(3), cashCollectedBy = ?, cashCollectedByDriverId = ?
+          WHERE id = ? AND shopId = ? AND cashCollectedAt IS NULL`,
+        [ctx.driver ? null : ctx.userId, ctx.driver?.id ?? null, id, ctx.shopId],
       );
     }
     const orders = await this.loadOrdersWithRelations([id]);
@@ -1393,7 +1397,7 @@ export class OrdersService {
       ctx,
       'order',
       id,
-      'order.status_changed',
+      ['order.status_changed', 'order.delivery_failed'],
     );
     return [
       // The very first "became pending" moment is the order's own creation,
@@ -1401,7 +1405,13 @@ export class OrdersService {
       // *change*, so this is synthesized rather than duplicated in auditlog.
       { status: 'pending', timestamp: order.createdAt, actorName: null },
       ...entries.map((e) => ({
-        status: (e.after as { status?: string } | null)?.status ?? null,
+        // A failed delivery attempt is not a status change (the order stays
+        // out_for_delivery so staff can re-run it) but it belongs on the
+        // timeline; it is shown as its own pseudo-status.
+        status:
+          e.action === 'order.delivery_failed'
+            ? 'delivery_failed'
+            : ((e.after as { status?: string } | null)?.status ?? null),
         timestamp: e.createdAt,
         actorName: e.actorName as string,
       })),
@@ -1615,8 +1625,9 @@ export class OrdersService {
       this.db.query<
         (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
       >(
-        `SELECT o.*, u.name AS cashCollectedByName
+        `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName
          FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
+         LEFT JOIN driver d ON d.id = o.cashCollectedByDriverId AND d.shopId = o.shopId
          WHERE o.id IN (${idList})`,
         ids,
       ),
@@ -1655,8 +1666,9 @@ export class OrdersService {
         this.db.query<
           (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
         >(
-          `SELECT o.*, u.name AS cashCollectedByName
+          `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName
            FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
+           LEFT JOIN driver d ON d.id = o.cashCollectedByDriverId AND d.shopId = o.shopId
            WHERE o.id = ?`,
           [id],
         ),
