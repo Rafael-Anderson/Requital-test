@@ -10,6 +10,7 @@ import type { PaymentProvider } from '../payments/payment-provider.interface';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { releaseDiscountRedemption } from '../discounts/release-redemption';
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { createLogger } from '../common/logging/logger';
 import { minorUnitFactor, roundMoney } from '../common/currency-minor-units';
@@ -379,6 +380,9 @@ export class ReturnsService {
           `UPDATE \`order\` SET paymentStatus = 'refunded' WHERE id = ?`,
           [orderId],
         );
+        // A full refund gives the order's discount use back, exactly like a
+        // cancel (idempotent). A partial return never reaches this branch.
+        await releaseDiscountRedemption(conn, order.shopId, orderId);
       }
 
       return { returnId: newReturnId, refundAmount, refundMethod };

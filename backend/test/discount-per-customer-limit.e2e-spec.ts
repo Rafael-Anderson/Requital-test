@@ -14,10 +14,9 @@ jest.setTimeout(240000);
 // validate()/draft-attach checks are advisory: they only see a customer that
 // already exists and only committed rows.
 //
-// Semantics recorded here (not invented): a redemption is written at order
-// creation and never deleted, so an UNPAID or CANCELLED order still counts
-// against the per-customer limit, exactly as it still counts against the global
-// usageLimit (timesUsed is never decremented either).
+// Semantics: a redemption is written at order creation. An UNPAID order still
+// counts, but a CANCELLED or fully refunded order releases it (see
+// discount-release-on-cancel.e2e-spec.ts), for this limit and the global one.
 describe('Discount per-customer limit (e2e)', () => {
   let app: INestApplication<App>;
   let db: DatabaseService;
@@ -272,7 +271,7 @@ describe('Discount per-customer limit (e2e)', () => {
     expect(await redemptions(d.id)).toHaveLength(3);
   });
 
-  it('a cancelled order still counts against the limit (existing semantics: redemptions are never released)', async () => {
+  it('a cancelled order stops counting against the limit (released with the cancel)', async () => {
     const { shop, product } = await shopWithStock('pcl-cancel');
     const d = await f.createDiscount(shop, { usageLimitPerCustomer: 1 });
     const phone = newPhone();
@@ -288,7 +287,7 @@ describe('Discount per-customer limit (e2e)', () => {
       customerPhone: phone,
       discountCode: d.code,
     });
-    expect(retry.status).toBe(409);
+    expect(retry.status).toBe(201);
     expect(await timesUsed(d.id)).toBe(1);
   });
 
