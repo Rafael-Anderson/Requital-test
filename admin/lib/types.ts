@@ -3340,6 +3340,73 @@ export interface ReceivePurchaseOrderInput {
   idempotencyKey?: string;
 }
 
+export interface ScanPurchaseOrderResult {
+  line: {
+    id: number;
+    description: string;
+    supplierSku: string | null;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitCost: string;
+    currency: string;
+  };
+  quantity: number;
+  outstandingAfter: number;
+}
+
+// INV-5 (backend/src/purchase-orders/reorder.service.ts).
+export interface ReorderPointInput {
+  ingredientId: number;
+  outletId: number;
+  reorderPoint: number | null;
+  reorderQuantity: number | null;
+}
+
+export interface ReorderLowStockRow {
+  outletId: number;
+  outletName: string;
+  ingredientId: number;
+  name: string;
+  unit: string;
+  stock: number;
+  onOrder: number;
+  position: number;
+  covered: boolean;
+  reorderPoint: number;
+  reorderQuantity: number | null;
+}
+
+export interface ReorderSuggestionLine {
+  ingredientId: number;
+  name: string;
+  unit: string;
+  quantity: number;
+  unitCost: string;
+  lineTotal: number;
+  priceComparable: boolean;
+  alternatives: number;
+  stock: number;
+  onOrder: number;
+  reorderPoint: number;
+}
+
+export interface ReorderSuggestionGroup {
+  outletId: number;
+  supplierId: number;
+  supplierName: string;
+  currency: string;
+  subtotal: number;
+  belowMinimumOrderAmount: boolean;
+  lines: ReorderSuggestionLine[];
+}
+
+export type ReorderNoSupplierReason = "no_supplier" | "unpriced_supplier_item" | "no_reorder_quantity";
+
+export interface ReorderSuggestions {
+  groups: ReorderSuggestionGroup[];
+  noSupplier: { outletId: number; ingredientId: number; name: string; reason: ReorderNoSupplierReason }[];
+}
+
 // ONB-4: URL redirect map + 404 report (backend/src/url-redirects).
 export interface UrlRedirect {
   id: number;
