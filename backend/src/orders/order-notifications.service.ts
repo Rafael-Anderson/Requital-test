@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { sendWhatsAppStub } from '../common/whatsapp';
 import { normalizePhoneToE164 } from '../common/phone';
 import { generateSurveyToken } from '../common/token-hash';
+import { isDuplicateKeyError } from '../database/mysql-errors';
 import { escapeHtml } from '../common/email';
 import { WhatsAppSettingsService } from '../whatsapp/whatsapp-settings.service';
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
@@ -170,11 +171,24 @@ export class OrderNotificationsService {
     );
     if (existingRows.length > 0) return;
 
-    const token = generateSurveyToken();
-    await this.db.execute(
-      `INSERT INTO surveyresponse (shopId, orderId, token) VALUES (?, ?, ?)`,
-      [shopId, order.id, token],
-    );
+    // A token collision on the unique index is retried with a fresh token (it
+    // cannot realistically happen at 128 bits; this keeps it from ever being a
+    // lost survey). A duplicate ORDER means a concurrent call already created it.
+    let token = generateSurveyToken();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.db.execute(
+          `INSERT INTO surveyresponse (shopId, orderId, token) VALUES (?, ?, ?)`,
+          [shopId, order.id, token],
+        );
+        break;
+      } catch (err) {
+        if (!isDuplicateKeyError(err)) throw err;
+        if (String((err as Error).message).includes('orderId_key')) return;
+        if (attempt >= 3) throw err;
+        token = generateSurveyToken();
+      }
+    }
 
     if (!flags.notify_email || !order.customerEmail) return;
     const link = storefrontUrl(

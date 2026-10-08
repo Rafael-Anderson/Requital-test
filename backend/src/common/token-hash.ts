@@ -24,11 +24,15 @@ export function generateTrackingCode(): string {
   return randomBytes(5).toString('hex').toUpperCase();
 }
 
-// Customer-facing survey link token — same shape/threat model as
-// generateTrackingCode() above (plaintext, possession proves it's your
-// survey, not a login credential). Kept as its own named function rather
-// than reusing generateTrackingCode() directly so a future reader never
-// confuses a survey token with an order-tracking code in the codebase.
+// Customer-facing survey link token. Unlike the tracking code this one is a
+// credential for a state change (submit, consent withdrawal), is never read
+// aloud, and lives only in an emailed link, so it gets 128 bits: 16 random
+// bytes as 32 hex characters. Hex (not base64url) on purpose: surveyresponse.token
+// uses a case-insensitive collation, so a mixed-case alphabet would silently
+// lose entropy per character. Tokens issued before this change are 10 hex
+// characters and stay valid: lookups are an exact match on the unique column
+// and nothing validates the token's length or shape.
+export const SURVEY_TOKEN_BYTES = 16;
 export function generateSurveyToken(): string {
-  return randomBytes(5).toString('hex').toUpperCase();
+  return randomBytes(SURVEY_TOKEN_BYTES).toString('hex').toUpperCase();
 }
