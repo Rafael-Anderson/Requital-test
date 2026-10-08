@@ -15,6 +15,7 @@ import {
   ListPurchaseOrdersQueryDto,
   ReceivePurchaseOrderDto,
   ReplacePurchaseOrderLinesDto,
+  ScanPurchaseOrderLineDto,
   UpdatePurchaseOrderDto,
 } from './dto/purchase-order.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -94,5 +95,14 @@ export class PurchaseOrdersController {
     @Body() dto: ReceivePurchaseOrderDto,
   ) {
     return this.purchaseOrders.receive(ctx, id, dto);
+  }
+
+  @Post(':id/scan')
+  scan(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ScanPurchaseOrderLineDto,
+  ) {
+    return this.purchaseOrders.resolveScan(ctx, id, dto);
   }
 }
