@@ -8,13 +8,14 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("InventoryTabs", () => {
-  it("renders all six tabs with the correct hrefs, Ingredients as the root tab", () => {
+  it("renders all seven tabs with the correct hrefs, Ingredients as the root tab", () => {
     render(<InventoryTabs />);
     expect(screen.getByText("Ingredients").closest("a")).toHaveAttribute("href", "/inventory");
     expect(screen.getByText("Categories").closest("a")).toHaveAttribute("href", "/inventory/categories");
     expect(screen.getByText("Scan to Stock").closest("a")).toHaveAttribute("href", "/inventory/scan");
     expect(screen.getByText("Suppliers").closest("a")).toHaveAttribute("href", "/inventory/suppliers");
     expect(screen.getByText("Purchase Orders").closest("a")).toHaveAttribute("href", "/inventory/purchase-orders");
+    expect(screen.getByText("Reorder").closest("a")).toHaveAttribute("href", "/inventory/reorder");
     expect(screen.getByText("Movement History").closest("a")).toHaveAttribute("href", "/inventory/movements");
     expect(screen.queryByText("Products")).not.toBeInTheDocument();
   });

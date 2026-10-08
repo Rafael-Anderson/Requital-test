@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Ban, PackageCheck, Pencil, Send } from "lucide-react";
+import { Ban, PackageCheck, Pencil, ScanBarcode, Send } from "lucide-react";
 import { cancelPurchaseOrder, getPurchaseOrder, sendPurchaseOrder } from "@/lib/api";
 import type { PurchaseOrderDetail } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
@@ -18,6 +18,7 @@ import ScrollFade from "@/components/ui/ScrollFade";
 import InventoryTabs from "@/components/InventoryTabs";
 import PurchaseOrderStatusBadge from "@/components/PurchaseOrderStatusBadge";
 import ReceivePurchaseOrderModal from "@/components/ReceivePurchaseOrderModal";
+import ScanReceiveModal from "@/components/ScanReceiveModal";
 import EditPurchaseOrderLinesModal from "@/components/EditPurchaseOrderLinesModal";
 
 export default function PurchaseOrderDetailPage() {
@@ -29,6 +30,7 @@ export default function PurchaseOrderDetailPage() {
   const [version, setVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [receiving, setReceiving] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [editingLines, setEditingLines] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
@@ -97,6 +99,12 @@ export default function PurchaseOrderDetailPage() {
                       Mark as sent
                     </Button>
                   </>
+                )}
+                {canReceive && (
+                  <Button variant="secondary" onClick={() => setScanning(true)}>
+                    <ScanBarcode className="-mt-0.5 me-1 inline size-4" />
+                    Scan to receive
+                  </Button>
                 )}
                 {canReceive && (
                   <Button variant="primary" onClick={() => setReceiving(true)}>
@@ -206,6 +214,7 @@ export default function PurchaseOrderDetailPage() {
       )}
 
       {po && receiving && <ReceivePurchaseOrderModal po={po} onClose={() => setReceiving(false)} onReceived={refresh} />}
+      {po && scanning && <ScanReceiveModal po={po} onClose={() => setScanning(false)} onReceived={refresh} />}
       {po && editingLines && <EditPurchaseOrderLinesModal po={po} onClose={() => setEditingLines(false)} onSaved={refresh} />}
     </PageShell>
   );

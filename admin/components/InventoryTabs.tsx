@@ -8,6 +8,7 @@ const TABS = [
   { href: "/inventory/scan", label: "Scan to Stock" },
   { href: "/inventory/suppliers", label: "Suppliers", exact: false },
   { href: "/inventory/purchase-orders", label: "Purchase Orders", exact: false },
+  { href: "/inventory/reorder", label: "Reorder" },
   { href: "/inventory/movements", label: "Movement History" },
 ];
 
