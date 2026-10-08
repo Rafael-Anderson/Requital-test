@@ -8,6 +8,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
+import * as tokenHash from '../src/common/token-hash';
 import { storefrontUrl } from '../src/common/storefront-url';
 import type { JobRow, SurveyresponseRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
@@ -93,7 +94,7 @@ describe('Survey consent withdrawal (e2e)', () => {
     await request(app.getHttpServer())
       .patch('/shop')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ notifyEmail: true })
+      .send({ notifyEmail: true, customerSurveyEnabled: true })
       .expect(200);
     const outlets = await request(app.getHttpServer())
       .get('/outlets')
@@ -141,6 +142,7 @@ describe('Survey consent withdrawal (e2e)', () => {
       consent?: number | null;
       featured?: boolean;
       email?: string | null;
+      token?: string;
     } = {},
   ): Promise<{ id: number; token: string; orderId: number }> {
     const answered = opts.answered ?? true;
@@ -159,7 +161,7 @@ describe('Survey consent withdrawal (e2e)', () => {
       })
       .expect(201);
     const orderId = body<IdRow>(order).id;
-    const token = `WD${runId % 1e6}${++tokenSeq}`.slice(0, 20);
+    const token = opts.token ?? `WD${runId % 1e6}${++tokenSeq}`.slice(0, 20);
     const result = await db.execute(
       `INSERT INTO surveyresponse
          (shopId, orderId, token, rating, comment, respondedAt, publishConsent, featuredAt)
@@ -452,6 +454,128 @@ describe('Survey consent withdrawal (e2e)', () => {
       for (const s of [declined, omitted, noEmail, off]) {
         expect(await jobFor(s.id)).toHaveLength(0);
       }
+    });
+  });
+
+  // Survey tokens drive a state change (submit, consent withdrawal), so NEW ones
+  // carry 128 bits; the 10-hex tokens issued before keep working untouched.
+  describe('token width', () => {
+    const NEW_TOKEN = /^[0-9A-F]{32}$/;
+    const LEGACY = () =>
+      Array.from({ length: 10 }, () =>
+        '0123456789ABCDEF'[Math.floor(Math.random() * 16)],
+      ).join('');
+    const submitTo = (token: string) =>
+      request(app.getHttpServer())
+        .post(`/public/surveys/submit?token=${token}`)
+        .send({ rating: 5, comment: 'ok', publishConsent: true });
+    const lookup = (token: string) =>
+      request(app.getHttpServer()).get(
+        `/public/surveys/lookup?token=${encodeURIComponent(token)}`,
+      );
+    async function plainOrder(shop: Shop) {
+      const order = await request(app.getHttpServer())
+        .post('/orders')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({
+          customerName: 'Tok Customer',
+          customerPhone: '0500000004',
+          customerAddress: '1 Street',
+          outletId: shop.outletId,
+          items: [{ productId: shop.productId, quantity: 1 }],
+        })
+        .expect(201);
+      return body<IdRow & { shopOrderNumber: number }>(order);
+    }
+    const notifiable = (o: { id: number; shopOrderNumber: number }, shop: Shop) => ({
+      id: o.id,
+      shopOrderNumber: o.shopOrderNumber,
+      customerName: 'Tok Customer',
+      customerEmail: null,
+      customerPhone: '0500000004',
+      orderType: null,
+      total: '25',
+      currency: 'AED',
+      outletId: shop.outletId,
+    });
+
+    it('a newly issued token is 32 hex characters (128 bits) and works for lookup, submit and withdraw', async () => {
+      const shop = await setupShop('tok-new');
+      const o = await plainOrder(shop);
+      await app
+        .get(OrderNotificationsService)
+        .notifySurveyRequest(shop.shopId, notifiable(o, shop));
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT token FROM surveyresponse WHERE orderId = ?`,
+        [o.id],
+      );
+      const token = rows[0].token as string;
+      expect(token).toMatch(NEW_TOKEN);
+      expect(token).not.toBe(token.slice(0, 10));
+
+      await lookup(token).expect(200);
+      await submitTo(token).expect(201);
+      await withdraw(token).expect(201);
+      // exact match only: a 10 character prefix of the new token finds nothing
+      await lookup(token.slice(0, 10)).expect(404);
+      await withdraw(token.slice(0, 10)).expect(404);
+    });
+
+    it('a legacy 10 hex token still looks up, submits and withdraws', async () => {
+      const shop = await setupShop('tok-old');
+      const a = await addSurvey(shop, { answered: false, token: LEGACY() });
+      expect(a.token).toMatch(/^[0-9A-F]{10}$/);
+      const res = await lookup(a.token).expect(200);
+      expect(body<{ respondedAt: unknown }>(res).respondedAt).toBeNull();
+      await submitTo(a.token).expect(201);
+      expect((await rowOf(a.id)).publishConsent).toBe(1);
+      await withdraw(a.token).expect(201);
+      expect((await rowOf(a.id)).publishConsent).toBe(0);
+    });
+
+    it('malformed tokens of any length get the identical 404 on all three routes', async () => {
+      const shop = await setupShop('tok-bad');
+      const real = await addSurvey(shop, { answered: false, token: LEGACY() });
+      const bad = [
+        'A'.repeat(31),
+        'A'.repeat(33),
+        'G'.repeat(32),
+        real.token.slice(0, 9),
+        `${real.token}0`,
+        'x'.repeat(5000),
+        "' OR '1'='1",
+      ];
+      const first = await lookup(bad[0]).expect(404);
+      for (const t of bad) {
+        expect((await lookup(t).expect(404)).body).toEqual(first.body);
+        expect((await submitTo(t)).status).toBe(404);
+        expect((await withdraw(t)).status).toBe(404);
+      }
+    });
+
+    it('a token collision on the unique index is retried with a fresh token', async () => {
+      const shop = await setupShop('tok-collide');
+      const taken = await addSurvey(shop, { answered: false, token: 'C0111DEC0111DE00' });
+      const o = await plainOrder(shop);
+      const spy = jest
+        .spyOn(tokenHash, 'generateSurveyToken')
+        .mockReturnValueOnce(taken.token)
+        .mockReturnValueOnce(taken.token);
+      try {
+        await app
+          .get(OrderNotificationsService)
+          .notifySurveyRequest(shop.shopId, notifiable(o, shop));
+      } finally {
+        spy.mockRestore();
+      }
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT token FROM surveyresponse WHERE orderId = ?`,
+        [o.id],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].token).not.toBe(taken.token);
+      expect(rows[0].token).toMatch(/^[0-9A-F]{32}$/);
+      expect(spy).toHaveBeenCalledTimes(3);
     });
   });
 });
