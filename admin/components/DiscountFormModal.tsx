@@ -248,6 +248,9 @@ export default function DiscountFormModal({
               placeholder="Unlimited"
             />
           </div>
+          <p className="-mt-1 text-xs text-text-muted">
+            A cancelled order, or an order refunded in full, gives its use back to both limits. A partial return does not.
+          </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input label="Starts (optional)" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />

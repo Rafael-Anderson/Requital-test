@@ -24,11 +24,13 @@ export interface W5Shop {
   collectionId: number;
 }
 
-export async function bootApp() {
+export async function bootApp(opts: { rawBody?: boolean } = {}) {
   const moduleFixture = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
-  const app = moduleFixture.createNestApplication<INestApplication<App>>();
+  const app = moduleFixture.createNestApplication<INestApplication<App>>(
+    opts.rawBody ? { rawBody: true } : undefined,
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

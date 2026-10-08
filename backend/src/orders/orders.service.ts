@@ -41,6 +41,7 @@ import {
   isValidStatusTransition,
   OrderStatus,
 } from './constants';
+import { releaseDiscountRedemption } from '../discounts/release-redemption';
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
@@ -751,6 +752,11 @@ export class OrdersService {
         `Cannot move order from '${order.status}' to '${dto.status}'`,
       );
     }
+    // 'cancelled' has exactly one implementation: cancel() owns the stock
+    // restock, the invoice marker and the discount release. This route used to
+    // run its own bare status CAS for it, which restocked nothing and released
+    // nothing.
+    if (dto.status === 'cancelled') return this.cancel(ctx, id);
     // Plain pre-check, not folded into the CAS WHERE clause below — the CAS
     // failure path throws a generic "refresh and retry" ConflictException,
     // which would be a misleading message for "you forgot to collect cash."
@@ -1322,6 +1328,9 @@ export class OrdersService {
         // (C2). Marked in each successful CAS branch rather than after the
         // transaction, so it commits with the cancellation or not at all.
         await markInvoicesSuperseded(conn, id);
+        // Give the order's discount use back (global counter and per-customer
+        // row together), in the same transaction as the CAS that won.
+        await releaseDiscountRedemption(conn, ctx.shopId, id);
         // An order from an immediate-reservation channel already reserved
         // stock at creation (decremented while still 'pending', not at
         // confirm — see updateStatus above) — cancelling from 'pending' must
@@ -1348,6 +1357,7 @@ export class OrdersService {
       );
       if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
         await markInvoicesSuperseded(conn, id);
+        await releaseDiscountRedemption(conn, ctx.shopId, id);
         await this.adjustStockForOrder(
           conn,
           ctx,
