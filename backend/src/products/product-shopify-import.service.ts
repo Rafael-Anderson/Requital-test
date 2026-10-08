@@ -12,29 +12,47 @@ import { isDuplicateKeyError } from '../database/mysql-errors';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 import { parseCsv } from '../common/csv.util';
+import { readTable } from '../common/table-file';
 import { sanitizeHtml } from '../common/sanitize-html';
 import { ProductBomService } from './product-bom.service';
 import { ProductImportService } from './product-import.service';
+import {
+  ProductImageCopyService,
+  imageCopyKey,
+  type CopyRequest,
+} from './product-image-copy.service';
+import {
+  MAX_PLATFORM_ROWS,
+  PlatformColumnsError,
+  mapPlatformRows,
+  type PlatformSpec,
+} from './platform-import';
+import { SALLA_SPEC } from './salla-import';
+import { ZID_SPEC } from './zid-import';
 import {
   MAX_SHOPIFY_ROWS,
   decimalEquals,
   looksLikeShopifyExport,
   mapShopifyRows,
   normalizeDecimal,
+  type ShopifyMapResult,
   type ShopifyProductIn,
   type ShopifyVariantIn,
 } from './shopify-import';
 
-// ONB-1: Shopify product import. This is a COLUMN MAPPER (shopify-import.ts)
-// plus a classifier and writer that sit on the same preview/confirm contract the
-// Requital CSV import uses: preview is read-only, confirm re-uploads the same
+// ONB-1 / ONB-2: Shopify, Salla and Zid product import. A COLUMN MAPPER per
+// source (shopify-import.ts, or the table-driven platform-import.ts with
+// salla-import.ts / zid-import.ts) produces one canonical product shape; this
+// classifier and writer, shared by all three, sit on the same preview/confirm
+// contract the Requital CSV import uses: preview is read-only, confirm re-uploads the same
 // file and RE-PARSES AND RE-CLASSIFIES it (nothing from a preview is trusted),
 // every lookup is scoped by ctx.shopId, stock goes through the shared
 // applyImportStock (ledger row per change, outlet validated against the shop).
 //
-// Images are RECORDED AS URLS ONLY. The existing import never fetches an image
-// and neither does this: there is no outbound HTTP in this file, so there is
-// nothing to make SSRF-safe. (ONB-5, image fetch-and-store, is a separate job.)
+// Images are RECORDED AS URLS. There is no outbound HTTP in this file. With
+// `copyImages`, confirm QUEUES one job per image after the transaction commits
+// (ProductImageCopyService); the job fetches through common/safe-fetch.ts and
+// swaps the stored URL for our own copy.
 
 const MAX_DESCRIPTION_LENGTH = 60_000; // product.description is TEXT (65,535 bytes)
 const REPORT_PRODUCT_CAP = 1_000;
@@ -42,11 +60,27 @@ const IN_CHUNK = 500;
 
 export type ExistingPolicy = 'update' | 'skip';
 
+export type ProductImportSource = 'shopify' | 'salla' | 'zid';
+
 export interface ShopifyImportOptions {
   collectionId?: number;
   outletId?: number;
   onExisting?: ExistingPolicy;
+  // Defaults to 'shopify'.
+  source?: ProductImportSource;
+  copyImages?: boolean;
 }
+
+const PLATFORM_SPECS: Record<'salla' | 'zid', PlatformSpec> = {
+  salla: SALLA_SPEC,
+  zid: ZID_SPEC,
+};
+
+const SOURCE_LABEL: Record<ProductImportSource, string> = {
+  shopify: 'Shopify',
+  salla: 'Salla',
+  zid: 'Zid',
+};
 
 export type ProductImportAction = 'create' | 'update' | 'skip' | 'error';
 
@@ -81,7 +115,7 @@ export interface ShopifyProductReport {
 }
 
 export interface ShopifyImportReport {
-  source: 'shopify';
+  source: ProductImportSource;
   currency: string;
   currencyNote: string;
   outletId: number | null;
@@ -102,6 +136,8 @@ export interface ShopifyImportReport {
   truncated: boolean;
   warnings: string[];
   unsupportedColumns: string[];
+  // Present when the merchant asked to copy images into Requital's storage.
+  imageCopy: { requested: boolean; willQueue: number; overCap: number };
 }
 
 interface ExistingProduct {
@@ -171,6 +207,7 @@ export class ProductShopifyImportService {
     private readonly importService: ProductImportService,
     private readonly bom: ProductBomService,
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
+    private readonly imageCopy: ProductImageCopyService,
   ) {}
 
   async preview(
@@ -198,12 +235,13 @@ export class ProductShopifyImportService {
     );
     const restockTargets: { productId: number; variantId: number | null }[] =
       [];
+    const copyRequests: CopyRequest[] = [];
 
     try {
       await this.db.transaction(async (conn) => {
         for (const plan of writable) {
           if (plan.action === 'create') {
-            await this.createProduct(
+            const productId = await this.createProduct(
               conn,
               ctx,
               plan,
@@ -211,8 +249,16 @@ export class ProductShopifyImportService {
               taxClassIds,
               restockTargets,
             );
+            copyRequests.push({
+              productId,
+              urls: plan.product.images.map((i) => i.url),
+            });
           } else {
             await this.updateProduct(conn, ctx, plan, options, restockTargets);
+            copyRequests.push({
+              productId: plan.existing!.id,
+              urls: plan.newImages,
+            });
           }
         }
       });
@@ -235,8 +281,23 @@ export class ProductShopifyImportService {
         .catch(() => {});
     }
 
+    // Image copies are queued AFTER the commit and never inside the request's
+    // transaction. A queue failure must not undo a finished import.
+    let imageCopy = { queued: 0, skipped: 0 };
+    if (options.copyImages) {
+      try {
+        imageCopy = await this.imageCopy.enqueue(
+          ctx.shopId,
+          copyRequests.filter((r) => r.urls.length > 0),
+        );
+      } catch {
+        imageCopy = { queued: 0, skipped: -1 };
+      }
+    }
+
+    // Counts only: no product names, no URLs.
     await this.auditLogService.logCtx(ctx, {
-      action: 'product.shopify_imported',
+      action: `product.${options.source ?? 'shopify'}_imported`,
       entityType: 'product',
       metadata: {
         created: report.totals.create,
@@ -244,6 +305,7 @@ export class ProductShopifyImportService {
         skipped: report.totals.skip,
         errors: report.totals.error,
         outletId: options.outletId ?? null,
+        imagesQueued: imageCopy.queued,
       },
     });
 
@@ -252,6 +314,7 @@ export class ProductShopifyImportService {
       updated: report.totals.update,
       skipped: report.totals.skip,
       errors: report.totals.error,
+      imageCopy,
       report,
     };
   }
@@ -291,21 +354,8 @@ export class ProductShopifyImportService {
     );
     const currency = (shopRows[0]?.currency as string | undefined) ?? '';
 
-    const rows = parseCsv(file.buffer.toString('utf-8'));
-    if (rows.length === 0)
-      throw new BadRequestException('The file has no product rows');
-    if (rows.length > MAX_SHOPIFY_ROWS) {
-      throw new BadRequestException(
-        `A Shopify import can have at most ${MAX_SHOPIFY_ROWS} rows`,
-      );
-    }
-    const headers = Object.keys(rows[0]);
-    if (!looksLikeShopifyExport(headers)) {
-      throw new BadRequestException(
-        'This does not look like a Shopify product export (it needs at least Handle and Title columns)',
-      );
-    }
-    const mapped = mapShopifyRows(rows, headers);
+    const source = options.source ?? 'shopify';
+    const mapped = this.mapFile(source, file);
 
     const handles = mapped.products.map((p) => p.handle);
     const firstSkus = mapped.products
@@ -323,6 +373,21 @@ export class ProductShopifyImportService {
     const existingIds = [
       ...new Set([...bySlug.values(), ...bySku.values()].map((p) => p.id)),
     ];
+    // URLs an earlier import already copied into our storage (the product row
+    // now holds OUR url, so only this ledger says the picture is present).
+    const copyKeys: string[] = [];
+    for (const product of mapped.products) {
+      const match =
+        bySlug.get(product.handle) ??
+        (product.variants[0]?.sku
+          ? bySku.get(product.variants[0].sku)
+          : undefined);
+      if (!match) continue;
+      for (const image of product.images) {
+        copyKeys.push(imageCopyKey(ctx.shopId, match.id, image.url));
+      }
+    }
+    const copiedKeys = await this.imageCopy.copiedKeys(ctx.shopId, copyKeys);
     const [tagsByProduct, variantsByProduct, imagesByProduct] =
       await Promise.all([
         this.loadTags(existingIds),
@@ -344,6 +409,8 @@ export class ProductShopifyImportService {
           variantsByProduct,
           imagesByProduct,
           usedNewSkus,
+          copiedKeys,
+          shopId: ctx.shopId,
         }),
       );
     }
@@ -376,9 +443,9 @@ export class ProductShopifyImportService {
     const count = (action: ProductImportAction) =>
       reports.filter((r) => r.action === action).length;
     const report: ShopifyImportReport = {
-      source: 'shopify',
+      source,
       currency,
-      currencyNote: `Prices are imported exactly as exported and are read as ${currency || 'your shop currency'}. A Shopify export has no currency column.`,
+      currencyNote: `Prices are imported exactly as exported and are read as ${currency || 'your shop currency'}. They are never converted between currencies.`,
       outletId: options.outletId ?? null,
       collectionId: options.collectionId ?? null,
       onExisting,
@@ -396,8 +463,72 @@ export class ProductShopifyImportService {
       truncated: ordered.length > REPORT_PRODUCT_CAP,
       warnings,
       unsupportedColumns: mapped.unsupportedColumns,
+      imageCopy: (() => {
+        const requests: CopyRequest[] = plans
+          .filter((p) => p.action === 'create' || p.action === 'update')
+          .map((p) => ({
+            productId: p.existing?.id ?? 0,
+            urls:
+              p.action === 'create'
+                ? p.product.images.map((i) => i.url)
+                : p.newImages,
+          }));
+        const planned = ProductImageCopyService.plan(requests);
+        return {
+          requested: options.copyImages === true,
+          willQueue: options.copyImages === true ? planned.queued : 0,
+          overCap: options.copyImages === true ? planned.skipped : 0,
+        };
+      })(),
     };
     return { plans, report };
+  }
+
+  // Turns the uploaded file into canonical products for the chosen source.
+  // Shopify is CSV only (its mapper is pinned to Shopify's exact headers); Salla
+  // and Zid also accept .xlsx and are matched by tolerant aliases.
+  private mapFile(
+    source: ProductImportSource,
+    file: Express.Multer.File,
+  ): ShopifyMapResult {
+    const label = SOURCE_LABEL[source];
+    if (source === 'shopify') {
+      const rows = parseCsv(file.buffer.toString('utf-8'));
+      if (rows.length === 0)
+        throw new BadRequestException('The file has no product rows');
+      if (rows.length > MAX_SHOPIFY_ROWS) {
+        throw new BadRequestException(
+          `A Shopify import can have at most ${MAX_SHOPIFY_ROWS} rows`,
+        );
+      }
+      const headers = Object.keys(rows[0]);
+      if (!looksLikeShopifyExport(headers)) {
+        throw new BadRequestException(
+          'This does not look like a Shopify product export (it needs at least Handle and Title columns)',
+        );
+      }
+      return mapShopifyRows(rows, headers);
+    }
+    const table = readTable(file, { allowXlsx: true });
+    if (table.rows.length === 0)
+      throw new BadRequestException('The file has no product rows');
+    if (table.rows.length > MAX_PLATFORM_ROWS) {
+      throw new BadRequestException(
+        `A ${label} import can have at most ${MAX_PLATFORM_ROWS} rows`,
+      );
+    }
+    try {
+      return mapPlatformRows(PLATFORM_SPECS[source], table.rows, table.headers);
+    } catch (error) {
+      if (error instanceof PlatformColumnsError) {
+        throw new BadRequestException({
+          statusCode: 400,
+          message: error.message,
+          missingColumns: error.missing,
+        });
+      }
+      throw error;
+    }
   }
 
   private planProduct(
@@ -412,6 +543,8 @@ export class ProductShopifyImportService {
       variantsByProduct: Map<number, ExistingVariant[]>;
       imagesByProduct: Map<number, string[]>;
       usedNewSkus: Map<string, string>;
+      copiedKeys: Set<string>;
+      shopId: number;
     },
   ): Plan {
     const errors = [...product.errors];
@@ -652,6 +785,8 @@ export class ProductShopifyImportService {
       tagsByProduct: Map<number, string[]>;
       variantsByProduct: Map<number, ExistingVariant[]>;
       imagesByProduct: Map<number, string[]>;
+      copiedKeys: Set<string>;
+      shopId: number;
     },
   ) {
     const product = plan.product;
@@ -763,7 +898,11 @@ export class ProductShopifyImportService {
     plan.existingImageCount = have.size;
     plan.newImages = product.images
       .map((i) => i.url)
-      .filter((u) => !have.has(u));
+      .filter(
+        (u) =>
+          !have.has(u) &&
+          !ctx.copiedKeys.has(imageCopyKey(ctx.shopId, existing.id, u)),
+      );
     plan.report.images.toAdd = plan.newImages.length;
 
     // Variants are matched to existing ones by SKU. Creating a NEW variant on an
@@ -969,7 +1108,7 @@ export class ProductShopifyImportService {
     options: ShopifyImportOptions,
     taxClassIds: { standard: number | null; zero: number | null },
     restockTargets: { productId: number; variantId: number | null }[],
-  ) {
+  ): Promise<number> {
     const p = plan.product;
     const first = p.variants[0];
     const chargeTax = first.taxable ?? true;
@@ -1062,7 +1201,7 @@ export class ProductShopifyImportService {
           productId,
         );
       }
-      return;
+      return productId;
     }
 
     // Options and exactly the variants the file lists (not the cartesian
@@ -1131,6 +1270,7 @@ export class ProductShopifyImportService {
         );
       }
     }
+    return productId;
   }
 
   private async updateProduct(

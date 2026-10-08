@@ -20,7 +20,7 @@ import {
 
 export const MAX_SHOPIFY_ROWS = 10_000;
 export const MAX_BODY_HTML_LENGTH = 200_000;
-const NAME_MAX = 191;
+export const NAME_MAX = 191;
 
 export type ShopifyStatus = 'Available' | 'Unavailable' | 'Archived';
 
@@ -206,7 +206,7 @@ function truncated(
   return value;
 }
 
-function validImageUrl(raw: string): { url?: string; reason?: string } {
+export function validImageUrl(raw: string): { url?: string; reason?: string } {
   const url = raw.trim();
   // eslint-disable-next-line no-control-regex -- control characters are refused on purpose
   if (/[\x00-\x20\x7f\\]/.test(url))

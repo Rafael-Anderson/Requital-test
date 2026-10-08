@@ -21,3 +21,26 @@ export const csvUploadOptions = {
   },
   limits: { fileSize: 5 * 1024 * 1024 },
 };
+
+// The platform importers (Salla, Zid) also take the .xlsx their dashboards
+// export. Still memoryStorage and the same 5MB cap; the real parse (and its
+// own zip-bomb caps) is common/table-file.ts. The extension decides, the
+// content is never trusted.
+export const tableUploadOptions = {
+  ...csvUploadOptions,
+  fileFilter: (
+    _req: unknown,
+    file: Express.Multer.File,
+    cb: (error: Error | null, acceptFile: boolean) => void,
+  ) => {
+    const name = file.originalname.toLowerCase();
+    if (!name.endsWith('.csv') && !name.endsWith('.xlsx')) {
+      cb(
+        new BadRequestException('Only .csv and .xlsx files are accepted'),
+        false,
+      );
+      return;
+    }
+    cb(null, true);
+  },
+};

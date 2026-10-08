@@ -33,7 +33,8 @@ import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
 import { StorageService } from '../storage/storage.service';
-import { csvUploadOptions } from '../common/csv-upload.config';
+import { tableUploadOptions } from '../common/csv-upload.config';
+import type { ProductImportSource } from './product-shopify-import.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -43,6 +44,25 @@ import type { TenantContext } from '../common/tenant-context';
 // day-to-day stock/availability reality is normal. Everything that edits
 // the shared catalog *structure* (name, price, images, collection
 // assignment, create/delete) is admin-only, same as Outlets/DeliveryZones.
+// Shopify, Salla and Zid share one mapper-plus-classifier pipeline; the plain
+// Requital CSV keeps its own.
+function platformSource(
+  source: ImportQueryDto['source'],
+): ProductImportSource | undefined {
+  return source === 'shopify' || source === 'salla' || source === 'zid'
+    ? source
+    : undefined;
+}
+
+// .xlsx is only understood by the Salla and Zid importers.
+function assertCsvOnly(file: Express.Multer.File) {
+  if (!file.originalname.toLowerCase().endsWith('.csv')) {
+    throw new BadRequestException(
+      'Only .csv files are accepted for this import',
+    );
+  }
+}
+
 @Controller('products')
 export class ProductsController {
   constructor(
@@ -100,7 +120,7 @@ export class ProductsController {
   // captured by a :id param route matching the same method/segment count).
   @Roles('admin')
   @Post('import/preview')
-  @UseInterceptors(FileInterceptor('file', csvUploadOptions))
+  @UseInterceptors(FileInterceptor('file', tableUploadOptions))
   previewImport(
     @CurrentUser() ctx: TenantContext,
     @Query() query: ImportQueryDto,
@@ -109,9 +129,11 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    if (query.source === 'shopify') {
-      return this.shopifyImport.preview(ctx, file, query);
+    const source = platformSource(query.source);
+    if (source) {
+      return this.shopifyImport.preview(ctx, file, { ...query, source });
     }
+    assertCsvOnly(file);
     return this.productsService.previewImportProducts(ctx, file);
   }
 
@@ -120,7 +142,7 @@ export class ProductsController {
   // `?source=shopify` runs the Shopify column mapper on the same contract.
   @Roles('admin')
   @Post('import/confirm')
-  @UseInterceptors(FileInterceptor('file', csvUploadOptions))
+  @UseInterceptors(FileInterceptor('file', tableUploadOptions))
   confirmImport(
     @CurrentUser() ctx: TenantContext,
     @Query() query: ImportQueryDto,
@@ -129,9 +151,11 @@ export class ProductsController {
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
-    if (query.source === 'shopify') {
-      return this.shopifyImport.confirm(ctx, file, query);
+    const source = platformSource(query.source);
+    if (source) {
+      return this.shopifyImport.confirm(ctx, file, { ...query, source });
     }
+    assertCsvOnly(file);
     return this.productsService.confirmImportProducts(
       ctx,
       file,
