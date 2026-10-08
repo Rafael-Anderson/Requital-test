@@ -6,6 +6,7 @@ import { DeliveryProvidersModule } from '../delivery-providers/delivery-provider
 import { AuthModule } from '../auth/auth.module';
 import { PlatformAuthModule } from '../platform-auth/platform-auth.module';
 import { WebhookLogModule } from '../webhook-log/webhook-log.module';
+import { JobsModule } from '../jobs/jobs.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
     PlatformAuthModule,
     WebhookLogModule,
     CurrencyRatesModule,
+    JobsModule,
   ],
   controllers: [PlatformAdminController],
   providers: [PlatformAdminService, PlatformAuditLogService],

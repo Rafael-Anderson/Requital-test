@@ -108,14 +108,17 @@ export class TwoFactorService {
   // For GET /auth/me: is two-factor on, and must this session enrol before
   // doing anything else. An impersonation token is never gated.
   async meState(ctx: TenantContext) {
-    const [enabled, required] = await Promise.all([
+    const [enabled, shopRequired, mustEnrol] = await Promise.all([
       this.store.isEnrolled(ctx.userId),
       this.shopRequires(ctx.shopId),
+      this.userMustEnrol(ctx.userId),
     ]);
     return {
       enabled,
       enrollmentRequired:
-        required && !enabled && ctx.impersonatedByPlatformAdminId === undefined,
+        (shopRequired || mustEnrol) &&
+        !enabled &&
+        ctx.impersonatedByPlatformAdminId === undefined,
     };
   }
 
@@ -146,10 +149,17 @@ export class TwoFactorService {
 
   async confirmEnrollment(ctx: TenantContext, code: string) {
     this.assertNotImpersonating(ctx);
+    // Completing enrolment clears a platform-reset "must enrol" flag in the same
+    // transaction that confirms the secret.
     const codes = await this.store.confirmEnrollment(
       ctx.userId,
       code,
       Date.now(),
+      async (conn) => {
+        await conn.query(`UPDATE user SET mustEnrol2fa = 0 WHERE id = ?`, [
+          ctx.userId,
+        ]);
+      },
     );
     if (!codes) {
       throw new BadRequestException(
@@ -271,6 +281,14 @@ export class TwoFactorService {
       [shopId],
     );
     return !!rows[0]?.require2fa;
+  }
+
+  private async userMustEnrol(userId: number): Promise<boolean> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT mustEnrol2fa FROM user WHERE id = ?`,
+      [userId],
+    );
+    return !!rows[0]?.mustEnrol2fa;
   }
 
   private async userRow(userId: number) {

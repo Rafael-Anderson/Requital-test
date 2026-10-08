@@ -1037,6 +1037,9 @@ export interface UserRow {
   phone: string | null;
   role: string;
   emailVerified: boolean;
+  // S1a (migration 20261024100000): set by a platform-admin 2FA reset; AuthGuard
+  // confines the user to the enrolment routes until they enrol again.
+  mustEnrol2fa: boolean;
   failedLoginAttempts: number;
   lastFailedLoginAt: Date | null;
   createdAt: Date;
