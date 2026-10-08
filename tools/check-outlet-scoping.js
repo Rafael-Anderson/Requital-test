@@ -50,6 +50,16 @@ const ALLOWLIST = [
   // (outlet WHERE id AND shopId) verified the id. They write nothing.
   "purchase-orders/reorder.service.ts:loadCandidates",
   "purchase-orders/reorder.service.ts:computeSuggestions",
+  // SHP-5 driver dispatch. All three are read-only and every statement is also
+  // AND-ed with the caller's shopId, so a foreign outletId can only ever match
+  // zero rows. assertDriverUsable/checkOrders are private helpers called with
+  // run.outletId (a run loaded through loadRun, i.e. shop- and outlet-scoped) or
+  // with an outletId create() has just checked against `outlet WHERE id AND
+  // shopId`; reconciliation() takes its outlet from resolveOutletFilter and
+  // asserts the permission for it.
+  "drivers/delivery-runs.service.ts:reconciliation",
+  "drivers/delivery-runs.service.ts:assertDriverUsable",
+  "drivers/delivery-runs.service.ts:checkOrders",
   // Private helpers only ever called with an outletId already verified by
   // their caller earlier in the same request (order.outletId from a
   // shop/outlet-scoped findOne, or a batch already checked up front) — not a

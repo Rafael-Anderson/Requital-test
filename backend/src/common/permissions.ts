@@ -25,6 +25,11 @@ export const ALL_PERMISSIONS = [
   'purchase_orders.view',
   'purchase_orders.manage',
   'purchase_orders.receive',
+  // SHP-5 driver dispatch. Admin and branch hold both by construction (the
+  // vocabulary is their ceiling); order_manager and viewer hold neither, so no
+  // per-outlet override can grant dispatch to them.
+  'deliveries.view',
+  'deliveries.manage',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

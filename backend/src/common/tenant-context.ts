@@ -27,4 +27,11 @@ export interface TenantContext {
   // `sid` claim, verified live by AuthGuard. Absent on an impersonation token,
   // which has no refresh row and therefore no session.
   sessionId?: string;
+  // Set ONLY by DriverAppService, on a context it builds itself from a
+  // verified delivery-run link (never from a request). It marks the actor as a
+  // delivery-run DRIVER: not a staff user (userId is 0, no such row, so any code
+  // that tried to use it as an FK would fail loudly rather than mis-attribute).
+  // AuditLogService.logCtx attributes the entry to "driver <name>" and
+  // OrdersService.collectCash records the driver instead of a user.
+  driver?: { id: number; name: string };
 }
