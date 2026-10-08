@@ -5,6 +5,7 @@ import { ProductCatalogService } from './product-catalog.service';
 import { ProductStockService } from './product-stock.service';
 import { ProductImportService } from './product-import.service';
 import { ProductShopifyImportService } from './product-shopify-import.service';
+import { ProductImageCopyService } from './product-image-copy.service';
 import { ProductBomService } from './product-bom.service';
 import { ProductOrderItemsService } from './product-order-items.service';
 import { ProductReadService } from './product-read.service';
@@ -34,6 +35,7 @@ import { TaxClassesModule } from '../tax-classes/tax-classes.module';
     ProductStockService,
     ProductImportService,
     ProductShopifyImportService,
+    ProductImageCopyService,
     ProductBomService,
     ProductOrderItemsService,
     ProductReadService,

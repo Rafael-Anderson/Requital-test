@@ -2,8 +2,11 @@
 // (admin/lib/csv.ts is export-only and equally hand-rolled), and the shape
 // needed — quoted fields, escaped quotes, embedded commas/newlines — is
 // small enough that adding papaparse/csv-parse for this alone isn't worth it.
-export function parseCsv(text: string): Record<string, string>[] {
-  const rows = parseRows(text.replace(/^﻿/, ''));
+export function parseCsv(
+  text: string,
+  delimiter = ',',
+): Record<string, string>[] {
+  const rows = parseRows(text.replace(/^﻿/, ''), delimiter);
   if (rows.length === 0) return [];
   const [header, ...dataRows] = rows;
   return dataRows
@@ -17,7 +20,7 @@ export function parseCsv(text: string): Record<string, string>[] {
     });
 }
 
-function parseRows(text: string): string[][] {
+function parseRows(text: string, delimiter: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -45,7 +48,7 @@ function parseRows(text: string): string[][] {
       i += 1;
       continue;
     }
-    if (char === ',') {
+    if (char === delimiter) {
       row.push(field);
       field = '';
       i += 1;
