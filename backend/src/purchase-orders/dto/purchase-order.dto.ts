@@ -171,6 +171,46 @@ export class ReceivePurchaseOrderDto {
   idempotencyKey?: string;
 }
 
+export class ScanPendingDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  lineId: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000)
+  quantity: number;
+}
+
+// INV-3. A scan resolves a barcode or SKU to ONE open line of this PO and checks
+// the draft tally against what is still outstanding. It writes nothing: the tally
+// is committed through POST :id/receive, the same path as the receive modal.
+export class ScanPurchaseOrderLineDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  code: string;
+
+  // Units this scan adds (a case scan can add more than one).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  quantity?: number;
+
+  // The tally already scanned in this session, so the server can refuse an
+  // over-receive before the commit instead of letting the commit fail later.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => ScanPendingDto)
+  pending?: ScanPendingDto[];
+}
+
 export class ListPurchaseOrdersQueryDto {
   @IsOptional()
   @IsIn(PO_STATUSES)

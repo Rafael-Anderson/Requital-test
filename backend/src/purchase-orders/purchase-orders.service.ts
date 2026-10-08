@@ -27,6 +27,7 @@ import {
   PurchaseOrderLineDto,
   ReceivePurchaseOrderDto,
   ReplacePurchaseOrderLinesDto,
+  ScanPurchaseOrderLineDto,
   UpdatePurchaseOrderDto,
 } from './dto/purchase-order.dto';
 import {
@@ -101,7 +102,7 @@ import { applyStockReceipt } from './receipt-stock';
 type PoRow = PurchaseorderRow & RowDataPacket;
 type LineRow = PurchaseorderlineRow & RowDataPacket;
 
-interface ResolvedLine {
+export interface ResolvedLine {
   ingredientId: number;
   productId: number | null;
   variantId: number | null;
@@ -238,29 +239,19 @@ export class PurchaseOrdersService {
       currency,
     );
 
-    const id = await this.db.transaction(async (conn) => {
-      const poNumber = await this.nextPoNumber(conn, ctx.shopId);
-      const [result] = await conn.query(
-        `INSERT INTO purchaseorder (shopId, outletId, supplierId, poNumber, status, currency, subtotal, total, expectedAt, notes, createdByUserId, updatedAt)
-         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          ctx.shopId,
-          outletId,
-          supplier.id,
-          poNumber,
-          currency,
-          subtotal,
-          subtotal,
-          dto.expectedAt ?? null,
-          dto.notes ?? null,
-          ctx.userId,
-          new Date(),
-        ],
-      );
-      const poId = (result as { insertId: number }).insertId;
-      await this.insertLines(conn, ctx.shopId, poId, currency, lines);
-      return poId;
-    });
+    const id = await this.db.transaction((conn) =>
+      this.insertPurchaseOrder(conn, {
+        shopId: ctx.shopId,
+        userId: ctx.userId,
+        outletId,
+        supplierId: supplier.id,
+        currency,
+        subtotal,
+        expectedAt: dto.expectedAt ?? null,
+        notes: dto.notes ?? null,
+        lines,
+      }),
+    );
     await this.auditLogService.logCtx(ctx, {
       action: 'purchase_order.created',
       entityType: 'purchaseorder',
@@ -639,7 +630,128 @@ export class PurchaseOrdersService {
     return { receiptId, replayed, purchaseOrder: detail };
   }
 
+  // The one place a draft purchase order and its lines are written. `create` (the
+  // admin form) and the reorder "create draft POs" action both go through it, the
+  // latter on its own transaction connection so it can hold the outlet lock while
+  // it writes. Callers have already validated the outlet, supplier and lines
+  // against the shop; nothing here touches the pool.
+  async insertPurchaseOrder(
+    conn: PoolConnection,
+    p: {
+      shopId: number;
+      userId: number | null;
+      outletId: number;
+      supplierId: number;
+      currency: string;
+      subtotal: number;
+      expectedAt: string | null;
+      notes: string | null;
+      lines: ResolvedLine[];
+    },
+  ) {
+    const poNumber = await this.nextPoNumber(conn, p.shopId);
+    const [result] = await conn.query(
+      `INSERT INTO purchaseorder (shopId, outletId, supplierId, poNumber, status, currency, subtotal, total, expectedAt, notes, createdByUserId, updatedAt)
+       VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        p.shopId,
+        p.outletId,
+        p.supplierId,
+        poNumber,
+        p.currency,
+        p.subtotal,
+        p.subtotal,
+        p.expectedAt,
+        p.notes,
+        p.userId,
+        new Date(),
+      ],
+    );
+    const poId = (result as { insertId: number }).insertId;
+    await this.insertLines(conn, p.shopId, poId, p.currency, p.lines);
+    return poId;
+  }
+
   // ---- helpers ----
+
+  // INV-3: scan-driven receive, step 1. Resolves a barcode or SKU to the one open
+  // line of THIS purchase order it identifies and checks the caller's draft tally
+  // against what is still outstanding. Read-only: the tally is committed through
+  // receive() above, so the ledger write, the FOR UPDATE lock order, the per-line
+  // cap in the UPDATE, the status CAS and the (poId, key) idempotency are the very
+  // same code the modal uses. A line matches on its supplier SKU, or (a product
+  // line) on the product's barcode or SKU, or (a variant line) on the variant's.
+  async resolveScan(ctx: TenantContext, id: number, dto: ScanPurchaseOrderLineDto) {
+    const po = await this.getVisible(ctx, id);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      po.outletId,
+      'purchase_orders.receive',
+    );
+    if (!(RECEIVABLE_STATUSES as readonly string[]).includes(po.status)) {
+      throw new ConflictException(`A ${po.status} purchase order cannot be received`);
+    }
+    const code = dto.code.trim();
+    if (code === '') throw new BadRequestException('code is required');
+    const quantity = dto.quantity ?? 1;
+    const rows = await this.db.query<LineRow[]>(
+      `SELECT l.* FROM purchaseorderline l
+       LEFT JOIN product p ON p.id = l.productId AND p.shopId = l.shopId
+       LEFT JOIN productvariant pv ON pv.id = l.variantId AND pv.productId = l.productId
+       WHERE l.poId = ? AND l.shopId = ? AND l.ingredientId IS NOT NULL
+         AND (l.supplierSku = ?
+              OR (l.variantId IS NULL AND (p.barcode = ? OR p.sku = ?))
+              OR (l.variantId IS NOT NULL AND (pv.barcode = ? OR pv.sku = ?)))
+       ORDER BY l.id`,
+      [id, ctx.shopId, code, code, code, code, code],
+    );
+    if (rows.length === 0) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'no_matching_line',
+        message: `"${code}" does not match any line on ${po.poNumber}`,
+      });
+    }
+    if (rows.length > 1) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'ambiguous_code',
+        message: `"${code}" matches ${rows.length} lines on ${po.poNumber}; receive these by hand`,
+      });
+    }
+    const line = rows[0];
+    const outstanding = line.quantityOrdered - line.quantityReceived;
+    const pending = (dto.pending ?? [])
+      .filter((x) => x.lineId === line.id)
+      .reduce((acc, x) => acc + x.quantity, 0);
+    if (outstanding <= 0) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'line_fully_received',
+        message: `"${line.description}" is already fully received`,
+      });
+    }
+    if (pending + quantity > outstanding) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'exceeds_ordered',
+        message: `"${line.description}": ${outstanding} outstanding, ${pending} already scanned, cannot add ${quantity}`,
+      });
+    }
+    return {
+      line: {
+        id: line.id,
+        description: line.description,
+        supplierSku: line.supplierSku,
+        quantityOrdered: line.quantityOrdered,
+        quantityReceived: line.quantityReceived,
+        unitCost: trimDecimal(line.unitCost),
+        currency: line.currency,
+      },
+      quantity,
+      outstandingAfter: outstanding - pending - quantity,
+    };
+  }
 
   // The PO as the caller may see it: shop-scoped, and a branch user only ever
   // sees their own outlet's orders (checked against the FETCHED row's outlet,
