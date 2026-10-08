@@ -35,7 +35,7 @@ export default function SecurityPage() {
       <div className="space-y-4">
         {user?.twoFactor?.enrollmentRequired && (
           <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Your shop requires two-factor authentication. Set it up below to keep using Requital.
+            Two-factor authentication is required on your account. Set it up below to keep using Requital.
           </div>
         )}
         <TwoFactorCard adapter={adapter} onChanged={() => void refreshUser()} />

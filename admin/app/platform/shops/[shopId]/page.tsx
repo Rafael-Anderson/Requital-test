@@ -18,6 +18,7 @@ import {
 } from "@/lib/platform-api";
 import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
 import { formatMoney } from "@/lib/money";
+import StaffTwoFactorCard from "@/components/platform/StaffTwoFactorCard";
 
 const SLIDER_STATUS_STYLES: Record<string, string> = {
   connected: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -337,6 +338,8 @@ export default function PlatformShopDetailPage() {
             ))}
           </ul>
         </Section>
+
+        <StaffTwoFactorCard shopId={shopId} />
 
         <Section title="Payments & messaging">
           <div className="space-y-3 text-sm">

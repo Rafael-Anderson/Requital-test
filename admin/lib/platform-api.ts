@@ -293,6 +293,35 @@ export function clearShopFeatureOverride(shopId: number, key: string) {
   );
 }
 
+// Staff of one shop for the "Staff two-factor" card. The API never sends a
+// secret, hash, recovery code or token, so none appear here.
+export interface PlatformShopUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  outletId: number | null;
+  outletName: string | null;
+  mfaEnrolled: boolean;
+  mustEnrol2fa: boolean;
+  lastSignInAt: string | null;
+}
+export interface PlatformShopUsers {
+  shopRequires2fa: boolean;
+  users: PlatformShopUser[];
+}
+
+export function listPlatformShopUsers(shopId: number) {
+  return platformFetch<PlatformShopUsers>(`/platform-admin/shops/${shopId}/users`);
+}
+
+export function resetShopUserTwoFactor(shopId: number, userId: number) {
+  return platformFetch<{ success: true }>(
+    `/platform-admin/shops/${shopId}/users/${userId}/reset-2fa`,
+    { method: "POST" },
+  );
+}
+
 export interface SliderQuoteVehicle {
   vehicleType: string;
   deliveryFee: number;
