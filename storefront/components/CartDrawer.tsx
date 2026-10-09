@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { createPortal } from "react-dom";
+import { useIsClient } from "@/lib/use-is-client";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
@@ -39,6 +40,7 @@ const DRAWER_MOTION: Record<string, { transition: string; closed: string; open: 
 // as the full-page cart, in an overlay instead of a navigation. Only
 // mounted at all when theme.cartLayout === "drawer" (see ShopLayoutClient).
 export default function CartDrawer() {
+  const isClient = useIsClient();
   const { shop, shopBasePath, themeConfig } = useShop();
   const { items, subtotal } = useCart();
   const { open, closeDrawer } = useCartDrawer();
@@ -61,7 +63,7 @@ export default function CartDrawer() {
 
   // Portalled to <body>: mounted inside <header> (a z-30 stacking context) the drawer's own z-50 only
   // counted within the header, so the z-40 cookie banner painted over the drawer's checkout button.
-  if (typeof document === "undefined") return null;
+  if (!isClient) return null;
   return createPortal(
     // A single fixed, viewport-sized, overflow-clipped shell holds both the
     // backdrop and the panel. The closed panel sits at translate-x-full

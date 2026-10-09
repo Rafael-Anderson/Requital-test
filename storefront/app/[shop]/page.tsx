@@ -106,7 +106,9 @@ function HomeContent() {
     );
   }
 
-  if (products === null) return <StorefrontLoadingSkeleton />;
+  // Only the layouts that draw products/collections wait for them. Classic and Grid first
+  // need nothing but the shop, so they render in the server HTML (a crawler sees the hero).
+  if (products === null && (layout === "slideshow" || layout === "featured_grid")) return <StorefrontLoadingSkeleton />;
 
   // Only "classic" and "slideshow" are a genuine image/banner hero — those
   // render full-bleed, edge to edge, outside the page's own width cap (see
@@ -123,7 +125,7 @@ function HomeContent() {
       bannerUrl={shop?.bannerUrl ?? null}
       banners={shop?.banners ?? []}
       heroText={shop?.heroText ?? null}
-      products={products}
+      products={products ?? []}
       collections={collections}
     />
   );
