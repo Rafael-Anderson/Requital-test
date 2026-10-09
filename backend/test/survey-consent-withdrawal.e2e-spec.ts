@@ -555,8 +555,9 @@ describe('Survey consent withdrawal (e2e)', () => {
 
     it('a token collision on the unique index is retried with a fresh token', async () => {
       const shop = await setupShop('tok-collide');
-      const taken = await addSurvey(shop, { answered: false, token: 'C0111DEC0111DE00' });
+      const taken = await addSurvey(shop, { answered: false, token: `C0${runId}` });
       const o = await plainOrder(shop);
+      let calls = 0;
       const spy = jest
         .spyOn(tokenHash, 'generateSurveyToken')
         .mockReturnValueOnce(taken.token)
@@ -566,6 +567,7 @@ describe('Survey consent withdrawal (e2e)', () => {
           .get(OrderNotificationsService)
           .notifySurveyRequest(shop.shopId, notifiable(o, shop));
       } finally {
+        calls = spy.mock.calls.length;
         spy.mockRestore();
       }
       const rows = await db.query<RowDataPacket[]>(
@@ -575,7 +577,7 @@ describe('Survey consent withdrawal (e2e)', () => {
       expect(rows).toHaveLength(1);
       expect(rows[0].token).not.toBe(taken.token);
       expect(rows[0].token).toMatch(/^[0-9A-F]{32}$/);
-      expect(spy).toHaveBeenCalledTimes(3);
+      expect(calls).toBe(3);
     });
   });
 });
