@@ -45,6 +45,11 @@ const OWNERSHIP_MARKERS = [
 ];
 
 const ALLOWLIST = [
+  // INV-5 read-only helpers: every query joins outlet.shopId = ? (and ingredient.shopId),
+  // and both are reached only after readableOutlet()/the createDrafts outlet row lock
+  // (outlet WHERE id AND shopId) verified the id. They write nothing.
+  "purchase-orders/reorder.service.ts:loadCandidates",
+  "purchase-orders/reorder.service.ts:computeSuggestions",
   // Private helpers only ever called with an outletId already verified by
   // their caller earlier in the same request (order.outletId from a
   // shop/outlet-scoped findOne, or a batch already checked up front) — not a
