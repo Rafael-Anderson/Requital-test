@@ -425,6 +425,7 @@ export interface CustomerListItem {
   orderCount: number;
   lifetimeValue: number;
   lastOrderDate: string | null;
+  tags: CustomerTag[];
 }
 
 export interface NewsletterSubscriber {
@@ -3444,4 +3445,53 @@ export interface ShopifyImportOptions {
   collectionId?: number;
   outletId?: number;
   onExisting: "update" | "skip";
+}
+
+// CUS-2 / CUS-3 / CUS-11
+export interface CustomerTag {
+  id: number;
+  name: string;
+  color: string | null;
+}
+
+export interface CustomerTagWithCount extends CustomerTag {
+  customerCount: number;
+}
+
+export interface CustomerNote {
+  id: number;
+  authorUserId: number | null;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export type ConsentChannel = "email" | "whatsapp" | "sms";
+export type ConsentStatus = "granted" | "withdrawn";
+
+export interface CustomerConsentState {
+  channel: ConsentChannel;
+  // null = UNKNOWN (nobody ever recorded an answer). Never "false".
+  status: ConsentStatus | null;
+  source: string | null;
+  wordingVersion: string | null;
+  updatedAt: string | null;
+}
+
+export interface CustomerConsentEvent {
+  id: number;
+  channel: ConsentChannel;
+  status: ConsentStatus;
+  source: string;
+  wordingVersion: string | null;
+  wordingText: string | null;
+  note: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface CustomerConsent {
+  channels: CustomerConsentState[];
+  newsletter: { subscribed: boolean; since: string | null; source: string | null };
+  history: CustomerConsentEvent[];
 }

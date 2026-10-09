@@ -59,6 +59,12 @@ import type {
   DraftOrderInput,
   ValidateDiscountResult,
   CustomerDetail,
+  CustomerTag,
+  CustomerTagWithCount,
+  CustomerNote,
+  CustomerConsent,
+  ConsentChannel,
+  ConsentStatus,
   DailyRevenuePoint,
   DashboardSummary,
   DeliveryZone,
@@ -1771,6 +1777,7 @@ export interface ListCustomersParams {
   search?: string;
   sortBy?: "name" | "phone" | "orderCount" | "lifetimeValue" | "lastOrderDate";
   sortDir?: "asc" | "desc";
+  tagId?: number;
 }
 
 // Admin-only endpoint server-side — see backend CustomersController.
@@ -1781,6 +1788,7 @@ export function listCustomers(params: ListCustomersParams = {}) {
   if (params.search) query.set("search", params.search);
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortDir) query.set("sortDir", params.sortDir);
+  if (params.tagId) query.set("tagId", String(params.tagId));
   return apiFetch<PaginatedCustomers>(`/customers?${query.toString()}`);
 }
 
@@ -2382,4 +2390,78 @@ export function dismissNotFoundEntry(id: number) {
 
 export function clearNotFoundLog() {
   return apiFetch<{ cleared: number }>("/url-redirects/not-found-log", { method: "DELETE" });
+}
+
+// ---- Customer CRM: tags, notes, consent (CUS-2 / CUS-3 / CUS-11) ----
+// Reads are admin + viewer server-side, writes admin only; branch and
+// order_manager have no access to any of it.
+export function listCustomerTags() {
+  return apiFetch<CustomerTagWithCount[]>("/customer-tags");
+}
+
+export function createCustomerTag(data: { name: string; color?: string }) {
+  return apiFetch<CustomerTagWithCount>("/customer-tags", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateCustomerTag(id: number, data: { name?: string; color?: string }) {
+  return apiFetch<CustomerTag>(`/customer-tags/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteCustomerTag(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/customer-tags/${id}`, { method: "DELETE" });
+}
+
+export function assignCustomerTags(customerIds: number[], tagIds: number[]) {
+  return apiFetch<{ customers: number }>("/customer-tags/assign", {
+    method: "POST",
+    body: JSON.stringify({ customerIds, tagIds }),
+  });
+}
+
+export function unassignCustomerTags(customerIds: number[], tagIds: number[]) {
+  return apiFetch<{ removed: number }>("/customer-tags/unassign", {
+    method: "POST",
+    body: JSON.stringify({ customerIds, tagIds }),
+  });
+}
+
+export function getCustomerTags(customerId: number) {
+  return apiFetch<CustomerTag[]>(`/customers/${customerId}/tags`);
+}
+
+export function listCustomerNotes(customerId: number) {
+  return apiFetch<CustomerNote[]>(`/customers/${customerId}/notes`);
+}
+
+export function addCustomerNote(customerId: number, body: string) {
+  return apiFetch<CustomerNote>(`/customers/${customerId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function deleteCustomerNote(customerId: number, noteId: number) {
+  return apiFetch<{ deleted: boolean }>(`/customers/${customerId}/notes/${noteId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getCustomerConsent(customerId: number) {
+  return apiFetch<CustomerConsent>(`/customers/${customerId}/consent`);
+}
+
+export function recordCustomerConsent(
+  customerId: number,
+  data: { channel: ConsentChannel; status: ConsentStatus; note?: string },
+) {
+  return apiFetch<CustomerConsent>(`/customers/${customerId}/consent`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }

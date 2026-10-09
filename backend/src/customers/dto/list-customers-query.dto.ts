@@ -29,6 +29,14 @@ export class ListCustomersQueryDto {
   @IsString()
   search?: string;
 
+  // Only customers carrying this tag (the tag must belong to the caller's shop;
+  // another shop's id simply matches nothing).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tagId?: number;
+
   @IsOptional()
   @IsIn(CUSTOMER_SORT_FIELDS)
   sortBy?: CustomerSortField = 'lastOrderDate';

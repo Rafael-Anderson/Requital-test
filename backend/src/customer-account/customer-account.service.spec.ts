@@ -117,6 +117,7 @@ describe('CustomerAccountService.exportData', () => {
       auditLog,
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     const result = await service.exportData(ctx);
@@ -167,6 +168,7 @@ describe('CustomerAccountService.exportData', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -188,6 +190,7 @@ describe('CustomerAccountService.exportData', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -204,6 +207,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     const result = await service.requestDeletion(ctx);
@@ -242,6 +246,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -288,6 +293,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -316,6 +322,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -335,6 +342,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -400,6 +408,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
     );
 
     const first = await service.confirmDeletion(ctx, raw);

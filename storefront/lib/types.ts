@@ -787,3 +787,11 @@ export interface PaymentLinkSummary {
   expired: boolean;
   expiresAt: string | null;
 }
+
+// CUS-11. status null = the customer has never answered (shown unticked).
+export type ConsentChannel = "email" | "whatsapp" | "sms";
+
+export interface MyConsent {
+  wording: { version: string; channels: Record<ConsentChannel, string> };
+  channels: { channel: ConsentChannel; status: "granted" | "withdrawn" | null }[];
+}

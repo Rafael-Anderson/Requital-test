@@ -12,6 +12,8 @@ import type {
   TemplateSummary,
   CreateOrderPayload,
   CreateOrderResponse,
+  ConsentChannel,
+  MyConsent,
   Customer,
   CustomerAddress,
   CustomerAuthResult,
@@ -578,6 +580,19 @@ export function removeFromWishlist(shopSlug: string, productId: number) {
 // `<a href>`/browser navigation can't do.
 export function exportMyData(shopSlug: string) {
   return authedFetch<Record<string, unknown>>(shopSlug, `/public/${shopSlug}/account/export`);
+}
+
+// CUS-11: the shopper's marketing-consent toggles. Wording and version come from
+// the server; the client only ever sends a channel and a boolean.
+export function getMyConsent(shopSlug: string) {
+  return authedFetch<MyConsent>(shopSlug, `/public/${shopSlug}/account/consent`);
+}
+
+export function setMyConsent(shopSlug: string, channel: ConsentChannel, granted: boolean) {
+  return authedFetch<{ channels: MyConsent["channels"] }>(shopSlug, `/public/${shopSlug}/account/consent`, {
+    method: "PUT",
+    body: JSON.stringify({ channel, granted }),
+  });
 }
 
 export interface RequestDeletionResult {

@@ -23,6 +23,9 @@ import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import CustomerTagsCard from "@/components/customers/CustomerTagsCard";
+import CustomerNotesCard from "@/components/customers/CustomerNotesCard";
+import CustomerConsentCard from "@/components/customers/CustomerConsentCard";
 
 // Admin-only, same as the list page — see app/customers/page.tsx.
 export default function CustomerDetailPage() {
@@ -160,6 +163,12 @@ export default function CustomerDetailPage() {
               </Button>
             </div>
           </Card>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <CustomerTagsCard customerId={customerId} canEdit={user?.role === "admin"} />
+            <CustomerConsentCard customerId={customerId} canEdit={user?.role === "admin"} />
+          </div>
+          <CustomerNotesCard customerId={customerId} canEdit={user?.role === "admin"} />
 
           <div>
             <h2 className="font-medium mb-3">Order history</h2>

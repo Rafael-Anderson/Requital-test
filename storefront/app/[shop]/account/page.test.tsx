@@ -29,6 +29,8 @@ vi.mock("@/lib/api", () => ({
   updateMyProfile: vi.fn(),
   requestMyAccountDeletion: vi.fn(),
   confirmMyAccountDeletion: vi.fn(),
+  getMyConsent: vi.fn().mockResolvedValue({ wording: { version: "v", channels: { email: "", whatsapp: "", sms: "" } }, channels: [] }),
+  setMyConsent: vi.fn(),
 }));
 
 import { confirmMyAccountDeletion, exportMyData, requestMyAccountDeletion } from "@/lib/api";

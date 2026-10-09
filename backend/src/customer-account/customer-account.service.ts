@@ -22,6 +22,9 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { PublicService } from '../public/public.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
+import { anonymiseCustomerCrm } from '../customer-crm/crm-anonymise';
+import { CustomerConsentService } from '../customer-crm/customer-consent.service';
+import type { ConsentChannel } from '../customer-crm/consent-wording';
 
 // UAE PDPL: max one data-export request per customer per rolling 24h
 // window — a courtesy/anti-abuse rate limit, not a hard security boundary,
@@ -79,6 +82,7 @@ export class CustomerAccountService {
     private readonly auditLogService: AuditLogService,
     private readonly publicService: PublicService,
     private readonly regionsService: RegionsService,
+    private readonly consentService: CustomerConsentService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -166,7 +170,34 @@ export class CustomerAccountService {
         ctx.customerId,
       ),
       orders: orders.map((o) => this.toOrderSummary(o, false)),
+      // What the customer agreed to receive, when, and under which wording
+      // (CUS-11). Staff notes and tags are the merchant's internal working data
+      // and are deliberately not part of this customer-facing export.
+      marketingConsent: await this.consentService.exportFor(
+        ctx.shopId,
+        ctx.customerId,
+      ),
     };
+  }
+
+  // CUS-11 storefront account toggle. The wording and its version are the
+  // server's (CustomerConsentService), never the client's.
+  async getConsent(ctx: CustomerContext) {
+    const [wording, channels] = await Promise.all([
+      this.consentService.wordingFor(ctx.shopId),
+      this.consentService.channelsFor(ctx.shopId, ctx.customerId),
+    ]);
+    return { wording, channels };
+  }
+
+  async setConsent(ctx: CustomerContext, channel: ConsentChannel, granted: boolean) {
+    const channels = await this.consentService.recordByCustomer(
+      ctx.shopId,
+      ctx.customerId,
+      channel,
+      granted,
+    );
+    return { channels };
   }
 
   // Step 1 of 2 — issues a short-lived confirmationToken rather than
@@ -284,6 +315,9 @@ export class CustomerAccountService {
     // Custom-field values on the customer are personal data: scrubbed with the
     // rest of the profile (the definitions stay, they are the shop's own).
     await deleteMetafieldValues(this.db, 'customer', [customerId]);
+    // CRM data: notes deleted, marketing consent withdrawn, ledger/merge text
+    // scrubbed. See customer-crm/crm-anonymise.ts.
+    await anonymiseCustomerCrm(this.db, shopId, customerId);
     // MKT-14: the online identifiers an order captured for ad attribution (click
     // ids, Meta browser cookies, user agent) are personal data too. The UTM
     // source/medium/campaign stay, so the merchant's attribution report does not
