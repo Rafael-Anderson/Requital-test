@@ -366,7 +366,7 @@ describe('Salla and Zid product import (e2e)', () => {
       };
       await copy.handle({
         shopId: a.shopId,
-        productId: Number(images[0] && 0) || (await productId(a, 'CP-1')),
+        productId: await productId(a, 'CP-1'),
         url: 'https://cdn.example.test/cp.png',
       });
       expect(fetched).toBe(0);
