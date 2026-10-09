@@ -25,6 +25,7 @@ import { useToast } from "@/components/ui/Toast";
 import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
 import CustomersTabs from "@/components/CustomersTabs";
+import { CustomerImportButton } from "@/components/ListImportButtons";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 
@@ -171,7 +172,8 @@ export default function CustomersPage() {
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
-      <div className="flex justify-end mb-3">
+      <div className="flex flex-wrap justify-end gap-2 mb-3">
+        <CustomerImportButton onImported={refresh} />
         <Button size="sm" variant="secondary" onClick={handleExportAll}>
           Export all
         </Button>

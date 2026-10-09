@@ -17,7 +17,12 @@ vi.mock("@/lib/api", async (importOriginal) => {
     confirmShopifyImport: vi.fn(),
   };
 });
-import { confirmShopifyImport, listCollections, listOutlets, previewShopifyImport } from "@/lib/api";
+import {
+  confirmShopifyImport,
+  listCollections,
+  listOutlets,
+  previewShopifyImport,
+} from "@/lib/api";
 
 const REPORT: ShopifyImportReport = {
   source: "shopify",
@@ -26,7 +31,16 @@ const REPORT: ShopifyImportReport = {
   outletId: 5,
   collectionId: 3,
   onExisting: "update",
-  totals: { products: 2, create: 1, update: 1, skip: 0, error: 0, variants: 4, images: 3, stockUpdates: 2 },
+  totals: {
+    products: 2,
+    create: 1,
+    update: 1,
+    skip: 0,
+    error: 0,
+    variants: 4,
+    images: 3,
+    stockUpdates: 2,
+  },
   products: [
     {
       handle: "red-rose",
@@ -58,15 +72,25 @@ const REPORT: ShopifyImportReport = {
     },
   ],
   truncated: false,
-  warnings: ["These columns have data but are not imported: Google Shopping / Gender."],
+  warnings: [
+    "These columns have data but are not imported: Google Shopping / Gender.",
+  ],
   unsupportedColumns: ["Google Shopping / Gender"],
 };
 
 beforeEach(() => {
-  vi.mocked(listCollections).mockResolvedValue([{ id: 3, name: "Imported" }] as never);
+  vi.mocked(listCollections).mockResolvedValue([
+    { id: 3, name: "Imported" },
+  ] as never);
   vi.mocked(listOutlets).mockResolvedValue([{ id: 5, name: "Main" }] as never);
   vi.mocked(previewShopifyImport).mockResolvedValue(REPORT);
-  vi.mocked(confirmShopifyImport).mockResolvedValue({ created: 1, updated: 1, skipped: 0, errors: 0, report: REPORT });
+  vi.mocked(confirmShopifyImport).mockResolvedValue({
+    created: 1,
+    updated: 1,
+    skipped: 0,
+    errors: 0,
+    report: REPORT,
+  });
 });
 
 describe("ShopifyImportModal", () => {
@@ -78,15 +102,29 @@ describe("ShopifyImportModal", () => {
         <ShopifyImportModal onClose={() => {}} onImported={onImported} />
       </ToastProvider>,
     );
-    const file = new File(["Handle,Title\n"], "products.csv", { type: "text/csv" });
-    await user.upload(document.querySelector("input[type=file]") as HTMLInputElement, file);
+    const file = new File(["Handle,Title\n"], "products.csv", {
+      type: "text/csv",
+    });
+    await user.upload(
+      document.querySelector("input[type=file]") as HTMLInputElement,
+      file,
+    );
     await screen.findByRole("option", { name: "Imported" });
     await user.selectOptions(screen.getByLabelText("Put new products in"), "3");
-    await user.selectOptions(screen.getByLabelText("Stock quantities go to"), "5");
+    await user.selectOptions(
+      screen.getByLabelText("Stock quantities go to"),
+      "5",
+    );
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     await waitFor(() =>
-      expect(previewShopifyImport).toHaveBeenCalledWith(file, { onExisting: "update", collectionId: 3, outletId: 5 }),
+      expect(previewShopifyImport).toHaveBeenCalledWith(file, {
+        source: "shopify",
+        copyImages: false,
+        onExisting: "update",
+        collectionId: 3,
+        outletId: 5,
+      }),
     );
     expect(await screen.findByText(/1 to create, 1 to update/)).toBeTruthy();
     expect(screen.getByText(/read as AED/)).toBeTruthy();
@@ -95,9 +133,17 @@ describe("ShopifyImportModal", () => {
     expect(screen.getByText(/150 to 160/)).toBeTruthy();
     expect(screen.getByText(/12 to 20/)).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Confirm import (2)" }));
+    await user.click(
+      screen.getByRole("button", { name: "Confirm import (2)" }),
+    );
     await waitFor(() =>
-      expect(confirmShopifyImport).toHaveBeenCalledWith(file, { onExisting: "update", collectionId: 3, outletId: 5 }),
+      expect(confirmShopifyImport).toHaveBeenCalledWith(file, {
+        source: "shopify",
+        copyImages: false,
+        onExisting: "update",
+        collectionId: 3,
+        outletId: 5,
+      }),
     );
     expect(onImported).toHaveBeenCalled();
   });
@@ -109,24 +155,97 @@ describe("ShopifyImportModal", () => {
         <ShopifyImportModal onClose={() => {}} onImported={() => {}} />
       </ToastProvider>,
     );
-    await user.upload(document.querySelector("input[type=file]") as HTMLInputElement, new File(["x"], "p.csv"));
+    await user.upload(
+      document.querySelector("input[type=file]") as HTMLInputElement,
+      new File(["x"], "p.csv"),
+    );
     await user.click(screen.getByRole("button", { name: "Preview" }));
     await screen.findByText(/1 to create/);
-    await user.selectOptions(screen.getByLabelText("Products that already exist"), "skip");
+    await user.selectOptions(
+      screen.getByLabelText("Products that already exist"),
+      "skip",
+    );
     expect(screen.queryByText(/1 to create/)).toBeNull();
     expect(screen.getByRole("button", { name: "Preview" })).toBeTruthy();
   });
 
   it("shows the server's message when the file is rejected", async () => {
-    vi.mocked(previewShopifyImport).mockRejectedValueOnce(new Error("This does not look like a Shopify product export"));
+    vi.mocked(previewShopifyImport).mockRejectedValueOnce(
+      new Error("This does not look like a Shopify product export"),
+    );
     const user = userEvent.setup();
     render(
       <ToastProvider>
         <ShopifyImportModal onClose={() => {}} onImported={() => {}} />
       </ToastProvider>,
     );
-    await user.upload(document.querySelector("input[type=file]") as HTMLInputElement, new File(["x"], "p.csv"));
+    await user.upload(
+      document.querySelector("input[type=file]") as HTMLInputElement,
+      new File(["x"], "p.csv"),
+    );
     await user.click(screen.getByRole("button", { name: "Preview" }));
-    expect(await screen.findByText(/does not look like a Shopify/)).toBeTruthy();
+    expect(
+      await screen.findByText(/does not look like a Shopify/),
+    ).toBeTruthy();
+  });
+
+  it("imports from Salla: right title, accepts xlsx, sends source and the copy-images choice", async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ShopifyImportModal
+          source="salla"
+          onClose={() => {}}
+          onImported={() => {}}
+        />
+      </ToastProvider>,
+    );
+    expect(screen.getByText("Import from Salla")).toBeTruthy();
+    const input = document.querySelector(
+      "input[type=file]",
+    ) as HTMLInputElement;
+    expect(input.accept).toContain(".xlsx");
+    const file = new File(["x"], "salla.xlsx");
+    await user.upload(input, file);
+    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(previewShopifyImport).toHaveBeenCalledWith(file, {
+        source: "salla",
+        copyImages: true,
+        onExisting: "update",
+        collectionId: undefined,
+        outletId: undefined,
+      }),
+    );
+  });
+
+  it("imports from Zid and states how many images will be copied", async () => {
+    vi.mocked(previewShopifyImport).mockResolvedValueOnce({
+      ...REPORT,
+      source: "zid",
+      imageCopy: { requested: true, willQueue: 3, overCap: 2 },
+    });
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ShopifyImportModal
+          source="zid"
+          onClose={() => {}}
+          onImported={() => {}}
+        />
+      </ToastProvider>,
+    );
+    expect(screen.getByText("Import from Zid")).toBeTruthy();
+    await user.upload(
+      document.querySelector("input[type=file]") as HTMLInputElement,
+      new File(["x"], "z.csv"),
+    );
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    expect(
+      await screen.findByText(
+        /3 images will be copied in the background; 2 over the limit stay linked/,
+      ),
+    ).toBeTruthy();
   });
 });

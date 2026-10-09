@@ -44,6 +44,8 @@ import type {
   NotFoundLogList,
   ShopifyImportOptions,
   ShopifyImportReport,
+  CollectionImportReport,
+  CustomerImportReport,
   TaxClassInput,
   MetafieldDefinition,
   MetafieldDefinitionInput,
@@ -1466,7 +1468,8 @@ export function confirmImportProducts(file: File, outletId?: number) {
 // ONB-1: the Shopify column mapper on the same stateless preview/confirm pair.
 // Confirm re-uploads the file and the server re-parses and re-validates it.
 function shopifyImportQuery(options: ShopifyImportOptions) {
-  const qs = new URLSearchParams({ source: "shopify", onExisting: options.onExisting });
+  const qs = new URLSearchParams({ source: options.source ?? "shopify", onExisting: options.onExisting });
+  if (options.copyImages) qs.set("copyImages", "true");
   if (options.collectionId) qs.set("collectionId", String(options.collectionId));
   if (options.outletId) qs.set("outletId", String(options.outletId));
   return qs.toString();
@@ -1488,6 +1491,42 @@ export function confirmShopifyImport(file: File, options: ShopifyImportOptions) 
     `/products/import/confirm?${shopifyImportQuery(options)}`,
     { method: "POST", body: formData },
   );
+}
+
+// ONB-1: collections and customers import. Same stateless pair: confirm
+// re-uploads the file and the server re-plans from the bytes.
+function importForm(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return formData;
+}
+export function previewCollectionImport(file: File, onExisting: "update" | "skip") {
+  return apiFetch<CollectionImportReport>(`/collections/import/preview?onExisting=${onExisting}`, {
+    method: "POST",
+    body: importForm(file),
+  });
+}
+export function confirmCollectionImport(file: File, onExisting: "update" | "skip") {
+  return apiFetch<{ created: number; updated: number; skipped: number; errors: number; report: CollectionImportReport }>(
+    `/collections/import/confirm?onExisting=${onExisting}`,
+    { method: "POST", body: importForm(file) },
+  );
+}
+export function previewCustomerImport(file: File, onExisting: "update" | "skip") {
+  return apiFetch<CustomerImportReport>(`/customers/import/preview?onExisting=${onExisting}`, {
+    method: "POST",
+    body: importForm(file),
+  });
+}
+export function confirmCustomerImport(file: File, onExisting: "update" | "skip") {
+  return apiFetch<{
+    created: number;
+    updated: number;
+    skipped: number;
+    conflicts: number;
+    errors: number;
+    report: CustomerImportReport;
+  }>(`/customers/import/confirm?onExisting=${onExisting}`, { method: "POST", body: importForm(file) });
 }
 
 // Full replace of the option/value set — see backend ProductsService.updateOptions

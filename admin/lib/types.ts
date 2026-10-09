@@ -3418,8 +3418,9 @@ export interface ShopifyProductReport {
   warnings: string[];
   errors: string[];
 }
+export type ProductImportSource = "shopify" | "salla" | "zid";
 export interface ShopifyImportReport {
-  source: "shopify";
+  source: ProductImportSource;
   currency: string;
   currencyNote: string;
   outletId: number | null;
@@ -3439,9 +3440,53 @@ export interface ShopifyImportReport {
   truncated: boolean;
   warnings: string[];
   unsupportedColumns: string[];
+  imageCopy?: { requested: boolean; willQueue: number; overCap: number };
 }
 export interface ShopifyImportOptions {
+  source?: ProductImportSource;
+  copyImages?: boolean;
   collectionId?: number;
   outletId?: number;
   onExisting: "update" | "skip";
+}
+
+// ONB-1: collections and customers import (preview/confirm, same stateless pair).
+export interface CollectionImportRow {
+  rowNumber: number;
+  name: string;
+  action: "create" | "update" | "skip" | "error";
+  reason: string | null;
+  changes: { field: string; from: string | null; to: string | null }[];
+  warnings: string[];
+  errors: string[];
+  depth: number | null;
+}
+export interface CollectionImportReport {
+  source: "collections";
+  onExisting: "update" | "skip";
+  totals: { rows: number; create: number; update: number; skip: number; error: number };
+  rows: CollectionImportRow[];
+  truncated: boolean;
+  warnings: string[];
+  unsupportedColumns: string[];
+}
+export interface CustomerImportRow {
+  rowNumber: number;
+  name: string;
+  phoneMasked: string | null;
+  action: "create" | "update" | "skip" | "conflict" | "error";
+  reason: string | null;
+  changes: string[];
+  warnings: string[];
+  errors: string[];
+}
+export interface CustomerImportReport {
+  source: "customers";
+  onExisting: "update" | "skip";
+  totals: { rows: number; create: number; update: number; skip: number; conflict: number; error: number };
+  rows: CustomerImportRow[];
+  truncated: boolean;
+  warnings: string[];
+  unsupportedColumns: string[];
+  note: string;
 }
