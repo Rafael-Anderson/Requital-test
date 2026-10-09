@@ -67,9 +67,9 @@ describe('SHP-5 drivers and delivery runs (staff API)', () => {
         `SELECT action FROM auditlog WHERE shopId = ? AND entityType = 'driver' AND entityId = ?`,
         [a.shopId, d.id],
       );
-      expect(log.map((l: { action: string }) => l.action)).toEqual(
-        expect.arrayContaining(['driver.created', 'driver.updated']),
-      );
+      expect(
+        log.map((l) => (l as unknown as { action: string }).action),
+      ).toEqual(expect.arrayContaining(['driver.created', 'driver.updated']));
     });
 
     it('a driver with no runs is deleted, one with runs is only deactivated', async () => {

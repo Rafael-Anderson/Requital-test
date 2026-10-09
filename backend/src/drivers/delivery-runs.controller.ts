@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { DeliveryRunsService } from './delivery-runs.service';
+import { DriverLinksService } from './driver-links.service';
 import {
   AddStopsDto,
   CreateDeliveryRunDto,
@@ -26,7 +27,10 @@ import type { TenantContext } from '../common/tenant-context';
 @Roles('admin', 'branch')
 @Controller('delivery-runs')
 export class DeliveryRunsController {
-  constructor(private readonly runs: DeliveryRunsService) {}
+  constructor(
+    private readonly runs: DeliveryRunsService,
+    private readonly links: DriverLinksService,
+  ) {}
 
   @Get()
   findAll(
@@ -117,7 +121,33 @@ export class DeliveryRunsController {
     @CurrentUser() ctx: TenantContext,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.runs.dispatch(ctx, id);
+    // The response carries `issuedLink`: the only time the secret URL is shown.
+    return this.links.dispatchWithLink(ctx, id);
+  }
+
+  @Post(':id/link')
+  async issueLink(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    const { url, expiresAt } = await this.links.issue(ctx, id);
+    return { url, expiresAt };
+  }
+
+  @Delete(':id/link')
+  revokeLink(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.links.revoke(ctx, id);
+  }
+
+  @Post(':id/link/send')
+  sendLink(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.links.sendWhatsApp(ctx, id);
   }
 
   @Post(':id/cancel')
