@@ -1328,9 +1328,6 @@ export class OrdersService {
         // (C2). Marked in each successful CAS branch rather than after the
         // transaction, so it commits with the cancellation or not at all.
         await markInvoicesSuperseded(conn, id);
-        // Give the order's discount use back (global counter and per-customer
-        // row together), in the same transaction as the CAS that won.
-        await releaseDiscountRedemption(conn, ctx.shopId, id);
         // An order from an immediate-reservation channel already reserved
         // stock at creation (decremented while still 'pending', not at
         // confirm — see updateStatus above) — cancelling from 'pending' must
@@ -1347,6 +1344,13 @@ export class OrdersService {
             1,
           );
         }
+        // Give the order's discount use back (global counter and per-customer
+        // row together), in the same transaction as the CAS that won. LAST on
+        // purpose: checkout locks stock rows, inserts the order, then locks the
+        // discount row (redeem), so cancel must take order, stock, discount in
+        // that same order or a checkout and a cancel sharing a code and an
+        // ingredient can deadlock (1213).
+        await releaseDiscountRedemption(conn, ctx.shopId, id);
         return;
       }
 
@@ -1357,7 +1361,6 @@ export class OrdersService {
       );
       if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
         await markInvoicesSuperseded(conn, id);
-        await releaseDiscountRedemption(conn, ctx.shopId, id);
         await this.adjustStockForOrder(
           conn,
           ctx,
@@ -1365,6 +1368,8 @@ export class OrdersService {
           order.outletId,
           1,
         );
+        // Last, for the lock order explained in the branch above.
+        await releaseDiscountRedemption(conn, ctx.shopId, id);
         return;
       }
 

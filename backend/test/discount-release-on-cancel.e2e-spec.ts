@@ -6,10 +6,14 @@ import type { App } from 'supertest/types';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { DatabaseService } from '../src/database/database.service';
 import { OrdersService } from '../src/orders/orders.service';
+import * as releaseModule from '../src/discounts/release-redemption';
 import { releaseDiscountRedemption } from '../src/discounts/release-redemption';
 import { body, bootApp, makeFixtures } from './helpers/w5-fixture';
 
 jest.setTimeout(240000);
+
+// Captured before any spy replaces the module property.
+const realRelease = releaseModule.releaseDiscountRedemption;
 
 const TABBY_SECRET = 'tabby-webhook-secret-for-release-tests';
 
@@ -335,6 +339,28 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
       expect(await redemptions(d.id)).toHaveLength(1);
     });
 
+    it('a total-0 order (100% discount) never releases on a partial return', async () => {
+      const { shop, product } = await shopWithStock('rel-zero');
+      const d = await f.createDiscount(shop, {
+        type: 'PERCENTAGE',
+        value: 100,
+        usageLimit: 5,
+      });
+      const o = await f.adminOrder(shop, [{ productId: product.id, quantity: 2 }], {
+        customerPhone: newPhone(),
+        discountCode: d.code,
+      });
+      expect(Number(o.total)).toBe(0);
+      await f.advance(shop, o.id, 'delivered');
+      const items = await db.query<RowDataPacket[]>(
+        `SELECT id FROM orderitem WHERE orderId = ?`,
+        [o.id],
+      );
+      await ret(shop, o.id, items[0].id as number, 1).expect(201);
+      expect(await timesUsed(d.id)).toBe(1);
+      expect(await redemptions(d.id)).toHaveLength(1);
+    });
+
     it('a return that refunds the whole total releases once, and a later look changes nothing', async () => {
       const { shop, d, o, itemId } = await delivered('rel-full');
       await ret(shop, o.id, itemId, 1).expect(201);
@@ -353,14 +379,17 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
   });
 
   describe('atomicity and tenant scope', () => {
-    it('a failure after the cancel CAS rolls the cancel AND the release back together', async () => {
+    it('a failure after the release rolls the cancel AND the release back together', async () => {
       const { shop, product } = await shopWithStock('rel-atomic');
       const d = await f.createDiscount(shop, { usageLimit: 5 });
       const a = orderId(await place(shop, product.id, d.code));
-      const svc = app.get(OrdersService) as unknown as Record<string, unknown>;
+      // The real release runs (and deletes the row), then the request fails.
       const spy = jest
-        .spyOn(svc, 'adjustStockForOrder' as never)
-        .mockRejectedValueOnce(new Error('boom') as never);
+        .spyOn(releaseModule, 'releaseDiscountRedemption')
+        .mockImplementationOnce(async (...args) => {
+          await realRelease(...args);
+          throw new Error('boom');
+        });
       const res = await f.cancelOrder(shop, a);
       spy.mockRestore();
       expect(res.status).toBe(500);
@@ -369,6 +398,45 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
       expect(await redemptions(d.id)).toHaveLength(1);
       // and the retry then succeeds and releases once
       await f.cancelOrder(shop, a).expect(201);
+      expect(await timesUsed(d.id)).toBe(0);
+    });
+
+    // Lock order: checkout locks stock rows, inserts the order, then locks the
+    // discount row (redeem). Cancel must therefore take order, stock, discount:
+    // the release comes AFTER the restock in both CAS branches, or a checkout
+    // and a cancel sharing a code and an ingredient can deadlock (1213).
+    it('cancel restocks BEFORE it releases the discount, in both CAS branches', async () => {
+      const { shop, product } = await shopWithStock('rel-lockorder');
+      const d = await f.createDiscount(shop, { usageLimit: 5 });
+      const pending = orderId(await place(shop, product.id, d.code));
+      const confirmed = orderId(await place(shop, product.id, d.code));
+      await f.setStatus(shop, confirmed, 'confirmed');
+
+      const calls: string[] = [];
+      const svc = app.get(OrdersService) as unknown as Record<string, unknown>;
+      const origStock = (svc.adjustStockForOrder as (...a: unknown[]) => unknown).bind(svc);
+      const s1 = jest
+        .spyOn(svc, 'adjustStockForOrder' as never)
+        .mockImplementation(((...a: unknown[]) => {
+          calls.push('stock');
+          return origStock(...a);
+        }) as never);
+      const s2 = jest
+        .spyOn(releaseModule, 'releaseDiscountRedemption')
+        .mockImplementation(async (...args) => {
+          calls.push('release');
+          return realRelease(...args);
+        });
+      try {
+        await f.cancelOrder(shop, pending).expect(201);
+        expect(calls).toEqual(['stock', 'release']);
+        calls.length = 0;
+        await f.cancelOrder(shop, confirmed).expect(201);
+        expect(calls).toEqual(['stock', 'release']);
+      } finally {
+        s1.mockRestore();
+        s2.mockRestore();
+      }
       expect(await timesUsed(d.id)).toBe(0);
     });
 
