@@ -162,6 +162,29 @@ describe('Customers import (e2e)', () => {
     expect(row).toMatchObject({ name: 'Keep Me', email: 'old@x.test' });
   });
 
+  it('skip does not even fill an empty email', async () => {
+    await insert(a.shopId, 'No Email', '0508888888');
+    const csv =
+      'name,phone,email,address\nNo Email,0508888888,filled@x.test,Somewhere 1\n';
+    const res = (await send('confirm', a, csv).expect(201)).body;
+    expect(res).toMatchObject({ created: 0, updated: 0, skipped: 1 });
+    const row = (await customers(a.shopId)).find(
+      (r) => r.phone === '0508888888',
+    )!;
+    expect(row.email).toBeNull();
+    expect(row.addresses).toBeNull();
+    // the same file with update fills both
+    const upd = (
+      await send('confirm', a, csv, { onExisting: 'update' }).expect(201)
+    ).body;
+    expect(upd).toMatchObject({ updated: 1 });
+    const filled = (await customers(a.shopId)).find(
+      (r) => r.phone === '0508888888',
+    )!;
+    expect(filled.email).toBe('filled@x.test');
+    expect(filled.addresses).toHaveLength(1);
+  });
+
   it('update never overwrites a name or an email', async () => {
     const csv = 'name,phone,email\nOther Name,0506666666,other@x.test\n';
     await send('confirm', a, csv, { onExisting: 'update' }).expect(201);
