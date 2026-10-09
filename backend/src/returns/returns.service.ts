@@ -381,8 +381,11 @@ export class ReturnsService {
           [orderId],
         );
         // A full refund gives the order's discount use back, exactly like a
-        // cancel (idempotent). A partial return never reaches this branch.
-        await releaseDiscountRedemption(conn, order.shopId, orderId);
+        // cancel (idempotent). A total-0 order (100% discount) satisfies the
+        // test above on any return, so it never releases: nothing was refunded.
+        if (totalMinor > 0) {
+          await releaseDiscountRedemption(conn, order.shopId, orderId);
+        }
       }
 
       return { returnId: newReturnId, refundAmount, refundMethod };
