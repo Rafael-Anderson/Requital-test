@@ -3495,3 +3495,12 @@ export interface CustomerConsent {
   newsletter: { subscribed: boolean; since: string | null; source: string | null };
   history: CustomerConsentEvent[];
 }
+
+// CUS-1
+export interface CustomerSegment {
+  id: number;
+  name: string;
+  rules: unknown;
+  createdAt: string;
+  updatedAt: string;
+}

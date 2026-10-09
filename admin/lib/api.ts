@@ -63,6 +63,7 @@ import type {
   CustomerTagWithCount,
   CustomerNote,
   CustomerConsent,
+  CustomerSegment,
   ConsentChannel,
   ConsentStatus,
   DailyRevenuePoint,
@@ -1778,6 +1779,7 @@ export interface ListCustomersParams {
   sortBy?: "name" | "phone" | "orderCount" | "lifetimeValue" | "lastOrderDate";
   sortDir?: "asc" | "desc";
   tagId?: number;
+  segmentId?: number;
 }
 
 // Admin-only endpoint server-side — see backend CustomersController.
@@ -1789,6 +1791,7 @@ export function listCustomers(params: ListCustomersParams = {}) {
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortDir) query.set("sortDir", params.sortDir);
   if (params.tagId) query.set("tagId", String(params.tagId));
+  if (params.segmentId) query.set("segmentId", String(params.segmentId));
   return apiFetch<PaginatedCustomers>(`/customers?${query.toString()}`);
 }
 
@@ -2464,4 +2467,25 @@ export function recordCustomerConsent(
     method: "PUT",
     body: JSON.stringify(data),
   });
+}
+
+// ---- Customer segments (CUS-1). Reads admin + viewer, writes admin only. ----
+export function listCustomerSegments() {
+  return apiFetch<CustomerSegment[]>("/customer-segments");
+}
+
+export function createCustomerSegment(data: { name: string; rules: unknown }) {
+  return apiFetch<CustomerSegment>("/customer-segments", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateCustomerSegment(id: number, data: { name: string; rules: unknown }) {
+  return apiFetch<CustomerSegment>(`/customer-segments/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteCustomerSegment(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/customer-segments/${id}`, { method: "DELETE" });
+}
+
+export function previewCustomerSegment(rules: unknown) {
+  return apiFetch<{ count: number }>("/customer-segments/preview", { method: "POST", body: JSON.stringify({ rules }) });
 }

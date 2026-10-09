@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -6,6 +7,7 @@ import { PRODUCT_IMPORT_HEADERS } from '../products/products-import';
 import { buildVariantLabel } from '../products/variant-generator';
 import { toMajorUnitString } from '../common/currency-minor-units';
 import { queryAttributionRows } from '../reports/attribution-report';
+import { loadSegmentPredicate } from '../customer-segments/segment-store';
 
 // ANL-11: one definition per exportable report. Adding an export is adding an
 // entry here - the controller, the streaming, the paging, the escaping and the
@@ -25,6 +27,7 @@ export interface ExportContext {
   dateFrom?: string;
   dateTo?: string;
   model?: 'first' | 'last';
+  segmentId?: number;
 }
 
 export interface ExportDefinition {
@@ -44,6 +47,13 @@ export interface ExportDefinition {
 // attribution export, whose text is visitor-supplied (utm parameters).
 export function neutraliseFormula(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
+// A phone number is the one cell that legitimately starts with `+`; it is left
+// alone when it is nothing but digits, spaces and hyphens (it cannot be a formula),
+// and neutralised like every other text cell otherwise.
+function neutralisePhone(value: string): string {
+  return /^\+?[0-9][0-9\s-]*$/.test(value) ? value : neutraliseFormula(value);
 }
 
 function yesNo(value: unknown): string {
@@ -100,6 +110,58 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
         Number(r.orderCount),
         toMajorUnitString(Number(r.ltv), r.currency as string | null),
         (r.currency as string | null) ?? '',
+        isoOrEmpty(r.lastOrderDate),
+      ]);
+    },
+  },
+
+  // CUS-1: the members of one saved segment, evaluated live. Name, email and phone
+  // are customer-supplied text, so every text cell is formula-neutralised.
+  'customer-segment': {
+    roles: ['admin', 'viewer'],
+    filenamePrefix: 'customer-segment',
+    headers: ['Name', 'Phone', 'Email', 'Orders', 'Spend (per currency)', 'Last Order'],
+    async fetchPage({ db, ctx, segmentId }, limit, offset) {
+      if (segmentId === undefined) {
+        throw new BadRequestException('segmentId is required for this export');
+      }
+      // A segment of another shop is a 404 (loadSegmentPredicate is shop-scoped).
+      const predicate = await loadSegmentPredicate(db, ctx.shopId, segmentId);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT c.id, c.name, c.phone, c.email,
+                (SELECT COUNT(*) FROM \`order\` o WHERE o.customerId = c.id AND o.shopId = c.shopId AND o.status <> 'cancelled') AS orderCount,
+                (SELECT MAX(o.createdAt) FROM \`order\` o WHERE o.customerId = c.id AND o.shopId = c.shopId AND o.status <> 'cancelled') AS lastOrderDate
+           FROM customer c
+          WHERE c.shopId = ? AND ${predicate.sql}
+          ORDER BY c.id
+          LIMIT ? OFFSET ?`,
+        [ctx.shopId, ...predicate.params, limit, offset],
+      );
+      const ids = rows.map((r) => r.id as number);
+      const spend = new Map<number, string[]>();
+      if (ids.length > 0) {
+        const sums = await db.query<RowDataPacket[]>(
+          `SELECT customerId, currency, SUM(total) AS spend
+             FROM \`order\`
+            WHERE shopId = ? AND status <> 'cancelled' AND customerId IN (${ids.map(() => '?').join(', ')})
+            GROUP BY customerId, currency
+            ORDER BY currency`,
+          [ctx.shopId, ...ids],
+        );
+        for (const s of sums) {
+          const list = spend.get(s.customerId as number) ?? [];
+          list.push(
+            `${s.currency as string} ${toMajorUnitString(Number(s.spend), s.currency as string)}`,
+          );
+          spend.set(s.customerId as number, list);
+        }
+      }
+      return rows.map((r): unknown[] => [
+        neutraliseFormula(String(r.name)),
+        neutralisePhone(String(r.phone)),
+        r.email ? neutraliseFormula(String(r.email)) : '',
+        Number(r.orderCount),
+        (spend.get(r.id as number) ?? []).join('; '),
         isoOrEmpty(r.lastOrderDate),
       ]);
     },

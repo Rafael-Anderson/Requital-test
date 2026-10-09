@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useShopMode } from "@/lib/useShopMode";
-import { listCustomers, listCustomerTags, type ListCustomersParams,
+import { listCustomers, listCustomerSegments, listCustomerTags, type ListCustomersParams,
   downloadExport,
 } from "@/lib/api";
-import type { CustomerListItem, CustomerTagWithCount } from "@/lib/types";
+import type { CustomerListItem, CustomerSegment, CustomerTagWithCount } from "@/lib/types";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -64,6 +64,13 @@ export default function CustomersPage() {
   const [error, setError] = useState<string | null>(null);
   const [tags, setTags] = useState<CustomerTagWithCount[]>([]);
   const [tagFilter, setTagFilter] = useState("");
+  const [segments, setSegments] = useState<CustomerSegment[]>([]);
+  // Deep link from the Segments tab ("View members"): /customers?segmentId=N.
+  // Read once from the URL at first render; the select below is only rendered
+  // after the segments load, so server and client markup agree.
+  const [segmentFilter, setSegmentFilter] = useState(() =>
+    typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("segmentId") ?? ""),
+  );
   const [managingTags, setManagingTags] = useState(false);
   const [tagsTick, setTagsTick] = useState(0);
   const toast = useToast();
@@ -81,7 +88,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortBy, sortDir, tagFilter]);
+  }, [search, sortBy, sortDir, tagFilter, segmentFilter]);
 
   // The shop's tag list feeds the filter and the bulk controls. Its own request:
   // if it fails the list still loads, just without the tag filter.
@@ -96,6 +103,17 @@ export default function CustomersPage() {
     };
   }, [user, tagsTick]);
 
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    let live = true;
+    listCustomerSegments()
+      .then((d) => live && setSegments(d))
+      .catch(() => live && setSegments([]));
+    return () => {
+      live = false;
+    };
+  }, [user]);
+
   const refresh = useCallback(async () => {
     try {
       const result = await listCustomers({
@@ -105,6 +123,7 @@ export default function CustomersPage() {
         sortBy,
         sortDir,
         tagId: tagFilter ? Number(tagFilter) : undefined,
+        segmentId: segmentFilter ? Number(segmentFilter) : undefined,
       });
       setCustomers(result.data);
       setTotal(result.total);
@@ -112,7 +131,7 @@ export default function CustomersPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load customers");
     }
-  }, [page, search, sortBy, sortDir, tagFilter]);
+  }, [page, search, sortBy, sortDir, tagFilter, segmentFilter]);
 
   useEffect(() => {
     if (user?.role === "admin") refresh();
@@ -148,7 +167,9 @@ export default function CustomersPage() {
   // passed through so the file matches what is on screen.
   async function handleExportAll() {
     try {
-      await downloadExport("customers", { search: search || undefined });
+      await (segmentFilter
+        ? downloadExport("customer-segment", { segmentId: Number(segmentFilter) })
+        : downloadExport("customers", { search: search || undefined }));
       toast("Export started");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to export customers", "error");
@@ -192,6 +213,18 @@ export default function CustomersPage() {
               {tags.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} ({t.customerCount})
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        {segments.length > 0 && (
+          <div className="w-full sm:w-48">
+            <Select value={segmentFilter} onChange={(e) => setSegmentFilter(e.target.value)} aria-label="Filter by segment">
+              <option value="">All customers</option>
+              {segments.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </Select>

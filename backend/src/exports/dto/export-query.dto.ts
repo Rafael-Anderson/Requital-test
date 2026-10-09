@@ -39,4 +39,11 @@ export class ExportQueryDto {
   @IsOptional()
   @IsIn(['first', 'last'])
   model?: 'first' | 'last';
+
+  // The customer-segment export only: which saved segment to export.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  segmentId?: number;
 }
