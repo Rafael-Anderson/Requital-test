@@ -101,7 +101,10 @@ export class ReorderService {
       entityType: 'ingredient',
       entityId: target.ingredientId,
       before: before[0]
-        ? { reorderPoint: before[0].reorderPoint, reorderQuantity: before[0].reorderQuantity }
+        ? {
+            reorderPoint: before[0].reorderPoint as number | null,
+            reorderQuantity: before[0].reorderQuantity as number | null,
+          }
         : { reorderPoint: null, reorderQuantity: null },
       after: {
         outletId: dto.outletId,
