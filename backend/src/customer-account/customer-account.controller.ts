@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -21,6 +22,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
+import { SetConsentDto } from './dto/set-consent.dto';
 import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { CurrentCustomer } from '../customer-auth/decorators/current-customer.decorator';
 import { Public } from '../auth/decorators/public.decorator';
@@ -159,6 +161,21 @@ export class CustomerAccountController {
     @Param('productId', ParseIntPipe) productId: number,
   ) {
     return this.customerAccountService.removeFromWishlist(ctx, productId);
+  }
+
+  // CUS-11: the customer's marketing-consent toggles. Unknown (never answered)
+  // is reported as status: null, never false.
+  @Get('consent')
+  getConsent(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.getConsent(ctx);
+  }
+
+  @Put('consent')
+  setConsent(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Body() dto: SetConsentDto,
+  ) {
+    return this.customerAccountService.setConsent(ctx, dto.channel, dto.granted);
   }
 
   // UAE PDPL data export/deletion — mounted under this controller (not the

@@ -6,6 +6,7 @@ import { InvoicesModule } from '../invoices/invoices.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { PublicModule } from '../public/public.module';
 import { RegionsModule } from '../regions/regions.module';
+import { CustomerCrmModule } from '../customer-crm/customer-crm.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { RegionsModule } from '../regions/regions.module';
     AuditLogModule,
     PublicModule,
     RegionsModule,
+    CustomerCrmModule,
   ],
   controllers: [CustomerAccountController],
   providers: [CustomerAccountService],

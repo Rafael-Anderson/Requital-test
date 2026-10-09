@@ -9,6 +9,15 @@ vi.mock("@/lib/api", () => ({
   getShop: vi.fn(),
   getCustomer: vi.fn(),
   updateCustomer: vi.fn(),
+  // The CRM cards each load their own data; empty answers keep these mode tests focused.
+  getCustomerTags: vi.fn().mockResolvedValue([]),
+  listCustomerTags: vi.fn().mockResolvedValue([]),
+  listCustomerNotes: vi.fn().mockResolvedValue([]),
+  getCustomerConsent: vi.fn().mockResolvedValue({
+    channels: [],
+    newsletter: { subscribed: false, since: null, source: null },
+    history: [],
+  }),
 }));
 
 vi.mock("@/lib/auth-context", () => ({
