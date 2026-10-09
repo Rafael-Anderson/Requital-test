@@ -14,6 +14,7 @@ import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { toSafeCustomer } from './customer-response.util';
 import { CustomerTagsService } from '../customer-crm/customer-tags.service';
+import { CustomerSegmentsService } from '../customer-segments/customer-segments.service';
 
 interface CustomerListRow {
   id: number;
@@ -42,6 +43,7 @@ export class CustomersService {
   constructor(
     private readonly db: DatabaseService,
     private readonly tagsService: CustomerTagsService,
+    private readonly segmentsService: CustomerSegmentsService,
   ) {}
 
   // Shared by both the storefront checkout flow (PublicService) and
@@ -138,6 +140,16 @@ export class CustomersService {
         `EXISTS (SELECT 1 FROM customertagassignment a WHERE a.customerId = c.id AND a.tagId = ? AND a.shopId = c.shopId)`,
       );
       filterParams.push(query.tagId);
+    }
+    if (query.segmentId !== undefined) {
+      // A saved segment's compiled predicate (validated rule tree, bound params).
+      // Looked up in the caller's shop: another shop's id is a 404.
+      const predicate = await this.segmentsService.predicateFor(
+        ctx.shopId,
+        query.segmentId,
+      );
+      conditions.push(predicate.sql);
+      filterParams.push(...predicate.params);
     }
     const searchCondition = conditions.length
       ? `AND ${conditions.join(' AND ')}`

@@ -57,6 +57,7 @@ const ENTRIES: Entry[] = [
   page("customer detail", () => import("./customers/[id]/page")),
   page("newsletter", () => import("./customers/newsletter/page")),
   page("reviews", () => import("./customers/reviews/page")),
+  page("customer segments", () => import("./customers/segments/page")),
   page("dashboard", () => import("./dashboard/page")),
   page("integrations: delivery", () => import("./integrations/page")),
   page("integrations: analytics", () => import("./integrations/analytics/page")),

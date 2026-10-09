@@ -9,6 +9,7 @@ vi.mock("@/lib/api", () => ({
   getShop: vi.fn(),
   listCustomers: vi.fn(),
   listCustomerTags: vi.fn().mockResolvedValue([]),
+  listCustomerSegments: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/auth-context", () => ({

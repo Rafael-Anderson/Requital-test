@@ -37,6 +37,13 @@ export class ListCustomersQueryDto {
   @Min(1)
   tagId?: number;
 
+  // Only the members of this saved segment (evaluated live).
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  segmentId?: number;
+
   @IsOptional()
   @IsIn(CUSTOMER_SORT_FIELDS)
   sortBy?: CustomerSortField = 'lastOrderDate';
