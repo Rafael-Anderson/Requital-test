@@ -109,8 +109,10 @@ export function parseCollectionRows(
     }
   }
   if (!col.name) throw new CollectionColumnsError([...ALIASES.name]);
-  const get = (row: Record<string, string>, f: Field) =>
-    col[f] ? (row[col[f]!] ?? '').trim() : '';
+  const get = (row: Record<string, string>, f: Field) => {
+    const header = col[f];
+    return header ? (row[header] ?? '').trim() : '';
+  };
 
   const out: CollectionRowIn[] = rows.map((row, index) => {
     const errors: string[] = [];
@@ -134,7 +136,7 @@ export function parseCollectionRows(
         image = null;
       } else image = checked.url;
     }
-    let description: string | null = get(row, 'description') || null;
+    const description: string | null = get(row, 'description') || null;
     if (description !== null && description.length > DESCRIPTION_MAX) {
       errors.push(`Description is longer than ${DESCRIPTION_MAX} characters`);
     }

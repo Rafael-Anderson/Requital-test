@@ -18,7 +18,7 @@ export const MAX_TABLE_BYTES = 5 * 1024 * 1024;
 
 function detectDelimiter(text: string): string {
   // The header line decides. Quoted separators are rare in a header row.
-  const firstLine = text.replace(/^﻿/, '').split(/\r?\n/, 1)[0] ?? '';
+  const firstLine = text.replace(/^\ufeff/, '').split(/\r?\n/, 1)[0] ?? '';
   const counts = [',', ';', '\t'].map(
     (d) => [d, firstLine.split(d).length - 1] as const,
   );

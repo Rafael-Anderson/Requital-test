@@ -11,7 +11,7 @@ const file = (name: string, content: string | Buffer) => ({
 
 describe('readTable csv', () => {
   it('reads a comma file with a BOM and trims headers and cells', () => {
-    const t = readTable(file('a.csv', '﻿ Name ,Price\n Rose ,10.505\n'), {
+    const t = readTable(file('a.csv', '\ufeff Name ,Price\n Rose ,10.505\n'), {
       allowXlsx: true,
     });
     expect(t.headers).toEqual(['Name', 'Price']);

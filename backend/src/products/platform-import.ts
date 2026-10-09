@@ -112,7 +112,7 @@ export function normaliseHeader(raw: string): string {
     raw
       .normalize('NFKC')
       // zero-width, bidi marks, BOM
-      .replace(/[​-‏‪-‮⁦-⁩﻿]/g, '')
+      .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
       // Arabic diacritics and tatweel
       .replace(/[ً-ٰٟـ]/g, '')
       .replace(/[أإآٱ]/g, 'ا')
@@ -132,7 +132,7 @@ export function normaliseHeader(raw: string): string {
 export function toAsciiNumber(raw: string): string {
   let text = raw
     .normalize('NFKC')
-    .replace(/[​-‏‪-‮﻿]/g, '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, '')
     .trim()
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
