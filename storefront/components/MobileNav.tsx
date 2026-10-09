@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
+import { useIsClient } from "@/lib/use-is-client";
 import Link from "next/link";
 import { Menu as MenuIcon, X, ChevronDown, Home, Search, ShoppingCart, User, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
@@ -114,6 +115,7 @@ export function MobileNavTrigger() {
 // all — structurally different from 'drawer'/'fullscreen', not a natural
 // fit inside MenuBar's existing hover-based desktop logic.
 export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scroll"> }) {
+  const isClient = useIsClient();
   const { shopSlug, shopBasePath, previewToken } = useShop();
   const { count } = useCart();
   const { openDrawer } = useCartDrawer();
@@ -315,7 +317,7 @@ export default function MobileNav({ mode }: { mode: Exclude<MobileNavMode, "scro
 
   return (
     <>
-      {createPortal(
+      {isClient && createPortal(
         <div className={`fixed inset-0 z-40 md:hidden ${open ? "" : "pointer-events-none"}`}>
           <div
             onClick={() => setOpen(false)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getRegions, getShop, getThemeConfig, listActiveAutoDiscounts, listOutlets } from "./api";
 import { resolveSchemeCssVars, resolveThemeCssVars } from "./theme-css-vars";
@@ -14,6 +14,7 @@ import { isTrustedAdminOrigin } from "./theme-preview-origin";
 import { resolveScheme } from "./theme-color-scheme";
 import { resolveLetterSpacing, resolveLineHeight, resolveScaleSizes, resolveTypographyPairing } from "./theme-typography";
 import type { AutoDiscount, Outlet, RegionsResponse, Shop } from "./types";
+import type { ShopInitialData } from "./shop-initial-data";
 import type { ColorScheme, HeadingTextPreset, ThemeConfig } from "./theme-config-types";
 
 interface ShopContextValue {
@@ -442,21 +443,43 @@ function applyDensityOverrides(config: ThemeConfig | null) {
   applyDensityCssVars(document.documentElement.style, config?.globalSettings?.density);
 }
 
-export function ShopProvider({ shopSlug, children }: { shopSlug: string; children: React.ReactNode }) {
+export function ShopProvider({
+  shopSlug,
+  initialData,
+  children,
+}: {
+  shopSlug: string;
+  // Server-fetched starting state (lib/shop-initial-data.ts). Optional: without it the
+  // provider behaves exactly as it did before (loading until its own fetches resolve).
+  initialData?: ShopInitialData;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const shopBasePath = pathname === `/${shopSlug}` || pathname.startsWith(`/${shopSlug}/`) ? `/${shopSlug}` : "";
-  const [shop, setShop] = useState<Shop | null>(null);
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [autoDiscounts, setAutoDiscounts] = useState<AutoDiscount[]>([]);
-  const [regionsRes, setRegionsRes] = useState<RegionsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(null);
-
   const urlPreview = searchParams.get("preview") === "true";
   const urlThemeId = searchParams.get("themeId");
   const urlToken = searchParams.get("previewToken") ?? undefined;
+
+  // The seed is the PUBLISHED shop/theme. A theme-builder preview iframe (?preview=true)
+  // needs the draft theme and its token-gated reads, so it ignores the seed and takes the
+  // original path (skeleton, then its own fetches) untouched. A preview session restored
+  // from sessionStorage is only known after mount; it changes the fetch keys below, which
+  // re-fetches with the token the same way it always did.
+  const seed = initialData && initialData.shopSlug === shopSlug && !urlPreview ? initialData : null;
+  const [shop, setShop] = useState<Shop | null>(seed?.shop ?? null);
+  const [outlets, setOutlets] = useState<Outlet[]>(seed?.outlets ?? []);
+  const [autoDiscounts, setAutoDiscounts] = useState<AutoDiscount[]>([]);
+  const [regionsRes, setRegionsRes] = useState<RegionsResponse | null>(null);
+  const [loading, setLoading] = useState(!seed);
+  const [error, setError] = useState<string | null>(null);
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig | null>(seed?.themeConfig ?? null);
+  // The fetch keys the current state already answers. An effect whose key matches skips its
+  // request: the server rendered this request moments ago, so a client round trip on mount
+  // would only repeat it. Keyed (not a "first run" flag) so React strict mode's double
+  // effect run does not refetch and flash.
+  const shopKeyHeld = useRef<string | null>(seed ? `${shopSlug}|` : null);
+  const themeKeyHeld = useRef<string | null>(seed ? `${shopSlug}|false|` : null);
 
   // Bug 3 root cause: every internal <Link> in this app (MenuBar, product/
   // collection cards, search results, ...) is a plain shop-relative path
@@ -531,11 +554,14 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   }, [shopSlug]);
 
   useEffect(() => {
+    const key = `${shopSlug}|${previewToken ?? ""}`;
+    if (shopKeyHeld.current === key) return;
     setLoading(true);
     setError(null);
     setShop(null);
     Promise.all([getShop(shopSlug), listOutlets(shopSlug, previewToken)])
       .then(([shopRes, outletsRes]) => {
+        shopKeyHeld.current = key;
         setShop(shopRes);
         setOutlets(outletsRes);
       })
@@ -554,11 +580,16 @@ export function ShopProvider({ shopSlug, children }: { shopSlug: string; childre
   // listener below overrides it after that with zero network round-trips,
   // per the spec's "no saving required to see changes in preview."
   useEffect(() => {
+    const key = `${shopSlug}|${preview}|${previewThemeId ?? ""}`;
+    if (themeKeyHeld.current === key) return;
     getThemeConfig(shopSlug, {
       preview,
       themeId: previewThemeId ? Number(previewThemeId) : undefined,
     })
-      .then(setThemeConfig)
+      .then((res) => {
+        themeKeyHeld.current = key;
+        setThemeConfig(res);
+      })
       .catch(() => setThemeConfig(null));
   }, [shopSlug, preview, previewThemeId]);
 
