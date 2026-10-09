@@ -131,7 +131,7 @@ export class ProductImageCopyService implements OnModuleInit {
     );
     if (rows.length === 0) return;
 
-    let fetched;
+    let fetched: Awaited<ReturnType<typeof safeFetchImage>>;
     try {
       fetched = await this.fetchImage(url);
     } catch (error) {

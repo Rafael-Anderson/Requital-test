@@ -100,7 +100,7 @@ export function normaliseCustomerPhone(
   countryCode: string | null,
 ): string | null {
   const text = asciiDigits(raw.normalize('NFKC'))
-    .replace(/[​-‏‪-‮﻿]/g, '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\ufeff]/g, '')
     .trim();
   if (text === '') return null;
   // A spreadsheet may hand a phone over as 9.71501234567E11. Not recoverable
@@ -146,8 +146,10 @@ export function parseCustomerRows(
   }
   const missing = (['name', 'phone'] as Field[]).filter((f) => !col[f]);
   if (missing.length > 0) throw new CustomerColumnsError(missing);
-  const get = (row: Record<string, string>, f: Field) =>
-    col[f] ? (row[col[f]!] ?? '').trim() : '';
+  const get = (row: Record<string, string>, f: Field) => {
+    const header = col[f];
+    return header ? (row[header] ?? '').trim() : '';
+  };
 
   const out: CustomerRowIn[] = rows.map((row, index) => {
     const rowNumber = index + 2;

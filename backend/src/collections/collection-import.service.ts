@@ -125,9 +125,10 @@ export class CollectionImportService {
           const sets: string[] = [];
           const params: (string | number | null)[] = [];
           for (const col of ['name', 'description', 'image'] as const) {
-            if (plan.set[col] !== undefined) {
+            const value = plan.set[col];
+            if (value !== undefined) {
               sets.push(`${col} = ?`);
-              params.push(plan.set[col]!);
+              params.push(value);
             }
           }
           if (plan.parentKey !== undefined) {

@@ -34,7 +34,7 @@ function zid(rows: string[][]) {
 
 describe('normaliseHeader', () => {
   it.each([
-    ['﻿Product Name', 'product name'],
+    ['\ufeffProduct Name', 'product name'],
     ['  PRICE  ', 'price'],
     ['أسم الخيار[1]', 'اسم الخيار 1'],
     ['اسم الخيار 1', 'اسم الخيار 1'],
@@ -44,7 +44,7 @@ describe('normaliseHeader', () => {
     ['رمز المنتج SKU', 'رمز المنتج sku'],
     ['السِّعْر', 'السعر'],
     ['ســعر', 'سعر'],
-    ['‏اسم المنتج‎', 'اسم المنتج'],
+    ['\u200fاسم المنتج\u200e', 'اسم المنتج'],
     ['Sale-Price', 'sale price'],
   ])('%p -> %p', (raw, expected) => {
     expect(normaliseHeader(raw)).toBe(expected);
@@ -194,7 +194,14 @@ describe('Salla mapper', () => {
 
   it('matches headers tolerantly (BOM, case, brackets, English)', () => {
     const result = salla([
-      ['﻿Product Name', ' PRICE ', 'Sku', 'Quantity', 'Weight', 'Weight Unit'],
+      [
+        '\ufeffProduct Name',
+        ' PRICE ',
+        'Sku',
+        'Quantity',
+        'Weight',
+        'Weight Unit',
+      ],
       ['Rose', '10.505', 'R1', '3', '1.5', 'KG'],
     ]);
     const v = result.products[0].variants[0];
@@ -305,9 +312,9 @@ describe('Salla mapper', () => {
     ]);
     expect(result.products).toHaveLength(1);
     expect(result.products[0].errors).toContain('Row 3: Price is required');
-    expect(result.rowIssues).toEqual([
-      { rowNumber: 2, message: expect.stringMatching(/no product name/) },
-    ]);
+    expect(result.rowIssues).toHaveLength(1);
+    expect(result.rowIssues[0].rowNumber).toBe(2);
+    expect(result.rowIssues[0].message).toMatch(/no product name/);
   });
 
   it('handles weight units and refuses to guess a missing one', () => {
