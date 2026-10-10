@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -65,6 +66,16 @@ export class DeliveryRunsController {
       from: query.from,
       to: query.to,
     });
+  }
+
+  @Get(':id/sheet')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Cache-Control', 'no-store')
+  sheet(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.runs.renderSheet(ctx, id);
   }
 
   @Get(':id')

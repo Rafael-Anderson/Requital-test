@@ -19,6 +19,7 @@ import { trimDecimal } from '../database/decimal.util';
 import { createLogger } from '../common/logging/logger';
 import { decimalToMinor, minorToDecimal } from './cash';
 import { completeRunIfDone, connExec } from './run-lifecycle';
+import { renderRunSheetHtml } from './run-sheet-html';
 import {
   AddStopsDto,
   CreateDeliveryRunDto,
@@ -185,6 +186,55 @@ export class DeliveryRunsService {
         : null,
       cash: this.summariseCash(stops),
     };
+  }
+
+  // Printable run sheet (staff only). Built from the same scoped loadRun as
+  // everything else; the HTML renderer escapes every dynamic value.
+  async renderSheet(ctx: TenantContext, id: number): Promise<string> {
+    const run = await this.findOne(ctx, id);
+    const shop = await this.db.query<RowDataPacket[]>(
+      `SELECT COALESCE(displayName, name) AS shopName FROM shop WHERE id = ?`,
+      [ctx.shopId],
+    );
+    const orderIds = run.stops.map((s) => s.order.id);
+    const items = orderIds.length
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT orderId, productName, variantLabel, quantity FROM orderitem
+            WHERE orderId IN (${orderIds.map(() => '?').join(', ')}) ORDER BY id`,
+          orderIds,
+        )
+      : [];
+    return renderRunSheetHtml({
+      shopName: shop[0]?.shopName as string,
+      runId: run.id,
+      runDate: run.runDate,
+      status: run.status,
+      driverName: run.driver?.name as string,
+      driverPhone: run.driver?.phone as string,
+      notes: run.notes,
+      stops: run.stops.map((s) => ({
+        position: s.position,
+        orderNumber: s.order.shopOrderNumber,
+        customerName: s.order.customerName,
+        customerPhone: s.order.customerPhone,
+        address: [s.order.customerAddress, s.order.area, s.order.regionName]
+          .filter((x): x is string => typeof x === 'string' && x.length > 0)
+          .join(', '),
+        deliveryNotes: s.order.deliveryNotes,
+        timeSlot: s.order.deliveryTimeSlot,
+        items: items
+          .filter((i) => i.orderId === s.order.id)
+          .map(
+            (i) =>
+              `${i.quantity as number} x ${i.productName as string}${i.variantLabel ? ` (${i.variantLabel as string})` : ''}`,
+          ),
+        cod:
+          s.cod && s.order.cashCollectedAt == null && s.status === 'pending'
+            ? { amount: s.order.total, currency: s.order.currency }
+            : null,
+        status: s.status,
+      })),
+    });
   }
 
   private async loadStopsForStaff(shopId: number, runId: number) {
