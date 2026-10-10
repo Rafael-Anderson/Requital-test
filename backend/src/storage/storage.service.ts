@@ -1,4 +1,5 @@
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
+import sharp from 'sharp';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { StorageProvider } from './storage-provider.interface';
 import { sniffImageType } from './image-sniff';
@@ -112,4 +113,65 @@ export class StorageService {
       deriveVariantKeys(key).map((k) => this.provider.delete(k)),
     );
   }
+
+  // Proof-of-delivery photo (SHP-5). Unlike uploadImage this is not a catalogue
+  // image: it is re-encoded, stored once, and its URL is shown to STAFF only.
+  //   - real content sniffing (never the declared Content-Type); JPEG/PNG/WebP only
+  //   - a hard 5MB cap and a pixel cap before decoding (decompression bombs)
+  //   - re-encoded to JPEG through sharp: EXIF (including GPS) is dropped, EXIF
+  //     orientation is applied, and a polyglot/corrupt file fails to decode
+  //   - the key carries 256 bits of randomness, so the URL is a capability that
+  //     cannot be guessed; it lives under the shop's own namespace, so
+  //     deleteProof can verify ownership from the key alone.
+  async uploadProof(
+    shopId: number,
+    file: Express.Multer.File,
+  ): Promise<{ key: string; url: string }> {
+    if (!isFilenameSafe(file.originalname)) {
+      throw new BadRequestException('Invalid filename');
+    }
+    if (file.buffer.length > PROOF_MAX_BYTES) {
+      throw new BadRequestException('Photo is larger than 5MB');
+    }
+    const sniffed = sniffImageType(file.buffer);
+    if (!sniffed || sniffed.ext === 'gif') {
+      throw new BadRequestException('Photo must be a JPEG, PNG or WebP image');
+    }
+    let out: Buffer;
+    try {
+      out = await sharp(file.buffer, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({
+          width: 1600,
+          height: 1600,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+    } catch {
+      throw new BadRequestException('Could not read that image');
+    }
+    const key = `delivery-proof/${shopId}/${randomBytes(32).toString('hex')}.jpg`;
+    const saved = await this.provider.save({
+      key,
+      buffer: out,
+      contentType: 'image/jpeg',
+    });
+    return { key: saved.key, url: saved.url };
+  }
+
+  async deleteProof(shopId: number, key: string): Promise<void> {
+    const owner = extractShopIdFromKey(key);
+    if (
+      owner === null ||
+      owner !== shopId ||
+      !key.startsWith('delivery-proof/')
+    ) {
+      throw new NotFoundException('File not found');
+    }
+    await this.provider.delete(key);
+  }
 }
+
+export const PROOF_MAX_BYTES = 5 * 1024 * 1024;

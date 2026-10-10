@@ -105,6 +105,84 @@ export class OrderNotificationsService {
     ]);
   }
 
+  // SHP-5: the one-time code a customer reads to their driver. Returns which
+  // channels actually took it, so the driver's app can say "ask the customer to
+  // check their messages" or "no channel, use a photo". Never throws.
+  // Deliberately NOT the stub fallback of sendWhatsApp(): the stub prints the
+  // message to the server log, and a delivery code does not belong in a log.
+  async sendDeliveryCode(
+    shopId: number,
+    order: NotifiableOrder,
+    code: string,
+    idempotencyKey: string,
+  ): Promise<{ email: boolean; whatsapp: boolean }> {
+    const sent = { email: false, whatsapp: false };
+    const bodyText = `Your order #${order.shopOrderNumber} is at your door. Give this code to the driver to confirm delivery: ${code}. Do not share it with anyone else.`;
+    try {
+      if (
+        order.customerEmail &&
+        (await this.features.isEnabled(shopId, 'notify_email'))
+      ) {
+        const shopRows = await this.db.query<RowDataPacket[]>(
+          `SELECT name, displayName FROM shop WHERE id = ?`,
+          [shopId],
+        );
+        const shop = shopRows[0];
+        if (shop) {
+          await this.jobsService.enqueue(
+            shopId,
+            'send_email',
+            {
+              to: order.customerEmail,
+              subject: `Your delivery code for order #${order.shopOrderNumber}`,
+              bodyText,
+              html: `<p style="font-size:15px;line-height:1.5;color:#111111;">Your order <strong>#${order.shopOrderNumber}</strong> is at your door. Give this code to the driver to confirm delivery:</p><p style="font-size:28px;letter-spacing:6px;font-weight:700;color:#111111;">${escapeHtml(code)}</p><p style="font-size:12px;color:#666666;">Do not share it with anyone else.</p>`,
+              fromName:
+                (shop.displayName as string | null) ?? (shop.name as string),
+            },
+            idempotencyKey,
+          );
+          sent.email = true;
+        }
+      }
+    } catch (err) {
+      logger.error(`order #${order.id}: delivery code email failed`, {
+        orderId: order.id,
+        shopId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    try {
+      if (await this.features.isEnabled(shopId, 'notify_customers_whatsapp')) {
+        const shopRows = await this.db.query<RowDataPacket[]>(
+          `SELECT countryCode FROM shop WHERE id = ?`,
+          [shopId],
+        );
+        const to = normalizePhoneToE164(
+          order.customerPhone,
+          (shopRows[0]?.countryCode as string | null) ?? null,
+        );
+        const credentials =
+          await this.whatsAppSettingsService.resolveCredentials(shopId);
+        if (to && credentials) {
+          await this.metaWhatsAppProvider.sendMessage({
+            to,
+            body: bodyText,
+            credentials,
+          });
+          sent.whatsapp = true;
+        }
+      }
+    } catch (err) {
+      logger.error(`order #${order.id}: delivery code WhatsApp failed`, {
+        orderId: order.id,
+        shopId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    return sent;
+  }
+
   async notifyOutForDelivery(shopId: number, order: NotifiableOrder) {
     const isPickup = order.orderType === 'pickup';
     const subject = isPickup
@@ -186,7 +264,8 @@ export class OrderNotificationsService {
       },
       `/survey?token=${token}`,
     );
-    const shopDisplayName = (shop.displayName as string | null) ?? (shop.name as string);
+    const shopDisplayName =
+      (shop.displayName as string | null) ?? (shop.name as string);
     const surveyHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
