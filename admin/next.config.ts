@@ -103,6 +103,16 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // The driver magic-link page carries a bearer secret in its URL: never send
+      // it as a Referer, never cache it, never index it.
+      {
+        source: "/driver/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
       {
         source: "/:path*",
         headers: [

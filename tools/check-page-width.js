@@ -23,6 +23,9 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 
 const ALLOWLIST = [
+  // SHP-5: the delivery driver's magic-link page. No session and no merchant chrome
+  // (RequireAuth/AppChrome bypass /driver/), phone-width by design.
+  "admin/app/driver/[token]/page.tsx",
   // Pre-auth pages: no PageShell/dashboard chrome exists to route through —
   // these render before a session exists, same reason RequireAuth doesn't
   // gate them either.
