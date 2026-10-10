@@ -1,4 +1,10 @@
 import type {
+  DeliveryRunDetail,
+  DeliveryRunListItem,
+  DeliveryRunStatus,
+  Driver,
+  ProofRequirement,
+  ReadyOrder,
   AbandonedCart,
   AdjustmentReason,
   CustomDomainStatus,
@@ -2382,4 +2388,101 @@ export function dismissNotFoundEntry(id: number) {
 
 export function clearNotFoundLog() {
   return apiFetch<{ cleared: number }>("/url-redirects/not-found-log", { method: "DELETE" });
+}
+
+
+// ---- SHP-5 driver dispatch (staff side) -------------------------------------
+
+export function listDrivers(params: { outletId?: number | null; active?: boolean } = {}) {
+  const qs = new URLSearchParams();
+  if (params.outletId) qs.set("outletId", String(params.outletId));
+  if (params.active !== undefined) qs.set("active", String(params.active));
+  const q = qs.toString();
+  return apiFetch<Driver[]>(`/drivers${q ? `?${q}` : ""}`);
+}
+
+export function createDriver(data: { name: string; phone: string; outletId?: number }) {
+  return apiFetch<Driver>("/drivers", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateDriver(id: number, data: { name?: string; phone?: string; active?: boolean }) {
+  return apiFetch<Driver>(`/drivers/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteDriver(id: number) {
+  return apiFetch<{ deleted: boolean; deactivated: boolean }>(`/drivers/${id}`, { method: "DELETE" });
+}
+
+export function listDeliveryRuns(params: { outletId?: number | null; status?: DeliveryRunStatus; page?: number } = {}) {
+  const qs = new URLSearchParams();
+  if (params.outletId) qs.set("outletId", String(params.outletId));
+  if (params.status) qs.set("status", params.status);
+  if (params.page) qs.set("page", String(params.page));
+  const q = qs.toString();
+  return apiFetch<{ data: DeliveryRunListItem[]; page: number; pageSize: number; total: number }>(
+    `/delivery-runs${q ? `?${q}` : ""}`,
+  );
+}
+
+export function listReadyOrders(outletId: number) {
+  return apiFetch<ReadyOrder[]>(`/delivery-runs/ready-orders?outletId=${outletId}`);
+}
+
+export function getDeliveryRun(id: number) {
+  return apiFetch<DeliveryRunDetail>(`/delivery-runs/${id}`);
+}
+
+export function createDeliveryRun(data: {
+  outletId?: number;
+  driverId: number;
+  runDate?: string;
+  notes?: string;
+  proofRequirement?: ProofRequirement;
+  orderIds: number[];
+}) {
+  return apiFetch<DeliveryRunDetail>("/delivery-runs", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateDeliveryRun(
+  id: number,
+  data: { driverId?: number; runDate?: string; notes?: string; proofRequirement?: ProofRequirement },
+) {
+  return apiFetch<DeliveryRunDetail>(`/delivery-runs/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function reorderRunStops(id: number, stopIds: number[]) {
+  return apiFetch<DeliveryRunDetail>(`/delivery-runs/${id}/stops/order`, {
+    method: "PUT",
+    body: JSON.stringify({ stopIds }),
+  });
+}
+
+export function removeRunStop(id: number, stopId: number) {
+  return apiFetch<DeliveryRunDetail>(`/delivery-runs/${id}/stops/${stopId}`, { method: "DELETE" });
+}
+
+export function dispatchDeliveryRun(id: number) {
+  return apiFetch<DeliveryRunDetail>(`/delivery-runs/${id}/dispatch`, { method: "POST" });
+}
+
+export function cancelDeliveryRun(id: number) {
+  return apiFetch<DeliveryRunDetail>(`/delivery-runs/${id}/cancel`, { method: "POST" });
+}
+
+export function issueRunLink(id: number) {
+  return apiFetch<{ url: string; expiresAt: string }>(`/delivery-runs/${id}/link`, { method: "POST" });
+}
+
+export function revokeRunLink(id: number) {
+  return apiFetch<{ revoked: number }>(`/delivery-runs/${id}/link`, { method: "DELETE" });
+}
+
+export function sendRunLinkWhatsApp(id: number) {
+  return apiFetch<{ url: string; expiresAt: string; queued: boolean }>(`/delivery-runs/${id}/link/send`, {
+    method: "POST",
+  });
+}
+
+export function getRunSheetHtml(id: number) {
+  return apiFetchText(`/delivery-runs/${id}/sheet`);
 }

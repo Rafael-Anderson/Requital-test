@@ -18,6 +18,9 @@ const ALL_TABS: (TabItem & { roles: UserRole[] | null })[] = [
   // method-level override on GET /reports/external-delivery.
   { href: "/orders/branch-status", label: "Branch Status", roles: null },
   { href: "/orders/external-delivery", label: "External Delivery", roles: null },
+  // Mirrors the backend's @Roles('admin','branch') on drivers/delivery-runs: order_manager
+  // and viewer have no dispatch access, so the tab never appears for them.
+  { href: "/orders/runs", label: "Delivery Runs", roles: ["admin", "branch"] },
 ];
 
 export default function OrdersTabs() {

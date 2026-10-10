@@ -1124,6 +1124,8 @@ export const ALL_PERMISSIONS = [
   "purchase_orders.view",
   "purchase_orders.manage",
   "purchase_orders.receive",
+  "deliveries.view",
+  "deliveries.manage",
 ] as const;
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
@@ -1141,6 +1143,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchase_orders.view": "View purchase orders",
   "purchase_orders.manage": "Manage purchase orders (create, edit, send, cancel)",
   "purchase_orders.receive": "Receive purchase order deliveries into stock",
+  "deliveries.view": "View drivers and delivery runs",
+  "deliveries.manage": "Manage drivers and delivery runs (build, dispatch, cancel)",
 };
 
 // A named, admin-defined bundle of permissions that can be assigned to a
@@ -2880,7 +2884,8 @@ export interface AuditLogEntry {
   before: unknown;
   after: unknown;
   metadata: unknown;
-  actorId: number;
+  // null when a delivery-run driver acted (the name is then "driver <name>").
+  actorId: number | null;
   actorName: string;
   createdAt: string;
 }
@@ -3444,4 +3449,118 @@ export interface ShopifyImportOptions {
   collectionId?: number;
   outletId?: number;
   onExisting: "update" | "skip";
+}
+
+
+// ---- SHP-5 driver dispatch -------------------------------------------------
+
+export interface Driver {
+  id: number;
+  outletId: number;
+  name: string;
+  phone: string;
+  active: boolean;
+}
+
+export type DeliveryRunStatus = "draft" | "dispatched" | "in_progress" | "completed" | "cancelled";
+export type ProofRequirement = "photo_or_otp" | "photo" | "otp" | "none";
+
+export const RUN_STATUS_LABELS: Record<DeliveryRunStatus, string> = {
+  draft: "Draft",
+  dispatched: "Dispatched",
+  in_progress: "In progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export const PROOF_REQUIREMENT_LABELS: Record<ProofRequirement, string> = {
+  photo_or_otp: "Photo or customer code",
+  photo: "Photo only",
+  otp: "Customer code only",
+  none: "No proof",
+};
+
+export interface DeliveryRunListItem {
+  id: number;
+  outletId: number;
+  driverId: number;
+  driverName: string;
+  status: DeliveryRunStatus;
+  runDate: string | null;
+  notes: string | null;
+  proofRequirement: ProofRequirement;
+  createdAt: string;
+  stopCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  discrepancyCount: number;
+}
+
+export interface RunCashTotal {
+  currency: string;
+  expected: string;
+  collected: string;
+  difference: string;
+  pending: string;
+  discrepancies: number;
+}
+
+export interface DeliveryRunStop {
+  id: number;
+  position: number;
+  status: "pending" | "delivered" | "failed";
+  failureReason: string | null;
+  deliveredAt: string | null;
+  failedAt: string | null;
+  proofType: string | null;
+  proofPhotoUrl: string | null;
+  cod: boolean;
+  codExpected: string | null;
+  cashCollectedAmount: string | null;
+  cashCurrency: string | null;
+  cashDiscrepancy: boolean;
+  order: {
+    id: number;
+    shopOrderNumber: number;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+    area: string | null;
+    regionName: string | null;
+    deliveryNotes: string | null;
+    deliveryTimeSlot: string | null;
+    status: string;
+    paymentMethod: string | null;
+    total: string;
+    currency: string;
+  };
+}
+
+export interface DeliveryRunDetail {
+  id: number;
+  outletId: number;
+  status: DeliveryRunStatus;
+  runDate: string | null;
+  notes: string | null;
+  proofRequirement: ProofRequirement;
+  driver: { id: number; name: string; phone: string; active: boolean } | null;
+  stops: DeliveryRunStop[];
+  link: { expiresAt: string; lastUsedAt: string | null } | null;
+  cash: RunCashTotal[];
+  // Only on the dispatch response: the one time the secret URL is shown.
+  issuedLink?: { url: string; expiresAt: string } | null;
+}
+
+export interface ReadyOrder {
+  id: number;
+  shopOrderNumber: number;
+  customerName: string;
+  customerAddress: string;
+  area: string | null;
+  regionName: string | null;
+  deliveryTimeSlot: string | null;
+  status: string;
+  paymentMethod: string | null;
+  total: string;
+  currency: string;
 }
