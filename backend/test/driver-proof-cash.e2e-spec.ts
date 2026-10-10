@@ -437,19 +437,27 @@ describe('SHP-5 driver actions: proof, cash, timeline', () => {
       await fx.r().get('/driver-app/run').set(tok(r.token)).expect(404);
     });
 
-    it('refuses to hand over an order staff cancelled meanwhile', async () => {
+    it('closes a stop whose order staff cancelled, so the run can still finish', async () => {
       const r = await fx.dispatchedRun(a, { proofRequirement: 'none' });
       await fx.f.cancelOrder(a, r.orders[0].id).expect(201);
-      const view = body<{
-        stops: { deliverable: boolean; orderCancelled: boolean }[];
-      }>(await fx.r().get('/driver-app/run').set(tok(r.token)).expect(200));
-      expect(view.stops[0]).toMatchObject({
-        deliverable: false,
-        orderCancelled: true,
-      });
+      // the race window: the order is cancelled but the stop is still pending
       const res = await deliver(r.token, r.stops[0].id).expect(409);
       expect(body<{ code: string }>(res).code).toBe('order_not_deliverable');
       expect((await fx.f.orderRow(r.orders[0].id)).status).toBe('cancelled');
+      // the driver's next refresh sweeps it closed and completes the run
+      const view = body<{
+        run: { status: string };
+        stops: { status: string; failureReason: string }[];
+      }>(await fx.r().get('/driver-app/run').set(tok(r.token)).expect(200));
+      expect(view.stops[0]).toMatchObject({
+        status: 'failed',
+        failureReason: 'order_cancelled',
+      });
+      const [done] = await fx.row<{ status: string }>(
+        `SELECT status FROM deliveryrun WHERE id = ?`,
+        [r.run.id],
+      );
+      expect(done.status).toBe('completed');
     });
   });
 

@@ -40,6 +40,7 @@ const FAILURE_LABEL: Record<string, string> = {
   run_cancelled: "Run cancelled",
   order_changed: "Order changed before dispatch",
   order_not_deliverable: "Order no longer deliverable",
+  order_cancelled: "Order was cancelled",
 };
 
 export default function DeliveryRunDetailPage() {

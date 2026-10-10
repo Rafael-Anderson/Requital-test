@@ -25,6 +25,13 @@ const FAIL_REASONS = [
   "Other",
 ];
 
+const SYSTEM_REASONS: Record<string, string> = {
+  run_cancelled: "the shop cancelled the run",
+  order_changed: "the order changed",
+  order_not_deliverable: "the order can no longer be delivered",
+  order_cancelled: "the shop cancelled the order",
+};
+
 function mapsUrl(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
@@ -103,7 +110,7 @@ function StopCard({
       </div>
 
       {stop.status === "delivered" && <p className="mt-3 text-sm font-semibold text-green-700 dark:text-green-400">Delivered{stop.cashDiscrepancy ? ". The cash amount did not match and was flagged." : ""}</p>}
-      {stop.status === "failed" && <p className="mt-3 text-sm font-semibold text-red-700 dark:text-red-400">Not delivered{stop.failureReason ? `: ${stop.failureReason}` : ""}</p>}
+      {stop.status === "failed" && <p className="mt-3 text-sm font-semibold text-red-700 dark:text-red-400">Not delivered{stop.failureReason ? `: ${SYSTEM_REASONS[stop.failureReason] ?? stop.failureReason}` : ""}</p>}
       {stop.status === "pending" && stop.orderCancelled && (
         <p className="mt-3 text-sm font-semibold text-red-700 dark:text-red-400">The shop cancelled this order. Do not hand it over.</p>
       )}

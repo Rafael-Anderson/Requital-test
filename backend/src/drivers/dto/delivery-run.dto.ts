@@ -5,6 +5,7 @@ import {
   ArrayUnique,
   IsArray,
   IsIn,
+  IsDateString,
   IsInt,
   IsOptional,
   IsString,
@@ -160,4 +161,26 @@ export class ReadyOrdersQueryDto {
 export class SendLinkDto {
   @IsIn(['whatsapp'])
   channel: 'whatsapp';
+}
+
+export class CashReconciliationQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  outletId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  driverId?: number;
+
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }

@@ -15,6 +15,7 @@ import { DeliveryRunsService } from './delivery-runs.service';
 import { DriverLinksService } from './driver-links.service';
 import {
   AddStopsDto,
+  CashReconciliationQueryDto,
   CreateDeliveryRunDto,
   ListDeliveryRunsQueryDto,
   ReadyOrdersQueryDto,
@@ -53,19 +54,9 @@ export class DeliveryRunsController {
   @Get('cash-reconciliation')
   reconciliation(
     @CurrentUser() ctx: TenantContext,
-    @Query()
-    query: { outletId?: string; driverId?: string; from?: string; to?: string },
+    @Query() query: CashReconciliationQueryDto,
   ) {
-    return this.runs.reconciliation(ctx, {
-      outletId: query.outletId
-        ? Number(query.outletId) || undefined
-        : undefined,
-      driverId: query.driverId
-        ? Number(query.driverId) || undefined
-        : undefined,
-      from: query.from,
-      to: query.to,
-    });
+    return this.runs.reconciliation(ctx, query);
   }
 
   @Get(':id/sheet')

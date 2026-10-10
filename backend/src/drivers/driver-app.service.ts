@@ -127,6 +127,19 @@ export class DriverAppService {
   // run, driver or shop, no internal ids beyond the stop's own.
   async getRun(token: string | undefined) {
     const link = await this.resolve(token, 'read');
+    // A pending stop whose order staff cancelled can never be completed and
+    // would hold the run open forever: close it as failed, then see whether the
+    // run is done. Idempotent, and scoped by the link's own run and shop.
+    const swept = await this.db.execute(
+      `UPDATE deliveryrunstop s JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
+          SET s.status = 'failed', s.failureReason = 'order_cancelled', s.failedAt = NOW(3),
+              s.activeOrderId = NULL, s.updatedAt = NOW(3)
+        WHERE s.runId = ? AND s.shopId = ? AND s.status = 'pending' AND o.status = 'cancelled'`,
+      [link.runId, link.shopId],
+    );
+    if (swept.affectedRows > 0) {
+      await completeRunIfDone(poolExec(this.db), link.shopId, link.runId);
+    }
     const stops = await this.db.query<RowDataPacket[]>(
       `SELECT s.id, s.position, s.status, s.failureReason, s.deliveredAt,
               (s.proofPhotoKey IS NOT NULL) AS hasPhoto,
