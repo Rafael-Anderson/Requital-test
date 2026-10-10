@@ -3,6 +3,8 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { OrdersModule } from '../orders/orders.module';
 import { JobsModule } from '../jobs/jobs.module';
+import { OrderNotificationsModule } from '../orders/order-notifications.module';
+import { StorageModule } from '../storage/storage.module';
 import { DriversController } from './drivers.controller';
 import { DriversService } from './drivers.service';
 import { DeliveryRunsController } from './delivery-runs.controller';
@@ -13,7 +15,14 @@ import { DriverAppService } from './driver-app.service';
 
 // SHP-5: dispatch to a merchant's own drivers. See docs/handoff/t2.md.
 @Module({
-  imports: [AuditLogModule, BranchRolesModule, OrdersModule, JobsModule],
+  imports: [
+    AuditLogModule,
+    BranchRolesModule,
+    OrdersModule,
+    JobsModule,
+    OrderNotificationsModule,
+    StorageModule,
+  ],
   controllers: [DriversController, DeliveryRunsController, DriverAppController],
   providers: [
     DriversService,

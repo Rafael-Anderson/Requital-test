@@ -16,6 +16,9 @@ export type { W5Shop };
 // would also move stock, which these specs are not about.
 export async function bootDriverFixture() {
   const booted = await bootApp();
+  // Listen once on an ephemeral port: supertest otherwise opens a fresh listener
+  // per call, and a burst of parallel calls resets connections.
+  await booted.app.listen(0);
   const f = makeFixtures(booted.app, booted.db);
   const db = booted.db;
   const app: INestApplication<App> = booted.app;
@@ -126,7 +129,48 @@ export async function bootDriverFixture() {
     return rows as unknown as T[];
   }
 
+  // A dispatched run with its magic link, ready for the driver-app endpoints.
+  async function dispatchedRun(
+    shop: W5Shop,
+    opts: {
+      n?: number;
+      cod?: boolean;
+      proofRequirement?: string;
+      driverId?: number;
+      price?: number;
+    } = {},
+  ) {
+    const driver = opts.driverId
+      ? { id: opts.driverId }
+      : await createDriver(shop);
+    const orders: { id: number }[] = [];
+    for (let i = 0; i < (opts.n ?? 1); i++) {
+      orders.push(
+        await deliveryOrder(shop, { cod: opts.cod, price: opts.price }),
+      );
+    }
+    const run = await createRun(
+      shop,
+      driver.id,
+      orders.map((o) => o.id),
+      opts.proofRequirement ? { proofRequirement: opts.proofRequirement } : {},
+    );
+    const res = await r()
+      .post(`/delivery-runs/${run.id}/dispatch`)
+      .set(h(shop.adminToken))
+      .expect(201);
+    const url = body<{ issuedLink: { url: string } }>(res).issuedLink.url;
+    const token = url.split('/driver/')[1];
+    const view = await r()
+      .get('/driver-app/run')
+      .set('X-Driver-Token', token)
+      .expect(200);
+    const stops = body<{ stops: { id: number }[] }>(view).stops;
+    return { driver, orders, run, token, stops };
+  }
+
   return {
+    dispatchedRun,
     app,
     db,
     f,
