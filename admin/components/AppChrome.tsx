@@ -28,8 +28,10 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
   // app/platform/layout.tsx) — the merchant TopBar/banners/CommandPalette
   // must never appear there, same reasoning as the full-bleed bypass above.
   const isPlatformPath = pathname.startsWith("/platform");
+  // The driver's magic-link page renders bare: no merchant chrome.
+  const isDriverPath = pathname.startsWith("/driver/");
 
-  if (isFullBleed || isPlatformPath) {
+  if (isFullBleed || isPlatformPath || isDriverPath) {
     return <>{children}</>;
   }
 
