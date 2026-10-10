@@ -118,6 +118,7 @@ describe('CustomerAccountService.exportData', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     const result = await service.exportData(ctx);
@@ -169,6 +170,7 @@ describe('CustomerAccountService.exportData', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -191,6 +193,7 @@ describe('CustomerAccountService.exportData', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -208,6 +211,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     const result = await service.requestDeletion(ctx);
@@ -247,6 +251,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -294,6 +299,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -323,6 +329,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -343,6 +350,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -409,6 +417,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
       { exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }) } as never, // consentService
+      { overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }) } as never, // storeCreditService
     );
 
     const first = await service.confirmDeletion(ctx, raw);

@@ -26,6 +26,7 @@ import { useShopCurrency } from "@/lib/useShopCurrency";
 import CustomerTagsCard from "@/components/customers/CustomerTagsCard";
 import CustomerNotesCard from "@/components/customers/CustomerNotesCard";
 import CustomerConsentCard from "@/components/customers/CustomerConsentCard";
+import StoreCreditCard from "@/components/customers/StoreCreditCard";
 
 // Admin-only, same as the list page — see app/customers/page.tsx.
 export default function CustomerDetailPage() {
@@ -168,6 +169,7 @@ export default function CustomerDetailPage() {
             <CustomerTagsCard customerId={customerId} canEdit={user?.role === "admin"} />
             <CustomerConsentCard customerId={customerId} canEdit={user?.role === "admin"} />
           </div>
+          <StoreCreditCard customerId={customerId} canEdit={user?.role === "admin"} />
           <CustomerNotesCard customerId={customerId} canEdit={user?.role === "admin"} />
 
           <div>

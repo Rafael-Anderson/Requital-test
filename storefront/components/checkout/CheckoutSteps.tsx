@@ -7,6 +7,7 @@ import { storeButtonClassName } from "@/lib/button-style";
 import { isDateBlocked } from "@/lib/slots";
 import PromoCodeField from "@/components/PromoCodeField";
 import GiftCardCodeField from "@/components/GiftCardCodeField";
+import StoreCreditField from "@/components/StoreCreditField";
 import DeliveryAddressFields from "./DeliveryAddressFields";
 import PaymentMethodPicker from "./PaymentMethodPicker";
 import DeliveryDateCalendar from "./DeliveryDateCalendar";
@@ -219,6 +220,13 @@ export default function CheckoutSteps(state: CheckoutFormState) {
               <p className="text-sm font-medium mb-2">Gift card</p>
               <GiftCardCodeField shopSlug={state.shopSlug} onAmountChange={(amount) => state.setGiftCardAmount(amount)} />
             </div>
+
+            <StoreCreditField
+              shopSlug={state.shopSlug}
+              currency={state.shop?.currency}
+              checked={state.useStoreCredit}
+              onChange={state.setUseStoreCredit}
+            />
 
             <div className="pt-2 border-t border-black/10 space-y-1">
               <div className="flex items-center justify-between">

@@ -41,6 +41,14 @@ export class CustomerAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
+    await this.authenticate(request);
+    return true;
+  }
+
+  // The whole check, callable outside the guard too (an optional-login route such
+  // as checkout with store credit needs the same verdict). Throws 401/404 exactly
+  // as the guard does and attaches request.customer on success.
+  async authenticate(request: Request): Promise<CustomerContext> {
     const token = this.extractToken(request);
     if (!token) {
       throw new UnauthorizedException('Missing session cookie');
@@ -90,7 +98,7 @@ export class CustomerAuthGuard implements CanActivate {
     };
     (request as Request & { customer: CustomerContext }).customer =
       customerContext;
-    return true;
+    return customerContext;
   }
 
   // Session-cookie migration (security audit finding #1), phase 3. No

@@ -506,6 +506,9 @@ export interface CreateOrderPayload {
   // discountCode — applies up to min(remainingBalance, order total),
   // combines with whichever paymentMethod covers any remainder.
   giftCardCode?: string;
+  // CUS-6: spend the logged-in customer's store credit. A bare yes: the server
+  // reads the balance and applies up to what is payable. Never an amount.
+  useStoreCredit?: boolean;
   items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number; note?: string }[];
 }
 
@@ -794,4 +797,10 @@ export type ConsentChannel = "email" | "whatsapp" | "sms";
 export interface MyConsent {
   wording: { version: string; channels: Record<ConsentChannel, string> };
   channels: { channel: ConsentChannel; status: "granted" | "withdrawn" | null }[];
+}
+
+// CUS-6. Balances are per currency and are never summed across currencies.
+export interface MyStoreCredit {
+  balances: { currency: string; balance: string; balanceMinor: number }[];
+  entries: { id: number; currency: string; amount: string; type: string; createdAt: string }[];
 }

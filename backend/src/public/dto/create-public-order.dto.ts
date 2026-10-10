@@ -3,6 +3,7 @@ import {
   Allow,
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -184,6 +185,14 @@ export class CreatePublicOrderDto {
   @IsOptional()
   @IsString()
   giftCardCode?: string;
+
+  // CUS-6. A bare yes/no: the AMOUNT is never client-supplied. The server reads
+  // the logged-in customer's balance in this shop's currency and applies up to
+  // what is still payable after tax, discount and gift card. Needs a customer
+  // session (401 without one). Combines with any paymentMethod for the remainder.
+  @IsOptional()
+  @IsBoolean()
+  useStoreCredit?: boolean;
 
   @IsArray()
   @ArrayNotEmpty()
