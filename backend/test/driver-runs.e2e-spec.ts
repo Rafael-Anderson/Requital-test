@@ -608,3 +608,60 @@ describe('SHP-5 drivers and delivery runs (staff API)', () => {
     });
   });
 });
+
+describe('SHP-5 run sheet', () => {
+  let fx: Awaited<ReturnType<typeof bootDriverFixture>>;
+  let a: W5Shop;
+  let b: W5Shop;
+  beforeAll(async () => {
+    fx = await bootDriverFixture();
+    a = await fx.f.setupShop('sheet-a');
+    b = await fx.f.setupShop('sheet-b');
+  });
+  afterAll(async () => {
+    await fx.app.close();
+  });
+
+  it('renders an escaped, staff-only, tenant-scoped HTML sheet', async () => {
+    const r = await fx.dispatchedRun(a, { cod: true });
+    await fx.db.execute(
+      `UPDATE \`order\` SET customerName = ?, deliveryNotes = ? WHERE id = ?`,
+      [
+        '<script>alert(1)</script>',
+        '"><img src=x onerror=alert(2)>',
+        r.orders[0].id,
+      ],
+    );
+    const res = await fx
+      .r()
+      .get(`/delivery-runs/${r.run.id}/sheet`)
+      .set(fx.h(a.adminToken))
+      .expect(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.text).toContain('CASH TO COLLECT');
+    expect(res.text).not.toMatch(/<script>alert|<img src=x/);
+    expect(res.text).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    await fx
+      .r()
+      .get(`/delivery-runs/${r.run.id}/sheet`)
+      .set(fx.h(b.adminToken))
+      .expect(404);
+    await fx.r().get(`/delivery-runs/${r.run.id}/sheet`).expect(401);
+    await fx
+      .r()
+      .get(`/delivery-runs/${r.run.id}/sheet`)
+      .set('X-Driver-Token', r.token)
+      .expect(401);
+    const viewer = await fx.createStaff(
+      fx.app,
+      a.adminToken,
+      'sheetv',
+      'viewer',
+    );
+    await fx
+      .r()
+      .get(`/delivery-runs/${r.run.id}/sheet`)
+      .set(fx.h(viewer.token))
+      .expect(403);
+  });
+});
