@@ -93,6 +93,11 @@ export default async function ShopLayout({
     <>
       {themeVars && <style dangerouslySetInnerHTML={{ __html: `:root{${themeVars}}` }} />}
       {organization && <JsonLd data={organization} />}
+      {/* The sections are server-rendered now. Their entrance animations start from a hidden
+          state that only a script reveals, so without JS they would stay invisible. */}
+      <noscript>
+        <style>{`[class*="theme-anim-"]{opacity:1!important;transform:none!important;filter:none!important;clip-path:none!important}`}</style>
+      </noscript>
       {/* key: a different shop must remount the provider, never reuse the previous shop's seeded state */}
       <ShopLayoutClient key={shopSlug} initialData={initialData}>
         {children}
