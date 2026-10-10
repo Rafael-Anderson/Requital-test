@@ -212,12 +212,14 @@ function Body({ children }: { children: React.ReactNode }) {
   // point has no shop/theme and would flash the raw slug text plus default
   // Requital iconography before the merchant's real theme loads.
   if (loading) {
-    // ShopProvider fetches in an effect, so the server render is always this
-    // branch. Dropping `children` here meant a notFound() thrown by the route
-    // was never seen by the server render and every missing URL left as a
-    // streamed 200 (soft 404). On the routes that decide their own status the
-    // children are rendered hidden so the server sees the throw: the response
-    // becomes a real 404 with the branded not-found state and noindex.
+    // Reached on the server only when app/[shop]/layout.tsx could NOT seed ShopProvider (a
+    // failed theme/outlets fetch, an unpublished shop); a seeded provider is never loading, so
+    // its pages and any notFound() they throw render in the server pass directly. Dropping
+    // `children` here meant a notFound() thrown by the route was never seen by the server render
+    // and every missing URL left as a streamed 200 (soft 404). On the routes that decide their
+    // own status the children are rendered hidden so the server sees the throw: the response
+    // becomes a real 404 with noindex. (Proven needed: with the seed withheld and this removed,
+    // the soft-404 spec fails.)
     return (
       <>
         <StorefrontLoadingSkeleton />

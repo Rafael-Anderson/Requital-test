@@ -2,11 +2,13 @@ import { test, expect, type APIRequestContext } from '@playwright/test';
 import { STOREFRONT_URL } from '../urls';
 import { api, seedShop, type SeedState } from '../seed';
 
-// A missing storefront URL must answer 404 with the branded not-found body and a noindex
-// robots meta, never a streamed 200 (a soft 404 that search engines index). The server
-// render of every storefront page is the loading skeleton (ShopProvider fetches in an effect),
-// so a notFound() thrown by the route is only seen by the server render if ShopLayoutClient
-// renders the route's children; see app/[shop]/ShopLayoutClient.tsx (SSR_STATUS_PARAMS).
+// A missing storefront URL must answer 404 with a noindex robots meta, never a streamed 200
+// (a soft 404 that search engines index). The server layout seeds ShopProvider with the shop it
+// already fetched (lib/shop-initial-data.ts), so a notFound() thrown by the route is seen by the
+// server render. When the seed is withheld (a failed theme/outlets fetch) ShopLayoutClient renders
+// the route's children hidden instead; see app/[shop]/ShopLayoutClient.tsx (SSR_STATUS_PARAMS).
+// The branded not-found UI cannot be in that HTML: Next 16 answers a notFound() raised in the
+// server render with its bare error shell (see docs/handoff/t4.md), so it is asserted in a browser.
 // Plain HTTP (request.get), no browser: the status line and the HTML are what a crawler reads.
 // Next answers a notFound() raised during the server render with the 404 status, the noindex meta and
 // a bare error shell (<html id="__next_error__">); the branded not-found UI is then rendered by the
@@ -76,6 +78,34 @@ test.describe('path mode (/<shop>/...)', () => {
 
 });
 
+// What a crawler without JavaScript reads: the shop's own content is in the HTML of a real
+// page (the shell used to be a loading skeleton with no text at all).
+function visibleText(html: string): string {
+  return html
+    .replace(/<head[\s\S]*?<\/head>/i, '')
+    .replace(/<(script|style|template|noscript)[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+test.describe('server-rendered shop content (raw HTML, no JavaScript)', () => {
+  test('the home page carries the shop name, its chrome and a heading', async ({ request }) => {
+    const { res, body } = await get(request, `/${seed.subdomain}`);
+    expect(res.status()).toBe(200);
+    expect(body).toContain(`<title>${seed.shopName}`);
+    expect(visibleText(body)).toContain(seed.shopName);
+    expect(body).toMatch(/<header[\s>]/);
+    expect(body).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
+  });
+
+  test('a 404 keeps its status and noindex and names the shop in the title', async ({ request }) => {
+    const { res, body } = await get(request, `/${seed.subdomain}/nope`);
+    expect(res.status()).toBe(404);
+    expect(body).toMatch(NOINDEX);
+    expect(body).toContain(`<title>${seed.shopName}`);
+  });
+});
+
 test.describe('the branded not-found state (rendered by the client after the 404 response)', () => {
   test('a missing page shows the shop-chromed not-found, an unknown shop the store-not-found state', async ({ page }) => {
     const missing = await page.goto(`${STOREFRONT_URL}/${seed.subdomain}/nope`);
@@ -121,5 +151,24 @@ test.describe('host mode (<shop>.requital.io, resolved by proxy.ts)', () => {
     const redirected = await get(request, '/old-rose', host);
     expect(redirected.res.status()).toBe(301);
     expect(redirected.res.headers()['location']).toBe(`/products/${seed.simpleProduct.slug}`);
+  });
+});
+
+// Last on purpose: publishing a theme changes the shop every earlier case in this serial file ran against.
+test.describe('a published theme', () => {
+  test('a published Sections theme renders its sections in the HTML', async ({ request }) => {
+    const theme = await api<{ id: number }>(
+      '/themes',
+      { method: 'POST', body: JSON.stringify({ name: 'SSR check', fromTemplate: 'bloom' }) },
+      seed.session,
+    );
+    await api(`/themes/${theme.id}/publish`, { method: 'POST', body: JSON.stringify({}) }, seed.session);
+    const { res, body } = await get(request, `/${seed.subdomain}`);
+    expect(res.status()).toBe(200);
+    expect(body).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
+    expect(body).toContain('theme-anim-');
+    // Entrance animations start hidden until a script reveals them; without JS they must not stay hidden.
+    expect(body).toMatch(/<noscript><style>[^<]*theme-anim-/);
+    expect(body).not.toContain('min-h-screen w-full'); // not the loading skeleton
   });
 });

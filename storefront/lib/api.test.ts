@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveImageUrl, listProducts, getProduct, getMyOrders, loginCustomer, updateMyProfile } from "./api";
+import { getThemeConfig, HttpError, resolveImageUrl, listProducts, getProduct, getMyOrders, loginCustomer, updateMyProfile } from "./api";
 import type { Customer } from "./types";
 
 function mockFetchOnce(body: unknown) {
@@ -142,5 +142,19 @@ describe("credentialed requests and CSRF token handling", () => {
 
     const [, init] = fetchMock.mock.calls[0];
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+});
+
+describe("getThemeConfig", () => {
+  it("reads an empty 200 body (no published theme) as null, not as a failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
+    await expect(getThemeConfig("s", { preview: false })).resolves.toBeNull();
+  });
+
+  it("parses a theme and still throws an HttpError on a failed request", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => '{"sections":[]}' }));
+    await expect(getThemeConfig("s", { preview: false })).resolves.toEqual({ sections: [] });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ message: "down" }) }));
+    await expect(getThemeConfig("s", { preview: false })).rejects.toBeInstanceOf(HttpError);
   });
 });

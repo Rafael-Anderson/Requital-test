@@ -188,15 +188,24 @@ export function getMenu(shopSlug: string, previewToken?: string) {
 // the legacy homepageLayout/topBarLayout/etc. dispatch in that case (see
 // shop-context.tsx's own ThemeConfig fetch, and app/[shop]/page.tsx,
 // TopBar.tsx, Footer.tsx).
-export function getThemeConfig(
+export async function getThemeConfig(
   shopSlug: string,
   opts: { preview: boolean; themeId?: number },
-) {
+): Promise<ThemeConfig | null> {
   const params = new URLSearchParams();
   if (opts.preview) params.set("preview", "true");
   if (opts.themeId !== undefined) params.set("themeId", String(opts.themeId));
   const qs = params.toString();
-  return get<ThemeConfig | null>(`/public/${shopSlug}/theme-config${qs ? `?${qs}` : ""}`);
+  const res = await fetch(`${apiBase()}/public/${shopSlug}/theme-config${qs ? `?${qs}` : ""}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new HttpError(body?.message ?? `Request failed (${res.status})`, res.status);
+  }
+  // A shop with no published theme answers 200 with an EMPTY body (the API returns null).
+  // That is a real answer ("legacy layout"), not a failure, so it must not throw: the server
+  // layout tells the two apart to decide whether it can seed ShopProvider.
+  const text = await res.text();
+  return text ? (JSON.parse(text) as ThemeConfig) : null;
 }
 
 export function getBioLinks(shopSlug: string) {
