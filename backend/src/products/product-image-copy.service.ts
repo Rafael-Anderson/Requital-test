@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import sharp from 'sharp';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
@@ -14,6 +15,11 @@ const logger = createLogger('ProductImageCopy');
 // Per import, so a hostile or huge file cannot queue unbounded outbound work.
 export const MAX_COPY_IMAGES_PER_IMPORT = 500;
 export const MAX_COPY_IMAGES_PER_PRODUCT = 10;
+// A pixel bomb is a tiny file that decodes to gigabytes (a solid-colour PNG of
+// 16000x16000 is a few hundred KB). sharp's own default allows ~268 megapixels;
+// a product photo never needs more than this, and the check reads only the
+// header, so nothing is decoded to find out.
+export const MAX_COPY_PIXELS = 50_000_000;
 const IN_CHUNK = 500;
 // A retry cannot fix most failures here, so the queue gives up quickly.
 const JOB_MAX_ATTEMPTS = 3;
@@ -28,6 +34,23 @@ export function imageCopyKey(
   url: string,
 ): string {
   return `imgcopy:${shopId}:${productId}:${createHash('sha256').update(url).digest('hex').slice(0, 32)}`;
+}
+
+// True when the image's total pixels (frames of an animation included) are
+// within `maxPixels`. Reads the header only. An unreadable image is not within.
+export async function withinPixelLimit(
+  buffer: Buffer,
+  maxPixels = MAX_COPY_PIXELS,
+): Promise<boolean> {
+  try {
+    const meta = await sharp(buffer).metadata();
+    const { width, height, pages } = meta;
+    if (!width || !height) return false;
+    // For an animation sharp reports one frame's height and the frame count.
+    return width * height * (pages ?? 1) <= maxPixels;
+  } catch {
+    return false;
+  }
 }
 
 export interface CopyRequest {
@@ -149,6 +172,16 @@ export class ProductImageCopyService implements OnModuleInit {
       // Retryable: let the queue back off and try again; it dead-letters after
       // JOB_MAX_ATTEMPTS and shows in Settings > Diagnostics.
       throw error;
+    }
+
+    if (!(await withinPixelLimit(fetched.buffer))) {
+      logger.warn('image copy refused', {
+        shopId,
+        productId,
+        reason: 'too_many_pixels',
+        host: safeHost(url),
+      });
+      return;
     }
 
     const stored = await this.storage.uploadImage(shopId, 'products', {

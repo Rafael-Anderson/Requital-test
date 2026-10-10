@@ -143,21 +143,124 @@ function decodeXml(text: string): string {
   );
 }
 
+// ---- linear XML scanning ------------------------------------------------
+// The worksheet is attacker-controlled, so NO regex here can backtrack: a lazy
+// `[\s\S]*?` repeated for every start tag is quadratic when the end tag is
+// missing (`<row>` x 1e6 with no `</row>` blocked the event loop for every
+// tenant). Instead every element is found with indexOf, its close tag is
+// searched ONCE from the element's own start, and the scan resumes after it.
+// A missing close tag is a clear error, never a rescan. Elements scanned are
+// counted and capped before anything is allocated for them.
+
+const MAX_CELLS_TOTAL = 2_000_000;
+const MAX_CELLS_PER_ROW = 5_000;
+const MAX_SHARED_STRINGS = 500_000;
+const MAX_TEXT_RUNS = 5_000;
+
+interface Element {
+  attrs: string;
+  // null for a self-closing element
+  body: string | null;
+  // index just after the element
+  end: number;
+}
+
+function malformed(): never {
+  throw new XlsxError('This .xlsx file is damaged (unclosed element)');
+}
+
+// Index of the '>' that ends the open tag starting at `from` (quote-aware, so
+// a '>' inside an attribute value does not end it). -1 when there is none.
+function openTagEnd(xml: string, from: number): number {
+  let quote = '';
+  for (let i = from; i < xml.length; i += 1) {
+    const ch = xml[i];
+    if (quote) {
+      if (ch === quote) quote = '';
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '>') {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// The next <tag ...>...</tag> (or <tag .../>) at or after `from`, or null.
+function nextElement(xml: string, tag: string, from: number): Element | null {
+  const open = `<${tag}`;
+  let start = xml.indexOf(open, from);
+  while (start !== -1) {
+    const after = xml.charCodeAt(start + open.length);
+    // The name must end here: `<c` is not `<cols`, `<t` is not `<tableParts`.
+    if (
+      after === 62 || // >
+      after === 47 || // /
+      after === 32 ||
+      after === 9 ||
+      after === 10 ||
+      after === 13
+    ) {
+      break;
+    }
+    start = xml.indexOf(open, start + open.length);
+  }
+  if (start === -1) return null;
+  const tagEnd = openTagEnd(xml, start + open.length);
+  if (tagEnd === -1) malformed();
+  const attrs = xml.slice(start + open.length, tagEnd);
+  if (xml[tagEnd - 1] === '/') {
+    return { attrs: attrs.slice(0, -1), body: null, end: tagEnd + 1 };
+  }
+  const close = xml.indexOf(`</${tag}>`, tagEnd + 1);
+  if (close === -1) malformed();
+  return {
+    attrs,
+    body: xml.slice(tagEnd + 1, close),
+    end: close + tag.length + 3,
+  };
+}
+
 function textOf(fragment: string): string {
   let out = '';
-  const re = /<t\b[^>]*>([\s\S]*?)<\/t>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(fragment)) !== null) out += decodeXml(m[1]);
+  let pos = 0;
+  let runs = 0;
+  for (let el = nextElement(fragment, 't', pos); el;) {
+    runs += 1;
+    if (runs > MAX_TEXT_RUNS) {
+      throw new XlsxError('This .xlsx file has too many text runs in a cell');
+    }
+    if (el.body !== null) out += decodeXml(el.body);
+    pos = el.end;
+    el = nextElement(fragment, 't', pos);
+  }
   return out;
+}
+
+// Drops every <rPh>...</rPh> (phonetic runs: furigana, not cell text).
+function withoutPhonetic(body: string): string {
+  if (!body.includes('<rPh')) return body;
+  let out = '';
+  let pos = 0;
+  for (;;) {
+    const el = nextElement(body, 'rPh', pos);
+    if (!el) break;
+    out += body.slice(pos, body.indexOf('<rPh', pos));
+    pos = el.end;
+  }
+  return out + body.slice(pos);
 }
 
 function sharedStrings(xml: string): string[] {
   const out: string[] = [];
-  const re = /<si\b[^>]*>([\s\S]*?)<\/si>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(xml)) !== null) {
-    // Phonetic runs (<rPh>) are furigana, not part of the cell text.
-    out.push(textOf(m[1].replace(/<rPh\b[\s\S]*?<\/rPh>/g, '')));
+  let pos = 0;
+  for (let el = nextElement(xml, 'si', pos); el;) {
+    if (out.length >= MAX_SHARED_STRINGS) {
+      throw new XlsxError('This .xlsx file has too many shared strings');
+    }
+    out.push(el.body === null ? '' : textOf(withoutPhonetic(el.body)));
+    pos = el.end;
+    el = nextElement(xml, 'si', pos);
   }
   return out;
 }
@@ -186,42 +289,58 @@ export function readXlsxRows(buffer: Buffer): string[][] {
   const sheet = readEntry(buffer, entries.get(sheetName)!, MAX_SHEET_BYTES);
 
   const rows: string[][] = [];
-  const rowRe = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g;
-  let rm: RegExpExecArray | null;
-  while ((rm = rowRe.exec(sheet)) !== null) {
-    const rowRef = /\br="(\d+)"/.exec(rm[1]);
-    const rowIndex = rowRef ? Number(rowRef[1]) - 1 : rows.length;
-    if (rowIndex >= MAX_ROWS)
+  let scannedRows = 0;
+  let scannedCells = 0;
+  let rowPos = 0;
+  for (let rm = nextElement(sheet, 'row', rowPos); rm;) {
+    scannedRows += 1;
+    if (scannedRows > MAX_ROWS) {
       throw new XlsxError('This .xlsx file has too many rows');
+    }
+    const rowRef = /\br="(\d+)"/.exec(rm.attrs);
+    const rowIndex = rowRef ? Number(rowRef[1]) - 1 : rows.length;
+    if (rowIndex >= MAX_ROWS) {
+      throw new XlsxError('This .xlsx file has too many rows');
+    }
     while (rows.length < rowIndex) rows.push([]);
     const cells: string[] = [];
-    const body = rm[2] ?? '';
-    const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
-    let cm: RegExpExecArray | null;
+    const body = rm.body ?? '';
+    let rowCells = 0;
     let next = 0;
-    while ((cm = cellRe.exec(body)) !== null) {
-      const ref = /\br="([A-Z]+)\d+"/.exec(cm[1]);
-      const col = ref ? columnIndex(ref[1]) : next;
-      if (col >= MAX_COLUMNS) continue;
-      next = col + 1;
-      const type = /\bt="([^"]*)"/.exec(cm[1])?.[1] ?? 'n';
-      const inner = cm[2] ?? '';
-      let value = '';
-      if (type === 'inlineStr') {
-        value = textOf(inner);
-      } else {
-        const v = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(inner)?.[1];
-        if (v !== undefined) {
-          if (type === 's') value = strings[Number(v)] ?? '';
-          else if (type === 'b') value = v.trim() === '1' ? 'TRUE' : 'FALSE';
-          else if (type === 'e') value = '';
-          else value = decodeXml(v);
-        }
+    let cellPos = 0;
+    for (let cm = nextElement(body, 'c', cellPos); cm;) {
+      rowCells += 1;
+      scannedCells += 1;
+      if (rowCells > MAX_CELLS_PER_ROW || scannedCells > MAX_CELLS_TOTAL) {
+        throw new XlsxError('This .xlsx file has too many cells');
       }
-      while (cells.length < col) cells.push('');
-      cells[col] = value;
+      cellPos = cm.end;
+      const ref = /\br="([A-Z]+)\d+"/.exec(cm.attrs);
+      const col = ref ? columnIndex(ref[1]) : next;
+      if (col < MAX_COLUMNS) {
+        next = col + 1;
+        const type = /\bt="([^"]*)"/.exec(cm.attrs)?.[1] ?? 'n';
+        const inner = cm.body ?? '';
+        let value = '';
+        if (type === 'inlineStr') {
+          value = textOf(inner);
+        } else {
+          const v = nextElement(inner, 'v', 0)?.body ?? undefined;
+          if (v !== undefined) {
+            if (type === 's') value = strings[Number(v)] ?? '';
+            else if (type === 'b') value = v.trim() === '1' ? 'TRUE' : 'FALSE';
+            else if (type === 'e') value = '';
+            else value = decodeXml(v);
+          }
+        }
+        while (cells.length < col) cells.push('');
+        cells[col] = value;
+      }
+      cm = nextElement(body, 'c', cellPos);
     }
     rows[rowIndex] = cells;
+    rowPos = rm.end;
+    rm = nextElement(sheet, 'row', rowPos);
   }
   return rows;
 }

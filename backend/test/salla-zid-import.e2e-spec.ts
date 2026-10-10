@@ -412,6 +412,36 @@ describe('Salla and Zid product import (e2e)', () => {
       expect(done[0].status).toBe('completed');
     });
 
+    it('refuses a pixel bomb: a small file that decodes to tens of megapixels keeps the remote URL', async () => {
+      const file = csv('Bomb', 'BO-1', 'https://cdn.example.test/bomb.png');
+      await send('confirm', a, file, 'z.csv', {
+        source: 'zid',
+        collectionId: a.collectionId,
+        copyImages: 'true',
+      }).expect(201);
+      const bomb = await sharp({
+        create: { width: 8000, height: 8000, channels: 3, background: '#000' },
+      })
+        .png()
+        .toBuffer();
+      expect(bomb.length).toBeLessThan(2 * 1024 * 1024);
+      copy.fetchImage = () =>
+        Promise.resolve({
+          buffer: bomb,
+          mime: 'image/png',
+          ext: 'png',
+          finalUrl: 'x',
+        });
+      const jobs = await jobsFor(a.shopId);
+      await worker.processJobById(jobs[jobs.length - 1].id as number);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT pi.url FROM productimage pi JOIN product p ON p.id = pi.productId
+          WHERE p.shopId = ? AND p.sku = 'BO-1'`,
+        [a.shopId],
+      );
+      expect(rows[0].url).toBe('https://cdn.example.test/bomb.png');
+    });
+
     it('a retryable failure is retried, a permanent one is not', async () => {
       const file = csv('Flaky', 'FL-1', 'https://cdn.example.test/fl.png');
       await send('confirm', a, file, 'z.csv', {

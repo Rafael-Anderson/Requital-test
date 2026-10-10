@@ -126,7 +126,10 @@ v4('240.0.0.0', 4); // reserved, includes 255.255.255.255
 v6('::', 96); // unspecified, loopback and the deprecated IPv4-compatible range
 v6('::ffff:0:0', 96); // IPv4-mapped: refused whole, in any notation
 v6('64:ff9b::', 96); // NAT64
+v6('64:ff9b:1::', 48); // local-use NAT64
 v6('100::', 64); // discard
+v6('5f00::', 16); // SRv6 SIDs
+v6('3fff::', 20); // documentation (RFC 9637)
 v6('2001::', 32); // Teredo
 v6('2001:db8::', 32); // documentation
 v6('2002::', 16); // 6to4
@@ -248,13 +251,28 @@ type Outcome =
   | { kind: 'redirect'; location: string }
   | { kind: 'body'; buffer: Buffer; contentType: string };
 
+function timeoutError(): SafeFetchError {
+  return new SafeFetchError(
+    'timeout',
+    'The image download took too long',
+    true,
+  );
+}
+
 function requestOnce(
   target: CheckedTarget,
   limits: { maxBytes: number; allowedContentTypes: readonly string[] },
   transport: NonNullable<SafeFetchDeps['transport']>,
   register: (req: http.ClientRequest) => void,
+  timedOut: () => boolean,
 ): Promise<Outcome> {
   return new Promise<Outcome>((resolve, reject) => {
+    // The overall deadline may have passed while this hop was resolving DNS:
+    // open nothing then.
+    if (timedOut()) {
+      reject(timeoutError());
+      return;
+    }
     const options: https.RequestOptions = {
       // The socket goes to the address we validated; the name only travels in
       // Host and (for TLS) SNI and certificate verification.
@@ -392,20 +410,23 @@ export async function safeFetchImage(
 
   let current: ClientRequestRef = { req: null };
   let timer: NodeJS.Timeout | undefined;
+  let deadlinePassed = false;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
+      deadlinePassed = true;
       current.req?.destroy();
-      reject(
-        new SafeFetchError('timeout', 'The image download took too long', true),
-      );
+      reject(timeoutError());
     }, timeoutMs);
   });
 
   const run = async (): Promise<SafeFetchResult> => {
     let url = rawUrl;
     for (let hop = 0; hop <= maxRedirects; hop += 1) {
-      // Every hop, the first included, is checked from scratch.
+      // Every hop, the first included, is checked from scratch. Once the
+      // deadline has passed no further hop may start or connect.
+      if (deadlinePassed) throw timeoutError();
       const target = await checkTarget(url, allowHttp, resolve);
+      if (deadlinePassed) throw timeoutError();
       const outcome = await requestOnce(
         target,
         { maxBytes, allowedContentTypes },
@@ -413,6 +434,7 @@ export async function safeFetchImage(
         (req) => {
           current = { req };
         },
+        () => deadlinePassed,
       );
       if (outcome.kind === 'redirect') {
         let next: URL;

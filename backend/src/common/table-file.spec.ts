@@ -139,3 +139,120 @@ describe('readTable xlsx', () => {
     expect(() => readXlsxRows(buf)).toThrow(/too large/);
   });
 });
+
+describe('readXlsxRows: hostile XML finishes fast and is rejected cleanly', () => {
+  const zipOf = (sheet: string, strings?: string) =>
+    buildZip([
+      { name: 'xl/worksheets/sheet1.xml', data: Buffer.from(sheet) },
+      ...(strings === undefined
+        ? []
+        : [{ name: 'xl/sharedStrings.xml', data: Buffer.from(strings) }]),
+    ]);
+  const sheetOf = (body: string) =>
+    `<worksheet><sheetData>${body}</sheetData></worksheet>`;
+
+  function expectFastReject(buf: Buffer, pattern: RegExp) {
+    const started = performance.now();
+    let error: unknown;
+    try {
+      readXlsxRows(buf);
+    } catch (e) {
+      error = e;
+    }
+    const elapsed = performance.now() - started;
+    expect(error).toBeInstanceOf(XlsxError);
+    expect((error as XlsxError).message).toMatch(pattern);
+    expect(elapsed).toBeLessThan(1000);
+  }
+
+  it.each([
+    [
+      '<row> repeated with no </row>',
+      sheetOf('<row>'.repeat(1_000_000)),
+      /unclosed|too many rows/,
+    ],
+    [
+      '<row r="1"> repeated with no </row>',
+      sheetOf('<row r="1">'.repeat(500_000)),
+      /unclosed|too many rows/,
+    ],
+    [
+      '<c> repeated with no </c>',
+      sheetOf(`<row r="1">${'<c r="A1">'.repeat(1_000_000)}</row>`),
+      /unclosed|too many cells/,
+    ],
+    [
+      '<t> repeated inside an inline string',
+      sheetOf(
+        `<row r="1"><c r="A1" t="inlineStr"><is>${'<t>'.repeat(1_000_000)}</is></c></row>`,
+      ),
+      /unclosed|too many/,
+    ],
+    [
+      '<v> repeated with no </v>',
+      sheetOf(`<row r="1"><c r="A1">${'<v>'.repeat(1_000_000)}</c></row>`),
+      /unclosed/,
+    ],
+    [
+      'an open tag that never ends',
+      sheetOf(`<row r="1" ${'a="1" '.repeat(1_000_000)}`),
+      /unclosed/,
+    ],
+    [
+      'an open tag with an unterminated quote',
+      sheetOf(`<row a="${'>'.repeat(2_000_000)}`),
+      /unclosed/,
+    ],
+  ])('%s', (_name, sheet, pattern) => {
+    expectFastReject(zipOf(sheet), pattern);
+  });
+
+  it.each([
+    ['<si> repeated with no </si>', `<sst>${'<si>'.repeat(1_000_000)}</sst>`],
+    [
+      '<t> repeated inside an <si>',
+      `<sst><si>${'<t>'.repeat(1_000_000)}</si></sst>`,
+    ],
+    [
+      '<rPh> repeated with no </rPh>',
+      `<sst><si><t>x</t>${'<rPh>'.repeat(1_000_000)}</si></sst>`,
+    ],
+    ['2,000,000 empty <si/>', `<sst>${'<si/>'.repeat(2_000_000)}</sst>`],
+  ])('shared strings: %s', (_name, strings) => {
+    expectFastReject(
+      zipOf(sheetOf('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'), strings),
+      /unclosed|too many/,
+    );
+  });
+
+  it('a single huge <row> whose close tag is at the very end is read in linear time', () => {
+    const started = performance.now();
+    const rows = readXlsxRows(
+      zipOf(sheetOf(`<row>${'<row>'.repeat(1_000_000)}</row>`)),
+    );
+    expect(rows).toEqual([[]]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('caps the number of cells in one row', () => {
+    const cells = '<c r="A1"/>'.repeat(6000);
+    expectFastReject(
+      zipOf(sheetOf(`<row r="1">${cells}</row>`)),
+      /too many cells/,
+    );
+  });
+
+  it('still reads well-formed XML: > inside an attribute, <cols> is not a cell, self-closing elements, phonetic runs', () => {
+    const sheet = sheetOf(
+      '<cols><col min="1" max="1"/></cols>' +
+        '<row r="1" note="a>b"><c r="A1" t="inlineStr"><is><t>Name</t></is></c><c r="B1"/><c r="C1" t="s"><v>0</v></c></row>' +
+        '<row r="2"><c r="A2" t="s"><v>1</v></c><c r="C2"><v>5</v></c></row>',
+    );
+    const strings =
+      '<sst><si><t>Shared</t><rPh sb="0" eb="1"><t>PHONETIC</t></rPh></si><si><r><t>Rich </t></r><r><t>text</t></r></si></sst>';
+    expect(readXlsxRows(zipOf(sheet, strings))).toEqual([
+      ['Name', '', 'Shared'],
+      ['Rich text', '', '5'],
+    ]);
+  });
+});

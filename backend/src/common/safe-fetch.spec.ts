@@ -62,6 +62,12 @@ describe('isPublicAddress', () => {
     '::ffff:a9fe:a9fe', // 169.254.169.254 mapped
     '::ffff:8.8.8.8', // a mapped PUBLIC address is refused too
     '64:ff9b::7f00:1',
+    '64:ff9b:1::1', // local-use NAT64
+    '64:ff9b:1:ffff::1',
+    '5f00::1', // SRv6
+    '5f00:ffff::1',
+    '3fff::1', // documentation
+    '3fff:fff:ffff::1',
     '2002:7f00:1::',
     '2001:db8::1',
     'not-an-ip',
@@ -81,6 +87,10 @@ describe('isPublicAddress', () => {
     '192.169.0.1',
     '11.0.0.1',
     '2606:4700:4700::1111',
+    '3ffe::1', // 6bone, outside 3fff::/20
+    '4000::1',
+    '5e00::1',
+    '5f01::1',
     '2a00:1450:4001::200e',
   ];
   it.each(allowed)('allows %s', (address) => {
@@ -570,6 +580,30 @@ describe('safeFetchImage', () => {
       await expectRefused(`https://${HOST}/a.png`, 'timeout', deps(), {
         timeoutMs: 300,
       });
+    });
+
+    it("opens nothing after the deadline passed during a redirect hop's DNS", async () => {
+      handler = (_req, res) => {
+        res.writeHead(302, { location: 'https://cdn.example.test/b.png' });
+        res.end();
+      };
+      const slow = (host: string) =>
+        host === HOST
+          ? Promise.resolve([PUBLIC_IP])
+          : new Promise<string[]>((r) => setTimeout(() => r([PUBLIC_IP]), 500));
+      const error = await expectRefused(
+        `https://${HOST}/a.png`,
+        'timeout',
+        deps(slow),
+        {
+          timeoutMs: 200,
+        },
+      );
+      expect(error.retryable).toBe(true);
+      // give the slow lookup time to finish, then prove no second connection opened
+      await new Promise((r) => setTimeout(r, 700));
+      expect(connectedTo).toEqual([PUBLIC_IP]);
+      expect(seenRequests).toHaveLength(1);
     });
 
     it('a 404 is permanent and a 503 is retryable', async () => {
