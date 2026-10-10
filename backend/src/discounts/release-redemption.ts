@@ -37,10 +37,10 @@ export async function releaseDiscountRedemption(
   const { id, discountId } = found[0] as { id: number; discountId: number };
 
   // Lock order matches redeem(): discount row first, then the redemption row.
-  await conn.query(`SELECT id FROM discount WHERE id = ? AND shopId = ? FOR UPDATE`, [
-    discountId,
-    shopId,
-  ]);
+  await conn.query(
+    `SELECT id FROM discount WHERE id = ? AND shopId = ? FOR UPDATE`,
+    [discountId, shopId],
+  );
   const [deleted] = await conn.query(
     `DELETE FROM discountredemption WHERE id = ?`,
     [id],

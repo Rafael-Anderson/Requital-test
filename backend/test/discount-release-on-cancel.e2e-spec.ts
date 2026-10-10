@@ -78,9 +78,9 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
     const d = await f.createDiscount(shop, { usageLimit: 1 });
     const first = await place(shop, product.id, d.code);
     expect(first.status).toBe(201);
-    expect((await place(shop, product.id, d.code)).status).toBeGreaterThanOrEqual(
-      400,
-    );
+    expect(
+      (await place(shop, product.id, d.code)).status,
+    ).toBeGreaterThanOrEqual(400);
     expect(await timesUsed(d.id)).toBe(1);
 
     await f.cancelOrder(shop, orderId(first)).expect(201);
@@ -219,7 +219,11 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
     const res = await f.storefrontOrderRaw(
       shop,
       [{ productId: product.id, quantity: 1 }],
-      { customerPhone: newPhone(), discountCode: d.code, giftCardCode: card.code },
+      {
+        customerPhone: newPhone(),
+        discountCode: d.code,
+        giftCardCode: card.code,
+      },
     );
     expect(res.status).toBe(201);
     const cardBefore = await db.query<RowDataPacket[]>(
@@ -265,7 +269,7 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
     expect(await timesUsed(d.id)).toBe(1);
   });
 
-  it('draft order: cancelling an invoice-sent draft releases its order\'s redemption', async () => {
+  it("draft order: cancelling an invoice-sent draft releases its order's redemption", async () => {
     const { shop, product } = await shopWithStock('rel-draft');
     const d = await f.createDiscount(shop, { usageLimit: 1 });
     const draft = body<{ id: number }>(
@@ -304,10 +308,14 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
         usageLimit: 5,
         usageLimitPerCustomer: 5,
       });
-      const o = await f.adminOrder(shop, [{ productId: product.id, quantity: qty }], {
-        customerPhone: newPhone(),
-        discountCode: d.code,
-      });
+      const o = await f.adminOrder(
+        shop,
+        [{ productId: product.id, quantity: qty }],
+        {
+          customerPhone: newPhone(),
+          discountCode: d.code,
+        },
+      );
       await f.advance(shop, o.id, 'delivered');
       const items = await db.query<RowDataPacket[]>(
         `SELECT id FROM orderitem WHERE orderId = ?`,
@@ -346,10 +354,14 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
         value: 100,
         usageLimit: 5,
       });
-      const o = await f.adminOrder(shop, [{ productId: product.id, quantity: 2 }], {
-        customerPhone: newPhone(),
-        discountCode: d.code,
-      });
+      const o = await f.adminOrder(
+        shop,
+        [{ productId: product.id, quantity: 2 }],
+        {
+          customerPhone: newPhone(),
+          discountCode: d.code,
+        },
+      );
       expect(Number(o.total)).toBe(0);
       await f.advance(shop, o.id, 'delivered');
       const items = await db.query<RowDataPacket[]>(
@@ -413,14 +425,17 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
       await f.setStatus(shop, confirmed, 'confirmed');
 
       const calls: string[] = [];
-      const svc = app.get(OrdersService) as unknown as Record<string, unknown>;
-      const origStock = (svc.adjustStockForOrder as (...a: unknown[]) => unknown).bind(svc);
+      type Stock = (this: unknown, ...a: unknown[]) => Promise<unknown>;
+      const proto = OrdersService.prototype as unknown as {
+        adjustStockForOrder: Stock;
+      };
+      const origStock = proto.adjustStockForOrder;
       const s1 = jest
-        .spyOn(svc, 'adjustStockForOrder' as never)
-        .mockImplementation(((...a: unknown[]) => {
+        .spyOn(proto, 'adjustStockForOrder')
+        .mockImplementation(function (this: unknown, ...a: unknown[]) {
           calls.push('stock');
-          return origStock(...a);
-        }) as never);
+          return Reflect.apply(origStock, this, a);
+        });
       const s2 = jest
         .spyOn(releaseModule, 'releaseDiscountRedemption')
         .mockImplementation(async (...args) => {
