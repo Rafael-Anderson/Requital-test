@@ -64,6 +64,7 @@ import type {
   CustomerNote,
   CustomerConsent,
   CustomerSegment,
+  StoreCreditOverview,
   ConsentChannel,
   ConsentStatus,
   DailyRevenuePoint,
@@ -1090,6 +1091,7 @@ export function createOrderReturn(
     reason: OrderReturn["reason"];
     restock?: boolean;
     refundAmount?: number;
+    refundTo?: "original" | "store_credit";
   },
 ) {
   return apiFetch<OrderReturn>(`/orders/${orderId}/returns`, {
@@ -2488,4 +2490,25 @@ export function deleteCustomerSegment(id: number) {
 
 export function previewCustomerSegment(rules: unknown) {
   return apiFetch<{ count: number }>("/customer-segments/preview", { method: "POST", body: JSON.stringify({ rules }) });
+}
+
+// ---- Store credit (CUS-6). Reads admin + viewer, adjustments admin only. ----
+export function getCustomerStoreCredit(customerId: number) {
+  return apiFetch<StoreCreditOverview>(`/customers/${customerId}/store-credit`);
+}
+
+export function adjustCustomerStoreCredit(
+  customerId: number,
+  data: {
+    currency: string;
+    amount: string;
+    direction: "grant" | "deduct";
+    reason: string;
+    idempotencyKey: string;
+  },
+) {
+  return apiFetch<StoreCreditOverview>(`/customers/${customerId}/store-credit/adjustments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }

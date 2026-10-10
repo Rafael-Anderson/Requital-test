@@ -16,6 +16,7 @@ import { minorUnitFactor, roundMoney } from '../common/currency-minor-units';
 
 const logger = createLogger('ReturnsService');
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
+import { StoreCreditService } from '../store-credit/store-credit.service';
 import { ProductsService } from '../products/products.service';
 import { defaultReturnRefundMinor } from './return-refund';
 import { CreateReturnDto } from './dto/create-return.dto';
@@ -43,6 +44,7 @@ export class ReturnsService {
     private readonly giftCardsService: GiftCardsService,
     private readonly productsService: ProductsService,
     private readonly branchRolesService: BranchRolesService,
+    private readonly storeCreditService: StoreCreditService,
   ) {}
 
   async findAllForOrder(ctx: TenantContext, orderId: number) {
@@ -97,7 +99,7 @@ export class ReturnsService {
     // below is for this (already tenant-checked) order.
     const result = await this.db.transaction(async (conn) => {
       const [lockRows] = await conn.query<RowDataPacket[]>(
-        `SELECT status, total, deliveryFee, discountAmount, taxAmount, giftCardId, giftCardAmount, consumptionRecordedAt
+        `SELECT status, total, deliveryFee, discountAmount, taxAmount, giftCardId, giftCardAmount, storeCreditAmount, customerId, consumptionRecordedAt
            FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
         [orderId, order.shopId],
       );
@@ -133,7 +135,7 @@ export class ReturnsService {
       }
 
       const [priorRows] = await conn.query<RowDataPacket[]>(
-        `SELECT COALESCE(SUM(refundAmount), 0) AS total, COALESCE(SUM(giftCardRefundAmount), 0) AS gift FROM orderreturn WHERE orderId = ?`,
+        `SELECT COALESCE(SUM(refundAmount), 0) AS total, COALESCE(SUM(giftCardRefundAmount), 0) AS gift, COALESCE(SUM(storeCreditRefundAmount), 0) AS store FROM orderreturn WHERE orderId = ?`,
         [orderId],
       );
       const alreadyRefunded = Number(priorRows[0].total);
@@ -236,7 +238,44 @@ export class ReturnsService {
         );
       }
       const giftCardRefundAmount = giftMinor / factor;
-      const providerRefundPortion = (refundMinor - giftMinor) / factor;
+
+      // The share that was paid with STORE CREDIT goes back to store credit, by
+      // the same proportional rule as the gift card: rounded once, capped at what
+      // is still unreturned of storeCreditAmount and at what is left of this
+      // refund after the gift share, and the return that completes the refund
+      // gets all that remains (so partial returns sum exactly to the whole).
+      const storeTotalMinor = Math.round(
+        Number(locked.storeCreditAmount ?? 0) * factor,
+      );
+      let storeMinor = 0;
+      if (storeTotalMinor > 0) {
+        const storeLeftMinor =
+          storeTotalMinor - Math.round(Number(priorRows[0].store) * factor);
+        const completesRefundStore = alreadyMinor + refundMinor >= totalMinor;
+        storeMinor = Math.max(
+          0,
+          Math.min(
+            completesRefundStore
+              ? storeLeftMinor
+              : Math.round((refundMinor * storeTotalMinor) / totalMinor),
+            storeLeftMinor,
+            refundMinor - giftMinor,
+          ),
+        );
+      }
+      const storeCreditRefundAmount = storeMinor / factor;
+      const toStoreCredit = dto.refundTo === 'store_credit';
+      const ownerCustomerId = (locked.customerId as number | null) ?? null;
+      if ((toStoreCredit || storeMinor > 0) && ownerCustomerId === null) {
+        throw new BadRequestException(
+          'This order has no customer account to credit store credit to',
+        );
+      }
+      const providerPortionMinor = refundMinor - giftMinor - storeMinor;
+      const providerRefundPortion = providerPortionMinor / factor;
+      // Refunded to store credit instead of the original payment: the provider
+      // is not called at all.
+      const creditMinor = storeMinor + (toStoreCredit ? providerPortionMinor : 0);
 
       // Only ever asked to refund the non-gift-card slice — a return that's
       // fully covered by gift-card credit never touches the payment provider
@@ -244,12 +283,13 @@ export class ReturnsService {
       // circuits to 'manual' with no reference, since there's nothing to
       // charge/refund through a gateway for zero amount). Called with the order
       // row lock held and every cap already passed.
-      const { refundMethod, providerRefundReference } =
-        await this.attemptProviderRefund(
-          order.id,
-          refundTarget,
-          providerRefundPortion,
-        );
+      const { refundMethod, providerRefundReference } = toStoreCredit
+        ? { refundMethod: 'store_credit' as const, providerRefundReference: null }
+        : await this.attemptProviderRefund(
+            order.id,
+            refundTarget,
+            providerRefundPortion,
+          );
 
       // An order with a stock record (consumptionRecordedAt) gets exactly what
       // it holds back, not today's recipe and not today's product flags. A LEGACY
@@ -289,8 +329,8 @@ export class ReturnsService {
       }
 
       const [insert] = await conn.query(
-        `INSERT INTO orderreturn (orderId, reason, refundAmount, refundMethod, providerRefundReference, giftCardRefundAmount, restocked, staffUserId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO orderreturn (orderId, reason, refundAmount, refundMethod, providerRefundReference, giftCardRefundAmount, storeCreditRefundAmount, restocked, staffUserId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
           dto.reason,
@@ -298,6 +338,7 @@ export class ReturnsService {
           refundMethod,
           providerRefundReference,
           giftCardRefundAmount,
+          storeCreditRefundAmount,
           restock,
           ctx.userId,
         ],
@@ -309,6 +350,20 @@ export class ReturnsService {
           conn,
           locked.giftCardId as number,
           giftCardRefundAmount,
+        );
+      }
+
+      if (creditMinor > 0 && ownerCustomerId !== null) {
+        // In this transaction, so the return and the credit commit together.
+        // Currency is the ORDER'S: credit returns in the currency it was spent in.
+        await this.storeCreditService.creditForReturn(
+          conn,
+          order.shopId,
+          ownerCustomerId,
+          newReturnId,
+          order.currency,
+          creditMinor,
+          `Return #${newReturnId}`,
         );
       }
 
@@ -531,6 +586,7 @@ export class ReturnsService {
       ...orderReturn,
       refundAmount: trimDecimal(orderReturn.refundAmount),
       giftCardRefundAmount: trimDecimal(orderReturn.giftCardRefundAmount),
+      storeCreditRefundAmount: trimDecimal(orderReturn.storeCreditRefundAmount),
     };
   }
 }

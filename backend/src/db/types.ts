@@ -34,6 +34,8 @@ export interface OrderRow {
   giftCardId: number | null;
   giftCardCode: string | null;
   giftCardAmount: string | null;
+  // CUS-6: paid with store credit (NULL = none). total is unchanged.
+  storeCreditAmount: string | null;
   total: string;
   createdAt: Date;
   paymentLinkToken: string | null;
@@ -205,6 +207,7 @@ export interface OrderreturnRow {
   refundMethod: string;
   providerRefundReference: string | null;
   giftCardRefundAmount: string;
+  storeCreditRefundAmount: string;
   restocked: boolean;
   status: string;
   staffUserId: number;
@@ -1532,4 +1535,32 @@ export interface CustomerconsenteventRow {
   actorUserId: number | null;
   note: string | null;
   createdAt: Date;
+}
+
+// CUS-6 (migration 20261027120000). Append-only; balance = SUM(amount) per
+// (customerId, currency). amount is signed.
+export interface StorecreditentryRow {
+  id: number;
+  shopId: number;
+  customerId: number;
+  currency: string;
+  amount: string;
+  entryType: 'grant' | 'deduct' | 'spend' | 'spend_reversal' | 'return_refund';
+  reason: string | null;
+  orderId: number | null;
+  returnId: number | null;
+  actorUserId: number | null;
+  idempotencyKey: string | null;
+  createdAt: Date;
+}
+
+// CUS-1 (migration 20261027110000)
+export interface CustomersegmentRow {
+  id: number;
+  shopId: number;
+  name: string;
+  rules: unknown;
+  createdByUserId: number | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

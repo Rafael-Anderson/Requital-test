@@ -84,6 +84,10 @@ export interface Order {
   status: OrderStatus;
   paymentStatus: "unpaid" | "paid" | "refunded";
   paymentMethod: string | null;
+  customerId?: number | null;
+  // CUS-6: part of the total paid with the customer's store credit / a gift card.
+  storeCreditAmount?: string | null;
+  giftCardAmount?: string | null;
   // Null until POST /orders/:id/collect-cash marks a COD order's cash as
   // collected. cashCollectedByName is only populated when cashCollectedAt
   // is set (joined server-side, see OrdersService.loadOrdersWithRelations).
@@ -211,7 +215,8 @@ export interface OrderReturn {
   orderId: number;
   reason: "damaged" | "wrong_item" | "changed_mind" | "other";
   refundAmount: string;
-  refundMethod: "provider" | "manual";
+  refundMethod: "provider" | "manual" | "store_credit";
+  storeCreditRefundAmount?: string;
   providerRefundReference: string | null;
   restocked: boolean;
   status: string;
@@ -3503,4 +3508,31 @@ export interface CustomerSegment {
   rules: unknown;
   createdAt: string;
   updatedAt: string;
+}
+
+// CUS-6
+export interface StoreCreditBalance {
+  currency: string;
+  balance: string;
+  balanceMinor: number;
+  entries: number;
+}
+
+export interface StoreCreditEntry {
+  id: number;
+  currency: string;
+  // Signed: spends and deductions are negative.
+  amount: string;
+  type: "grant" | "deduct" | "spend" | "spend_reversal" | "return_refund";
+  reason: string | null;
+  orderId: number | null;
+  returnId: number | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface StoreCreditOverview {
+  balances: StoreCreditBalance[];
+  entries: StoreCreditEntry[];
+  replay?: boolean;
 }

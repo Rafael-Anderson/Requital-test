@@ -163,6 +163,12 @@ export class CustomerAccountController {
     return this.customerAccountService.removeFromWishlist(ctx, productId);
   }
 
+  // CUS-6: the customer's own store-credit balance(s) and recent entries.
+  @Get('store-credit')
+  getStoreCredit(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.getStoreCredit(ctx);
+  }
+
   // CUS-11: the customer's marketing-consent toggles. Unknown (never answered)
   // is reported as status: null, never false.
   @Get('consent')

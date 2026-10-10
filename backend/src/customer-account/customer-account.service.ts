@@ -23,6 +23,7 @@ import { PublicService } from '../public/public.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 import { anonymiseCustomerCrm } from '../customer-crm/crm-anonymise';
+import { StoreCreditService } from '../store-credit/store-credit.service';
 import { CustomerConsentService } from '../customer-crm/customer-consent.service';
 import type { ConsentChannel } from '../customer-crm/consent-wording';
 
@@ -83,6 +84,7 @@ export class CustomerAccountService {
     private readonly publicService: PublicService,
     private readonly regionsService: RegionsService,
     private readonly consentService: CustomerConsentService,
+    private readonly storeCreditService: StoreCreditService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -177,7 +179,21 @@ export class CustomerAccountService {
         ctx.shopId,
         ctx.customerId,
       ),
+      // Store credit the shop holds for them: balances and every ledger entry.
+      storeCredit: await this.storeCreditService.overview(
+        ctx.shopId,
+        ctx.customerId,
+      ),
     };
+  }
+
+  // The customer's own balance(s), for checkout and the account page.
+  async getStoreCredit(ctx: CustomerContext) {
+    const [balances, entries] = await Promise.all([
+      this.storeCreditService.balances(ctx.shopId, ctx.customerId),
+      this.storeCreditService.entries(ctx.shopId, ctx.customerId, 1, 20),
+    ]);
+    return { balances, entries };
   }
 
   // CUS-11 storefront account toggle. The wording and its version are the

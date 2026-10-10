@@ -47,4 +47,14 @@ export class CreateReturnDto {
   @IsNumber()
   @Min(0)
   refundAmount?: number;
+
+  // Where the refund goes. 'original' (default) is today's behaviour: the card
+  // payment is refunded through the provider when it can be, else recorded as a
+  // manual refund. 'store_credit' credits the customer's store credit instead
+  // (in the order's currency); the order must belong to a customer account.
+  // Either way, any part of the order that was PAID with store credit goes back
+  // to store credit automatically.
+  @IsOptional()
+  @IsIn(['original', 'store_credit'])
+  refundTo?: 'original' | 'store_credit';
 }

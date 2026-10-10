@@ -44,6 +44,7 @@ import {
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { StoreCreditService } from '../store-credit/store-credit.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { roundMoney } from '../common/currency-minor-units';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -88,6 +89,7 @@ export class OrdersService {
     private readonly notifySubscriptionsService: NotifySubscriptionsService,
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly regionsService: RegionsService,
+    private readonly storeCreditService: StoreCreditService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -1322,6 +1324,14 @@ export class OrdersService {
         // (C2). Marked in each successful CAS branch rather than after the
         // transaction, so it commits with the cancellation or not at all.
         await markInvoicesSuperseded(conn, id);
+        // Credit the order spent comes back as a ledger entry, in this same
+        // transaction. Idempotent (unique per order), so a retried cancel is safe.
+        await this.storeCreditService.reverseSpendForOrder(
+          conn,
+          ctx.shopId,
+          id,
+          'Order cancelled',
+        );
         // An order from an immediate-reservation channel already reserved
         // stock at creation (decremented while still 'pending', not at
         // confirm — see updateStatus above) — cancelling from 'pending' must
@@ -1348,6 +1358,14 @@ export class OrdersService {
       );
       if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
         await markInvoicesSuperseded(conn, id);
+        // Credit the order spent comes back as a ledger entry, in this same
+        // transaction. Idempotent (unique per order), so a retried cancel is safe.
+        await this.storeCreditService.reverseSpendForOrder(
+          conn,
+          ctx.shopId,
+          id,
+          'Order cancelled',
+        );
         await this.adjustStockForOrder(
           conn,
           ctx,
@@ -1741,6 +1759,7 @@ export class OrdersService {
       taxAmount: trimDecimal(order.taxAmount),
       discountAmount: trimDecimal(order.discountAmount),
       giftCardAmount: trimDecimal(order.giftCardAmount),
+      storeCreditAmount: trimDecimal(order.storeCreditAmount),
       total: trimDecimal(order.total),
       orderitem: order.orderitem.map((i) => ({
         ...i,

@@ -6,9 +6,12 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { PublicService } from './public.service';
+import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
@@ -24,7 +27,10 @@ import { FeaturedReviewsQueryDto } from '../reviews/dto/featured-reviews-query.d
 // TenantContext — every method re-resolves the shop from shopSlug itself.
 @Controller('public/:shopSlug')
 export class PublicController {
-  constructor(private readonly publicService: PublicService) {}
+  constructor(
+    private readonly publicService: PublicService,
+    private readonly customerAuth: CustomerAuthGuard,
+  ) {}
 
   @Public()
   @Get()
@@ -307,11 +313,18 @@ export class PublicController {
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Public()
   @Post('orders')
-  createOrder(
+  async createOrder(
     @Param('shopSlug') shopSlug: string,
     @Body() dto: CreatePublicOrderDto,
+    @Req() req: Request,
   ) {
-    return this.publicService.createOrder(shopSlug, dto);
+    // Checkout stays guest-first. A customer session is looked at ONLY when the
+    // request asks to spend store credit, and then it is mandatory: the credit
+    // belongs to the logged-in account, never to whoever types a phone number.
+    const customer = dto.useStoreCredit
+      ? await this.customerAuth.authenticate(req)
+      : null;
+    return this.publicService.createOrder(shopSlug, dto, customer);
   }
 
   // Fired by the checkout page once name+phone are both filled in — see

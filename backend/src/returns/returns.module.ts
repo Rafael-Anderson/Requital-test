@@ -7,6 +7,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { ProductsModule } from '../products/products.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
+import { StoreCreditModule } from '../store-credit/store-credit.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { BranchRolesModule } from '../branch-roles/branch-roles.module';
     GiftCardsModule,
     ProductsModule,
     BranchRolesModule,
+    StoreCreditModule,
   ],
   controllers: [ReturnsController],
   providers: [ReturnsService],

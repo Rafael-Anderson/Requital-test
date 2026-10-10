@@ -7,6 +7,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { PublicModule } from '../public/public.module';
 import { RegionsModule } from '../regions/regions.module';
 import { CustomerCrmModule } from '../customer-crm/customer-crm.module';
+import { StoreCreditModule } from '../store-credit/store-credit.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { CustomerCrmModule } from '../customer-crm/customer-crm.module';
     PublicModule,
     RegionsModule,
     CustomerCrmModule,
+    StoreCreditModule,
   ],
   controllers: [CustomerAccountController],
   providers: [CustomerAccountService],

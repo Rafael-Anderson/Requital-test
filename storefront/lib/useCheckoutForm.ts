@@ -38,6 +38,8 @@ export function useCheckoutForm() {
   // the true total here; the display below already clamps with Math.max(0, ...),
   // and the server is the only one that ever actually draws down the balance.
   const [giftCardAmount, setGiftCardAmount] = useState<number | null>(null);
+  // CUS-6: only a yes/no. How much is applied is the server's call.
+  const [useStoreCredit, setUseStoreCredit] = useState(false);
   const total = Math.max(0, subtotal - (discountAmount ?? 0) - (giftCardAmount ?? 0));
   // The tax quote shown at checkout. A display mirror of the server's per-line
   // computation (see lib/order-tax.ts) - the server recomputes and charges its
@@ -260,6 +262,7 @@ export function useCheckoutForm() {
           note: i.note,
         })),
         giftCardCode: giftCardCode || undefined,
+        useStoreCredit: useStoreCredit || undefined,
         // MKT-14: where this order came from + the cookie-consent state at this
         // moment. Click ids / fbp / fbc are included only if the visitor accepted.
         attribution: buildOrderAttribution(shopSlug),
@@ -309,6 +312,8 @@ export function useCheckoutForm() {
     setDiscountAmount,
     giftCardAmount,
     setGiftCardAmount,
+    useStoreCredit,
+    setUseStoreCredit,
     deliveryAvailable,
     pickupAvailable,
     orderType,

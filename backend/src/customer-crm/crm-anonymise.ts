@@ -11,6 +11,11 @@ import type { DatabaseService } from '../database/database.service';
 //    history is kept: it holds no personal data (no name, address or IP) and is the
 //    evidence of what was agreed and when.
 //
+//  - The store-credit ledger is KEPT (it is a financial record) but the free-text
+//    `reason` on staff-typed grants and deductions is replaced, since staff type
+//    names and circumstances into it. Structural entries carry no free text.
+//  - A merge record holding a duplicate's old contact details is scrubbed.
+//
 // Plain pool statements (no transaction), each idempotent: the event is written
 // from the rows still `granted`, then those rows are flipped, so a repeat finds
 // nothing left to do.
@@ -34,6 +39,11 @@ export async function anonymiseCustomerCrm(
     `UPDATE customerconsent
         SET status = 'withdrawn', source = 'account_deletion', updatedAt = CURRENT_TIMESTAMP(3)
       WHERE customerId = ? AND shopId = ? AND status = 'granted'`,
+    [customerId, shopId],
+  );
+  await db.execute(
+    `UPDATE storecreditentry SET reason = '[removed]'
+      WHERE customerId = ? AND shopId = ? AND entryType IN ('grant', 'deduct') AND reason IS NOT NULL`,
     [customerId, shopId],
   );
 }

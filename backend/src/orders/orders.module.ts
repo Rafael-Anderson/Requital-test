@@ -11,6 +11,7 @@ import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 import { RegionsModule } from '../regions/regions.module';
+import { StoreCreditModule } from '../store-credit/store-credit.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RegionsModule } from '../regions/regions.module';
     NotifySubscriptionsModule,
     CurrencyRatesModule,
     RegionsModule,
+    StoreCreditModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

@@ -14,6 +14,7 @@ import type {
   CreateOrderResponse,
   ConsentChannel,
   MyConsent,
+  MyStoreCredit,
   Customer,
   CustomerAddress,
   CustomerAuthResult,
@@ -291,7 +292,20 @@ export function listDeliveryZones(shopSlug: string, outletId: number) {
 }
 
 export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
+  // Spending store credit needs the customer session, and a mutating call with
+  // the session cookie needs the CSRF header: authedFetch carries both.
+  if (payload.useStoreCredit) {
+    return authedFetch<CreateOrderResponse>(shopSlug, `/public/${shopSlug}/orders`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
   return post<CreateOrderResponse>(`/public/${shopSlug}/orders`, payload);
+}
+
+// The logged-in shopper's own store credit (CUS-6).
+export function getMyStoreCredit(shopSlug: string) {
+  return authedFetch<MyStoreCredit>(shopSlug, `/public/${shopSlug}/account/store-credit`);
 }
 
 export function validateDiscount(

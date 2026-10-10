@@ -23,6 +23,8 @@ import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 import { RegionsModule } from '../regions/regions.module';
 import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
 import { ReviewsModule } from '../reviews/reviews.module';
+import { CustomerAuthModule } from '../customer-auth/customer-auth.module';
+import { StoreCreditModule } from '../store-credit/store-credit.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { ReviewsModule } from '../reviews/reviews.module';
     RegionsModule,
     ShopAnalyticsModule,
     ReviewsModule,
+    CustomerAuthModule,
+    StoreCreditModule,
   ],
   controllers: [
     PublicController,

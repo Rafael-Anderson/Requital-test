@@ -6,6 +6,7 @@ import type { Order, OrderReturn } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import Combobox from "@/components/ui/Combobox";
+import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { formatAmount, formatMoney } from "@/lib/money";
 
@@ -30,6 +31,7 @@ export default function OrderReturnsSection({
   const [restock, setRestock] = useState(true);
   const [refundAmount, setRefundAmount] = useState("");
   const [amountTouched, setAmountTouched] = useState(false);
+  const [refundTo, setRefundTo] = useState<"original" | "store_credit">("original");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -87,6 +89,7 @@ export default function OrderReturnsSection({
         reason,
         restock,
         refundAmount: amountTouched ? Number(refundAmount) : undefined,
+        refundTo,
       });
       toast("Return processed");
       setInitiating(false);
@@ -125,7 +128,7 @@ export default function OrderReturnsSection({
                 <span className="text-xs text-text-muted">{new Date(r.createdAt).toLocaleDateString()}</span>
               </div>
               <div className="text-xs text-text-muted mt-0.5 capitalize">
-                {r.reason.replace(/_/g, " ")} · {r.refundMethod === "provider" ? "refunded via gateway" : "manual refund"} ·{" "}
+                {r.reason.replace(/_/g, " ")} · {r.refundMethod === "provider" ? "refunded via gateway" : r.refundMethod === "store_credit" ? "refunded to store credit" : "manual refund"} ·{" "}
                 {r.restocked ? "restocked" : "not restocked"} · by {r.staff.name}
               </div>
             </div>
@@ -203,6 +206,20 @@ export default function OrderReturnsSection({
             />
             {order.currency}
           </label>
+
+          {order.customerId != null && (
+            <div className="max-w-xs">
+              <Select label="Refund to" value={refundTo} onChange={(e) => setRefundTo(e.target.value as "original" | "store_credit")}>
+                <option value="original">Original payment</option>
+                <option value="store_credit">Customer store credit</option>
+              </Select>
+              {Number(order.storeCreditAmount ?? 0) > 0 && (
+                <p className="mt-1 text-xs text-text-faint">
+                  The part paid with store credit always goes back to store credit.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => { setInitiating(false); setSelected({}); setAmountTouched(false); }}>
