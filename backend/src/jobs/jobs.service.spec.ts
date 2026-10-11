@@ -267,7 +267,11 @@ describe('JobsService.retry / dismiss — tenant scoping', () => {
 });
 
 describe('JobsService sensitive payloads', () => {
-  const SECRET = { to: '+971500000000', body: 'link https://x/driver/SECRET', orderId: 1 };
+  const SECRET = {
+    to: '+971500000000',
+    body: 'link https://x/driver/SECRET',
+    orderId: 1,
+  };
 
   it('enqueue({ sensitive }) flags the stored payload', async () => {
     const db = createMockDb();

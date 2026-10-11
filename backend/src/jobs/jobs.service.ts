@@ -57,7 +57,7 @@ export class JobsService {
     } = {},
   ): Promise<JobRecord> {
     const { maxAttempts = 5, tx, sensitive } = options;
-    if (sensitive) payload = { ...payload, sensitive: true } as JobPayload;
+    if (sensitive) payload = { ...payload, sensitive: true };
     if (!Number.isInteger(shopId) || shopId <= 0) {
       throw new Error(
         `job enqueue rejected: invalid shopId (${JSON.stringify(shopId)})`,
@@ -159,7 +159,7 @@ export class JobsService {
 
   // `payload` (when the caller has it) lets a sensitive job's secret text go in
   // the same statement that completes it.
-  async completeJob(id: number, payload?: JobPayload): Promise<void> {
+  async completeJob(id: number, payload?: unknown): Promise<void> {
     const scrubbed = payload ? scrubSensitivePayload(payload) : payload;
     if (scrubbed && scrubbed !== payload) {
       await this.db.execute(

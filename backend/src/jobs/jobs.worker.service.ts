@@ -108,10 +108,7 @@ export class JobsWorkerService {
     }
     try {
       await handler(job.payload as unknown as JobPayload);
-      await this.jobsService.completeJob(
-        job.id,
-        job.payload as unknown as JobPayload,
-      );
+      await this.jobsService.completeJob(job.id, job.payload);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error(

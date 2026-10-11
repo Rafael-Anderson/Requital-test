@@ -57,7 +57,12 @@ export async function anonymiseCustomerDeliveryProofs(
       [customerId, shopId],
     );
     for (const r of rows) {
-      await scheduleProofDeletion(jobs, shopId, r.proofPhotoKey as string, conn);
+      await scheduleProofDeletion(
+        jobs,
+        shopId,
+        r.proofPhotoKey as string,
+        conn,
+      );
       await conn.query(
         `UPDATE deliveryrunstop SET proofPhotoKey = NULL, proofPhotoUrl = NULL, proofPhotoAt = NULL
           WHERE id = ? AND shopId = ?`,
