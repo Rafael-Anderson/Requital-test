@@ -66,7 +66,12 @@ export class CustomerTagsService {
         entityId: res.insertId,
         after: { name },
       });
-      return { id: res.insertId, name, color: dto.color ?? null, customerCount: 0 };
+      return {
+        id: res.insertId,
+        name,
+        color: dto.color ?? null,
+        customerCount: 0,
+      };
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         throw new ConflictException('A tag with this name already exists');
@@ -116,7 +121,10 @@ export class CustomerTagsService {
     return { deleted: true };
   }
 
-  async forCustomer(ctx: TenantContext, customerId: number): Promise<CustomerTag[]> {
+  async forCustomer(
+    ctx: TenantContext,
+    customerId: number,
+  ): Promise<CustomerTag[]> {
     await assertCustomerInShop(this.db, ctx.shopId, customerId);
     const map = await this.tagsByCustomer(ctx.shopId, [customerId]);
     return map.get(customerId) ?? [];

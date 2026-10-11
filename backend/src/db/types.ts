@@ -1347,7 +1347,8 @@ export interface CustomermetricsRow {
 export interface MetafielddefinitionRow {
   id: number;
   shopId: number;
-  ownerType: 'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
+  ownerType:
+    'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
   namespace: string;
   // `key` in the API; `fieldKey` here because KEY is a MySQL reserved word.
   fieldKey: string;
@@ -1363,7 +1364,8 @@ export interface MetafielddefinitionRow {
 export interface MetafieldvalueRow {
   id: number;
   shopId: number;
-  ownerType: 'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
+  ownerType:
+    'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
   // Polymorphic (no FK): points into the table named by ownerType.
   ownerId: number;
   definitionId: number;

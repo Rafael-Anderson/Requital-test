@@ -14,7 +14,11 @@ import { CustomerConsentService } from './customer-consent.service';
 @Module({
   imports: [AuditLogModule],
   controllers: [CustomerTagsController, CustomerCrmController],
-  providers: [CustomerTagsService, CustomerNotesService, CustomerConsentService],
+  providers: [
+    CustomerTagsService,
+    CustomerNotesService,
+    CustomerConsentService,
+  ],
   exports: [CustomerTagsService, CustomerNotesService, CustomerConsentService],
 })
 export class CustomerCrmModule {}

@@ -85,7 +85,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function onlyKeys(obj: Record<string, unknown>, allowed: string[], path: string) {
+function onlyKeys(
+  obj: Record<string, unknown>,
+  allowed: string[],
+  path: string,
+) {
   for (const k of Object.keys(obj)) {
     if (!allowed.includes(k)) fail(path, `unknown property "${k}"`);
   }
@@ -98,7 +102,11 @@ function int(v: unknown, path: string, min: number, max: number): number {
   return v;
 }
 
-function oneOf<T extends string>(v: unknown, allowed: readonly T[], path: string): T {
+function oneOf<T extends string>(
+  v: unknown,
+  allowed: readonly T[],
+  path: string,
+): T {
   if (typeof v !== 'string' || !(allowed as readonly string[]).includes(v)) {
     fail(path, `must be one of: ${allowed.join(', ')}`);
   }
@@ -124,7 +132,8 @@ function parseNode(
   depth: number,
   budget: { nodes: number },
 ): RuleNode {
-  if (depth > MAX_DEPTH) fail(path, `nesting is deeper than ${MAX_DEPTH} levels`);
+  if (depth > MAX_DEPTH)
+    fail(path, `nesting is deeper than ${MAX_DEPTH} levels`);
   budget.nodes += 1;
   if (budget.nodes > MAX_NODES) fail(path, `more than ${MAX_NODES} conditions`);
   if (!isPlainObject(input)) fail(path, 'must be an object');
@@ -162,15 +171,25 @@ function parseNode(
       const asString =
         typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : raw;
       // At most 12 integer digits and 3 decimals (the finest minor unit).
-      if (typeof asString !== 'string' || !/^\d{1,12}(\.\d{1,3})?$/.test(asString)) {
-        fail(`${path}.value`, 'must be a non-negative amount with up to 3 decimals');
+      if (
+        typeof asString !== 'string' ||
+        !/^\d{1,12}(\.\d{1,3})?$/.test(asString)
+      ) {
+        fail(
+          `${path}.value`,
+          'must be a non-negative amount with up to 3 decimals',
+        );
       }
       return {
         field,
         cmp: oneOf(input.cmp, NUMERIC_CMP, `${path}.cmp`),
         value: asString,
         // Spend is only ever compared within one currency (no conversion).
-        currency: oneOf(input.currency, SUPPORTED_CURRENCIES, `${path}.currency`),
+        currency: oneOf(
+          input.currency,
+          SUPPORTED_CURRENCIES,
+          `${path}.currency`,
+        ),
       };
     }
     case 'lastOrderDate': {
@@ -216,7 +235,8 @@ function parseNode(
     }
     case 'newsletterSubscriber': {
       onlyKeys(input, ['field', 'cmp', 'value'], path);
-      if (typeof input.value !== 'boolean') fail(`${path}.value`, 'must be true or false');
+      if (typeof input.value !== 'boolean')
+        fail(`${path}.value`, 'must be true or false');
       return {
         field,
         cmp: oneOf(input.cmp, ['is'] as const, `${path}.cmp`),

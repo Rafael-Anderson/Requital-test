@@ -136,11 +136,10 @@ export class CustomerAccountService {
     const customer = await this.findCustomerOrThrow(ctx.customerId);
     if (
       customer.lastDataExportAt &&
-      Date.now() - (customer.lastDataExportAt as Date).getTime() <
-        EXPORT_RATE_LIMIT_MS
+      Date.now() - customer.lastDataExportAt.getTime() < EXPORT_RATE_LIMIT_MS
     ) {
       const retryAt = new Date(
-        (customer.lastDataExportAt as Date).getTime() + EXPORT_RATE_LIMIT_MS,
+        customer.lastDataExportAt.getTime() + EXPORT_RATE_LIMIT_MS,
       );
       throw new BadRequestException(
         `You can request your data once every 24 hours — try again after ${retryAt.toISOString()}`,
@@ -206,7 +205,11 @@ export class CustomerAccountService {
     return { wording, channels };
   }
 
-  async setConsent(ctx: CustomerContext, channel: ConsentChannel, granted: boolean) {
+  async setConsent(
+    ctx: CustomerContext,
+    channel: ConsentChannel,
+    granted: boolean,
+  ) {
     const channels = await this.consentService.recordByCustomer(
       ctx.shopId,
       ctx.customerId,

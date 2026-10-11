@@ -276,7 +276,8 @@ export class ReturnsService {
       const providerRefundPortion = providerPortionMinor / factor;
       // Refunded to store credit instead of the original payment: the provider
       // is not called at all.
-      const creditMinor = storeMinor + (toStoreCredit ? providerPortionMinor : 0);
+      const creditMinor =
+        storeMinor + (toStoreCredit ? providerPortionMinor : 0);
 
       // Only ever asked to refund the non-gift-card slice — a return that's
       // fully covered by gift-card credit never touches the payment provider
@@ -285,7 +286,10 @@ export class ReturnsService {
       // charge/refund through a gateway for zero amount). Called with the order
       // row lock held and every cap already passed.
       const { refundMethod, providerRefundReference } = toStoreCredit
-        ? { refundMethod: 'store_credit' as const, providerRefundReference: null }
+        ? {
+            refundMethod: 'store_credit' as const,
+            providerRefundReference: null,
+          }
         : await this.attemptProviderRefund(
             order.id,
             refundTarget,
@@ -542,10 +546,13 @@ export class ReturnsService {
         providerRefundReference: result.providerReference,
       };
     } catch (error) {
-      logger.warn(`provider refund failed for order ${orderId}, falling back to manual`, {
-        orderId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.warn(
+        `provider refund failed for order ${orderId}, falling back to manual`,
+        {
+          orderId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
       return { refundMethod: 'manual', providerRefundReference: null };
     }
   }
@@ -568,7 +575,10 @@ export class ReturnsService {
         ids,
       ),
     ]);
-    const itemsByReturn = new Map<number, { id: number; orderItemId: number; quantity: number }[]>();
+    const itemsByReturn = new Map<
+      number,
+      { id: number; orderItemId: number; quantity: number }[]
+    >();
     for (const item of items) {
       const list = itemsByReturn.get(item.orderReturnId as number) ?? [];
       list.push({

@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import { minorUnitDecimals, minorUnitFactor } from '../common/currency-minor-units';
+import {
+  minorUnitDecimals,
+  minorUnitFactor,
+} from '../common/currency-minor-units';
 
 // Store-credit amounts are handled as INTEGER MINOR UNITS everywhere they are
 // added, compared or capped (fils, cents): no float is ever summed or compared.
@@ -31,7 +34,9 @@ export function minorToDecimal(minor: number, currency: string): string {
   const whole = Math.trunc(abs / factor);
   const frac = abs % factor;
   const body =
-    decimals === 0 ? String(whole) : `${whole}.${String(frac).padStart(decimals, '0')}`;
+    decimals === 0
+      ? String(whole)
+      : `${whole}.${String(frac).padStart(decimals, '0')}`;
   return minor < 0 ? `-${body}` : body;
 }
 
@@ -42,17 +47,21 @@ export const MAX_CREDIT_MAJOR = 1_000_000;
 // An admin-typed amount: a positive decimal with no more places than the
 // currency has. Rejected, never rounded: "10.505 AED" is a typo, not 10.51.
 export function parseAdminAmount(raw: unknown, currency: string): number {
-  const text = typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : raw;
+  const text =
+    typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : raw;
   if (typeof text !== 'string' || !/^\d{1,7}(\.\d{1,3})?$/.test(text)) {
     throw new BadRequestException('amount must be a positive number');
   }
   const decimals = minorUnitDecimals(currency);
   const frac = text.split('.')[1] ?? '';
   if (frac.length > decimals) {
-    throw new BadRequestException(`${currency} amounts have at most ${decimals} decimal places`);
+    throw new BadRequestException(
+      `${currency} amounts have at most ${decimals} decimal places`,
+    );
   }
   const minor = decimalToMinor(text, currency);
-  if (minor <= 0) throw new BadRequestException('amount must be greater than zero');
+  if (minor <= 0)
+    throw new BadRequestException('amount must be greater than zero');
   if (minor > MAX_CREDIT_MAJOR * minorUnitFactor(currency)) {
     throw new BadRequestException(`amount cannot exceed ${MAX_CREDIT_MAJOR}`);
   }

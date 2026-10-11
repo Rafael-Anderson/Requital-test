@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+} from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -13,7 +20,10 @@ export class CustomerMergeController {
 
   @Roles('admin', 'viewer')
   @Get('merges')
-  history(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  history(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.merges.history(ctx, id);
   }
 

@@ -1,4 +1,10 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsInt,
+} from 'class-validator';
 
 export class MergeCustomersDto {
   // The customers to fold INTO the one in the URL. Same shop, never the primary.

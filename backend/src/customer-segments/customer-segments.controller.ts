@@ -36,7 +36,10 @@ export class CustomerSegmentsController {
 
   @Roles('admin', 'viewer')
   @Get(':id')
-  get(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  get(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.segments.get(ctx, id);
   }
 
@@ -58,7 +61,10 @@ export class CustomerSegmentsController {
 
   @Roles('admin')
   @Delete(':id')
-  remove(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  remove(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.segments.remove(ctx, id);
   }
 }

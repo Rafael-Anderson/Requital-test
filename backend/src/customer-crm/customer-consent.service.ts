@@ -1,7 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -57,7 +54,10 @@ export class CustomerConsentService {
 
   // Customer-account read: the same shape, minus the newsletter lookup and the
   // history (the customer sees only their own current answers).
-  async channelsFor(shopId: number, customerId: number): Promise<ConsentState[]> {
+  async channelsFor(
+    shopId: number,
+    customerId: number,
+  ): Promise<ConsentState[]> {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT channel, status, source, wordingVersion, updatedAt
          FROM customerconsent WHERE customerId = ? AND shopId = ?`,
@@ -92,7 +92,11 @@ export class CustomerConsentService {
     };
   }
 
-  async recordByAdmin(ctx: TenantContext, customerId: number, dto: RecordConsentDto) {
+  async recordByAdmin(
+    ctx: TenantContext,
+    customerId: number,
+    dto: RecordConsentDto,
+  ) {
     const note = dto.note?.trim() || null;
     if (dto.status === 'granted' && !note) {
       throw new BadRequestException(
@@ -152,7 +156,11 @@ export class CustomerConsentService {
   }
 
   // Returns true when state changed. Pool-free inside the transaction.
-  async record(shopId: number, customerId: number, input: RecordInput): Promise<boolean> {
+  async record(
+    shopId: number,
+    customerId: number,
+    input: RecordInput,
+  ): Promise<boolean> {
     return this.db.transaction(async (conn) => {
       await lockCustomerInShop(conn, shopId, customerId);
       return this.recordOn(conn, shopId, customerId, input);
@@ -264,7 +272,9 @@ export class CustomerConsentService {
         channel,
         status: r ? (r.status as ConsentStatus) : null,
         source: r ? (r.source as string) : null,
-        wordingVersion: r ? ((r.wordingVersion as string | null) ?? null) : null,
+        wordingVersion: r
+          ? ((r.wordingVersion as string | null) ?? null)
+          : null,
         updatedAt: r ? (r.updatedAt as Date) : null,
       };
     });

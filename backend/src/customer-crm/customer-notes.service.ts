@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
@@ -38,7 +42,11 @@ export class CustomerNotesService {
     }));
   }
 
-  async create(ctx: TenantContext, customerId: number, dto: CreateCustomerNoteDto) {
+  async create(
+    ctx: TenantContext,
+    customerId: number,
+    dto: CreateCustomerNoteDto,
+  ) {
     await assertCustomerInShop(this.db, ctx.shopId, customerId);
     const body = dto.body.trim();
     if (!body) throw new BadRequestException('A note cannot be empty');

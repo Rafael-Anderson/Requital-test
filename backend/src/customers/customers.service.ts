@@ -119,10 +119,10 @@ export class CustomersService {
       email: emailChanged ? data.email : undefined,
     });
     if (set) {
-      await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
-        ...set.params,
-        existing.id,
-      ]);
+      await this.db.execute(
+        `UPDATE customer SET ${set.setClause} WHERE id = ?`,
+        [...set.params, existing.id],
+      );
     }
     const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
       `SELECT * FROM customer WHERE id = ?`,
@@ -243,8 +243,8 @@ export class CustomersService {
         }[],
       }),
     ) as ({ status: string; total: string; createdAt: Date } & RowDataPacket & {
-      orderitem: RowDataPacket[];
-    })[];
+        orderitem: RowDataPacket[];
+      })[];
 
     const completedOrders = orders.filter((o) => o.status !== 'cancelled');
     const lifetimeValue = completedOrders.reduce(
@@ -277,10 +277,10 @@ export class CustomersService {
         birthday: dto.birthday ? new Date(dto.birthday) : undefined,
       });
       if (set) {
-        await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
-          ...set.params,
-          id,
-        ]);
+        await this.db.execute(
+          `UPDATE customer SET ${set.setClause} WHERE id = ?`,
+          [...set.params, id],
+        );
       }
       const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
         `SELECT * FROM customer WHERE id = ?`,

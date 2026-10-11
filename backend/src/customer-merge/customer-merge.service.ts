@@ -66,7 +66,9 @@ export class CustomerMergeService {
       duplicateName: (r.duplicateName as string | null) ?? null,
       duplicatePhone: (r.duplicatePhone as string | null) ?? null,
       duplicateEmail: (r.duplicateEmail as string | null) ?? null,
-      moved: (typeof r.moved === 'string' ? JSON.parse(r.moved) : r.moved) as MergeMoved,
+      moved: (typeof r.moved === 'string'
+        ? JSON.parse(r.moved)
+        : r.moved) as MergeMoved,
       actorName: (r.actorName as string | null) ?? null,
       createdAt: r.createdAt as Date,
     }));
@@ -79,7 +81,8 @@ export class CustomerMergeService {
       `SELECT id, name, phone, email, passwordHash FROM customer WHERE shopId = ? AND id IN (${[primaryId, ...ids].map(() => '?').join(', ')})`,
       [ctx.shopId, primaryId, ...ids],
     );
-    if (customers.length !== ids.length + 1) throw new NotFoundException('One or more customers were not found');
+    if (customers.length !== ids.length + 1)
+      throw new NotFoundException('One or more customers were not found');
     const counts = async (table: string, col: string) => {
       const rows = await this.db.query<RowDataPacket[]>(
         `SELECT COUNT(*) AS n FROM \`${table}\` WHERE \`${col}\` IN (${ids.map(() => '?').join(', ')}) AND shopId = ?`,
@@ -119,7 +122,9 @@ export class CustomerMergeService {
             entityType: 'customer',
             entityId: primaryId,
             // Ids and counts only: no names, phones or emails in the audit row.
-            after: { duplicateIds: out.merged.map((m) => m.duplicateCustomerId) },
+            after: {
+              duplicateIds: out.merged.map((m) => m.duplicateCustomerId),
+            },
           });
         }
         return {
@@ -133,7 +138,9 @@ export class CustomerMergeService {
       }
     }
     if (isLockConflict(lastError)) {
-      throw new ConflictException('The customers are busy right now. Please try again.');
+      throw new ConflictException(
+        'The customers are busy right now. Please try again.',
+      );
     }
     throw lastError;
   }
@@ -166,7 +173,8 @@ export class CustomerMergeService {
       if (rows[0]) locked.set(id, rows[0]);
     }
     const primary = locked.get(primaryId);
-    if (!primary) throw new NotFoundException(`Customer ${primaryId} not found`);
+    if (!primary)
+      throw new NotFoundException(`Customer ${primaryId} not found`);
 
     // 2. A duplicate that is gone is only acceptable if THIS primary already
     //    absorbed it (a repeat of the same request). Anything else is a 404, which
@@ -182,17 +190,22 @@ export class CustomerMergeService {
         `SELECT id FROM customermerge WHERE shopId = ? AND duplicateCustomerId = ? AND primaryCustomerId = ?`,
         [shopId, id, primaryId],
       );
-      if (rec.length === 0) throw new NotFoundException(`Customer ${id} not found`);
+      if (rec.length === 0)
+        throw new NotFoundException(`Customer ${id} not found`);
       alreadyMerged.push(id);
     }
 
     if (this.isAnonymised(primary)) {
-      throw new ConflictException('A deleted customer cannot be the merge target');
+      throw new ConflictException(
+        'A deleted customer cannot be the merge target',
+      );
     }
     for (const id of toMerge) {
       const dup = locked.get(id)!;
       if (this.isAnonymised(dup)) {
-        throw new ConflictException(`Customer ${id} has been deleted and cannot be merged`);
+        throw new ConflictException(
+          `Customer ${id} has been deleted and cannot be merged`,
+        );
       }
       // Its login would be lost (the primary keeps its own). Merge the other way
       // round, or have the customer delete the extra account first.
@@ -211,7 +224,16 @@ export class CustomerMergeService {
       await conn.query(
         `INSERT INTO customermerge (shopId, primaryCustomerId, duplicateCustomerId, duplicateName, duplicatePhone, duplicateEmail, actorUserId, moved)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [shopId, primaryId, id, dup.name, dup.phone, dup.email ?? null, ctx.userId, JSON.stringify(moved)],
+        [
+          shopId,
+          primaryId,
+          id,
+          dup.name,
+          dup.phone,
+          dup.email ?? null,
+          ctx.userId,
+          JSON.stringify(moved),
+        ],
       );
       // Anything that previously merged INTO the duplicate now belongs to the primary.
       await conn.query(
@@ -221,7 +243,10 @@ export class CustomerMergeService {
       // Everything it owned is re-pointed; what is left (auth tokens, metrics,
       // tag links) goes with the row. storecreditentry is RESTRICT, so a ledger
       // row left behind would make this DELETE fail and roll the merge back.
-      await conn.query(`DELETE FROM customer WHERE id = ? AND shopId = ?`, [id, shopId]);
+      await conn.query(`DELETE FROM customer WHERE id = ? AND shopId = ?`, [
+        id,
+        shopId,
+      ]);
       merged.push({ duplicateCustomerId: id, moved });
     }
     return { merged, alreadyMerged };
@@ -245,13 +270,25 @@ export class CustomerMergeService {
     };
 
     const orders = await this.moveOrders(conn, shopId, p, d, run);
-    const draftOrders = await run(`UPDATE draftorder SET customerId = ? WHERE customerId = ? AND shopId = ?`, [p, d, shopId]);
-    const giftCards = await run(`UPDATE giftcard SET purchasedByCustomerId = ? WHERE purchasedByCustomerId = ? AND shopId = ?`, [p, d, shopId]);
+    const draftOrders = await run(
+      `UPDATE draftorder SET customerId = ? WHERE customerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
+    const giftCards = await run(
+      `UPDATE giftcard SET purchasedByCustomerId = ? WHERE purchasedByCustomerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
     // The per-customer discount limit counts rows by customerId: moving them is
     // what makes the primary inherit the duplicate's redemptions.
-    const discountRedemptions = await run(`UPDATE discountredemption SET customerId = ? WHERE customerId = ?`, [p, d]);
+    const discountRedemptions = await run(
+      `UPDATE discountredemption SET customerId = ? WHERE customerId = ?`,
+      [p, d],
+    );
     const storeCreditEntries = await this.moveLedger(conn, shopId, p, d, run);
-    const notes = await run(`UPDATE customernote SET customerId = ? WHERE customerId = ? AND shopId = ?`, [p, d, shopId]);
+    const notes = await run(
+      `UPDATE customernote SET customerId = ? WHERE customerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
     const tags = await run(
       `INSERT INTO customertagassignment (customerId, tagId, shopId)
        SELECT ?, src.tagId, src.shopId FROM customertagassignment src WHERE src.customerId = ? AND src.shopId = ?
@@ -264,11 +301,15 @@ export class CustomerMergeService {
       `UPDATE IGNORE metafieldvalue SET ownerId = ? WHERE ownerType = 'customer' AND ownerId = ? AND shopId = ?`,
       [p, d, shopId],
     );
-    await conn.query(`DELETE FROM metafieldvalue WHERE ownerType = 'customer' AND ownerId = ? AND shopId = ?`, [d, shopId]);
+    await conn.query(
+      `DELETE FROM metafieldvalue WHERE ownerType = 'customer' AND ownerId = ? AND shopId = ?`,
+      [d, shopId],
+    );
 
-    const { addresses, wishlist, addressCount, wishlistCount } = this.mergeJsonLists(primary, dup);
-    const email = primary.email ?? dup.email ?? null;
-    const birthday = primary.birthday ?? dup.birthday ?? null;
+    const { addresses, wishlist, addressCount, wishlistCount } =
+      this.mergeJsonLists(primary, dup);
+    const email = (primary.email ?? dup.email ?? null) as string | null;
+    const birthday = (primary.birthday ?? dup.birthday ?? null) as Date | null;
     await conn.query(
       `UPDATE customer SET addresses = ?, wishlist = ?, email = ?, birthday = ? WHERE id = ? AND shopId = ?`,
       [addresses, wishlist, email, birthday, p, shopId],
@@ -296,7 +337,10 @@ export class CustomerMergeService {
     d: number,
     run: (sql: string, params: (string | number)[]) => Promise<number>,
   ) {
-    return run(`UPDATE \`order\` SET customerId = ? WHERE customerId = ? AND shopId = ?`, [p, d, shopId]);
+    return run(
+      `UPDATE \`order\` SET customerId = ? WHERE customerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
   }
 
   // Ledger rows are re-pointed, never copied or deleted: every row survives, so
@@ -309,7 +353,10 @@ export class CustomerMergeService {
     d: number,
     run: (sql: string, params: (string | number)[]) => Promise<number>,
   ) {
-    return run(`UPDATE storecreditentry SET customerId = ? WHERE customerId = ? AND shopId = ?`, [p, d, shopId]);
+    return run(
+      `UPDATE storecreditentry SET customerId = ? WHERE customerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
   }
 
   // Per channel the more recent answer wins (a later withdrawal beats an earlier
@@ -334,8 +381,14 @@ export class CustomerMergeService {
          updatedAt = GREATEST(VALUES(updatedAt), customerconsent.updatedAt)`,
       [p, d, shopId],
     );
-    await conn.query(`DELETE FROM customerconsent WHERE customerId = ? AND shopId = ?`, [d, shopId]);
-    return run(`UPDATE customerconsentevent SET customerId = ? WHERE customerId = ? AND shopId = ?`, [p, d, shopId]);
+    await conn.query(
+      `DELETE FROM customerconsent WHERE customerId = ? AND shopId = ?`,
+      [d, shopId],
+    );
+    return run(
+      `UPDATE customerconsentevent SET customerId = ? WHERE customerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
   }
 
   private mergeJsonLists(primary: RowDataPacket, dup: RowDataPacket) {
@@ -354,13 +407,24 @@ export class CustomerMergeService {
     const pAddr = asArray(primary.addresses) as { id?: string }[];
     const dAddr = asArray(dup.addresses) as { id?: string }[];
     const seen = new Set(pAddr.map((a) => a.id));
-    const addresses = [...pAddr, ...dAddr.filter((a) => !a.id || !seen.has(a.id))];
+    const addresses = [
+      ...pAddr,
+      ...dAddr.filter((a) => !a.id || !seen.has(a.id)),
+    ];
     const pWish = asArray(primary.wishlist) as number[];
     const dWish = asArray(dup.wishlist) as number[];
     const wishlist = [...new Set([...pWish, ...dWish])].slice(0, WISHLIST_MAX);
     return {
-      addresses: addresses.length ? JSON.stringify(addresses) : primary.addresses == null && dup.addresses == null ? null : JSON.stringify(addresses),
-      wishlist: wishlist.length ? JSON.stringify(wishlist) : primary.wishlist == null && dup.wishlist == null ? null : JSON.stringify(wishlist),
+      addresses: addresses.length
+        ? JSON.stringify(addresses)
+        : primary.addresses == null && dup.addresses == null
+          ? null
+          : JSON.stringify(addresses),
+      wishlist: wishlist.length
+        ? JSON.stringify(wishlist)
+        : primary.wishlist == null && dup.wishlist == null
+          ? null
+          : JSON.stringify(wishlist),
       addressCount: dAddr.length,
       wishlistCount: dWish.length,
     };

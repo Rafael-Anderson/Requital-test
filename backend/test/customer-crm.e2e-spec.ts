@@ -64,7 +64,10 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
     it('creates, lists with counts, bulk assigns, filters the customer list, and unassigns', async () => {
       const { shop, customerId } = await shopWithCustomer('crm-tag');
       const tag = body<{ id: number }>(
-        await send(shop, 'post', '/customer-tags', { name: 'VIP', color: '#ff0000' }).expect(201),
+        await send(shop, 'post', '/customer-tags', {
+          name: 'VIP',
+          color: '#ff0000',
+        }).expect(201),
       );
       // duplicate name (case-insensitive) is a 409
       await send(shop, 'post', '/customer-tags', { name: 'vip' }).expect(409);
@@ -83,9 +86,9 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
       );
       expect(list.find((t) => t.id === tag.id)?.customerCount).toBe(1);
 
-      const customers = body<{ data: { id: number; tags: { name: string }[] }[] }>(
-        await get(shop, `/customers?tagId=${tag.id}`).expect(200),
-      );
+      const customers = body<{
+        data: { id: number; tags: { name: string }[] }[];
+      }>(await get(shop, `/customers?tagId=${tag.id}`).expect(200));
       expect(customers.data.map((c) => c.id)).toEqual([customerId]);
       expect(customers.data[0].tags.map((t) => t.name)).toEqual(['VIP']);
 
@@ -115,13 +118,19 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
       const a = await shopWithCustomer('crm-tag-a');
       const b = await shopWithCustomer('crm-tag-b');
       const tagA = body<{ id: number }>(
-        await send(a.shop, 'post', '/customer-tags', { name: 'A-only' }).expect(201),
+        await send(a.shop, 'post', '/customer-tags', { name: 'A-only' }).expect(
+          201,
+        ),
       );
       const tagB = body<{ id: number }>(
-        await send(b.shop, 'post', '/customer-tags', { name: 'B-only' }).expect(201),
+        await send(b.shop, 'post', '/customer-tags', { name: 'B-only' }).expect(
+          201,
+        ),
       );
       // B's list does not contain A's tag
-      const listB = body<{ id: number }[]>(await get(b.shop, '/customer-tags').expect(200));
+      const listB = body<{ id: number }[]>(
+        await get(b.shop, '/customer-tags').expect(200),
+      );
       expect(listB.map((t) => t.id)).not.toContain(tagA.id);
       // B assigning A's tag to B's customer, or B's tag to A's customer: 404, nothing written
       await send(b.shop, 'post', '/customer-tags/assign', {
@@ -136,7 +145,9 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
         customerIds: [a.customerId],
         tagIds: [tagB.id],
       }).expect(404);
-      await send(b.shop, 'patch', `/customer-tags/${tagA.id}`, { name: 'hijack' }).expect(404);
+      await send(b.shop, 'patch', `/customer-tags/${tagA.id}`, {
+        name: 'hijack',
+      }).expect(404);
       await send(b.shop, 'delete', `/customer-tags/${tagA.id}`).expect(404);
       await get(b.shop, `/customers/${a.customerId}/tags`).expect(404);
       const rows = await db.query<RowDataPacket[]>(
@@ -161,7 +172,9 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
         }).expect(201),
       );
       expect(n1.authorName).toBeTruthy();
-      await send(shop, 'post', `/customers/${customerId}/notes`, { body: '   ' }).expect(400);
+      await send(shop, 'post', `/customers/${customerId}/notes`, {
+        body: '   ',
+      }).expect(400);
       const list = body<{ id: number; body: string; createdAt: string }[]>(
         await get(shop, `/customers/${customerId}/notes`).expect(200),
       );
@@ -175,38 +188,92 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
       expect(audit).toHaveLength(1);
       expect(JSON.stringify(audit[0].metadata)).not.toContain('lilies');
 
-      await send(shop, 'delete', `/customers/${customerId}/notes/${n1.id}`).expect(200);
-      await send(shop, 'delete', `/customers/${customerId}/notes/${n1.id}`).expect(404);
+      await send(
+        shop,
+        'delete',
+        `/customers/${customerId}/notes/${n1.id}`,
+      ).expect(200);
+      await send(
+        shop,
+        'delete',
+        `/customers/${customerId}/notes/${n1.id}`,
+      ).expect(404);
     });
 
     it('cross-tenant: notes of another shop cannot be listed, written or deleted', async () => {
       const a = await shopWithCustomer('crm-note-a');
       const b = await shopWithCustomer('crm-note-b');
       const note = body<{ id: number }>(
-        await send(a.shop, 'post', `/customers/${a.customerId}/notes`, { body: 'secret' }).expect(201),
+        await send(a.shop, 'post', `/customers/${a.customerId}/notes`, {
+          body: 'secret',
+        }).expect(201),
       );
       await get(b.shop, `/customers/${a.customerId}/notes`).expect(404);
-      await send(b.shop, 'post', `/customers/${a.customerId}/notes`, { body: 'x' }).expect(404);
+      await send(b.shop, 'post', `/customers/${a.customerId}/notes`, {
+        body: 'x',
+      }).expect(404);
       // right note id, but another shop's customer id, and the wrong customer in my own shop
-      await send(b.shop, 'delete', `/customers/${a.customerId}/notes/${note.id}`).expect(404);
-      await send(b.shop, 'delete', `/customers/${b.customerId}/notes/${note.id}`).expect(404);
-      const rows = await db.query<RowDataPacket[]>(`SELECT id FROM customernote WHERE id = ?`, [note.id]);
+      await send(
+        b.shop,
+        'delete',
+        `/customers/${a.customerId}/notes/${note.id}`,
+      ).expect(404);
+      await send(
+        b.shop,
+        'delete',
+        `/customers/${b.customerId}/notes/${note.id}`,
+      ).expect(404);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT id FROM customernote WHERE id = ?`,
+        [note.id],
+      );
       expect(rows).toHaveLength(1);
     });
 
     it('role matrix: viewer reads but cannot write; branch and order_manager have no access at all', async () => {
       const { shop, customerId } = await shopWithCustomer('crm-note-role');
-      const viewer = await createStaffToken(app, shop.adminToken, 'crm', 'viewer');
-      const branch = await createStaffToken(app, shop.adminToken, 'crm', 'branch', shop.outletId);
-      const om = await createStaffToken(app, shop.adminToken, 'crm', 'order_manager');
-      await send(shop, 'post', `/customers/${customerId}/notes`, { body: 'ok' }).expect(201);
-      const as = (token: string, method: 'get' | 'post' | 'put', path: string, data?: object) =>
-        request(app.getHttpServer())[method](path).set('Authorization', `Bearer ${token}`).send(data);
+      const viewer = await createStaffToken(
+        app,
+        shop.adminToken,
+        'crm',
+        'viewer',
+      );
+      const branch = await createStaffToken(
+        app,
+        shop.adminToken,
+        'crm',
+        'branch',
+        shop.outletId,
+      );
+      const om = await createStaffToken(
+        app,
+        shop.adminToken,
+        'crm',
+        'order_manager',
+      );
+      await send(shop, 'post', `/customers/${customerId}/notes`, {
+        body: 'ok',
+      }).expect(201);
+      const as = (
+        token: string,
+        method: 'get' | 'post' | 'put',
+        path: string,
+        data?: object,
+      ) =>
+        request(app.getHttpServer())
+          [method](path)
+          .set('Authorization', `Bearer ${token}`)
+          .send(data);
       await as(viewer, 'get', `/customers/${customerId}/notes`).expect(200);
       await as(viewer, 'get', `/customers/${customerId}/consent`).expect(200);
       await as(viewer, 'get', `/customer-tags`).expect(200);
-      await as(viewer, 'post', `/customers/${customerId}/notes`, { body: 'x' }).expect(403);
-      await as(viewer, 'put', `/customers/${customerId}/consent`, { channel: 'email', status: 'withdrawn' }).expect(403);
+      await as(viewer, 'post', `/customers/${customerId}/notes`, {
+        body: 'x',
+      }).expect(403);
+      await as(viewer, 'put', `/customers/${customerId}/consent`, {
+        channel: 'email',
+        status: 'withdrawn',
+      }).expect(403);
       await as(viewer, 'post', `/customer-tags`, { name: 'nope' }).expect(403);
       for (const token of [branch, om]) {
         await as(token, 'get', `/customers/${customerId}/notes`).expect(403);
@@ -236,7 +303,12 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
       );
       expect(Number(rows[0].n)).toBe(0);
 
-      const reg = await registerCustomer(app.getHttpServer(), shop.slug, phone(), `reg-${f.uniq()}@x.test`);
+      const reg = await registerCustomer(
+        app.getHttpServer(),
+        shop.slug,
+        phone(),
+        `reg-${f.uniq()}@x.test`,
+      );
       const rows2 = await db.query<RowDataPacket[]>(
         `SELECT COUNT(*) AS n FROM customerconsent WHERE customerId = ?`,
         [reg.customerId],
@@ -267,20 +339,29 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
       expect(events).toHaveLength(1);
       expect(events[0].wordingVersion).toBeTruthy();
       expect(events[0].wordingText).toContain('marketing emails');
-      const after = body<{ channels: { channel: string; status: string | null }[] }>(
+      const after = body<{
+        channels: { channel: string; status: string | null }[];
+      }>(
         await send(shop, 'put', `/customers/${customerId}/consent`, {
           channel: 'email',
           status: 'withdrawn',
         }).expect(200),
       );
-      expect(after.channels.find((x) => x.channel === 'email')?.status).toBe('withdrawn');
+      expect(after.channels.find((x) => x.channel === 'email')?.status).toBe(
+        'withdrawn',
+      );
       // other channels untouched (still unknown)
-      expect(after.channels.find((x) => x.channel === 'sms')?.status).toBeNull();
+      expect(
+        after.channels.find((x) => x.channel === 'sms')?.status,
+      ).toBeNull();
       events = await db.query<RowDataPacket[]>(
         `SELECT status FROM customerconsentevent WHERE customerId = ? ORDER BY id`,
         [customerId],
       );
-      expect(events.map((e) => e.status)).toEqual(['granted', 'withdrawn']);
+      expect(events.map((e) => String(e.status))).toEqual([
+        'granted',
+        'withdrawn',
+      ]);
     });
 
     it('cross-tenant: another shop cannot read or record consent for my customer', async () => {
@@ -301,7 +382,10 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
 
     it('the newsletter list is shown but never copied into consent', async () => {
       const { shop, customerId } = await shopWithCustomer('crm-news');
-      const cust = await db.query<RowDataPacket[]>(`SELECT email FROM customer WHERE id = ?`, [customerId]);
+      const cust = await db.query<RowDataPacket[]>(
+        `SELECT email FROM customer WHERE id = ?`,
+        [customerId],
+      );
       await db.execute(
         `INSERT INTO newslettersubscriber (shopId, email, source) VALUES (?, ?, 'newsletter_widget')`,
         [shop.shopId, String(cust[0].email).toUpperCase()],
@@ -317,14 +401,32 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
     it('storefront account: the customer toggles their own consent; wording and version are server-side; another shop session cannot', async () => {
       const a = await shopWithCustomer('crm-acct-a');
       const b = await shopWithCustomer('crm-acct-b');
-      const sessA = await registerCustomer(app.getHttpServer(), a.shop.slug, phone(), `acct-${f.uniq()}@x.test`);
-      const view = body<{ wording: { version: string }; channels: { status: string | null }[] }>(
-        await asCustomer(app.getHttpServer(), sessA, 'get', `/public/${a.shop.slug}/account/consent`).expect(200),
+      const sessA = await registerCustomer(
+        app.getHttpServer(),
+        a.shop.slug,
+        phone(),
+        `acct-${f.uniq()}@x.test`,
+      );
+      const view = body<{
+        wording: { version: string };
+        channels: { status: string | null }[];
+      }>(
+        await asCustomer(
+          app.getHttpServer(),
+          sessA,
+          'get',
+          `/public/${a.shop.slug}/account/consent`,
+        ).expect(200),
       );
       expect(view.channels.every((c) => c.status === null)).toBe(true);
       expect(view.wording.version).toBeTruthy();
 
-      await asCustomer(app.getHttpServer(), sessA, 'put', `/public/${a.shop.slug}/account/consent`)
+      await asCustomer(
+        app.getHttpServer(),
+        sessA,
+        'put',
+        `/public/${a.shop.slug}/account/consent`,
+      )
         .send({ channel: 'whatsapp', granted: true })
         .expect(200);
       const ev = await db.query<RowDataPacket[]>(
@@ -336,12 +438,27 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
       expect(ev[0].wordingText).toContain('WhatsApp');
 
       // a client cannot smuggle its own wording or source
-      await asCustomer(app.getHttpServer(), sessA, 'put', `/public/${a.shop.slug}/account/consent`)
-        .send({ channel: 'email', granted: true, wordingText: 'free money', source: 'admin' })
+      await asCustomer(
+        app.getHttpServer(),
+        sessA,
+        'put',
+        `/public/${a.shop.slug}/account/consent`,
+      )
+        .send({
+          channel: 'email',
+          granted: true,
+          wordingText: 'free money',
+          source: 'admin',
+        })
         .expect(400);
 
       // shop A's session on shop B's URL is rejected
-      await asCustomer(app.getHttpServer(), sessA, 'put', `/public/${b.shop.slug}/account/consent`)
+      await asCustomer(
+        app.getHttpServer(),
+        sessA,
+        'put',
+        `/public/${b.shop.slug}/account/consent`,
+      )
         .send({ channel: 'email', granted: true })
         .expect(401);
       // unauthenticated
@@ -355,20 +472,50 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
   describe('PDPL', () => {
     it('export carries consent but not notes; deleting the account removes notes and withdraws granted consent, keeping the history', async () => {
       const { shop } = await shopWithCustomer('crm-pdpl');
-      const sess = await registerCustomer(app.getHttpServer(), shop.slug, phone(), `pdpl-${f.uniq()}@x.test`);
-      await asCustomer(app.getHttpServer(), sess, 'put', `/public/${shop.slug}/account/consent`)
+      const sess = await registerCustomer(
+        app.getHttpServer(),
+        shop.slug,
+        phone(),
+        `pdpl-${f.uniq()}@x.test`,
+      );
+      await asCustomer(
+        app.getHttpServer(),
+        sess,
+        'put',
+        `/public/${shop.slug}/account/consent`,
+      )
         .send({ channel: 'email', granted: true })
         .expect(200);
-      await send(shop, 'post', `/customers/${sess.customerId}/notes`, { body: 'internal remark' }).expect(201);
+      await send(shop, 'post', `/customers/${sess.customerId}/notes`, {
+        body: 'internal remark',
+      }).expect(201);
 
-      const exp = body<{ marketingConsent: { channels: { channel: string; status: string }[]; history: unknown[] } }>(
-        await asCustomer(app.getHttpServer(), sess, 'get', `/public/${shop.slug}/account/export`).expect(200),
+      const exp = body<{
+        marketingConsent: {
+          channels: { channel: string; status: string }[];
+          history: unknown[];
+        };
+      }>(
+        await asCustomer(
+          app.getHttpServer(),
+          sess,
+          'get',
+          `/public/${shop.slug}/account/export`,
+        ).expect(200),
       );
-      expect(exp.marketingConsent.channels.find((c) => c.channel === 'email')?.status).toBe('granted');
+      expect(
+        exp.marketingConsent.channels.find((c) => c.channel === 'email')
+          ?.status,
+      ).toBe('granted');
       expect(JSON.stringify(exp)).not.toContain('internal remark');
 
       const req1 = body<{ confirmationToken: string }>(
-        await asCustomer(app.getHttpServer(), sess, 'delete', `/public/${shop.slug}/account/me`).expect(202),
+        await asCustomer(
+          app.getHttpServer(),
+          sess,
+          'delete',
+          `/public/${shop.slug}/account/me`,
+        ).expect(202),
       );
       await asCustomer(
         app.getHttpServer(),
@@ -377,18 +524,27 @@ describe('Customer CRM: tags, notes, consent (e2e)', () => {
         `/public/${shop.slug}/account/me/confirm?token=${req1.confirmationToken}`,
       ).expect(200);
 
-      const notes = await db.query<RowDataPacket[]>(`SELECT id FROM customernote WHERE customerId = ?`, [sess.customerId]);
+      const notes = await db.query<RowDataPacket[]>(
+        `SELECT id FROM customernote WHERE customerId = ?`,
+        [sess.customerId],
+      );
       expect(notes).toHaveLength(0);
       const state = await db.query<RowDataPacket[]>(
         `SELECT status, source FROM customerconsent WHERE customerId = ? AND channel = 'email'`,
         [sess.customerId],
       );
-      expect(state[0]).toMatchObject({ status: 'withdrawn', source: 'account_deletion' });
+      expect(state[0]).toMatchObject({
+        status: 'withdrawn',
+        source: 'account_deletion',
+      });
       const events = await db.query<RowDataPacket[]>(
         `SELECT status FROM customerconsentevent WHERE customerId = ? ORDER BY id`,
         [sess.customerId],
       );
-      expect(events.map((e) => e.status)).toEqual(['granted', 'withdrawn']);
+      expect(events.map((e) => String(e.status))).toEqual([
+        'granted',
+        'withdrawn',
+      ]);
     });
   });
 });

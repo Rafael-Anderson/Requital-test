@@ -30,7 +30,18 @@ describe('segment rules: validation', () => {
         },
       ],
     });
-    expect(out.params).toEqual([3, 'KWD', '100.5', '2026-01-31 00:00:00', 90, 4, 7, 'email', 'sms', 'granted']);
+    expect(out.params).toEqual([
+      3,
+      'KWD',
+      '100.5',
+      '2026-01-31 00:00:00',
+      90,
+      4,
+      7,
+      'email',
+      'sms',
+      'granted',
+    ]);
     // one placeholder per param
     expect(out.sql.match(/\?/g)).toHaveLength(out.params.length);
     expect(out.sql).toContain('NOT EXISTS');
@@ -53,36 +64,95 @@ describe('segment rules: validation', () => {
 
   it.each([
     ['unknown field', { field: 'passwordHash', cmp: 'eq', value: 'x' }],
-    ['unknown key on a leaf', { field: 'orderCount', cmp: 'eq', value: 1, sql: '1=1' }],
-    ['unknown key on a group', { op: 'and', rules: [{ field: 'orderCount', cmp: 'eq', value: 1 }], where: '1' }],
+    [
+      'unknown key on a leaf',
+      { field: 'orderCount', cmp: 'eq', value: 1, sql: '1=1' },
+    ],
+    [
+      'unknown key on a group',
+      {
+        op: 'and',
+        rules: [{ field: 'orderCount', cmp: 'eq', value: 1 }],
+        where: '1',
+      },
+    ],
     ['bad operator', { field: 'orderCount', cmp: '= 1 OR 1=1 --', value: 1 }],
-    ['sql in a number', { field: 'orderCount', cmp: 'eq', value: '1; DROP TABLE customer' }],
+    [
+      'sql in a number',
+      { field: 'orderCount', cmp: 'eq', value: '1; DROP TABLE customer' },
+    ],
     ['sql in a tag id', { field: 'tag', cmp: 'has', value: '1 OR 1=1' }],
     ['float for an integer', { field: 'orderCount', cmp: 'eq', value: 1.5 }],
     ['negative', { field: 'orderCount', cmp: 'eq', value: -1 }],
-    ['sql in a currency', { field: 'lifetimeSpend', cmp: 'gt', value: '1', currency: "AED' OR '1'='1" }],
-    ['unsupported currency', { field: 'lifetimeSpend', cmp: 'gt', value: '1', currency: 'XXX' }],
+    [
+      'sql in a currency',
+      {
+        field: 'lifetimeSpend',
+        cmp: 'gt',
+        value: '1',
+        currency: "AED' OR '1'='1",
+      },
+    ],
+    [
+      'unsupported currency',
+      { field: 'lifetimeSpend', cmp: 'gt', value: '1', currency: 'XXX' },
+    ],
     ['missing currency', { field: 'lifetimeSpend', cmp: 'gt', value: '1' }],
-    ['sql in an amount', { field: 'lifetimeSpend', cmp: 'gt', value: '1) OR (1=1', currency: 'AED' }],
-    ['too many decimals', { field: 'lifetimeSpend', cmp: 'gt', value: '1.2345', currency: 'AED' }],
-    ['sql in a date', { field: 'lastOrderDate', cmp: 'before', value: "2026-01-01' OR '1'='1" }],
-    ['impossible date', { field: 'lastOrderDate', cmp: 'before', value: '2026-02-31' }],
-    ['sql in a channel', { field: 'consent', cmp: 'is', channel: "email' OR '1", value: 'granted' }],
-    ['sql in a consent value', { field: 'consent', cmp: 'is', channel: 'email', value: "granted' --" }],
-    ['string boolean', { field: 'newsletterSubscriber', cmp: 'is', value: 'true' }],
+    [
+      'sql in an amount',
+      {
+        field: 'lifetimeSpend',
+        cmp: 'gt',
+        value: '1) OR (1=1',
+        currency: 'AED',
+      },
+    ],
+    [
+      'too many decimals',
+      { field: 'lifetimeSpend', cmp: 'gt', value: '1.2345', currency: 'AED' },
+    ],
+    [
+      'sql in a date',
+      { field: 'lastOrderDate', cmp: 'before', value: "2026-01-01' OR '1'='1" },
+    ],
+    [
+      'impossible date',
+      { field: 'lastOrderDate', cmp: 'before', value: '2026-02-31' },
+    ],
+    [
+      'sql in a channel',
+      {
+        field: 'consent',
+        cmp: 'is',
+        channel: "email' OR '1",
+        value: 'granted',
+      },
+    ],
+    [
+      'sql in a consent value',
+      { field: 'consent', cmp: 'is', channel: 'email', value: "granted' --" },
+    ],
+    [
+      'string boolean',
+      { field: 'newsletterSubscriber', cmp: 'is', value: 'true' },
+    ],
     ['empty group', { op: 'and', rules: [] }],
     ['non-list rules', { op: 'and', rules: 'x' }],
     ['array root', [{ field: 'orderCount' }]],
     ['null root', null],
     ['string root', "1' OR '1'='1"],
-    ['bad op', { op: 'xor', rules: [{ field: 'orderCount', cmp: 'eq', value: 1 }] }],
+    [
+      'bad op',
+      { op: 'xor', rules: [{ field: 'orderCount', cmp: 'eq', value: 1 }] },
+    ],
   ])('rejects %s', (_name, input) => {
     expect(() => parseRules(input)).toThrow(BadRequestException);
   });
 
   it('refuses a depth bomb at the first level past the limit', () => {
     let node: unknown = { field: 'orderCount', cmp: 'eq', value: 1 };
-    for (let i = 0; i < MAX_DEPTH + 1; i += 1) node = { op: 'and', rules: [node] };
+    for (let i = 0; i < MAX_DEPTH + 1; i += 1)
+      node = { op: 'and', rules: [node] };
     expect(() => parseRules(node)).toThrow(/deeper than/);
     // exactly at the limit is fine
     let ok: unknown = { field: 'orderCount', cmp: 'eq', value: 1 };
@@ -99,9 +169,15 @@ describe('segment rules: validation', () => {
   it('caps the width of a group and the total node count', () => {
     const leaf = { field: 'orderCount', cmp: 'eq', value: 1 };
     expect(() =>
-      parseRules({ op: 'or', rules: Array.from({ length: MAX_GROUP_RULES + 1 }, () => leaf) }),
+      parseRules({
+        op: 'or',
+        rules: Array.from({ length: MAX_GROUP_RULES + 1 }, () => leaf),
+      }),
     ).toThrow(/more than/);
-    const group = { op: 'or', rules: Array.from({ length: MAX_GROUP_RULES }, () => leaf) };
+    const group = {
+      op: 'or',
+      rules: Array.from({ length: MAX_GROUP_RULES }, () => leaf),
+    };
     expect(() =>
       parseRules({ op: 'and', rules: [group, group, group] }),
     ).toThrow(new RegExp(`more than ${MAX_NODES}`));
@@ -117,7 +193,13 @@ describe('segment rules: validation', () => {
   });
 
   it('whatever string a client puts in any value slot, the SQL text never contains it', () => {
-    const payloads = ["'; DROP TABLE customer; --", '1 OR 1=1', '${x}', '`', '\\'];
+    const payloads = [
+      "'; DROP TABLE customer; --",
+      '1 OR 1=1',
+      '${x}',
+      '`',
+      '\\',
+    ];
     const slots: ((p: string) => unknown)[] = [
       (p) => ({ field: 'orderCount', cmp: 'eq', value: p }),
       (p) => ({ field: 'orderCount', cmp: p, value: 1 }),

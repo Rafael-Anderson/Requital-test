@@ -181,7 +181,11 @@ export class CustomerAccountController {
     @CurrentCustomer() ctx: CustomerContext,
     @Body() dto: SetConsentDto,
   ) {
-    return this.customerAccountService.setConsent(ctx, dto.channel, dto.granted);
+    return this.customerAccountService.setConsent(
+      ctx,
+      dto.channel,
+      dto.granted,
+    );
   }
 
   // UAE PDPL data export/deletion — mounted under this controller (not the

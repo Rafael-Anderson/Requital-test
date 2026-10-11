@@ -8,7 +8,10 @@ import { DatabaseService } from '../database/database.service';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import type { TenantContext } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { lockCustomerInShop, assertCustomerInShop } from '../customer-crm/customer-scope';
+import {
+  lockCustomerInShop,
+  assertCustomerInShop,
+} from '../customer-crm/customer-scope';
 import { SUPPORTED_CURRENCIES } from '../shop/dto/update-shop.dto';
 import {
   decimalToMinor,
@@ -68,7 +71,11 @@ export class StoreCreditService {
   }
 
   // The balance in ONE currency, in minor units (0 when there are no entries).
-  async balanceMinor(shopId: number, customerId: number, currency: string): Promise<number> {
+  async balanceMinor(
+    shopId: number,
+    customerId: number,
+    currency: string,
+  ): Promise<number> {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT COALESCE(SUM(amount), 0) AS b FROM storecreditentry
         WHERE customerId = ? AND shopId = ? AND currency = ?`,
@@ -93,7 +100,10 @@ export class StoreCreditService {
     return rows.map((r) => ({
       id: r.id as number,
       currency: r.currency as string,
-      amount: minorToDecimal(decimalToMinor(String(r.amount), r.currency as string), r.currency as string),
+      amount: minorToDecimal(
+        decimalToMinor(String(r.amount), r.currency as string),
+        r.currency as string,
+      ),
       type: r.entryType as string,
       reason: (r.reason as string | null) ?? null,
       orderId: (r.orderId as number | null) ?? null,
@@ -114,14 +124,19 @@ export class StoreCreditService {
 
   // ---- admin grant / deduct ----
 
-  async adjust(ctx: TenantContext, customerId: number, dto: AdjustStoreCreditDto) {
+  async adjust(
+    ctx: TenantContext,
+    customerId: number,
+    dto: AdjustStoreCreditDto,
+  ) {
     if (!(SUPPORTED_CURRENCIES as readonly string[]).includes(dto.currency)) {
       throw new BadRequestException('Unsupported currency');
     }
     const minor = parseAdminAmount(dto.amount, dto.currency);
     const signed = dto.direction === 'grant' ? minor : -minor;
     const reason = dto.reason.trim();
-    if (reason.length < 3) throw new BadRequestException('A reason is required');
+    if (reason.length < 3)
+      throw new BadRequestException('A reason is required');
     const entryType = dto.direction;
 
     const result = await this.db.transaction(async (conn) => {
@@ -130,20 +145,30 @@ export class StoreCreditService {
         throw new ConflictException('This customer has been deleted');
       }
       if (dto.idempotencyKey) {
-        const existing = await this.findByKey(conn, ctx.shopId, dto.idempotencyKey);
+        const existing = await this.findByKey(
+          conn,
+          ctx.shopId,
+          dto.idempotencyKey,
+        );
         if (existing) {
           const same =
             existing.customerId === customerId &&
             existing.currency === dto.currency &&
             decimalToMinor(String(existing.amount), dto.currency) === signed;
           if (!same) {
-            throw new ConflictException('That idempotency key was already used for a different request');
+            throw new ConflictException(
+              'That idempotency key was already used for a different request',
+            );
           }
           return { id: existing.id as number, replay: true };
         }
       }
       if (signed < 0) {
-        const have = await this.lockedBalanceMinor(conn, customerId, dto.currency);
+        const have = await this.lockedBalanceMinor(
+          conn,
+          customerId,
+          dto.currency,
+        );
         if (have + signed < 0) {
           throw new ConflictException(
             `This would take the balance below zero (balance ${minorToDecimal(have, dto.currency)} ${dto.currency})`,
@@ -176,14 +201,24 @@ export class StoreCreditService {
 
     if (!result.replay) {
       await this.auditLog.logCtx(ctx, {
-        action: dto.direction === 'grant' ? 'customer.store_credit.granted' : 'customer.store_credit.deducted',
+        action:
+          dto.direction === 'grant'
+            ? 'customer.store_credit.granted'
+            : 'customer.store_credit.deducted',
         entityType: 'customer',
         entityId: customerId,
         // The reason is on the ledger row; the audit entry carries the figures.
-        after: { currency: dto.currency, amount: minorToDecimal(minor, dto.currency), entryId: result.id },
+        after: {
+          currency: dto.currency,
+          amount: minorToDecimal(minor, dto.currency),
+          entryId: result.id,
+        },
       });
     }
-    return { ...(await this.overview(ctx.shopId, customerId)), replay: result.replay };
+    return {
+      ...(await this.overview(ctx.shopId, customerId)),
+      replay: result.replay,
+    };
   }
 
   // ---- checkout / cancel / return (all on the caller's transaction) ----
@@ -219,7 +254,13 @@ export class StoreCreditService {
     await conn.query(
       `INSERT INTO storecreditentry (shopId, customerId, currency, amount, entryType, orderId)
        VALUES (?, ?, ?, ?, 'spend', ?)`,
-      [shopId, customerId, currency, minorToDecimal(-amountMinor, currency), orderId],
+      [
+        shopId,
+        customerId,
+        currency,
+        minorToDecimal(-amountMinor, currency),
+        orderId,
+      ],
     );
   }
 
@@ -263,7 +304,14 @@ export class StoreCreditService {
     await conn.query(
       `INSERT INTO storecreditentry (shopId, customerId, currency, amount, entryType, reason, returnId)
        VALUES (?, ?, ?, ?, 'return_refund', ?, ?)`,
-      [shopId, customerId, currency, minorToDecimal(amountMinor, currency), reason, returnId],
+      [
+        shopId,
+        customerId,
+        currency,
+        minorToDecimal(amountMinor, currency),
+        reason,
+        returnId,
+      ],
     );
   }
 

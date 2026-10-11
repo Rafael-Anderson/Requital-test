@@ -120,7 +120,14 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
   'customer-segment': {
     roles: ['admin', 'viewer'],
     filenamePrefix: 'customer-segment',
-    headers: ['Name', 'Phone', 'Email', 'Orders', 'Spend (per currency)', 'Last Order'],
+    headers: [
+      'Name',
+      'Phone',
+      'Email',
+      'Orders',
+      'Spend (per currency)',
+      'Last Order',
+    ],
     async fetchPage({ db, ctx, segmentId }, limit, offset) {
       if (segmentId === undefined) {
         throw new BadRequestException('segmentId is required for this export');
@@ -268,7 +275,11 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
           LIMIT ? OFFSET ?`,
         [ctx.shopId, ...searchParams, limit, offset],
       );
-      return rows.map((r): unknown[] => [r.email, r.source, isoOrEmpty(r.createdAt)]);
+      return rows.map((r): unknown[] => [
+        r.email,
+        r.source,
+        isoOrEmpty(r.createdAt),
+      ]);
     },
   },
 
@@ -301,10 +312,7 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
 
       const ids = products.map((p) => p.id as number);
       const placeholders = ids.map(() => '?').join(', ');
-      const stockSum =
-        outletId !== undefined
-          ? 'AND ois.outletId = ?'
-          : '';
+      const stockSum = outletId !== undefined ? 'AND ois.outletId = ?' : '';
       const stockParams: QueryParam[] =
         outletId !== undefined ? [outletId] : [];
 
@@ -378,10 +386,16 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
       const collectionsBy = groupBy(collections, 'productId');
       const tagsBy = groupBy(tags, 'productId');
       const productStockBy = new Map(
-        productStock.map((r) => [r.productId as number, Number(r.stockQuantity)]),
+        productStock.map((r) => [
+          r.productId as number,
+          Number(r.stockQuantity),
+        ]),
       );
       const variantStockBy = new Map(
-        variantStock.map((r) => [r.variantId as number, Number(r.stockQuantity)]),
+        variantStock.map((r) => [
+          r.variantId as number,
+          Number(r.stockQuantity),
+        ]),
       );
 
       const out: unknown[][] = [];

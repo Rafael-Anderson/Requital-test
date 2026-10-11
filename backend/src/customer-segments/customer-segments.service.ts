@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { isDuplicateKeyError } from '../database/mysql-errors';
@@ -28,7 +32,8 @@ export class CustomerSegmentsService {
       `SELECT id, name, rules, createdAt, updatedAt FROM customersegment WHERE id = ? AND shopId = ?`,
       [id, ctx.shopId],
     );
-    if (rows.length === 0) throw new NotFoundException(`Segment ${id} not found`);
+    if (rows.length === 0)
+      throw new NotFoundException(`Segment ${id} not found`);
     return this.shape(rows[0]);
   }
 
@@ -83,7 +88,8 @@ export class CustomerSegmentsService {
       `DELETE FROM customersegment WHERE id = ? AND shopId = ?`,
       [id, ctx.shopId],
     );
-    if (res.affectedRows === 0) throw new NotFoundException(`Segment ${id} not found`);
+    if (res.affectedRows === 0)
+      throw new NotFoundException(`Segment ${id} not found`);
     await this.auditLog.logCtx(ctx, {
       action: 'customer.segment.deleted',
       entityType: 'customersegment',

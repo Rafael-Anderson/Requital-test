@@ -1,4 +1,12 @@
-import { Allow, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  Allow,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { SUPPORTED_CURRENCIES } from '../../shop/dto/update-shop.dto';
 
 export class AdjustStoreCreditDto {
