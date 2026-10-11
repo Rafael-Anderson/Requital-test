@@ -120,13 +120,15 @@ export class StorageService {
   //   - a hard 5MB cap and a pixel cap before decoding (decompression bombs)
   //   - re-encoded to JPEG through sharp: EXIF (including GPS) is dropped, EXIF
   //     orientation is applied, and a polyglot/corrupt file fails to decode
-  //   - the key carries 256 bits of randomness, so the URL is a capability that
-  //     cannot be guessed; it lives under the shop's own namespace, so
-  //     deleteProof can verify ownership from the key alone.
+  //   - the key carries 256 bits of randomness and lives under the shop's own
+  //     namespace, so deleteProof/readProof can verify ownership from the key
+  //     alone. It is PRIVATE: no URL is returned or stored, the local static
+  //     route refuses the prefix (private-uploads.ts), and staff read it through
+  //     an authenticated endpoint (readProof).
   async uploadProof(
     shopId: number,
     file: Express.Multer.File,
-  ): Promise<{ key: string; url: string }> {
+  ): Promise<{ key: string }> {
     if (!isFilenameSafe(file.originalname)) {
       throw new BadRequestException('Invalid filename');
     }
@@ -158,10 +160,12 @@ export class StorageService {
       buffer: out,
       contentType: 'image/jpeg',
     });
-    return { key: saved.key, url: saved.url };
+    // The provider's public URL is deliberately dropped: proof photos are only
+    // ever read back through readProof, behind an authenticated endpoint.
+    return { key: saved.key };
   }
 
-  async deleteProof(shopId: number, key: string): Promise<void> {
+  private assertProofKey(shopId: number, key: string): void {
     const owner = extractShopIdFromKey(key);
     if (
       owner === null ||
@@ -170,7 +174,20 @@ export class StorageService {
     ) {
       throw new NotFoundException('File not found');
     }
+  }
+
+  async deleteProof(shopId: number, key: string): Promise<void> {
+    this.assertProofKey(shopId, key);
     await this.provider.delete(key);
+  }
+
+  // Same ownership rule as deleteProof; a wrong shop, a wrong prefix and a
+  // missing file are all the same 404.
+  async readProof(shopId: number, key: string): Promise<Buffer> {
+    this.assertProofKey(shopId, key);
+    const bytes = await this.provider.read(key);
+    if (!bytes) throw new NotFoundException('File not found');
+    return bytes;
   }
 }
 

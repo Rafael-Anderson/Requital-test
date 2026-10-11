@@ -28,4 +28,8 @@ export interface StorageProvider {
   // written (see StorageService.deleteImage deriving _thumb/_medium keys
   // from a base key without checking each one exists first).
   delete(key: string): Promise<void>;
+  // Server-side read, for files that must NOT have a public URL (proof of
+  // delivery). null when the key does not exist. Never builds a public or
+  // pre-signed URL: the bytes are streamed through an authenticated endpoint.
+  read(key: string): Promise<Buffer | null>;
 }
