@@ -10,7 +10,7 @@ import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { CustomerContext } from './customer-context';
-import { CUSTOMER_ACCESS_COOKIE } from './customer-auth.constants';
+import { customerCookieNames } from './customer-auth.constants';
 
 interface CustomerJwtPayload {
   sub: number;
@@ -107,7 +107,8 @@ export class CustomerAuthGuard implements CanActivate {
   // surface (3 specs) was converted outright instead of the staff tier's
   // NODE_ENV=test compatibility shim.
   private extractToken(request: Request): string | null {
-    const raw: unknown = request.cookies?.[CUSTOMER_ACCESS_COOKIE];
+    const names = customerCookieNames(request.params?.shopSlug);
+    const raw: unknown = names ? request.cookies?.[names.access] : undefined;
     return typeof raw === 'string' && raw ? raw : null;
   }
 }

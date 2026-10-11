@@ -17,12 +17,11 @@ import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
 import { VerifyCustomerEmailDto } from './dto/verify-customer-email.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import {
-  CUSTOMER_ACCESS_COOKIE,
   CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS,
-  CUSTOMER_REFRESH_COOKIE,
-  customerAccessPath,
-  customerRefreshPath,
+  CUSTOMER_COOKIE_PATH,
+  customerCookieNames,
   customerCsrf,
+  legacyCustomerCookies,
 } from './customer-auth.constants';
 import { sessionCookieOptions } from '../common/cookies';
 
@@ -32,22 +31,21 @@ function setCustomerSessionCookies(
   shopSlug: string,
   session: { accessToken: string; refreshToken: string },
 ) {
+  const names = customerCookieNames(shopSlug);
+  // The shop exists by now (login/register/refresh resolved it), so its slug is
+  // a valid cookie name part. Refusing is the safe answer if that ever stops being true.
+  if (!names) throw new UnauthorizedException('Invalid shop');
   res.cookie(
-    CUSTOMER_ACCESS_COOKIE,
+    names.access,
     session.accessToken,
-    sessionCookieOptions(
-      customerAccessPath(shopSlug),
-      CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS,
-    ),
+    sessionCookieOptions(CUSTOMER_COOKIE_PATH, CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS),
   );
   res.cookie(
-    CUSTOMER_REFRESH_COOKIE,
+    names.refresh,
     session.refreshToken,
-    sessionCookieOptions(customerRefreshPath(shopSlug)),
+    sessionCookieOptions(CUSTOMER_COOKIE_PATH),
   );
-  customerCsrf.issue(req, res, session.accessToken, {
-    cookiePath: customerAccessPath(shopSlug),
-  });
+  customerCsrf.issue(req, res, shopSlug, session.accessToken);
 }
 
 // Unauthenticated (or, for refresh/logout, authenticated by the refresh
@@ -104,7 +102,8 @@ export class CustomerAuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken: unknown = req.cookies?.[CUSTOMER_REFRESH_COOKIE];
+    const names = customerCookieNames(shopSlug);
+    const refreshToken: unknown = names ? req.cookies?.[names.refresh] : undefined;
     if (typeof refreshToken !== 'string' || !refreshToken) {
       throw new UnauthorizedException('Missing refresh token');
     }
@@ -121,18 +120,19 @@ export class CustomerAuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken: unknown = req.cookies?.[CUSTOMER_REFRESH_COOKIE];
+    const names = customerCookieNames(shopSlug);
+    const refreshToken: unknown = names ? req.cookies?.[names.refresh] : undefined;
     if (typeof refreshToken === 'string' && refreshToken) {
       await this.customerAuthService.logout({ refreshToken });
     }
-    res.clearCookie(
-      CUSTOMER_ACCESS_COOKIE,
-      sessionCookieOptions(customerAccessPath(shopSlug)),
-    );
-    res.clearCookie(
-      CUSTOMER_REFRESH_COOKIE,
-      sessionCookieOptions(customerRefreshPath(shopSlug)),
-    );
+    if (names) {
+      for (const name of [names.access, names.refresh, names.csrf]) {
+        res.clearCookie(name, sessionCookieOptions(CUSTOMER_COOKIE_PATH));
+      }
+      for (const { name, path } of legacyCustomerCookies(shopSlug)) {
+        res.clearCookie(name, sessionCookieOptions(path));
+      }
+    }
     return { success: true };
   }
 

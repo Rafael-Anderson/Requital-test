@@ -72,7 +72,7 @@ function sessionFromResponse(res: Response): CustomerSession {
   const cookies = extractCookies(res);
   return {
     cookieHeaderStr: cookieHeader(cookies),
-    csrfToken: cookies['req-customer-csrf'],
+    csrfToken: cookies[Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!],
     customer: body<CustomerResponseBody>(res).customer,
   };
 }
