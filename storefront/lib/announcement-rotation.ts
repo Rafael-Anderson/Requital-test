@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReducedMotion } from "./use-reduced-motion";
 
 // Rotation timing — shared by both announcement bars: the persistent chrome
 // bar (components/AnnouncementBar.tsx) and the homepage-body section
@@ -27,20 +28,9 @@ export function useAnnouncementRotation(
   enabled: boolean,
   speed: string | undefined,
 ): { rotating: boolean; index: number; faded: boolean } {
-  // Lazy-init from matchMedia so the mount effect only wires the listener
-  // (no synchronous setState in an effect body).
-  const [reducedMotion, setReducedMotion] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
+  const reducedMotion = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [faded, setFaded] = useState(false);
-
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReducedMotion(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
 
   const len = messages.length;
   const rotating = enabled && !reducedMotion && len > 1;

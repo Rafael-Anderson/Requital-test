@@ -8,6 +8,7 @@ import { editableAttrs } from "@/lib/editable-attrs";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import { useScrollValue } from "@/lib/use-scroll-value";
 import { useMinWidth } from "@/lib/use-min-width";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 import {
   resolveTextElementStyle,
   resolveButtonElementStyle,
@@ -89,19 +90,10 @@ function HeroSlideshow({
   indicatorStyle?: string;
   parallax?: boolean;
 }) {
-  const [reducedMotion, setReducedMotion] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
+  const reducedMotion = useReducedMotion();
   const [paused, setPaused] = useState(false);
   const [index, setIndex] = useState(0);
   const count = images.length;
-
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReducedMotion(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
 
   const rotating = count > 1 && !reducedMotion && !paused;
 

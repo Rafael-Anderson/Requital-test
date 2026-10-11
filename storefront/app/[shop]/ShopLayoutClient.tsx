@@ -30,6 +30,7 @@ import Analytics from "@/components/Analytics";
 import PreviewInteraction from "@/components/PreviewInteraction";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
+import type { ShopInitialData } from "@/lib/shop-initial-data";
 import type { HeaderScrollBehavior, MobileNavMode } from "@/lib/theme-config-types";
 
 // Whether the MenuBar row shows: a themed shop's own nav_menu header block
@@ -211,12 +212,14 @@ function Body({ children }: { children: React.ReactNode }) {
   // point has no shop/theme and would flash the raw slug text plus default
   // Requital iconography before the merchant's real theme loads.
   if (loading) {
-    // ShopProvider fetches in an effect, so the server render is always this
-    // branch. Dropping `children` here meant a notFound() thrown by the route
-    // was never seen by the server render and every missing URL left as a
-    // streamed 200 (soft 404). On the routes that decide their own status the
-    // children are rendered hidden so the server sees the throw: the response
-    // becomes a real 404 with the branded not-found state and noindex.
+    // Reached on the server only when app/[shop]/layout.tsx could NOT seed ShopProvider (a
+    // failed theme/outlets fetch, an unpublished shop); a seeded provider is never loading, so
+    // its pages and any notFound() they throw render in the server pass directly. Dropping
+    // `children` here meant a notFound() thrown by the route was never seen by the server render
+    // and every missing URL left as a streamed 200 (soft 404). On the routes that decide their
+    // own status the children are rendered hidden so the server sees the throw: the response
+    // becomes a real 404 with noindex. (Proven needed: with the seed withheld and this removed,
+    // the soft-404 spec fails.)
     return (
       <>
         <StorefrontLoadingSkeleton />
@@ -270,12 +273,12 @@ function Body({ children }: { children: React.ReactNode }) {
 // component, not the route's layout.tsx file itself, so the actual
 // app/[shop]/layout.tsx can stay a Server Component and export
 // generateMetadata (per-tenant title/favicon; a "use client" file can't).
-export default function ShopLayoutClient({ children }: { children: React.ReactNode }) {
+export default function ShopLayoutClient({ children, initialData }: { children: React.ReactNode; initialData?: ShopInitialData }) {
   const params = useParams<{ shop: string }>();
   const shopSlug = params.shop;
 
   return (
-    <ShopProvider shopSlug={shopSlug}>
+    <ShopProvider shopSlug={shopSlug} initialData={initialData}>
       <AuthProvider shopSlug={shopSlug}>
         <WishlistProvider shopSlug={shopSlug}>
           <CartProvider shopSlug={shopSlug}>
