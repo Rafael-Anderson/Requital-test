@@ -3,9 +3,11 @@ import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 import { CustomerImportService } from './customer-import.service';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { CustomerCrmModule } from '../customer-crm/customer-crm.module';
+import { CustomerSegmentsModule } from '../customer-segments/customer-segments.module';
 
 @Module({
-  imports: [AuditLogModule],
+  imports: [AuditLogModule, CustomerCrmModule, CustomerSegmentsModule],
   controllers: [CustomersController],
   providers: [CustomersService, CustomerImportService],
   // OrdersModule (admin-entered orders) and PublicModule (storefront

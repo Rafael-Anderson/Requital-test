@@ -11,6 +11,7 @@ import { sanitizePhoneInput } from "@/lib/phone";
 import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/form-styles";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import DeleteAccountModal from "@/components/DeleteAccountModal";
+import MarketingConsentCard from "@/components/MarketingConsentCard";
 
 export default function AccountDashboardPage() {
   const router = useRouter();
@@ -186,6 +187,8 @@ export default function AccountDashboardPage() {
           </Link>
         )}
       </div>
+
+      <MarketingConsentCard />
 
       <div className="rounded-lg border border-black/10 p-4 space-y-3">
         <div>

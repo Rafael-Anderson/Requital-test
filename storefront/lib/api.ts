@@ -12,6 +12,9 @@ import type {
   TemplateSummary,
   CreateOrderPayload,
   CreateOrderResponse,
+  ConsentChannel,
+  MyConsent,
+  MyStoreCredit,
   Customer,
   CustomerAddress,
   CustomerAuthResult,
@@ -298,7 +301,20 @@ export function listDeliveryZones(shopSlug: string, outletId: number) {
 }
 
 export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
+  // Spending store credit needs the customer session, and a mutating call with
+  // the session cookie needs the CSRF header: authedFetch carries both.
+  if (payload.useStoreCredit) {
+    return authedFetch<CreateOrderResponse>(shopSlug, `/public/${shopSlug}/orders`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
   return post<CreateOrderResponse>(`/public/${shopSlug}/orders`, payload);
+}
+
+// The logged-in shopper's own store credit (CUS-6).
+export function getMyStoreCredit(shopSlug: string) {
+  return authedFetch<MyStoreCredit>(shopSlug, `/public/${shopSlug}/account/store-credit`);
 }
 
 export function validateDiscount(
@@ -587,6 +603,19 @@ export function removeFromWishlist(shopSlug: string, productId: number) {
 // `<a href>`/browser navigation can't do.
 export function exportMyData(shopSlug: string) {
   return authedFetch<Record<string, unknown>>(shopSlug, `/public/${shopSlug}/account/export`);
+}
+
+// CUS-11: the shopper's marketing-consent toggles. Wording and version come from
+// the server; the client only ever sends a channel and a boolean.
+export function getMyConsent(shopSlug: string) {
+  return authedFetch<MyConsent>(shopSlug, `/public/${shopSlug}/account/consent`);
+}
+
+export function setMyConsent(shopSlug: string, channel: ConsentChannel, granted: boolean) {
+  return authedFetch<{ channels: MyConsent["channels"] }>(shopSlug, `/public/${shopSlug}/account/consent`, {
+    method: "PUT",
+    body: JSON.stringify({ channel, granted }),
+  });
 }
 
 export interface RequestDeletionResult {

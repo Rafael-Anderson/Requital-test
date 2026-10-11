@@ -1,4 +1,4 @@
-import { PaymentsService } from './payments.service';
+import { PaymentsService, amountStillDue } from './payments.service';
 import { PaymentProviderRegistry } from './payment-provider.registry';
 import type { PaymentSettingsService } from './payment-settings.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
@@ -425,5 +425,34 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
     await expect(
       service.handleWebhook('fake', Buffer.from('{}'), 'sig'),
     ).resolves.toEqual({ received: true });
+  });
+});
+
+describe('amountStillDue', () => {
+  it('subtracts the gift card and store credit in integer minor units of the order currency', () => {
+    expect(
+      amountStillDue({
+        total: '100.00',
+        giftCardAmount: '10.00',
+        storeCreditAmount: '30.00',
+        currency: 'AED',
+      }),
+    ).toBe(60);
+    // a 3-decimal currency keeps its third decimal
+    expect(
+      amountStillDue({
+        total: '10.505',
+        giftCardAmount: '0',
+        storeCreditAmount: '0.005',
+        currency: 'KWD',
+      }),
+    ).toBe(10.5);
+  });
+
+  it('never goes below zero and treats missing amounts as none', () => {
+    expect(
+      amountStillDue({ total: '20', storeCreditAmount: '20', currency: 'AED' }),
+    ).toBe(0);
+    expect(amountStillDue({ total: '20', currency: 'AED' })).toBe(20);
   });
 });

@@ -34,6 +34,8 @@ export interface OrderRow {
   giftCardId: number | null;
   giftCardCode: string | null;
   giftCardAmount: string | null;
+  // CUS-6: paid with store credit (NULL = none). total is unchanged.
+  storeCreditAmount: string | null;
   total: string;
   createdAt: Date;
   paymentLinkToken: string | null;
@@ -211,6 +213,7 @@ export interface OrderreturnRow {
   refundMethod: string;
   providerRefundReference: string | null;
   giftCardRefundAmount: string;
+  storeCreditRefundAmount: string;
   restocked: boolean;
   status: string;
   staffUserId: number;
@@ -1344,7 +1347,8 @@ export interface CustomermetricsRow {
 export interface MetafielddefinitionRow {
   id: number;
   shopId: number;
-  ownerType: 'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
+  ownerType:
+    'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
   namespace: string;
   // `key` in the API; `fieldKey` here because KEY is a MySQL reserved word.
   fieldKey: string;
@@ -1360,7 +1364,8 @@ export interface MetafielddefinitionRow {
 export interface MetafieldvalueRow {
   id: number;
   shopId: number;
-  ownerType: 'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
+  ownerType:
+    'product' | 'variant' | 'collection' | 'customer' | 'order' | 'outlet';
   // Polymorphic (no FK): points into the table named by ownerType.
   ownerId: number;
   definitionId: number;
@@ -1572,4 +1577,83 @@ export interface DeliveryrunlinkRow {
   lastUsedAt: Date | null;
   createdByUserId: number | null;
   createdAt: Date;
+}
+
+// CUS-2 / CUS-3 / CUS-11 (migration 20261027100000). A customer with NO
+// customerconsent row has an UNKNOWN consent (never false).
+export interface CustomertagRow {
+  id: number;
+  shopId: number;
+  name: string;
+  color: string | null;
+  createdAt: Date;
+}
+
+export interface CustomertagassignmentRow {
+  customerId: number;
+  tagId: number;
+  shopId: number;
+  createdAt: Date;
+}
+
+export interface CustomernoteRow {
+  id: number;
+  shopId: number;
+  customerId: number;
+  authorUserId: number | null;
+  authorName: string;
+  body: string;
+  createdAt: Date;
+}
+
+export interface CustomerconsentRow {
+  customerId: number;
+  channel: string;
+  shopId: number;
+  status: 'granted' | 'withdrawn';
+  source: string;
+  wordingVersion: string | null;
+  updatedAt: Date;
+}
+
+export interface CustomerconsenteventRow {
+  id: number;
+  shopId: number;
+  customerId: number;
+  channel: string;
+  status: 'granted' | 'withdrawn';
+  source: string;
+  wordingVersion: string | null;
+  wordingText: string | null;
+  actorUserId: number | null;
+  note: string | null;
+  createdAt: Date;
+}
+
+// CUS-6 (migration 20261027120000). Append-only; balance = SUM(amount) per
+// (customerId, currency). amount is signed.
+export interface StorecreditentryRow {
+  id: number;
+  shopId: number;
+  customerId: number;
+  currency: string;
+  amount: string;
+  entryType: 'grant' | 'deduct' | 'spend' | 'spend_reversal' | 'return_refund';
+  reason: string | null;
+  orderId: number | null;
+  returnId: number | null;
+  actorUserId: number | null;
+  idempotencyKey: string | null;
+  createdAt: Date;
+}
+
+// CUS-1 (migration 20261027110000)
+export interface CustomersegmentRow {
+  id: number;
+  shopId: number;
+  name: string;
+  rules: unknown;
+  createdByUserId: number | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

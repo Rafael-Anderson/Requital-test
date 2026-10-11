@@ -84,6 +84,10 @@ export interface Order {
   status: OrderStatus;
   paymentStatus: "unpaid" | "paid" | "refunded";
   paymentMethod: string | null;
+  customerId?: number | null;
+  // CUS-6: part of the total paid with the customer's store credit / a gift card.
+  storeCreditAmount?: string | null;
+  giftCardAmount?: string | null;
   // Null until POST /orders/:id/collect-cash marks a COD order's cash as
   // collected. cashCollectedByName is only populated when cashCollectedAt
   // is set (joined server-side, see OrdersService.loadOrdersWithRelations).
@@ -211,7 +215,8 @@ export interface OrderReturn {
   orderId: number;
   reason: "damaged" | "wrong_item" | "changed_mind" | "other";
   refundAmount: string;
-  refundMethod: "provider" | "manual";
+  refundMethod: "provider" | "manual" | "store_credit";
+  storeCreditRefundAmount?: string;
   providerRefundReference: string | null;
   restocked: boolean;
   status: string;
@@ -425,6 +430,7 @@ export interface CustomerListItem {
   orderCount: number;
   lifetimeValue: number;
   lastOrderDate: string | null;
+  tags: CustomerTag[];
 }
 
 export interface NewsletterSubscriber {
@@ -3675,4 +3681,106 @@ export interface CustomerImportReport {
   warnings: string[];
   unsupportedColumns: string[];
   note: string;
+}
+
+// CUS-2 / CUS-3 / CUS-11
+export interface CustomerTag {
+  id: number;
+  name: string;
+  color: string | null;
+}
+
+export interface CustomerTagWithCount extends CustomerTag {
+  customerCount: number;
+}
+
+export interface CustomerNote {
+  id: number;
+  authorUserId: number | null;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export type ConsentChannel = "email" | "whatsapp" | "sms";
+export type ConsentStatus = "granted" | "withdrawn";
+
+export interface CustomerConsentState {
+  channel: ConsentChannel;
+  // null = UNKNOWN (nobody ever recorded an answer). Never "false".
+  status: ConsentStatus | null;
+  source: string | null;
+  wordingVersion: string | null;
+  updatedAt: string | null;
+}
+
+export interface CustomerConsentEvent {
+  id: number;
+  channel: ConsentChannel;
+  status: ConsentStatus;
+  source: string;
+  wordingVersion: string | null;
+  wordingText: string | null;
+  note: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface CustomerConsent {
+  channels: CustomerConsentState[];
+  newsletter: { subscribed: boolean; since: string | null; source: string | null };
+  history: CustomerConsentEvent[];
+}
+
+// CUS-1
+export interface CustomerSegment {
+  id: number;
+  name: string;
+  rules: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// CUS-6
+export interface StoreCreditBalance {
+  currency: string;
+  balance: string;
+  balanceMinor: number;
+  entries: number;
+}
+
+export interface StoreCreditEntry {
+  id: number;
+  currency: string;
+  // Signed: spends and deductions are negative.
+  amount: string;
+  type: "grant" | "deduct" | "spend" | "spend_reversal" | "return_refund";
+  reason: string | null;
+  orderId: number | null;
+  returnId: number | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export interface StoreCreditOverview {
+  balances: StoreCreditBalance[];
+  entries: StoreCreditEntry[];
+  replay?: boolean;
+}
+
+// CUS-10
+export interface CustomerMergePreview {
+  customers: { id: number; name: string; phone: string; email: string | null; registered: boolean }[];
+  willMove: { orders: number; draftOrders: number; storeCreditEntries: number; notes: number };
+}
+
+export interface CustomerMergeRecord {
+  id: number;
+  duplicateCustomerId: number;
+  duplicateName: string | null;
+  duplicatePhone: string | null;
+  duplicateEmail: string | null;
+  moved: Record<string, number>;
+  actorName: string | null;
+  createdAt: string;
 }

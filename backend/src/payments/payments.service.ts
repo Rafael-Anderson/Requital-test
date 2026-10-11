@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   GoneException,
   Injectable,
   NotFoundException,
@@ -19,11 +20,21 @@ import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { ConversionEventsService } from '../shop-analytics/conversion-events.service';
 import { createLogger } from '../common/logging/logger';
 import type { WebhookResult } from './payment-provider.interface';
-import {
-  storefrontUrl,
-  type ShopUrlFields,
-} from '../common/storefront-url';
-import { trimDecimal } from '../database/decimal.util';
+import { storefrontUrl, type ShopUrlFields } from '../common/storefront-url';
+import { minorUnitFactor } from '../common/currency-minor-units';
+
+// What a gateway may still be asked for: the total minus the gift card and the
+// store credit already taken from this order, in integer minor units of the
+// ORDER's own currency (never below zero).
+export function amountStillDue(order: Record<string, unknown>): number {
+  const factor = minorUnitFactor(order.currency as string | null | undefined);
+  const minor = (v: unknown) => Math.round(Number(v ?? 0) * factor);
+  const due =
+    minor(order.total) -
+    minor(order.giftCardAmount) -
+    minor(order.storeCreditAmount);
+  return Math.max(due, 0) / factor;
+}
 
 const logger = createLogger('PaymentsService');
 
@@ -110,7 +121,7 @@ export class PaymentsService {
   // plus enough to render, and touches nothing.
   async getPaymentLinkSummary(token: string) {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT o.shopOrderNumber, o.total, o.currency, o.paymentStatus,
+      `SELECT o.shopOrderNumber, o.total, o.giftCardAmount, o.storeCreditAmount, o.currency, o.paymentStatus,
               o.paymentLinkExpiresAt, s.name AS shopName, s.displayName AS shopDisplayName
          FROM \`order\` o JOIN shop s ON s.id = o.shopId
         WHERE o.paymentLinkToken = ?`,
@@ -123,7 +134,8 @@ export class PaymentsService {
     const expiresAt = order.paymentLinkExpiresAt as Date | null;
     return {
       shopOrderNumber: order.shopOrderNumber as number,
-      total: trimDecimal(order.total as string),
+      // what is still payable: gift card and store credit were already taken
+      total: String(amountStillDue(order)),
       currency: order.currency as string,
       shopName: (order.shopDisplayName ?? order.shopName) as string,
       alreadyPaid: order.paymentStatus === 'paid',
@@ -168,9 +180,13 @@ export class PaymentsService {
       order.shopRowId as number,
       order.shopPaymentGateway as string,
     );
+    const due = amountStillDue(order);
+    if (due <= 0) {
+      throw new ConflictException('Nothing is left to pay on this order');
+    }
     const session = await provider.createCheckoutSession({
       orderId: order.id as number,
-      amount: Number(order.total),
+      amount: due,
       currency: order.shopCurrency as string,
       successUrl: storefrontUrl(
         shopUrlFieldsFrom(order),
@@ -365,7 +381,9 @@ export class PaymentsService {
         // that here. Idempotent (job key capi:purchase:<orderId>), so this can
         // never produce a second job.
         if (result.status === 'paid') {
-          await this.conversionEventsService.enqueuePurchase(order.id as number);
+          await this.conversionEventsService.enqueuePurchase(
+            order.id as number,
+          );
         }
         return { received: true };
       }

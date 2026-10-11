@@ -14,10 +14,11 @@ const BASE_TABS = [
   { href: "/customers", label: "Customers" },
   { href: "/customers/newsletter", label: "Newsletter" },
 ];
+const SEGMENTS_TAB = { href: "/customers/segments", label: "Segments" };
 const REVIEWS_TAB = { href: "/customers/reviews", label: "Reviews" };
 
 export default function CustomersTabs() {
   const { user } = useAuth();
-  const tabs = user?.role === "admin" ? [...BASE_TABS, REVIEWS_TAB] : BASE_TABS;
+  const tabs = user?.role === "admin" ? [...BASE_TABS, SEGMENTS_TAB, REVIEWS_TAB] : BASE_TABS;
   return <Tabs tabs={tabs} className="mb-6" />;
 }

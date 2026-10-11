@@ -90,6 +90,7 @@ export class ExportsController {
         dateFrom: query.dateFrom,
         dateTo: query.dateTo,
         model: query.model,
+        segmentId: query.segmentId,
       },
       PAGE_SIZE,
       offset,
@@ -130,14 +131,15 @@ export class ExportsController {
       try {
         page = await definition.fetchPage(
           {
-        db: this.db,
-        ctx,
-        outletId,
-        search: query.search,
-        dateFrom: query.dateFrom,
-        dateTo: query.dateTo,
-        model: query.model,
-      },
+            db: this.db,
+            ctx,
+            outletId,
+            search: query.search,
+            dateFrom: query.dateFrom,
+            dateTo: query.dateTo,
+            model: query.model,
+            segmentId: query.segmentId,
+          },
           PAGE_SIZE,
           offset,
         );

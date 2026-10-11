@@ -411,6 +411,23 @@ export default function OrderDetailModal({
                           <span>Total</span>
                           <span>{formatMoney(order.total, order.currency)}</span>
                         </div>
+                        {Number(order.storeCreditAmount ?? 0) > 0 && (
+                          <>
+                            <div className="flex justify-between text-sm mt-1">
+                              <span className="text-text-muted">Paid with store credit</span>
+                              <span>-{formatMoney(order.storeCreditAmount!, order.currency)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm font-medium mt-1">
+                              <span>Left to pay</span>
+                              <span>
+                                {formatMoney(
+                                  Math.max(0, Number(order.total) - Number(order.storeCreditAmount) - Number(order.giftCardAmount ?? 0)),
+                                  order.currency,
+                                )}
+                              </span>
+                            </div>
+                          </>
+                        )}
                         {taxDisplayText && (
                           <p className="text-xs text-text-faint mt-1 text-end">{taxDisplayText}</p>
                         )}

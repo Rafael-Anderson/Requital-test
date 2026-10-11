@@ -71,6 +71,16 @@ import type {
   DraftOrderInput,
   ValidateDiscountResult,
   CustomerDetail,
+  CustomerTag,
+  CustomerTagWithCount,
+  CustomerNote,
+  CustomerConsent,
+  CustomerSegment,
+  StoreCreditOverview,
+  CustomerMergePreview,
+  CustomerMergeRecord,
+  ConsentChannel,
+  ConsentStatus,
   DailyRevenuePoint,
   DashboardSummary,
   DeliveryZone,
@@ -1095,6 +1105,7 @@ export function createOrderReturn(
     reason: OrderReturn["reason"];
     restock?: boolean;
     refundAmount?: number;
+    refundTo?: "original" | "store_credit";
   },
 ) {
   return apiFetch<OrderReturn>(`/orders/${orderId}/returns`, {
@@ -1820,6 +1831,8 @@ export interface ListCustomersParams {
   search?: string;
   sortBy?: "name" | "phone" | "orderCount" | "lifetimeValue" | "lastOrderDate";
   sortDir?: "asc" | "desc";
+  tagId?: number;
+  segmentId?: number;
 }
 
 // Admin-only endpoint server-side — see backend CustomersController.
@@ -1830,6 +1843,8 @@ export function listCustomers(params: ListCustomersParams = {}) {
   if (params.search) query.set("search", params.search);
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortDir) query.set("sortDir", params.sortDir);
+  if (params.tagId) query.set("tagId", String(params.tagId));
+  if (params.segmentId) query.set("segmentId", String(params.segmentId));
   return apiFetch<PaginatedCustomers>(`/customers?${query.toString()}`);
 }
 
@@ -2561,4 +2576,139 @@ export function sendRunLinkWhatsApp(id: number) {
 
 export function getRunSheetHtml(id: number) {
   return apiFetchText(`/delivery-runs/${id}/sheet`);
+}
+
+// ---- Customer CRM: tags, notes, consent (CUS-2 / CUS-3 / CUS-11) ----
+// Reads are admin + viewer server-side, writes admin only; branch and
+// order_manager have no access to any of it.
+export function listCustomerTags() {
+  return apiFetch<CustomerTagWithCount[]>("/customer-tags");
+}
+
+export function createCustomerTag(data: { name: string; color?: string }) {
+  return apiFetch<CustomerTagWithCount>("/customer-tags", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateCustomerTag(id: number, data: { name?: string; color?: string }) {
+  return apiFetch<CustomerTag>(`/customer-tags/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteCustomerTag(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/customer-tags/${id}`, { method: "DELETE" });
+}
+
+export function assignCustomerTags(customerIds: number[], tagIds: number[]) {
+  return apiFetch<{ customers: number }>("/customer-tags/assign", {
+    method: "POST",
+    body: JSON.stringify({ customerIds, tagIds }),
+  });
+}
+
+export function unassignCustomerTags(customerIds: number[], tagIds: number[]) {
+  return apiFetch<{ removed: number }>("/customer-tags/unassign", {
+    method: "POST",
+    body: JSON.stringify({ customerIds, tagIds }),
+  });
+}
+
+export function getCustomerTags(customerId: number) {
+  return apiFetch<CustomerTag[]>(`/customers/${customerId}/tags`);
+}
+
+export function listCustomerNotes(customerId: number) {
+  return apiFetch<CustomerNote[]>(`/customers/${customerId}/notes`);
+}
+
+export function addCustomerNote(customerId: number, body: string) {
+  return apiFetch<CustomerNote>(`/customers/${customerId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function deleteCustomerNote(customerId: number, noteId: number) {
+  return apiFetch<{ deleted: boolean }>(`/customers/${customerId}/notes/${noteId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getCustomerConsent(customerId: number) {
+  return apiFetch<CustomerConsent>(`/customers/${customerId}/consent`);
+}
+
+export function recordCustomerConsent(
+  customerId: number,
+  data: { channel: ConsentChannel; status: ConsentStatus; note?: string },
+) {
+  return apiFetch<CustomerConsent>(`/customers/${customerId}/consent`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+// ---- Customer segments (CUS-1). Reads admin + viewer, writes admin only. ----
+export function listCustomerSegments() {
+  return apiFetch<CustomerSegment[]>("/customer-segments");
+}
+
+export function createCustomerSegment(data: { name: string; rules: unknown }) {
+  return apiFetch<CustomerSegment>("/customer-segments", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateCustomerSegment(id: number, data: { name: string; rules: unknown }) {
+  return apiFetch<CustomerSegment>(`/customer-segments/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteCustomerSegment(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/customer-segments/${id}`, { method: "DELETE" });
+}
+
+export function previewCustomerSegment(rules: unknown) {
+  return apiFetch<{ count: number }>("/customer-segments/preview", { method: "POST", body: JSON.stringify({ rules }) });
+}
+
+// ---- Store credit (CUS-6). Reads admin + viewer, adjustments admin only. ----
+export function getCustomerStoreCredit(customerId: number) {
+  return apiFetch<StoreCreditOverview>(`/customers/${customerId}/store-credit`);
+}
+
+export function adjustCustomerStoreCredit(
+  customerId: number,
+  data: {
+    currency: string;
+    amount: string;
+    direction: "grant" | "deduct";
+    reason: string;
+    idempotencyKey: string;
+  },
+) {
+  return apiFetch<StoreCreditOverview>(`/customers/${customerId}/store-credit/adjustments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ---- Customer merge (CUS-10). NOT reversible. Admin only (history: admin + viewer). ----
+export function previewCustomerMerge(primaryId: number, duplicateIds: number[]) {
+  return apiFetch<CustomerMergePreview>(`/customers/${primaryId}/merge-preview`, {
+    method: "POST",
+    body: JSON.stringify({ duplicateIds }),
+  });
+}
+
+export function mergeCustomers(primaryId: number, duplicateIds: number[]) {
+  return apiFetch<{ primaryId: number; merged: { duplicateCustomerId: number }[]; alreadyMerged: number[] }>(
+    `/customers/${primaryId}/merge`,
+    { method: "POST", body: JSON.stringify({ duplicateIds, confirm: "MERGE" }) },
+  );
+}
+
+export function listCustomerMerges(primaryId: number) {
+  return apiFetch<CustomerMergeRecord[]>(`/customers/${primaryId}/merges`);
 }

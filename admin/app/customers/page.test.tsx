@@ -8,6 +8,8 @@ import type { CustomerListItem } from "@/lib/types";
 vi.mock("@/lib/api", () => ({
   getShop: vi.fn(),
   listCustomers: vi.fn(),
+  listCustomerTags: vi.fn().mockResolvedValue([]),
+  listCustomerSegments: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/auth-context", () => ({
@@ -30,6 +32,7 @@ const customer: CustomerListItem = {
   orderCount: 3,
   lifetimeValue: 450,
   lastOrderDate: null,
+  tags: [],
 };
 
 function renderPage() {

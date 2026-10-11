@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  UnauthorizedException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -38,6 +39,8 @@ import { TemplatesService } from '../templates/templates.service';
 import { MenuService } from '../menu/menu.service';
 import { AbandonedCartsService } from '../abandoned-carts/abandoned-carts.service';
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
+import { StoreCreditService } from '../store-credit/store-credit.service';
+import type { CustomerContext } from '../customer-auth/customer-context';
 import type { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandoned-cart.dto';
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
@@ -57,7 +60,8 @@ import {
   sanitizeAttribution,
   stripAttribution,
 } from '../shop-analytics/attribution';
-import { roundMoney } from '../common/currency-minor-units';
+import { minorUnitFactor, roundMoney } from '../common/currency-minor-units';
+import type { CustomerRow } from '../db/types';
 import {
   POLICY_PAGE_TYPES,
   type PolicyPageType,
@@ -132,6 +136,7 @@ export class PublicService {
     private readonly menuService: MenuService,
     private readonly abandonedCartsService: AbandonedCartsService,
     private readonly giftCardsService: GiftCardsService,
+    private readonly storeCreditService: StoreCreditService,
     private readonly policyPagesService: PolicyPagesService,
     private readonly themesService: ThemesService,
     private readonly jwtService: JwtService,
@@ -1504,7 +1509,23 @@ export class PublicService {
     return this.discountsService.listActiveAutoDiscounts(shop.id);
   }
 
-  async createOrder(shopSlug: string, dto: CreatePublicOrderDto) {
+  // The logged-in customer's own row, shop-checked (checkout with store credit).
+  private async sessionCustomerRow(shopId: number, customerId: number) {
+    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT * FROM customer WHERE id = ? AND shopId = ?`,
+      [customerId, shopId],
+    );
+    if (!rows[0]) throw new UnauthorizedException('Account no longer exists');
+    return rows[0];
+  }
+
+  async createOrder(
+    shopSlug: string,
+    dto: CreatePublicOrderDto,
+    // Set by the controller ONLY when dto.useStoreCredit (an authenticated
+    // customer of this shop); null for every guest checkout.
+    sessionCustomer: CustomerContext | null = null,
+  ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
@@ -1710,13 +1731,52 @@ export class PublicService {
     // gift card credit — 0 when the card fully covers the order, in which
     // case no online-payment session is created at all (see below) and the
     // order is marked paid immediately, since nothing further is owed.
-    const remainderTotal = orderTotal - giftCardAmountApplied;
+    // Store credit (CUS-6) applies after the gift card, to what is still payable,
+    // in THIS shop's currency only (credit never converts). Everything is integer
+    // minor units; the figure is the server's: the request carries a boolean.
+    // The balance read here is advisory - StoreCreditService.spend re-checks it
+    // under the customer row lock inside the order transaction and 409s if it
+    // moved, so the order is never written with credit that is not there.
+    const factor = minorUnitFactor(shop.currency);
+    let storeCreditMinor = 0;
+    if (dto.useStoreCredit) {
+      if (!sessionCustomer || sessionCustomer.shopId !== shop.id) {
+        throw new UnauthorizedException('Log in to use your store credit');
+      }
+      const payableMinor =
+        Math.round(orderTotal * factor) -
+        Math.round(giftCardAmountApplied * factor);
+      const haveMinor = await this.storeCreditService.balanceMinor(
+        shop.id,
+        sessionCustomer.customerId,
+        shop.currency,
+      );
+      if (haveMinor <= 0) {
+        throw new ConflictException(
+          `You have no store credit in ${shop.currency} to use`,
+        );
+      }
+      storeCreditMinor = Math.max(0, Math.min(haveMinor, payableMinor));
+    }
+    const storeCreditAmount = storeCreditMinor / factor;
+    const remainderTotal =
+      storeCreditMinor > 0
+        ? (Math.round(orderTotal * factor) -
+            Math.round(giftCardAmountApplied * factor) -
+            storeCreditMinor) /
+          factor
+        : orderTotal - giftCardAmountApplied;
 
-    const customer = await this.customersService.findOrCreateForOrder(shop.id, {
-      name: dto.customerName,
-      phone: dto.customerPhone,
-      email: dto.customerEmail,
-    });
+    // With store credit the order belongs to the LOGGED-IN account, not to
+    // whichever customer row the typed phone number happens to match.
+    const customer =
+      dto.useStoreCredit && sessionCustomer
+        ? await this.sessionCustomerRow(shop.id, sessionCustomer.customerId)
+        : await this.customersService.findOrCreateForOrder(shop.id, {
+            name: dto.customerName,
+            phone: dto.customerPhone,
+            email: dto.customerEmail,
+          });
 
     // Resolved before the transaction (doesn't need order.id), applied
     // inside it (needs the order to exist) — an invalid/expired/blocked
@@ -1733,6 +1793,14 @@ export class PublicService {
     const attributionData = sanitizeAttribution(dto.attribution);
 
     const orderId = await this.db.transaction(async (conn) => {
+      // Store credit: lock the customer row before ANY other locking step, so
+      // every flow that touches one customer's credit (checkout, cancel, return,
+      // admin adjustment, merge) takes locks in the same order. It is the same
+      // row assertPerCustomerLimit locks, so that statement is still effectively
+      // first for its COUNT's snapshot.
+      if (storeCreditMinor > 0) {
+        await this.storeCreditService.lockCustomer(conn, shop.id, customer.id);
+      }
       // Must stay the first statement: see assertPerCustomerLimit.
       if (discount) {
         await this.discountsService.assertPerCustomerLimit(
@@ -1800,9 +1868,9 @@ export class PublicService {
           shopId, ingredientsConsumedAt, consumptionRecordedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
-          giftCardId, giftCardCode, giftCardAmount, total, paymentStatus, trackingToken, shopOrderNumber,
+          giftCardId, giftCardCode, giftCardAmount, storeCreditAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate, attributionJson
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1832,6 +1900,7 @@ export class PublicService {
           giftCard?.id ?? null,
           giftCard?.code ?? null,
           giftCard ? giftCardAmountApplied : null,
+          storeCreditMinor > 0 ? storeCreditAmount : null,
           orderTotal,
           // Nothing left to collect through the selected paymentMethod when
           // the gift card covers the order in full — marked paid at
@@ -1900,6 +1969,17 @@ export class PublicService {
           discount,
           newOrderId,
           customer.id,
+        );
+      }
+
+      if (storeCreditMinor > 0) {
+        await this.storeCreditService.spend(
+          conn,
+          shop.id,
+          customer.id,
+          newOrderId,
+          shop.currency,
+          storeCreditMinor,
         );
       }
 
@@ -1984,6 +2064,7 @@ export class PublicService {
       taxAmount: trimDecimal(orderRows[0].taxAmount as string),
       discountAmount: trimDecimal(orderRows[0].discountAmount as string),
       giftCardAmount: trimDecimal(orderRows[0].giftCardAmount as string),
+      storeCreditAmount: trimDecimal(orderRows[0].storeCreditAmount as string),
       total: trimDecimal(orderRows[0].total as string),
       orderitem: itemRows.map((i) => ({
         ...i,

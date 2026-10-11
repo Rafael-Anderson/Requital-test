@@ -13,6 +13,8 @@ import type { TenantContext } from '../common/tenant-context';
 import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { toSafeCustomer } from './customer-response.util';
+import { CustomerTagsService } from '../customer-crm/customer-tags.service';
+import { CustomerSegmentsService } from '../customer-segments/customer-segments.service';
 
 interface CustomerListRow {
   id: number;
@@ -38,7 +40,11 @@ const SORT_COLUMN: Record<string, string> = {
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly tagsService: CustomerTagsService,
+    private readonly segmentsService: CustomerSegmentsService,
+  ) {}
 
   // Shared by both the storefront checkout flow (PublicService) and
   // admin-entered orders (OrdersService) — the one place phone-matching
@@ -57,6 +63,18 @@ export class CustomersService {
     const existing = existingRows[0];
     if (existing) {
       return this.applyUpdateIfChanged(existing, data);
+    }
+    // A phone that belonged to a customer who was merged into another one
+    // resolves to that customer, so merging is not undone by the next order.
+    const aliasRows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT c.* FROM customermerge m
+         JOIN customer c ON c.id = m.primaryCustomerId AND c.shopId = m.shopId
+        WHERE m.shopId = ? AND m.duplicatePhone = ?
+        ORDER BY m.id DESC LIMIT 1`,
+      [shopId, data.phone],
+    );
+    if (aliasRows[0]) {
+      return this.applyUpdateIfChanged(aliasRows[0], data);
     }
     try {
       const result = await this.db.execute(
@@ -101,10 +119,10 @@ export class CustomersService {
       email: emailChanged ? data.email : undefined,
     });
     if (set) {
-      await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
-        ...set.params,
-        existing.id,
-      ]);
+      await this.db.execute(
+        `UPDATE customer SET ${set.setClause} WHERE id = ?`,
+        [...set.params, existing.id],
+      );
     }
     const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
       `SELECT * FROM customer WHERE id = ?`,
@@ -119,8 +137,36 @@ export class CustomersService {
     const search = query.search?.trim();
     const sortColumn = SORT_COLUMN[query.sortBy ?? 'lastOrderDate'];
     const sortDir = query.sortDir === 'asc' ? 'ASC' : 'DESC';
-    const searchCondition = search ? 'AND (c.name LIKE ? OR c.phone LIKE ?)' : '';
-    const searchParams = search ? [`%${search}%`, `%${search}%`] : [];
+    // Filters are accumulated as SQL fragments over alias `c` plus their bound
+    // params. Every fragment is a literal in this file; the only client-supplied
+    // values (search text, the tag id) travel as parameters.
+    const conditions: string[] = [];
+    const filterParams: (string | number)[] = [];
+    if (search) {
+      conditions.push('(c.name LIKE ? OR c.phone LIKE ?)');
+      filterParams.push(`%${search}%`, `%${search}%`);
+    }
+    if (query.tagId !== undefined) {
+      // Scoped on the assignment's own shopId as well as the customer's.
+      conditions.push(
+        `EXISTS (SELECT 1 FROM customertagassignment a WHERE a.customerId = c.id AND a.tagId = ? AND a.shopId = c.shopId)`,
+      );
+      filterParams.push(query.tagId);
+    }
+    if (query.segmentId !== undefined) {
+      // A saved segment's compiled predicate (validated rule tree, bound params).
+      // Looked up in the caller's shop: another shop's id is a 404.
+      const predicate = await this.segmentsService.predicateFor(
+        ctx.shopId,
+        query.segmentId,
+      );
+      conditions.push(predicate.sql);
+      filterParams.push(...predicate.params);
+    }
+    const searchCondition = conditions.length
+      ? `AND ${conditions.join(' AND ')}`
+      : '';
+    const searchParams = filterParams;
 
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT c.id, c.name, c.phone, c.email, c.createdAt,
@@ -141,6 +187,11 @@ export class CustomersService {
       [ctx.shopId, ...searchParams],
     );
 
+    const tagsByCustomer = await this.tagsService.tagsByCustomer(
+      ctx.shopId,
+      (rows as unknown as CustomerListRow[]).map((r) => r.id),
+    );
+
     return {
       data: (rows as unknown as CustomerListRow[]).map((r) => ({
         id: r.id,
@@ -151,6 +202,7 @@ export class CustomersService {
         orderCount: Number(r.orderCount),
         lifetimeValue: Number(r.lifetimeValue ?? 0),
         lastOrderDate: r.lastOrderDate,
+        tags: tagsByCustomer.get(r.id) ?? [],
       })),
       page,
       pageSize,
@@ -191,8 +243,8 @@ export class CustomersService {
         }[],
       }),
     ) as ({ status: string; total: string; createdAt: Date } & RowDataPacket & {
-      orderitem: RowDataPacket[];
-    })[];
+        orderitem: RowDataPacket[];
+      })[];
 
     const completedOrders = orders.filter((o) => o.status !== 'cancelled');
     const lifetimeValue = completedOrders.reduce(
@@ -225,10 +277,10 @@ export class CustomersService {
         birthday: dto.birthday ? new Date(dto.birthday) : undefined,
       });
       if (set) {
-        await this.db.execute(`UPDATE customer SET ${set.setClause} WHERE id = ?`, [
-          ...set.params,
-          id,
-        ]);
+        await this.db.execute(
+          `UPDATE customer SET ${set.setClause} WHERE id = ?`,
+          [...set.params, id],
+        );
       }
       const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
         `SELECT * FROM customer WHERE id = ?`,

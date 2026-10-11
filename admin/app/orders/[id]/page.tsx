@@ -241,6 +241,27 @@ export default function OrderDetailPage() {
               </td>
               <td className="py-2 text-end">{formatMoney(order.total, order.currency)}</td>
             </tr>
+            {Number(order.storeCreditAmount ?? 0) > 0 && (
+              <>
+                <tr>
+                  <td className="py-1 text-text-muted" colSpan={2}>
+                    Paid with store credit
+                  </td>
+                  <td className="py-1 text-end">-{formatMoney(order.storeCreditAmount!, order.currency)}</td>
+                </tr>
+                <tr className="font-medium">
+                  <td className="py-1" colSpan={2}>
+                    Left to pay
+                  </td>
+                  <td className="py-1 text-end">
+                    {formatMoney(
+                      Math.max(0, Number(order.total) - Number(order.storeCreditAmount) - Number(order.giftCardAmount ?? 0)),
+                      order.currency,
+                    )}
+                  </td>
+                </tr>
+              </>
+            )}
           </tfoot>
         </table>
       </Card>

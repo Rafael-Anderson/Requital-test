@@ -49,6 +49,7 @@ function buildService(db: DatabaseService) {
     unused,
     unused,
     unused,
+    unused, // storeCreditService
     jwtService,
     unused, // currencyRatesService — not reached on the preview-auth path
     unused, // regionsService — not reached on the preview-auth path

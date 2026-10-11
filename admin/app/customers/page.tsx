@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useShopMode } from "@/lib/useShopMode";
-import { listCustomers, type ListCustomersParams,
+import { listCustomers, listCustomerSegments, listCustomerTags, type ListCustomersParams,
   downloadExport,
 } from "@/lib/api";
-import type { CustomerListItem } from "@/lib/types";
+import type { CustomerListItem, CustomerSegment, CustomerTagWithCount } from "@/lib/types";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -28,6 +28,9 @@ import CustomersTabs from "@/components/CustomersTabs";
 import { CustomerImportButton } from "@/components/ListImportButtons";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import { TagChip } from "@/components/customers/CustomerTagsCard";
+import CustomerTagBulkControls from "@/components/customers/CustomerTagBulkControls";
+import ManageTagsModal from "@/components/customers/ManageTagsModal";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -60,6 +63,17 @@ export default function CustomersPage() {
   const [sortBy, setSortBy] = useState<SortField>("lastOrderDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [error, setError] = useState<string | null>(null);
+  const [tags, setTags] = useState<CustomerTagWithCount[]>([]);
+  const [tagFilter, setTagFilter] = useState("");
+  const [segments, setSegments] = useState<CustomerSegment[]>([]);
+  // Deep link from the Segments tab ("View members"): /customers?segmentId=N.
+  // Read once from the URL at first render; the select below is only rendered
+  // after the segments load, so server and client markup agree.
+  const [segmentFilter, setSegmentFilter] = useState(() =>
+    typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("segmentId") ?? ""),
+  );
+  const [managingTags, setManagingTags] = useState(false);
+  const [tagsTick, setTagsTick] = useState(0);
   const toast = useToast();
   const visibleIds = useMemo(() => (customers ?? []).map((c) => c.id), [customers]);
   const selection = useRowSelection(visibleIds);
@@ -75,18 +89,50 @@ export default function CustomersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortBy, sortDir]);
+  }, [search, sortBy, sortDir, tagFilter, segmentFilter]);
+
+  // The shop's tag list feeds the filter and the bulk controls. Its own request:
+  // if it fails the list still loads, just without the tag filter.
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    let live = true;
+    listCustomerTags()
+      .then((d) => live && setTags(d))
+      .catch(() => live && setTags([]));
+    return () => {
+      live = false;
+    };
+  }, [user, tagsTick]);
+
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    let live = true;
+    listCustomerSegments()
+      .then((d) => live && setSegments(d))
+      .catch(() => live && setSegments([]));
+    return () => {
+      live = false;
+    };
+  }, [user]);
 
   const refresh = useCallback(async () => {
     try {
-      const result = await listCustomers({ page, pageSize: PAGE_SIZE, search: search || undefined, sortBy, sortDir });
+      const result = await listCustomers({
+        page,
+        pageSize: PAGE_SIZE,
+        search: search || undefined,
+        sortBy,
+        sortDir,
+        tagId: tagFilter ? Number(tagFilter) : undefined,
+        segmentId: segmentFilter ? Number(segmentFilter) : undefined,
+      });
       setCustomers(result.data);
       setTotal(result.total);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load customers");
     }
-  }, [page, search, sortBy, sortDir]);
+  }, [page, search, sortBy, sortDir, tagFilter, segmentFilter]);
 
   useEffect(() => {
     if (user?.role === "admin") refresh();
@@ -122,7 +168,9 @@ export default function CustomersPage() {
   // passed through so the file matches what is on screen.
   async function handleExportAll() {
     try {
-      await downloadExport("customers", { search: search || undefined });
+      await (segmentFilter
+        ? downloadExport("customer-segment", { segmentId: Number(segmentFilter) })
+        : downloadExport("customers", { search: search || undefined }));
       toast("Export started");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to export customers", "error");
@@ -159,6 +207,33 @@ export default function CustomersPage() {
       <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Customers</h1>
       <CustomersTabs />
       <div className="flex items-center justify-end mb-6 flex-wrap gap-2">
+        {tags.length > 0 && (
+          <div className="w-full sm:w-48">
+            <Select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} aria-label="Filter by tag">
+              <option value="">All tags</option>
+              {tags.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.customerCount})
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        {segments.length > 0 && (
+          <div className="w-full sm:w-48">
+            <Select value={segmentFilter} onChange={(e) => setSegmentFilter(e.target.value)} aria-label="Filter by segment">
+              <option value="">All customers</option>
+              {segments.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        <Button size="sm" variant="secondary" onClick={() => setManagingTags(true)}>
+          Manage tags
+        </Button>
         <div className="relative w-full sm:w-64">
           <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-3.5 text-text-faint" />
           <input
@@ -184,6 +259,14 @@ export default function CustomersPage() {
           <Button size="sm" variant="secondary" onClick={handleBulkExport}>
             Export CSV
           </Button>
+          <CustomerTagBulkControls
+            customerIds={selection.selectedIds}
+            tags={tags}
+            onDone={() => {
+              setTagsTick((t) => t + 1);
+              void refresh();
+            }}
+          />
         </BulkActionBar>
       )}
 
@@ -243,6 +326,13 @@ export default function CustomersPage() {
             >
               <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</div>
               <div className="truncate text-[13.5px] text-text-muted">{isSimple && c.email ? c.email : c.phone}</div>
+              {c.tags.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {c.tags.map((t) => (
+                    <TagChip key={t.id} tag={t} />
+                  ))}
+                </div>
+              )}
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
                 <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(c.lifetimeValue, currency)}</span>
                 <span className="text-text-muted">
@@ -311,7 +401,16 @@ export default function CustomersPage() {
                     />
                   </TD>
                 )}
-                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">{c.name}</TD>
+                <TD className="text-sm font-semibold text-text-primary dark:text-zinc-100">
+                  {c.name}
+                  {c.tags.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1 font-normal">
+                      {c.tags.map((t) => (
+                        <TagChip key={t.id} tag={t} />
+                      ))}
+                    </div>
+                  )}
+                </TD>
                 <TD className="text-text-muted text-[13.5px]">{c.phone}</TD>
                 <TD className="text-[13.5px]">{c.orderCount}</TD>
                 <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{formatMoney(c.lifetimeValue, currency)}</TD>
@@ -342,6 +441,15 @@ export default function CustomersPage() {
             </Button>
           </div>
         </div>
+      )}
+      {managingTags && (
+        <ManageTagsModal
+          onClose={() => {
+            setManagingTags(false);
+            setTagsTick((t) => t + 1);
+            void refresh();
+          }}
+        />
       )}
     </PageShell>
   );

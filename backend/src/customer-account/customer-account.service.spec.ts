@@ -61,7 +61,9 @@ function createMockDb(opts: {
       return Promise.resolve(opts.authToken ? [opts.authToken] : []);
     }
     if (sql.includes('FROM user WHERE shopId')) {
-      return Promise.resolve(opts.adminUser === null ? [] : [opts.adminUser ?? { id: 99 }]);
+      return Promise.resolve(
+        opts.adminUser === null ? [] : [opts.adminUser ?? { id: 99 }],
+      );
     }
     throw new Error(`unexpected query: ${sql}`);
   });
@@ -87,7 +89,12 @@ describe('CustomerAccountService.exportData', () => {
   it('returns profile/addresses/orders scoped to (ctx.customerId, ctx.shopId), and stamps lastDataExportAt', async () => {
     const db = createMockDb({
       customFields: [
-        { namespace: 'custom', fieldKey: 'allergy', name: 'Allergy', value: 'nuts' },
+        {
+          namespace: 'custom',
+          fieldKey: 'allergy',
+          name: 'Allergy',
+          value: 'nuts',
+        },
       ],
       orders: [
         {
@@ -117,6 +124,12 @@ describe('CustomerAccountService.exportData', () => {
       auditLog,
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     const result = await service.exportData(ctx);
@@ -167,6 +180,12 @@ describe('CustomerAccountService.exportData', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -188,6 +207,12 @@ describe('CustomerAccountService.exportData', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -204,6 +229,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     const result = await service.requestDeletion(ctx);
@@ -242,6 +273,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -252,7 +289,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
     // "anonymise twice" test below for why that determinism matters.
     expect(db.execute).toHaveBeenCalledWith(
       expect.stringContaining('SET name = ?, email = ?, phone = ?'),
-      ['Deleted User', 'deleted-1@deleted.requital', 'DELETED-1', ctx.customerId],
+      [
+        'Deleted User',
+        'deleted-1@deleted.requital',
+        'DELETED-1',
+        ctx.customerId,
+      ],
     );
     // Custom-field values on the customer are scrubbed with the profile.
     expect(db.query).toHaveBeenCalledWith(
@@ -288,6 +330,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -316,6 +364,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -335,6 +389,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -381,9 +441,9 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         const [name, email, phone] = params;
         customerState = {
           ...customerState,
-          name: name as string,
-          email: email as string,
-          phone: phone as string,
+          name: name,
+          email: email,
+          phone: phone,
           birthday: null,
           passwordHash: null,
         };
@@ -400,6 +460,12 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       createMockAuditLog(),
       mockPublicService,
       {} as never, // regionsService: not reached by these paths
+      {
+        exportFor: jest.fn().mockResolvedValue({ channels: [], history: [] }),
+      } as never, // consentService
+      {
+        overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
+      } as never, // storeCreditService
     );
 
     const first = await service.confirmDeletion(ctx, raw);
