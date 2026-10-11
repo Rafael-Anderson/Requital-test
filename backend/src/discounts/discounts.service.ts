@@ -456,8 +456,8 @@ export class DiscountsService {
   // A locking COUNT (FOR UPDATE) was rejected: it next-key/gap-locks the
   // (discountId, customerId) index, and two different customers inserting into
   // the same gap deadlock. Only locks when the discount has a per-customer
-  // limit, so unlimited codes pay nothing. A cancelled order's redemption keeps
-  // counting (nothing deletes it, same as timesUsed vs usageLimit).
+  // limit, so unlimited codes pay nothing. A cancelled or fully refunded
+  // order's redemption is deleted (release-redemption.ts), so it stops counting.
   async assertPerCustomerLimit(
     conn: PoolConnection,
     shopId: number,

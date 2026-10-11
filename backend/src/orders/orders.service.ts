@@ -41,6 +41,7 @@ import {
   isValidStatusTransition,
   OrderStatus,
 } from './constants';
+import { releaseDiscountRedemption } from '../discounts/release-redemption';
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
@@ -751,6 +752,11 @@ export class OrdersService {
         `Cannot move order from '${order.status}' to '${dto.status}'`,
       );
     }
+    // 'cancelled' has exactly one implementation: cancel() owns the stock
+    // restock, the invoice marker and the discount release. This route used to
+    // run its own bare status CAS for it, which restocked nothing and released
+    // nothing.
+    if (dto.status === 'cancelled') return this.cancel(ctx, id);
     // Plain pre-check, not folded into the CAS WHERE clause below — the CAS
     // failure path throws a generic "refresh and retry" ConflictException,
     // which would be a misleading message for "you forgot to collect cash."
@@ -1338,6 +1344,13 @@ export class OrdersService {
             1,
           );
         }
+        // Give the order's discount use back (global counter and per-customer
+        // row together), in the same transaction as the CAS that won. LAST on
+        // purpose: checkout locks stock rows, inserts the order, then locks the
+        // discount row (redeem), so cancel must take order, stock, discount in
+        // that same order or a checkout and a cancel sharing a code and an
+        // ingredient can deadlock (1213).
+        await releaseDiscountRedemption(conn, ctx.shopId, id);
         return;
       }
 
@@ -1355,6 +1368,8 @@ export class OrdersService {
           order.outletId,
           1,
         );
+        // Last, for the lock order explained in the branch above.
+        await releaseDiscountRedemption(conn, ctx.shopId, id);
         return;
       }
 
