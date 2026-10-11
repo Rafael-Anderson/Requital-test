@@ -1,3 +1,4 @@
+import { amountDueDecimal } from '../common/amount-due';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
@@ -49,6 +50,9 @@ export interface OrderForInvoice {
   // Snapshotted for completeness (C1) even though the renderer does not print it
   // yet - when it does, it must read the frozen value, not a live one.
   giftCardAmount: string | null;
+  // Store credit spent on the order. Optional: a snapshot taken before this
+  // field existed has none, which reads as 0 (the behaviour it always had).
+  storeCreditAmount?: string | null;
   shopName: string;
   shopDisplayName: string | null;
   shopAddress: string | null;
@@ -250,7 +254,7 @@ export class InvoicesService {
     }
     const orderRows = await this.db.query<RowDataPacket[]>(
       `SELECT o.*, s.name AS shopName, s.displayName AS shopDisplayName,
-              s.address AS shopAddress, s.email AS shopEmail, s.currency AS shopCurrency,
+              s.address AS shopAddress, s.email AS shopEmail, o.currency AS shopCurrency,
               r.nameEn AS regionName
        FROM \`order\` o JOIN shop s ON s.id = o.shopId
        LEFT JOIN region r ON r.id = o.regionId
@@ -282,10 +286,13 @@ export class InvoicesService {
       paymentStatus: order.paymentStatus as string,
       total: order.total as string,
       giftCardAmount: order.giftCardAmount as string | null,
+      storeCreditAmount: order.storeCreditAmount as string | null,
       shopName: order.shopName as string,
       shopDisplayName: order.shopDisplayName as string | null,
       shopAddress: order.shopAddress as string | null,
       shopEmail: order.shopEmail as string | null,
+      // The ORDER's currency (named shopCurrency for the snapshot shape's sake):
+      // every amount on the document is in it, whatever the shop uses today.
       shopCurrency: order.shopCurrency as string,
       orderitem: items.map((i) => ({
         productName: i.productName as string,
@@ -379,7 +386,16 @@ export class InvoicesService {
       shopName: order.shopDisplayName ?? order.shopName,
       shopAddress: order.shopAddress,
       shopEmail: order.shopEmail,
-      currency: order.shopCurrency,
+      currency: invoice.currency,
+      // What is still owed in cash: the total less the gift card and the store
+      // credit the order was paid with. A packing slip reads the order LIVE; an
+      // invoice keeps its frozen total and the tenders frozen in its snapshot.
+      amountDue: amountDueDecimal({
+        total: invoice.type === 'PACKING_SLIP' ? liveOrder.total : invoice.total,
+        giftCardAmount: order.giftCardAmount,
+        storeCreditAmount: order.storeCreditAmount,
+        currency: invoice.currency,
+      }),
       order,
     });
   }

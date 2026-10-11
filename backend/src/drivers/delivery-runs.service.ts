@@ -18,6 +18,7 @@ import { OrdersService } from '../orders/orders.service';
 import { trimDecimal } from '../database/decimal.util';
 import { createLogger } from '../common/logging/logger';
 import { decimalToMinor, minorToDecimal } from './cash';
+import { amountDueDecimal } from '../common/amount-due';
 import { completeRunIfDone, connExec } from './run-lifecycle';
 import { renderRunSheetHtml } from './run-sheet-html';
 import {
@@ -230,7 +231,7 @@ export class DeliveryRunsService {
           ),
         cod:
           s.cod && s.order.cashCollectedAt == null && s.status === 'pending'
-            ? { amount: s.order.total, currency: s.order.currency }
+            ? { amount: s.order.amountDue, currency: s.order.currency }
             : null,
         status: s.status,
       })),
@@ -244,7 +245,7 @@ export class DeliveryRunsService {
               s.otpSentAt, s.otpSendCount,
               o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.customerAddress,
               o.area, o.deliveryNotes, o.deliveryTimeSlot, o.status AS orderStatus,
-              o.paymentMethod, o.paymentStatus, o.total AS orderTotal, o.currency AS orderCurrency,
+              o.paymentMethod, o.paymentStatus, o.total AS orderTotal, o.giftCardAmount, o.storeCreditAmount, o.currency AS orderCurrency,
               o.cashCollectedAt, rg.nameEn AS regionName
          FROM deliveryrunstop s
          JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
@@ -284,6 +285,13 @@ export class DeliveryRunsService {
         paymentMethod: r.paymentMethod as string | null,
         paymentStatus: r.paymentStatus as string,
         total: trimDecimal(r.orderTotal as string),
+        // Cash still to collect: total less gift card and store credit.
+        amountDue: amountDueDecimal({
+          total: r.orderTotal,
+          giftCardAmount: r.giftCardAmount,
+          storeCreditAmount: r.storeCreditAmount,
+          currency: r.orderCurrency as string,
+        }),
         currency: r.orderCurrency as string,
         cashCollectedAt: r.cashCollectedAt as Date | null,
       },
@@ -319,7 +327,7 @@ export class DeliveryRunsService {
         if (s.cashDiscrepancy) b.discrepancies += 1;
       } else if (s.status === 'pending' && s.order.status !== 'cancelled') {
         bucket(currency).pending +=
-          decimalToMinor(s.order.total, currency) ?? 0;
+          decimalToMinor(s.order.amountDue, currency) ?? 0;
       }
     }
     return [...byCurrency.entries()].map(([currency, b]) => ({

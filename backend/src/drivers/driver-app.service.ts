@@ -8,7 +8,6 @@ import {
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { hashToken } from '../common/token-hash';
-import { trimDecimal } from '../database/decimal.util';
 import { FixedWindowLimiter } from './fixed-window-limiter';
 import { LINK_TOKEN_SHAPE } from './driver-link';
 import type { TenantContext } from '../common/tenant-context';
@@ -17,7 +16,8 @@ import { OrderNotificationsService } from '../orders/order-notifications.service
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { StorageService } from '../storage/storage.service';
 import { createLogger } from '../common/logging/logger';
-import { decimalToMinor, minorToDecimal, parseCashInput } from './cash';
+import { minorToDecimal, parseCashInput } from './cash';
+import { amountDueDecimal, amountDueMinor } from '../common/amount-due';
 import { generateOtp, hashOtp, newOtpSalt, otpMatches } from './otp';
 import { completeRunIfDone, poolExec } from './run-lifecycle';
 import type { DeliverStopDto, FailStopDto } from './dto/driver-app.dto';
@@ -147,7 +147,7 @@ export class DriverAppService {
               s.otpSendCount, s.cashCollectedAmount, s.cashDiscrepancy,
               o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.customerAddress,
               o.area, o.deliveryNotes, o.deliveryTimeSlot, o.status AS orderStatus,
-              o.paymentMethod, o.total, o.currency, o.cashCollectedAt, rg.nameEn AS regionName
+              o.paymentMethod, o.total, o.giftCardAmount, o.storeCreditAmount, o.currency, o.cashCollectedAt, rg.nameEn AS regionName
          FROM deliveryrunstop s
          JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
          LEFT JOIN region rg ON rg.id = o.regionId
@@ -198,7 +198,8 @@ export class DriverAppService {
           orderCancelled: s.orderStatus === 'cancelled',
           cod: cod
             ? {
-                amount: trimDecimal(s.total as string),
+                // What the driver takes at the door: total less gift card and store credit.
+                amount: amountDueDecimal(s),
                 currency: s.currency as string,
                 // Already collected (a retry after a half-finished delivery, or
                 // staff took it by hand): nothing left to take on the doorstep.
@@ -242,7 +243,8 @@ export class DriverAppService {
 
   private async loadStop(link: LinkContext, stopId: number) {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT s.*, o.status AS orderStatus, o.paymentMethod, o.total AS orderTotal, o.currency AS orderCurrency,
+      `SELECT s.*, o.status AS orderStatus, o.paymentMethod, o.total AS orderTotal, o.giftCardAmount AS orderGiftCardAmount,
+              o.storeCreditAmount AS orderStoreCreditAmount, o.currency AS orderCurrency,
               o.cashCollectedAt AS orderCashCollectedAt, o.customerName, o.customerPhone, o.customerEmail,
               o.shopOrderNumber, o.id AS oid
          FROM deliveryrunstop s JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
@@ -454,7 +456,14 @@ export class DriverAppService {
         });
       }
       const collectedMinor = parseCashInput(dto.cashCollected, currency);
-      const expectedMinor = decimalToMinor(stop.orderTotal as string, currency);
+      // Expected cash = total less gift card and store credit (the order's own
+      // currency, integer minor units), not the order total.
+      const expectedMinor = amountDueMinor({
+        total: stop.orderTotal,
+        giftCardAmount: stop.orderGiftCardAmount,
+        storeCreditAmount: stop.orderStoreCreditAmount,
+        currency,
+      });
       if (collectedMinor === null || expectedMinor === null) {
         throw new BadRequestException({
           statusCode: 400,
