@@ -6,6 +6,9 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
+import { verifyCustomerEmail } from './helpers/customer-email';
 
 interface SignupResponse {
   accessToken: string;
@@ -363,6 +366,18 @@ describe('Password policy (e2e)', () => {
       expect(codeOf(await reg(breachedPassword))).toBe('password_breached');
       hibpMode = 'clean';
       await reg('plum-harvest-moon-31').expect(201);
+      // A reset needs a verified address: click the registration link first.
+      const shopRow = await app
+        .get(DatabaseService)
+        .query<RowDataPacket[]>(`SELECT id FROM shop WHERE subdomain = ?`, [
+          a.subdomain,
+        ]);
+      await verifyCustomerEmail(
+        app.getHttpServer(),
+        app.get(DatabaseService),
+        { slug: a.subdomain, id: shopRow[0].id as number },
+        email,
+      );
 
       const forgot = await http()
         .post(`/public/${a.subdomain}/auth/forgot-password`)

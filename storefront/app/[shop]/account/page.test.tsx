@@ -11,9 +11,16 @@ vi.mock("next/navigation", () => ({
 }));
 
 const logout = vi.fn().mockResolvedValue(undefined);
+const authState = vi.hoisted(() => ({ emailVerified: false }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
-    customer: { id: 1, name: "Jane Shopper", phone: "0501234567", email: "jane@example.com" },
+    customer: {
+      id: 1,
+      name: "Jane Shopper",
+      phone: "0501234567",
+      email: "jane@example.com",
+      emailVerified: authState.emailVerified,
+    },
     loading: false,
     logout,
     refreshProfile: vi.fn(),
@@ -27,13 +34,20 @@ vi.mock("@/lib/shop-context", () => ({
 vi.mock("@/lib/api", () => ({
   exportMyData: vi.fn(),
   updateMyProfile: vi.fn(),
+  requestEmailVerification: vi.fn(),
   requestMyAccountDeletion: vi.fn(),
   confirmMyAccountDeletion: vi.fn(),
   getMyConsent: vi.fn().mockResolvedValue({ wording: { version: "v", channels: { email: "", whatsapp: "", sms: "" } }, channels: [] }),
   setMyConsent: vi.fn(),
 }));
 
-import { confirmMyAccountDeletion, exportMyData, requestMyAccountDeletion } from "@/lib/api";
+import {
+  confirmMyAccountDeletion,
+  exportMyData,
+  requestEmailVerification,
+  requestMyAccountDeletion,
+  updateMyProfile,
+} from "@/lib/api";
 
 describe("AccountDashboardPage — Privacy", () => {
   beforeEach(() => {
@@ -103,5 +117,63 @@ describe("AccountDashboardPage — Privacy", () => {
 
     expect(screen.queryByText("Delete your account?")).not.toBeInTheDocument();
     expect(requestMyAccountDeletion).not.toHaveBeenCalled();
+  });
+});
+
+describe("AccountDashboardPage — email verification (W1)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authState.emailVerified = false;
+  });
+
+  it("an unverified email says so and can request the verification link", async () => {
+    const user = userEvent.setup();
+    vi.mocked(requestEmailVerification).mockResolvedValue({ success: true });
+    render(<AccountDashboardPage />);
+    expect(screen.getByText(/not verified/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send verification link" }));
+    expect(requestEmailVerification).toHaveBeenCalledWith("test-shop");
+    expect(await screen.findByText(/Check your inbox/)).toBeInTheDocument();
+  });
+
+  it("a verified email shows no verify button", () => {
+    authState.emailVerified = true;
+    render(<AccountDashboardPage />);
+    expect(screen.getByText(/Email verified/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send verification link" })).not.toBeInTheDocument();
+  });
+
+  it("changing a verified email asks for the current password and sends it; changing an unverified one does not", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateMyProfile).mockResolvedValue({} as never);
+    authState.emailVerified = true;
+    const { unmount } = render(<AccountDashboardPage />);
+    await user.click(screen.getByRole("button", { name: "Edit profile" }));
+    expect(screen.queryByText("Current password")).not.toBeInTheDocument();
+    const email = screen.getByDisplayValue("jane@example.com");
+    await user.clear(email);
+    await user.type(email, "new@example.com");
+    const pw = screen.getByLabelText("Current password");
+    await user.type(pw, "my-secret-pass");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMyProfile).toHaveBeenCalledWith(
+      "test-shop",
+      expect.objectContaining({ email: "new@example.com", currentPassword: "my-secret-pass" }),
+    );
+    unmount();
+
+    vi.clearAllMocks();
+    authState.emailVerified = false;
+    render(<AccountDashboardPage />);
+    await user.click(screen.getByRole("button", { name: "Edit profile" }));
+    const email2 = screen.getByDisplayValue("jane@example.com");
+    await user.clear(email2);
+    await user.type(email2, "other@example.com");
+    expect(screen.queryByText("Current password")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateMyProfile).toHaveBeenCalledWith(
+      "test-shop",
+      expect.not.objectContaining({ currentPassword: expect.anything() }),
+    );
   });
 });

@@ -210,7 +210,7 @@ describe('Customers (e2e)', () => {
       expect(adminCustomerId).toBe(storefrontCustomerId);
     });
 
-    it('updates the saved name when a later order uses the same phone with a different name', async () => {
+    it('a later order under the same phone with a different name does NOT rewrite the customer (W1); the order keeps its own name, and staff change the customer through PATCH', async () => {
       const shop = await setupShop('name-update');
       const order1 = await request(app.getHttpServer())
         .post('/orders')
@@ -222,7 +222,7 @@ describe('Customers (e2e)', () => {
           }),
         )
         .expect(201);
-      await request(app.getHttpServer())
+      const order2 = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send(
@@ -234,11 +234,26 @@ describe('Customers (e2e)', () => {
         .expect(201);
 
       const customerId = body<OrderRow>(order1).customerId!;
+      expect(body<OrderRow>(order2).customerId).toBe(customerId);
       const detail = await request(app.getHttpServer())
         .get(`/customers/${customerId}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<CustomerDetailBody>(detail).name).toBe('New Name');
+      expect(body<CustomerDetailBody>(detail).name).toBe('Old Name');
+      expect(body<{ customerName: string }>(order2).customerName).toBe(
+        'New Name',
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/customers/${customerId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .send({ name: 'New Name' })
+        .expect(200);
+      const after = await request(app.getHttpServer())
+        .get(`/customers/${customerId}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<CustomerDetailBody>(after).name).toBe('New Name');
     });
   });
 

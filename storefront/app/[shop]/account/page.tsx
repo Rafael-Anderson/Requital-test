@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
 import { wishlistEnabled } from "@/lib/wishlist";
-import { exportMyData, updateMyProfile } from "@/lib/api";
+import { exportMyData, requestEmailVerification, updateMyProfile } from "@/lib/api";
 import { sanitizePhoneInput } from "@/lib/phone";
 import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/form-styles";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
@@ -26,6 +26,9 @@ export default function AccountDashboardPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [verifySent, setVerifySent] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -37,6 +40,7 @@ export default function AccountDashboardPage() {
     setName(customer.name);
     setEmail(customer.email ?? "");
     setPhone(customer.phone);
+    setCurrentPassword("");
     setEditing(true);
     setError(null);
   }
@@ -46,13 +50,29 @@ export default function AccountDashboardPage() {
     setSaving(true);
     setError(null);
     try {
-      await updateMyProfile(shopSlug, { name, email: email || undefined, phone });
+      await updateMyProfile(shopSlug, {
+        name,
+        email: email || undefined,
+        phone,
+        ...(needsPassword ? { currentPassword } : {}),
+      });
       await refreshProfile();
       setEditing(false);
+      setVerifySent(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save your changes");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSendVerification() {
+    setVerifyError(null);
+    try {
+      await requestEmailVerification(shopSlug);
+      setVerifySent(true);
+    } catch (err) {
+      setVerifyError(err instanceof Error ? err.message : "Could not send the link");
     }
   }
 
@@ -93,6 +113,10 @@ export default function AccountDashboardPage() {
     return <p className="text-zinc-500">Loading…</p>;
   }
 
+  // The server asks for the password only when replacing the email of an account whose email is verified.
+  const needsPassword =
+    customer.emailVerified === true && email.trim().toLowerCase() !== (customer.email ?? "").toLowerCase();
+
   return (
     <StorefrontPageShell variant="medium" className="space-y-6">
       <div className="flex items-center justify-between">
@@ -117,6 +141,31 @@ export default function AccountDashboardPage() {
               <span className="text-zinc-500">Email</span>
               <span>{customer.email ?? "-"}</span>
             </div>
+            {customer.email && (
+              <div className="text-sm">
+                {customer.emailVerified ? (
+                  <p className="text-zinc-500">Email verified. Password resets are sent here.</p>
+                ) : (
+                  <div className="space-y-1">
+                    <p className="text-zinc-500">
+                      This email is not verified. We only send password resets to a verified address.
+                    </p>
+                    {verifySent ? (
+                      <p className="text-zinc-500">Check your inbox for the verification link.</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSendVerification}
+                        className="text-accent-text hover:underline cursor-pointer"
+                      >
+                        Send verification link
+                      </button>
+                    )}
+                    {verifyError && <p className="text-red-600">{verifyError}</p>}
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={startEditing}
@@ -145,6 +194,20 @@ export default function AccountDashboardPage() {
               <label className="text-sm font-medium block mb-1">Email</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD_CLASS} />
             </div>
+            {needsPassword && (
+              <div>
+                <label className="text-sm font-medium block mb-1">Current password</label>
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className={FIELD_CLASS}
+                />
+                <p className="text-xs text-zinc-500 mt-1">Needed to change a verified email address.</p>
+              </div>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button type="submit" disabled={saving} className={BUTTON_PRIMARY_CLASS}>

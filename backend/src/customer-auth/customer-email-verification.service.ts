@@ -14,7 +14,8 @@ import type { CustomerRow, ShopRow } from '../db/types';
 import { renderCustomerLinkEmail } from './customer-link-email';
 
 const VERIFY_TOKEN_LIFETIME_HOURS = 24;
-// Per customer: one link a minute, five an hour, however many requests arrive.
+// Per customer: one link a minute to the same address, five an hour in all,
+// however many requests arrive.
 // Counted from the token table itself, so it holds across processes and cannot be
 // reset by changing IP. A refused send is silent: the caller always gets the same
 // generic answer.
@@ -46,11 +47,12 @@ export class CustomerEmailVerificationService {
     }
     const recent = await this.db.query<RowDataPacket[]>(
       `SELECT COUNT(*) AS perHour,
-              COALESCE(SUM(createdAt > ?), 0) AS lastMinute
+              COALESCE(SUM(createdAt > ? AND targetEmail = ?), 0) AS lastMinute
          FROM customerauthtoken
         WHERE customerId = ? AND purpose = 'email_verify' AND createdAt > ?`,
       [
         new Date(Date.now() - MIN_GAP_SECONDS * 1000),
+        email,
         customer.id,
         new Date(Date.now() - 60 * 60 * 1000),
       ],
