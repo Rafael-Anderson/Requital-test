@@ -18,7 +18,7 @@ import { createLogger } from '../common/logging/logger';
 
 const logger = createLogger('PublicService');
 import { haversineDistanceKm } from '../common/geo';
-import { generateTrackingCode } from '../common/token-hash';
+import { TRACKING_TOKEN_SHAPE, withTrackingToken } from '../common/token-hash';
 import {
   computeOrderTotals,
   matchDeliveryZone,
@@ -1265,10 +1265,14 @@ export class PublicService {
     if (!token?.trim()) {
       throw new BadRequestException('A tracking code is required');
     }
-    const orders = await this.db.query<RowDataPacket[]>(
-      `SELECT * FROM \`order\` WHERE trackingToken = ? LIMIT 1`,
-      [token],
-    );
+    // Only the two issued shapes (32 hex, or the legacy 10 hex) can match; any
+    // other string gets the same 404 as an unknown token, with no DB query.
+    const orders = TRACKING_TOKEN_SHAPE.test(token)
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT * FROM \`order\` WHERE trackingToken = ? LIMIT 1`,
+          [token],
+        )
+      : [];
     const order = orders[0];
     if (!order) {
       throw new NotFoundException('No order found for that tracking code');
@@ -1855,7 +1859,6 @@ export class PublicService {
           },
         );
 
-      const trackingToken = generateTrackingCode();
       // Nested inside withShopOrderNumber deliberately - see that function's
       // comment. Claiming the number must complete before this AUTO_INCREMENT
       // insert clobbers LAST_INSERT_ID() on this connection.
@@ -1863,7 +1866,8 @@ export class PublicService {
         conn,
         shop.id,
         async (shopOrderNumber) => {
-          const [res] = await conn.query(
+          const [res] = await withTrackingToken((trackingToken) =>
+            conn.query(
         `INSERT INTO \`order\` (
           shopId, ingredientsConsumedAt, consumptionRecordedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
@@ -1925,6 +1929,7 @@ export class PublicService {
           // this moment. NULL = the browser sent nothing (unknown).
           attributionData ? JSON.stringify(attributionData) : null,
         ],
+            ),
           );
           return res;
         },
