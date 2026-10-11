@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PurchaseOrdersController } from './purchase-orders.controller';
+import { ReorderController } from './reorder.controller';
+import { ReorderService } from './reorder.service';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
@@ -15,7 +17,7 @@ import { SuppliersModule } from '../suppliers/suppliers.module';
     ProductsModule,
     SuppliersModule,
   ],
-  controllers: [PurchaseOrdersController],
-  providers: [PurchaseOrdersService],
+  controllers: [PurchaseOrdersController, ReorderController],
+  providers: [PurchaseOrdersService, ReorderService],
 })
 export class PurchaseOrdersModule {}

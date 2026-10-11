@@ -925,6 +925,9 @@ export interface OutletingredientstockRow {
   ingredientId: number;
   stockQuantity: number;
   lowStockThreshold: number | null;
+  // INV-5. NULL = unknown (no suggestion), never 0.
+  reorderPoint: number | null;
+  reorderQuantity: number | null;
 }
 
 export interface ProductingredientRow {

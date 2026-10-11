@@ -31,6 +31,10 @@ import type {
   PurchaseOrderLineInput,
   PurchaseOrderListItem,
   ReceivePurchaseOrderInput,
+  ReorderLowStockRow,
+  ReorderPointInput,
+  ReorderSuggestions,
+  ScanPurchaseOrderResult,
   SupplierContactInput,
   SupplierDetail,
   SupplierInput,
@@ -2326,6 +2330,39 @@ export function cancelPurchaseOrder(id: number) {
 export function receivePurchaseOrder(id: number, data: ReceivePurchaseOrderInput) {
   return apiFetch<{ receiptId: number; replayed: boolean; purchaseOrder: PurchaseOrderDetail }>(
     `/purchase-orders/${id}/receive`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+// INV-3: resolves a barcode or SKU to one open line. Writes nothing; the tally is
+// committed through receivePurchaseOrder.
+export function scanPurchaseOrderLine(
+  id: number,
+  data: { code: string; quantity?: number; pending?: { lineId: number; quantity: number }[] },
+) {
+  return apiFetch<ScanPurchaseOrderResult>(`/purchase-orders/${id}/scan`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ---- Reorder points and suggested purchase orders (INV-5) ----
+
+export function listReorderLowStock(outletId?: number) {
+  return apiFetch<{ data: ReorderLowStockRow[] }>(`/reorder/low-stock${outletId ? `?outletId=${outletId}` : ""}`);
+}
+
+export function listReorderSuggestions(outletId?: number) {
+  return apiFetch<ReorderSuggestions>(`/reorder/suggestions${outletId ? `?outletId=${outletId}` : ""}`);
+}
+
+export function setReorderPoint(data: ReorderPointInput) {
+  return apiFetch<ReorderPointInput>("/reorder/points", { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function createReorderDrafts(data: { outletId: number; supplierId?: number }) {
+  return apiFetch<{ created: { id: number; supplierId: number; currency: string; subtotal: number; lines: number }[] }>(
+    "/reorder/suggestions/draft-pos",
     { method: "POST", body: JSON.stringify(data) },
   );
 }

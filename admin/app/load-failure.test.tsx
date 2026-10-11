@@ -67,6 +67,7 @@ const ENTRIES: Entry[] = [
   page("movements", () => import("./inventory/movements/page")),
   page("purchase orders", () => import("./inventory/purchase-orders/page")),
   page("purchase order detail", () => import("./inventory/purchase-orders/[id]/page")),
+  page("reorder", () => import("./inventory/reorder/page")),
   page("suppliers", () => import("./inventory/suppliers/page")),
   page("supplier detail", () => import("./inventory/suppliers/[id]/page")),
   page("order detail", () => import("./orders/[id]/page")),
