@@ -159,7 +159,9 @@ describeIfStorefront('storefront /api rewrite and client IP (W7)', () => {
       }),
     );
     await app.listen(0, '127.0.0.1');
-    backendPort = (app.getHttpServer().address() as net.AddressInfo).port;
+    backendPort = (
+      (app.getHttpServer() as http.Server).address() as net.AddressInfo
+    ).port;
     apiCaddy = await caddy(backendPort, VPS);
   });
 
@@ -181,7 +183,12 @@ describeIfStorefront('storefront /api rewrite and client IP (W7)', () => {
     edge = await caddy(storefront.port);
   }
 
-  const login = async (base: string, prefix: string, ip: string, xff?: string) => {
+  const login = async (
+    base: string,
+    prefix: string,
+    ip: string,
+    xff?: string,
+  ) => {
     let req = request(base).post(`${prefix}/auth/login`).set(SIM, ip);
     if (xff) req = req.set('X-Forwarded-For', xff);
     const res = await req.send({
@@ -191,7 +198,12 @@ describeIfStorefront('storefront /api rewrite and client IP (W7)', () => {
     return res.status;
   };
 
-  const sessionIp = async (base: string, prefix: string, ip: string, xff?: string) => {
+  const sessionIp = async (
+    base: string,
+    prefix: string,
+    ip: string,
+    xff?: string,
+  ) => {
     const slug = `e2e-w7-${runId}-${++seq}`;
     let req = request(base).post(`${prefix}/auth/signup`).set(SIM, ip);
     if (xff) req = req.set('X-Forwarded-For', xff);
