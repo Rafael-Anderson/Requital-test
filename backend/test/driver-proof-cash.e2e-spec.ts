@@ -568,6 +568,62 @@ describe('SHP-5 driver actions: proof, cash, timeline', () => {
       });
     });
 
+    it('expects the cash DUE (total less gift card and store credit) everywhere: driver app, run sheet, pending, delivery', async () => {
+      const r = await fx.dispatchedRun(a, {
+        cod: true,
+        proofRequirement: 'none',
+        price: 100,
+      });
+      const orderId = r.orders[0].id;
+      await fx.db.execute(
+        `UPDATE \`order\` SET giftCardAmount = 20, storeCreditAmount = 30 WHERE id = ?`,
+        [orderId],
+      );
+      const [order] = await fx.row<{ total: string }>(
+        `SELECT total FROM \`order\` WHERE id = ?`,
+        [orderId],
+      );
+      const due = (Number(order.total) - 50).toFixed(2);
+      // the driver's own view
+      const view = await fx
+        .r()
+        .get('/driver-app/run')
+        .set(tok(r.token))
+        .expect(200);
+      expect(
+        body<{ stops: { cod: { amount: string } }[] }>(view).stops[0].cod.amount,
+      ).toBe(due);
+      // staff: pending cash and the printable run sheet
+      const detail = await fx
+        .r()
+        .get(`/delivery-runs/${r.run.id}`)
+        .set(fx.h(a.adminToken))
+        .expect(200);
+      expect(
+        body<{ cash: { pending: string }[] }>(detail).cash[0].pending,
+      ).toBe(due);
+      const sheet = (
+        await fx
+          .r()
+          .get(`/delivery-runs/${r.run.id}/sheet`)
+          .set(fx.h(a.adminToken))
+          .expect(200)
+      ).text;
+      expect(sheet).toContain(`CASH TO COLLECT: ${due} `);
+      // delivering with exactly the due amount is NOT a discrepancy, and the
+      // frozen expectation is the due amount
+      await deliver(r.token, r.stops[0].id, { cashCollected: due }).expect(201);
+      const [stop] = await fx.row<{
+        codExpected: string;
+        cashDiscrepancy: number;
+      }>(
+        `SELECT codExpected, cashDiscrepancy FROM deliveryrunstop WHERE id = ?`,
+        [r.stops[0].id],
+      );
+      expect(Number(stop.codExpected)).toBe(Number(due));
+      expect(Boolean(stop.cashDiscrepancy)).toBe(false);
+    });
+
     it('handles a 3-decimal currency exactly (KWD 10.505)', async () => {
       const r = await fx.dispatchedRun(a, {
         cod: true,
