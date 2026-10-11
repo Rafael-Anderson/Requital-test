@@ -30,7 +30,12 @@ const WRITE = /INSERT INTO|\bUPDATE\b|buildSetClause|replaceZoneRegions\(/;
 // Private writers only ever called with ids their caller has just validated; every
 // caller (create / update / setMapping in the same file) is itself checked above,
 // because it mentions regionIds next to a SQL write and so must resolve them.
-const ALLOWLIST = new Set(["delivery-zones/delivery-zones.service.ts:replaceZoneRegions"]);
+const ALLOWLIST = new Set([
+  "delivery-zones/delivery-zones.service.ts:replaceZoneRegions",
+  // READ-only: only LEFT JOINs region to print the region name on a stop. Its UPDATE
+  // touches the link's lastUsedAt, never a regionId.
+  "drivers/driver-app.service.ts:getRun",
+]);
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

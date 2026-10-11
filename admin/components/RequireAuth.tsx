@@ -36,11 +36,14 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
   // just because no merchant session exists. Same pathname-conditional
   // bypass shape AppChrome.tsx already uses for its own full-bleed routes.
   const isPlatformPath = pathname.startsWith("/platform");
+  // /driver/<token> is the delivery driver's magic-link page: no account, no
+  // session, its own token in the URL. Never redirect it to /login.
+  const isDriverPath = pathname.startsWith("/driver/");
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
   const isGuestOnlyPath = GUEST_ONLY_PATHS.includes(pathname);
 
   useEffect(() => {
-    if (loading || isPlatformPath) return;
+    if (loading || isPlatformPath || isDriverPath) return;
     if (!user && !isPublicPath) {
       // A dead impersonation token (1h expiry, non-refreshable — see
       // AuthService.issueImpersonationTokenForShop) reaches here the same
@@ -62,9 +65,9 @@ export default function RequireAuth({ children }: { children: React.ReactNode })
     if (user?.twoFactor?.enrollmentRequired && pathname !== "/settings/security") {
       router.replace("/settings/security");
     }
-  }, [loading, user, isPublicPath, isGuestOnlyPath, isPlatformPath, pathname, router]);
+  }, [loading, user, isPublicPath, isGuestOnlyPath, isPlatformPath, isDriverPath, pathname, router]);
 
-  if (isPlatformPath) return <>{children}</>;
+  if (isPlatformPath || isDriverPath) return <>{children}</>;
   if (loading) return null;
   if (!user && !isPublicPath) return null;
   if (user && isGuestOnlyPath) return null;
