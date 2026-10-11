@@ -33,6 +33,14 @@ backend returns 200 for that host.
 `TRUST_PROXY=loopback` reads it. Keep it that way: see `docs/runbook.md`, "Client
 IP behind the proxies".
 
+The storefront's own server-side hop to the backend must not go through this
+Caddyfile's `api.requital.io` block (Caddy would overwrite `X-Forwarded-For` with
+the VPS address and put every shopper in one throttle bucket). It uses
+`INTERNAL_API_URL=http://127.0.0.1:3000` in `storefront/.env.local`, present at
+build AND runtime; see the runbook's "Why the storefront needs
+`INTERNAL_API_URL`". The `api.requital.io` block needs no change: it serves
+browsers (admin) and keeps overwriting the header correctly.
+
 ### Secrets — not in this repo
 
 `*.requital.io`'s `tls { dns cloudflare {env.CLOUDFLARE_API_TOKEN} }` reads
