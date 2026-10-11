@@ -135,6 +135,15 @@ export function createTierCsrf(opts: {
       ) {
         return true;
       }
+      // Customer email-verification link: token-bearing and pre-session (opened
+      // from an inbox, possibly in a browser that still holds a stale session
+      // cookie); a forged request would need the unguessable token.
+      if (
+        req.method === 'POST' &&
+        /(^|\/)public\/[^/]+\/auth\/verify-email$/.test(reqPath)
+      ) {
+        return true;
+      }
       if (opts.skipPathPrefixes?.some((prefix) => reqPath.startsWith(prefix))) {
         return true;
       }

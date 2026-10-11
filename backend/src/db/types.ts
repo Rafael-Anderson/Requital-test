@@ -811,7 +811,14 @@ export interface CustomerRow {
   wishlist: unknown;
   createdAt: Date;
   passwordHash: string | null;
+  // Legacy BOOLEAN, never written by any code and no longer read. Trust lives in
+  // verifiedEmail below.
   emailVerified: boolean;
+  // The address the owner proved by clicking a link (NULL = none). The ONLY
+  // address a password reset is sent to; written only by the verification
+  // endpoint. See migration 20261101100000.
+  verifiedEmail: string | null;
+  emailVerifiedAt: Date | null;
   registeredAt: Date | null;
   lastDataExportAt: Date | null;
   failedLoginAttempts: number;

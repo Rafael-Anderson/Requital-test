@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { CustomerAuthController } from './customer-auth.controller';
 import { CustomerAuthService } from './customer-auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
+import { CustomerEmailVerificationService } from './customer-email-verification.service';
 import { JobsModule } from '../jobs/jobs.module';
 
 // Session-cookie migration (security audit finding #1), phase 3 — this used
@@ -23,11 +24,15 @@ import { JobsModule } from '../jobs/jobs.module';
     JobsModule,
   ],
   controllers: [CustomerAuthController],
-  providers: [CustomerAuthService, CustomerAuthGuard],
+  providers: [
+    CustomerAuthService,
+    CustomerAuthGuard,
+    CustomerEmailVerificationService,
+  ],
   // JwtModule itself must be exported too, not just CustomerAuthGuard —
   // @UseGuards(CustomerAuthGuard) in a *different* module (CustomerAccountModule)
   // re-resolves the guard's own constructor deps (JwtService, DatabaseService)
   // in that module's scope, so JwtService has to be visible there too.
-  exports: [JwtModule, CustomerAuthGuard],
+  exports: [JwtModule, CustomerAuthGuard, CustomerEmailVerificationService],
 })
 export class CustomerAuthModule {}

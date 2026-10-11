@@ -49,9 +49,18 @@ export class CustomersService {
   // Shared by both the storefront checkout flow (PublicService) and
   // admin-entered orders (OrdersService) — the one place phone-matching
   // logic lives, so the two paths can never drift apart. Matches by phone
-  // within the shop (never globally); updates the saved name/email if the
-  // new order's details differ, so the record stays current rather than
-  // frozen at first contact.
+  // within the shop (never globally).
+  //
+  // A MATCH IS NEVER WRITTEN TO. The phone number is not a credential: anyone
+  // who knows it can place an order with it, and this used to copy the name and
+  // email typed on that order onto the matched customer, which let a guest
+  // replace the email of a registered account. The contact details typed for an
+  // order live on the order row (order.customerName/customerEmail, which is also
+  // where every order notification reads them), and a customer's own record is
+  // changed only by its owner (account profile, then verified) or by staff
+  // (PATCH /customers). Password reset does not trust customer.email either, only
+  // customer.verifiedEmail, but this stays closed as well so the CRM record is
+  // not rewritable by strangers. Only a brand-new phone creates a row.
   async findOrCreateForOrder(
     shopId: number,
     data: { name: string; phone: string; email?: string | null },
@@ -60,9 +69,8 @@ export class CustomersService {
       `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
       [shopId, data.phone],
     );
-    const existing = existingRows[0];
-    if (existing) {
-      return this.applyUpdateIfChanged(existing, data);
+    if (existingRows[0]) {
+      return existingRows[0];
     }
     // A phone that belonged to a customer who was merged into another one
     // resolves to that customer, so merging is not undone by the next order.
@@ -74,7 +82,7 @@ export class CustomersService {
       [shopId, data.phone],
     );
     if (aliasRows[0]) {
-      return this.applyUpdateIfChanged(aliasRows[0], data);
+      return aliasRows[0];
     }
     try {
       const result = await this.db.execute(
@@ -89,46 +97,18 @@ export class CustomersService {
     } catch (error) {
       // Two concurrent orders for the same brand-new phone number can both
       // miss the SELECT above and both attempt to create — the loser hits
-      // the [shopId, phone] unique constraint (the only unique constraint on
-      // this table, see schema.prisma) instead of actually losing data.
-      // Re-fetch and resolve to the winner's row rather than letting a 500
-      // surface, running it through the same name/email-diff path an
-      // ordinary (non-racing) repeat customer would take.
+      // the [shopId, phone] unique constraint instead of actually losing
+      // data. Re-fetch and resolve to the winner's row (unchanged, like any
+      // other match).
       if (isDuplicateKeyError(error)) {
         const winnerRows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
           `SELECT * FROM customer WHERE shopId = ? AND phone = ?`,
           [shopId, data.phone],
         );
-        return this.applyUpdateIfChanged(winnerRows[0], data);
+        return winnerRows[0];
       }
       throw error;
     }
-  }
-
-  private async applyUpdateIfChanged(
-    existing: CustomerRow,
-    data: { name: string; email?: string | null },
-  ) {
-    const nameChanged = data.name && data.name !== existing.name;
-    const emailChanged = data.email && data.email !== existing.email;
-    if (!nameChanged && !emailChanged) {
-      return existing;
-    }
-    const set = buildSetClause({
-      name: nameChanged ? data.name : undefined,
-      email: emailChanged ? data.email : undefined,
-    });
-    if (set) {
-      await this.db.execute(
-        `UPDATE customer SET ${set.setClause} WHERE id = ?`,
-        [...set.params, existing.id],
-      );
-    }
-    const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
-      `SELECT * FROM customer WHERE id = ?`,
-      [existing.id],
-    );
-    return rows[0];
   }
 
   async findAll(ctx: TenantContext, query: ListCustomersQueryDto) {

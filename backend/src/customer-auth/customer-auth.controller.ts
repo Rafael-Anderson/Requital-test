@@ -14,6 +14,7 @@ import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
 import { ForgotCustomerPasswordDto } from './dto/forgot-customer-password.dto';
 import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
+import { VerifyCustomerEmailDto } from './dto/verify-customer-email.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import {
   CUSTOMER_ACCESS_COOKIE,
@@ -148,5 +149,13 @@ export class CustomerAuthController {
   @Post('reset-password')
   resetPassword(@Body() dto: ResetCustomerPasswordDto) {
     return this.customerAuthService.resetPassword(dto);
+  }
+
+  // Pre-session and token-carrying, like reset-password: the link is opened from
+  // an inbox, often in a browser with no storefront session.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('verify-email')
+  verifyEmail(@Body() dto: VerifyCustomerEmailDto) {
+    return this.customerAuthService.verifyEmail(dto.token);
   }
 }

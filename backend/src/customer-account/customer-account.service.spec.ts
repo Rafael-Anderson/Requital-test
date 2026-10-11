@@ -135,6 +135,7 @@ describe('CustomerAccountService.exportData', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     const result = await service.exportData(ctx);
@@ -192,6 +193,7 @@ describe('CustomerAccountService.exportData', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -220,6 +222,7 @@ describe('CustomerAccountService.exportData', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -243,6 +246,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     const result = await service.requestDeletion(ctx);
@@ -288,6 +292,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -346,6 +351,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -381,6 +387,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -407,6 +414,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -479,6 +487,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
       {} as never, // jobs: proof cleanup is mocked below
+      {} as never, // emailVerification: not reached by these paths
     );
 
     const first = await service.confirmDeletion(ctx, raw);
