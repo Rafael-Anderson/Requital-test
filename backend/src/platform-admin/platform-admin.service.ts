@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { randomUUID } from 'crypto';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { AuthService } from '../auth/auth.service';
 import { SliderSettingsService } from '../delivery-providers/slider-settings.service';
@@ -11,6 +12,9 @@ import { SliderDeliveryProvider } from '../delivery-providers/slider/slider-deli
 import { SLIDER_CURRENCY } from '../delivery-providers/slider/slider.constants';
 import { assertShopCountryIsUae } from '../delivery-providers/slider/slider-caps';
 import { PlatformAuditLogService } from './platform-audit-log.service';
+import { JobsService } from '../jobs/jobs.service';
+import { MfaStore } from '../two-factor/mfa-store';
+import { escapeHtml } from '../common/email';
 import { FeaturesService } from '../features/features.service';
 import { isFeatureKey } from '../features/feature-keys';
 import type { ShopRow, OutletRow } from '../db/types';
@@ -30,7 +34,119 @@ export class PlatformAdminService {
     private readonly sliderProvider: SliderDeliveryProvider,
     private readonly platformAuditLogService: PlatformAuditLogService,
     private readonly features: FeaturesService,
-  ) {}
+    private readonly jobs: JobsService,
+  ) {
+    this.staffMfa = new MfaStore(db, 'staff');
+  }
+
+  private readonly staffMfa: MfaStore;
+
+  // Staff of one shop, for the "Staff two-factor" picker. Explicit columns only:
+  // no password hash, no TOTP secret, no recovery code, no token ever leaves here.
+  async listShopUsers(shopId: number) {
+    const shops = await this.db.query<RowDataPacket[]>(
+      `SELECT require2fa FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    if (!shops[0]) throw new NotFoundException('Shop not found');
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT u.id, u.name, u.email, u.role, u.outletId, o.name AS outletName,
+              u.mustEnrol2fa,
+              EXISTS(SELECT 1 FROM usertotp t
+                     WHERE t.userId = u.id AND t.confirmedAt IS NOT NULL) AS mfaEnrolled,
+              (SELECT MAX(r.createdAt) FROM refreshtoken r WHERE r.userId = u.id) AS lastSignInAt
+         FROM user u LEFT JOIN outlet o ON o.id = u.outletId AND o.shopId = u.shopId
+        WHERE u.shopId = ?
+        ORDER BY u.id`,
+      [shopId],
+    );
+    return {
+      shopRequires2fa: !!shops[0].require2fa,
+      users: rows.map((u) => ({
+        id: u.id as number,
+        name: u.name as string,
+        email: u.email as string,
+        role: u.role as string,
+        outletId: (u.outletId as number | null) ?? null,
+        outletName: (u.outletName as string | null) ?? null,
+        mfaEnrolled: !!u.mfaEnrolled,
+        mustEnrol2fa: !!u.mustEnrol2fa,
+        lastSignInAt: (u.lastSignInAt as Date | null) ?? null,
+      })),
+    };
+  }
+
+  // Recovery for a shop user who lost their device AND their recovery codes (a
+  // sole shop admin has nobody else to reset them). One transaction: the
+  // removal of the second factor, the revoke of every session, the "must enrol
+  // again" flag, the notification email and the platform audit row commit
+  // together, so a failed audit insert rolls the whole reset back. The shop is
+  // part of every statement's WHERE: a user id from another shop is the same 404
+  // as one that does not exist. Nothing secret is read or returned.
+  async resetShopUserTwoFactor(
+    platformAdminId: number,
+    shopId: number,
+    userId: number,
+  ): Promise<{ success: true }> {
+    await this.db.transaction(async (conn) => {
+      const [users] = await conn.query<RowDataPacket[]>(
+        `SELECT id, name, email, role FROM user WHERE id = ? AND shopId = ? FOR UPDATE`,
+        [userId, shopId],
+      );
+      const user = users[0];
+      if (!user) throw new NotFoundException('User not found');
+
+      const [enrolledRows] = await conn.query<RowDataPacket[]>(
+        `SELECT 1 FROM usertotp WHERE userId = ? AND confirmedAt IS NOT NULL`,
+        [userId],
+      );
+      const wasEnrolled = enrolledRows.length > 0;
+
+      await this.staffMfa.disableOn(conn, userId);
+      // An enrolled user must enrol again even in a shop that does not require
+      // it; a user who never had a second factor is not forced into one.
+      if (wasEnrolled) {
+        await conn.query(
+          `UPDATE user SET mustEnrol2fa = 1 WHERE id = ? AND shopId = ?`,
+          [userId, shopId],
+        );
+      }
+      const [revoked] = await conn.query<ResultSetHeader>(
+        `UPDATE refreshtoken SET revokedAt = ? WHERE userId = ? AND revokedAt IS NULL`,
+        [new Date(), userId],
+      );
+
+      await this.jobs.enqueue(
+        shopId,
+        'send_email',
+        {
+          to: user.email as string,
+          subject: 'Two-factor authentication was reset on your Requital account',
+          bodyText:
+            'Requital support reset two-factor authentication on your account at your request. ' +
+            'You have been signed out everywhere. Sign in with your password and set up two-factor again. ' +
+            'If you did not ask for this, contact Requital support immediately and change your password.',
+          html: `<p>Hi ${escapeHtml(user.name as string)},</p><p>Requital support reset two-factor authentication on your account at your request. You have been signed out everywhere. Sign in with your password and set up two-factor again.</p><p>If you did not ask for this, contact Requital support immediately and change your password.</p>`,
+        },
+        `platform-2fa-reset-email:${userId}:${randomUUID()}`,
+        { tx: conn },
+      );
+
+      await this.platformAuditLogService.log(
+        platformAdminId,
+        'shop.user_2fa_reset',
+        shopId,
+        {
+          userId,
+          role: user.role as string,
+          wasEnrolled,
+          sessionsRevoked: revoked.affectedRows,
+        },
+        conn,
+      );
+    });
+    return { success: true };
+  }
 
   // Shops whose delivery zones are still matched by free-text name because at
   // least one active zone has not had its regions confirmed. Read-only.

@@ -338,6 +338,42 @@ Remove `TRUST_PROXY` from `backend/.env` and `sudo -u deploy pm2 restart requita
 
 An IPv6 client is throttled per /64 (so it cannot rotate addresses to escape a limit), which means two users on the same /64 share a bucket. The session list IP column records the full address. Per-account protections (the progressive login delay, the MFA lockout) never depended on the IP and are unchanged.
 
+## Shop owner lost their two-factor (platform-admin recovery)
+
+**This is the only way a sole shop admin recovers.** If a shop's only admin loses their authenticator device AND their recovery codes, nobody else in that shop can reset them (a same-shop admin can reset a colleague, never themselves), so a Requital platform admin must do it. Until you press the button the shop is locked out of its own admin. Because the reset hands account access to whoever asks convincingly, it is a social-engineering target: do the checklist below first, every time, no exceptions for urgency.
+
+### Before you press Reset: verify the person (all of these)
+
+1. **Out of band.** Contact the owner on a channel you already held before this request (the phone number or email on the signed Requital contract or billing record), never on the details supplied by the requester and never over the channel the request arrived on. A requester who pushes urgency ("my shop is down, do it now") is a reason to slow down, not to hurry.
+2. **Match the shop.** The requester states, unprompted, details you compare with the platform record: shop name and subdomain, the owner's registered email, the country and currency, roughly when the shop was created.
+3. **Proof of ownership.** At least one of: the last order (number and approximate total) as seen in the platform shop detail, a recent billing or payout document in the owner's name, or a live video call where they show a government ID matching the owner of record.
+4. **Know who the user is.** Pick the exact user in the Staff two-factor card by email. For a non-owner staff member, the shop's own admin should ask, not the staff member; only reset a staff member at the request of a verified shop admin.
+5. **Write down** who verified, how, and the ticket reference, in your support ticket (the audit log below records the action, not your verification).
+
+### What the reset does
+
+On `/platform/shops/<id>`, card **Staff two-factor**, Reset two-factor, confirm. In one transaction it:
+
+- deletes the user's authenticator secret and all recovery codes;
+- revokes every session of that user (signed out everywhere at once, even a tab that is open);
+- marks the user as **must set up two-factor again**: after signing in with their password they can reach only the two-factor setup page until they enrol, even when the shop does not require two-factor (a user who had no second factor is not forced into one);
+- queues an email to the user: "two-factor was reset by Requital support" (no codes in it);
+- writes a platform audit log entry. The audit entry is part of the same transaction: if it cannot be written, nothing is reset and you see an error. Try again.
+
+It does **not**: change the password, change the shop-wide two-factor setting, touch any other user, or end an impersonation session (those expire on their own within an hour). It never shows you a secret or a code; the response is only "success". A user id from another shop gets the same 404 as one that does not exist.
+
+### What the user sees next
+
+An email saying support reset their two-factor. On the next sign-in (password only) they are taken to Settings > Security with a notice that two-factor is required on their account, and every other page answers 403 until they scan a new QR code and confirm. They get new recovery codes. Tell them to store the codes somewhere other than the phone that holds the authenticator.
+
+### Checking it in the audit log
+
+Platform > Audit log (or `GET /platform-admin/audit-log?shopId=<id>`): action `shop.user_2fa_reset`, the shop id, and metadata `{ userId, role, wasEnrolled, sessionsRevoked }` (never a secret). The shop's own Activity log does not show it (it records shop users as actors and a platform admin is not one); the email to the user is the shop-side trail.
+
+### If a platform admin loses their own two-factor
+
+The platform tier has no one above it in the UI: from `backend/` on the server run `npm run db:reset-platform-2fa -- <email>` (needs database access and writes no audit row, so note it in the ticket), then enrol again. If `PLATFORM_REQUIRE_2FA` is on, an unenrolled platform admin can reach only the enrolment page, which is also why this endpoint is unreachable to them.
+
 ## Migration rollback reference
 
 This project's migrations are hand-authored `migration.sql` files applied by `npm run db:migrate` (`backend/scripts/migrate.ts`, see CLAUDE.md) — nothing generates a down migration for any of them, and the runner has no "rollback" command. The table below is the manual down-path for every migration currently in the repo, so a rollback is a deliberate, reviewed action rather than a guess made under pressure.
@@ -429,6 +465,7 @@ This project's migrations are hand-authored `migration.sql` files applied by `np
 | `20261021110000_two_factor` | Data-loss revert | `DROP TABLE userrecoverycode, usertotp, platformadminrecoverycode, platformadmintotp` and `ALTER TABLE shop DROP COLUMN require2fa`. Every enrolled user and platform admin silently loses their second factor and must re-enrol; a shop that required 2FA stops requiring it. Roll the backend, admin and platform admin back first so no login path still expects a factor. |
 | `20261022100000_url_redirects` | Data-loss revert | `DROP TABLE notfoundlog, urlredirect`. Destroys every merchant's redirect map and the 404 report; the old URLs 404 again until re-imported. Roll the storefront back first (its proxy fetches the map) or it simply sees no redirects. |
 | `20261023100000_survey_publish_consent` | Schema-only, additive | `ALTER TABLE surveyresponse DROP INDEX <the (shopId, featuredAt) index>, DROP COLUMN featuredAt, DROP COLUMN publishConsent`. Every featured review goes offline and every recorded consent is lost, so a re-migrated shop must re-collect consent. Roll the storefront and admin back first (the survey form sends `publishConsent`). |
+| `20261024100000_user_must_enrol_2fa` | Schema-only, additive | `ALTER TABLE user DROP COLUMN mustEnrol2fa`. A user who was waiting to re-enrol after a platform reset is no longer confined (their 2FA was already removed), so roll the backend back first or support must re-check those users. |
 
 For any "Data-loss revert" row above, the actually-safe rollback procedure is: **restore from a backup taken before the migration was applied** (see Backup/Restore above), not attempt the down-path against a live database that already has real post-migration data in it. The down-paths listed are what you'd run to make the *schema* match a pre-migration state, not to un-lose the data that lived in the tables/columns being dropped.
 
@@ -531,6 +568,10 @@ Five migrations, in folder order, all additive (new tables, two nullable columns
 - **The password policy is not retroactive.** It applies where a password is chosen (signup, change, reset, invite, customer register and reset), never at login; no existing account is locked out or flagged.
 - **Smoke checks after restart:** `GET /public/<testadmin slug>/redirects/map` returns 200 with an `ETag`; a visit to a path with a configured redirect on a hostname-resolved storefront answers 301 with a same-origin or own-host `Location`; log in as `testadmin`, open Settings > Security and confirm the current session is listed. Deploy checksums: the order and money-column checksum is unaffected (no order table changes).
 - `GET /purchase-orders` and the supplier pages need no flag: they appear under Inventory for admin and branch staff.
+
+### S1a (2026-10-08): platform-admin reset of a shop user's two-factor
+
+Migration `20261024100000_user_must_enrol_2fa` (additive `user.mustEnrol2fa`, default 0). Deploy order: migrate, backend, admin. No env var. See the recovery section above.
 
 ### Added since `b9aed0f7` (the UI fix batch, 2026-10-03)
 

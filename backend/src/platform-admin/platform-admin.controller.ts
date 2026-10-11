@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { PlatformAdminService } from './platform-admin.service';
 import { PlatformAuditLogService } from './platform-audit-log.service';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
@@ -109,6 +110,27 @@ export class PlatformAdminController {
       admin.id,
       shopId,
       key,
+    );
+  }
+
+  @Get('shops/:shopId/users')
+  listShopUsers(@Param('shopId', ParseIntPipe) shopId: number) {
+    return this.platformAdminService.listShopUsers(shopId);
+  }
+
+  // The only recovery for a sole shop admin who lost their device and recovery
+  // codes. Response is { success: true } and nothing else.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('shops/:shopId/users/:userId/reset-2fa')
+  resetUserTwoFactor(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.platformAdminService.resetShopUserTwoFactor(
+      admin.id,
+      shopId,
+      userId,
     );
   }
 

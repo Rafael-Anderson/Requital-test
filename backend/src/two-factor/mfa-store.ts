@@ -111,6 +111,8 @@ export class MfaStore {
     id: number,
     code: string,
     nowMs: number,
+    // Runs on the confirming transaction (staff tier: clears user.mustEnrol2fa).
+    onConfirmed?: (conn: PoolConnection) => Promise<void>,
   ): Promise<string[] | null> {
     const r = await this.row(id);
     if (!r || r.confirmedAt) return null;
@@ -134,6 +136,7 @@ export class MfaStore {
       );
       if (res.affectedRows === 0) return false;
       await this.replaceRecoveryCodes(conn, id, codes);
+      await onConfirmed?.(conn);
       return true;
     });
     return won ? codes : null;
@@ -206,15 +209,15 @@ export class MfaStore {
 
   // Removes the second factor entirely (own disable, admin reset).
   async disable(id: number): Promise<void> {
-    await this.db.transaction(async (conn) => {
-      await conn.query(
-        `DELETE FROM ${this.t.recovery} WHERE ${this.t.id} = ?`,
-        [id],
-      );
-      await conn.query(`DELETE FROM ${this.t.totp} WHERE ${this.t.id} = ?`, [
-        id,
-      ]);
-    });
+    await this.db.transaction((conn) => this.disableOn(conn, id));
+  }
+
+  // The same removal on a caller's transaction (platform-admin reset).
+  async disableOn(conn: PoolConnection, id: number): Promise<void> {
+    await conn.query(`DELETE FROM ${this.t.recovery} WHERE ${this.t.id} = ?`, [
+      id,
+    ]);
+    await conn.query(`DELETE FROM ${this.t.totp} WHERE ${this.t.id} = ?`, [id]);
   }
 
   private async replaceRecoveryCodes(

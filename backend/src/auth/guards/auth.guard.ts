@@ -97,6 +97,7 @@ export class AuthGuard implements CanActivate {
                      WHERE r.familyId = ? AND r.userId = u.id
                        AND r.revokedAt IS NULL AND r.expiresAt > ?) AS sessionLive,
               s.require2fa AS shopRequires2fa,
+              u.mustEnrol2fa AS mustEnrol2fa,
               EXISTS(SELECT 1 FROM usertotp t
                      WHERE t.userId = u.id AND t.confirmedAt IS NOT NULL) AS mfaEnrolled
        FROM user u JOIN shop s ON s.id = u.shopId
@@ -118,6 +119,9 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException('This shop has been suspended');
     }
 
+    // Per-user "must enrol" (S1a): set by a platform-admin 2FA reset, so a user
+    // whose second factor was removed cannot carry on without one even when the
+    // shop does not require it. Same confinement, same single query.
     // Shop-wide "require two-factor" (STF-3). Evaluated on EVERY request from
     // the row just read, so flipping the switch restricts users who are already
     // signed in at once, and enrolling lifts it on the same session. A session
@@ -128,7 +132,7 @@ export class AuthGuard implements CanActivate {
     // themselves refuse an impersonation token.
     if (
       !isImpersonation &&
-      user.shopRequires2fa &&
+      (user.shopRequires2fa || user.mustEnrol2fa) &&
       !user.mfaEnrolled &&
       !this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_MFA_KEY, [
         context.getHandler(),
@@ -138,7 +142,7 @@ export class AuthGuard implements CanActivate {
       throw new ForbiddenException({
         statusCode: 403,
         message:
-          'Your shop requires two-factor authentication. Set it up to continue.',
+          'Two-factor authentication is required for your account. Set it up to continue.',
         code: 'mfa_enrollment_required',
       });
     }
