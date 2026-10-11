@@ -591,6 +591,11 @@ describe('Store credit (e2e)', () => {
         1,
         30,
       );
+      // credit is only minted against money actually received
+      await db.execute(
+        `UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`,
+        [orderId],
+      );
       const total = Number((await f.orderRow(orderId)).total);
       const r = body<{
         id: number;
@@ -630,6 +635,92 @@ describe('Store credit (e2e)', () => {
           (e) => e.entryType === 'return_refund',
         ),
       ).toHaveLength(1);
+    });
+
+    it('the shopper never sees the staff reason or staff name on a ledger entry', async () => {
+      const { shop, customer } = await setup('sc-priv');
+      await grant(shop, customer.customerId, 10, 'AED', {
+        reason: 'compensation for rude driver Ahmed',
+      }).expect(201);
+      const mine = body<{
+        entries: { reason: string | null; actorName: string | null }[];
+      }>(
+        await asCustomer(
+          server(),
+          customer,
+          'get',
+          `/public/${shop.slug}/account/store-credit`,
+        ).expect(200),
+      );
+      expect(mine.entries.length).toBeGreaterThan(0);
+      expect(JSON.stringify(mine)).not.toContain('Ahmed');
+      expect(mine.entries[0].actorName).toBeNull();
+      expect(mine.entries[0].reason).toBeNull();
+      // staff still see both
+      const staff = body<{ entries: { reason: string | null }[] }>(
+        await admin(
+          shop,
+          'get',
+          `/customers/${customer.customerId}/store-credit`,
+        ).expect(200),
+      );
+      expect(staff.entries[0].reason).toContain('Ahmed');
+    });
+
+    it('only an admin can refund to store credit, and only against a paid order', async () => {
+      const { shop, customer, orderId, line } = await delivered(
+        'sc-ret4',
+        100,
+        1,
+        30,
+      );
+      const om = await createStaffToken(
+        app,
+        shop.adminToken,
+        'scr',
+        'order_manager',
+      );
+      // an order_manager may record a return but not mint credit
+      await request(server())
+        .post(`/orders/${orderId}/returns`)
+        .set('Authorization', `Bearer ${om}`)
+        .send({
+          reason: 'changed_mind',
+          items: [{ orderItemId: line, quantity: 1 }],
+          restock: false,
+          refundTo: 'store_credit',
+        })
+        .expect(403);
+      // unpaid (never received) money cannot be turned into credit
+      await db.execute(
+        `UPDATE \`order\` SET paymentStatus = 'unpaid' WHERE id = ?`,
+        [orderId],
+      );
+      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }], {
+        refundTo: 'store_credit',
+      }).expect(400);
+      expect(
+        (await ledger(customer.customerId)).filter(
+          (e) => e.entryType === 'return_refund',
+        ),
+      ).toHaveLength(0);
+    });
+
+    it('the /pay summary shows what is still payable after store credit, not the full total', async () => {
+      const { orderId } = await delivered('sc-pay', 100, 1, 30);
+      const token = `sc-pay-${Date.now()}-${orderId}`;
+      await db.execute(
+        `UPDATE \`order\` SET paymentLinkToken = ?, paymentStatus = 'unpaid',
+                paymentLinkExpiresAt = DATE_ADD(NOW(), INTERVAL 1 DAY) WHERE id = ?`,
+        [token, orderId],
+      );
+      const row = await f.orderRow(orderId);
+      const due = Number(row.total) - Number(row.storeCreditAmount);
+      const res = await request(server())
+        .get(`/pay/${token}/summary`)
+        .expect(200);
+      expect(Number(body<{ total: string }>(res).total)).toBe(due);
+      expect(due).toBeLessThan(Number(row.total));
     });
 
     it('refund to store credit on an order with no customer account is a 400 and changes nothing', async () => {

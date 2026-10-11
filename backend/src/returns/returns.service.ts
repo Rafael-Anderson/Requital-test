@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
@@ -71,6 +75,13 @@ export class ReturnsService {
     if (order.status !== 'delivered') {
       throw new BadRequestException('Only a delivered order can be returned');
     }
+    // Store credit is spendable money at every outlet, so minting it is an
+    // admin action even though recording a return is not.
+    if (dto.refundTo === 'store_credit' && ctx.role !== 'admin') {
+      throw new ForbiddenException(
+        'Only an admin can refund a return to store credit',
+      );
+    }
     // `order` above is the tenant/outlet scope check only. Everything money- or
     // quantity-related is re-read below under the order row lock: this snapshot
     // can be stale by the time a concurrent return commits.
@@ -100,7 +111,7 @@ export class ReturnsService {
     // below is for this (already tenant-checked) order.
     const result = await this.db.transaction(async (conn) => {
       const [lockRows] = await conn.query<RowDataPacket[]>(
-        `SELECT status, total, deliveryFee, discountAmount, taxAmount, giftCardId, giftCardAmount, storeCreditAmount, customerId, consumptionRecordedAt
+        `SELECT status, paymentStatus, total, deliveryFee, discountAmount, taxAmount, giftCardId, giftCardAmount, storeCreditAmount, customerId, consumptionRecordedAt
            FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
         [orderId, order.shopId],
       );
@@ -273,6 +284,16 @@ export class ReturnsService {
         );
       }
       const providerPortionMinor = refundMinor - giftMinor - storeMinor;
+      // Credit is only minted against money actually received.
+      if (
+        toStoreCredit &&
+        providerPortionMinor > 0 &&
+        locked.paymentStatus !== 'paid'
+      ) {
+        throw new BadRequestException(
+          'Only a paid order can be refunded to store credit',
+        );
+      }
       const providerRefundPortion = providerPortionMinor / factor;
       // Refunded to store credit instead of the original payment: the provider
       // is not called at all.

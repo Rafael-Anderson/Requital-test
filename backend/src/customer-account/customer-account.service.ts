@@ -182,6 +182,7 @@ export class CustomerAccountService {
       storeCredit: await this.storeCreditService.overview(
         ctx.shopId,
         ctx.customerId,
+        true,
       ),
     };
   }
@@ -190,7 +191,7 @@ export class CustomerAccountService {
   async getStoreCredit(ctx: CustomerContext) {
     const [balances, entries] = await Promise.all([
       this.storeCreditService.balances(ctx.shopId, ctx.customerId),
-      this.storeCreditService.entries(ctx.shopId, ctx.customerId, 1, 20),
+      this.storeCreditService.entries(ctx.shopId, ctx.customerId, 1, 20, true),
     ]);
     return { balances, entries };
   }

@@ -84,7 +84,15 @@ export class StoreCreditService {
     return decimalToMinor(String(rows[0].b), currency);
   }
 
-  async entries(shopId: number, customerId: number, page = 1, pageSize = 50) {
+  // customerView: the shopper must not see who on the staff made an entry or
+  // what the staff typed as its reason (those are for the merchant).
+  async entries(
+    shopId: number,
+    customerId: number,
+    page = 1,
+    pageSize = 50,
+    customerView = false,
+  ) {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT e.id, e.currency, e.amount, e.entryType, e.reason,
               COALESCE(e.orderId, rt.orderId) AS orderId, e.returnId,
@@ -105,19 +113,22 @@ export class StoreCreditService {
         r.currency as string,
       ),
       type: r.entryType as string,
-      reason: (r.reason as string | null) ?? null,
+      reason:
+        customerView && r.actorUserId != null
+          ? null
+          : ((r.reason as string | null) ?? null),
       orderId: (r.orderId as number | null) ?? null,
       returnId: (r.returnId as number | null) ?? null,
-      actorName: (r.actorName as string | null) ?? null,
+      actorName: customerView ? null : ((r.actorName as string | null) ?? null),
       createdAt: r.createdAt as Date,
     }));
   }
 
-  async overview(shopId: number, customerId: number) {
+  async overview(shopId: number, customerId: number, customerView = false) {
     await assertCustomerInShop(this.db, shopId, customerId);
     const [balances, entries] = await Promise.all([
       this.balances(shopId, customerId),
-      this.entries(shopId, customerId),
+      this.entries(shopId, customerId, 1, 50, customerView),
     ]);
     return { balances, entries };
   }
