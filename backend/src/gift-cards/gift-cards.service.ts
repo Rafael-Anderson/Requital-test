@@ -188,6 +188,25 @@ export class GiftCardsService {
     await this.syncStatus(conn, giftCardId);
   }
 
+  // An order edit lowered the total below what the order holds in gift card +
+  // store credit, and `amount` of the card's share is put back: the balance goes
+  // up (status re-synced exactly like a refund) and the order's redemption record
+  // shrinks by the same amount, so SUM(amountUsed) keeps describing what the card
+  // still funds. Runs on the caller's transaction, after the order row lock.
+  async releaseForOrderEdit(
+    conn: PoolConnection,
+    giftCardId: number,
+    orderId: number,
+    amount: number,
+  ) {
+    await this.creditRefund(conn, giftCardId, amount);
+    await conn.query(
+      `UPDATE giftcardredemption SET amountUsed = GREATEST(amountUsed - ?, 0)
+        WHERE giftCardId = ? AND orderId = ?`,
+      [amount, giftCardId, orderId],
+    );
+  }
+
   // One unit issued per quantity — e.g. quantity 3 of a 200 AED gift card
   // product creates three independent 200-balance cards, each individually
   // redeemable (not one 600-balance card), matching how a shopper buying 3

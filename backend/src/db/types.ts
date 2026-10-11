@@ -1638,7 +1638,15 @@ export interface StorecreditentryRow {
   customerId: number;
   currency: string;
   amount: string;
-  entryType: 'grant' | 'deduct' | 'spend' | 'spend_reversal' | 'return_refund';
+  entryType:
+    | 'grant'
+    | 'deduct'
+    | 'spend'
+    | 'spend_reversal'
+    | 'spend_release'
+    | 'return_refund';
+  // 1-based edit number for a 'spend_release' row, 0 for every other entry.
+  editSeq: number;
   reason: string | null;
   orderId: number | null;
   returnId: number | null;

@@ -11,6 +11,7 @@ import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { NotifySubscriptionsModule } from '../notify-subscriptions/notify-subscriptions.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 import { RegionsModule } from '../regions/regions.module';
+import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { StoreCreditModule } from '../store-credit/store-credit.module';
 
 @Module({
@@ -26,6 +27,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     CurrencyRatesModule,
     RegionsModule,
     StoreCreditModule,
+    GiftCardsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],
