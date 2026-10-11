@@ -185,7 +185,7 @@ export function parseCustomerRows(
           id: randomUUID().slice(0, 8),
           ...(label ? { label: label.slice(0, 100) } : {}),
           address: addressText,
-          ...(area ? { area } : {}),
+          ...(area ? { area: area.slice(0, 191) } : {}),
         };
       }
     }

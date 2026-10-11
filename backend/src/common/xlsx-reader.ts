@@ -19,6 +19,11 @@ const MAX_SHEET_BYTES = 30 * 1024 * 1024;
 const MAX_STRINGS_BYTES = 30 * 1024 * 1024;
 const MAX_ROWS = 50_000;
 const MAX_COLUMNS = 200;
+// Excel's own per-cell ceiling, and a total of what the reader EMITS. Shared
+// strings are returned by reference, so without these a ~25KB file whose rows
+// all point at one 25MB string would hand 10k rows of 25MB cells to the callers.
+const MAX_CELL_CHARS = 32_767;
+const MAX_TOTAL_CHARS = 5_000_000;
 
 interface ZipEntry {
   name: string;
@@ -291,6 +296,7 @@ export function readXlsxRows(buffer: Buffer): string[][] {
   const rows: string[][] = [];
   let scannedRows = 0;
   let scannedCells = 0;
+  let emittedChars = 0;
   let rowPos = 0;
   for (let rm = nextElement(sheet, 'row', rowPos); rm;) {
     scannedRows += 1;
@@ -332,6 +338,13 @@ export function readXlsxRows(buffer: Buffer): string[][] {
             else if (type === 'e') value = '';
             else value = decodeXml(v);
           }
+        }
+        if (value.length > MAX_CELL_CHARS) {
+          throw new XlsxError('This .xlsx file has a cell with too much text');
+        }
+        emittedChars += value.length;
+        if (emittedChars > MAX_TOTAL_CHARS) {
+          throw new XlsxError('This .xlsx file has too much text');
         }
         while (cells.length < col) cells.push('');
         cells[col] = value;

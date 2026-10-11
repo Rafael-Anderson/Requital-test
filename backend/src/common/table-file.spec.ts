@@ -225,6 +225,28 @@ describe('readXlsxRows: hostile XML finishes fast and is rejected cleanly', () =
     );
   });
 
+  it('rejects a tiny file whose rows all reference one huge shared string', () => {
+    const huge = 'x'.repeat(2_000_000);
+    const rows = Array.from(
+      { length: 200 },
+      (_v, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="s"><v>0</v></c></row>`,
+    ).join('');
+    expectFastReject(
+      zipOf(sheetOf(rows), `<sst><si><t>${huge}</t></si></sst>`),
+      /too much text/,
+    );
+  });
+
+  it('rejects a cell longer than Excel allows even when it is the only one', () => {
+    expectFastReject(
+      zipOf(
+        sheetOf('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+        `<sst><si><t>${'y'.repeat(40_000)}</t></si></sst>`,
+      ),
+      /too much text/,
+    );
+  });
+
   it('a single huge <row> whose close tag is at the very end is read in linear time', () => {
     const started = performance.now();
     const rows = readXlsxRows(
