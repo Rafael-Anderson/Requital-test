@@ -56,7 +56,9 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     const product = await f.stockedProduct(shop, 100, {
       price: opts.price ?? 100,
     });
-    const cheap = await f.stockedProduct(shop, 100, { price: opts.cheap ?? 10 });
+    const cheap = await f.stockedProduct(shop, 100, {
+      price: opts.cheap ?? 10,
+    });
     await f.publish(shop);
     const customer = await registerCustomer(
       server(),
@@ -67,7 +69,12 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     return { shop, product, cheap, customer };
   }
 
-  const grant = (shop: Shop, customerId: number, amount: number | string, currency = 'AED') =>
+  const grant = (
+    shop: Shop,
+    customerId: number,
+    amount: number | string,
+    currency = 'AED',
+  ) =>
     admin(shop, 'post', `/customers/${customerId}/store-credit/adjustments`, {
       currency,
       amount,
@@ -82,7 +89,12 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     extra: Record<string, unknown> = {},
     qty = 1,
   ) {
-    return asCustomer(server(), sess, 'post', `/public/${shop.slug}/orders`).send({
+    return asCustomer(
+      server(),
+      sess,
+      'post',
+      `/public/${shop.slug}/orders`,
+    ).send({
       outletId: shop.outletId,
       orderType: 'pickup',
       paymentMethod: 'cash_on_pickup',
@@ -128,7 +140,13 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     const { shop, product, cheap, customer } = await setup('sce-down');
     await grant(shop, customer.customerId, 1000);
     const id = orderId(
-      await checkout(shop, customer, product.id, { useStoreCredit: true }, 2).expect(201),
+      await checkout(
+        shop,
+        customer,
+        product.id,
+        { useStoreCredit: true },
+        2,
+      ).expect(201),
     );
     const t0 = Number((await f.orderRow(id)).total);
     expect(Number((await f.orderRow(id)).storeCreditAmount)).toBe(t0);
@@ -168,14 +186,21 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     expect(await sumCustomer(customer.customerId)).toBeCloseTo(1000, 6);
     expect(await heldInLedger(id)).toBeCloseTo(0, 6);
     const last = (await entriesOf(id)).map((e) => String(e.entryType));
-    expect(last).toEqual(['spend', 'spend_release', 'spend_release', 'spend_reversal']);
+    expect(last).toEqual([
+      'spend',
+      'spend_release',
+      'spend_release',
+      'spend_reversal',
+    ]);
   });
 
   it('an edit-up never spends more credit: the extra is simply still to pay', async () => {
     const { shop, product, customer } = await setup('sce-up');
     await grant(shop, customer.customerId, 1000);
     const id = orderId(
-      await checkout(shop, customer, product.id, { useStoreCredit: true }).expect(201),
+      await checkout(shop, customer, product.id, {
+        useStoreCredit: true,
+      }).expect(201),
     );
     const before = await f.orderRow(id);
     const entries = (await entriesOf(id)).length;
@@ -183,7 +208,9 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     await edit(shop, id, product.id, 3).expect(200);
     const after = await f.orderRow(id);
     expect(Number(after.total)).toBeGreaterThan(Number(before.total));
-    expect(Number(after.storeCreditAmount)).toBe(Number(before.storeCreditAmount));
+    expect(Number(after.storeCreditAmount)).toBe(
+      Number(before.storeCreditAmount),
+    );
     expect(await entriesOf(id)).toHaveLength(entries);
     expect(await sumCustomer(customer.customerId)).toBe(bal);
     // cancel gives back exactly the original (== still held) amount
@@ -195,7 +222,9 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     const { shop, product, cheap, customer } = await setup('sce-gift');
     await grant(shop, customer.customerId, 1000);
     const card = body<{ code: string; id: number }>(
-      await admin(shop, 'post', '/gift-cards', { initialValue: 60 }).expect(201),
+      await admin(shop, 'post', '/gift-cards', { initialValue: 60 }).expect(
+        201,
+      ),
     );
     const id = orderId(
       await checkout(
@@ -235,14 +264,18 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     )[0];
     expect(Number(red.amountUsed)).toBeCloseTo(t1, 6);
     // order.total - gift - credit is exactly 0 due
-    expect(t1 - Number(r1.giftCardAmount) - Number(r1.storeCreditAmount)).toBeCloseTo(0, 6);
+    expect(
+      t1 - Number(r1.giftCardAmount) - Number(r1.storeCreditAmount),
+    ).toBeCloseTo(0, 6);
   });
 
   it('a delivery-fee decrease releases the excess credit as well', async () => {
     const { shop, product, customer } = await setup('sce-fee');
     await grant(shop, customer.customerId, 1000);
     const id = orderId(
-      await checkout(shop, customer, product.id, { useStoreCredit: true }).expect(201),
+      await checkout(shop, customer, product.id, {
+        useStoreCredit: true,
+      }).expect(201),
     );
     const t = Number((await f.orderRow(id)).total);
     // Simulate an order that was placed with a 50 delivery fee fully paid by credit.
@@ -277,16 +310,26 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     });
     await grant(shop, customer.customerId, 500, 'KWD');
     const id = orderId(
-      await checkout(shop, customer, product.id, { useStoreCredit: true }, 3).expect(201),
+      await checkout(
+        shop,
+        customer,
+        product.id,
+        { useStoreCredit: true },
+        3,
+      ).expect(201),
     );
     const t0 = Math.round(Number((await f.orderRow(id)).total) * 1000);
     await edit(shop, id, product.id, 1).expect(200);
     const row = await f.orderRow(id);
     const t1 = Math.round(Number(row.total) * 1000);
     expect(Math.round(Number(row.storeCreditAmount) * 1000)).toBe(t1);
-    const bal = Math.round((await sumCustomer(customer.customerId, 'KWD')) * 1000);
+    const bal = Math.round(
+      (await sumCustomer(customer.customerId, 'KWD')) * 1000,
+    );
     expect(bal).toBe(500000 - t1);
-    const rel = (await entriesOf(id)).find((e) => e.entryType === 'spend_release')!;
+    const rel = (await entriesOf(id)).find(
+      (e) => e.entryType === 'spend_release',
+    )!;
     expect(Math.round(Number(rel.amount) * 1000)).toBe(t0 - t1);
   });
 
@@ -294,7 +337,13 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     const { shop, product, cheap, customer } = await setup('sce-race');
     await grant(shop, customer.customerId, 1000);
     const id = orderId(
-      await checkout(shop, customer, product.id, { useStoreCredit: true }, 3).expect(201),
+      await checkout(
+        shop,
+        customer,
+        product.id,
+        { useStoreCredit: true },
+        3,
+      ).expect(201),
     );
     const results = await Promise.all([
       edit(shop, id, product.id, 2),
@@ -315,7 +364,9 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
         6,
       );
     }
-    expect(Number(row.storeCreditAmount)).toBeLessThanOrEqual(Number(row.total) + 1e-9);
+    expect(Number(row.storeCreditAmount)).toBeLessThanOrEqual(
+      Number(row.total) + 1e-9,
+    );
     // editSeq values are unique per order by construction
     const seqs = (await entriesOf(id))
       .filter((e) => e.entryType === 'spend_release')
@@ -328,7 +379,9 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
       const s = await setup(prefix, { price });
       await grant(s.shop, s.customer.customerId, 30);
       const card = body<{ code: string }>(
-        await admin(s.shop, 'post', '/gift-cards', { initialValue: 20 }).expect(201),
+        await admin(s.shop, 'post', '/gift-cards', { initialValue: 20 }).expect(
+          201,
+        ),
       );
       const id = orderId(
         await checkout(s.shop, s.customer, s.product.id, {
@@ -349,7 +402,10 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
     it('the packing slip says CASH TO COLLECT the amount due, not the total', async () => {
       const { shop, id, row, due } = await codOrder('sce-slip');
       const slip = body<{ id: number }>(
-        await admin(shop, 'post', '/invoices', { orderId: id, type: 'PACKING_SLIP' }).expect(201),
+        await admin(shop, 'post', '/invoices', {
+          orderId: id,
+          type: 'PACKING_SLIP',
+        }).expect(201),
       );
       const html = (
         await request(server())
@@ -358,7 +414,9 @@ describe('Store credit and gift card on an edited order (e2e)', () => {
           .expect(200)
       ).text;
       expect(html).toContain(`CASH TO COLLECT: AED ${due.toFixed(2)}`);
-      expect(html).not.toContain(`CASH TO COLLECT: AED ${Number(row.total).toFixed(2)}`);
+      expect(html).not.toContain(
+        `CASH TO COLLECT: AED ${Number(row.total).toFixed(2)}`,
+      );
     });
 
     it('the webhook transaction row records the amount charged (due), not the order total', async () => {

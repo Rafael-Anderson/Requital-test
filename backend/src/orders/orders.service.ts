@@ -47,7 +47,11 @@ import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { StoreCreditService } from '../store-credit/store-credit.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
-import { minorUnitFactor, roundMoney, toMinorUnits } from '../common/currency-minor-units';
+import {
+  minorUnitFactor,
+  roundMoney,
+  toMinorUnits,
+} from '../common/currency-minor-units';
 import { decimalToMinor, minorToDecimal } from '../drivers/cash';
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -1410,7 +1414,9 @@ export class OrdersService {
     const o = rows[0];
     if (!o) return none;
     const held = (v: unknown) =>
-      v == null ? 0 : (decimalToMinor(String(v), currency) ?? 0);
+      typeof v === 'string' || typeof v === 'number'
+        ? (decimalToMinor(String(v), currency) ?? 0)
+        : 0;
     const creditMinor = held(o.storeCreditAmount);
     const giftMinor = held(o.giftCardAmount);
     const excess = creditMinor + giftMinor - toMinorUnits(newTotal, currency);

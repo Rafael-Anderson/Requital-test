@@ -16,9 +16,13 @@ export type AmountDueOrder = Record<string, unknown>;
 export function amountDueMinor(order: AmountDueOrder): number {
   const currency = order.currency as string | null | undefined;
   const minor = (v: unknown) =>
-    v == null ? 0 : (decimalToMinor(String(v), currency) ?? 0);
+    typeof v === 'string' || typeof v === 'number'
+      ? (decimalToMinor(String(v), currency) ?? 0)
+      : 0;
   return Math.max(
-    minor(order.total) - minor(order.giftCardAmount) - minor(order.storeCreditAmount),
+    minor(order.total) -
+      minor(order.giftCardAmount) -
+      minor(order.storeCreditAmount),
     0,
   );
 }
