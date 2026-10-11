@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { resolveInternalApiOrigin } from "./lib/api-origin";
 
 // The real backend origin. Since the same-origin `/api/*` proxy landed
 // (docs/plans/custom-domain-resolver.md Phase 5) the browser no longer calls
@@ -8,6 +9,18 @@ import type { NextConfig } from "next";
 // It's still needed for `<img src>` (product/theme images stay absolute) so
 // img-src below keeps it; connect-src no longer does.
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+
+// Where the `/api/*` rewrite below forwards to: the backend's LOCAL origin in
+// production (INTERNAL_API_URL=http://127.0.0.1:3000), so the hop stays on the
+// VPS instead of re-entering Caddy, which would overwrite X-Forwarded-For with
+// the VPS's own address and put every shopper in one throttle bucket. Falls
+// back to API_ORIGIN when unset. `rewrites()` is evaluated at `next build` and
+// baked into .next/routes-manifest.json, so this must be set at BUILD time
+// (docs/runbook.md, "Client IP behind the proxies").
+const REWRITE_ORIGIN = resolveInternalApiOrigin(
+  process.env.INTERNAL_API_URL,
+  API_ORIGIN,
+);
 
 // Mirrors lib/theme-preview-origin.ts's isTrustedAdminOrigin allowlist by
 // hand (next.config.ts is loaded outside the app's normal module graph, so
@@ -101,7 +114,7 @@ const nextConfig: NextConfig = {
   // so it doesn't rewrite these onto the /[shop]/... tree.
   async rewrites() {
     return [
-      { source: "/api/:path*", destination: `${API_ORIGIN}/:path*` },
+      { source: "/api/:path*", destination: `${REWRITE_ORIGIN}/:path*` },
     ];
   },
   async headers() {
