@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import SurveyPage from "./page";
 
 afterEach(() => {
+  tokenInUrl.value = "abc";
   cleanup();
   vi.clearAllMocks();
 });
@@ -21,7 +22,8 @@ beforeEach(() => {
   lookupSurvey.mockResolvedValue(OPEN);
 });
 vi.mock("@/lib/shop-context", () => ({ useShop: () => ({ shop: { name: "Rose Shop" } }) }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("token=abc") }));
+const tokenInUrl = vi.hoisted(() => ({ value: "abc" }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(`token=${tokenInUrl.value}`) }));
 vi.mock("@/components/StorefrontPageShell", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 
 describe("survey form publish consent", () => {
@@ -104,5 +106,26 @@ describe("survey consent withdrawal", () => {
     expect(await screen.findByText("Request failed (500)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Withdraw my consent" })).not.toBeDisabled();
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+// Tokens issued before the 128 bit change are 10 hex characters and stay valid;
+// new ones are 32. The page must pass either through untouched.
+describe.each([
+  ["legacy 10 character", "A1B2C3D4E5"],
+  ["128 bit 32 character", "A1B2C3D4E5F60718293A4B5C6D7E8F90"],
+])("%s survey token", (_label, token) => {
+  it("is looked up, submitted and withdrawn verbatim", async () => {
+    tokenInUrl.value = token;
+    submitSurvey.mockResolvedValue({ success: true });
+    withdrawSurveyConsent.mockResolvedValue({ withdrawn: true });
+    render(<SurveyPage />);
+    fireEvent.click(await screen.findByLabelText(/You may show my feedback/));
+    expect(lookupSurvey).toHaveBeenCalledWith(token);
+    fireEvent.click(screen.getByRole("button", { name: "5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    await waitFor(() => expect(submitSurvey).toHaveBeenCalledWith(token, { rating: 5, comment: undefined, publishConsent: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "Withdraw my consent" }));
+    await waitFor(() => expect(withdrawSurveyConsent).toHaveBeenCalledWith(token));
   });
 });
