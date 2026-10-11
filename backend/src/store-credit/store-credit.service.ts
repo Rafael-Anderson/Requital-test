@@ -311,8 +311,8 @@ export class StoreCreditService {
   // credit: this puts `amountMinor` of the credit back, as a 'spend_release'
   // ledger row for the customer and currency of the order's original spend.
   //
-  // The caller holds the customer row lock (lockCustomer, FIRST in its
-  // transaction) and the order row lock, both in this transaction, so two edits of
+  // The caller holds the order row lock and then the customer row lock
+  // (lockCustomer), both in this transaction, so two edits of
   // one order serialise and the next editSeq (1 + the highest so far) cannot be
   // taken twice; the unique (orderId, entryType, editSeq) key is the backstop.
   // Retrying an edit that already committed releases nothing (the order no longer

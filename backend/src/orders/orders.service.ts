@@ -691,11 +691,6 @@ export class OrdersService {
     if (total < 0) total = 0;
 
     await this.db.transaction(async (conn) => {
-      const lockedCustomerId = await this.lockCustomerForTenderEdit(
-        conn,
-        ctx.shopId,
-        order,
-      );
       // Lock the order and refuse to apply a total computed from a stale picture
       // (a cancel or delivery that committed since the read above).
       const [lockRows] = await conn.query<RowDataPacket[]>(
@@ -707,6 +702,11 @@ export class OrdersService {
           'Order status changed before this edit could be applied - refresh and retry',
         );
       }
+      const lockedCustomerId = await this.lockCustomerForTenderEdit(
+        conn,
+        ctx.shopId,
+        order,
+      );
       await conn.query(
         `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?
           WHERE id = ?`,
@@ -1077,14 +1077,6 @@ export class OrdersService {
     let ingredientStockWarnings: string[] = [];
     let released = { creditMinor: 0, giftMinor: 0 };
     await this.db.transaction(async (conn) => {
-      // Customer row FIRST (before the order row and before any stock lock), the
-      // same order checkout takes, when this order spent store credit and an edit
-      // might have to give some back. See releaseOverpaidTenders.
-      const lockedCustomerId = await this.lockCustomerForTenderEdit(
-        conn,
-        ctx.shopId,
-        order,
-      );
       // Everything above was decided from a read taken BEFORE this transaction.
       // A cancel (or a confirm) that commits in between changes both the status
       // and what stock the order holds, so lock the row and refuse to edit
@@ -1099,6 +1091,13 @@ export class OrdersService {
           'Order status changed before this edit could be applied - refresh and retry',
         );
       }
+      // Order row first, THEN the customer row (see releaseOverpaidTenders for why
+      // that direction): only when this order spent store credit.
+      const lockedCustomerId = await this.lockCustomerForTenderEdit(
+        conn,
+        ctx.shopId,
+        order,
+      );
       const ingredientsConsumedNow = lockRows[0].ingredientsConsumedAt != null;
       // The order has a stock record (orderstockconsumption), so every delta
       // below is driven by what it actually holds. NULL = LEGACY.
@@ -1348,10 +1347,9 @@ export class OrdersService {
   }
 
   // Locks the customer row that owns this order's store credit, when it has any.
-  // Called FIRST in a transaction that may release credit, before the order row
-  // and before stock rows: checkout takes the customer row first too (it is the
-  // first statement of the order transaction), so the two cannot deadlock on
-  // (customer, stock). Returns the id locked, or null when the order spent none.
+  // Called right AFTER the order row lock and before any stock row, in a
+  // transaction that may release credit. Returns the id locked, or null when the
+  // order spent none.
   private async lockCustomerForTenderEdit(
     conn: PoolConnection,
     shopId: number,
@@ -1383,13 +1381,18 @@ export class OrdersService {
   // edit that is repeated finds nothing in excess. Several partial releases per
   // order are allowed by the ledger's (orderId, entryType, editSeq) key.
   //
-  // Lock order: customer row (lockCustomerForTenderEdit) -> order row -> stock ->
-  // ledger rows -> gift card row, the same direction checkout takes. ReturnsService
-  // takes order -> gift card -> customer, so an edit and a return of the SAME
-  // order could in principle deadlock; they cannot both pass their status checks
-  // (a return needs 'delivered', an edit needs an editable status), leaving only a
-  // delivery-versus-edit race in the window between the two checks, which MySQL
-  // resolves by failing one with 1213 (the admin retries).
+  // Lock order: ORDER row -> customer row -> stock -> ledger rows -> gift card
+  // row. Order first is forced by cancel and return: they hold the order row and
+  // then insert a ledger row, whose foreign key takes a shared lock on the
+  // customer row, so an edit that held the customer row (FOR UPDATE) and waited
+  // for the order row deadlocked against a cancel (found by the concurrency test
+  // here, 1213). Order -> customer is the direction cancel, return and this edit
+  // all share, so they serialise on the order row. Checkout takes the customer
+  // row first but only ever inserts its own NEW order row, so it cannot close a
+  // cycle with an edit. After the customer row, stock, then the gift card row, is
+  // the order checkout uses. Customer merge locks customers then orders and could
+  // still deadlock with any of these (pre-existing for cancel and return too);
+  // MySQL fails one side with 1213 and the retry succeeds.
   private async releaseOverpaidTenders(
     conn: PoolConnection,
     shopId: number,
