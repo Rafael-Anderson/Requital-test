@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { DeliveryRunsService } from './delivery-runs.service';
 import { DriverLinksService } from './driver-links.service';
@@ -23,6 +24,8 @@ import {
   UpdateDeliveryRunDto,
 } from './dto/delivery-run.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequiresVerifiedEmail } from '../auth/decorators/requires-verified-email.decorator';
+import { VerifiedEmailGuard } from '../auth/guards/verified-email.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 
@@ -144,7 +147,11 @@ export class DeliveryRunsController {
     return this.links.revoke(ctx, id);
   }
 
+  // Messages an arbitrary phone number from Requital's shared WhatsApp number,
+  // so it needs a verified staff email like the other outward-facing actions.
   @Post(':id/link/send')
+  @UseGuards(VerifiedEmailGuard)
+  @RequiresVerifiedEmail({ action: 'sending a driver link by WhatsApp' })
   sendLink(
     @CurrentUser() ctx: TenantContext,
     @Param('id', ParseIntPipe) id: number,

@@ -16,6 +16,11 @@ describe('SHP-5 driver magic link', () => {
     fx = await bootDriverFixture();
     a = await fx.f.setupShop('lnk-a');
     b = await fx.f.setupShop('lnk-b');
+    // link/send needs a verified staff email; the unverified case is tested below
+    await fx.db.execute(`UPDATE user SET emailVerified = 1 WHERE shopId IN (?, ?)`, [
+      a.shopId,
+      b.shopId,
+    ]);
   });
   afterAll(async () => {
     await fx.app.close();
@@ -248,6 +253,20 @@ describe('SHP-5 driver magic link', () => {
       .post(`/delivery-runs/${draft.id}/link`)
       .set(fx.h(a.adminToken))
       .expect(409);
+  });
+
+  it('refuses to send the WhatsApp link until the staff email is verified', async () => {
+    const t = await dispatchedRun(a);
+    await fx.db.execute(`UPDATE user SET emailVerified = 0 WHERE shopId = ?`, [a.shopId]);
+    try {
+      await fx
+        .r()
+        .post(`/delivery-runs/${t.run.id}/link/send`)
+        .set(fx.h(a.adminToken))
+        .expect(403);
+    } finally {
+      await fx.db.execute(`UPDATE user SET emailVerified = 1 WHERE shopId = ?`, [a.shopId]);
+    }
   });
 
   it('sends the link to the driver through the job queue, without customer data', async () => {

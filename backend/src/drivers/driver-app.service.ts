@@ -526,6 +526,9 @@ export class DriverAppService {
       [orderId, link.shopId],
     );
     const order = rows[0];
+    if (order && order.status === 'cancelled') {
+      await this.failCancelledStop(link, stop);
+    }
     if (
       order &&
       order.paymentMethod === 'cash_on_delivery' &&
@@ -546,16 +549,7 @@ export class DriverAppService {
         if (status === 'delivered') {
           // a concurrent finisher won; fine
         } else if (status === 'cancelled') {
-          await this.db.execute(
-            `UPDATE deliveryrunstop SET status = 'failed', failureReason = 'order_not_deliverable', failedAt = NOW(3)
-              WHERE id = ? AND shopId = ? AND status = 'delivered'`,
-            [stop.id as number, link.shopId],
-          );
-          throw new ConflictException({
-            statusCode: 409,
-            code: 'order_not_deliverable',
-            message: 'This order was cancelled. Do not hand it over',
-          });
+          await this.failCancelledStop(link, stop);
         } else {
           logger.error('driver delivery: order status move failed', {
             shopId: link.shopId,
@@ -573,6 +567,24 @@ export class DriverAppService {
       idempotent,
       runCompleted,
     };
+  }
+
+  // Staff cancelled the order while the driver was finishing the stop: put the
+  // stop back to failed (clearing any cash expectation) and tell the driver.
+  private async failCancelledStop(
+    link: LinkContext,
+    stop: RowDataPacket,
+  ): Promise<never> {
+    await this.db.execute(
+      `UPDATE deliveryrunstop SET status = 'failed', failureReason = 'order_not_deliverable', failedAt = NOW(3)
+        WHERE id = ? AND shopId = ? AND status = 'delivered'`,
+      [stop.id as number, link.shopId],
+    );
+    throw new ConflictException({
+      statusCode: 409,
+      code: 'order_not_deliverable',
+      message: 'This order was cancelled. Do not hand it over',
+    });
   }
 
   private async advanceRun(link: LinkContext): Promise<boolean> {

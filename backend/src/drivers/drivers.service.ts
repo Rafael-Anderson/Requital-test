@@ -155,6 +155,11 @@ export class DriversService {
   async remove(ctx: TenantContext, id: number) {
     const driver = await this.load(ctx, id, 'deliveries.manage');
     const result = await this.db.transaction(async (conn) => {
+      // Driver row first, the same order DriverLinksService.issue takes.
+      await conn.query(
+        `SELECT id FROM driver WHERE id = ? AND shopId = ? FOR UPDATE`,
+        [id, ctx.shopId],
+      );
       await conn.query(
         `UPDATE deliveryrunlink SET revokedAt = NOW(3)
           WHERE driverId = ? AND shopId = ? AND revokedAt IS NULL`,
