@@ -196,8 +196,11 @@ export default function AccountDashboardPage() {
             </div>
             {needsPassword && (
               <div>
-                <label className="text-sm font-medium block mb-1">Current password</label>
+                <label htmlFor="current-password" className="text-sm font-medium block mb-1">
+                  Current password
+                </label>
                 <input
+                  id="current-password"
                   required
                   type="password"
                   autoComplete="current-password"
