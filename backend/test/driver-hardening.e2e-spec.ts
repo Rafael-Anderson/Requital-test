@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- untyped supertest JSON */
 import 'dotenv/config';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -15,8 +14,11 @@ import * as email from '../src/common/email';
 jest.setTimeout(300000);
 
 const asObj = (p: unknown): Record<string, unknown> =>
-  typeof p === 'string' ? JSON.parse(p) : (p as Record<string, unknown>);
-const asText = (p: unknown): string => (typeof p === 'string' ? p : JSON.stringify(p));
+  typeof p === 'string'
+    ? (JSON.parse(p) as Record<string, unknown>)
+    : (p as Record<string, unknown>);
+const asText = (p: unknown): string =>
+  typeof p === 'string' ? p : JSON.stringify(p);
 
 describe('W5 driver hardening', () => {
   let fx: Awaited<ReturnType<typeof bootDriverFixture>>;
@@ -87,7 +89,9 @@ describe('W5 driver hardening', () => {
       expect(res.headers['content-type']).toContain('image/jpeg');
       expect(res.headers['cache-control']).toBe('no-store');
       expect(res.headers['x-content-type-options']).toBe('nosniff');
-      expect(res.headers['content-security-policy']).toContain("default-src 'none'");
+      expect(res.headers['content-security-policy']).toContain(
+        "default-src 'none'",
+      );
       expect((await sharp(res.body as Buffer).metadata()).format).toBe('jpeg');
 
       // no URL anywhere: not in the column, not in the staff detail
@@ -126,14 +130,26 @@ describe('W5 driver hardening', () => {
         .expect(404);
       // a branch user pinned to a different outlet of the same shop
       const outlet2 = await fx.secondOutlet(a);
-      const branch2 = await fx.createStaff(fx.app, a.adminToken, 'ph2', 'branch', outlet2);
+      const branch2 = await fx.createStaff(
+        fx.app,
+        a.adminToken,
+        'ph2',
+        'branch',
+        outlet2,
+      );
       await fx
         .r()
         .get(proofUrl(r.run.id, r.stops[0].id))
         .set(fx.h(branch2.token))
         .expect(404);
       // the right outlet's branch user may read it
-      const branch1 = await fx.createStaff(fx.app, a.adminToken, 'ph1', 'branch', a.outletId);
+      const branch1 = await fx.createStaff(
+        fx.app,
+        a.adminToken,
+        'ph1',
+        'branch',
+        a.outletId,
+      );
       await fx
         .r()
         .get(proofUrl(r.run.id, r.stops[0].id))
@@ -152,7 +168,12 @@ describe('W5 driver hardening', () => {
         .set(fx.h(a.adminToken))
         .expect(404);
       // a viewer has no access to delivery runs at all
-      const viewer = await fx.createStaff(fx.app, a.adminToken, 'phv', 'viewer');
+      const viewer = await fx.createStaff(
+        fx.app,
+        a.adminToken,
+        'phv',
+        'viewer',
+      );
       await fx
         .r()
         .get(proofUrl(r.run.id, r.stops[0].id))
@@ -175,7 +196,10 @@ describe('W5 driver hardening', () => {
         .set(fx.h(a.adminToken))
         .expect(200);
       expect(JSON.stringify(detail.body)).not.toContain('/uploads/');
-      expect(body<{ stops: { hasProofPhoto: boolean }[] }>(detail).stops[0].hasProofPhoto).toBe(true);
+      expect(
+        body<{ stops: { hasProofPhoto: boolean }[] }>(detail).stops[0]
+          .hasProofPhoto,
+      ).toBe(true);
       await fx
         .r()
         .get(proofUrl(r.run.id, r.stops[0].id))
@@ -252,14 +276,14 @@ describe('W5 driver hardening', () => {
           [a.shopId, `0509${Date.now() % 1000000}`],
         );
         customerId = res.insertId;
-        await fx.db.execute(`UPDATE \`order\` SET customerId = ? WHERE id = ?`, [
-          customerId,
-          r.orders[0].id,
-        ]);
+        await fx.db.execute(
+          `UPDATE \`order\` SET customerId = ? WHERE id = ?`,
+          [customerId, r.orders[0].id],
+        );
       }
-      const svc = fx.app.get(CustomerAccountService) as unknown as {
+      const svc = fx.app.get<{
         anonymiseCustomer(shopId: number, customerId: number): Promise<void>;
-      };
+      }>(CustomerAccountService);
       await svc.anonymiseCustomer(a.shopId, customerId);
       expect(await keyOf(r.stops[0].id)).toBeNull();
       const job = await deleteJobFor(key);
@@ -277,7 +301,9 @@ describe('W5 driver hardening', () => {
 
   describe('(2) secrets are scrubbed from the job table', () => {
     it('a delivery-code email job: code in the payload until sent, scrubbed after, never logged', async () => {
-      await fx.db.execute(`UPDATE shop SET notifyEmail = 1 WHERE id = ?`, [a.shopId]);
+      await fx.db.execute(`UPDATE shop SET notifyEmail = 1 WHERE id = ?`, [
+        a.shopId,
+      ]);
       const r = await fx.dispatchedRun(a);
       await fx.db.execute(
         `UPDATE deliveryrunstop SET otpSentAt = NULL WHERE id = ?`,
@@ -295,7 +321,10 @@ describe('W5 driver hardening', () => {
         [key],
       );
       expect(pending).toBeDefined(); // notify_email is on and the order has an email
-      const before = asObj(pending.payload) as { sensitive: boolean; bodyText: string };
+      const before = asObj(pending.payload) as {
+        sensitive: boolean;
+        bodyText: string;
+      };
       expect(before.sensitive).toBe(true);
       const code = /: (\d{6})\./.exec(before.bodyText)![1];
 
@@ -332,7 +361,11 @@ describe('W5 driver hardening', () => {
       const link = await jobs.enqueue(
         a.shopId,
         'send_merchant_whatsapp_alert',
-        { to: '+971505550100', body: 'open https://x.test/driver/SECRETTOKEN', orderId: 1 },
+        {
+          to: '+971505550100',
+          body: 'open https://x.test/driver/SECRETTOKEN',
+          orderId: 1,
+        },
         `driver-link:hard-${Date.now()}`,
         { sensitive: true },
       );
@@ -412,7 +445,11 @@ describe('W5 driver hardening', () => {
           .set(fx.h(a.adminToken))
           .expect(409);
         // another shop's admin cannot see or retry it
-        await fx.r().post(`/jobs/${j.id}/retry`).set(fx.h(b.adminToken)).expect(404);
+        await fx
+          .r()
+          .post(`/jobs/${j.id}/retry`)
+          .set(fx.h(b.adminToken))
+          .expect(404);
       } finally {
         spy.mockRestore();
       }
@@ -438,7 +475,10 @@ describe('W5 driver hardening', () => {
         );
         expect(mid.status).toBe('pending');
         expect(asText(mid.payload)).toContain('515151'); // needed for the retry
-        await fx.db.execute(`UPDATE job SET nextAttemptAt = NOW() - INTERVAL 1 MINUTE WHERE id = ?`, [j.id]);
+        await fx.db.execute(
+          `UPDATE job SET nextAttemptAt = NOW() - INTERVAL 1 MINUTE WHERE id = ?`,
+          [j.id],
+        );
         await worker.processJobById(j.id);
         expect(spy).toHaveBeenLastCalledWith(
           'y@example.com',
@@ -459,31 +499,43 @@ describe('W5 driver hardening', () => {
   });
 
   describe('(3) dispatch is all or nothing', () => {
-    const statusOf = async (id: number) => (await fx.f.orderRow(id)).status;
+    const statusOf = async (id: number): Promise<string> =>
+      (await fx.f.orderRow(id)).status as string;
 
     async function draftRun(n: number) {
       const driver = await fx.createDriver(a);
       const orders: { id: number }[] = [];
       for (let i = 0; i < n; i++) orders.push(await fx.deliveryOrder(a));
-      const run = await fx.createRun(a, driver.id, orders.map((o) => o.id));
+      const run = await fx.createRun(
+        a,
+        driver.id,
+        orders.map((o) => o.id),
+      );
       return { driver, orders, run };
     }
     const runStatus = async (id: number) =>
-      (await fx.row<{ status: string }>(`SELECT status FROM deliveryrun WHERE id = ?`, [id]))[0].status;
+      (
+        await fx.row<{ status: string }>(
+          `SELECT status FROM deliveryrun WHERE id = ?`,
+          [id],
+        )
+      )[0].status;
 
     it('rolls EVERYTHING back when a later order cannot be moved (crash mid-loop)', async () => {
       const { orders, run } = await draftRun(3);
       const ordersSvc = fx.app.get(OrdersService);
       const notifications = fx.app.get(OrderNotificationsService);
       const notify = jest.spyOn(notifications, 'notifyOutForDelivery');
-      const real = ordersSvc.moveToOutForDeliveryTx.bind(ordersSvc);
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- applied with the right this below
+      const real = OrdersService.prototype.moveToOutForDeliveryTx;
       let calls = 0;
       const spy = jest
         .spyOn(ordersSvc, 'moveToOutForDeliveryTx')
-        .mockImplementation(async (...args) => {
+        .mockImplementation((...args) => {
           calls += 1;
-          if (calls === 2) throw new Error('simulated crash');
-          return real(...args);
+          if (calls === 2) return Promise.reject(new Error('simulated crash'));
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- jest spy wrapper
+          return real.apply(ordersSvc, args);
         });
       try {
         await fx
@@ -510,12 +562,16 @@ describe('W5 driver hardening', () => {
         .post(`/delivery-runs/${run.id}/dispatch`)
         .set(fx.h(a.adminToken))
         .expect(201);
-      for (const o of orders) expect(await statusOf(o.id)).toBe('out_for_delivery');
+      for (const o of orders)
+        expect(await statusOf(o.id)).toBe('out_for_delivery');
     });
 
     it('refuses the whole dispatch with a 409 naming an order that is no longer eligible', async () => {
       const { orders, run } = await draftRun(3);
-      await fx.db.execute(`UPDATE \`order\` SET status = 'cancelled' WHERE id = ?`, [orders[1].id]);
+      await fx.db.execute(
+        `UPDATE \`order\` SET status = 'cancelled' WHERE id = ?`,
+        [orders[1].id],
+      );
       const res = await fx
         .r()
         .post(`/delivery-runs/${run.id}/dispatch`)
@@ -557,7 +613,10 @@ describe('W5 driver hardening', () => {
 
   describe('(leftovers) reconciliation', () => {
     it('falls back to the ORDER currency, not AED, when cashCurrency is NULL', async () => {
-      const r = await fx.dispatchedRun(a, { cod: true, proofRequirement: 'none' });
+      const r = await fx.dispatchedRun(a, {
+        cod: true,
+        proofRequirement: 'none',
+      });
       await fx.db.execute(
         `UPDATE \`order\` SET total = '10.505', currency = 'KWD' WHERE id = ?`,
         [r.orders[0].id],
@@ -574,11 +633,16 @@ describe('W5 driver hardening', () => {
       );
       const recon = await fx
         .r()
-        .get(`/delivery-runs/cash-reconciliation?outletId=${a.outletId}&driverId=${r.driver.id}`)
+        .get(
+          `/delivery-runs/cash-reconciliation?outletId=${a.outletId}&driverId=${r.driver.id}`,
+        )
         .set(fx.h(a.adminToken))
         .expect(200);
       const entry = body<{
-        data: { runId: number; totals: { currency: string; expected: string }[] }[];
+        data: {
+          runId: number;
+          totals: { currency: string; expected: string }[];
+        }[];
       }>(recon).data.find((x) => x.runId === r.run.id)!;
       expect(entry.totals).toEqual([
         expect.objectContaining({ currency: 'KWD', expected: '10.505' }),
@@ -603,7 +667,9 @@ describe('W5 driver hardening', () => {
       );
       const recon = await fx
         .r()
-        .get(`/delivery-runs/cash-reconciliation?outletId=${a.outletId}&driverId=${driver.id}`)
+        .get(
+          `/delivery-runs/cash-reconciliation?outletId=${a.outletId}&driverId=${driver.id}`,
+        )
         .set(fx.h(a.adminToken))
         .expect(200);
       const out = body<{ data: unknown[]; truncated: boolean }>(recon);

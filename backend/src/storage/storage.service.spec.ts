@@ -15,7 +15,9 @@ const VALID_PNG = Buffer.from(
   'base64',
 );
 
-function fakeFile(overrides: Partial<Express.Multer.File> = {}): Express.Multer.File {
+function fakeFile(
+  overrides: Partial<Express.Multer.File> = {},
+): Express.Multer.File {
   return {
     fieldname: 'file',
     originalname: 'photo.png',
@@ -38,7 +40,9 @@ function createMockProvider() {
       Promise.resolve({ key: input.key, url: `/uploads/${input.key}` }),
     );
   const del = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
-  const read = jest.fn<Promise<Buffer | null>, [string]>().mockResolvedValue(null);
+  const read = jest
+    .fn<Promise<Buffer | null>, [string]>()
+    .mockResolvedValue(null);
   const provider: StorageProvider = { name: 'mock', save, delete: del, read };
   return { provider, save, delete: del, read };
 }
@@ -198,7 +202,9 @@ describe('StorageService proof photos are private', () => {
     read.mockResolvedValueOnce(Buffer.from('jpg'));
     const service = new StorageService(provider);
     const key = `delivery-proof/7/${'a'.repeat(64)}.jpg`;
-    await expect(service.readProof(7, key)).resolves.toEqual(Buffer.from('jpg'));
+    await expect(service.readProof(7, key)).resolves.toEqual(
+      Buffer.from('jpg'),
+    );
     await expect(service.readProof(8, key)).rejects.toThrow(NotFoundException);
     await expect(
       service.readProof(7, `products/7/${'a'.repeat(64)}.jpg`),
