@@ -14,5 +14,6 @@ export async function handleSendEmailJob(
   await sendEmailOrThrow(payload.to, payload.subject, payload.bodyText, {
     fromName: payload.fromName,
     html: payload.html,
+    sensitive: payload.sensitive,
   });
 }

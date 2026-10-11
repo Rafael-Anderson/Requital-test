@@ -105,10 +105,9 @@ export class DriverLinksService {
 
   // Issue a FRESH link and text it to the driver on WhatsApp through the
   // existing job queue (the platform WhatsApp account). The message carries the
-  // link and nothing about the customers. The link is also in the job payload
-  // until the queue prunes it; that is the price of using the queue (retries
-  // after a provider failure), and it is no more than an admin who can mint a
-  // link at will could read anyway.
+  // link and nothing about the customers. The link sits in the job payload only
+  // until the job completes or dead-letters (retries need it); then it is scrubbed
+  // (jobs/job-payload-scrub.ts) and the stub paths never log it.
   async sendWhatsApp(ctx: TenantContext, runId: number) {
     const run = await this.runs.loadRun(ctx, runId, 'deliveries.manage');
     const rows = await this.db.query<RowDataPacket[]>(
@@ -141,6 +140,8 @@ export class DriverLinksService {
         orderId: (firstStop[0]?.orderId as number | undefined) ?? 0,
       },
       `driver-link:${link.linkId}`,
+      // The message holds the live magic URL: scrubbed from the job row once sent.
+      { sensitive: true },
     );
     return { url: link.url, expiresAt: link.expiresAt, queued: true };
   }

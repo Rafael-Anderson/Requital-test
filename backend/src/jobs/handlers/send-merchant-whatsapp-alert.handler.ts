@@ -8,5 +8,7 @@ import type { SendMerchantWhatsAppAlertJobPayload } from '../jobs.types';
 export async function handleSendMerchantWhatsAppAlertJob(
   payload: SendMerchantWhatsAppAlertJobPayload,
 ): Promise<void> {
-  await sendPlatformWhatsAppAlertOrThrow(payload.to, payload.body);
+  await sendPlatformWhatsAppAlertOrThrow(payload.to, payload.body, {
+    sensitive: payload.sensitive,
+  });
 }

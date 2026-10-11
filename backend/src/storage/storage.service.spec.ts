@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { StorageService } from './storage.service';
 import type {
@@ -37,8 +38,9 @@ function createMockProvider() {
       Promise.resolve({ key: input.key, url: `/uploads/${input.key}` }),
     );
   const del = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
-  const provider: StorageProvider = { name: 'mock', save, delete: del };
-  return { provider, save, delete: del };
+  const read = jest.fn<Promise<Buffer | null>, [string]>().mockResolvedValue(null);
+  const provider: StorageProvider = { name: 'mock', save, delete: del, read };
+  return { provider, save, delete: del, read };
 }
 
 describe('StorageService.uploadImage', () => {
@@ -169,5 +171,40 @@ describe('StorageService.deleteImage', () => {
       service.deleteImage(42, 'products/abc123.jpg'),
     ).rejects.toThrow(NotFoundException);
     expect(del).not.toHaveBeenCalled();
+  });
+});
+
+describe('StorageService proof photos are private', () => {
+  const png = () =>
+    sharp({
+      create: { width: 8, height: 8, channels: 3, background: '#336699' },
+    })
+      .png()
+      .toBuffer();
+
+  it('uploadProof returns a key and no public URL', async () => {
+    const { provider } = createMockProvider();
+    const service = new StorageService(provider);
+    const out = await service.uploadProof(
+      7,
+      fakeFile({ buffer: await png(), originalname: 'p.png' }),
+    );
+    expect(Object.keys(out)).toEqual(['key']);
+    expect(out.key).toMatch(/^delivery-proof\/7\/[0-9a-f]{64}\.jpg$/);
+  });
+
+  it('readProof reads own-shop proof, 404s a foreign shop, a foreign prefix and a missing file', async () => {
+    const { provider, read } = createMockProvider();
+    read.mockResolvedValueOnce(Buffer.from('jpg'));
+    const service = new StorageService(provider);
+    const key = `delivery-proof/7/${'a'.repeat(64)}.jpg`;
+    await expect(service.readProof(7, key)).resolves.toEqual(Buffer.from('jpg'));
+    await expect(service.readProof(8, key)).rejects.toThrow(NotFoundException);
+    await expect(
+      service.readProof(7, `products/7/${'a'.repeat(64)}.jpg`),
+    ).rejects.toThrow(NotFoundException);
+    expect(read).toHaveBeenCalledTimes(1);
+    read.mockResolvedValueOnce(null);
+    await expect(service.readProof(7, key)).rejects.toThrow(NotFoundException);
   });
 });

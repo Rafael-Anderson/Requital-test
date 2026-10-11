@@ -8,7 +8,8 @@ export type JobType =
   | 'compute_daily_rollup'
   | 'recompute_customer_metrics'
   | 'send_conversion_event'
-  | 'import_copy_image';
+  | 'import_copy_image'
+  | 'delete_proof_photo';
 
 export interface SendEmailJobPayload {
   to: string;
@@ -16,6 +17,9 @@ export interface SendEmailJobPayload {
   bodyText: string;
   fromName?: string;
   html?: string;
+  // Set by JobsService.enqueue({ sensitive: true }); see job-payload-scrub.ts.
+  sensitive?: boolean;
+  scrubbed?: boolean;
 }
 
 // Platform-owned WhatsApp new-order alert to the merchant's own outlet
@@ -25,6 +29,8 @@ export interface SendMerchantWhatsAppAlertJobPayload {
   to: string;
   body: string;
   orderId: number;
+  sensitive?: boolean;
+  scrubbed?: boolean;
 }
 
 // Slider's webhook receiver (SliderWebhookController) enqueues one of these
@@ -102,7 +108,15 @@ export interface ImportCopyImageJobPayload {
   url: string;
 }
 
+// Removes one private proof-of-delivery file from storage (retry/backoff/dead
+// letter for free). The key is not a capability: reads are authenticated.
+export interface DeleteProofPhotoJobPayload {
+  shopId: number;
+  key: string;
+}
+
 export type JobPayload =
+  | DeleteProofPhotoJobPayload
   | SendEmailJobPayload
   | SendMerchantWhatsAppAlertJobPayload
   | ProcessSliderWebhookJobPayload

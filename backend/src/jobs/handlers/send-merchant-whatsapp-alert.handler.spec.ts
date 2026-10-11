@@ -16,6 +16,7 @@ describe('handleSendMerchantWhatsAppAlertJob', () => {
     expect(spy).toHaveBeenCalledWith(
       '+971501234567',
       'New order #42 from Jane Doe. Total: 120 AED.',
+      { sensitive: undefined },
     );
     spy.mockRestore();
   });

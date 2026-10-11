@@ -9,8 +9,15 @@ import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provid
 // Deliberately still a raw console.log — same reasoning and same
 // allowlist entry as sendEmailStub's own comment (order-notifications.e2e-
 // spec.ts spies on console.log for both stubs via the same logSpy).
-export function sendWhatsAppStub(to: string, bodyText: string): void {
-  console.log(`[whatsapp:stub] to=${to}\n${bodyText}`);
+export function sendWhatsAppStub(
+  to: string,
+  bodyText: string,
+  sensitive = false,
+): void {
+  // A message holding a live secret (driver link) never reaches the log.
+  console.log(
+    `[whatsapp:stub] to=${to}\n${sensitive ? '[withheld: sensitive]' : bodyText}`,
+  );
 }
 
 const platformProvider = new MetaWhatsAppProvider();
@@ -27,11 +34,12 @@ const platformProvider = new MetaWhatsAppProvider();
 export async function sendPlatformWhatsAppAlertOrThrow(
   to: string,
   body: string,
+  options: { sensitive?: boolean } = {},
 ): Promise<void> {
   const phoneNumberId = process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN;
   if (!phoneNumberId || !accessToken) {
-    sendWhatsAppStub(to, body);
+    sendWhatsAppStub(to, body, options.sensitive);
     return;
   }
   await platformProvider.sendMessage({

@@ -15,6 +15,9 @@ import { resolveOutletFilter } from '../common/outlet-scope';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { OrdersService } from '../orders/orders.service';
+import { JobsService } from '../jobs/jobs.service';
+import { StorageService } from '../storage/storage.service';
+import { scheduleProofDeletion } from './proof-photo-cleanup';
 import { trimDecimal } from '../database/decimal.util';
 import { createLogger } from '../common/logging/logger';
 import { decimalToMinor, minorToDecimal } from './cash';
@@ -37,6 +40,7 @@ const logger = createLogger('DeliveryRunsService');
 // (staff moved it by hand, or a previous attempt failed). 'pending'/'confirmed'
 // orders are not ready to leave; 'delivered'/'cancelled' are over.
 export const RUNNABLE_ORDER_STATUSES = ['preparing', 'out_for_delivery'];
+export const RECONCILIATION_ROW_LIMIT = 5000;
 const LIVE_RUN_STATUSES = ['draft', 'dispatched', 'in_progress'];
 
 export type OrderIneligibility =
@@ -65,6 +69,8 @@ export class DeliveryRunsService {
     private readonly branchRoles: BranchRolesService,
     private readonly audit: AuditLogService,
     private readonly orders: OrdersService,
+    private readonly jobs: JobsService,
+    private readonly storage: StorageService,
   ) {}
 
   // ---------------------------------------------------------------- reads
@@ -189,6 +195,25 @@ export class DeliveryRunsService {
     };
   }
 
+  // Staff read of one stop's private proof photo. The run is loaded through the
+  // same scoped lookup as everything else (shop + outlet, deliveries.view checked
+  // against the FETCHED run's outlet); the stop must belong to that run and shop.
+  // A foreign run, a foreign stop, no photo and a missing file are all one 404.
+  async getProofPhoto(
+    ctx: TenantContext,
+    runId: number,
+    stopId: number,
+  ): Promise<Buffer> {
+    const run = await this.loadRun(ctx, runId, 'deliveries.view');
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT proofPhotoKey FROM deliveryrunstop
+        WHERE id = ? AND runId = ? AND shopId = ? AND proofPhotoKey IS NOT NULL`,
+      [stopId, run.id, ctx.shopId],
+    );
+    if (rows.length === 0) throw new NotFoundException('Photo not found');
+    return this.storage.readProof(ctx.shopId, rows[0].proofPhotoKey as string);
+  }
+
   // Printable run sheet (staff only). Built from the same scoped loadRun as
   // everything else; the HTML renderer escapes every dynamic value.
   async renderSheet(ctx: TenantContext, id: number): Promise<string> {
@@ -241,7 +266,7 @@ export class DeliveryRunsService {
   private async loadStopsForStaff(shopId: number, runId: number) {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT s.id, s.position, s.status, s.failureReason, s.deliveredAt, s.failedAt,
-              s.proofType, s.proofPhotoUrl, s.codExpected, s.cashCollectedAmount, s.cashCurrency, s.cashDiscrepancy,
+              s.proofType, (s.proofPhotoKey IS NOT NULL) AS hasProofPhoto, s.codExpected, s.cashCollectedAmount, s.cashCurrency, s.cashDiscrepancy,
               s.otpSentAt, s.otpSendCount,
               o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.customerAddress,
               o.area, o.deliveryNotes, o.deliveryTimeSlot, o.status AS orderStatus,
@@ -262,8 +287,9 @@ export class DeliveryRunsService {
       deliveredAt: r.deliveredAt as Date | null,
       failedAt: r.failedAt as Date | null,
       proofType: r.proofType as string | null,
-      // Staff only. The driver's own view never carries this.
-      proofPhotoUrl: r.proofPhotoUrl as string | null,
+      // No URL: the photo is private and is read through
+      // GET /delivery-runs/:id/stops/:stopId/proof-photo (getProofPhoto).
+      hasProofPhoto: Boolean(r.hasProofPhoto),
       otpSentAt: r.otpSentAt as Date | null,
       otpSendCount: r.otpSendCount as number,
       cod: r.paymentMethod === 'cash_on_delivery',
@@ -373,18 +399,25 @@ export class DeliveryRunsService {
       conditions.push('s.deliveredAt <= ?');
       params.push(new Date(query.to));
     }
-    const rows = await this.db.query<RowDataPacket[]>(
+    const allRows = await this.db.query<RowDataPacket[]>(
       `SELECT r.id AS runId, r.driverId, d.name AS driverName, DATE_FORMAT(r.runDate, '%Y-%m-%d') AS runDate,
-              s.id AS stopId, s.codExpected, s.cashCollectedAmount, s.cashCurrency, s.cashDiscrepancy
+              s.id AS stopId, s.codExpected, s.cashCollectedAmount, s.cashCurrency, s.cashDiscrepancy,
+              o.currency AS orderCurrency
          FROM deliveryrunstop s
          JOIN deliveryrun r ON r.id = s.runId AND r.shopId = s.shopId
          JOIN driver d ON d.id = r.driverId AND d.shopId = r.shopId
          JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
         WHERE ${conditions.join(' AND ')}
-        ORDER BY r.id DESC
-        LIMIT 5000`,
+        ORDER BY r.id DESC, s.id ASC
+        LIMIT ${RECONCILIATION_ROW_LIMIT + 1}`,
       params,
     );
+    // One row over the limit proves there is more. The oldest run in the page may
+    // then be cut part-way, so it is dropped whole rather than reported short.
+    const truncated = allRows.length > RECONCILIATION_ROW_LIMIT;
+    const rows = truncated
+      ? allRows.filter((r) => r.runId !== allRows[allRows.length - 1].runId)
+      : allRows;
     const runs = new Map<
       number,
       {
@@ -407,7 +440,10 @@ export class DeliveryRunsService {
         };
         runs.set(run.runId, run);
       }
-      const currency = (r.cashCurrency as string | null) ?? 'AED';
+      // The currency the cash was recorded in; a NULL falls back to the ORDER's own
+      // currency, never an assumed AED.
+      const currency =
+        (r.cashCurrency as string | null) ?? (r.orderCurrency as string);
       let b = run.buckets.get(currency);
       if (!b) {
         b = { expected: 0, collected: 0, pending: 0, discrepancies: 0 };
@@ -419,7 +455,7 @@ export class DeliveryRunsService {
         decimalToMinor(r.cashCollectedAmount as string | null, currency) ?? 0;
       if (r.cashDiscrepancy) b.discrepancies += 1;
     }
-    return [...runs.values()].map((run) => ({
+    const data = [...runs.values()].map((run) => ({
       runId: run.runId,
       driverId: run.driverId,
       driverName: run.driverName,
@@ -432,6 +468,7 @@ export class DeliveryRunsService {
         discrepancies: b.discrepancies,
       })),
     }));
+    return { data, truncated };
   }
 
   // The outlet's ready queue: delivery orders that can be put on a run right
@@ -697,6 +734,14 @@ export class DeliveryRunsService {
       if (!status || !LIVE_RUN_STATUSES.includes(status)) {
         throw new ConflictException('This run is finished');
       }
+      // A pending stop can already hold an uploaded photo: its file goes with it
+      // (queued in this transaction, so the row and the cleanup commit together).
+      const [photo] = await conn.query<RowDataPacket[]>(
+        `SELECT proofPhotoKey FROM deliveryrunstop
+          WHERE id = ? AND runId = ? AND shopId = ? AND status = 'pending' FOR UPDATE`,
+        [stopId, id, ctx.shopId],
+      );
+      const photoKey = (photo[0]?.proofPhotoKey as string | null) ?? null;
       const [res] = await conn.query(
         `DELETE FROM deliveryrunstop WHERE id = ? AND runId = ? AND shopId = ? AND status = 'pending'`,
         [stopId, id, ctx.shopId],
@@ -704,6 +749,9 @@ export class DeliveryRunsService {
       if ((res as { affectedRows: number }).affectedRows === 0) {
         // Not on this run, or already delivered/failed (history is kept).
         throw new NotFoundException(`No pending stop ${stopId} on this run`);
+      }
+      if (photoKey) {
+        await scheduleProofDeletion(this.jobs, ctx.shopId, photoKey, conn);
       }
       await this.compactPositions(conn, ctx.shopId, id);
       if (status !== 'draft') {
@@ -774,37 +822,21 @@ export class DeliveryRunsService {
     return this.findOne(ctx, id);
   }
 
-  // draft -> dispatched. Every order is re-validated, the status moves by CAS,
-  // and only then are the orders pushed through the SAME order state machine the
-  // kanban uses (preparing -> out_for_delivery), so the customer is told and the
-  // timeline records it. An order that changed underneath us (cancelled) has its
-  // stop failed with a reason rather than aborting the whole dispatch.
+  // draft -> dispatched, ALL OR NOTHING. The run's status CAS and every order's
+  // preparing -> out_for_delivery CAS commit in ONE transaction, so a crash or a
+  // failure part-way can never leave a half-dispatched run (run dispatched, some
+  // orders still preparing, the driver sent out with a list that disagrees with
+  // the kanban). An order that is no longer eligible (cancelled, no longer a
+  // delivery, moved elsewhere) refuses the WHOLE dispatch with a 409 naming it;
+  // staff remove it and dispatch again. Nothing is silently dropped from a run a
+  // driver is about to drive. The side effects (affiliate sync, audit row, the
+  // "out for delivery" message to each customer) run only after the commit, so
+  // no customer is told about a dispatch that rolled back.
   async dispatch(ctx: TenantContext, id: number) {
     const run = await this.loadRun(ctx, id, 'deliveries.manage');
     await this.branchRoles.assertPermission(ctx, run.outletId, 'orders.manage');
     if (run.status !== 'draft') {
       throw new ConflictException(`A ${run.status} run cannot be dispatched`);
-    }
-    const stops = await this.db.query<RowDataPacket[]>(
-      `SELECT s.id, s.orderId, o.status AS orderStatus, o.orderType
-         FROM deliveryrunstop s JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
-        WHERE s.runId = ? AND s.shopId = ? ORDER BY s.position`,
-      [id, ctx.shopId],
-    );
-    if (stops.length === 0) {
-      throw new BadRequestException(
-        'Add at least one order before dispatching',
-      );
-    }
-    const bad = stops.filter(
-      (s) =>
-        s.orderType !== 'delivery' ||
-        !RUNNABLE_ORDER_STATUSES.includes(s.orderStatus as string),
-    );
-    if (bad.length > 0) {
-      throw new ConflictException(
-        `These orders are no longer ready: ${bad.map((s) => `#${s.orderId as number}`).join(', ')}. Remove them and try again`,
-      );
     }
     const driver = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM driver WHERE id = ? AND shopId = ? AND outletId = ? AND active = 1`,
@@ -814,47 +846,86 @@ export class DeliveryRunsService {
       throw new ConflictException('The assigned driver is no longer active');
     }
 
-    const claimed = await this.db.execute(
-      `UPDATE deliveryrun SET status = 'dispatched', dispatchedAt = NOW(3), updatedAt = NOW(3)
-        WHERE id = ? AND shopId = ? AND status = 'draft'`,
-      [id, ctx.shopId],
-    );
-    if (claimed.affectedRows === 0) {
-      throw new ConflictException(
-        'The run was changed by someone else, refresh and retry',
+    const moved: number[] = [];
+    let stopCount = 0;
+    await this.db.transaction(async (conn) => {
+      // A retry after a rollback starts from scratch.
+      moved.length = 0;
+      const [claimed] = await conn.query(
+        `UPDATE deliveryrun SET status = 'dispatched', dispatchedAt = NOW(3), updatedAt = NOW(3)
+          WHERE id = ? AND shopId = ? AND status = 'draft'`,
+        [id, ctx.shopId],
       );
-    }
-
-    for (const stop of stops) {
-      if (stop.orderStatus !== 'preparing') continue;
-      try {
-        await this.orders.updateStatus(ctx, stop.orderId as number, {
-          status: 'out_for_delivery',
-        });
-      } catch (error) {
-        logger.warn('dispatch: order could not be moved out for delivery', {
-          shopId: ctx.shopId,
-          runId: id,
-          orderId: stop.orderId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        await this.db.execute(
-          `UPDATE deliveryrunstop SET status = 'failed', failureReason = 'order_changed', failedAt = NOW(3), activeOrderId = NULL, updatedAt = NOW(3)
-            WHERE id = ? AND shopId = ? AND status = 'pending'`,
-          [stop.id as number, ctx.shopId],
+      if ((claimed as { affectedRows: number }).affectedRows === 0) {
+        throw new ConflictException(
+          'The run was changed by someone else, refresh and retry',
         );
       }
+      // Locked in a fixed (order id) sequence so two dispatches cannot deadlock.
+      const [stops] = await conn.query<RowDataPacket[]>(
+        `SELECT s.id, s.orderId, o.status AS orderStatus, o.orderType
+           FROM deliveryrunstop s JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
+          WHERE s.runId = ? AND s.shopId = ?
+          ORDER BY s.orderId
+            FOR UPDATE`,
+        [id, ctx.shopId],
+      );
+      stopCount = stops.length;
+      if (stops.length === 0) {
+        throw new BadRequestException(
+          'Add at least one order before dispatching',
+        );
+      }
+      const bad = stops.filter(
+        (s) =>
+          s.orderType !== 'delivery' ||
+          !RUNNABLE_ORDER_STATUSES.includes(s.orderStatus as string),
+      );
+      if (bad.length > 0) {
+        throw new ConflictException({
+          statusCode: 409,
+          message: `These orders are no longer ready: ${bad.map((s) => `#${s.orderId as number}`).join(', ')}. Remove them and try again`,
+          details: bad.map((s) => ({
+            orderId: s.orderId as number,
+            status: s.orderStatus as string,
+          })),
+        });
+      }
+      for (const stop of stops) {
+        if (stop.orderStatus !== 'preparing') continue;
+        await this.orders.moveToOutForDeliveryTx(
+          conn,
+          ctx,
+          stop.orderId as number,
+          run.outletId,
+        );
+        moved.push(stop.orderId as number);
+      }
+    });
+
+    for (const orderId of moved) {
+      try {
+        await this.orders.afterStatusChanged(
+          ctx,
+          orderId,
+          'preparing',
+          'out_for_delivery',
+        );
+      } catch (error) {
+        // Committed already: a failed side effect must not fail the dispatch.
+        logger.error('dispatch: post-commit order effects failed', {
+          shopId: ctx.shopId,
+          runId: id,
+          orderId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
-    await completeRunIfDone(
-      (sql, params) => this.db.execute(sql, params).then((r) => r.affectedRows),
-      ctx.shopId,
-      id,
-    );
     await this.audit.logCtx(ctx, {
       action: 'delivery_run.dispatched',
       entityType: 'delivery_run',
       entityId: id,
-      after: { driverId: run.driverId, stops: stops.length },
+      after: { driverId: run.driverId, stops: stopCount },
     });
     return this.findOne(ctx, id);
   }

@@ -23,8 +23,12 @@ export function sendEmailStub(
   to: string,
   subject: string,
   bodyText: string,
+  sensitive = false,
 ): void {
-  console.log(`[email:stub] to=${to} subject="${subject}"\n${bodyText}`);
+  // A message holding a live secret (delivery code, driver link) never reaches
+  // the log, not even in the stub.
+  const shown = sensitive ? '[withheld: sensitive]' : bodyText;
+  console.log(`[email:stub] to=${to} subject="${subject}"\n${shown}`);
 }
 
 // Exported for reuse by every call site's own HTML email template (see
@@ -71,6 +75,8 @@ interface SendEmailOptions {
   // abandoned cart, gift card) so those read as coming from the shop, not
   // the platform, even though the sending domain is always the platform's.
   fromName?: string;
+  // Keep the body out of the stub's log line (see sendEmailStub).
+  sensitive?: boolean;
 }
 
 // Same real-vs-stub resolution as sendEmail() below, but lets a real
@@ -97,7 +103,7 @@ export async function sendEmailOrThrow(
   // that real round-trip, multiplied across dozens of specs, is what was
   // making the e2e suite flaky under load.
   if (!apiKey || apiKey === 'test') {
-    sendEmailStub(to, subject, bodyText);
+    sendEmailStub(to, subject, bodyText, options.sensitive);
     return;
   }
   await new ResendEmailProvider().sendEmail({
@@ -132,6 +138,6 @@ export async function sendEmail(
     logger.error(`send to ${to} failed, falling back to stub`, {
       error: err instanceof Error ? err.message : String(err),
     });
-    sendEmailStub(to, subject, bodyText);
+    sendEmailStub(to, subject, bodyText, options.sensitive);
   }
 }

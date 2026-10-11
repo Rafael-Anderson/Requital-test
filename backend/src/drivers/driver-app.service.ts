@@ -16,8 +16,10 @@ import { OrderNotificationsService } from '../orders/order-notifications.service
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { StorageService } from '../storage/storage.service';
 import { createLogger } from '../common/logging/logger';
-import { minorToDecimal, parseCashInput } from './cash';
+import { decimalToMinor, minorToDecimal, parseCashInput } from './cash';
 import { amountDueDecimal, amountDueMinor } from '../common/amount-due';
+import { JobsService } from '../jobs/jobs.service';
+import { scheduleProofDeletion } from './proof-photo-cleanup';
 import { generateOtp, hashOtp, newOtpSalt, otpMatches } from './otp';
 import { completeRunIfDone, poolExec } from './run-lifecycle';
 import type { DeliverStopDto, FailStopDto } from './dto/driver-app.dto';
@@ -61,6 +63,7 @@ export class DriverAppService {
     private readonly notifications: OrderNotificationsService,
     private readonly audit: AuditLogService,
     private readonly storage: StorageService,
+    private readonly jobs: JobsService,
   ) {}
 
   // The single entry point. One query joins the link to its run, driver and shop
@@ -331,20 +334,17 @@ export class DriverAppService {
     }
     const saved = await this.storage.uploadProof(link.shopId, file);
     const res = await this.db.execute(
-      `UPDATE deliveryrunstop SET proofPhotoKey = ?, proofPhotoUrl = ?, proofPhotoAt = NOW(3)
+      `UPDATE deliveryrunstop SET proofPhotoKey = ?, proofPhotoUrl = NULL, proofPhotoAt = NOW(3)
         WHERE id = ? AND runId = ? AND shopId = ? AND status = 'pending'`,
-      [saved.key, saved.url, stopId, link.runId, link.shopId],
+      [saved.key, stopId, link.runId, link.shopId],
     );
     if (res.affectedRows === 0) {
       // The stop closed while we were uploading: do not leave an orphan.
-      await this.storage
-        .deleteProof(link.shopId, saved.key)
-        .catch(() => undefined);
+      await scheduleProofDeletion(this.jobs, link.shopId, saved.key);
       throw new ConflictException('This stop is already closed');
     }
     const old = stop.proofPhotoKey as string | null;
-    if (old)
-      await this.storage.deleteProof(link.shopId, old).catch(() => undefined);
+    if (old) await scheduleProofDeletion(this.jobs, link.shopId, old);
     return { hasPhoto: true };
   }
 
