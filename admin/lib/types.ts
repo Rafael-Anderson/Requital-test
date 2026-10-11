@@ -3634,6 +3634,7 @@ export interface ReadyOrder {
   paymentMethod: string | null;
   total: string;
   currency: string;
+}
 
 // ONB-1: collections and customers import (preview/confirm, same stateless pair).
 export interface CollectionImportRow {
