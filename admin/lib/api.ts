@@ -77,6 +77,8 @@ import type {
   CustomerConsent,
   CustomerSegment,
   StoreCreditOverview,
+  CustomerMergePreview,
+  CustomerMergeRecord,
   ConsentChannel,
   ConsentStatus,
   DailyRevenuePoint,
@@ -2690,4 +2692,23 @@ export function adjustCustomerStoreCredit(
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+// ---- Customer merge (CUS-10). NOT reversible. Admin only (history: admin + viewer). ----
+export function previewCustomerMerge(primaryId: number, duplicateIds: number[]) {
+  return apiFetch<CustomerMergePreview>(`/customers/${primaryId}/merge-preview`, {
+    method: "POST",
+    body: JSON.stringify({ duplicateIds }),
+  });
+}
+
+export function mergeCustomers(primaryId: number, duplicateIds: number[]) {
+  return apiFetch<{ primaryId: number; merged: { duplicateCustomerId: number }[]; alreadyMerged: number[] }>(
+    `/customers/${primaryId}/merge`,
+    { method: "POST", body: JSON.stringify({ duplicateIds, confirm: "MERGE" }) },
+  );
+}
+
+export function listCustomerMerges(primaryId: number) {
+  return apiFetch<CustomerMergeRecord[]>(`/customers/${primaryId}/merges`);
 }

@@ -47,6 +47,7 @@ import { CustomersModule } from './customers/customers.module';
 import { CustomerCrmModule } from './customer-crm/customer-crm.module';
 import { CustomerSegmentsModule } from './customer-segments/customer-segments.module';
 import { StoreCreditModule } from './store-credit/store-credit.module';
+import { CustomerMergeModule } from './customer-merge/customer-merge.module';
 import { ReportsModule } from './reports/reports.module';
 import { ExternalDeliveriesModule } from './external-deliveries/external-deliveries.module';
 import { ThemeModule } from './theme/theme.module';
@@ -174,6 +175,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     CustomerCrmModule,
     CustomerSegmentsModule,
     StoreCreditModule,
+    CustomerMergeModule,
     ReportsModule,
     ExternalDeliveriesModule,
     ThemeModule,

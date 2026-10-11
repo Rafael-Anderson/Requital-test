@@ -27,6 +27,8 @@ import CustomerTagsCard from "@/components/customers/CustomerTagsCard";
 import CustomerNotesCard from "@/components/customers/CustomerNotesCard";
 import CustomerConsentCard from "@/components/customers/CustomerConsentCard";
 import StoreCreditCard from "@/components/customers/StoreCreditCard";
+import MergeCustomersModal from "@/components/customers/MergeCustomersModal";
+import MergeHistoryCard from "@/components/customers/MergeHistoryCard";
 
 // Admin-only, same as the list page — see app/customers/page.tsx.
 export default function CustomerDetailPage() {
@@ -46,6 +48,8 @@ export default function CustomerDetailPage() {
   const [email, setEmail] = useState("");
   const [birthday, setBirthday] = useState("");
   const [saving, setSaving] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [mergeTick, setMergeTick] = useState(0);
 
   useEffect(() => {
     if (!authLoading && user && user.role !== "admin") router.replace("/");
@@ -159,6 +163,11 @@ export default function CustomerDetailPage() {
               )}
             </div>
             <div className="flex justify-end mt-4">
+              {user?.role === "admin" && (
+                <Button variant="secondary" className="me-2" onClick={() => setMerging(true)}>
+                  Merge duplicates
+                </Button>
+              )}
               <Button variant="primary" onClick={handleSave} disabled={saving} loading={saving}>
                 {saving ? "Saving…" : "Save changes"}
               </Button>
@@ -170,6 +179,7 @@ export default function CustomerDetailPage() {
             <CustomerConsentCard customerId={customerId} canEdit={user?.role === "admin"} />
           </div>
           <StoreCreditCard customerId={customerId} canEdit={user?.role === "admin"} />
+          <MergeHistoryCard customerId={customerId} reloadKey={mergeTick} />
           <CustomerNotesCard customerId={customerId} canEdit={user?.role === "admin"} />
 
           <div>
@@ -208,6 +218,18 @@ export default function CustomerDetailPage() {
             </Table>
           </div>
         </div>
+      )}
+      {merging && customer && (
+        <MergeCustomersModal
+          primaryId={customerId}
+          primaryName={customer.name}
+          onClose={() => setMerging(false)}
+          onMerged={() => {
+            setMerging(false);
+            setMergeTick((t) => t + 1);
+            void refresh();
+          }}
+        />
       )}
     </PageShell>
   );

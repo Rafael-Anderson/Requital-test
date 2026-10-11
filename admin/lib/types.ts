@@ -3767,3 +3767,20 @@ export interface StoreCreditOverview {
   entries: StoreCreditEntry[];
   replay?: boolean;
 }
+
+// CUS-10
+export interface CustomerMergePreview {
+  customers: { id: number; name: string; phone: string; email: string | null; registered: boolean }[];
+  willMove: { orders: number; draftOrders: number; storeCreditEntries: number; notes: number };
+}
+
+export interface CustomerMergeRecord {
+  id: number;
+  duplicateCustomerId: number;
+  duplicateName: string | null;
+  duplicatePhone: string | null;
+  duplicateEmail: string | null;
+  moved: Record<string, number>;
+  actorName: string | null;
+  createdAt: string;
+}

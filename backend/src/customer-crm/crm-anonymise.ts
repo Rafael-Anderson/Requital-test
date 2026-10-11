@@ -46,4 +46,11 @@ export async function anonymiseCustomerCrm(
       WHERE customerId = ? AND shopId = ? AND entryType IN ('grant', 'deduct') AND reason IS NOT NULL`,
     [customerId, shopId],
   );
+  // A merge record holding a duplicate's old contact details is personal data of
+  // this customer too: the record stays (what moved, when), the contact snapshot goes.
+  await db.execute(
+    `UPDATE customermerge SET duplicateName = NULL, duplicatePhone = NULL, duplicateEmail = NULL
+      WHERE primaryCustomerId = ? AND shopId = ?`,
+    [customerId, shopId],
+  );
 }

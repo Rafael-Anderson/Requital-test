@@ -13,6 +13,7 @@ vi.mock("@/lib/api", () => ({
   getCustomerTags: vi.fn().mockResolvedValue([]),
   listCustomerTags: vi.fn().mockResolvedValue([]),
   listCustomerNotes: vi.fn().mockResolvedValue([]),
+  listCustomerMerges: vi.fn().mockResolvedValue([]),
   getCustomerStoreCredit: vi.fn().mockResolvedValue({ balances: [], entries: [] }),
   getCustomerConsent: vi.fn().mockResolvedValue({
     channels: [],

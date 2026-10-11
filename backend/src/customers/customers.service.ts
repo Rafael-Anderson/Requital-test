@@ -64,6 +64,18 @@ export class CustomersService {
     if (existing) {
       return this.applyUpdateIfChanged(existing, data);
     }
+    // A phone that belonged to a customer who was merged into another one
+    // resolves to that customer, so merging is not undone by the next order.
+    const aliasRows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
+      `SELECT c.* FROM customermerge m
+         JOIN customer c ON c.id = m.primaryCustomerId AND c.shopId = m.shopId
+        WHERE m.shopId = ? AND m.duplicatePhone = ?
+        ORDER BY m.id DESC LIMIT 1`,
+      [shopId, data.phone],
+    );
+    if (aliasRows[0]) {
+      return this.applyUpdateIfChanged(aliasRows[0], data);
+    }
     try {
       const result = await this.db.execute(
         `INSERT INTO customer (shopId, name, phone, email) VALUES (?, ?, ?, ?)`,
