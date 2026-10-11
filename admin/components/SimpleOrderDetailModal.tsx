@@ -193,7 +193,7 @@ export default function SimpleOrderDetailModal({
             {order.trackingToken && (
               <div className="mt-1 flex items-center gap-1.5">
                 <span>Tracking ref: </span>
-                <span className="font-mono text-xs">{order.trackingToken}</span>
+                <span className="font-mono text-xs break-all">{order.trackingToken}</span>
                 <button
                   onClick={() => copyTrackingRef(order.trackingToken!)}
                   className="text-xs text-text-faint underline decoration-transparent hover:decoration-current"
