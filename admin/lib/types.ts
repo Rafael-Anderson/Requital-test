@@ -3590,7 +3590,8 @@ export interface DeliveryRunStop {
   deliveredAt: string | null;
   failedAt: string | null;
   proofType: string | null;
-  proofPhotoUrl: string | null;
+  // The photo is private: opened via /delivery-runs/:id/stops/:stopId/proof-photo.
+  hasProofPhoto: boolean;
   cod: boolean;
   codExpected: string | null;
   cashCollectedAmount: string | null;

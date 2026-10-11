@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   sendRunLinkWhatsApp: vi.fn(),
   getRunSheetHtml: vi.fn(),
   resolveImageUrl: (u: string | null) => u,
+  API_URL: "http://api.test",
 }));
 vi.mock("@/lib/api", () => api);
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "7" }) }));
@@ -29,7 +30,7 @@ const stop = (id: number, position: number, extra: Partial<DeliveryRunDetail["st
   deliveredAt: null,
   failedAt: null,
   proofType: null,
-  proofPhotoUrl: null,
+  hasProofPhoto: false,
   cod: false,
   codExpected: null,
   cashCollectedAmount: null,
@@ -80,6 +81,18 @@ afterEach(() => {
 });
 
 describe("delivery run detail", () => {
+  it("links a private proof photo through the authenticated endpoint, never a stored URL", async () => {
+    api.getDeliveryRun.mockResolvedValue(
+      run({
+        status: "in_progress",
+        stops: [stop(5, 1, { status: "delivered", proofType: "photo", hasProofPhoto: true })],
+      }),
+    );
+    renderPage();
+    const link = await screen.findByRole("link", { name: "View photo" });
+    expect(link.getAttribute("href")).toBe("http://api.test/delivery-runs/7/stops/5/proof-photo");
+  });
+
   it("dispatches and shows the one-time link; a draft has no link card", async () => {
     api.getDeliveryRun.mockResolvedValue(run());
     api.dispatchDeliveryRun.mockResolvedValue(

@@ -126,10 +126,12 @@ describe('SHP-5 driver actions: proof, cash, timeline', () => {
         .get(`/delivery-runs/${r.run.id}`)
         .set(fx.h(a.adminToken))
         .expect(200);
-      expect(
-        body<{ stops: { proofPhotoUrl: string }[] }>(detail).stops[0]
-          .proofPhotoUrl,
-      ).toContain('delivery-proof');
+      // staff are told there is a photo, never given a URL for it
+      const staffStop = body<{ stops: Record<string, unknown>[] }>(detail)
+        .stops[0];
+      expect(staffStop.hasProofPhoto).toBe(true);
+      expect(JSON.stringify(staffStop)).not.toContain('delivery-proof');
+      expect(stop.proofPhotoUrl).toBeNull();
       // and it satisfies photo_or_otp
       const done = await deliver(r.token, r.stops[0].id).expect(201);
       expect(
@@ -556,12 +558,12 @@ describe('SHP-5 driver actions: proof, cash, timeline', () => {
         )
         .set(fx.h(a.adminToken))
         .expect(200);
-      const entry = body<
-        {
+      const entry = body<{
+        data: {
           runId: number;
           totals: { difference: string; discrepancies: number }[];
-        }[]
-      >(recon).find((x) => x.runId === r.run.id)!;
+        }[];
+      }>(recon).data.find((x) => x.runId === r.run.id)!;
       expect(entry.totals[0]).toMatchObject({
         difference: '-10.00',
         discrepancies: 1,
