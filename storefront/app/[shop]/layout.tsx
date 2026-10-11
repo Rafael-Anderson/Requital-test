@@ -91,7 +91,7 @@ export default async function ShopLayout({
 
   return (
     <>
-      {themeVars && <style dangerouslySetInnerHTML={{ __html: `:root{${themeVars}}` }} />}
+      {themeVars && <style dangerouslySetInnerHTML={{ __html: `:root{${themeVars}}`.replace(/</g, "\\3C ") }} />}
       {organization && <JsonLd data={organization} />}
       {/* The sections are server-rendered now. Their entrance animations start from a hidden
           state that only a script reveals, so without JS they would stay invisible. */}
