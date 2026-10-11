@@ -12,6 +12,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
 import CollectionFormModal from "@/components/CollectionFormModal";
+import { CollectionImportButton } from "@/components/ListImportButtons";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
@@ -92,12 +93,15 @@ export default function CollectionsPage() {
       <BackButton href="/products" />
       <ProductsTabs />
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h1 className="text-2xl font-semibold">Collections</h1>
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus className="size-4 inline -mt-0.5 me-1" />
-          New collection
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <CollectionImportButton onImported={refresh} />
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            <Plus className="size-4 inline -mt-0.5 me-1" />
+            New collection
+          </Button>
+        </div>
       </div>
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}

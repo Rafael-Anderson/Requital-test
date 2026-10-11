@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -18,6 +19,9 @@ import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { ReorderCollectionsDto } from './dto/reorder-collections.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
 import { StorageService } from '../storage/storage.service';
+import { CollectionImportService } from './collection-import.service';
+import { ImportCollectionsQueryDto } from './dto/import-collections-query.dto';
+import { tableUploadOptions } from '../common/csv-upload.config';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
@@ -32,6 +36,7 @@ export class CollectionsController {
   constructor(
     private readonly collectionsService: CollectionsService,
     private readonly storageService: StorageService,
+    private readonly collectionImport: CollectionImportService,
   ) {}
 
   @Get()
@@ -50,6 +55,32 @@ export class CollectionsController {
       throw new BadRequestException('No file uploaded');
     }
     return this.storageService.uploadImage(ctx.shopId, 'collections', file);
+  }
+
+  // Import (ONB-1). POST, so no clash with the :id routes below; preview writes
+  // nothing, confirm re-reads the same file (stateless pair).
+  @Roles('admin')
+  @Post('import/preview')
+  @UseInterceptors(FileInterceptor('file', tableUploadOptions))
+  previewImport(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ImportCollectionsQueryDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.collectionImport.preview(ctx, file, query.onExisting);
+  }
+
+  @Roles('admin')
+  @Post('import/confirm')
+  @UseInterceptors(FileInterceptor('file', tableUploadOptions))
+  confirmImport(
+    @CurrentUser() ctx: TenantContext,
+    @Query() query: ImportCollectionsQueryDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.collectionImport.confirm(ctx, file, query.onExisting);
   }
 
   // Placed before the :id route, same reason bio-links documents: a numeric

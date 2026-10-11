@@ -7,7 +7,8 @@ export type JobType =
   | 'process_slider_webhook'
   | 'compute_daily_rollup'
   | 'recompute_customer_metrics'
-  | 'send_conversion_event';
+  | 'send_conversion_event'
+  | 'import_copy_image';
 
 export interface SendEmailJobPayload {
   to: string;
@@ -92,10 +93,20 @@ export interface SendConversionEventJobPayload {
   currency: string;
 }
 
+// ONB-2: copy ONE remote image a product import listed into our own storage
+// (see ProductImageCopyService). The URL is public merchant-supplied data, not
+// a secret; the fetch itself is SSRF-guarded (common/safe-fetch.ts).
+export interface ImportCopyImageJobPayload {
+  shopId: number;
+  productId: number;
+  url: string;
+}
+
 export type JobPayload =
   | SendEmailJobPayload
   | SendMerchantWhatsAppAlertJobPayload
   | ProcessSliderWebhookJobPayload
   | ComputeDailyRollupJobPayload
   | RecomputeCustomerMetricsJobPayload
-  | SendConversionEventJobPayload;
+  | SendConversionEventJobPayload
+  | ImportCopyImageJobPayload;
