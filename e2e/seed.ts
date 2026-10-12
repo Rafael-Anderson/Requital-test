@@ -95,20 +95,33 @@ export async function seedShop(): Promise<SeedState> {
   const adminPassword = 'Password123!';
   const shopName = `Playwright E2E Shop ${runId}`;
 
-  const signupRes = await fetch(`${API_URL}/auth/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: 'Playwright Admin',
-      email: adminEmail,
-      password: adminPassword,
-      shopName,
-      subdomain,
-    }),
-  });
-  if (!signupRes.ok) {
-    const text = await signupRes.text();
-    throw new Error(`seed: POST /auth/signup -> ${signupRes.status}: ${text}`);
+  // Signup is limited per IP (5/min, 20/hour), and several specs seed their own
+  // shop, so a 429 here is expected now and then: wait for the window to reopen
+  // (bounded) instead of failing the spec for a reason that is not under test.
+  let signupRes: Response | undefined;
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    signupRes = await fetch(`${API_URL}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Playwright Admin',
+        email: adminEmail,
+        password: adminPassword,
+        shopName,
+        subdomain,
+      }),
+    });
+    if (signupRes.status !== 429 || attempt === 8) break;
+    const retryAfter = Number(signupRes.headers.get('retry-after'));
+    const waitS =
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 15;
+    await new Promise((r) => setTimeout(r, Math.min(waitS, 65) * 1000 + 500));
+  }
+  if (!signupRes || !signupRes.ok) {
+    const text = signupRes ? await signupRes.text() : '';
+    throw new Error(
+      `seed: POST /auth/signup -> ${signupRes?.status ?? 'no response'}: ${text}`,
+    );
   }
   const session = sessionFromResponse(signupRes);
   const signup = (await signupRes.json()) as { devVerificationLink?: string };
