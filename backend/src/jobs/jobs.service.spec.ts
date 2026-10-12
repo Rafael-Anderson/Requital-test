@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access --
  * Standard jest-mock-typing false positive (see CLAUDE.md's backend lint-gap
  * note and auth.service.spec.ts's identical disable). */
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import type { DatabaseService } from '../database/database.service';
 import type { PoolConnection } from 'mysql2/promise';
@@ -239,6 +239,7 @@ describe('JobsService.retry / dismiss — tenant scoping', () => {
   it('retry only succeeds when the job belongs to the given shopId', async () => {
     const db = createMockDb();
     db.execute.mockResolvedValue({ affectedRows: 0 });
+    db.query.mockResolvedValue([]);
     const service = new JobsService(db);
 
     await expect(service.retry(999, 1)).rejects.toThrow(NotFoundException);
@@ -262,5 +263,81 @@ describe('JobsService.retry / dismiss — tenant scoping', () => {
     const service = new JobsService(db);
 
     await expect(service.retry(10, 1)).resolves.toBeUndefined();
+  });
+});
+
+describe('JobsService sensitive payloads', () => {
+  const SECRET = {
+    to: '+971500000000',
+    body: 'link https://x/driver/SECRET',
+    orderId: 1,
+  };
+
+  it('enqueue({ sensitive }) flags the stored payload', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ insertId: 3, affectedRows: 1 });
+    db.query.mockResolvedValue([fakeJob({ id: 3 })]);
+    const service = new JobsService(db);
+    await service.enqueue(1, 'send_merchant_whatsapp_alert', SECRET, 'k', {
+      sensitive: true,
+    });
+    const stored = JSON.parse(db.execute.mock.calls[0][1][2] as string);
+    expect(stored).toMatchObject({ sensitive: true, body: SECRET.body });
+  });
+
+  it('completeJob scrubs the secret in the same statement', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ affectedRows: 1 });
+    const service = new JobsService(db);
+    await service.completeJob(3, { ...SECRET, sensitive: true });
+    const [sql, params] = db.execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("status = 'completed', payload = ?");
+    expect(String(params[0])).not.toContain('SECRET');
+    expect(JSON.parse(params[0] as string)).toMatchObject({ scrubbed: true });
+  });
+
+  it('completeJob leaves an ordinary payload alone', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ affectedRows: 1 });
+    const service = new JobsService(db);
+    await service.completeJob(3, SECRET);
+    expect(db.execute.mock.calls[0][0]).not.toContain('payload = ?');
+  });
+
+  it('dead-lettering scrubs the secret', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ affectedRows: 1 });
+    db.query.mockResolvedValue([
+      fakeJob({
+        attempts: 5,
+        maxAttempts: 5,
+        payload: { ...SECRET, sensitive: true },
+      }),
+    ]);
+    const service = new JobsService(db);
+    await service.failJob(1, 'provider down');
+    const [sql, params] = db.execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain("status = 'dead_letter', payload = ?");
+    expect(String(params[0])).not.toContain('SECRET');
+  });
+
+  it('listDeadLetter never returns a secret, even from an unscrubbed row', async () => {
+    const db = createMockDb();
+    db.query.mockResolvedValue([
+      fakeJob({ payload: { ...SECRET, sensitive: true } }),
+    ]);
+    const [row] = await new JobsService(db).listDeadLetter(1);
+    expect(JSON.stringify(row.payload)).not.toContain('SECRET');
+  });
+
+  it('retry of a scrubbed dead letter is a 409, not a re-send of "[scrubbed]"', async () => {
+    const db = createMockDb();
+    db.execute.mockResolvedValue({ affectedRows: 0 });
+    db.query.mockResolvedValue([
+      fakeJob({ payload: { ...SECRET, body: '[scrubbed]', scrubbed: true } }),
+    ]);
+    await expect(new JobsService(db).retry(1, 1)).rejects.toThrow(
+      ConflictException,
+    );
   });
 });

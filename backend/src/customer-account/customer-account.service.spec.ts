@@ -30,6 +30,10 @@ function baseCustomer(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+jest.mock('../drivers/proof-photo-cleanup', () => ({
+  anonymiseCustomerDeliveryProofs: jest.fn().mockResolvedValue(0),
+}));
+
 function createMockDb(opts: {
   customer?: Record<string, unknown>;
   orders?: Record<string, unknown>[];
@@ -130,6 +134,7 @@ describe('CustomerAccountService.exportData', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     const result = await service.exportData(ctx);
@@ -186,6 +191,7 @@ describe('CustomerAccountService.exportData', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     await expect(service.exportData(ctx)).rejects.toThrow(BadRequestException);
@@ -213,6 +219,7 @@ describe('CustomerAccountService.exportData', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     await expect(service.exportData(ctx)).resolves.toBeDefined();
@@ -235,6 +242,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     const result = await service.requestDeletion(ctx);
@@ -279,6 +287,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     const result = await service.confirmDeletion(ctx, raw);
@@ -336,6 +345,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -370,6 +380,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     await expect(service.confirmDeletion(ctx, raw)).rejects.toThrow(
@@ -395,6 +406,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     const requestResult = await service.requestDeletion(ctx);
@@ -466,6 +478,7 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       {
         overview: jest.fn().mockResolvedValue({ balances: [], entries: [] }),
       } as never, // storeCreditService
+      {} as never, // jobs: proof cleanup is mocked below
     );
 
     const first = await service.confirmDeletion(ctx, raw);

@@ -66,6 +66,10 @@ const ALLOWLIST = [
   // new entry point, so no independent check belongs here.
   "orders/orders.service.ts:findNegativeIngredientStock",
   "orders/orders.service.ts:adjustStockForOrder",
+  // W5: the status CAS is AND-ed with shopId AND outletId (a foreign outlet matches
+  // zero rows and throws 409); its one caller, DeliveryRunsService.dispatch, passes
+  // the outletId of a run it loaded through the shop- and outlet-scoped loadRun.
+  "orders/orders.service.ts:moveToOutForDeliveryTx",
   "products/product-order-items.service.ts:consumeForOrderItems",
   "products/product-import.service.ts:applyImportStock",
   // Private to the Shopify importer: only ever called from createProduct/

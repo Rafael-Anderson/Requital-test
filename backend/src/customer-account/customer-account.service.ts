@@ -23,6 +23,8 @@ import { PublicService } from '../public/public.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
 import { anonymiseCustomerCrm } from '../customer-crm/crm-anonymise';
+import { JobsService } from '../jobs/jobs.service';
+import { anonymiseCustomerDeliveryProofs } from '../drivers/proof-photo-cleanup';
 import { StoreCreditService } from '../store-credit/store-credit.service';
 import { CustomerConsentService } from '../customer-crm/customer-consent.service';
 import type { ConsentChannel } from '../customer-crm/consent-wording';
@@ -85,6 +87,7 @@ export class CustomerAccountService {
     private readonly regionsService: RegionsService,
     private readonly consentService: CustomerConsentService,
     private readonly storeCreditService: StoreCreditService,
+    private readonly jobs: JobsService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -338,6 +341,13 @@ export class CustomerAccountService {
     // CRM data: notes deleted, marketing consent withdrawn, ledger/merge text
     // scrubbed. See customer-crm/crm-anonymise.ts.
     await anonymiseCustomerCrm(this.db, shopId, customerId);
+    // SHP-5: proof-of-delivery photos of this customer's orders are removed.
+    await anonymiseCustomerDeliveryProofs(
+      this.db,
+      this.jobs,
+      shopId,
+      customerId,
+    );
     // MKT-14: the online identifiers an order captured for ad attribution (click
     // ids, Meta browser cookies, user agent) are personal data too. The UTM
     // source/medium/campaign stay, so the merchant's attribution report does not

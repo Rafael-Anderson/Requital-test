@@ -12,6 +12,7 @@ import { DeliveryRunsService } from './delivery-runs.service';
 import { DriverLinksService } from './driver-links.service';
 import { DriverAppController } from './driver-app.controller';
 import { DriverAppService } from './driver-app.service';
+import { ProofPhotoCleanupHandler } from './proof-photo-cleanup';
 
 // SHP-5: dispatch to a merchant's own drivers. See docs/handoff/t2.md.
 @Module({
@@ -29,6 +30,7 @@ import { DriverAppService } from './driver-app.service';
     DeliveryRunsService,
     DriverLinksService,
     DriverAppService,
+    ProofPhotoCleanupHandler,
   ],
 })
 export class DriversModule {}

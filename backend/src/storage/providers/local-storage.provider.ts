@@ -1,5 +1,5 @@
-import { dirname, join } from 'path';
-import { mkdir, rm, writeFile } from 'fs/promises';
+import { dirname, join, sep } from 'path';
+import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { Injectable } from '@nestjs/common';
 import type {
   SaveFileInput,
@@ -31,5 +31,17 @@ export class LocalStorageProvider implements StorageProvider {
   async delete(key: string): Promise<void> {
     const fullPath = join(UPLOAD_ROOT, key);
     await rm(fullPath, { force: true });
+  }
+
+  async read(key: string): Promise<Buffer | null> {
+    const fullPath = join(UPLOAD_ROOT, key);
+    // Keys are server-built, but never let one escape the upload root.
+    if (!fullPath.startsWith(UPLOAD_ROOT + sep)) return null;
+    try {
+      return await readFile(fullPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
   }
 }

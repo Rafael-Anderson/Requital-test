@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 import { StructuredLoggerService } from './common/logging/structured-logger.service';
 import { validateEnv } from './common/env-validation';
 import { DomainsService } from './domains/domains.service';
+import { blockPrivateUploads } from './storage/private-uploads';
 
 // Constructed standalone (no Nest DI needed yet) so even the fail-fast
 // validation error itself goes out as a structured JSON line, not a raw
@@ -122,6 +123,8 @@ async function bootstrap() {
   // pre-Phase-6 keys (no shopId path segment) and current shop-scoped keys
   // identically — Express's static middleware doesn't care about the
   // shape of what's under this root, just that it maps to a real file.
+  // delivery-proof/ is private (storage/private-uploads.ts): 404 before static.
+  app.use('/uploads', blockPrivateUploads);
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   app.useGlobalPipes(
     new ValidationPipe({

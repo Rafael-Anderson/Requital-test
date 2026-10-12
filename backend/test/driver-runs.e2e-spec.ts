@@ -536,7 +536,7 @@ describe('SHP-5 drivers and delivery runs (staff API)', () => {
         .get(`/delivery-runs/cash-reconciliation?outletId=${a.outletId}`)
         .set(fx.h(t))
         .expect(200);
-      expect(body<unknown[]>(recon)).toEqual([]);
+      expect(body<unknown>(recon)).toEqual({ data: [], truncated: false });
       // untouched
       const intact = await fx
         .r()

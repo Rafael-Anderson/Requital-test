@@ -849,11 +849,43 @@ export class OrdersService {
         );
       }
     });
+    return this.afterStatusChanged(ctx, id, order.status, dto.status);
+  }
+
+  // The preparing -> out_for_delivery move on a caller's own transaction
+  // connection (delivery run dispatch). Same CAS as updateStatus: throws 409 if
+  // the order is no longer 'preparing'. No notification, audit or affiliate sync
+  // here: the caller runs afterStatusChanged() once its transaction commits.
+  async moveToOutForDeliveryTx(
+    conn: PoolConnection,
+    ctx: TenantContext,
+    orderId: number,
+    outletId: number,
+  ): Promise<void> {
+    const [result] = await conn.query(
+      `UPDATE \`order\` SET status = 'out_for_delivery' WHERE id = ? AND shopId = ? AND outletId = ? AND status = 'preparing'`,
+      [orderId, ctx.shopId, outletId],
+    );
+    if ((result as { affectedRows: number }).affectedRows === 0) {
+      throw new ConflictException(
+        `Order #${orderId} is no longer ready to leave`,
+      );
+    }
+  }
+
+  // Everything that follows a COMMITTED status change: affiliate sync, audit
+  // row, customer notifications. Shared by updateStatus and run dispatch.
+  async afterStatusChanged(
+    ctx: TenantContext,
+    id: number,
+    fromStatus: string,
+    toStatus: string,
+  ) {
     const orders = await this.loadOrdersWithRelations([id]);
     const updated = this.toResponse(orders.get(id)!);
 
     await this.affiliateService.syncOrderStatus(id, {
-      orderStatus: dto.status,
+      orderStatus: toStatus,
     });
     // Covers bulkUpdateStatus() too — it's a loop over this same method, so
     // a bulk status change naturally produces one log row per order here,
@@ -862,13 +894,13 @@ export class OrdersService {
       action: 'order.status_changed',
       entityType: 'order',
       entityId: id,
-      before: { status: order.status },
-      after: { status: dto.status },
+      before: { status: fromStatus },
+      after: { status: toStatus },
     });
     // Not awaited, deliberately — same reasoning as notifyOrderConfirmed's
     // call sites above: a slow or down email/WhatsApp provider must never
     // delay or fail an already-committed status change.
-    if (dto.status === 'out_for_delivery') {
+    if (toStatus === 'out_for_delivery') {
       this.orderNotificationsService
         .notifyOutForDelivery(ctx.shopId, updated)
         .catch((err: unknown) => {
@@ -879,7 +911,7 @@ export class OrdersService {
           });
         });
     }
-    if (dto.status === 'delivered') {
+    if (toStatus === 'delivered') {
       this.orderNotificationsService
         .notifySurveyRequest(ctx.shopId, updated)
         .catch((err: unknown) => {

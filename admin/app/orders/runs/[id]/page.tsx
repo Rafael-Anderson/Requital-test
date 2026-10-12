@@ -11,7 +11,7 @@ import {
   issueRunLink,
   removeRunStop,
   reorderRunStops,
-  resolveImageUrl,
+  API_URL,
   revokeRunLink,
   sendRunLinkWhatsApp,
 } from "@/lib/api";
@@ -328,11 +328,11 @@ export default function DeliveryRunDetailPage() {
                 {s.status === "delivered" && s.proofType && (
                   <div className="text-xs text-text-muted">
                     Proof: {s.proofType}
-                    {s.proofPhotoUrl && (
+                    {s.hasProofPhoto && (
                       <>
                         {" "}
                         &middot;{" "}
-                        <a href={resolveImageUrl(s.proofPhotoUrl) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-accent-text underline">
+                        <a href={`${API_URL}/delivery-runs/${run.id}/stops/${s.id}/proof-photo`} target="_blank" rel="noopener noreferrer" className="text-accent-text underline">
                           View photo
                         </a>
                       </>

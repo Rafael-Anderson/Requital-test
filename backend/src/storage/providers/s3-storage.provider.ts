@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -78,6 +79,24 @@ export class S3StorageProvider implements StorageProvider {
     } catch (err) {
       throw new InternalServerErrorException(
         `S3 delete failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // GetObject through the SDK with the provider's own credentials: the bucket
+  // never has to be public for this to work.
+  async read(key: string): Promise<Buffer | null> {
+    try {
+      const res = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      if (!res.Body) return null;
+      return Buffer.from(await res.Body.transformToByteArray());
+    } catch (err) {
+      const name = (err as { name?: string }).name;
+      if (name === 'NoSuchKey' || name === 'NotFound') return null;
+      throw new InternalServerErrorException(
+        `S3 read failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

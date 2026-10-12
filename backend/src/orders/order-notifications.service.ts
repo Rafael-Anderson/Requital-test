@@ -142,6 +142,8 @@ export class OrderNotificationsService {
                 (shop.displayName as string | null) ?? (shop.name as string),
             },
             idempotencyKey,
+            // The code is scrubbed from the job row once it is sent or dead.
+            { sensitive: true },
           );
           sent.email = true;
         }

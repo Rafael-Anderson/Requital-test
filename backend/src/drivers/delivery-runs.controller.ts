@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { DeliveryRunsService } from './delivery-runs.service';
@@ -70,6 +71,22 @@ export class DeliveryRunsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.runs.renderSheet(ctx, id);
+  }
+
+  // Proof-of-delivery photo: private, never a public URL. Staff only, tenant and
+  // outlet scoped; never cached, never sniffed, locked down as a document.
+  @Get(':id/stops/:stopId/proof-photo')
+  @Header('Cache-Control', 'no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @Header('Content-Security-Policy', "default-src 'none'; sandbox")
+  @Header('Cross-Origin-Resource-Policy', 'same-site')
+  async proofPhoto(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('stopId', ParseIntPipe) stopId: number,
+  ) {
+    const bytes = await this.runs.getProofPhoto(ctx, id, stopId);
+    return new StreamableFile(bytes, { type: 'image/jpeg' });
   }
 
   @Get(':id')

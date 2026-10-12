@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
 import type {
@@ -8,6 +12,7 @@ import type {
 } from 'mysql2/promise';
 import type { JobRow } from '../db/types';
 import type { JobPayload, JobType } from './jobs.types';
+import { isScrubbedPayload, scrubSensitivePayload } from './job-payload-scrub';
 
 const BASE_BACKOFF_SECONDS = 30;
 const MAX_BACKOFF_SECONDS = 3600;
@@ -46,9 +51,13 @@ export class JobsService {
     options: {
       maxAttempts?: number;
       tx?: PoolConnection;
+      // The payload holds a live secret (link, one-time code): it is scrubbed
+      // on completion and on dead-letter, never retried after a scrub.
+      sensitive?: boolean;
     } = {},
   ): Promise<JobRecord> {
-    const { maxAttempts = 5, tx } = options;
+    const { maxAttempts = 5, tx, sensitive } = options;
+    if (sensitive) payload = { ...payload, sensitive: true };
     if (!Number.isInteger(shopId) || shopId <= 0) {
       throw new Error(
         `job enqueue rejected: invalid shopId (${JSON.stringify(shopId)})`,
@@ -80,7 +89,7 @@ export class JobsService {
       return created as JobRecord;
     } catch (error) {
       if (isDuplicateKeyError(error) || isLockConflict(error)) {
-        const existing = await this.findByIdempotencyKey(idempotencyKey);
+        const existing = await this.findByIdempotencyKey(idempotencyKey, tx);
         if (existing) return existing;
       }
       throw error;
@@ -148,7 +157,17 @@ export class JobsService {
     return this.findById(id);
   }
 
-  async completeJob(id: number): Promise<void> {
+  // `payload` (when the caller has it) lets a sensitive job's secret text go in
+  // the same statement that completes it.
+  async completeJob(id: number, payload?: unknown): Promise<void> {
+    const scrubbed = payload ? scrubSensitivePayload(payload) : payload;
+    if (scrubbed && scrubbed !== payload) {
+      await this.db.execute(
+        `UPDATE job SET status = 'completed', payload = ?, completedAt = ?, updatedAt = ? WHERE id = ?`,
+        [JSON.stringify(scrubbed), new Date(), new Date(), id],
+      );
+      return;
+    }
     await this.db.execute(
       `UPDATE job SET status = 'completed', completedAt = ?, updatedAt = ? WHERE id = ?`,
       [new Date(), new Date(), id],
@@ -165,6 +184,14 @@ export class JobsService {
       throw new NotFoundException(`Job ${id} not found`);
     }
     if (job.attempts >= job.maxAttempts) {
+      const scrubbed = scrubSensitivePayload(job.payload);
+      if (scrubbed !== job.payload) {
+        await this.db.execute(
+          `UPDATE job SET status = 'dead_letter', payload = ?, lastError = ?, updatedAt = ? WHERE id = ?`,
+          [JSON.stringify(scrubbed), errorMessage, new Date(), id],
+        );
+        return;
+      }
       await this.db.execute(
         `UPDATE job SET status = 'dead_letter', lastError = ?, updatedAt = ? WHERE id = ?`,
         [errorMessage, new Date(), id],
@@ -187,7 +214,12 @@ export class JobsService {
       `SELECT * FROM job WHERE shopId = ? AND status = 'dead_letter' ORDER BY updatedAt DESC`,
       [shopId],
     );
-    return rows.map((row) => this.parseJobRow(row));
+    // Scrubbed again on the way out: nothing sensitive leaves this endpoint even
+    // if a row somehow reached dead_letter without it.
+    return rows.map((row) => {
+      const parsed = this.parseJobRow(row);
+      return { ...parsed, payload: scrubSensitivePayload(parsed.payload) };
+    });
   }
 
   // Both scoped by (id, shopId) via an UPDATE checking affectedRows rather
@@ -198,10 +230,21 @@ export class JobsService {
   async retry(shopId: number, id: number): Promise<void> {
     const result = await this.db.execute(
       `UPDATE job SET status = 'pending', attempts = 0, nextAttemptAt = ?, lastError = NULL, updatedAt = ?
-       WHERE id = ? AND shopId = ? AND status = 'dead_letter'`,
+       WHERE id = ? AND shopId = ? AND status = 'dead_letter'
+         AND JSON_EXTRACT(payload, '$.scrubbed') IS NULL`,
       [new Date(), new Date(), id, shopId],
     );
     if (result.affectedRows === 0) {
+      // A scrubbed message has nothing left to send: say so instead of 404.
+      const found = await this.db.query<(JobRow & RowDataPacket)[]>(
+        `SELECT * FROM job WHERE id = ? AND shopId = ? AND status = 'dead_letter'`,
+        [id, shopId],
+      );
+      if (found[0] && isScrubbedPayload(this.parseJobRow(found[0]).payload)) {
+        throw new ConflictException(
+          'This message held a one-time secret that was removed when it failed. Send a new link or code instead.',
+        );
+      }
       throw new NotFoundException(`Failed job ${id} not found`);
     }
   }
@@ -224,11 +267,23 @@ export class JobsService {
     return rows[0] ? this.parseJobRow(rows[0]) : null;
   }
 
-  private async findByIdempotencyKey(key: string): Promise<JobRecord | null> {
-    const rows = await this.db.query<(JobRow & RowDataPacket)[]>(
-      `SELECT * FROM job WHERE idempotencyKey = ?`,
-      [key],
-    );
+  // Inside a caller's transaction the lookup uses that connection, never a
+  // second pool connection (nested-pool rule).
+  private async findByIdempotencyKey(
+    key: string,
+    tx?: PoolConnection,
+  ): Promise<JobRecord | null> {
+    const rows = tx
+      ? (
+          await tx.query<(JobRow & RowDataPacket)[]>(
+            `SELECT * FROM job WHERE idempotencyKey = ?`,
+            [key],
+          )
+        )[0]
+      : await this.db.query<(JobRow & RowDataPacket)[]>(
+          `SELECT * FROM job WHERE idempotencyKey = ?`,
+          [key],
+        );
     return rows[0] ? this.parseJobRow(rows[0]) : null;
   }
 
