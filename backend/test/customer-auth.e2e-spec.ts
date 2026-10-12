@@ -821,6 +821,95 @@ describe('Customer storefront accounts (e2e)', () => {
       expect(body<{ message: string }>(res).message).toBe('invalid csrf token');
     });
 
+    // A request must not escape the CSRF check by spelling its URL differently from the
+    // canonical `/public/<slug>/...`: Express routes the forms below to the same handler
+    // (case-insensitive, percent-decoded params), and the guard then authenticates the
+    // shop's cookie. The middleware has to read the shop exactly as the guard does, and
+    // fail CLOSED where it cannot. A valid session cookie, NO X-CSRF-Token.
+    it('refuses a cookie-authenticated mutation without a CSRF token on every non-canonical spelling of the URL', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-urlforms');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560031' }).expect(201),
+      );
+      const hex = shopSlug.charCodeAt(0).toString(16);
+      const forms = [
+        `/PUBLIC/${shopSlug}/account/addresses`,
+        `/Public/${shopSlug.toUpperCase()}/account/addresses`,
+        `/public/${shopSlug.toUpperCase()}/account/addresses`,
+        `/public/%${hex}${shopSlug.slice(1)}/account/addresses`,
+        `/public/${shopSlug}%2e/account/addresses`,
+        `/public/${shopSlug}./account/addresses`,
+        `//public/${shopSlug}/account/addresses`,
+        `/%70ublic/${shopSlug}/account/addresses`,
+        `/public//${shopSlug}/account/addresses`,
+      ];
+      for (const url of forms) {
+        const res = await request(app.getHttpServer())
+          .post(url)
+          .set('Cookie', session.cookieHeaderStr)
+          .send({ label: 'Evil', address: 'Forged St' });
+        expect([401, 403, 404]).toContain(res.status);
+      }
+      // ...and none of them wrote anything, while the canonical form still needs and accepts a token.
+      const list = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .expect(200);
+      expect(body<unknown[]>(list)).toHaveLength(0);
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', session.csrfToken)
+        .send({ label: 'Home', address: '1 Test St' })
+        .expect(201);
+    });
+
+    it('the spellings that reach the guard are CSRF-checked, not just refused: the encoded and upper-case forms answer 403 without a token and succeed with one', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-urlforms2');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560032' }).expect(201),
+      );
+      const hex = shopSlug.charCodeAt(0).toString(16);
+      for (const url of [
+        `/PUBLIC/${shopSlug}/account/addresses`,
+        `/public/%${hex}${shopSlug.slice(1)}/account/addresses`,
+      ]) {
+        await request(app.getHttpServer())
+          .post(url)
+          .set('Cookie', session.cookieHeaderStr)
+          .send({ label: 'Evil', address: 'Forged St' })
+          .expect(403);
+        await request(app.getHttpServer())
+          .post(url)
+          .set('Cookie', session.cookieHeaderStr)
+          .set('X-CSRF-Token', session.csrfToken)
+          .send({ label: 'Ok', address: '2 Test St' })
+          .expect(201);
+      }
+    });
+
+    it('a non-canonical /public URL with a customer cookie fails closed for mutations, but login still works at the canonical URL', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-failclosed');
+      const phone = '0505560033';
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone, password: 'password123' }).expect(
+          201,
+        ),
+      );
+      // A slug the extractor cannot read, any method but a safe one, a customer cookie: 403 from the middleware.
+      const odd = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}%00/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .send({});
+      expect(odd.status).toBe(403);
+      // The login exemption is for the canonical URL only and is untouched there.
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/login`)
+        .set('Cookie', session.cookieHeaderStr)
+        .send({ identifier: phone, password: 'password123' })
+        .expect(201);
+    });
+
     it('rejects a state-changing request with a wrong CSRF header value', async () => {
       const { shopSlug } = await setupShop('cust-csrf-wrong');
       const session = sessionFromResponse(

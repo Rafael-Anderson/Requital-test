@@ -10,7 +10,10 @@ import type { Request } from 'express';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { CustomerContext } from './customer-context';
-import { customerCookieNames } from './customer-auth.constants';
+import {
+  customerCookieNames,
+  customerSlugFromUrl,
+} from './customer-auth.constants';
 
 interface CustomerJwtPayload {
   sub: number;
@@ -107,7 +110,15 @@ export class CustomerAuthGuard implements CanActivate {
   // surface (3 specs) was converted outright instead of the staff tier's
   // NODE_ENV=test compatibility shim.
   private extractToken(request: Request): string | null {
-    const names = customerCookieNames(request.params?.shopSlug);
+    // The cookie is chosen by the slug in the URL, read by the same extractor
+    // the CSRF middleware uses, and must agree with the route's own :shopSlug.
+    // Any disagreement means a URL form the two read differently: no session.
+    const { slug } = customerSlugFromUrl(request.originalUrl || request.url);
+    const param: unknown = request.params?.shopSlug;
+    if (!slug || typeof param !== 'string' || param.toLowerCase() !== slug) {
+      return null;
+    }
+    const names = customerCookieNames(slug);
     const raw: unknown = names ? request.cookies?.[names.access] : undefined;
     return typeof raw === 'string' && raw ? raw : null;
   }

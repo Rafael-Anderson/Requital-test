@@ -136,7 +136,9 @@ export class CustomerAuthController {
       for (const name of [names.access, names.refresh, names.csrf]) {
         res.clearCookie(name, sessionCookieOptions(CUSTOMER_COOKIE_PATH));
       }
-      for (const { name, path } of legacyCustomerCookies(shopSlug)) {
+      for (const { name, path } of legacyCustomerCookies(
+        shopSlug.toLowerCase(),
+      )) {
         res.clearCookie(name, sessionCookieOptions(path));
       }
     }

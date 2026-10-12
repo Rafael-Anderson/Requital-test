@@ -95,19 +95,58 @@ function csrfFor(shopSlug: unknown): TierCsrf | null {
 }
 
 // Every customer-facing route lives under /public/:shopSlug, so the shop is
-// read from the URL (this runs as global middleware, before routing, so
-// req.params is not there yet). Any other URL has no customer cookies to guard.
-function slugFromUrl(req: Request): string | null {
-  const m = /^\/public\/([^/?#]+)/.exec(req.originalUrl || req.url || '');
-  return m ? m[1] : null;
+// read from the URL. ONE extractor, used by BOTH the CSRF middleware and the
+// auth guard, so they can never disagree about which shop (and therefore which
+// cookie) a request is for. It matches the way Express routes: case-insensitive
+// `public`, repeated slashes, and a percent-decoded path (`/public/%73hop-a`
+// reaches the same handler as `/public/shop-a`, with req.params decoded). A
+// request the middleware reads one way and the guard another was a CSRF bypass.
+export function customerSlugFromUrl(url: string | undefined): {
+  isPublic: boolean;
+  slug: string | null;
+} {
+  let path = (url ?? '').split('?')[0].split('#')[0];
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // malformed escape: keep the raw path, the slug check below fails closed
+  }
+  const m = /^\/+public(?=\/|$)(?:\/+([^/]*))?/i.exec(path);
+  if (!m) return { isPublic: false, slug: null };
+  const slug = (m[1] ?? '').toLowerCase();
+  return { isPublic: true, slug: SLUG_RE.test(slug) ? slug : null };
 }
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const CUSTOMER_COOKIE_RE = /^(__Host-)?req-customer-/;
 
 export const customerCsrf = {
   // A property, not a method: it is handed to consumer.apply() unbound.
   doubleCsrfProtection: (req: Request, res: Response, next: NextFunction) => {
-    const csrf = csrfFor(slugFromUrl(req));
-    if (!csrf) return next();
-    return csrf.doubleCsrfProtection(req, res, next);
+    const { isPublic, slug } = customerSlugFromUrl(req.originalUrl || req.url);
+    if (!isPublic) return next(); // no customer route, no customer session
+    if (!slug) {
+      // A /public URL whose shop cannot be read cannot be matched to a CSRF
+      // cookie, so it fails CLOSED rather than being waved through: with any
+      // customer cookie present, only a safe method may proceed.
+      const hasCustomerCookie = Object.keys(req.cookies ?? {}).some((k) =>
+        CUSTOMER_COOKIE_RE.test(k),
+      );
+      if (hasCustomerCookie && !SAFE_METHODS.has(req.method.toUpperCase())) {
+        return res.status(403).json({
+          statusCode: 403,
+          error: 'Forbidden',
+          message: 'invalid csrf token',
+        });
+      }
+      return next();
+    }
+    // Unauthenticated traffic (the bulk of the storefront) builds nothing: with
+    // no access cookie there is no session for a CSRF check to protect.
+    const names = customerCookieNames(slug)!;
+    const access: unknown = req.cookies?.[names.access];
+    if (typeof access !== 'string' || !access) return next();
+    return csrfFor(slug)!.doubleCsrfProtection(req, res, next);
   },
   // accessToken: the token the session identifier is bound to (the one in the
   // cookie, or the one just minted at login/refresh).

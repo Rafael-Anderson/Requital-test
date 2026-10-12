@@ -131,7 +131,9 @@ export function createTierCsrf(opts: {
       // does not match — the char before `auth` there is `-`, not `/`.)
       if (
         req.method === 'POST' &&
-        /(^|\/)auth\/(login|login\/mfa|signup|register)$/.test(reqPath)
+        /^(\/public\/[^/]+)?\/auth\/(login|login\/mfa|signup|register)$/.test(
+          reqPath,
+        )
       ) {
         return true;
       }
