@@ -124,13 +124,20 @@ test.describe('the branded not-found state (rendered by the client after the 404
 
   test('in-app navigation to a missing product shows the not-found state and a real one still renders', async ({ page }) => {
     await page.goto(`${STOREFRONT_URL}/${seed.subdomain}`);
-    // The header only renders once the shop has loaded, i.e. after hydration: a
-    // router.push issued before that is dropped (flaky on the slower CI dev server).
     await expect(page.locator('header').first()).toBeVisible();
-    await page.evaluate((s) => (window as unknown as { next: { router: { push(u: string): void } } }).next.router.push(`/${s}/products/no-such-product`), seed.subdomain);
-    await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
-    await page.evaluate((a) => (window as unknown as { next: { router: { push(u: string): void } } }).next.router.push(`/${a.s}/products/${a.p}`), { s: seed.subdomain, p: seed.simpleProduct.slug });
-    await expect(page.getByRole('heading', { name: seed.simpleProduct.name })).toBeVisible();
+    // The shop chrome is server-rendered now (T4), so a visible header no longer means the
+    // page has hydrated, and a router.push issued before hydration is silently dropped.
+    // Re-issue the navigation until it takes instead of guessing at a hydration signal.
+    const push = (url: string) =>
+      page.evaluate((u) => (window as unknown as { next?: { router?: { push(u: string): void } } }).next?.router?.push(u), url);
+    await expect(async () => {
+      await push(`/${seed.subdomain}/products/no-such-product`);
+      await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await expect(async () => {
+      await push(`/${seed.subdomain}/products/${seed.simpleProduct.slug}`);
+      await expect(page.getByRole('heading', { name: seed.simpleProduct.name })).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
   });
 });
 
