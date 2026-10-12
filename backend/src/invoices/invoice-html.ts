@@ -20,6 +20,9 @@ export interface InvoiceHtmlData {
   subtotal: string | number;
   taxAmount: string | number;
   total: string | number;
+  // Cash still to collect (total - gift card - store credit). Defaults to
+  // `total` for a caller that does not know about tenders.
+  amountDue?: string | number;
   // Tax grouped by rate, for the "of which tax" table a VAT invoice needs (and
   // what I18N-9's proper bilingual VAT invoice builds on). Empty or omitted when
   // the order predates B2's per-line capture, in which case only the single Tax
@@ -146,14 +149,15 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   // know how much cash to collect, so this is a separate element rather
   // than a reason to flip showMoney itself. Non-COD orders render neither
   // block, on either document type.
+  const due = data.amountDue ?? data.total;
   const codBlock =
     !isCod || data.type === 'CREDIT_NOTE'
     ? ''
     : data.type === 'PACKING_SLIP'
-      ? isPaid
+      ? isPaid || Number(due) === 0
         ? `<div class="cash-block cash-block-paid">PAID &mdash; no collection required</div>`
-        : `<div class="cash-block cash-block-due">CASH TO COLLECT: ${money(data.total, data.currency)}</div>`
-      : `<div class="cash-due-box"><span class="cash-due-label">Cash Due</span><span class="cash-due-amount">${money(data.total, data.currency)}</span></div>`;
+        : `<div class="cash-block cash-block-due">CASH TO COLLECT: ${money(due, data.currency)}</div>`
+      : `<div class="cash-due-box"><span class="cash-due-label">Cash Due</span><span class="cash-due-amount">${money(due, data.currency)}</span></div>`;
 
   // THE ARITHMETIC. This column is something a merchant, a customer and an
   // auditor all read as a sum, so it has to be one.

@@ -22,18 +22,15 @@ import { createLogger } from '../common/logging/logger';
 import type { WebhookResult } from './payment-provider.interface';
 import { storefrontUrl, type ShopUrlFields } from '../common/storefront-url';
 import { minorUnitFactor } from '../common/currency-minor-units';
+import { amountDueMinor, amountDueDecimal } from '../common/amount-due';
 
-// What a gateway may still be asked for: the total minus the gift card and the
-// store credit already taken from this order, in integer minor units of the
-// ORDER's own currency (never below zero).
+// What a gateway may still be asked for (see common/amount-due.ts), as a
+// number of major units for the provider interface.
 export function amountStillDue(order: Record<string, unknown>): number {
-  const factor = minorUnitFactor(order.currency as string | null | undefined);
-  const minor = (v: unknown) => Math.round(Number(v ?? 0) * factor);
-  const due =
-    minor(order.total) -
-    minor(order.giftCardAmount) -
-    minor(order.storeCreditAmount);
-  return Math.max(due, 0) / factor;
+  return (
+    amountDueMinor(order) /
+    minorUnitFactor(order.currency as string | null | undefined)
+  );
 }
 
 const logger = createLogger('PaymentsService');
@@ -151,7 +148,7 @@ export class PaymentsService {
   async getCheckoutSession(token: string) {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT o.*, s.id AS shopRowId, s.paymentGateway AS shopPaymentGateway,
-              s.currency AS shopCurrency, s.subdomain AS shopSubdomain,
+              s.subdomain AS shopSubdomain,
               s.customDomain AS shopCustomDomain,
               s.customDomainStatus AS shopCustomDomainStatus,
               s.domainType AS shopDomainType
@@ -187,7 +184,10 @@ export class PaymentsService {
     const session = await provider.createCheckoutSession({
       orderId: order.id as number,
       amount: due,
-      currency: order.shopCurrency as string,
+      // The ORDER's own currency (captured at placement), never the shop's live
+      // one: a shop that changed currency since must not have this unpaid order
+      // charged in the new currency at the old order's figure.
+      currency: order.currency as string,
       successUrl: storefrontUrl(
         shopUrlFieldsFrom(order),
         `/pay/success?token=${token}`,
@@ -347,7 +347,10 @@ export class PaymentsService {
             providerName,
             result.providerReference,
             result.chargeReference ?? null,
-            order.total,
+            // What the gateway was asked for: the total less the gift card and
+            // store credit already taken from this order (amountDueDecimal), not
+            // order.total.
+            amountDueDecimal(order),
             result.status,
             order.id, // the currency subselect above
           ],

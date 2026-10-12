@@ -47,7 +47,13 @@ import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { StoreCreditService } from '../store-credit/store-credit.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
-import { roundMoney } from '../common/currency-minor-units';
+import {
+  minorUnitFactor,
+  roundMoney,
+  toMinorUnits,
+} from '../common/currency-minor-units';
+import { decimalToMinor, minorToDecimal } from '../drivers/cash';
+import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
 
@@ -91,6 +97,7 @@ export class OrdersService {
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly regionsService: RegionsService,
     private readonly storeCreditService: StoreCreditService,
+    private readonly giftCardsService: GiftCardsService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -688,10 +695,34 @@ export class OrdersService {
     if (total < 0) total = 0;
 
     await this.db.transaction(async (conn) => {
+      // Lock the order and refuse to apply a total computed from a stale picture
+      // (a cancel or delivery that committed since the read above).
+      const [lockRows] = await conn.query<RowDataPacket[]>(
+        `SELECT status FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+        [id, ctx.shopId],
+      );
+      if (lockRows[0]?.status !== order.status) {
+        throw new ConflictException(
+          'Order status changed before this edit could be applied - refresh and retry',
+        );
+      }
+      const lockedCustomerId = await this.lockCustomerForTenderEdit(
+        conn,
+        ctx.shopId,
+        order,
+      );
       await conn.query(
         `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?
           WHERE id = ?`,
         [dto.deliveryFee, roundMoney(taxAmount, feeCurrency), total, id],
+      );
+      await this.releaseOverpaidTenders(
+        conn,
+        ctx.shopId,
+        id,
+        total,
+        feeCurrency,
+        lockedCustomerId,
       );
       // Only the delivery fee's own tax can have moved (the discount
       // apportionment is unchanged), but writing the recomputed line captures
@@ -1048,6 +1079,7 @@ export class OrdersService {
     });
 
     let ingredientStockWarnings: string[] = [];
+    let released = { creditMinor: 0, giftMinor: 0 };
     await this.db.transaction(async (conn) => {
       // Everything above was decided from a read taken BEFORE this transaction.
       // A cancel (or a confirm) that commits in between changes both the status
@@ -1063,6 +1095,13 @@ export class OrdersService {
           'Order status changed before this edit could be applied - refresh and retry',
         );
       }
+      // Order row first, THEN the customer row (see releaseOverpaidTenders for why
+      // that direction): only when this order spent store credit.
+      const lockedCustomerId = await this.lockCustomerForTenderEdit(
+        conn,
+        ctx.shopId,
+        order,
+      );
       const ingredientsConsumedNow = lockRows[0].ingredientsConsumedAt != null;
       // The order has a stock record (orderstockconsumption), so every delta
       // below is driven by what it actually holds. NULL = LEGACY.
@@ -1249,6 +1288,17 @@ export class OrdersService {
         );
       }
 
+      // Credit or gift card the order holds beyond its new total goes back (see
+      // releaseOverpaidTenders for the rule). Same transaction as the new total.
+      released = await this.releaseOverpaidTenders(
+        conn,
+        ctx.shopId,
+        orderId,
+        total,
+        itemsCurrency,
+        lockedCustomerId,
+      );
+
       const set = buildSetClause({
         total,
         taxAmount: roundedItemsTax,
@@ -1277,10 +1327,147 @@ export class OrdersService {
         itemCount: order.orderitem.length,
       },
       after: { total: String(total), itemCount: newItemsData.length },
-      metadata: discountDropped ? { discountDropped: true } : undefined,
+      metadata:
+        discountDropped || released.creditMinor > 0 || released.giftMinor > 0
+          ? {
+              ...(discountDropped && { discountDropped: true }),
+              ...(released.creditMinor > 0 && {
+                storeCreditReleased: minorToDecimal(
+                  released.creditMinor,
+                  itemsCurrency,
+                ),
+              }),
+              ...(released.giftMinor > 0 && {
+                giftCardReleased: minorToDecimal(
+                  released.giftMinor,
+                  itemsCurrency,
+                ),
+              }),
+            }
+          : undefined,
     });
 
     return { ...updated, discountDropped, ingredientStockWarnings };
+  }
+
+  // Locks the customer row that owns this order's store credit, when it has any.
+  // Called right AFTER the order row lock and before any stock row, in a
+  // transaction that may release credit. Returns the id locked, or null when the
+  // order spent none.
+  private async lockCustomerForTenderEdit(
+    conn: PoolConnection,
+    shopId: number,
+    order: { customerId?: number | null; storeCreditAmount?: unknown },
+  ): Promise<number | null> {
+    if (order.customerId == null || !(Number(order.storeCreditAmount ?? 0) > 0)) {
+      return null;
+    }
+    await this.storeCreditService.lockCustomer(conn, shopId, order.customerId);
+    return order.customerId;
+  }
+
+  // THE RULE for an edit that changes order.total (updateItems, updateDeliveryFee).
+  //
+  // An order holds `giftCardAmount + storeCreditAmount` of its total as already
+  // paid. After the edit:
+  //  - total >= gift + credit: nothing changes. A bigger total NEVER spends more
+  //    credit or gift card; the extra is simply still to pay (total - gift -
+  //    credit grows), collected like any other balance.
+  //  - total < gift + credit: the order would hold more than it costs, so the
+  //    EXCESS goes back. Store credit is released first (it is the customer's own
+  //    ledger balance and comes back exactly), then the gift card for whatever
+  //    remains (a card can have been disabled or expired meanwhile, so it is the
+  //    last resort). order.storeCreditAmount / giftCardAmount shrink to what is
+  //    still held, which is what cancel and return then reverse.
+  //
+  // Everything is integer minor units of the ORDER's currency. Idempotent per
+  // edit: it runs inside the edit's transaction under the order row lock, and an
+  // edit that is repeated finds nothing in excess. Several partial releases per
+  // order are allowed by the ledger's (orderId, entryType, editSeq) key.
+  //
+  // Lock order: ORDER row -> customer row -> stock -> ledger rows -> gift card
+  // row. Order first is forced by cancel and return: they hold the order row and
+  // then insert a ledger row, whose foreign key takes a shared lock on the
+  // customer row, so an edit that held the customer row (FOR UPDATE) and waited
+  // for the order row deadlocked against a cancel (found by the concurrency test
+  // here, 1213). Order -> customer is the direction cancel, return and this edit
+  // all share, so they serialise on the order row. Checkout takes the customer
+  // row first but only ever inserts its own NEW order row, so it cannot close a
+  // cycle with an edit. After the customer row, stock, then the gift card row, is
+  // the order checkout uses. Customer merge locks customers then orders and could
+  // still deadlock with any of these (pre-existing for cancel and return too);
+  // MySQL fails one side with 1213 and the retry succeeds.
+  private async releaseOverpaidTenders(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+    newTotal: number,
+    currency: string,
+    lockedCustomerId: number | null,
+  ): Promise<{ creditMinor: number; giftMinor: number }> {
+    const none = { creditMinor: 0, giftMinor: 0 };
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT customerId, giftCardId, giftCardAmount, storeCreditAmount
+         FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+      [orderId, shopId],
+    );
+    const o = rows[0];
+    if (!o) return none;
+    const held = (v: unknown) =>
+      typeof v === 'string' || typeof v === 'number'
+        ? (decimalToMinor(String(v), currency) ?? 0)
+        : 0;
+    const creditMinor = held(o.storeCreditAmount);
+    const giftMinor = held(o.giftCardAmount);
+    const excess = creditMinor + giftMinor - toMinorUnits(newTotal, currency);
+    if (excess <= 0) return none;
+    if (creditMinor > 0 && o.customerId !== lockedCustomerId) {
+      // The credit was spent (or the order moved to another customer) after we
+      // looked: we hold the wrong customer lock. Nothing was written.
+      throw new ConflictException(
+        'This order changed before the edit could be applied - refresh and retry',
+      );
+    }
+    const releaseCredit = Math.min(creditMinor, excess);
+    const releaseGift = excess - releaseCredit;
+    if (releaseGift > 0 && !o.giftCardId) {
+      throw new ConflictException(
+        'This order changed before the edit could be applied - refresh and retry',
+      );
+    }
+    const factor = minorUnitFactor(currency);
+    if (releaseCredit > 0) {
+      await this.storeCreditService.releaseForOrderEdit(
+        conn,
+        shopId,
+        orderId,
+        currency,
+        releaseCredit,
+        'Order edited',
+      );
+    }
+    if (releaseGift > 0) {
+      await this.giftCardsService.releaseForOrderEdit(
+        conn,
+        o.giftCardId as number,
+        orderId,
+        releaseGift / factor,
+      );
+    }
+    await conn.query(
+      `UPDATE \`order\` SET storeCreditAmount = ?, giftCardAmount = ? WHERE id = ? AND shopId = ?`,
+      [
+        creditMinor > 0
+          ? minorToDecimal(creditMinor - releaseCredit, currency)
+          : o.storeCreditAmount,
+        giftMinor > 0
+          ? minorToDecimal(giftMinor - releaseGift, currency)
+          : o.giftCardAmount,
+        orderId,
+        shopId,
+      ],
+    );
+    return { creditMinor: releaseCredit, giftMinor: releaseGift };
   }
 
   // Ingredients whose stock is negative at this outlet, restricted to the

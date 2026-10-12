@@ -3754,7 +3754,13 @@ export interface StoreCreditEntry {
   currency: string;
   // Signed: spends and deductions are negative.
   amount: string;
-  type: "grant" | "deduct" | "spend" | "spend_reversal" | "return_refund";
+  type:
+    | "grant"
+    | "deduct"
+    | "spend"
+    | "spend_reversal"
+    | "spend_release"
+    | "return_refund";
   reason: string | null;
   orderId: number | null;
   returnId: number | null;

@@ -20,6 +20,7 @@ const TYPE_LABEL: Record<StoreCreditEntry["type"], string> = {
   deduct: "Taken off by staff",
   spend: "Spent on an order",
   spend_reversal: "Returned (order cancelled)",
+  spend_release: "Returned (order edited)",
   return_refund: "Refunded from a return",
 };
 

@@ -25,6 +25,7 @@ export const STORE_CREDIT_ENTRY_TYPES = [
   'deduct',
   'spend',
   'spend_reversal',
+  'spend_release',
   'return_refund',
 ] as const;
 
@@ -275,25 +276,89 @@ export class StoreCreditService {
     );
   }
 
-  // Puts back what an order spent. IDEMPOTENT by the (orderId, entryType) unique
-  // key: running it twice, or racing two cancels, writes one reversal. Returns the
-  // number of minor units restored (0 when the order spent none or was already
-  // reversed). Re-uses the original entry's customer and currency, so credit can
-  // only ever return to the account and currency it came from.
+  // Puts back what an order STILL HOLDS, which after edit-downs is less than it
+  // originally spent: the original 'spend' plus every 'spend_release' already
+  // written for it (spend is negative, releases positive), so cancel never gives
+  // back credit an edit already returned. IDEMPOTENT by the (orderId, entryType,
+  // editSeq=0) unique key: running it twice, or racing two cancels, writes one
+  // reversal; nothing is written when the net held is already zero. Re-uses the
+  // original entry's customer and currency, so credit can only ever return to the
+  // account and currency it came from.
   async reverseSpendForOrder(
     conn: PoolConnection,
     shopId: number,
     orderId: number,
     reason: string,
   ): Promise<void> {
+    // Serialise concurrent reversers of one order on the spend row BEFORE the
+    // INSERT...SELECT. Without this, two callers both take shared next-key locks
+    // from the SUM subquery over the order's ledger rows and then each wants an
+    // exclusive lock in a gap the other holds: 1213. The loser now waits here,
+    // then finds the reversal already written (duplicate key, a no-op).
+    await this.lockSpendRow(conn, shopId, orderId);
     await conn.query(
       `INSERT INTO storecreditentry (shopId, customerId, currency, amount, entryType, reason, orderId)
-       SELECT s.shopId, s.customerId, s.currency, -s.amount, 'spend_reversal', ?, s.orderId
+       SELECT s.shopId, s.customerId, s.currency,
+              -(s.amount + COALESCE((SELECT SUM(r.amount) FROM storecreditentry r
+                                      WHERE r.orderId = s.orderId AND r.shopId = s.shopId
+                                        AND r.entryType = 'spend_release'), 0)),
+              'spend_reversal', ?, s.orderId
          FROM storecreditentry s
         WHERE s.orderId = ? AND s.shopId = ? AND s.entryType = 'spend'
+          AND -(s.amount + COALESCE((SELECT SUM(r.amount) FROM storecreditentry r
+                                      WHERE r.orderId = s.orderId AND r.shopId = s.shopId
+                                        AND r.entryType = 'spend_release'), 0)) > 0
        ON DUPLICATE KEY UPDATE storecreditentry.id = storecreditentry.id`,
       [reason, orderId, shopId],
     );
+  }
+
+  // An edit lowered the order's total below what it holds in gift card + store
+  // credit: this puts `amountMinor` of the credit back, as a 'spend_release'
+  // ledger row for the customer and currency of the order's original spend.
+  //
+  // The caller holds the order row lock and then the customer row lock
+  // (lockCustomer), both in this transaction, so two edits of
+  // one order serialise and the next editSeq (1 + the highest so far) cannot be
+  // taken twice; the unique (orderId, entryType, editSeq) key is the backstop.
+  // Retrying an edit that already committed releases nothing (the order no longer
+  // holds more than its total), so a retry cannot double-apply.
+  async releaseForOrderEdit(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+    currency: string,
+    amountMinor: number,
+    reason: string,
+  ): Promise<void> {
+    if (!Number.isInteger(amountMinor) || amountMinor <= 0) return;
+    // Same first lock as reverseSpendForOrder, so releases and the reversal of
+    // one order always serialise on the spend row in the same order.
+    await this.lockSpendRow(conn, shopId, orderId);
+    const [seqRows] = await conn.query<RowDataPacket[]>(
+      `SELECT COALESCE(MAX(editSeq), 0) + 1 AS nextSeq FROM storecreditentry
+        WHERE orderId = ? AND shopId = ? AND entryType = 'spend_release' FOR UPDATE`,
+      [orderId, shopId],
+    );
+    const [res] = await conn.query(
+      `INSERT INTO storecreditentry (shopId, customerId, currency, amount, entryType, reason, orderId, editSeq)
+       SELECT s.shopId, s.customerId, s.currency, ?, 'spend_release', ?, s.orderId, ?
+         FROM storecreditentry s
+        WHERE s.orderId = ? AND s.shopId = ? AND s.entryType = 'spend' AND s.currency = ?`,
+      [
+        minorToDecimal(amountMinor, currency),
+        reason,
+        Number(seqRows[0].nextSeq),
+        orderId,
+        shopId,
+        currency,
+      ],
+    );
+    if ((res as { affectedRows: number }).affectedRows !== 1) {
+      throw new ConflictException(
+        'This order has no store credit spend to release - refresh and retry',
+      );
+    }
   }
 
   // Credit issued for a return (the store-credit-paid share of the refund, plus the
@@ -327,6 +392,20 @@ export class StoreCreditService {
   }
 
   // ---- internals ----
+
+  // X-locks the order's one 'spend' row (no row, no lock that conflicts: the
+  // callers then have nothing to write). Scoped by shopId.
+  private async lockSpendRow(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ): Promise<void> {
+    await conn.query(
+      `SELECT id FROM storecreditentry
+        WHERE orderId = ? AND shopId = ? AND entryType = 'spend' FOR UPDATE`,
+      [orderId, shopId],
+    );
+  }
 
   private async lockedBalanceMinor(
     conn: PoolConnection,

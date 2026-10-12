@@ -424,4 +424,34 @@ describe('KWD end to end (e2e)', () => {
       MINOR,
     );
   });
+  // ── the payment-link path (W3) ─────────────────────────────────────────────
+  // getCheckoutSession used to charge in the SHOP's live currency
+  // (shop.currency) with this order's figure. A shop that changed currency after
+  // the order was placed would have asked the gateway for 33.091 AED (3309 minor
+  // units) for what is a 33.091 KWD order. It now charges the ORDER's own
+  // currency, so the gateway gets KWD and 33091 minor units.
+  it('the payment-link session is charged in the ORDER currency even after the shop currency changes', async () => {
+    const link = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/payment-link`)
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .expect(201);
+    const token = body<{ token: string }>(link).token;
+    await request(app.getHttpServer())
+      .patch('/shop')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({ currency: 'AED' })
+      .expect(200);
+
+    const before = stripe.calls.length;
+    await request(app.getHttpServer()).get(`/pay/${token}`).expect(200);
+    expect(stripe.calls).toHaveLength(before + 1);
+    const call = stripe.calls[before];
+    expect(call.currency).toBe('KWD');
+    expect(toMinorUnits(call.amount, call.currency)).toBe(MINOR);
+
+    const summary = await request(app.getHttpServer())
+      .get(`/pay/${token}/summary`)
+      .expect(200);
+    expect(body<{ currency: string }>(summary).currency).toBe('KWD');
+  });
 });
