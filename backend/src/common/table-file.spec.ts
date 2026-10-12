@@ -140,6 +140,10 @@ describe('readTable xlsx', () => {
   });
 });
 
+// The old reader took minutes on these inputs, so the bound only has to separate
+// linear from quadratic. 1s was tight enough to fail on a loaded CI runner.
+const HOSTILE_INPUT_BUDGET_MS = 5000;
+
 describe('readXlsxRows: hostile XML finishes fast and is rejected cleanly', () => {
   const zipOf = (sheet: string, strings?: string) =>
     buildZip([
@@ -162,7 +166,7 @@ describe('readXlsxRows: hostile XML finishes fast and is rejected cleanly', () =
     const elapsed = performance.now() - started;
     expect(error).toBeInstanceOf(XlsxError);
     expect((error as XlsxError).message).toMatch(pattern);
-    expect(elapsed).toBeLessThan(1000);
+    expect(elapsed).toBeLessThan(HOSTILE_INPUT_BUDGET_MS);
   }
 
   it.each([
@@ -253,7 +257,7 @@ describe('readXlsxRows: hostile XML finishes fast and is rejected cleanly', () =
       zipOf(sheetOf(`<row>${'<row>'.repeat(1_000_000)}</row>`)),
     );
     expect(rows).toEqual([[]]);
-    expect(performance.now() - started).toBeLessThan(1000);
+    expect(performance.now() - started).toBeLessThan(HOSTILE_INPUT_BUDGET_MS);
   });
 
   it('caps the number of cells in one row', () => {
