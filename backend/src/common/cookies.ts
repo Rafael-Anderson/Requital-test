@@ -29,9 +29,10 @@ export function tieredCookieName(base: string): string {
   return isProd() ? `__Host-${base}` : base;
 }
 
-// For a cookie deliberately scoped to a sub-path — the per-shop customer
-// cookies (`/public/<slug>`), the narrowly-scoped refresh cookies
-// (`/auth/refresh`, `/public/<slug>/auth/refresh`). `__Host-` mandates
+// For a cookie deliberately scoped to a sub-path — the staff refresh cookie
+// (`/auth/refresh`). (The customer cookies used to be here at `/public/<slug>`;
+// that Path never matched the storefront's proxied `/api/public/<slug>/...`
+// calls, so they are now Path=/ and `__Host-`, see customer-auth.constants.ts.) `__Host-` mandates
 // `Path=/`, so it CANNOT be used here: a `__Host-...; Path=/public/x` cookie
 // is rejected outright by the browser and the session never persists (this
 // was a real, latent prod bug — customer sessions had never actually stuck).

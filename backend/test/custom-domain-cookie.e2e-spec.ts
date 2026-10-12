@@ -135,7 +135,9 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
       .post(`/public/${slug}/auth/refresh`)
       .set('Cookie', rt!.split(';')[0])
       .expect(201);
-    expect(findCookie(refreshed, `__Host-req-customer-at-${slug}=`)).toBeDefined();
+    expect(
+      findCookie(refreshed, `__Host-req-customer-at-${slug}=`),
+    ).toBeDefined();
 
     // ...and is genuinely enforced: same cookie, no CSRF header -> 403.
     await request(app.getHttpServer())

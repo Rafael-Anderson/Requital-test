@@ -60,7 +60,9 @@ export class CustomerAccountController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const names = customerCookieNames(shopSlug);
-    const accessToken: unknown = names ? req.cookies?.[names.access] : undefined;
+    const accessToken: unknown = names
+      ? req.cookies?.[names.access]
+      : undefined;
     if (typeof accessToken === 'string' && accessToken) {
       customerCsrf.issue(req, res, shopSlug, accessToken, {
         reuseExisting: true,

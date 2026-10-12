@@ -38,7 +38,10 @@ function setCustomerSessionCookies(
   res.cookie(
     names.access,
     session.accessToken,
-    sessionCookieOptions(CUSTOMER_COOKIE_PATH, CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS),
+    sessionCookieOptions(
+      CUSTOMER_COOKIE_PATH,
+      CUSTOMER_ACCESS_COOKIE_MAX_AGE_MS,
+    ),
   );
   res.cookie(
     names.refresh,
@@ -103,7 +106,9 @@ export class CustomerAuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const names = customerCookieNames(shopSlug);
-    const refreshToken: unknown = names ? req.cookies?.[names.refresh] : undefined;
+    const refreshToken: unknown = names
+      ? req.cookies?.[names.refresh]
+      : undefined;
     if (typeof refreshToken !== 'string' || !refreshToken) {
       throw new UnauthorizedException('Missing refresh token');
     }
@@ -121,7 +126,9 @@ export class CustomerAuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const names = customerCookieNames(shopSlug);
-    const refreshToken: unknown = names ? req.cookies?.[names.refresh] : undefined;
+    const refreshToken: unknown = names
+      ? req.cookies?.[names.refresh]
+      : undefined;
     if (typeof refreshToken === 'string' && refreshToken) {
       await this.customerAuthService.logout({ refreshToken });
     }

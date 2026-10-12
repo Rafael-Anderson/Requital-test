@@ -92,7 +92,10 @@ function sessionFromResponse(res: Response): CustomerSession {
   const cookies = extractCookies(res);
   return {
     cookieHeaderStr: cookieHeader(cookies),
-    csrfToken: cookies[Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!],
+    csrfToken:
+      cookies[
+        Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+      ],
     customer: body<CustomerResponseBody>(res).customer,
   };
 }
@@ -777,9 +780,15 @@ describe('Customer storefront accounts (e2e)', () => {
       expect(JSON.stringify(res.body)).not.toMatch(/eyJ/); // no raw JWT anywhere in the body
 
       const lines = res.get('Set-Cookie') ?? [];
-      const atCookie = lines.find((l) => l.startsWith(`req-customer-at-${shopSlug}=`));
-      const rtCookie = lines.find((l) => l.startsWith(`req-customer-rt-${shopSlug}=`));
-      const csrfCookie = lines.find((l) => l.startsWith(`req-customer-csrf-${shopSlug}=`));
+      const atCookie = lines.find((l) =>
+        l.startsWith(`req-customer-at-${shopSlug}=`),
+      );
+      const rtCookie = lines.find((l) =>
+        l.startsWith(`req-customer-rt-${shopSlug}=`),
+      );
+      const csrfCookie = lines.find((l) =>
+        l.startsWith(`req-customer-csrf-${shopSlug}=`),
+      );
       // Path=/ (never /public/<slug>): the browser reaches this API as /api/public/<slug>/...
       // through the storefront proxy, which a /public/<slug> Path never matches.
       expect(rtCookie).toMatch(/Path=\/(;|$)/);
@@ -844,7 +853,9 @@ describe('Customer storefront accounts (e2e)', () => {
         .expect(201);
       const lines = res.get('Set-Cookie') ?? [];
       for (const name of ['at', 'rt', 'csrf']) {
-        const cleared = lines.find((l) => l.startsWith(`req-customer-${name}-${shopSlug}=`));
+        const cleared = lines.find((l) =>
+          l.startsWith(`req-customer-${name}-${shopSlug}=`),
+        );
         expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
         expect(cleared).toMatch(/Path=\/(;|$)/);
       }
@@ -875,7 +886,8 @@ describe('Customer storefront accounts (e2e)', () => {
       // The profile call above minted a brand new CSRF cookie value (this
       // request had none yet) — the follow-up request must carry THAT
       // cookie, not the stale one captured at registration time.
-      const freshCsrfCookie = extractCookies(profileRes)[`req-customer-csrf-${shopSlug}`];
+      const freshCsrfCookie =
+        extractCookies(profileRes)[`req-customer-csrf-${shopSlug}`];
       const cookieWithFreshCsrf = `${accessCookieOnly}; req-customer-csrf-${shopSlug}=${freshCsrfCookie}`;
 
       await request(app.getHttpServer())
@@ -966,7 +978,8 @@ describe('Customer storefront accounts (e2e)', () => {
       const { shopSlug } = await setupShop('cust-legacy-cookies');
       const phone = '0505560011';
       await register(shopSlug, { phone, password: 'password123' }).expect(201);
-      const legacy = 'req-customer-at=stale; req-customer-rt=stale; req-customer-csrf=stale';
+      const legacy =
+        'req-customer-at=stale; req-customer-rt=stale; req-customer-csrf=stale';
 
       await request(app.getHttpServer())
         .get(`/public/${shopSlug}/account/profile`)

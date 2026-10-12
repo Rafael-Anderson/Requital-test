@@ -103,7 +103,8 @@ function slugFromUrl(req: Request): string | null {
 }
 
 export const customerCsrf = {
-  doubleCsrfProtection(req: Request, res: Response, next: NextFunction) {
+  // A property, not a method: it is handed to consumer.apply() unbound.
+  doubleCsrfProtection: (req: Request, res: Response, next: NextFunction) => {
     const csrf = csrfFor(slugFromUrl(req));
     if (!csrf) return next();
     return csrf.doubleCsrfProtection(req, res, next);
