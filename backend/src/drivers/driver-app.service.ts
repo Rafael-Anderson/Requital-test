@@ -16,7 +16,7 @@ import { OrderNotificationsService } from '../orders/order-notifications.service
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { StorageService } from '../storage/storage.service';
 import { createLogger } from '../common/logging/logger';
-import { decimalToMinor, minorToDecimal, parseCashInput } from './cash';
+import { minorToDecimal, parseCashInput } from './cash';
 import { amountDueDecimal, amountDueMinor } from '../common/amount-due';
 import { JobsService } from '../jobs/jobs.service';
 import { scheduleProofDeletion } from './proof-photo-cleanup';
