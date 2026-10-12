@@ -290,6 +290,12 @@ export class StoreCreditService {
     orderId: number,
     reason: string,
   ): Promise<void> {
+    // Serialise concurrent reversers of one order on the spend row BEFORE the
+    // INSERT...SELECT. Without this, two callers both take shared next-key locks
+    // from the SUM subquery over the order's ledger rows and then each wants an
+    // exclusive lock in a gap the other holds: 1213. The loser now waits here,
+    // then finds the reversal already written (duplicate key, a no-op).
+    await this.lockSpendRow(conn, shopId, orderId);
     await conn.query(
       `INSERT INTO storecreditentry (shopId, customerId, currency, amount, entryType, reason, orderId)
        SELECT s.shopId, s.customerId, s.currency,
@@ -326,6 +332,9 @@ export class StoreCreditService {
     reason: string,
   ): Promise<void> {
     if (!Number.isInteger(amountMinor) || amountMinor <= 0) return;
+    // Same first lock as reverseSpendForOrder, so releases and the reversal of
+    // one order always serialise on the spend row in the same order.
+    await this.lockSpendRow(conn, shopId, orderId);
     const [seqRows] = await conn.query<RowDataPacket[]>(
       `SELECT COALESCE(MAX(editSeq), 0) + 1 AS nextSeq FROM storecreditentry
         WHERE orderId = ? AND shopId = ? AND entryType = 'spend_release' FOR UPDATE`,
@@ -383,6 +392,20 @@ export class StoreCreditService {
   }
 
   // ---- internals ----
+
+  // X-locks the order's one 'spend' row (no row, no lock that conflicts: the
+  // callers then have nothing to write). Scoped by shopId.
+  private async lockSpendRow(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ): Promise<void> {
+    await conn.query(
+      `SELECT id FROM storecreditentry
+        WHERE orderId = ? AND shopId = ? AND entryType = 'spend' FOR UPDATE`,
+      [orderId, shopId],
+    );
+  }
 
   private async lockedBalanceMinor(
     conn: PoolConnection,
