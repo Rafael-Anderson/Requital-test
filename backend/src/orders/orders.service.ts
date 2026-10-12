@@ -17,7 +17,7 @@ import type { OrderRow, OrderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { withShopOrderNumber } from './order-number';
-import { generateTrackingCode } from '../common/token-hash';
+import { withTrackingToken } from '../common/token-hash';
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ProductsService } from '../products/products.service';
@@ -492,7 +492,6 @@ export class OrdersService {
         );
       }
 
-      const trackingToken = generateTrackingCode();
       // The insert lives INSIDE withShopOrderNumber on purpose - see that
       // function's own comment. The number must be claimed and read back before
       // this AUTO_INCREMENT insert overwrites LAST_INSERT_ID() on this
@@ -502,7 +501,8 @@ export class OrdersService {
         conn,
         ctx.shopId,
         async (shopOrderNumber) => {
-          const [res] = await conn.query(
+          const [res] = await withTrackingToken((trackingToken) =>
+            conn.query(
         `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
@@ -551,6 +551,7 @@ export class OrdersService {
           capturedRate?.rateBaseCurrency ?? null,
           capturedRate?.exchangeRate ?? null,
         ],
+            ),
           );
           return res;
         },

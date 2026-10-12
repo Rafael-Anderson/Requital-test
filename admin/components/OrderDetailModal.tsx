@@ -521,7 +521,7 @@ export default function OrderDetailModal({
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-text-muted">Tracking ref</span>
                         <span className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs">{order.trackingToken}</span>
+                          <span className="font-mono text-xs break-all text-end">{order.trackingToken}</span>
                           <button
                             onClick={() => copyTrackingRef(order.trackingToken!)}
                             className="text-xs text-text-faint underline decoration-transparent hover:decoration-current"

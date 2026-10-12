@@ -57,7 +57,7 @@ function OrderConfirmationContent() {
             Use this code to check your order status any time. No account needed. If you have an account, it&apos;ll
             also show up in your order history.
           </p>
-          <p className="mt-2 font-mono text-lg tracking-wide">{order.trackingToken}</p>
+          <p className="mt-2 font-mono text-base sm:text-lg tracking-wide break-all">{order.trackingToken}</p>
           <Link
             href={`${shopBasePath}/orders/track?token=${order.trackingToken}`}
             className="inline-block mt-2 text-sm text-accent-text hover:underline"

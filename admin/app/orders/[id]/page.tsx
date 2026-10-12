@@ -159,7 +159,7 @@ export default function OrderDetailPage() {
         {order.trackingToken && (
           <div className="flex items-center gap-1.5 mt-1 text-xs text-text-muted">
             <span>Tracking ref: </span>
-            <span className="font-mono">{order.trackingToken}</span>
+            <span className="font-mono break-all">{order.trackingToken}</span>
             <button
               onClick={() => copyTrackingRef(order.trackingToken!)}
               className="underline decoration-transparent hover:decoration-current"
