@@ -34,6 +34,7 @@ import type {
   PaymentLinkSummary,
 } from "./types";
 import type { ThemeConfig } from "./theme-config-types";
+import { resolveInternalApiOrigin } from "./api-origin";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -45,8 +46,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 //     point of the custom-domain auth fix.
 //   Server (RSC/SSR) -> the absolute backend origin: a relative URL has no
 //     origin there, and the rewrite doesn't apply to fetches the Next server
-//     itself makes.
-const apiBase = () => (typeof window === "undefined" ? API_URL : "/api");
+//     itself makes. INTERNAL_API_URL (the backend's local origin) when set,
+//     else the public one; see lib/api-origin.ts. Browser-facing URLs
+//     (resolveImageUrl) always stay on API_URL.
+const apiBase = () =>
+  typeof window === "undefined"
+    ? resolveInternalApiOrigin(process.env.INTERNAL_API_URL, API_URL)
+    : "/api";
 
 // Uploaded theme/product images are stored backend-relative (/uploads/...),
 // but the storefront runs on its own origin (:3002) — a bare relative <img

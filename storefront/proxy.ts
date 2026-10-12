@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isLocalHost } from "./lib/is-local-host";
 import { createRedirectStore } from "./lib/redirect-map";
+import { resolveInternalApiOrigin } from "./lib/api-origin";
 
 // Runs on every real navigation (see matcher below) before the app/[shop]/...
 // route tree ever sees the request. Requital's own tenant resolution is a
@@ -12,7 +13,12 @@ import { createRedirectStore } from "./lib/redirect-map";
 // land on that same route tree, by rewriting the path to prepend the
 // resolved shop slug. Every existing /<shopSlug>/... page, layout, and data
 // fetch is completely unaware this happened.
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+// Server-to-backend calls (domain resolve, redirect map) use the local origin
+// when INTERNAL_API_URL is set, else the public one (lib/api-origin.ts).
+const API_URL = resolveInternalApiOrigin(
+  process.env.INTERNAL_API_URL,
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000",
+);
 
 // Last-known-good host -> subdomain, used ONLY when the resolve call fails
 // (backend restart / blip). A wrong 404 for a real shop is worse than briefly
