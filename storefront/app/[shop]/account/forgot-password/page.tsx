@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
         <div className={`${AUTH_CARD_CLASS} space-y-3`}>
           <h1 className={AUTH_HEADING_CLASS}>Check your email</h1>
           <p className="text-sm text-zinc-500">
-            If an account with that email exists, we&apos;ve sent a link to reset your password.
+            If a verified account with that email exists, we&apos;ve sent a link to reset your password.
           </p>
           {devResetLink && (
             <p className="text-xs text-zinc-400 break-all">
@@ -56,8 +56,8 @@ export default function ForgotPasswordPage() {
       <form onSubmit={handleSubmit} className={AUTH_CARD_CLASS}>
         <h1 className={AUTH_HEADING_CLASS}>Reset your password</h1>
         <p className="text-sm text-zinc-500">
-          Enter the email you registered with. Only accounts registered with an email can reset their password this
-          way.
+          Enter the email address you verified on your account. We only send a reset link to a verified address. If
+          you have not verified one yet, sign in and verify it from My account.
         </p>
         <div>
           <label className="text-sm font-medium block mb-1">Email</label>

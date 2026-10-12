@@ -17,6 +17,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { CustomerAccountService } from './customer-account.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
@@ -75,6 +76,14 @@ export class CustomerAccountController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.customerAccountService.updateProfile(ctx, dto);
+  }
+
+  // Re-sends the verification link to the address on the account. Always the
+  // same answer; a per-account limit inside the service stops mail flooding.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('email/verification')
+  requestEmailVerification(@CurrentCustomer() ctx: CustomerContext) {
+    return this.customerAccountService.requestEmailVerification(ctx);
   }
 
   @Get('orders')

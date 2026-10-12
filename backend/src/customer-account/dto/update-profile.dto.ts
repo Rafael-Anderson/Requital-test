@@ -4,6 +4,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 
 // Self-service profile fields only — name/email/phone. Nothing here touches
@@ -27,4 +28,12 @@ export class UpdateProfileDto {
       'phone must contain only digits, spaces, hyphens, and an optional leading +',
   })
   phone?: string;
+
+  // Required only when the email of an account that already has a verified one
+  // is being changed. Never stored.
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(72)
+  currentPassword?: string;
 }

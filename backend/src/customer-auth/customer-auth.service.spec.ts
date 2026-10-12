@@ -72,6 +72,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await service.login('test-shop', {
       identifier: customer.phone,
@@ -100,6 +101,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await expect(
       service.login('test-shop', {
@@ -127,6 +129,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await expect(
       service.login('test-shop', {
@@ -152,6 +155,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await expect(
       service.login('test-shop', {
@@ -181,6 +185,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await expect(
       service.login('test-shop', {
@@ -209,6 +214,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await service.login('test-shop', {
       identifier: customer.phone,
@@ -234,6 +240,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJwt(),
       createMockJobsService(),
       new PasswordPolicyService(),
+      { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
     );
     await service.login('test-shop', {
       identifier: customer.phone,

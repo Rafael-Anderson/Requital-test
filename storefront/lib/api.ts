@@ -554,7 +554,23 @@ export function getMyProfile(shopSlug: string) {
   return authedFetch<Customer>(shopSlug, `/public/${shopSlug}/account/profile`);
 }
 
-export function updateMyProfile(shopSlug: string, data: Partial<{ name: string; email: string; phone: string }>) {
+// Public and token-bearing, like resetCustomerPassword: the link is opened from an inbox.
+export function verifyCustomerEmail(shopSlug: string, token: string) {
+  return post<{ success: boolean }>(`/public/${shopSlug}/auth/verify-email`, { token });
+}
+
+// Re-sends the verification link to the address on the account (generic answer, limited per account).
+export function requestEmailVerification(shopSlug: string) {
+  return authedFetch<{ success: boolean }>(shopSlug, `/public/${shopSlug}/account/email/verification`, {
+    method: "POST",
+  });
+}
+
+// currentPassword is required by the server only to change the email of an account whose email is verified.
+export function updateMyProfile(
+  shopSlug: string,
+  data: Partial<{ name: string; email: string; phone: string; currentPassword: string }>,
+) {
   return authedFetch<Customer>(shopSlug, `/public/${shopSlug}/account/profile`, {
     method: "PATCH",
     body: JSON.stringify(data),

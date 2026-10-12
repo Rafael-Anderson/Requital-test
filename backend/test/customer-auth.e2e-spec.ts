@@ -9,6 +9,7 @@ import { DatabaseService } from '../src/database/database.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { ShopRow, CustomerRow } from '../src/db/types';
 import { verifySignupEmail } from './helpers/verify-signup-email';
+import { verifyCustomerEmail } from './helpers/customer-email';
 
 interface AdminAuthResponse {
   accessToken: string;
@@ -425,6 +426,13 @@ describe('Customer storefront accounts (e2e)', () => {
       email,
       password: 'oldPassword1',
     }).expect(201);
+    // A reset is only mailed to a verified address.
+    await verifyCustomerEmail(
+      app.getHttpServer(),
+      db,
+      { slug: shopSlug, id: (await getShopBySubdomain(shopSlug)).id },
+      email,
+    );
 
     const forgot = await request(app.getHttpServer())
       .post(`/public/${shopSlug}/auth/forgot-password`)

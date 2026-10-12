@@ -52,7 +52,7 @@ export function sessionFrom(res: Response): CustomerSession {
 export function asCustomer(
   server: App,
   session: CustomerSession,
-  method: 'get' | 'post' | 'put' | 'delete',
+  method: 'get' | 'post' | 'put' | 'patch' | 'delete',
   path: string,
 ) {
   const r = request(server)[method](path).set('Cookie', session.cookie);

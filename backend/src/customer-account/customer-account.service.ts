@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { exportCustomerMetafields } from '../metafields/metafields.service';
@@ -12,7 +14,7 @@ import { isDuplicateKeyError } from '../database/mysql-errors';
 import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
 import type { RowDataPacket } from 'mysql2/promise';
-import type { CustomerRow } from '../db/types';
+import type { CustomerRow, ShopRow } from '../db/types';
 import type { CustomerContext } from '../customer-auth/customer-context';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveAddressDto } from './dto/save-address.dto';
@@ -28,6 +30,9 @@ import { anonymiseCustomerDeliveryProofs } from '../drivers/proof-photo-cleanup'
 import { StoreCreditService } from '../store-credit/store-credit.service';
 import { CustomerConsentService } from '../customer-crm/customer-consent.service';
 import type { ConsentChannel } from '../customer-crm/consent-wording';
+import { CustomerEmailVerificationService } from '../customer-auth/customer-email-verification.service';
+import { isEmailVerified } from '../customer-auth/email-verified';
+import { isWithinLoginCooldown } from '../customer-auth/login-lockout';
 
 // UAE PDPL: max one data-export request per customer per rolling 24h
 // window — a courtesy/anti-abuse rate limit, not a hard security boundary,
@@ -88,6 +93,7 @@ export class CustomerAccountService {
     private readonly consentService: CustomerConsentService,
     private readonly storeCreditService: StoreCreditService,
     private readonly jobs: JobsService,
+    private readonly emailVerification: CustomerEmailVerificationService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -104,7 +110,36 @@ export class CustomerAccountService {
   }
 
   async updateProfile(ctx: CustomerContext, dto: UpdateProfileDto) {
+    const current = await this.findCustomerOrThrow(ctx.customerId);
+    const emailChanged =
+      dto.email !== undefined &&
+      dto.email.trim().toLowerCase() !== (current.email ?? '').toLowerCase();
+    // Replacing the address of an account that already has a verified one is
+    // the step that would redirect password resets, so a session alone (which
+    // can be stolen) is not enough: the current password is required, with the
+    // same progressive lockout as login. An account with nothing verified yet
+    // has nothing to protect and can set its address freely (it stays unproven
+    // until the new address is verified).
+    if (emailChanged && current.verifiedEmail) {
+      if (isWithinLoginCooldown(current)) {
+        throw new ForbiddenException('Too many attempts. Try again shortly.');
+      }
+      const ok =
+        !!dto.currentPassword &&
+        !!current.passwordHash &&
+        (await bcrypt.compare(dto.currentPassword, current.passwordHash));
+      if (!ok) {
+        await this.db.execute(
+          `UPDATE customer SET failedLoginAttempts = failedLoginAttempts + 1, lastFailedLoginAt = ? WHERE id = ?`,
+          [new Date(), current.id],
+        );
+        throw new ForbiddenException(
+          'Enter your current password to change your email',
+        );
+      }
+    }
     try {
+      // currentPassword is a credential, not a column.
       const set = buildSetClause({
         name: dto.name,
         email: dto.email,
@@ -117,6 +152,12 @@ export class CustomerAccountService {
         );
       }
       const customer = await this.findCustomerOrThrow(ctx.customerId);
+      if (emailChanged) {
+        // verifiedEmail is deliberately untouched: the old proven address stays
+        // the reset destination until the new one is verified. Best effort, the
+        // profile change itself has already succeeded.
+        await this.afterEmailChange(ctx.shopId, customer, current);
+      }
       return this.toProfileResponse(customer);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
@@ -126,6 +167,43 @@ export class CustomerAccountService {
       }
       throw error;
     }
+  }
+
+  // Verification link to the NEW address, and a notice to the old verified one.
+  private async afterEmailChange(
+    shopId: number,
+    customer: CustomerRow,
+    before: CustomerRow,
+  ) {
+    const shop = await this.findShop(shopId);
+    await this.emailVerification
+      .sendForCustomer(shop, customer)
+      .catch(() => undefined);
+    if (before.verifiedEmail) {
+      await this.emailVerification
+        .sendEmailChangedNotice(shop, before.name, before.verifiedEmail)
+        .catch(() => undefined);
+    }
+  }
+
+  // Authenticated "send me the link again" (generic answer, throttled per account
+  // inside the service).
+  async requestEmailVerification(ctx: CustomerContext) {
+    const customer = await this.findCustomerOrThrow(ctx.customerId);
+    const shop = await this.findShop(ctx.shopId);
+    await this.emailVerification
+      .sendForCustomer(shop, customer)
+      .catch(() => undefined);
+    return { success: true as const };
+  }
+
+  private async findShop(shopId: number): Promise<ShopRow> {
+    const rows = await this.db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    if (!rows[0]) throw new NotFoundException('Shop not found');
+    return rows[0];
   }
 
   // UAE PDPL data export — every piece of PII this shop holds for the
@@ -309,7 +387,7 @@ export class CustomerAccountService {
   // scrubbed.
   private async anonymiseCustomer(shopId: number, customerId: number) {
     await this.db.execute(
-      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, wishlist = NULL, passwordHash = NULL WHERE id = ?`,
+      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, wishlist = NULL, passwordHash = NULL, verifiedEmail = NULL, emailVerifiedAt = NULL WHERE id = ?`,
       [
         'Deleted User',
         // Derived from the customer's own (globally unique) id, not a
@@ -694,7 +772,7 @@ export class CustomerAccountService {
     name: string;
     phone: string;
     email: string | null;
-    emailVerified: boolean;
+    verifiedEmail: string | null;
     registeredAt: Date | null;
     createdAt: Date;
   }) {
@@ -704,7 +782,7 @@ export class CustomerAccountService {
       name,
       phone,
       email,
-      emailVerified,
+      verifiedEmail,
       registeredAt,
       createdAt,
     } = customer;
@@ -714,7 +792,7 @@ export class CustomerAccountService {
       name,
       phone,
       email,
-      emailVerified,
+      emailVerified: isEmailVerified({ email, verifiedEmail }),
       registeredAt,
       createdAt,
     };

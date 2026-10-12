@@ -9,10 +9,9 @@ import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { DatabaseService } from '../database/database.service';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { CustomerRow, ShopRow } from '../db/types';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
-import { escapeHtml } from '../common/email';
 import { JobsService } from '../jobs/jobs.service';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
@@ -20,22 +19,16 @@ import { ForgotCustomerPasswordDto } from './dto/forgot-customer-password.dto';
 import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
 import { storefrontUrl } from '../common/storefront-url';
 import { PasswordPolicyService } from '../common/password-policy/password-policy.service';
+import { CustomerEmailVerificationService } from './customer-email-verification.service';
+import { renderCustomerLinkEmail } from './customer-link-email';
+import { isWithinLoginCooldown } from './login-lockout';
+import { isEmailVerified } from './email-verified';
 
 const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
 const ACCESS_TOKEN_LIFETIME_SECONDS = 15 * 60;
 const REFRESH_TOKEN_LIFETIME_DAYS = 30;
 const RESET_TOKEN_LIFETIME_MINUTES = 30;
-// Progressive login delay — mirrors AuthService's own constants exactly
-// (see that file's login()/isWithinLoginCooldown() comments for the full
-// reasoning). Duplicated rather than shared: this module is already a
-// deliberately fully-separate stack from staff auth (own tokens, own
-// guard, own rotation — see this file's own top-of-module convention), so
-// a shared lockout helper would couple two modules the codebase keeps
-// independent on purpose. The two constants sets are kept in sync by hand.
-const LOGIN_LOCKOUT_THRESHOLD = 5;
-const LOGIN_LOCKOUT_BASE_DELAY_SECONDS = 2;
-const LOGIN_LOCKOUT_MAX_DELAY_SECONDS = 60;
 // Where the reset link points — the storefront app, not this API. Same
 // pattern as AuthService's ADMIN_URL, just the other frontend.
 // Same dev-only echo-the-link-back convenience as AuthService — see its
@@ -49,6 +42,7 @@ export class CustomerAuthService {
     private readonly jwtService: JwtService,
     private readonly jobsService: JobsService,
     private readonly passwordPolicy: PasswordPolicyService,
+    private readonly emailVerification: CustomerEmailVerificationService,
   ) {}
 
   // "Register" is "claim" — find the [shopId, phone] row guest checkout
@@ -98,13 +92,15 @@ export class CustomerAuthService {
     let customerId: number;
     if (existing) {
       await this.db.execute(
-        `UPDATE customer SET passwordHash = ?, registeredAt = ?, name = ?, email = ? WHERE id = ?`,
+        `UPDATE customer SET passwordHash = ?, registeredAt = ?, name = ?, email = ?, verifiedEmail = NULL, emailVerifiedAt = NULL WHERE id = ?`,
         [
           passwordHash,
           new Date(),
           // A guest checkout's captured name/email might be stale or
           // absent by the time they register — the name/email given at
-          // registration wins.
+          // registration wins. The email is unproven either way (the
+          // verified columns are cleared above: a claimed row never inherits
+          // trust) until the link sent below is clicked.
           dto.name,
           dto.email ?? existing.email,
           existing.id,
@@ -121,6 +117,10 @@ export class CustomerAuthService {
     }
 
     const customer = await this.findCustomerByIdOrThrow(customerId);
+    // A send problem must not fail the registration that already succeeded.
+    await this.emailVerification
+      .sendForCustomer(shop, customer)
+      .catch(() => undefined);
     return this.issueTokenPair(customer);
   }
 
@@ -133,12 +133,27 @@ export class CustomerAuthService {
   async login(shopSlug: string, dto: LoginCustomerDto) {
     const shop = await this.resolveShop(shopSlug);
     const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
-      `SELECT * FROM customer WHERE shopId = ? AND (phone = ? OR email = ?)`,
-      [shop.id, dto.identifier, dto.identifier],
+      // Registered accounts only, in a fixed order: a guest row that merely
+      // carries someone's email (checkout stores whatever was typed) must not
+      // shadow the real account, and when two registered rows could match, the
+      // phone, then the proven email, wins.
+      `SELECT * FROM customer
+        WHERE shopId = ? AND passwordHash IS NOT NULL
+          AND (phone = ? OR email = ? OR verifiedEmail = ?)
+        ORDER BY (phone = ?) DESC, (verifiedEmail = ?) DESC, id ASC
+        LIMIT 1`,
+      [
+        shop.id,
+        dto.identifier,
+        dto.identifier,
+        dto.identifier,
+        dto.identifier,
+        dto.identifier,
+      ],
     );
     const customer = rows[0];
 
-    if (customer?.passwordHash && this.isWithinLoginCooldown(customer)) {
+    if (customer?.passwordHash && isWithinLoginCooldown(customer)) {
       throw new UnauthorizedException('Invalid phone/email or password');
     }
 
@@ -162,25 +177,6 @@ export class CustomerAuthService {
       );
     }
     return this.issueTokenPair(customer);
-  }
-
-  private isWithinLoginCooldown(customer: {
-    failedLoginAttempts: number;
-    lastFailedLoginAt: Date | null;
-  }): boolean {
-    if (
-      customer.failedLoginAttempts < LOGIN_LOCKOUT_THRESHOLD ||
-      !customer.lastFailedLoginAt
-    ) {
-      return false;
-    }
-    const delaySeconds = Math.min(
-      LOGIN_LOCKOUT_MAX_DELAY_SECONDS,
-      LOGIN_LOCKOUT_BASE_DELAY_SECONDS **
-        (customer.failedLoginAttempts - LOGIN_LOCKOUT_THRESHOLD + 1),
-    );
-    const elapsedMs = Date.now() - customer.lastFailedLoginAt.getTime();
-    return elapsedMs < delaySeconds * 1000;
   }
 
   async refresh(shopSlug: string, dto: { refreshToken: string }) {
@@ -236,36 +232,43 @@ export class CustomerAuthService {
     return { success: true };
   }
 
-  // Email-based, reusing the exact same opaque-token + hash-at-rest +
-  // single-use-CAS pattern as AuthService.forgotPassword/resetPassword —
-  // this generalizes cleanly since it's shop-scoped the same way everything
-  // else here is. What does NOT generalize: a customer who registered with
-  // phone only (email is optional at registration, matching checkout) has
-  // no email on file and therefore no way to receive a reset link — this
-  // method still returns {success:true} for them (same
-  // don't-leak-whether-an-account-exists reasoning as the email-not-found
-  // case) but no email is ever sent. There's no in-app "reset via phone"
-  // path today; flagging this as a real gap for phone-only accounts rather
-  // than building an SMS-OTP flow that wasn't asked for.
+  // A reset link goes ONLY to an address the account owner proved by clicking a
+  // verification link (customer.verifiedEmail). customer.email is whatever was
+  // last typed (checkout, import, an old guest order) and proves nothing, so it
+  // is never a destination. Unknown address, unverified address and verified
+  // address all answer the same `{ success: true }` (the dev-only devResetLink
+  // echo aside, which production never sends); nothing here reveals which one it
+  // was. A phone-only or never-verified account has no reset path until it logs
+  // in and verifies an address: there is no phone channel to fall back to.
   async forgotPassword(shopSlug: string, dto: ForgotCustomerPasswordDto) {
     const shop = await this.resolveShop(shopSlug);
     const rows = await this.db.query<(CustomerRow & RowDataPacket)[]>(
-      `SELECT * FROM customer WHERE shopId = ? AND email = ? AND passwordHash IS NOT NULL`,
+      `SELECT * FROM customer WHERE shopId = ? AND verifiedEmail = ? AND passwordHash IS NOT NULL`,
       [shop.id, dto.email],
     );
     const customer = rows[0];
-    if (!customer) {
+    if (!customer?.verifiedEmail) {
+      return { success: true };
+    }
+    // One link a minute per account, so the endpoint cannot be used to flood a
+    // customer's inbox; the answer is the same.
+    const recent = await this.db.query<RowDataPacket[]>(
+      `SELECT 1 FROM customerauthtoken WHERE customerId = ? AND purpose = 'password_reset' AND createdAt > ? LIMIT 1`,
+      [customer.id, new Date(Date.now() - 60 * 1000)],
+    );
+    if (recent.length > 0) {
       return { success: true };
     }
 
     const raw = generateOpaqueToken();
-    await this.db.execute(
-      `INSERT INTO customerauthtoken (customerId, purpose, tokenHash, expiresAt) VALUES (?, ?, ?, ?)`,
+    const inserted = await this.db.execute(
+      `INSERT INTO customerauthtoken (customerId, purpose, tokenHash, expiresAt, targetEmail) VALUES (?, ?, ?, ?, ?)`,
       [
         customer.id,
         'password_reset',
         hashToken(raw),
         new Date(Date.now() + RESET_TOKEN_LIFETIME_MINUTES * 60 * 1000),
+        customer.verifiedEmail,
       ],
     );
     const resetLink = storefrontUrl(
@@ -273,39 +276,33 @@ export class CustomerAuthService {
       `/account/reset-password?token=${raw}`,
     );
     const shopDisplayName = shop.displayName ?? shop.name;
-    const resetHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-<tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
-<tr><td style="padding:40px;">
-<p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(customer.name)},</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">We received a request to reset your ${escapeHtml(shopDisplayName)} account password. This link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.</p>
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${resetLink}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Reset password</a></td></tr></table>
-<p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
-<p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${resetLink}</p>
-</td></tr>
-<tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
-<tr><td style="padding:24px 40px 40px;text-align:center;">
-<p style="margin:0 0 8px;font-size:12px;color:#999999;">This email was sent by ${escapeHtml(shopDisplayName)} via Requital. If you didn't request a password reset, you can ignore this email.</p>
-<p style="margin:0;font-size:12px;color:#999999;">&copy; 2026 Requital</p>
-</td></tr>
-</table>
-</td></tr></table>`;
+    const resetHtml = renderCustomerLinkEmail({
+      greetingName: customer.name,
+      shopDisplayName,
+      intro: `We received a request to reset your ${shopDisplayName} account password. This link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
+      buttonLabel: 'Reset password',
+      link: resetLink,
+      ignoreNote: "If you didn't request a password reset, you can ignore this email.",
+    });
     await this.jobsService.enqueue(
       shop.id,
       'send_email',
       {
-        to: customer.email!,
+        to: customer.verifiedEmail,
         subject: 'Reset your password',
         bodyText: `Reset your password: ${resetLink}\nThis link expires in ${RESET_TOKEN_LIFETIME_MINUTES} minutes.`,
         html: resetHtml,
         fromName: shopDisplayName,
       },
-      `customer-password-reset-email:${customer.id}:${raw}`,
+      // The token row's id, not the raw token: the key is stored in clear.
+      `customer-password-reset-email:${customer.id}:${inserted.insertId}`,
     );
     return { success: true, ...(isDev ? { devResetLink: resetLink } : {}) };
   }
 
   async resetPassword(dto: ResetCustomerPasswordDto) {
+    const invalid = () =>
+      new BadRequestException('This reset link is invalid or has expired');
     const storedRows = await this.db.query<RowDataPacket[]>(
       `SELECT * FROM customerauthtoken WHERE tokenHash = ?`,
       [hashToken(dto.token)],
@@ -316,51 +313,69 @@ export class CustomerAuthService {
       stored.purpose !== 'password_reset' ||
       (stored.expiresAt as Date) < new Date()
     ) {
-      throw new BadRequestException(
-        'This reset link is invalid or has expired',
-      );
+      throw invalid();
     }
     // Policy BEFORE the single-use claim, so a rejected weak password does
     // not burn the reset link.
     const custRows = await this.db.query<RowDataPacket[]>(
-      `SELECT name, email, phone, shopId FROM customer WHERE id = ?`,
+      `SELECT name, email, verifiedEmail, phone, shopId FROM customer WHERE id = ?`,
       [stored.customerId],
     );
     const cust = custRows[0];
-    const shopRows = cust
-      ? await this.db.query<RowDataPacket[]>(
-          `SELECT name, subdomain FROM shop WHERE id = ?`,
-          [cust.shopId],
-        )
-      : [];
+    // The link is honoured only while the address it was sent to is still the
+    // account's verified one. A link issued before verification existed has no
+    // targetEmail and never passes; neither does one for an address that has
+    // since been replaced.
+    if (
+      !cust ||
+      !stored.targetEmail ||
+      !cust.verifiedEmail ||
+      String(stored.targetEmail).toLowerCase() !==
+        String(cust.verifiedEmail).toLowerCase()
+    ) {
+      throw invalid();
+    }
+    const shopRows = await this.db.query<RowDataPacket[]>(
+      `SELECT name, subdomain FROM shop WHERE id = ?`,
+      [cust.shopId],
+    );
     await this.passwordPolicy.assertAcceptable(dto.newPassword, {
-      email: cust?.email as string | null | undefined,
-      name: cust?.name as string | null | undefined,
-      phone: cust?.phone as string | null | undefined,
+      email: cust.email as string | null | undefined,
+      name: cust.name as string | null | undefined,
+      phone: cust.phone as string | null | undefined,
       shopName: shopRows[0]?.name as string | undefined,
       subdomain: shopRows[0]?.subdomain as string | undefined,
     });
-    const claimed = await this.db.execute(
-      `UPDATE customerauthtoken SET usedAt = ? WHERE id = ? AND usedAt IS NULL`,
-      [new Date(), stored.id],
-    );
-    if (claimed.affectedRows === 0) {
-      throw new BadRequestException('This reset link has already been used');
-    }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     const customerId = stored.customerId as number;
     await this.db.transaction(async (conn) => {
-      await conn.query(`UPDATE customer SET passwordHash = ? WHERE id = ?`, [
-        passwordHash,
-        customerId,
-      ]);
+      const [claimed] = await conn.query<ResultSetHeader>(
+        `UPDATE customerauthtoken SET usedAt = ? WHERE id = ? AND usedAt IS NULL`,
+        [new Date(), stored.id],
+      );
+      if (claimed.affectedRows === 0) {
+        throw new BadRequestException('This reset link has already been used');
+      }
+      // Re-checked in the write itself: the verified address must still be the
+      // one the link was sent to, and the account must still be live (an
+      // anonymised row has no password and must not get one back).
+      const [updated] = await conn.query<ResultSetHeader>(
+        `UPDATE customer SET passwordHash = ?
+          WHERE id = ? AND verifiedEmail = ? AND passwordHash IS NOT NULL`,
+        [passwordHash, customerId, stored.targetEmail],
+      );
+      if (updated.affectedRows === 0) throw invalid();
       await conn.query(
         `UPDATE customerrefreshtoken SET revokedAt = ? WHERE customerId = ? AND revokedAt IS NULL`,
         [new Date(), customerId],
       );
     });
     return { success: true };
+  }
+
+  verifyEmail(token: string) {
+    return this.emailVerification.confirm(token);
   }
 
   private async resolveShop(shopSlug: string): Promise<ShopRow & RowDataPacket> {
@@ -423,7 +438,7 @@ export class CustomerAuthService {
       name,
       phone,
       email,
-      emailVerified,
+      verifiedEmail,
       registeredAt,
       createdAt,
     } = customer;
@@ -433,7 +448,7 @@ export class CustomerAuthService {
       name,
       phone,
       email,
-      emailVerified,
+      emailVerified: isEmailVerified({ email, verifiedEmail }),
       registeredAt,
       createdAt,
     };
