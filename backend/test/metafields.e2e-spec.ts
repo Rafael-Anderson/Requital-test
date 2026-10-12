@@ -883,7 +883,10 @@ describe('Metafields (e2e)', () => {
       const cookie = Object.entries(cookies)
         .map(([k, v]) => `${k}=${v}`)
         .join('; ');
-      const csrf = cookies['req-customer-csrf'];
+      const csrf =
+        cookies[
+          Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+        ];
       const customerId = body<{ customer: IdRow }>(reg).customer.id;
       await put(A.admin, 'customer', customerId, [
         { definitionId: def.id, value: 'PDPL-SENSITIVE' },

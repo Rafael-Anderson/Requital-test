@@ -57,6 +57,10 @@ Per spec file:
   API call, same as the backend's own e2e suite's dev-link pattern — no real
   inbox) → reset → auto-redirect to /login → logs in with the new password.
 
+- `shopper-session.spec.ts` — a shopper registers, adds to the wishlist, reloads (the server must still know the
+  shopper), signs out (the server must not); two shops in one browser keep separate sessions. Asks the SERVER through the
+  page's own `/api` origin, because a signed-out wishlist falls back to localStorage and hides a lost session.
+
 Not covered (deliberate, foundation-only per the task): draft orders,
 returns/refunds, discounts, gift cards, affiliate flows, theme editor,
 CSV import/export, scan-to-stock, any BNPL/card payment gateway (only cash

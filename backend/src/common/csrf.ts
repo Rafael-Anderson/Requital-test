@@ -98,9 +98,9 @@ export function createTierCsrf(opts: {
       const raw: unknown = req.cookies?.[opts.accessCookieName];
       return typeof raw === 'string' ? raw : '';
     },
-    // __Host- only when this tier's CSRF cookie sits at Path=/ (staff);
-    // customer CSRF is Path=/public and must be __Secure- or the browser
-    // drops it — same rule as the session cookies. See pathScopedCookieName.
+    // __Host- only when this tier's CSRF cookie sits at Path=/ (staff and
+    // customer); a sub-path cookie must be __Secure- or the browser drops it.
+    // See pathScopedCookieName.
     cookieName:
       opts.path === '/'
         ? tieredCookieName(opts.cookieBaseName)
@@ -131,7 +131,9 @@ export function createTierCsrf(opts: {
       // does not match — the char before `auth` there is `-`, not `/`.)
       if (
         req.method === 'POST' &&
-        /(^|\/)auth\/(login|login\/mfa|signup|register)$/.test(reqPath)
+        /^(\/public\/[^/]+)?\/auth\/(login|login\/mfa|signup|register)$/.test(
+          reqPath,
+        )
       ) {
         return true;
       }

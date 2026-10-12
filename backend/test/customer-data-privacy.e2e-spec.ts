@@ -72,7 +72,10 @@ function sessionFromResponse(res: Response): CustomerSession {
   const cookies = extractCookies(res);
   return {
     cookieHeaderStr: cookieHeader(cookies),
-    csrfToken: cookies['req-customer-csrf'],
+    csrfToken:
+      cookies[
+        Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+      ],
     customer: body<CustomerResponseBody>(res).customer,
   };
 }
@@ -337,10 +340,8 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         .expect(401);
 
       // The refresh cookie is revoked too — can't silently mint a new
-      // access token to keep using the account. A real browser would still
-      // send the (Path-broader) access cookie alongside the refresh cookie
-      // here too — Path=/public/{shopSlug} covers the narrower
-      // /public/{shopSlug}/auth/refresh sub-path — so the CSRF header is
+      // access token to keep using the account. A real browser sends every
+      // customer cookie (all Path=/) with the refresh request, so the CSRF header is
       // required the same way any other state-changing request with an
       // access cookie present is; the request still 401s on the guard's own
       // account-no-longer-usable check regardless of CSRF passing.

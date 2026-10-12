@@ -64,7 +64,10 @@ function sessionFromResponse(res: Response): CustomerSession {
   const cookies = extractCookies(res);
   return {
     cookieHeaderStr: cookieHeader(cookies),
-    csrfToken: cookies['req-customer-csrf'],
+    csrfToken:
+      cookies[
+        Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+      ],
     customer: body<CustomerResponseBody>(res).customer,
   };
 }
@@ -205,17 +208,29 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
     const p2 = await createProduct(shop.adminToken, shop.collectionId, 'own2');
 
     const a = sessionFromResponse(
-      await register(shop.shopSlug, `05011${runId % 100000}`, `wl-own-a-${runId}@t.com`),
+      await register(
+        shop.shopSlug,
+        `05011${runId % 100000}`,
+        `wl-own-a-${runId}@t.com`,
+      ),
     );
     const b = sessionFromResponse(
-      await register(shop.shopSlug, `05012${runId % 100000}`, `wl-own-b-${runId}@t.com`),
+      await register(
+        shop.shopSlug,
+        `05012${runId % 100000}`,
+        `wl-own-b-${runId}@t.com`,
+      ),
     );
 
     await addToWishlist(a, shop.shopSlug, p1).expect(201);
-    expect(body<number[]>(await getWishlist(a, shop.shopSlug).expect(200))).toEqual([p1]);
+    expect(
+      body<number[]>(await getWishlist(a, shop.shopSlug).expect(200)),
+    ).toEqual([p1]);
 
     // B's own list is empty and B's writes never touch A's.
-    expect(body<number[]>(await getWishlist(b, shop.shopSlug).expect(200))).toEqual([]);
+    expect(
+      body<number[]>(await getWishlist(b, shop.shopSlug).expect(200)),
+    ).toEqual([]);
     await request(app.getHttpServer())
       .delete(`/public/${shop.shopSlug}/account/wishlist/${p1}`)
       .set('Cookie', b.cookieHeaderStr)
@@ -223,8 +238,12 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
       .expect(200);
     await addToWishlist(b, shop.shopSlug, p2).expect(201);
 
-    expect(body<number[]>(await getWishlist(a, shop.shopSlug).expect(200))).toEqual([p1]);
-    expect(body<number[]>(await getWishlist(b, shop.shopSlug).expect(200))).toEqual([p2]);
+    expect(
+      body<number[]>(await getWishlist(a, shop.shopSlug).expect(200)),
+    ).toEqual([p1]);
+    expect(
+      body<number[]>(await getWishlist(b, shop.shopSlug).expect(200)),
+    ).toEqual([p2]);
   });
 
   it('a customer authenticated on shop A cannot touch shop B, and a shop-B product id cannot enter a shop-A wishlist', async () => {
@@ -234,7 +253,11 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
     const pB = await createProduct(shopB.adminToken, shopB.collectionId, 'xb');
 
     const a = sessionFromResponse(
-      await register(shopA.shopSlug, `05013${runId % 100000}`, `wl-xa-${runId}@t.com`),
+      await register(
+        shopA.shopSlug,
+        `05013${runId % 100000}`,
+        `wl-xa-${runId}@t.com`,
+      ),
     );
     await addToWishlist(a, shopA.shopSlug, pA).expect(201);
 
@@ -260,7 +283,9 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
     // Shop B's product id, posted to shop A's own wishlist route — not an
     // Available product in shop A, so 404, and A's list is untouched.
     await addToWishlist(a, shopA.shopSlug, pB).expect(404);
-    expect(body<number[]>(await getWishlist(a, shopA.shopSlug).expect(200))).toEqual([pA]);
+    expect(
+      body<number[]>(await getWishlist(a, shopA.shopSlug).expect(200)),
+    ).toEqual([pA]);
   });
 
   it('rejects unauthenticated access on every verb', async () => {
@@ -282,7 +307,11 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
     const shop = await setupShop('wl-csrf');
     const p = await createProduct(shop.adminToken, shop.collectionId, 'csrf');
     const s = sessionFromResponse(
-      await register(shop.shopSlug, `05014${runId % 100000}`, `wl-csrf-${runId}@t.com`),
+      await register(
+        shop.shopSlug,
+        `05014${runId % 100000}`,
+        `wl-csrf-${runId}@t.com`,
+      ),
     );
 
     await request(app.getHttpServer())
@@ -336,13 +365,21 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
     expect(ids.length).toBe(100);
 
     const s = sessionFromResponse(
-      await register(shop.shopSlug, `05015${runId % 100000}`, `wl-cap-${runId}@t.com`),
+      await register(
+        shop.shopSlug,
+        `05015${runId % 100000}`,
+        `wl-cap-${runId}@t.com`,
+      ),
     );
     for (const id of ids) {
       await addToWishlist(s, shop.shopSlug, id).expect(201);
     }
     // The 101st product — a genuinely new, valid, Available id — is rejected.
-    const extra = await createProduct(shop.adminToken, shop.collectionId, 'capextra');
+    const extra = await createProduct(
+      shop.adminToken,
+      shop.collectionId,
+      'capextra',
+    );
     await addToWishlist(s, shop.shopSlug, extra).expect(409);
     expect(
       body<number[]>(await getWishlist(s, shop.shopSlug).expect(200)).length,
@@ -351,10 +388,22 @@ describe('Wishlist multi-tenant isolation (e2e)', () => {
 
   it('resolves a later-deleted product out of the account view without pruning the stored array', async () => {
     const shop = await setupShop('wl-del');
-    const keep = await createProduct(shop.adminToken, shop.collectionId, 'keep');
-    const gone = await createProduct(shop.adminToken, shop.collectionId, 'gone');
+    const keep = await createProduct(
+      shop.adminToken,
+      shop.collectionId,
+      'keep',
+    );
+    const gone = await createProduct(
+      shop.adminToken,
+      shop.collectionId,
+      'gone',
+    );
     const s = sessionFromResponse(
-      await register(shop.shopSlug, `05016${runId % 100000}`, `wl-del-${runId}@t.com`),
+      await register(
+        shop.shopSlug,
+        `05016${runId % 100000}`,
+        `wl-del-${runId}@t.com`,
+      ),
     );
     await addToWishlist(s, shop.shopSlug, keep).expect(201);
     await addToWishlist(s, shop.shopSlug, gone).expect(201);

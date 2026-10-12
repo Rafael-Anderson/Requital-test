@@ -29,8 +29,7 @@ import { CurrentCustomer } from '../customer-auth/decorators/current-customer.de
 import { Public } from '../auth/decorators/public.decorator';
 import type { CustomerContext } from '../customer-auth/customer-context';
 import {
-  CUSTOMER_ACCESS_COOKIE,
-  customerAccessPath,
+  customerCookieNames,
   customerCsrf,
 } from '../customer-auth/customer-auth.constants';
 
@@ -60,10 +59,12 @@ export class CustomerAccountController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const accessToken: unknown = req.cookies?.[CUSTOMER_ACCESS_COOKIE];
+    const names = customerCookieNames(shopSlug);
+    const accessToken: unknown = names
+      ? req.cookies?.[names.access]
+      : undefined;
     if (typeof accessToken === 'string' && accessToken) {
-      customerCsrf.issue(req, res, accessToken, {
-        cookiePath: customerAccessPath(shopSlug),
+      customerCsrf.issue(req, res, shopSlug, accessToken, {
         reuseExisting: true,
       });
     }

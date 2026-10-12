@@ -17,8 +17,11 @@ import { AppModule } from '../src/app.module';
 // wasn't: the customer cookie was `__Host-...; Path=/public/<slug>`, which
 // every browser drops (`__Host-` mandates `Path=/`). This spec runs with
 // NODE_ENV=production so the real prefix logic engages, and asserts:
-//   - customer cookies are `__Secure-` (never `__Host-`), keep their per-shop
-//     Path, and round-trip (session persists + a CSRF'd mutation passes);
+//   - customer cookies are `__Host-` at `Path=/` with the shop slug in the NAME
+//     (the browser reaches the API as /api/public/<slug>/..., which a
+//     `Path=/public/<slug>` cookie never matches, so the old shape was stored
+//     and never sent), carry no Domain, and round-trip (session persists + a
+//     CSRF'd mutation passes);
 //   - staff/platform are UNCHANGED — access cookie still `__Host-` at `Path=/`,
 //     staff refresh is `__Secure-` at `Path=/auth/refresh` and round-trips.
 
@@ -77,7 +80,7 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
     };
   }
 
-  it('customer login: cookie is __Secure- (not __Host-), keeps Path=/public/<slug>, and the session persists + a CSRF mutation passes', async () => {
+  it('customer login: cookies are __Host- at Path=/ with the slug in the name, and the session persists + a CSRF mutation passes', async () => {
     const staff = await signupStaff('cdc-cust');
     const slug = staff.subdomain;
     // A customer registers on the shop (guest-checkout row upgraded).
@@ -90,15 +93,24 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
       })
       .expect(201);
 
-    const at = findCookie(reg, '__Secure-req-customer-at=');
+    const at = findCookie(reg, `__Host-req-customer-at-${slug}=`);
+    const rt = findCookie(reg, `__Host-req-customer-rt-${slug}=`);
+    const csrfCookie = findCookie(reg, `__Host-req-customer-csrf-${slug}=`);
     expect(at).toBeDefined();
+    expect(rt).toBeDefined();
+    expect(csrfCookie).toBeDefined();
+    for (const c of [at!, rt!, csrfCookie!]) {
+      expect(c).toMatch(/HttpOnly/i);
+      expect(c).toMatch(/Secure/i);
+      expect(c).toMatch(/SameSite=Strict/i);
+      // __Host- demands exactly this: Path=/ and no Domain attribute.
+      expect(c).toMatch(/Path=\/(;|$)/);
+      expect(c).not.toMatch(/Domain=/i);
+    }
+    // None of the dropped shapes: shared name, sub-path, __Secure-.
+    expect(findCookie(reg, '__Secure-req-customer-')).toBeUndefined();
     expect(findCookie(reg, '__Host-req-customer-at=')).toBeUndefined();
-    expect(at).toMatch(/HttpOnly/i);
-    expect(at).toMatch(/Secure/i);
-    expect(at).toMatch(/SameSite=Strict/i);
-    expect(at).toMatch(new RegExp(`Path=/public/${slug}(;|$)`));
-    // CSRF cookie is __Secure- too (Path=/public, not /).
-    expect(findCookie(reg, '__Secure-req-customer-csrf=')).toBeDefined();
+    expect(reg.get('Set-Cookie')?.join('\n')).not.toMatch(/Path=\/public/);
 
     const cookies = cookieHeader(reg);
     const csrf = reg.get('X-CSRF-Token');
@@ -117,6 +129,15 @@ describe('Custom-domain cookie shapes (e2e, NODE_ENV=production)', () => {
       .set('X-CSRF-Token', csrf!)
       .send({ name: 'Renamed Shopper' })
       .expect(200);
+
+    // The refresh cookie (now Path=/ too) round-trips on its own, as a cold page load sends it.
+    const refreshed = await request(app.getHttpServer())
+      .post(`/public/${slug}/auth/refresh`)
+      .set('Cookie', rt!.split(';')[0])
+      .expect(201);
+    expect(
+      findCookie(refreshed, `__Host-req-customer-at-${slug}=`),
+    ).toBeDefined();
 
     // ...and is genuinely enforced: same cookie, no CSRF header -> 403.
     await request(app.getHttpServer())

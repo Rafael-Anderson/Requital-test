@@ -44,7 +44,9 @@ export function sessionFrom(res: Response): CustomerSession {
     cookie: Object.entries(cookies)
       .map(([k, v]) => `${k}=${v}`)
       .join('; '),
-    csrf: cookies['req-customer-csrf'],
+    csrf: cookies[
+      Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+    ],
   };
 }
 

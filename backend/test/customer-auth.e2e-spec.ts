@@ -92,7 +92,10 @@ function sessionFromResponse(res: Response): CustomerSession {
   const cookies = extractCookies(res);
   return {
     cookieHeaderStr: cookieHeader(cookies),
-    csrfToken: cookies['req-customer-csrf'],
+    csrfToken:
+      cookies[
+        Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+      ],
     customer: body<CustomerResponseBody>(res).customer,
   };
 }
@@ -765,7 +768,7 @@ describe('Customer storefront accounts (e2e)', () => {
   });
 
   describe('session cookies and CSRF', () => {
-    it('login sets httpOnly, SameSite=Strict, shop-Path-scoped access and CSRF cookies, with no token in the body — the CSRF value itself rides the X-CSRF-Token response header instead', async () => {
+    it('login sets httpOnly, SameSite=Strict access, refresh and CSRF cookies at Path=/ with the shop slug in the name, with no token in the body — the CSRF value itself rides the X-CSRF-Token response header instead', async () => {
       const { shopSlug } = await setupShop('cust-cookie-attrs');
       const phone = '0505560001';
       await register(shopSlug, { phone, password: 'password123' }).expect(201);
@@ -777,12 +780,22 @@ describe('Customer storefront accounts (e2e)', () => {
       expect(JSON.stringify(res.body)).not.toMatch(/eyJ/); // no raw JWT anywhere in the body
 
       const lines = res.get('Set-Cookie') ?? [];
-      const atCookie = lines.find((l) => l.startsWith('req-customer-at='));
-      const csrfCookie = lines.find((l) => l.startsWith('req-customer-csrf='));
+      const atCookie = lines.find((l) =>
+        l.startsWith(`req-customer-at-${shopSlug}=`),
+      );
+      const rtCookie = lines.find((l) =>
+        l.startsWith(`req-customer-rt-${shopSlug}=`),
+      );
+      const csrfCookie = lines.find((l) =>
+        l.startsWith(`req-customer-csrf-${shopSlug}=`),
+      );
+      // Path=/ (never /public/<slug>): the browser reaches this API as /api/public/<slug>/...
+      // through the storefront proxy, which a /public/<slug> Path never matches.
+      expect(rtCookie).toMatch(/Path=\/(;|$)/);
       expect(atCookie).toBeDefined();
       expect(atCookie).toMatch(/HttpOnly/);
       expect(atCookie).toMatch(/SameSite=Strict/i);
-      expect(atCookie).toMatch(new RegExp(`Path=/public/${shopSlug}(;|$)`));
+      expect(atCookie).toMatch(/Path=\/(;|$)/);
       expect(csrfCookie).toBeDefined();
       // httpOnly here too — see platform-admin.e2e-spec.ts's matching test
       // for the full reasoning (a non-httpOnly cookie only ever worked in
@@ -790,7 +803,7 @@ describe('Customer storefront accounts (e2e)', () => {
       // via document.cookie regardless of this attribute).
       expect(csrfCookie).toMatch(/HttpOnly/);
       expect(csrfCookie).toMatch(/SameSite=Strict/i);
-      expect(csrfCookie).toMatch(new RegExp(`Path=/public/${shopSlug}(;|$)`));
+      expect(csrfCookie).toMatch(/Path=\/(;|$)/);
       expect(res.get('X-CSRF-Token')).toBeTruthy();
     });
 
@@ -806,6 +819,95 @@ describe('Customer storefront accounts (e2e)', () => {
         .send({ label: 'Home', address: '1 Test St' })
         .expect(403);
       expect(body<{ message: string }>(res).message).toBe('invalid csrf token');
+    });
+
+    // A request must not escape the CSRF check by spelling its URL differently from the
+    // canonical `/public/<slug>/...`: Express routes the forms below to the same handler
+    // (case-insensitive, percent-decoded params), and the guard then authenticates the
+    // shop's cookie. The middleware has to read the shop exactly as the guard does, and
+    // fail CLOSED where it cannot. A valid session cookie, NO X-CSRF-Token.
+    it('refuses a cookie-authenticated mutation without a CSRF token on every non-canonical spelling of the URL', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-urlforms');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560031' }).expect(201),
+      );
+      const hex = shopSlug.charCodeAt(0).toString(16);
+      const forms = [
+        `/PUBLIC/${shopSlug}/account/addresses`,
+        `/Public/${shopSlug.toUpperCase()}/account/addresses`,
+        `/public/${shopSlug.toUpperCase()}/account/addresses`,
+        `/public/%${hex}${shopSlug.slice(1)}/account/addresses`,
+        `/public/${shopSlug}%2e/account/addresses`,
+        `/public/${shopSlug}./account/addresses`,
+        `//public/${shopSlug}/account/addresses`,
+        `/%70ublic/${shopSlug}/account/addresses`,
+        `/public//${shopSlug}/account/addresses`,
+      ];
+      for (const url of forms) {
+        const res = await request(app.getHttpServer())
+          .post(url)
+          .set('Cookie', session.cookieHeaderStr)
+          .send({ label: 'Evil', address: 'Forged St' });
+        expect([401, 403, 404]).toContain(res.status);
+      }
+      // ...and none of them wrote anything, while the canonical form still needs and accepts a token.
+      const list = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .expect(200);
+      expect(body<unknown[]>(list)).toHaveLength(0);
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .set('X-CSRF-Token', session.csrfToken)
+        .send({ label: 'Home', address: '1 Test St' })
+        .expect(201);
+    });
+
+    it('the spellings that reach the guard are CSRF-checked, not just refused: the encoded and upper-case forms answer 403 without a token and succeed with one', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-urlforms2');
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone: '0505560032' }).expect(201),
+      );
+      const hex = shopSlug.charCodeAt(0).toString(16);
+      for (const url of [
+        `/PUBLIC/${shopSlug}/account/addresses`,
+        `/public/%${hex}${shopSlug.slice(1)}/account/addresses`,
+      ]) {
+        await request(app.getHttpServer())
+          .post(url)
+          .set('Cookie', session.cookieHeaderStr)
+          .send({ label: 'Evil', address: 'Forged St' })
+          .expect(403);
+        await request(app.getHttpServer())
+          .post(url)
+          .set('Cookie', session.cookieHeaderStr)
+          .set('X-CSRF-Token', session.csrfToken)
+          .send({ label: 'Ok', address: '2 Test St' })
+          .expect(201);
+      }
+    });
+
+    it('a non-canonical /public URL with a customer cookie fails closed for mutations, but login still works at the canonical URL', async () => {
+      const { shopSlug } = await setupShop('cust-csrf-failclosed');
+      const phone = '0505560033';
+      const session = sessionFromResponse(
+        await register(shopSlug, { phone, password: 'password123' }).expect(
+          201,
+        ),
+      );
+      // A slug the extractor cannot read, any method but a safe one, a customer cookie: 403 from the middleware.
+      const odd = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}%00/account/addresses`)
+        .set('Cookie', session.cookieHeaderStr)
+        .send({});
+      expect(odd.status).toBe(403);
+      // The login exemption is for the canonical URL only and is untouched there.
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/login`)
+        .set('Cookie', session.cookieHeaderStr)
+        .send({ identifier: phone, password: 'password123' })
+        .expect(201);
     });
 
     it('rejects a state-changing request with a wrong CSRF header value', async () => {
@@ -839,10 +941,17 @@ describe('Customer storefront accounts (e2e)', () => {
         .set('X-CSRF-Token', session.csrfToken)
         .expect(201);
       const lines = res.get('Set-Cookie') ?? [];
-      const clearedAt = lines.find((l) => l.startsWith('req-customer-at='));
-      const clearedRt = lines.find((l) => l.startsWith('req-customer-rt='));
-      expect(clearedAt).toMatch(/Expires=Thu, 01 Jan 1970/);
-      expect(clearedRt).toMatch(/Expires=Thu, 01 Jan 1970/);
+      for (const name of ['at', 'rt', 'csrf']) {
+        const cleared = lines.find((l) =>
+          l.startsWith(`req-customer-${name}-${shopSlug}=`),
+        );
+        expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+        expect(cleared).toMatch(/Path=\/(;|$)/);
+      }
+      // The pre-fix shared-name, sub-path cookies are expired too, so none linger.
+      const legacyAt = lines.find((l) => l.startsWith('req-customer-at='));
+      expect(legacyAt).toMatch(/Path=\/public\//);
+      expect(legacyAt).toMatch(/Expires=Thu, 01 Jan 1970/);
     });
 
     // The real fix behind the CSRF-cookie httpOnly change above: a brand
@@ -855,7 +964,7 @@ describe('Customer storefront accounts (e2e)', () => {
       const session = sessionFromResponse(
         await register(shopSlug, { phone: '0505560007' }).expect(201),
       );
-      const accessCookieOnly = `req-customer-at=${session.cookieHeaderStr.match(/req-customer-at=([^;]+)/)![1]}`;
+      const accessCookieOnly = `req-customer-at-${shopSlug}=${session.cookieHeaderStr.match(new RegExp(`req-customer-at-${shopSlug}=([^;]+)`))![1]}`;
 
       const profileRes = await request(app.getHttpServer())
         .get(`/public/${shopSlug}/account/profile`)
@@ -866,8 +975,9 @@ describe('Customer storefront accounts (e2e)', () => {
       // The profile call above minted a brand new CSRF cookie value (this
       // request had none yet) — the follow-up request must carry THAT
       // cookie, not the stale one captured at registration time.
-      const freshCsrfCookie = extractCookies(profileRes)['req-customer-csrf'];
-      const cookieWithFreshCsrf = `${accessCookieOnly}; req-customer-csrf=${freshCsrfCookie}`;
+      const freshCsrfCookie =
+        extractCookies(profileRes)[`req-customer-csrf-${shopSlug}`];
+      const cookieWithFreshCsrf = `${accessCookieOnly}; req-customer-csrf-${shopSlug}=${freshCsrfCookie}`;
 
       await request(app.getHttpServer())
         .post(`/public/${shopSlug}/account/addresses`)
@@ -891,7 +1001,7 @@ describe('Customer storefront accounts (e2e)', () => {
           201,
         ),
       );
-      const staleAccessCookie = `req-customer-at=${session.cookieHeaderStr.match(/req-customer-at=([^;]+)/)![1]}`;
+      const staleAccessCookie = `req-customer-at-${shopSlug}=${session.cookieHeaderStr.match(new RegExp(`req-customer-at-${shopSlug}=([^;]+)`))![1]}`;
 
       await request(app.getHttpServer())
         .post(`/public/${shopSlug}/auth/login`)
@@ -900,7 +1010,7 @@ describe('Customer storefront accounts (e2e)', () => {
         .expect(201);
     });
 
-    it("two different shops' customer sessions coexist in the same cookie jar without one overwriting the other — same cookie NAME, different Path", async () => {
+    it("two different shops' customer sessions coexist in the same cookie jar without one overwriting the other — the slug is in the cookie NAME", async () => {
       const shopA = await setupShop('cust-two-shops-a');
       const shopB = await setupShop('cust-two-shops-b');
       const sessionA = sessionFromResponse(
@@ -910,19 +1020,69 @@ describe('Customer storefront accounts (e2e)', () => {
         await register(shopB.shopSlug, { phone: '0505560006' }).expect(201),
       );
 
-      // Simulate a real cookie jar holding both at once (a browser would
-      // only ever send the Path-matching one per request; supertest doesn't
-      // model that, so this concatenates both cookie headers to prove each
-      // shop's own request still resolves to the RIGHT session when its own
-      // cookie is the one presented).
+      // One jar holding both shops' cookies, as a browser would send them (Path=/
+      // sends everything): each shop's request must resolve to ITS OWN session.
+      const jar = `${sessionA.cookieHeaderStr}; ${sessionB.cookieHeaderStr}`;
+      const profileA = await request(app.getHttpServer())
+        .get(`/public/${shopA.shopSlug}/account/profile`)
+        .set('Cookie', jar)
+        .expect(200);
+      const profileB = await request(app.getHttpServer())
+        .get(`/public/${shopB.shopSlug}/account/profile`)
+        .set('Cookie', jar)
+        .expect(200);
+      expect(body<{ id: number }>(profileA).id).toBe(sessionA.customer.id);
+      expect(body<{ id: number }>(profileB).id).toBe(sessionB.customer.id);
+      // Each shop's CSRF token is bound to its own cookie, so both mutate from the one jar.
       await request(app.getHttpServer())
-        .get(`/public/${shopA.shopSlug}/account/orders`)
+        .post(`/public/${shopA.shopSlug}/account/addresses`)
+        .set('Cookie', jar)
+        .set('X-CSRF-Token', sessionA.csrfToken)
+        .send({ label: 'Home', address: '1 Test St' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/public/${shopB.shopSlug}/account/addresses`)
+        .set('Cookie', jar)
+        .set('X-CSRF-Token', sessionB.csrfToken)
+        .send({ label: 'Home', address: '1 Test St' })
+        .expect(201);
+      // A shop's token does not pass for the other shop.
+      await request(app.getHttpServer())
+        .post(`/public/${shopA.shopSlug}/account/addresses`)
+        .set('Cookie', jar)
+        .set('X-CSRF-Token', sessionB.csrfToken)
+        .send({ label: 'Home', address: '1 Test St' })
+        .expect(403);
+      // Only shop A's cookies, presented at shop B: no session there.
+      await request(app.getHttpServer())
+        .get(`/public/${shopB.shopSlug}/account/profile`)
         .set('Cookie', sessionA.cookieHeaderStr)
-        .expect(200);
+        .expect(401);
+    });
+
+    // Cookies set before the Path fix used a shared name. They are never read now:
+    // they must not authenticate, must not make CSRF demand a header on login, and
+    // must not break a fresh login.
+    it('stale pre-fix cookies (shared names, sub-path) are ignored: no session, and login still works without a CSRF header', async () => {
+      const { shopSlug } = await setupShop('cust-legacy-cookies');
+      const phone = '0505560011';
+      await register(shopSlug, { phone, password: 'password123' }).expect(201);
+      const legacy =
+        'req-customer-at=stale; req-customer-rt=stale; req-customer-csrf=stale';
+
       await request(app.getHttpServer())
-        .get(`/public/${shopB.shopSlug}/account/orders`)
-        .set('Cookie', sessionB.cookieHeaderStr)
-        .expect(200);
+        .get(`/public/${shopSlug}/account/profile`)
+        .set('Cookie', legacy)
+        .expect(401);
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/login`)
+        .set('Cookie', legacy)
+        .send({ identifier: phone, password: 'password123' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/auth/refresh`)
+        .set('Cookie', legacy)
+        .expect(401);
     });
   });
 });
