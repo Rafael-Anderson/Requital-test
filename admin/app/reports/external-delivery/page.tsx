@@ -145,7 +145,7 @@ export default function ExternalDeliveryReportPage() {
           ) : (
             rows.map((row) => (
               <TR key={row.id}>
-                <TD className="font-medium">#{row.orderId}</TD>
+                <TD className="font-medium">#{row.shopOrderNumber}</TD>
                 <TD className="text-text-muted">{row.outletName}</TD>
                 <TD>
                   <span>{row.customerName}</span>

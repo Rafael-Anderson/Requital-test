@@ -103,3 +103,20 @@ describe("OrderDetailModal — external delivery status picker", () => {
     });
   });
 });
+
+describe("OrderDetailModal — order identifier", () => {
+  it("the cancel confirmation names the per-shop order number, not the global id", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), status: "pending" } as Order);
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+
+    await user.click(await screen.findByRole("button", { name: /cancel order/i }));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const message = confirmSpy.mock.calls[0][0] as string;
+    expect(message).toContain("#3");
+    expect(message).not.toContain("#42");
+    confirmSpy.mockRestore();
+  });
+});

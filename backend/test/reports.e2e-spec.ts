@@ -53,6 +53,8 @@ interface ProductSalesBody {
 interface ExternalDeliveryRow {
   id: number;
   orderId: number;
+  shopOrderNumber: number;
+  currency: string;
   carrier: string;
   vehicleType: string | null;
   price: string;
@@ -725,7 +727,12 @@ describe('Reports (e2e)', () => {
       const order = await request(app.getHttpServer())
         .post('/orders')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send(orderPayload(shop.outletAId, shop.productId, 1))
+        .send(
+          // Digit-free phone: the search below must match by order number only.
+          orderPayload(shop.outletAId, shop.productId, 1, {
+            customerPhone: 'extdelivery-no-digits',
+          }),
+        )
         .expect(201);
       const orderId = body<IdRow>(order).id;
 
@@ -778,6 +785,23 @@ describe('Reports (e2e)', () => {
       expect(row.vehicleType).toBe('Bike');
       expect(Number(row.price)).toBe(15);
       expect(row.status).toBe('delivered');
+      expect(row.currency).toBe('AED');
+
+      // The list carries the per-shop number the merchant sees, and the
+      // search box finds the row by THAT number, not by the global id.
+      const orderRow = await db.query<RowDataPacket[]>(
+        `SELECT shopOrderNumber FROM \`order\` WHERE id = ?`,
+        [orderId],
+      );
+      const shopOrderNumber = orderRow[0].shopOrderNumber as number;
+      expect(row.shopOrderNumber).toBe(shopOrderNumber);
+      const bySearch = await request(app.getHttpServer())
+        .get(`/reports/external-delivery?search=${shopOrderNumber}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(
+        body<ExternalDeliveryListBody>(bySearch).data.map((r) => r.orderId),
+      ).toContain(orderId);
     });
 
     // Logging (POST) stays admin-only, unchanged. The report (GET) was
@@ -1029,7 +1053,11 @@ describe('Reports (e2e)', () => {
       linesWithoutCost: number;
     }
 
-    async function setCost(adminToken: string, productId: number, costPrice: number) {
+    async function setCost(
+      adminToken: string,
+      productId: number,
+      costPrice: number,
+    ) {
       await request(app.getHttpServer())
         .patch(`/products/${productId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -1060,10 +1088,14 @@ describe('Reports (e2e)', () => {
 
       const costOf = async (orderId: number) => {
         const rows = await db.query<
-          (RowDataPacket & { unitCost: string | null; unitCostCurrency: string })[]
-        >('SELECT unitCost, unitCostCurrency FROM orderitem WHERE orderId = ?', [
-          orderId,
-        ]);
+          (RowDataPacket & {
+            unitCost: string | null;
+            unitCostCurrency: string;
+          })[]
+        >(
+          'SELECT unitCost, unitCostCurrency FROM orderitem WHERE orderId = ?',
+          [orderId],
+        );
         return rows[0];
       };
 
@@ -1153,7 +1185,13 @@ describe('Reports (e2e)', () => {
         .send(orderPayload(other.outletAId, other.productId, 3))
         .expect(201);
 
-      for (const dimension of ['product', 'collection', 'channel', 'outlet', 'order']) {
+      for (const dimension of [
+        'product',
+        'collection',
+        'channel',
+        'outlet',
+        'order',
+      ]) {
         const rows = body<MarginRow[]>(
           await request(app.getHttpServer())
             .get(`/reports/margin/breakdown?dimension=${dimension}`)
@@ -1175,5 +1213,4 @@ describe('Reports (e2e)', () => {
         .expect(400);
     });
   });
-
 });

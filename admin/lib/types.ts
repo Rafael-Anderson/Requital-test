@@ -351,6 +351,8 @@ export type ExternalDeliveryStatus =
 export interface ExternalDeliveryRow {
   id: number;
   orderId: number;
+  // The per-shop number the merchant sees everywhere. Never show orderId.
+  shopOrderNumber: number;
   outletName: string;
   customerName: string;
   customerPhone: string;

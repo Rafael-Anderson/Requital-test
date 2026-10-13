@@ -111,6 +111,62 @@ async function sliderFetch<T>(
   return (await res.json()) as T;
 }
 
+// The exact JSON sent to POST /deliveries/fare: account_id a string,
+// coordinates JSON numbers. Pure for the same reason as the dispatch body.
+export function buildFareBody(params: DeliveryQuoteParams) {
+  return {
+    account_id: params.credentials.accountId,
+    pickup: {
+      latitude: params.pickup.latitude,
+      longitude: params.pickup.longitude,
+    },
+    delivery: {
+      latitude: params.delivery.latitude,
+      longitude: params.delivery.longitude,
+    },
+  };
+}
+
+// The exact JSON sent to POST /deliveries, kept pure so a test can assert the
+// type of every field (Slider validates strictly: a numeric order_id was
+// answered with a 422 "The order id field must be a string").
+// Types: ids and display refs are strings, coordinates and money are JSON
+// numbers, schedule_at is an ISO-8601 string. Optional fields are OMITTED
+// rather than sent as null (undefined is dropped by JSON.stringify): a
+// validator that is not told a field is nullable rejects a literal null.
+// INFERRED from Slider's error style (no public schema in the repo); the
+// order_id rule is the one VERIFIED from a real production 422.
+export function buildCreateDeliveryBody(params: CreateDeliveryParams) {
+  return {
+    order_id: params.orderId,
+    account_id: params.credentials.accountId,
+    display_order_id: params.displayOrderId,
+    vehicle_type: params.vehicleType,
+    schedule_at: params.scheduleAt ?? undefined,
+    driver_tip: params.driverTip,
+    pickup: {
+      address: params.pickup.address,
+      latitude: params.pickup.latitude,
+      longitude: params.pickup.longitude,
+      directions: params.pickup.directions,
+      contact_number: params.pickup.contactNumber,
+    },
+    dropoff: {
+      address: params.dropoff.address,
+      latitude: params.dropoff.latitude,
+      longitude: params.dropoff.longitude,
+      directions: params.dropoff.directions,
+      contact_number: params.dropoff.contactNumber,
+    },
+    payment_on_delivery: params.paymentOnDelivery
+      ? {
+          type: params.paymentOnDelivery.type,
+          amount: params.paymentOnDelivery.amount,
+        }
+      : undefined,
+  };
+}
+
 @Injectable()
 export class SliderDeliveryProvider implements DeliveryProvider {
   readonly name = 'slider';
@@ -120,17 +176,7 @@ export class SliderDeliveryProvider implements DeliveryProvider {
       `${params.credentials.baseUrl}/deliveries/fare`,
       {
         method: 'POST',
-        body: JSON.stringify({
-          account_id: params.credentials.accountId,
-          pickup: {
-            latitude: params.pickup.latitude,
-            longitude: params.pickup.longitude,
-          },
-          delivery: {
-            latitude: params.delivery.latitude,
-            longitude: params.delivery.longitude,
-          },
-        }),
+        body: JSON.stringify(buildFareBody(params)),
       },
       params.credentials.apiKey,
     );
@@ -151,34 +197,7 @@ export class SliderDeliveryProvider implements DeliveryProvider {
       `${params.credentials.baseUrl}/deliveries`,
       {
         method: 'POST',
-        body: JSON.stringify({
-          order_id: params.orderId,
-          account_id: params.credentials.accountId,
-          display_order_id: params.displayOrderId,
-          vehicle_type: params.vehicleType,
-          schedule_at: params.scheduleAt,
-          driver_tip: params.driverTip,
-          pickup: {
-            address: params.pickup.address,
-            latitude: params.pickup.latitude,
-            longitude: params.pickup.longitude,
-            directions: params.pickup.directions,
-            contact_number: params.pickup.contactNumber,
-          },
-          dropoff: {
-            address: params.dropoff.address,
-            latitude: params.dropoff.latitude,
-            longitude: params.dropoff.longitude,
-            directions: params.dropoff.directions,
-            contact_number: params.dropoff.contactNumber,
-          },
-          payment_on_delivery: params.paymentOnDelivery
-            ? {
-                type: params.paymentOnDelivery.type,
-                amount: params.paymentOnDelivery.amount,
-              }
-            : undefined,
-        }),
+        body: JSON.stringify(buildCreateDeliveryBody(params)),
       },
       params.credentials.apiKey,
     );

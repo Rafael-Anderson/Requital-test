@@ -17,6 +17,7 @@ import { dispatchSliderDelivery, getSliderQuote } from "@/lib/api";
 function fakeOrder(overrides: Partial<Order> = {}): Order {
   return {
     id: 42,
+    shopOrderNumber: 7,
     outletId: 1,
     customerName: "Jane Shopper",
     customerPhone: "0501234567",
@@ -175,5 +176,15 @@ describe("paymentModeLabel", () => {
   it("has no gateway sub-line for cash on delivery", () => {
     const result = paymentModeLabel(fakeOrder({ paymentMethod: "cash_on_delivery", paymenttransaction: [] }));
     expect(result).toEqual({ label: "Cash (Pay on Delivery)", gatewaySubline: null });
+  });
+
+  it("shows the per-shop order number as the Order Ref, never the global id", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getSliderQuote).mockResolvedValue(quoteFixture);
+    renderModal();
+    await selectCompanyAndCalculate(user);
+
+    expect(screen.getByText("Order Ref").nextSibling).toHaveTextContent("#7");
+    expect(screen.queryByText("#42")).not.toBeInTheDocument();
   });
 });

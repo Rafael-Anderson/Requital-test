@@ -34,6 +34,7 @@ interface ExternalDelivery {
 }
 interface OrderDetailBody {
   id: number;
+  shopOrderNumber: number;
   cashCollectedAt: string | null;
   externaldelivery: ExternalDelivery | null;
 }
@@ -81,6 +82,22 @@ function cookieHeader(cookies: Record<string, string>): string {
 // single test can flip it to exceed the bike cap.
 let distanceKm = 5;
 let sliderOrderCounter = 100;
+// The JSON body of the most recent POST /deliveries the mocked fetch saw -
+// what Slider would have received on the wire.
+interface SentPoint {
+  latitude: unknown;
+  longitude: unknown;
+  contact_number: string;
+}
+interface SentCreateBody {
+  order_id: unknown;
+  display_order_id: unknown;
+  account_id: unknown;
+  pickup: SentPoint;
+  dropoff: SentPoint;
+  payment_on_delivery: { type: string; amount: number };
+}
+let lastCreateBody: SentCreateBody | null = null;
 // Lets one test force the mocked /deliveries POST to behave like a real
 // Slider-side rejection (e.g. an address outside the account's serviceable
 // area) instead of the usual 201 — see the "surfaces the real Slider error
@@ -181,6 +198,7 @@ describe('Slider delivery integration (e2e)', () => {
             ) as unknown as Response;
           }
           sliderOrderCounter += 1;
+          lastCreateBody = JSON.parse(init?.body as string) as SentCreateBody;
           return jsonRes(201, {
             order_number: sliderOrderCounter,
             status: 'searching_rider',
@@ -238,6 +256,7 @@ describe('Slider delivery integration (e2e)', () => {
         latitude: OUTLET_LAT,
         longitude: OUTLET_LON,
         deliveryRadiusKm: 20,
+        phone: '0521234567',
       })
       .expect(200);
 
@@ -735,6 +754,85 @@ describe('Slider delivery integration (e2e)', () => {
     const orderDetail = body<OrderDetailBody>(fetched);
     expect(orderDetail.externaldelivery?.status).toBe('delivered');
     expect(orderDetail.cashCollectedAt).not.toBeNull();
+  });
+
+  // Production 422: "The order id field must be a string". Slider validates
+  // the JSON type of each field, so assert what actually goes on the wire.
+  it('sends Slider a string order_id (the real id), the per-shop number as display_order_id, E.164 phones and a numeric COD amount', async () => {
+    distanceKm = 5;
+    const orderId = await createOrder('cash_on_delivery', 100);
+    const res = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/slider-delivery`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ vehicleType: 'bike' })
+      .expect(201);
+    const { shopOrderNumber } = body<OrderDetailBody>(res);
+    const sent = lastCreateBody!;
+    expect(sent.order_id).toBe(String(orderId));
+    expect(sent.display_order_id).toBe(`#${shopOrderNumber}`);
+    expect(sent.account_id).toBe('acct_test');
+    expect(typeof sent.pickup.latitude).toBe('number');
+    expect(typeof sent.dropoff.longitude).toBe('number');
+    // The order was placed with the raw local number "0501234567".
+    expect(sent.dropoff.contact_number).toBe('+971501234567');
+    expect(sent.pickup.contact_number).toMatch(/^\+971\d{8,9}$/);
+    expect(sent.payment_on_delivery.type).toBe('cash');
+    expect(typeof sent.payment_on_delivery.amount).toBe('number');
+    expect(Number.isInteger(sent.payment_on_delivery.amount * 100)).toBe(true);
+    expect(sent).not.toHaveProperty('schedule_at');
+  });
+
+  it('refuses to dispatch from an outlet with no phone number instead of sending Slider an empty contact_number', async () => {
+    const orderId = await createOrder('cash_on_delivery');
+    await db.execute(
+      `UPDATE outlet SET phone = NULL, whatsapp = NULL WHERE id = ?`,
+      [outletId],
+    );
+    try {
+      const res = await request(app.getHttpServer())
+        .post(`/orders/${orderId}/slider-delivery`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vehicleType: 'any' })
+        .expect(400);
+      expect(messageContains(res, 'no phone number')).toBe(true);
+    } finally {
+      await db.execute(`UPDATE outlet SET phone = ? WHERE id = ?`, [
+        '+971521234567',
+        outletId,
+      ]);
+    }
+  });
+
+  it('a webhook that echoes order_id back as the string we sent still resolves the order and delivery', async () => {
+    const orderId = await createOrder('cash_on_delivery');
+    const dispatched = await request(app.getHttpServer())
+      .post(`/orders/${orderId}/slider-delivery`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ vehicleType: 'any' })
+      .expect(201);
+    const sliderOrderNumber =
+      body<OrderDetailBody>(dispatched).externaldelivery!.sliderOrderNumber;
+
+    await request(app.getHttpServer())
+      .post('/slider/webhook')
+      .set('x-slider-webhook-token', 'whsec_test_token')
+      .send({
+        order_number: sliderOrderNumber,
+        order_id: String(orderId),
+        status: 'in_transit',
+        timestamp: Date.now(),
+      })
+      .expect(201);
+    const jobId = await latestJobId('process_slider_webhook');
+    expect(await jobsWorker.processJobById(jobId)).toBe(true);
+
+    const fetched = await request(app.getHttpServer())
+      .get(`/orders/${orderId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(body<OrderDetailBody>(fetched).externaldelivery?.status).toBe(
+      'in_transit',
+    );
   });
 
   it("cross-shop dispatch 404s rather than leaking another shop's order", async () => {

@@ -225,7 +225,7 @@ export default function ManageDeliveryModal({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Order Ref</span>
-                  <span className="text-end">#{order.id}</span>
+                  <span className="text-end">#{order.shopOrderNumber}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Payment Mode</span>

@@ -41,7 +41,10 @@ export interface DeliveryQuote {
 }
 
 export interface CreateDeliveryParams {
-  orderId: number;
+  // Slider's `order_id` is validated as a STRING; this is the real order id
+  // (String(order.id)), the key its webhook echoes back.
+  orderId: string;
+  // Merchant-facing per-shop number ("#12"), display only.
   displayOrderId?: string;
   vehicleType: SliderVehicleType;
   scheduleAt: string | null;

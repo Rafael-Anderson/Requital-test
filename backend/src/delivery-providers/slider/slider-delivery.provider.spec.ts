@@ -1,6 +1,13 @@
 import { HttpException } from '@nestjs/common';
-import { SliderDeliveryProvider } from './slider-delivery.provider';
-import type { DeliveryProviderCredentials } from './slider-delivery.interface';
+import {
+  SliderDeliveryProvider,
+  buildCreateDeliveryBody,
+  buildFareBody,
+} from './slider-delivery.provider';
+import type {
+  CreateDeliveryParams,
+  DeliveryProviderCredentials,
+} from './slider-delivery.interface';
 
 const credentials: DeliveryProviderCredentials = {
   apiKey: 'sk_test',
@@ -96,7 +103,7 @@ describe('SliderDeliveryProvider', () => {
 
       const provider = new SliderDeliveryProvider();
       const result = await provider.createDelivery({
-        orderId: 42,
+        orderId: '42',
         vehicleType: 'bike',
         scheduleAt: null,
         pickup: {
@@ -143,7 +150,7 @@ describe('SliderDeliveryProvider', () => {
 
       const provider = new SliderDeliveryProvider();
       const result = await provider.createDelivery({
-        orderId: 1,
+        orderId: '1',
         vehicleType: 'any',
         scheduleAt: null,
         pickup: { address: 'A', latitude: 1, longitude: 1, contactNumber: '1' },
@@ -166,7 +173,7 @@ describe('SliderDeliveryProvider', () => {
       const provider = new SliderDeliveryProvider();
       await expect(
         provider.createDelivery({
-          orderId: 1,
+          orderId: '1',
           vehicleType: 'any',
           scheduleAt: null,
           pickup: {
@@ -202,7 +209,7 @@ describe('SliderDeliveryProvider', () => {
         const provider = new SliderDeliveryProvider();
         await expect(
           provider.createDelivery({
-            orderId: 1,
+            orderId: '1',
             vehicleType: 'any',
             scheduleAt: null,
             pickup: {
@@ -224,7 +231,7 @@ describe('SliderDeliveryProvider', () => {
         let caught: unknown;
         try {
           await provider.createDelivery({
-            orderId: 1,
+            orderId: '1',
             vehicleType: 'any',
             scheduleAt: null,
             pickup: {
@@ -273,7 +280,7 @@ describe('SliderDeliveryProvider', () => {
       let caught: unknown;
       try {
         await provider.createDelivery({
-          orderId: 13,
+          orderId: '13',
           vehicleType: 'bike',
           scheduleAt: null,
           pickup: {
@@ -317,7 +324,7 @@ describe('SliderDeliveryProvider', () => {
       const provider = new SliderDeliveryProvider();
       await expect(
         provider.createDelivery({
-          orderId: 1,
+          orderId: '1',
           vehicleType: 'any',
           scheduleAt: null,
           pickup: {
@@ -404,6 +411,152 @@ describe('SliderDeliveryProvider', () => {
       }
       expect(caught).toBeInstanceOf(HttpException);
       expect((caught as HttpException).getStatus()).toBe(404);
+    });
+  });
+
+  // Slider validates strictly (a numeric order_id was answered with 422
+  // "The order id field must be a string"), so the JSON TYPE of every field
+  // is part of the contract. This is a schema-like assertion over the exact
+  // body the provider puts on the wire.
+  describe('request payload shape', () => {
+    const base: CreateDeliveryParams = {
+      orderId: '42',
+      displayOrderId: '#7',
+      vehicleType: 'bike',
+      scheduleAt: '2026-10-14T10:00:00.000Z',
+      driverTip: 5,
+      pickup: {
+        address: 'Outlet A, Business Bay, Dubai',
+        latitude: 25.2,
+        longitude: 55.3,
+        directions: 'Gate 2',
+        contactNumber: '+971500000000',
+      },
+      dropoff: {
+        address: 'Customer St',
+        latitude: 25.1,
+        longitude: 55.2,
+        contactNumber: '+971500000001',
+      },
+      paymentOnDelivery: { type: 'cash', amount: 120.5 },
+      credentials,
+    };
+
+    const typeOf = (v: unknown) => (v === null ? 'null' : typeof v);
+    // Round-trip through JSON: what Slider actually receives.
+    const wire = (body: object) =>
+      JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
+
+    it('sends every dispatch field with the exact JSON type', () => {
+      const body = wire(buildCreateDeliveryBody(base));
+      const point = (o: unknown) => {
+        const p = o as Record<string, unknown>;
+        return {
+          address: typeOf(p.address),
+          latitude: typeOf(p.latitude),
+          longitude: typeOf(p.longitude),
+          contact_number: typeOf(p.contact_number),
+        };
+      };
+      expect({
+        order_id: typeOf(body.order_id),
+        account_id: typeOf(body.account_id),
+        display_order_id: typeOf(body.display_order_id),
+        vehicle_type: typeOf(body.vehicle_type),
+        schedule_at: typeOf(body.schedule_at),
+        driver_tip: typeOf(body.driver_tip),
+        pickup: point(body.pickup),
+        dropoff: point(body.dropoff),
+        pod_type: typeOf(
+          (body.payment_on_delivery as Record<string, unknown>).type,
+        ),
+        pod_amount: typeOf(
+          (body.payment_on_delivery as Record<string, unknown>).amount,
+        ),
+      }).toEqual({
+        order_id: 'string',
+        account_id: 'string',
+        display_order_id: 'string',
+        vehicle_type: 'string',
+        schedule_at: 'string',
+        driver_tip: 'number',
+        pickup: {
+          address: 'string',
+          latitude: 'number',
+          longitude: 'number',
+          contact_number: 'string',
+        },
+        dropoff: {
+          address: 'string',
+          latitude: 'number',
+          longitude: 'number',
+          contact_number: 'string',
+        },
+        pod_type: 'string',
+        pod_amount: 'number',
+      });
+      expect(body.order_id).toBe('42');
+      expect(body.display_order_id).toBe('#7');
+      expect(Number.isNaN(Date.parse(body.schedule_at as string))).toBe(false);
+    });
+
+    it('omits optional fields instead of sending null', () => {
+      const body = wire(
+        buildCreateDeliveryBody({
+          ...base,
+          scheduleAt: null,
+          driverTip: undefined,
+          displayOrderId: undefined,
+          paymentOnDelivery: undefined,
+        }),
+      );
+      for (const key of [
+        'schedule_at',
+        'driver_tip',
+        'display_order_id',
+        'payment_on_delivery',
+      ]) {
+        expect(body).not.toHaveProperty(key);
+      }
+      expect(Object.values(body)).not.toContain(null);
+      expect(body.pickup).not.toHaveProperty('directions', null);
+    });
+
+    it('the body handed to fetch carries order_id as a string', async () => {
+      global.fetch = jest.fn().mockResolvedValue(
+        jsonResponse(201, {
+          order_number: 1,
+          status: 'searching_rider',
+          fare: 10,
+          currency: 'AED',
+          distance_km: 1,
+          tracking_url: 'https://x',
+          created_at: '2026-08-25T10:00:00Z',
+        }),
+      );
+      await new SliderDeliveryProvider().createDelivery(base);
+      const [, init] = (global.fetch as jest.Mock).mock.calls[0] as [
+        string,
+        RequestInit,
+      ];
+      const sent = JSON.parse(init.body as string) as { order_id: unknown };
+      expect(typeof sent.order_id).toBe('string');
+    });
+
+    it('sends the fare request with a string account_id and numeric coordinates', () => {
+      const body = wire(
+        buildFareBody({
+          pickup: base.pickup,
+          delivery: base.dropoff,
+          credentials,
+        }),
+      );
+      expect(typeOf(body.account_id)).toBe('string');
+      for (const k of ['pickup', 'delivery']) {
+        const p = body[k] as Record<string, unknown>;
+        expect(typeOf(p.latitude)).toBe('number');
+        expect(typeOf(p.longitude)).toBe('number');
+      }
     });
   });
 });
