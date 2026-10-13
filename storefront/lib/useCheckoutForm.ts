@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
 import { generateTimeSlots, isDateBlocked } from "@/lib/slots";
 import { resolvePaymentMethods } from "@/lib/payment-methods";
+import { effectiveOrderType, resolveFulfilmentOptions } from "@/lib/fulfilment";
 import { getStoredReferralCode } from "@/lib/referral";
 import { sanitizePhoneInput } from "@/lib/phone";
 import { track, type AnalyticsItem } from "@/lib/analytics";
@@ -55,21 +56,14 @@ export function useCheckoutForm() {
     fallbackRate: Number(shop?.taxRate ?? 0),
   });
 
-  const deliveryOutlets = outlets.filter((o) => o.deliveryEnabled);
-  const pickupOutlets = outlets.filter((o) => o.pickupEnabled);
   const deliveryPaymentMethods = resolvePaymentMethods(shop, "delivery");
   const pickupPaymentMethods = resolvePaymentMethods(shop, "pickup");
-  const deliveryAvailable = deliveryOutlets.length > 0 && deliveryPaymentMethods.length > 0;
-  const pickupAvailable = pickupOutlets.length > 0 && pickupPaymentMethods.length > 0;
 
-  const [orderType, setOrderType] = useState<OrderType | null>(null);
-  useEffect(() => {
-    if (orderType) return;
-    if (deliveryAvailable) setOrderType("delivery");
-    else if (pickupAvailable) setOrderType("pickup");
-  }, [deliveryAvailable, pickupAvailable, orderType]);
-
-  const outletOptions = orderType === "pickup" ? pickupOutlets : deliveryOutlets;
+  // Outlet first: what can be chosen (delivery, pickup or both) is decided per
+  // outlet by resolveFulfilmentOptions, so an outlet that offers nothing is never
+  // listed and the order type is derived from the selected outlet, never stored
+  // next to it (see lib/fulfilment.ts).
+  const outletOptions = outlets.filter((o) => resolveFulfilmentOptions(shop, o).mode !== "none");
   const [outletId, setOutletId] = useState<number | null>(null);
   useEffect(() => {
     if (outletOptions.length > 0 && (outletId === null || !outletOptions.some((o) => o.id === outletId))) {
@@ -77,6 +71,13 @@ export function useCheckoutForm() {
     }
   }, [outletOptions, outletId]);
   const selectedOutlet = outletOptions.find((o) => o.id === outletId) ?? null;
+  // With no usable outlet, resolve against the first one so the reason is
+  // specific ("outlet offers neither" vs "no payment method").
+  const fulfilment = resolveFulfilmentOptions(shop, selectedOutlet ?? outlets[0] ?? null);
+  // The shopper's preference survives an outlet switch: A (both) -> B (delivery
+  // only) -> A shows their pickup choice again.
+  const [preferredOrderType, setOrderType] = useState<OrderType>("delivery");
+  const orderType = effectiveOrderType(fulfilment, preferredOrderType);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhoneRaw] = useState("");
@@ -244,7 +245,9 @@ export function useCheckoutForm() {
         customerName,
         customerPhone,
         customerEmail: customerEmail || undefined,
-        customerAddress: orderType === "pickup" ? customerAddress || `Pickup at ${selectedOutlet?.name}` : customerAddress,
+        // A pickup order never carries a typed delivery address, even one entered
+        // before the shopper (or an outlet switch) moved it to pickup.
+        customerAddress: orderType === "pickup" ? `Pickup at ${selectedOutlet?.name}` : customerAddress,
         regionId: orderType === "delivery" ? (regionId ?? undefined) : undefined,
         area: area || undefined,
         latitude: orderType === "delivery" ? coords?.latitude : undefined,
@@ -297,6 +300,7 @@ export function useCheckoutForm() {
     !submitting &&
     !!orderType &&
     !!paymentMethod &&
+    availablePaymentMethods.includes(paymentMethod) &&
     !dateBlocked &&
     (!deliveryDate || !!deliveryTimeSlot) &&
     (selectedOutlet ? selectedOutlet.isOpen : false);
@@ -314,8 +318,7 @@ export function useCheckoutForm() {
     setGiftCardAmount,
     useStoreCredit,
     setUseStoreCredit,
-    deliveryAvailable,
-    pickupAvailable,
+    fulfilment,
     orderType,
     setOrderType,
     outletOptions,

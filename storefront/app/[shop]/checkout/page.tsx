@@ -25,17 +25,12 @@ export default function CheckoutPage() {
       </StorefrontPageShell>
     );
   }
-  if (!state.deliveryAvailable && !state.pickupAvailable) {
-    return (
-      <StorefrontPageShell variant="medium">
-        <p className="text-red-600">Neither delivery nor pickup is currently available for this shop.</p>
-      </StorefrontPageShell>
-    );
-  }
-
   // contact_to_order shops never really "check out" via cart — the popup's
   // upsell is meaningless there (see ProductDetailClient's cartMode gate).
-  const addonPromptEligible = !(state.shop?.disableStoreCart && state.shop.cartDisabledMode === "contact_to_order");
+  // Nor is it worth showing when nothing can be ordered (fulfilment "none"):
+  // the shopper goes straight to the explanation.
+  const addonPromptEligible =
+    state.fulfilment.mode !== "none" && !(state.shop?.disableStoreCart && state.shop.cartDisabledMode === "contact_to_order");
 
   if (addonPromptEligible && !addonDone) {
     return (
