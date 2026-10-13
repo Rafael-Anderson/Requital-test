@@ -427,6 +427,78 @@ describe('Storefront public checkout (e2e)', () => {
     });
   });
 
+  describe('fulfilment type must be enabled on the order\'s outlet (C3)', () => {
+    async function setOutletFulfilment(
+      deliveryEnabled: boolean,
+      pickupEnabled: boolean,
+    ) {
+      await request(app.getHttpServer())
+        .patch(`/outlets/${outletId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ deliveryEnabled, pickupEnabled })
+        .expect(200);
+    }
+    const deliveryOrder = () =>
+      request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'delivery',
+            paymentMethod: 'cash_on_delivery',
+            latitude: OUTLET_LAT,
+            longitude: OUTLET_LON,
+          }),
+        );
+    const pickupOrder = () =>
+      request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send(
+          basePayload({
+            orderType: 'pickup',
+            paymentMethod: 'cash_on_pickup',
+          }),
+        );
+
+    afterEach(async () => {
+      await setOutletFulfilment(true, true);
+    });
+
+    it('a client forcing delivery at a pickup-only outlet gets a clear 400, pickup still works', async () => {
+      await setOutletFulfilment(false, true);
+      const res = await deliveryOrder().expect(400);
+      expect(body<ErrorBody>(res).message).toBe(
+        'This outlet does not offer delivery',
+      );
+      await pickupOrder().expect(201);
+    });
+
+    it('a client forcing pickup at a delivery-only outlet gets a clear 400, delivery still works', async () => {
+      await setOutletFulfilment(true, false);
+      const res = await pickupOrder().expect(400);
+      expect(body<ErrorBody>(res).message).toBe(
+        'This outlet does not offer pickup',
+      );
+      await deliveryOrder().expect(201);
+    });
+
+    it('an outlet offering neither takes no order of either type', async () => {
+      await setOutletFulfilment(false, false);
+      await deliveryOrder().expect(400);
+      await pickupOrder().expect(400);
+    });
+
+    it('the public outlets payload carries the same flags the server enforces', async () => {
+      await setOutletFulfilment(false, true);
+      const res = await request(app.getHttpServer())
+        .get(`/public/${shopSlug}/outlets`)
+        .expect(200);
+      const row = body<
+        { id: number; deliveryEnabled: boolean; pickupEnabled: boolean }[]
+      >(res).find((o) => o.id === outletId);
+      expect(row).toMatchObject({ deliveryEnabled: false, pickupEnabled: true });
+    });
+  });
+
   describe('per-item customer note', () => {
     it('persists items[].note onto orderitem.note', async () => {
       const res = await request(app.getHttpServer())
