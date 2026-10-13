@@ -8,12 +8,11 @@ import GiftCardCodeField from "@/components/GiftCardCodeField";
 import StoreCreditField from "@/components/StoreCreditField";
 import DeliveryAddressFields from "./DeliveryAddressFields";
 import FulfilmentSection, { FulfilmentUnavailable } from "./FulfilmentSection";
+import CheckoutSummary from "./CheckoutSummary";
 import PaymentMethodPicker from "./PaymentMethodPicker";
 import DeliveryDateCalendar from "./DeliveryDateCalendar";
 import TimeSlotPicker from "./TimeSlotPicker";
 import { FIELD_CLASS, TEXTAREA_CLASS } from "./checkout-field-styles";
-import CurrencySymbol from "@/components/CurrencySymbol";
-import { formatPriceAmount } from "@/lib/currency";
 
 // The original checkout layout — every field on one long scroll. Kept as
 // its own component (not inlined in the page) so it sits side by side with
@@ -22,11 +21,7 @@ import { formatPriceAmount } from "@/lib/currency";
 export default function CheckoutSinglePage(state: CheckoutFormState) {
   const {
     shop,
-    total,
-    subtotal,
-    taxQuote,
-    discountAmount,
-    giftCardAmount,
+    quoteBlocked,
     orderType,
     selectedOutlet,
     customerName,
@@ -147,59 +142,13 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
         onChange={state.setUseStoreCredit}
       />
 
-      <div className="pt-2 border-t border-black/10 space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-zinc-600">Subtotal</span>
-          <span>
-            {formatPriceAmount(subtotal, shop?.currency)} <CurrencySymbol code={shop?.currency} />
-          </span>
-        </div>
-        {discountAmount !== null && discountAmount > 0 && (
-          <div className="flex items-center justify-between text-green-600">
-            <span>Discount</span>
-            <span>
-              -{formatPriceAmount(discountAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
-            </span>
-          </div>
-        )}
-        {giftCardAmount !== null && giftCardAmount > 0 && (
-          <div className="flex items-center justify-between text-green-600">
-            <span>Gift card</span>
-            <span>
-              -{formatPriceAmount(Math.max(0, Math.min(giftCardAmount, subtotal - (discountAmount ?? 0))), shop?.currency)} <CurrencySymbol code={shop?.currency} />
-            </span>
-          </div>
-        )}
-        {/* Per-line tax, mirroring the server's own computation (lib/order-tax.ts).
-            Labelled "estimated" only when a line's rate is genuinely unknown -
-            a cart saved before per-line rates shipped. */}
-        {!taxQuote.empty && (
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-600">
-              {shop?.taxInclusive ? "Includes tax" : "Tax"}
-              {taxQuote.estimated ? " (estimated)" : ""}
-            </span>
-            <span>
-              {formatPriceAmount(taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
-            </span>
-          </div>
-        )}
-        <div className="flex items-center justify-between">
-          {/* Delivery is still resolved server-side from the address (zones and
-              radius), so it remains outside this quote. Tax no longer is. */}
-          <span className="text-zinc-600">Total (before delivery)</span>
-          <span className="font-medium">
-            {formatPriceAmount(shop?.taxInclusive ? total : total + taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
-          </span>
-        </div>
-      </div>
-      {shop?.taxDisplayText && <p className="text-xs text-zinc-400">{shop.taxDisplayText}</p>}
+      <CheckoutSummary state={state} />
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button
         type="submit"
-        disabled={submitting || !orderType || !paymentMethod || dateBlocked || (selectedOutlet ? !selectedOutlet.isOpen : true)}
+        disabled={submitting || quoteBlocked || !orderType || !paymentMethod || dateBlocked || (selectedOutlet ? !selectedOutlet.isOpen : true)}
         className={`w-full h-11 font-medium ${storeButtonClassName(shop)}`}
       >
         {submitting ? "Placing order…" : "Place order"}

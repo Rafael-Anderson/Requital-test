@@ -116,6 +116,10 @@ export default function CartDrawer() {
                   {formatPriceAmount(shownSubtotal, shop?.currency)} <CurrencySymbol code={shop?.currency} />
                 </span>
               </div>
+              <div className="flex items-center justify-between text-sm" data-testid="cart-drawer-delivery-row">
+                <span className="text-zinc-500">Delivery</span>
+                <span className="text-zinc-500">Calculated at checkout</span>
+              </div>
               <Link
                 href={`${shopBasePath}/checkout`}
                 onClick={closeDrawer}

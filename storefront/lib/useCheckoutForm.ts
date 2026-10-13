@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { quoteCartTax } from "@/lib/order-tax";
+import { buildQuoteRequest, quoteBlocksSubmit, useDeliveryQuote } from "@/lib/useDeliveryQuote";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
@@ -110,6 +111,15 @@ export function useCheckoutForm() {
     beganCheckout.current = true;
     track("begin_checkout", { items: cartAnalyticsItems(items), value: subtotal });
   }, [items, subtotal]);
+
+  // The server's delivery fee and totals for what is in the cart right now (same
+  // pricing as order creation). Drives the summary and blocks Place order when
+  // the server says this cart cannot be delivered as asked.
+  const { state: deliveryQuote, retry: retryDeliveryQuote } = useDeliveryQuote(
+    shopSlug,
+    buildQuoteRequest({ items, outletId, orderType, regionId, area, coords, discountCode }),
+  );
+  const quoteBlocked = quoteBlocksSubmit(deliveryQuote);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -233,7 +243,7 @@ export function useCheckoutForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!orderType || !outletId || !paymentMethod) return;
+    if (!orderType || !outletId || !paymentMethod || quoteBlocked) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -298,6 +308,7 @@ export function useCheckoutForm() {
   // version of this same requirement.
   const canSubmit =
     !submitting &&
+    !quoteBlocked &&
     !!orderType &&
     !!paymentMethod &&
     availablePaymentMethods.includes(paymentMethod) &&
@@ -312,6 +323,9 @@ export function useCheckoutForm() {
     subtotal,
     taxQuote,
     total,
+    deliveryQuote,
+    retryDeliveryQuote,
+    quoteBlocked,
     discountAmount,
     setDiscountAmount,
     giftCardAmount,

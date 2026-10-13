@@ -20,3 +20,21 @@ describe("CartPage with an empty cart", () => {
     expect(screen.getByRole("link", { name: "Continue shopping" })).toHaveAttribute("href", "/s");
   });
 });
+
+describe("CartPage delivery line", () => {
+  it("says delivery is calculated at checkout, never a zero amount", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/cart", () => ({
+      useCart: () => ({
+        items: [{ productId: 1, name: "Rose", price: 10, quantity: 1, thumbnail: "", maxStock: null, taxRate: 0 }],
+        subtotal: 10,
+      }),
+    }));
+    vi.doMock("@/components/CartLineItems", () => ({ default: () => null }));
+    vi.doMock("@/components/PromoCodeField", () => ({ default: () => null }));
+    const { default: Page } = await import("./page");
+    render(<Page />);
+    expect(screen.getByTestId("cart-delivery-row")).toHaveTextContent("Calculated at checkout");
+    vi.doUnmock("@/lib/cart");
+  });
+});

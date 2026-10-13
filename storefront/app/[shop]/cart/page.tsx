@@ -64,9 +64,9 @@ export default function CartPage() {
             </span>
           </div>
         )}
-        {/* Per-line tax, the same mirror the checkout shows (lib/order-tax.ts).
-            Delivery is still only known once an address is entered, so the cart
-            total remains goods + tax. */}
+        {/* Per-line tax estimate (lib/order-tax.ts), the one figure the cart still
+            mirrors. Delivery is only known once an address is entered, so it is
+            said to be calculated at checkout, never shown as 0. */}
         {!taxQuote.empty && (
           <div className="flex items-center justify-between">
             <span className="text-zinc-600">
@@ -78,8 +78,12 @@ export default function CartPage() {
             </span>
           </div>
         )}
+        <div className="flex items-center justify-between" data-testid="cart-delivery-row">
+          <span className="text-zinc-600">Delivery</span>
+          <span className="text-zinc-500">Calculated at checkout</span>
+        </div>
         <div className="flex items-center justify-between pt-1">
-          <span className="text-zinc-600">Total</span>
+          <span className="text-zinc-600">Total (excl. delivery)</span>
           <span className="text-lg font-semibold">
             {formatPriceAmount(shop?.taxInclusive ? total : total + taxQuote.taxAmount, shop?.currency)} <CurrencySymbol code={shop?.currency} />
           </span>
