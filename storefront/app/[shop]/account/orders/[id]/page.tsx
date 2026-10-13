@@ -63,7 +63,7 @@ export default function OrderDetailPage() {
       <Link href={`${shopBasePath}/account/orders`} className="text-sm text-zinc-500 hover:text-accent-text mb-3 inline-block">
         ← Back to order history
       </Link>
-      <h1 className="text-2xl font-semibold mb-4">Order #{orderId}</h1>
+      <h1 className="text-2xl font-semibold mb-4">Order{order ? ` #${order.shopOrderNumber}` : ""}</h1>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 

@@ -1,5 +1,9 @@
 export interface CreateCheckoutSessionParams {
   orderId: number;
+  // The per-shop number a human is shown (order.shopOrderNumber). orderId stays
+  // the machine identity every gateway round-trips; this is only for text the
+  // customer reads on the gateway's own page or receipt.
+  orderNumber: number;
   amount: number;
   currency: string;
   successUrl: string;

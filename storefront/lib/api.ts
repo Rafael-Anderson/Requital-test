@@ -79,8 +79,8 @@ export class HttpError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`);
+async function get<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, init);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new HttpError(body?.message ?? `Request failed (${res.status})`, res.status);
@@ -444,8 +444,14 @@ export function recoverAbandonedCart(token: string) {
 // Not shop-scoped — the tracking token alone identifies the order (see
 // backend PublicOrderLookupController), so this hits /public/orders/lookup
 // directly rather than /public/:shopSlug/....
-export function lookupOrder(token: string) {
-  return get<OrderLookupResult>(`/public/orders/lookup?token=${encodeURIComponent(token)}`);
+//
+// `shopSlug` is optional: the order confirmation page passes its own shop so a
+// token of another shop answers the same 404 as an unknown one; the tracking
+// page's free-text lookup does not. `no-store` because the confirmation page
+// polls this while a payment is being confirmed.
+export function lookupOrder(token: string, shopSlug?: string) {
+  const qs = `token=${encodeURIComponent(token)}${shopSlug ? `&shop=${encodeURIComponent(shopSlug)}` : ""}`;
+  return get<OrderLookupResult>(`/public/orders/lookup?${qs}`, { cache: "no-store" });
 }
 
 // Not shop-scoped — same reasoning as lookupOrder above (the token alone is

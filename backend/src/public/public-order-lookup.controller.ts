@@ -11,7 +11,7 @@ export class PublicOrderLookupController {
 
   @Public()
   @Get('lookup')
-  lookup(@Query('token') token?: string) {
-    return this.publicService.lookupOrder(token);
+  lookup(@Query('token') token?: string, @Query('shop') shop?: string) {
+    return this.publicService.lookupOrder(token, shop);
   }
 }

@@ -30,6 +30,7 @@ describe('StripePaymentProvider amount serialisation', () => {
     const provider = new StripePaymentProvider();
     await provider.createCheckoutSession({
       orderId: 1,
+      orderNumber: 1,
       amount,
       currency,
       successUrl: 'https://shop.example/success',

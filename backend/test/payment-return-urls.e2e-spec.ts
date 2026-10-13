@@ -257,7 +257,7 @@ describe('Gateway return URLs are built per shop (e2e)', () => {
       // origin - the shape proven to serve 200.
       const origin = `https://${shop.slug}\\.requital\\.io`;
       expect(successUrl).toMatch(
-        new RegExp(`^${origin}/orders/\\d+\\?paid=1$`),
+        new RegExp(`^${origin}/orders/[0-9A-F]{32}$`, 'i'),
       );
       expect(cancelUrl).toMatch(
         new RegExp(`^${origin}/checkout\\?orderId=\\d+$`),

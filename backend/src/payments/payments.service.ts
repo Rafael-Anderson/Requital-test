@@ -183,6 +183,7 @@ export class PaymentsService {
     }
     const session = await provider.createCheckoutSession({
       orderId: order.id as number,
+      orderNumber: order.shopOrderNumber as number,
       amount: due,
       // The ORDER's own currency (captured at placement), never the shop's live
       // one: a shop that changed currency since must not have this unpaid order

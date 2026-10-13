@@ -66,7 +66,7 @@ export class StripePaymentProvider implements PaymentProvider {
         {
           price_data: {
             currency: params.currency.toLowerCase(),
-            product_data: { name: `Order #${params.orderId}` },
+            product_data: { name: `Order #${params.orderNumber}` },
             // Minor units, per the currency's own exponent - NOT a fixed
             // x100. KWD/BHD/OMR are three-decimal, so a hardcoded 100
             // understates them by 10x. Unreachable today (shop.currency is

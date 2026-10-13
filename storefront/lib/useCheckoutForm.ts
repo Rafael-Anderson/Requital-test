@@ -286,15 +286,20 @@ export function useCheckoutForm() {
       );
       if (res.checkoutUrl) {
         // Leaves for the gateway: the browser purchase event is sent when the
-        // customer returns (orders/[id]?paid=1), see lib/purchase-tracking.ts.
+        // customer returns (orders/<token>, once the server says paid), see lib/purchase-tracking.ts.
         stashPurchase(res.order.id, purchase);
         window.location.href = res.checkoutUrl;
         return;
       }
       track("purchase", purchase);
-      sessionStorage.setItem(`requital_order:${res.order.id}`, JSON.stringify(res.order));
       clear();
-      router.push(`${shopBasePath}/orders/${res.order.id}`);
+      // The confirmation page reads the order with its tracking token, never its
+      // sequential id (an id in a URL must not open an order).
+      router.push(
+        res.order.trackingToken
+          ? `${shopBasePath}/orders/${res.order.trackingToken}`
+          : `${shopBasePath}/orders/track`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not place order");
     } finally {
