@@ -19,7 +19,7 @@ function Amount({ value, currency }: { value: number | string; currency?: string
 // delivery row says so and the total is withheld rather than shown without
 // delivery. The tax row alone falls back to the display mirror (lib/order-tax.ts).
 export default function CheckoutSummary({ state }: { state: CheckoutFormState }) {
-  const { shop, subtotal, taxQuote, discountAmount, giftCardAmount, orderType, deliveryQuote, retryDeliveryQuote } = state;
+  const { shop, subtotal, taxQuote, discountAmount, giftCardAmount, useStoreCredit, orderType, deliveryQuote, retryDeliveryQuote } = state;
   const currency = shop?.currency;
   const q = deliveryQuote.phase === "ready" ? deliveryQuote.quote : null;
   const priced = q && q.total !== null ? q : null;
@@ -27,7 +27,6 @@ export default function CheckoutSummary({ state }: { state: CheckoutFormState })
 
   const shownDiscount = priced ? Number(priced.discountAmount) : (discountAmount ?? 0);
   const showTax = priced ? Number(priced.taxAmount) > 0 : !taxQuote.empty;
-  const gift = priced && giftCardAmount ? Math.max(0, Math.min(giftCardAmount, Number(priced.total))) : 0;
 
   let delivery: React.ReactNode;
   if (loading) {
@@ -106,21 +105,10 @@ export default function CheckoutSummary({ state }: { state: CheckoutFormState })
           )}
         </span>
       </div>
-      {gift > 0 && priced && (
-        <>
-          <div className="flex items-center justify-between text-green-600">
-            <span>Gift card</span>
-            <span>
-              -<Amount value={gift} currency={currency} />
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-zinc-600">Amount due</span>
-            <span className="font-medium">
-              <Amount value={Math.max(0, Number(priced.total) - gift)} currency={currency} />
-            </span>
-          </div>
-        </>
+      {priced && ((giftCardAmount ?? 0) > 0 || useStoreCredit) && (
+        <p className="text-xs text-zinc-500" data-testid="checkout-credit-note">
+          Your gift card and store credit are applied to this total when you place the order.
+        </p>
       )}
       {shop?.taxDisplayText && <p className="text-xs text-zinc-400">{shop.taxDisplayText}</p>}
     </div>

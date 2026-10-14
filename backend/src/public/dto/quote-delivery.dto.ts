@@ -11,6 +11,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -28,6 +29,7 @@ class QuoteItemInput {
 
   @IsInt()
   @IsPositive()
+  @Max(999)
   quantity: number;
 
   @IsOptional()

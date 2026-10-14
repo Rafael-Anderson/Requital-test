@@ -86,6 +86,7 @@ describe('Delivery fee quote equals the charge (e2e)', () => {
   }
   let aed: TestShop;
   let kwd: TestShop;
+  let misc: TestShop;
 
   async function setupShop(
     prefix: string,
@@ -209,6 +210,13 @@ describe('Delivery fee quote equals the charge (e2e)', () => {
     app.get(PaymentProviderRegistry).register(stripe);
 
     aed = await setupShop('dq-aed', {
+      countryCode: 'AE',
+      currency: 'AED',
+      price: 100,
+      zoneFee: 30,
+      defaultFee: 15,
+    });
+    misc = await setupShop('dq-misc', {
       countryCode: 'AE',
       currency: 'AED',
       price: 100,
@@ -410,16 +418,203 @@ describe('Delivery fee quote equals the charge (e2e)', () => {
     expect(await count()).toEqual(before);
   });
 
+  describe('same rules as the order', () => {
+    it('refuses an unpublished shop exactly as createOrder does', async () => {
+      await db.execute(`UPDATE shop SET published = 0 WHERE id = ?`, [
+        misc.shopId,
+      ]);
+      try {
+        const q = await quote(misc);
+        const o = await order(misc);
+        expect(q.status).toBe(404);
+        expect(o.status).toBe(404);
+      } finally {
+        await db.execute(`UPDATE shop SET published = 1 WHERE id = ?`, [
+          misc.shopId,
+        ]);
+      }
+    });
+
+    it('refuses a suspended shop exactly as createOrder does', async () => {
+      await db.execute(`UPDATE shop SET suspendedAt = NOW() WHERE id = ?`, [
+        misc.shopId,
+      ]);
+      try {
+        expect((await quote(misc)).status).toBe(404);
+        expect((await order(misc)).status).toBe(404);
+      } finally {
+        await db.execute(`UPDATE shop SET suspendedAt = NULL WHERE id = ?`, [
+          misc.shopId,
+        ]);
+      }
+    });
+
+    it('a FREE_SHIPPING code zeroes the fee, and the quote equals the order', async () => {
+      const code = `DQFS${runId % 1000000}`;
+      await request(app.getHttpServer())
+        .post('/shop/discounts')
+        .set('Authorization', `Bearer ${misc.adminToken}`)
+        .send({ code, type: 'FREE_SHIPPING' })
+        .expect(201);
+      const r = await charged(misc, { discountCode: code });
+      expect(r.quote.deliveryFee).toBe('0');
+      expect(r.quote.total).toBe('105');
+      expect(Number(r.orderTotal)).toBe(105);
+      expect(r.gatewayAmount).toBe(105);
+    });
+
+    it('tax-inclusive shop: tax is inside the price, total = price + delivery', async () => {
+      await db.execute(`UPDATE shop SET taxInclusive = 1 WHERE id = ?`, [
+        misc.shopId,
+      ]);
+      try {
+        const r = await charged(misc);
+        expect(r.quote.total).toBe('130');
+        expect(r.quote.taxAmount).toBe('4.76');
+        expect(Number(r.orderTotal)).toBe(130);
+        expect(r.gatewayAmount).toBe(130);
+      } finally {
+        await db.execute(`UPDATE shop SET taxInclusive = 0 WHERE id = ?`, [
+          misc.shopId,
+        ]);
+      }
+    });
+
+    it('an auto-discount plus a typed code: the quote equals the order', async () => {
+      const code = `DQAC${runId % 1000000}`;
+      const auth = { Authorization: `Bearer ${misc.adminToken}` };
+      await request(app.getHttpServer())
+        .post('/shop/discounts')
+        .set(auth)
+        .send({
+          discountType: 'auto',
+          type: 'PERCENTAGE',
+          value: 20,
+          appliesTo: 'SPECIFIC_PRODUCTS',
+          productIds: [misc.productId],
+          active: true,
+        })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/shop/discounts')
+        .set(auth)
+        .send({ code, type: 'PERCENTAGE', value: 10 })
+        .expect(201);
+      const r = await charged(misc, { discountCode: code });
+      // 100 - 20% auto = 80 ; code 10% of 80 = 8 ; (80 - 8) * 1.05 = 75.6 ; + 30
+      expect(r.quote.subtotal).toBe('80');
+      expect(r.quote.discountAmount).toBe('8');
+      expect(r.quote.total).toBe('105.6');
+      expect(Number(r.orderTotal)).toBeCloseTo(105.6, 3);
+      expect(r.gatewayAmount).toBeCloseTo(105.6, 3);
+    });
+
+    it("a zone minimum order: unavailable with the order's own message", async () => {
+      await db.execute(
+        `UPDATE deliveryzone SET minOrderAmount = 5000 WHERE outletId = ?`,
+        [misc.outletId],
+      );
+      try {
+        const q = body<Quote>(await quote(misc).expect(201));
+        expect(q.status).toBe('unavailable');
+        const o = await order(misc).expect(400);
+        expect(q.reason).toBe((o.body as { message: string }).message);
+        expect(q.reason).toMatch(/Minimum order amount/);
+      } finally {
+        await db.execute(
+          `UPDATE deliveryzone SET minOrderAmount = 0 WHERE outletId = ?`,
+          [misc.outletId],
+        );
+      }
+    });
+  });
+
+  describe('logged-in shoppers (customer CSRF)', () => {
+    it('the customer session cookie needs the CSRF header on the quote POST', async () => {
+      const reg = await request(app.getHttpServer())
+        .post(`/public/${aed.slug}/auth/register`)
+        .send({
+          name: 'Quote Shopper',
+          phone: `05019${runId % 100000}`,
+          email: `dq-csrf-${runId}@t.com`,
+          password: 'password123',
+        })
+        .expect(201);
+      const cookies: Record<string, string> = {};
+      for (const line of reg.get('Set-Cookie') ?? []) {
+        const pair = line.split(';')[0];
+        const i = pair.indexOf('=');
+        cookies[pair.slice(0, i)] = pair.slice(i + 1);
+      }
+      const cookie = Object.entries(cookies)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('; ');
+      const csrf =
+        cookies[
+          Object.keys(cookies).find((k) => k.startsWith('req-customer-csrf'))!
+        ];
+      const payload = {
+        outletId: aed.outletId,
+        orderType: 'delivery',
+        regionId: aed.regionId,
+        ...NEAR,
+        items: [{ productId: aed.productId, quantity: 1 }],
+      };
+      const url = `/public/${aed.slug}/delivery-quote`;
+      await request(app.getHttpServer())
+        .post(url)
+        .set('Cookie', cookie)
+        .send(payload)
+        .expect(403);
+      const ok = await request(app.getHttpServer())
+        .post(url)
+        .set('Cookie', cookie)
+        .set('X-CSRF-Token', csrf)
+        .send(payload)
+        .expect(201);
+      expect(body<Quote>(ok).status).toBe('quoted');
+    });
+  });
+
   describe('tenant isolation and validation', () => {
     it("another shop's outlet is refused, not quoted", async () => {
       await quote(aed, { outletId: kwd.outletId }).expect(400);
     });
-    it("another shop's product is refused", async () => {
-      const res = await quote(aed, {
-        items: [{ productId: kwd.productId, quantity: 1 }],
-      });
-      expect(res.status).toBeGreaterThanOrEqual(400);
-      expect(res.status).toBeLessThan(500);
+    it("a Draft, an Archived, a deleted and another shop's product all get one identical answer with no amount", async () => {
+      const mk = async (status: string) => {
+        const r = await db.execute(
+          `INSERT INTO product (shopId, name, slug, price, thumbnail, sku, status)
+           VALUES (?, ?, ?, 777.77, 'https://example.com/x.jpg', ?, ?)`,
+          [
+            aed.shopId,
+            `Hidden ${status}`,
+            `hidden-${status}-${runId}`,
+            `H-${status}-${runId}`,
+            status,
+          ],
+        );
+        return r.insertId;
+      };
+      const ids = [
+        await mk('Draft'),
+        await mk('Archived'),
+        987654321,
+        kwd.productId,
+      ];
+      const bodies: Quote[] = [];
+      for (const productId of ids) {
+        const res = await quote(aed, {
+          items: [{ productId, quantity: 1 }],
+        }).expect(201);
+        bodies.push(body<Quote>(res));
+        expect(JSON.stringify(res.body)).not.toMatch(/777|10\.505|\b100\b/);
+      }
+      for (const q of bodies) {
+        expect(q.status).toBe('unavailable');
+        expect(q.subtotal).toBeNull();
+        expect(q.total).toBeNull();
+      }
+      expect(new Set(bodies.map((q) => JSON.stringify(q))).size).toBe(1);
     });
     it("another country's region id is unavailable, same message as an unknown one", async () => {
       const a = body<Quote>(
@@ -443,6 +638,13 @@ describe('Delivery fee quote equals the charge (e2e)', () => {
     });
     it('rejects customer fields (no PII accepted) and oversized carts', async () => {
       await quote(aed, { customerPhone: '0501234567' }).expect(400);
+      // A client price is never honoured on this public route.
+      await quote(aed, {
+        items: [{ productId: aed.productId, quantity: 1, priceOverride: 1 }],
+      }).expect(400);
+      await quote(aed, {
+        items: [{ productId: aed.productId, quantity: 1000 }],
+      }).expect(400);
       const items = Array.from({ length: 101 }, () => ({
         productId: aed.productId,
         quantity: 1,

@@ -2099,6 +2099,9 @@ export class PublicService {
     // Already checked against the shop's own country by the caller
     // (RegionsService.resolveForShop): the caller is the one that writes it.
     region: { regionId: number | null; regionName: string | null },
+    // A quote is re-asked on every debounced address change: it must not write
+    // the "matched no zone" warning createOrder logs once per real order.
+    opts: { quiet?: boolean } = {},
   ) {
     const lines = resolvedItems.map((r) => ({
       productId: r.product.id as number,
@@ -2121,6 +2124,7 @@ export class PublicService {
         subtotal,
         region.regionName ?? '',
         region.regionId,
+        opts.quiet,
       );
       deliveryFee = Number(resolved.fee);
       zoneName = resolved.zoneName;
@@ -2220,6 +2224,34 @@ export class PublicService {
     if (!outlet) {
       throw new BadRequestException('outletId is invalid for this shop');
     }
+    // Uniform refusal BEFORE anything is priced: an id that is not an Available
+    // product of THIS shop (unpublished, archived, deleted, another tenant's)
+    // gets one identical answer with no amount in it, so this unauthenticated
+    // route can neither read an unpublished product's price nor tell which
+    // ids exist.
+    const askedIds = [...new Set(dto.items.map((i) => i.productId))];
+    const availableRows = await this.db.query<({ id: number } & RowDataPacket)[]>(
+      `SELECT id FROM product WHERE shopId = ? AND status = 'Available' AND id IN (${askedIds
+        .map(() => '?')
+        .join(', ')})`,
+      [shop.id, ...askedIds],
+    );
+    if (availableRows.length !== askedIds.length) {
+      return {
+        currency: shop.currency,
+        orderType: dto.orderType,
+        taxInclusive: shop.taxInclusive,
+        status: 'unavailable' as const,
+        reason: 'An item in your cart is no longer available',
+        zone: null,
+        subtotal: null,
+        discountAmount: null,
+        discountCode: null,
+        taxAmount: null,
+        deliveryFee: null,
+        total: null,
+      };
+    }
     const resolvedItems = await this.productsService.resolveOrderItems(
       shop.id,
       dto.items.map((i) => ({
@@ -2253,9 +2285,6 @@ export class PublicService {
       reason: string | null,
     ) => ({ ...base, status, reason, subtotal: money(goodsSubtotal) });
 
-    if (resolvedItems.some(({ product }) => product.status !== 'Available')) {
-      return unquoted('unavailable', 'An item in your cart is no longer available');
-    }
     if (dto.orderType === 'delivery' && !outlet.deliveryEnabled) {
       return unquoted('unavailable', 'This outlet does not offer delivery');
     }
@@ -2287,6 +2316,7 @@ export class PublicService {
         dto,
         resolvedItems,
         region,
+        { quiet: true },
       );
       return {
         ...base,
@@ -2322,6 +2352,7 @@ export class PublicService {
     subtotal: number,
     regionName: string,
     regionId: number | null,
+    quiet = false,
   ): Promise<{ fee: string; zoneName: string | null }> {
     // Radius is the eligibility boundary — if configured, coordinates are
     // required to prove the customer is inside it. Zones (below) then
@@ -2409,7 +2440,8 @@ export class PublicService {
           'Delivery is not available to this address — it did not match any configured delivery zone',
         );
       }
-      logger.warn(
+      if (!quiet) {
+        logger.warn(
         'address matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
         {
           outletId: outlet.id,
@@ -2419,6 +2451,7 @@ export class PublicService {
           zoneMatchingMode: mode,
         },
       );
+      }
     }
 
     return { fee: shop.defaultDeliveryFee, zoneName: null };

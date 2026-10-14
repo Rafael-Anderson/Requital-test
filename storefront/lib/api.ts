@@ -334,7 +334,14 @@ export interface DeliveryQuoteRequest {
   items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number }[];
 }
 export function quoteDelivery(shopSlug: string, payload: DeliveryQuoteRequest, signal?: AbortSignal) {
-  return post<DeliveryQuote>(`/public/${shopSlug}/delivery-quote`, payload, signal);
+  // authedFetch, not post: a logged-in shopper carries the customer session
+  // cookie, and any POST under /public/:shop then needs the CSRF header (the
+  // backend 403s without it). Logged out it behaves like a plain POST.
+  return authedFetch<DeliveryQuote>(shopSlug, `/public/${shopSlug}/delivery-quote`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
 }
 
 export function createOrder(shopSlug: string, payload: CreateOrderPayload) {

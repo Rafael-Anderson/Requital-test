@@ -78,8 +78,10 @@ describe("CheckoutSummary", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
-  it("applies a gift card after the server total", () => {
+  it("does no money arithmetic for credits: it only says they are applied at order time", () => {
     summary({ phase: "ready", quote: quote() }, { giftCardAmount: 24.5 } as Partial<CheckoutFormState>);
-    expect(screen.getByText("Amount due").parentElement).toHaveTextContent("100.00");
+    expect(screen.getByTestId("checkout-credit-note")).toBeInTheDocument();
+    expect(screen.queryByText("Amount due")).toBeNull();
+    expect(screen.getByTestId("checkout-total")).toHaveTextContent("124.50");
   });
 });
