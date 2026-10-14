@@ -1,3 +1,4 @@
+import { isMarketplaceChannel } from '../channels/marketplace-channels';
 import {
   BadRequestException,
   ConflictException,
@@ -84,6 +85,13 @@ export class PaymentsService {
       order.outletId as number,
       'payments.generate_link',
     );
+    // The marketplace collected the money; there is nothing for us to charge.
+    // Also enforced in getCheckoutSession below (the link is the capability).
+    if (isMarketplaceChannel(order.channel as string | null)) {
+      throw new BadRequestException(
+        'This order was paid on the marketplace and cannot be charged here',
+      );
+    }
     if (order.paymentStatus === 'paid') {
       throw new BadRequestException('Order is already paid');
     }
@@ -158,6 +166,9 @@ export class PaymentsService {
     );
     const order = rows[0];
     if (!order) {
+      throw new NotFoundException('Payment link not found');
+    }
+    if (isMarketplaceChannel(order.channel as string | null)) {
       throw new NotFoundException('Payment link not found');
     }
     if (order.paymentStatus === 'paid') {

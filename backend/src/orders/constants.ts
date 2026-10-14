@@ -1,3 +1,5 @@
+import { MARKETPLACE_ORDER_CHANNELS } from '../channels/marketplace-channels';
+
 export const ORDER_STATUSES = [
   'pending',
   'confirmed',
@@ -40,9 +42,14 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 // a single hardcoded 'storefront' check, so a still-pending order from
 // either channel restocks correctly on cancel and never double-decrements
 // on confirm.
-export const IMMEDIATE_STOCK_RESERVATION_CHANNELS = [
+export const IMMEDIATE_STOCK_RESERVATION_CHANNELS: string[] = [
   'storefront',
   'draft_order',
+  // Marketplace orders hold their stock from the moment they arrive: the
+  // customer has already paid the marketplace, so the sale is committed and a
+  // pending marketplace order that is rejected or cancelled upstream must give
+  // the stock back (ChannelIngestionService, docs/plans/marketplace-channels.md).
+  ...MARKETPLACE_ORDER_CHANNELS,
 ];
 
 // #9: items can be added/removed/quantity-adjusted only while the order is

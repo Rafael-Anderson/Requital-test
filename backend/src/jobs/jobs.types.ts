@@ -28,7 +28,9 @@ export interface SendEmailJobPayload {
 export interface SendMerchantWhatsAppAlertJobPayload {
   to: string;
   body: string;
-  orderId: number;
+  // Optional: a marketplace order that is still waiting for item mappings has
+  // no `order` row yet (the handler never reads it).
+  orderId?: number;
   sensitive?: boolean;
   scrubbed?: boolean;
 }
