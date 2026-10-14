@@ -1,10 +1,19 @@
 import { assertCanonicalOrder } from './canonical-order';
 import { ChannelParseError, type CanonicalChannelOrder } from './channel.types';
-import { inboxBackoffSeconds, INBOX_MAX_ATTEMPTS } from './channel-ingestion.service';
+import {
+  inboxBackoffSeconds,
+  INBOX_MAX_ATTEMPTS,
+} from './channel-ingestion.service';
 import { ChannelProviderRegistry } from './channel-provider.registry';
-import { isMarketplaceChannel, MARKETPLACE_ORDER_CHANNELS } from './marketplace-channels';
+import {
+  isMarketplaceChannel,
+  MARKETPLACE_ORDER_CHANNELS,
+} from './marketplace-channels';
 import { IMMEDIATE_STOCK_RESERVATION_CHANNELS } from '../orders/constants';
-import { StubChannelProvider, signStubDelivery } from './providers/stub-channel.provider';
+import {
+  StubChannelProvider,
+  signStubDelivery,
+} from './providers/stub-channel.provider';
 
 const good = (): CanonicalChannelOrder => ({
   externalOrderId: 'X1',
@@ -16,11 +25,24 @@ const good = (): CanonicalChannelOrder => ({
   currency: 'KWD',
   handover: 'marketplace_courier',
   lines: [
-    { externalItemId: 'a', name: 'A', quantity: 1, unitPriceMinor: 10505, discountMinor: null, taxMinor: null, note: null },
+    {
+      externalItemId: 'a',
+      name: 'A',
+      quantity: 1,
+      unitPriceMinor: 10505,
+      discountMinor: null,
+      taxMinor: null,
+      note: null,
+    },
   ],
   totals: {
-    subtotalMinor: null, deliveryFeeMinor: null, discountMinor: null, taxMinor: null,
-    commissionMinor: null, totalMinor: 10505, cashDueMinor: null,
+    subtotalMinor: null,
+    deliveryFeeMinor: null,
+    discountMinor: null,
+    taxMinor: null,
+    commissionMinor: null,
+    totalMinor: 10505,
+    cashDueMinor: null,
   },
   customer: { name: null, phone: null, address: null, notes: null },
 });
@@ -30,14 +52,29 @@ describe('assertCanonicalOrder', () => {
     expect(() => assertCanonicalOrder(good())).not.toThrow();
   });
   it.each([
-    ['fractional minor units', (o: CanonicalChannelOrder) => (o.lines[0].unitPriceMinor = 1.5)],
-    ['negative total', (o: CanonicalChannelOrder) => (o.totals.totalMinor = -1)],
+    [
+      'fractional minor units',
+      (o: CanonicalChannelOrder) => (o.lines[0].unitPriceMinor = 1.5),
+    ],
+    [
+      'negative total',
+      (o: CanonicalChannelOrder) => (o.totals.totalMinor = -1),
+    ],
     ['zero quantity', (o: CanonicalChannelOrder) => (o.lines[0].quantity = 0)],
     ['no lines', (o: CanonicalChannelOrder) => (o.lines = [])],
     ['bad currency', (o: CanonicalChannelOrder) => (o.currency = 'kwd')],
-    ['undefined commission (must be null, not absent)', (o: CanonicalChannelOrder) => ((o.totals as unknown as Record<string, unknown>).commissionMinor = undefined)],
+    [
+      'undefined commission (must be null, not absent)',
+      (o: CanonicalChannelOrder) =>
+        ((o.totals as unknown as Record<string, unknown>).commissionMinor =
+          undefined),
+    ],
     ['bad date', (o: CanonicalChannelOrder) => (o.acceptBy = 'soon')],
-    ['unknown handover', (o: CanonicalChannelOrder) => ((o as unknown as Record<string, unknown>).handover = 'drone')],
+    [
+      'unknown handover',
+      (o: CanonicalChannelOrder) =>
+        ((o as unknown as Record<string, unknown>).handover = 'drone'),
+    ],
   ])('rejects %s', (_n, mutate) => {
     const o = good();
     mutate(o);
@@ -76,12 +113,45 @@ describe('StubChannelProvider', () => {
   const sig = signStubDelivery('s3cret-value', 'g1', raw);
   it('verifies only with the right secret, event id and body', () => {
     const headers = { 'x-stub-event-id': 'g1', 'x-stub-signature': sig };
-    expect(p.verifyWebhook({ rawBody: Buffer.from(raw), headers, secrets: ['s3cret-value'] })).toEqual({ valid: true, eventId: 'g1' });
-    expect(p.verifyWebhook({ rawBody: Buffer.from(raw), headers, secrets: ['other'] }).valid).toBe(false);
-    expect(p.verifyWebhook({ rawBody: Buffer.from(raw + ' '), headers, secrets: ['s3cret-value'] }).valid).toBe(false);
-    expect(p.verifyWebhook({ rawBody: Buffer.from(raw), headers: { 'x-stub-event-id': 'g2', 'x-stub-signature': sig }, secrets: ['s3cret-value'] }).valid).toBe(false);
-    expect(p.verifyWebhook({ rawBody: Buffer.from(raw), headers: {}, secrets: ['s3cret-value'] }).valid).toBe(false);
-    expect(p.verifyWebhook({ rawBody: Buffer.from(raw), headers, secrets: [] }).valid).toBe(false);
+    expect(
+      p.verifyWebhook({
+        rawBody: Buffer.from(raw),
+        headers,
+        secrets: ['s3cret-value'],
+      }),
+    ).toEqual({ valid: true, eventId: 'g1' });
+    expect(
+      p.verifyWebhook({
+        rawBody: Buffer.from(raw),
+        headers,
+        secrets: ['other'],
+      }).valid,
+    ).toBe(false);
+    expect(
+      p.verifyWebhook({
+        rawBody: Buffer.from(raw + ' '),
+        headers,
+        secrets: ['s3cret-value'],
+      }).valid,
+    ).toBe(false);
+    expect(
+      p.verifyWebhook({
+        rawBody: Buffer.from(raw),
+        headers: { 'x-stub-event-id': 'g2', 'x-stub-signature': sig },
+        secrets: ['s3cret-value'],
+      }).valid,
+    ).toBe(false);
+    expect(
+      p.verifyWebhook({
+        rawBody: Buffer.from(raw),
+        headers: {},
+        secrets: ['s3cret-value'],
+      }).valid,
+    ).toBe(false);
+    expect(
+      p.verifyWebhook({ rawBody: Buffer.from(raw), headers, secrets: [] })
+        .valid,
+    ).toBe(false);
   });
   it('extracts a routing key without trusting it, and survives garbage', () => {
     expect(p.extractRoutingKey(Buffer.from(raw))).toBe('L1');

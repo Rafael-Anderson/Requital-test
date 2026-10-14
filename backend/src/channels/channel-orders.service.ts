@@ -102,7 +102,9 @@ export class ChannelOrdersService {
           ? minorToDecimal(canonical.totals.totalMinor, r.currency as string)
           : null,
       // NULL = the marketplace did not say.
-      commissionAmount: r.commissionAmount ? trimDecimal(r.commissionAmount as string) : null,
+      commissionAmount: r.commissionAmount
+        ? trimDecimal(r.commissionAmount as string)
+        : null,
       priceMismatch: (r.priceMismatch as unknown[] | null) ?? null,
       waitingItems: canonical
         ? canonical.lines.map((l) => ({
@@ -178,7 +180,11 @@ export class ChannelOrdersService {
       action: 'channel_order.rejected',
       entityType: 'channelorder',
       entityId: co.id,
-      after: { provider: co.provider, externalOrderId: co.externalOrderId, reason },
+      after: {
+        provider: co.provider,
+        externalOrderId: co.externalOrderId,
+        reason,
+      },
     });
     return this.one(ctx, id);
   }
@@ -194,11 +200,14 @@ export class ChannelOrdersService {
     ) => Promise<{ ok: boolean; message?: string }>,
   ): Promise<void> {
     const provider = this.registry.find(co.provider);
-    const method = what === 'accept' ? provider?.acceptOrder : provider?.rejectOrder;
-    if (!provider || !provider.capabilities.acceptReject || !method) return;
+    const supported =
+      what === 'accept' ? !!provider?.acceptOrder : !!provider?.rejectOrder;
+    if (!provider || !provider.capabilities.acceptReject || !supported) return;
     const connRow = await this.connections.findById(co.connectionId);
     if (!connRow || connRow.shopId !== co.shopId) {
-      throw new BadGatewayException('The marketplace connection is no longer available');
+      throw new BadGatewayException(
+        'The marketplace connection is no longer available',
+      );
     }
     try {
       const result = await call(provider, this.connections.bind(connRow));

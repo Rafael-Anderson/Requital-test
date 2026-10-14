@@ -67,14 +67,23 @@ export class ChannelSweepService {
         });
       }
     };
-    await step('replay', async () => void (out.replayed = await this.replayDue()));
-    await step('poll', async () => void (out.polled = await this.pollConnections()));
+    await step(
+      'replay',
+      async () => void (out.replayed = await this.replayDue()),
+    );
+    await step(
+      'poll',
+      async () => void (out.polled = await this.pollConnections()),
+    );
     await step('stale', async () => {
       const r = await this.staleOrders();
       out.stale = r.alerted;
       out.repaired = r.repaired;
     });
-    await step('purge', async () => void (out.purged = await this.purgePayloads()));
+    await step(
+      'purge',
+      async () => void (out.purged = await this.purgePayloads()),
+    );
     return out;
   }
 
@@ -107,9 +116,12 @@ export class ChannelSweepService {
     let polled = 0;
     for (const conn of rows) {
       const provider = this.registry.find(conn.provider);
-      if (!provider?.capabilities.pollOrders || !provider.listOpenOrders) continue;
+      if (!provider?.capabilities.pollOrders || !provider.listOpenOrders)
+        continue;
       try {
-        const events = await provider.listOpenOrders(this.connections.bind(conn));
+        const events = await provider.listOpenOrders(
+          this.connections.bind(conn),
+        );
         for (const e of events) {
           const raw = JSON.stringify(e.payload);
           const written = await this.ingestion.writeInbox(conn, {
@@ -120,7 +132,8 @@ export class ChannelSweepService {
             payload: e.payload,
             payloadHash: createHash('sha256').update(raw).digest('hex'),
           });
-          if (!written.duplicate) await this.ingestion.processInboxEvent(written.inboxId);
+          if (!written.duplicate)
+            await this.ingestion.processInboxEvent(written.inboxId);
         }
         await this.db.execute(
           `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'ok', lastError = NULL WHERE id = ?`,
@@ -130,7 +143,11 @@ export class ChannelSweepService {
       } catch (err) {
         await this.db.execute(
           `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'failed', lastError = ? WHERE id = ?`,
-          [new Date(), (err instanceof Error ? err.message : String(err)).slice(0, 500), conn.id],
+          [
+            new Date(),
+            (err instanceof Error ? err.message : String(err)).slice(0, 500),
+            conn.id,
+          ],
         );
       }
     }
@@ -139,7 +156,9 @@ export class ChannelSweepService {
 
   async staleOrders(): Promise<{ alerted: number; repaired: number }> {
     const now = new Date();
-    const fallback = new Date(now.getTime() - DEFAULT_ACCEPT_WINDOW_MINUTES * 60_000);
+    const fallback = new Date(
+      now.getTime() - DEFAULT_ACCEPT_WINDOW_MINUTES * 60_000,
+    );
     const overdue = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
       `SELECT * FROM channelorder
         WHERE state IN ('needs_mapping', 'pending_acceptance') AND staleAlertedAt IS NULL
@@ -157,7 +176,10 @@ export class ChannelSweepService {
         [now, now, co.id, co.shopId],
       );
       if (claim.affectedRows === 0) continue;
-      const to = await this.notifications.resolveMerchantAlertRecipient(co.shopId, co.outletId);
+      const to = await this.notifications.resolveMerchantAlertRecipient(
+        co.shopId,
+        co.outletId,
+      );
       if (to) {
         await this.jobs.enqueue(
           co.shopId,
@@ -190,7 +212,8 @@ export class ChannelSweepService {
   // the answer settled it (no alert needed).
   private async reconcileOne(co: ChannelorderRow): Promise<boolean> {
     const provider = this.registry.find(co.provider);
-    if (!provider?.capabilities.fetchOrderStatus || !provider.fetchOrderStatus) return false;
+    if (!provider?.capabilities.fetchOrderStatus || !provider.fetchOrderStatus)
+      return false;
     const connRow = await this.connections.findById(co.connectionId);
     if (!connRow || connRow.shopId !== co.shopId) return false;
     try {

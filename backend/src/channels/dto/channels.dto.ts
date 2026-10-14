@@ -142,7 +142,13 @@ export class ListChannelOrdersQueryDto {
   outletId?: number;
 
   @IsOptional()
-  @IsIn(['needs_mapping', 'pending_acceptance', 'accepted', 'rejected', 'cancelled_upstream'])
+  @IsIn([
+    'needs_mapping',
+    'pending_acceptance',
+    'accepted',
+    'rejected',
+    'cancelled_upstream',
+  ])
   state?: string;
 
   @IsOptional()

@@ -82,7 +82,10 @@ export class ChannelsController {
   }
 
   @Post('connections/:id/test')
-  test(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  test(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.connections.testConnection(ctx, id);
   }
 
@@ -95,17 +98,26 @@ export class ChannelsController {
   }
 
   @Get('mappings')
-  listMappings(@CurrentUser() ctx: TenantContext, @Query('provider') provider?: string) {
+  listMappings(
+    @CurrentUser() ctx: TenantContext,
+    @Query('provider') provider?: string,
+  ) {
     return this.mappings.list(ctx, provider);
   }
 
   @Post('mappings')
-  createMapping(@CurrentUser() ctx: TenantContext, @Body() dto: CreateChannelMappingDto) {
+  createMapping(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: CreateChannelMappingDto,
+  ) {
     return this.mappings.create(ctx, dto);
   }
 
   @Delete('mappings/:id')
-  removeMapping(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  removeMapping(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.mappings.remove(ctx, id);
   }
 
@@ -128,13 +140,19 @@ export class ChannelsController {
 
   @Roles('admin', 'branch', 'order_manager')
   @Get('orders')
-  listOrders(@CurrentUser() ctx: TenantContext, @Query() q: ListChannelOrdersQueryDto) {
+  listOrders(
+    @CurrentUser() ctx: TenantContext,
+    @Query() q: ListChannelOrdersQueryDto,
+  ) {
     return this.orders.list(ctx, q);
   }
 
   @Roles('admin', 'branch', 'order_manager')
   @Post('orders/:id/accept')
-  accept(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  accept(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.orders.accept(ctx, id);
   }
 
@@ -150,8 +168,14 @@ export class ChannelsController {
 
   // The SLO numbers for this shop (ingestion success %, failure %).
   @Get('stats')
-  stats(@CurrentUser() ctx: TenantContext, @Query('sinceMinutes') sinceMinutes?: string) {
-    const n = Math.min(Math.max(parseInt(sinceMinutes ?? '1440', 10) || 1440, 1), 43200);
+  stats(
+    @CurrentUser() ctx: TenantContext,
+    @Query('sinceMinutes') sinceMinutes?: string,
+  ) {
+    const n = Math.min(
+      Math.max(parseInt(sinceMinutes ?? '1440', 10) || 1440, 1),
+      43200,
+    );
     return this.ingestion.stats({ shopId: ctx.shopId, sinceMinutes: n });
   }
 

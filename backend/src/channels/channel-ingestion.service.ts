@@ -48,7 +48,9 @@ export const INBOX_LOCK_STALE_SECONDS = 300;
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export function inboxBackoffSeconds(attempts: number): number {
-  return BACKOFF_SECONDS[Math.min(attempts - 1, BACKOFF_SECONDS.length - 1)] ?? 900;
+  return (
+    BACKOFF_SECONDS[Math.min(attempts - 1, BACKOFF_SECONDS.length - 1)] ?? 900
+  );
 }
 
 // One response for EVERY way an inbound delivery can be refused: unknown
@@ -142,7 +144,9 @@ export class ChannelIngestionService {
       /* an undecryptable secret is simply not a usable secret */
     }
     if (provider.capabilities.platformWebhookSecret) {
-      secrets.push(...(provider.platformWebhookSecrets?.() ?? []).filter(Boolean));
+      secrets.push(
+        ...(provider.platformWebhookSecrets?.() ?? []).filter(Boolean),
+      );
     }
     if (secrets.length === 0) return reject();
 
@@ -239,7 +243,9 @@ export class ChannelIngestionService {
     inboxId: number,
   ): Promise<'processed' | 'failed' | 'dead' | 'skipped'> {
     const now = new Date();
-    const staleBefore = new Date(now.getTime() - INBOX_LOCK_STALE_SECONDS * 1000);
+    const staleBefore = new Date(
+      now.getTime() - INBOX_LOCK_STALE_SECONDS * 1000,
+    );
     const claim = await this.db.execute(
       `UPDATE channelinboundevent
           SET status = 'processing', attempts = attempts + 1, lockedAt = ?
@@ -250,10 +256,9 @@ export class ChannelIngestionService {
     );
     if (claim.affectedRows === 0) return 'skipped';
 
-    const rows = await this.db.query<(ChannelinboundeventRow & RowDataPacket)[]>(
-      `SELECT * FROM channelinboundevent WHERE id = ?`,
-      [inboxId],
-    );
+    const rows = await this.db.query<
+      (ChannelinboundeventRow & RowDataPacket)[]
+    >(`SELECT * FROM channelinboundevent WHERE id = ?`, [inboxId]);
     const row = rows[0];
     const conn = await this.connections.findById(row.connectionId);
     // The shop comes from the inbox row, written by receive() from the verified
@@ -274,7 +279,11 @@ export class ChannelIngestionService {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       // Deterministic: retrying the same bytes cannot succeed.
-      return this.settle(row, e instanceof ChannelParseError ? 'dead' : 'failed', message);
+      return this.settle(
+        row,
+        e instanceof ChannelParseError ? 'dead' : 'failed',
+        message,
+      );
     }
     try {
       const externalOrderId = await this.applyEvent(conn, row, parsed);
@@ -435,7 +444,8 @@ export class ChannelIngestionService {
           after: {
             provider: conn.provider,
             externalOrderId: order.externalOrderId,
-            state: outcome === 'created' ? 'pending_acceptance' : 'needs_mapping',
+            state:
+              outcome === 'created' ? 'pending_acceptance' : 'needs_mapping',
           },
         },
       );
@@ -461,7 +471,9 @@ export class ChannelIngestionService {
     const byId = new Map(maps.map((m) => [m.externalItemId, m]));
     const mapped: (MappedLine | null)[] = order.lines.map((l, lineIndex) => {
       const m = byId.get(l.externalItemId);
-      return m ? { lineIndex, productId: m.productId, variantId: m.variantId } : null;
+      return m
+        ? { lineIndex, productId: m.productId, variantId: m.variantId }
+        : null;
     });
     const itemFor = (i: number) => ({
       productId: mapped[i]!.productId,
@@ -483,7 +495,10 @@ export class ChannelIngestionService {
       const idx = mapped.map((m, i) => (m ? i : -1)).filter((i) => i >= 0);
       if (idx.length === 0) break;
       try {
-        const r = await this.products.resolveOrderItems(conn.shopId, idx.map(itemFor));
+        const r = await this.products.resolveOrderItems(
+          conn.shopId,
+          idx.map(itemFor),
+        );
         const gifts = idx.filter((_, k) => r[k].product.isGiftCard);
         if (gifts.length > 0) {
           gifts.forEach(markUnmapped);
@@ -508,14 +523,24 @@ export class ChannelIngestionService {
     const unmapped = order.lines
       .map((l, i) => ({ l, i }))
       .filter(({ i }) => mapped[i] === null)
-      .map(({ l }) => ({ externalItemId: l.externalItemId, externalName: l.name || null }));
-    const dedup = [...new Map(unmapped.map((u) => [u.externalItemId, u])).values()];
+      .map(({ l }) => ({
+        externalItemId: l.externalItemId,
+        externalName: l.name || null,
+      }));
+    const dedup = [
+      ...new Map(unmapped.map((u) => [u.externalItemId, u])).values(),
+    ];
 
     return {
       mapped,
       unmapped: dedup,
       resolved,
-      priceMismatch: await this.priceMismatch(conn.shopId, order, mapped, resolved),
+      priceMismatch: await this.priceMismatch(
+        conn.shopId,
+        order,
+        mapped,
+        resolved,
+      ),
     };
   }
 
@@ -533,14 +558,16 @@ export class ChannelIngestionService {
       `SELECT currency FROM shop WHERE id = ?`,
       [shopId],
     );
-    if ((shop[0]?.currency as string | undefined) !== order.currency) return null;
+    if ((shop[0]?.currency as string | undefined) !== order.currency)
+      return null;
     const factor = minorUnitFactor(order.currency);
     const out: unknown[] = [];
     let k = 0;
     mapped.forEach((m, i) => {
       if (!m) return;
       const r = resolved[k++];
-      const catalog = (r.variant?.price as string | undefined) ?? (r.product.price as string);
+      const catalog =
+        (r.variant?.price as string | undefined) ?? (r.product.price as string);
       const catalogMinor = Math.round(Number(catalog) * factor);
       if (catalogMinor !== order.lines[i].unitPriceMinor) {
         out.push({
@@ -603,7 +630,7 @@ export class ChannelIngestionService {
       conn.outletId,
       resolved.map(({ product, variant, quantity }) => ({
         productId: product.id as number,
-        variantId: variant?.id ?? null,
+        variantId: (variant?.id as number | undefined) ?? null,
         quantity,
         allowNegative: true,
       })),
@@ -650,7 +677,9 @@ export class ChannelIngestionService {
     );
     const newOrderId = (res as { insertId: number }).insertId;
 
-    const placeholders = resolved.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)').join(', ');
+    const placeholders = resolved
+      .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)')
+      .join(', ');
     await c.query(
       `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount, note)
        VALUES ${placeholders}`,
@@ -660,7 +689,7 @@ export class ChannelIngestionService {
           newOrderId,
           r.product.id as number,
           r.product.name as string,
-          r.variant?.id ?? null,
+          (r.variant?.id as number | undefined) ?? null,
           r.variantLabel ?? null,
           r.quantity,
           // What the marketplace charged per unit, never the catalogue price.
@@ -672,7 +701,12 @@ export class ChannelIngestionService {
         ];
       }),
     );
-    await this.products.recordOrderConsumption(c, conn.shopId, newOrderId, consumed);
+    await this.products.recordOrderConsumption(
+      c,
+      conn.shopId,
+      newOrderId,
+      consumed,
+    );
 
     // Link, and drop the canonical snapshot now that the order holds the data.
     await c.query(
@@ -707,7 +741,10 @@ export class ChannelIngestionService {
     return created;
   }
 
-  async retryNeedsMapping(shopId: number, channelOrderId: number): Promise<boolean> {
+  async retryNeedsMapping(
+    shopId: number,
+    channelOrderId: number,
+  ): Promise<boolean> {
     const rows = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
       `SELECT * FROM channelorder WHERE id = ? AND shopId = ? AND state = 'needs_mapping'`,
       [channelOrderId, shopId],
@@ -804,7 +841,10 @@ export class ChannelIngestionService {
     await this.confirmOrder(co, actor);
   }
 
-  async confirmOrder(co: ChannelorderRow, actor?: TenantContext): Promise<void> {
+  async confirmOrder(
+    co: ChannelorderRow,
+    actor?: TenantContext,
+  ): Promise<void> {
     if (co.orderId === null) return;
     const ctx = actor ?? (await this.systemContext(co.shopId));
     try {
@@ -812,7 +852,8 @@ export class ChannelIngestionService {
     } catch (e) {
       // Already confirmed / moved on / cancelled: the state machine said no,
       // which is the idempotent answer.
-      if (!(e instanceof ConflictException || e instanceof BadRequestException)) throw e;
+      if (!(e instanceof ConflictException || e instanceof BadRequestException))
+        throw e;
     }
   }
 
@@ -855,15 +896,24 @@ export class ChannelIngestionService {
       `SELECT id FROM user WHERE shopId = ? AND role = 'admin' ORDER BY id ASC LIMIT 1`,
       [shopId],
     );
-    if (!adminRows[0]) throw new Error('shop has no admin user to attribute the change to');
-    return { userId: adminRows[0].id as number, shopId, role: 'admin', outletId: null };
+    if (!adminRows[0])
+      throw new Error('shop has no admin user to attribute the change to');
+    return {
+      userId: adminRows[0].id as number,
+      shopId,
+      role: 'admin',
+      outletId: null,
+    };
   }
 
   // ---------------------------------------------------------------------------
   // 5. Operations: replay and the SLO numbers.
   // ---------------------------------------------------------------------------
   // Puts dead or failed rows of ONE shop back in the queue and runs them.
-  async replay(shopId: number, inboxIds?: number[]): Promise<{ requeued: number }> {
+  async replay(
+    shopId: number,
+    inboxIds?: number[],
+  ): Promise<{ requeued: number }> {
     const idClause = inboxIds?.length
       ? `AND id IN (${inboxIds.map(() => '?').join(', ')})`
       : '';
@@ -887,7 +937,9 @@ export class ChannelIngestionService {
         GROUP BY status`,
       opts.shopId !== undefined ? [since, opts.shopId] : [since],
     );
-    const by = Object.fromEntries(rows.map((r) => [r.status as string, Number(r.n)]));
+    const by = Object.fromEntries(
+      rows.map((r) => [r.status as string, Number(r.n)]),
+    );
     const processed = by.processed ?? 0;
     const failed = (by.failed ?? 0) + (by.dead ?? 0);
     const final = processed + failed;
@@ -898,7 +950,8 @@ export class ChannelIngestionService {
       failed,
       inFlight: (by.received ?? 0) + (by.processing ?? 0),
       // null (never 100) when nothing has finished: no data is not perfect data.
-      ingestionSuccessPct: final === 0 ? null : Math.round((processed / final) * 1000) / 10,
+      ingestionSuccessPct:
+        final === 0 ? null : Math.round((processed / final) * 1000) / 10,
       failurePct: final === 0 ? null : Math.round((failed / final) * 1000) / 10,
     };
   }

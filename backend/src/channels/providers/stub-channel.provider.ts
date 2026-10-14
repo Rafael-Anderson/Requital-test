@@ -69,7 +69,10 @@ export class StubChannelProvider implements ChannelProvider {
   // Methods that should throw once, e.g. failNext.add('acceptOrder').
   readonly failNext = new Set<string>();
   // Open orders per location id for listOpenOrders (the polling fallback).
-  readonly openOrders = new Map<string, { eventId: string; payload: unknown }[]>();
+  readonly openOrders = new Map<
+    string,
+    { eventId: string; payload: unknown }[]
+  >();
   // Status per external order id for fetchOrderStatus.
   readonly statuses = new Map<string, CanonicalOrderStatus>();
   // What testConnection answers; flip to false to model a bad credential.
@@ -92,11 +95,11 @@ export class StubChannelProvider implements ChannelProvider {
     return typeof s === 'string' && s.length > 0 ? s : null;
   }
 
-  extractRoutingKey(
-    rawBody: Buffer,
-  ): string | null {
+  extractRoutingKey(rawBody: Buffer): string | null {
     try {
-      const body = JSON.parse(rawBody.toString('utf8')) as { locationId?: unknown };
+      const body = JSON.parse(rawBody.toString('utf8')) as {
+        locationId?: unknown;
+      };
       return typeof body.locationId === 'string' && body.locationId.length > 0
         ? body.locationId
         : null;
@@ -124,7 +127,8 @@ export class StubChannelProvider implements ChannelProvider {
       externalStatus?: unknown;
       order?: CanonicalChannelOrder;
     };
-    if (!p || typeof p !== 'object') throw new ChannelParseError('body is not an object');
+    if (!p || typeof p !== 'object')
+      throw new ChannelParseError('body is not an object');
     if (p.type === 'noop') return { kind: 'ignored', reason: 'noop' };
     if (p.type === 'order.new') {
       if (!p.order) throw new ChannelParseError('order.new without order');
@@ -142,14 +146,20 @@ export class StubChannelProvider implements ChannelProvider {
         externalOrderId: p.externalOrderId,
         status: p.status as CanonicalOrderStatus,
         externalStatus:
-          typeof p.externalStatus === 'string' ? p.externalStatus : String(p.status),
+          typeof p.externalStatus === 'string'
+            ? p.externalStatus
+            : String(p.status),
         order: p.order,
       };
     }
     throw new ChannelParseError('unknown event type');
   }
 
-  private record(method: string, externalOrderId?: string, detail?: unknown): void {
+  private record(
+    method: string,
+    externalOrderId?: string,
+    detail?: unknown,
+  ): void {
     this.calls.push({ method, externalOrderId, detail });
     if (this.failNext.delete(method)) {
       throw new Error(`stub ${method} failed`);
@@ -157,7 +167,9 @@ export class StubChannelProvider implements ChannelProvider {
   }
 
   testConnection(conn: BoundChannelConnection) {
-    this.record('testConnection', undefined, { location: conn.externalLocationId });
+    this.record('testConnection', undefined, {
+      location: conn.externalLocationId,
+    });
     return Promise.resolve({
       ok: this.testConnectionOk,
       provesLocation: this.testConnectionOk,
@@ -165,7 +177,10 @@ export class StubChannelProvider implements ChannelProvider {
     });
   }
 
-  acceptOrder(_conn: BoundChannelConnection, externalOrderId: string): Promise<ProviderCallResult> {
+  acceptOrder(
+    _conn: BoundChannelConnection,
+    externalOrderId: string,
+  ): Promise<ProviderCallResult> {
     this.record('acceptOrder', externalOrderId);
     this.statuses.set(externalOrderId, 'accepted');
     return Promise.resolve({ ok: true });
@@ -181,7 +196,10 @@ export class StubChannelProvider implements ChannelProvider {
     return Promise.resolve({ ok: true });
   }
 
-  markReady(_conn: BoundChannelConnection, externalOrderId: string): Promise<ProviderCallResult> {
+  markReady(
+    _conn: BoundChannelConnection,
+    externalOrderId: string,
+  ): Promise<ProviderCallResult> {
     this.record('markReady', externalOrderId);
     return Promise.resolve({ ok: true });
   }
@@ -197,13 +215,15 @@ export class StubChannelProvider implements ChannelProvider {
   fetchOrderStatus(_conn: BoundChannelConnection, externalOrderId: string) {
     this.record('fetchOrderStatus', externalOrderId);
     const status = this.statuses.get(externalOrderId);
-    return Promise.resolve(
-      status ? { status, externalStatus: status } : null,
-    );
+    return Promise.resolve(status ? { status, externalStatus: status } : null);
   }
 
   listOpenOrders(conn: BoundChannelConnection) {
-    this.record('listOpenOrders', undefined, { location: conn.externalLocationId });
-    return Promise.resolve(this.openOrders.get(conn.externalLocationId ?? '') ?? []);
+    this.record('listOpenOrders', undefined, {
+      location: conn.externalLocationId,
+    });
+    return Promise.resolve(
+      this.openOrders.get(conn.externalLocationId ?? '') ?? [],
+    );
   }
 }

@@ -49,7 +49,12 @@ function assertCredentialMap(value: unknown): Record<string, string> {
     throw new BadRequestException('credentials must have 1 to 20 entries');
   const out: Record<string, string> = {};
   for (const [k, v] of entries) {
-    if (!CREDENTIAL_KEY.test(k) || typeof v !== 'string' || v.length < 1 || v.length > 2000)
+    if (
+      !CREDENTIAL_KEY.test(k) ||
+      typeof v !== 'string' ||
+      v.length < 1 ||
+      v.length > 2000
+    )
       throw new BadRequestException(
         'credentials keys must be simple names and values non-empty strings up to 2000 characters',
       );
@@ -93,7 +98,10 @@ export class ChannelConnectionsService {
     }
   }
 
-  private async load(ctx: TenantContext, id: number): Promise<ChannelconnectionRow> {
+  private async load(
+    ctx: TenantContext,
+    id: number,
+  ): Promise<ChannelconnectionRow> {
     const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
       `SELECT * FROM channelconnection WHERE id = ? AND shopId = ?`,
       [id, ctx.shopId],
@@ -113,7 +121,9 @@ export class ChannelConnectionsService {
   async create(ctx: TenantContext, dto: CreateChannelConnectionDto) {
     await this.assertFlag(ctx.shopId);
     if (!this.registry.has(dto.provider)) {
-      throw new BadRequestException(`Unknown channel provider '${dto.provider}'`);
+      throw new BadRequestException(
+        `Unknown channel provider '${dto.provider}'`,
+      );
     }
     const outletRows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
@@ -162,7 +172,11 @@ export class ChannelConnectionsService {
     return ChannelConnectionsService.view(row);
   }
 
-  async update(ctx: TenantContext, id: number, dto: UpdateChannelConnectionDto) {
+  async update(
+    ctx: TenantContext,
+    id: number,
+    dto: UpdateChannelConnectionDto,
+  ) {
     const before = await this.load(ctx, id);
     const sets: string[] = ['updatedAt = ?'];
     const params: QueryParam[] = [new Date()];
@@ -197,7 +211,9 @@ export class ChannelConnectionsService {
     }
     if (dto.webhookSecret !== undefined) {
       sets.push('webhookSecret = ?');
-      params.push(dto.webhookSecret === null ? null : encrypt(dto.webhookSecret));
+      params.push(
+        dto.webhookSecret === null ? null : encrypt(dto.webhookSecret),
+      );
     }
     await this.db.execute(
       `UPDATE channelconnection SET ${sets.join(', ')} WHERE id = ? AND shopId = ?`,
@@ -233,7 +249,8 @@ export class ChannelConnectionsService {
     }
     await this.assertFlag(ctx.shopId);
     const provider = this.registry.find(row.provider);
-    if (!provider) throw new BadRequestException('This marketplace is not available');
+    if (!provider)
+      throw new BadRequestException('This marketplace is not available');
     if (!row.externalLocationId) {
       throw new BadRequestException('Set the location id before enabling');
     }
@@ -243,7 +260,10 @@ export class ChannelConnectionsService {
         'Credentials and a webhook secret are required before enabling',
       );
     }
-    if (!provider.capabilities.provesLocationOwnership || !provider.testConnection) {
+    if (
+      !provider.capabilities.provesLocationOwnership ||
+      !provider.testConnection
+    ) {
       throw new BadRequestException(
         'This marketplace cannot yet verify location ownership, so it cannot be enabled',
       );
@@ -254,7 +274,9 @@ export class ChannelConnectionsService {
       [
         new Date(),
         test.ok && test.provesLocation ? 'ok' : 'failed',
-        test.ok && test.provesLocation ? null : (test.message ?? 'Connection test failed').slice(0, 500),
+        test.ok && test.provesLocation
+          ? null
+          : (test.message ?? 'Connection test failed').slice(0, 500),
         id,
         ctx.shopId,
       ],
@@ -320,7 +342,9 @@ export class ChannelConnectionsService {
       [
         new Date(),
         test.ok ? 'ok' : 'failed',
-        test.ok ? null : (test.message ?? 'Connection test failed').slice(0, 500),
+        test.ok
+          ? null
+          : (test.message ?? 'Connection test failed').slice(0, 500),
         id,
         ctx.shopId,
       ],
