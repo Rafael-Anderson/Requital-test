@@ -14,6 +14,9 @@ test.setTimeout(120_000);
 let shop: SeedState;
 const DELIVERY_FEE = 12;
 test.beforeAll(async () => {
+  // seedShop waits out the per-IP signup limit (up to ~65s) when earlier specs
+  // used the budget; the hook needs its own timeout.
+  test.setTimeout(150_000);
   shop = await seedShop();
   // A delivery-capable outlet with a known default fee.
   await api(
