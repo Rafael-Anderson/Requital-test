@@ -25,6 +25,19 @@ vi.mock("@/lib/api", () => ({
   captureAbandonedCart: vi.fn().mockResolvedValue(undefined),
   createOrder: api.createOrder,
   listMyAddresses: vi.fn().mockResolvedValue([{ id: "a1", label: "Home", address: "1 Palm St" }]),
+  // The delivery quote is exercised in useDeliveryQuote.test; here it only has to answer.
+  quoteDelivery: vi.fn(async (_slug: string, req: { orderType: string }) => ({
+    status: req.orderType === "pickup" ? "pickup_free" : "quoted",
+    reason: null,
+    zone: null,
+    currency: "AED",
+    subtotal: "10.00",
+    discountAmount: null,
+    discountCode: null,
+    taxAmount: null,
+    deliveryFee: req.orderType === "pickup" ? "0.00" : "15.00",
+    total: req.orderType === "pickup" ? "10.00" : "25.00",
+  })),
 }));
 // Heavy or network children are irrelevant to which fields the selector shows.
 vi.mock("@/components/MapPicker", () => ({ default: () => <div data-testid="map" /> }));
@@ -183,6 +196,8 @@ describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (
     await userEvent.type(byLabel("Phone"), "0501234567");
     await userEvent.type(byLabel("Full address"), "1 Palm St");
     await userEvent.click(screen.getByRole("button", { name: "Pickup" }));
+    // Submit waits for the (debounced) quote, so the total shown is the total charged.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Place order" })).toBeEnabled());
     await userEvent.click(screen.getByRole("button", { name: "Place order" }));
     await waitFor(() => expect(api.createOrder).toHaveBeenCalled());
     expect(api.createOrder.mock.calls[0][1]).toMatchObject({ orderType: "pickup", customerAddress: "Pickup at A", regionId: undefined });
