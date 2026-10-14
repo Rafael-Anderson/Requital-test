@@ -30,9 +30,11 @@ async function seedDiscountShop(): Promise<DiscountShop> {
   const runId = `${Date.now()}`;
   const subdomain = `pw-dsc-${runId}`;
 
-  // POST /auth/signup is throttled at 5/min/IP. A full suite run already
-  // signs up twice (global-setup and merchant-onboarding) before reaching
-  // this spec, so a local re-run within the same window can push it over.
+  // POST /auth/signup is throttled at 5/min/IP. The suite signs up once in
+  // global-setup, then in each spec that seeds its own shop, so a spec near
+  // the end can be pushed over by the ones before it. The one spec that signs
+  // up through the UI (00-merchant-onboarding) is named to run FIRST, because
+  // it cannot wait out a 429 the way the API seeds below do.
   // One wait-and-retry rather than a blanket limit increase: the throttle is
   // a real protection and the suite should live within it.
   const signupBody = JSON.stringify({
