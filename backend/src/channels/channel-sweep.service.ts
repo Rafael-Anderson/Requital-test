@@ -58,7 +58,14 @@ export class ChannelSweepService {
   // Split out so a test drives it directly. Each step is isolated: one failing
   // never starves the others.
   async runOnce() {
-    const out = { replayed: 0, polled: 0, stale: 0, repaired: 0, purged: 0, scrubbed: 0 };
+    const out = {
+      replayed: 0,
+      polled: 0,
+      stale: 0,
+      repaired: 0,
+      purged: 0,
+      scrubbed: 0,
+    };
     const step = async (name: string, fn: () => Promise<void>) => {
       try {
         await fn();
@@ -186,7 +193,8 @@ export class ChannelSweepService {
             WHERE id = ? AND shopId = ? AND staleAlertedAt IS NULL AND state IN ('needs_mapping', 'pending_acceptance')`,
           [now, now, co.id, co.shopId],
         );
-        if ((claim as { affectedRows: number }).affectedRows === 0) return false;
+        if ((claim as { affectedRows: number }).affectedRows === 0)
+          return false;
         if (to) {
           await this.jobs.enqueue(
             co.shopId,
@@ -319,7 +327,9 @@ export class ChannelSweepService {
             WHERE id = ? AND shopId = ?`,
           [r.id, r.shopId],
         );
-        await c.query(`UPDATE orderitem SET note = NULL WHERE orderId = ?`, [r.id]);
+        await c.query(`UPDATE orderitem SET note = NULL WHERE orderId = ?`, [
+          r.id,
+        ]);
       });
     }
     return rows.length;

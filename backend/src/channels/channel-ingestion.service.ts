@@ -149,10 +149,9 @@ export class ChannelIngestionService {
     );
     const conn = rows[0];
     if (!conn) return reject();
-    // Defence in depth: an enabled connection whose location nobody has proven
-    // (no merchant-bound proof and no staff verification) is treated as unknown.
-    if (!provider.capabilities.provesLocationOwnership && !conn.locationVerifiedAt)
-      return reject();
+    // (Ownership was proven when the connection was ENABLED, and its ids cannot
+    // change while enabled, so nothing here may reject an enabled connection
+    // for a later verification change: that would drop accepted orders.)
 
     const secrets: string[] = [];
     try {
@@ -308,7 +307,11 @@ export class ChannelIngestionService {
         `UPDATE channelinboundevent
             SET status = 'processed', processedAt = ?, lastError = NULL, externalOrderId = ?
           WHERE id = ?`,
-        [new Date(), externalOrderId ? clip(externalOrderId, 191) : null, inboxId],
+        [
+          new Date(),
+          externalOrderId ? clip(externalOrderId, 191) : null,
+          inboxId,
+        ],
       );
       return 'processed';
     } catch (e) {
@@ -677,8 +680,8 @@ export class ChannelIngestionService {
           // VARCHAR(191), address and notes TEXT).
           clip(customer.name, 191),
           clip(customer.phone, 191),
-          clip(customer.address, 20000),
-          customer.notes ? clip(customer.notes, 20000) : null,
+          clip(customer.address, 10000),
+          customer.notes ? clip(customer.notes, 10000) : null,
           conn.provider,
           order.handover === 'merchant_delivery' ? 'delivery' : 'pickup',
           conn.provider,

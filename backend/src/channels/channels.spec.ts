@@ -1,3 +1,4 @@
+import { stubAllowed } from './channels.module';
 import { assertCanonicalOrder } from './canonical-order';
 import { ChannelParseError, type CanonicalChannelOrder } from './channel.types';
 import {
@@ -156,5 +157,26 @@ describe('StubChannelProvider', () => {
   it('extracts a routing key without trusting it, and survives garbage', () => {
     expect(p.extractRoutingKey(Buffer.from(raw))).toBe('L1');
     expect(p.extractRoutingKey(Buffer.from('nope'))).toBeNull();
+  });
+});
+
+describe('stub provider registration (allow-list)', () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+  it.each([
+    ['production', undefined, false],
+    [undefined, undefined, false],
+    ['staging', undefined, false],
+    ['test', undefined, true],
+    ['development', undefined, true],
+    ['production', '1', true],
+  ])('NODE_ENV=%s ENABLE_STUB_CHANNEL=%s -> %s', (env, flag, expected) => {
+    if (env === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = env;
+    if (flag === undefined) delete process.env.ENABLE_STUB_CHANNEL;
+    else process.env.ENABLE_STUB_CHANNEL = flag;
+    expect(stubAllowed()).toBe(expected);
   });
 });
