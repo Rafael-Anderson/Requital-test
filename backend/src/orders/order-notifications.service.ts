@@ -3,6 +3,7 @@ import { DatabaseService } from '../database/database.service';
 import { FeaturesService } from '../features/features.service';
 import type { RowDataPacket } from 'mysql2/promise';
 import { sendWhatsAppStub } from '../common/whatsapp';
+import { isMarketplaceChannel } from '../channels/marketplace-channels';
 import { normalizePhoneToE164 } from '../common/phone';
 import { generateSurveyToken } from '../common/token-hash';
 import { isDuplicateKeyError } from '../database/mysql-errors';
@@ -73,7 +74,24 @@ export class OrderNotificationsService {
     private readonly features: FeaturesService,
   ) {}
 
+  // A marketplace (Deliveroo / Talabat) order is the marketplace's customer, not
+  // ours: they were never asked to hear from this merchant, so nothing customer
+  // facing is ever sent for one. Checked at the top of EVERY customer-facing
+  // method here rather than trusted to its callers (the payment-provider
+  // toggle-bypass lesson: an outer-only check is the one some path forgets).
+  private async isMarketplaceOrder(
+    shopId: number,
+    orderId: number,
+  ): Promise<boolean> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT channel FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, shopId],
+    );
+    return isMarketplaceChannel(rows[0]?.channel as string | undefined);
+  }
+
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
+    if (await this.isMarketplaceOrder(shopId, order.id)) return;
     const bodyText = `Hi ${order.customerName}, we've received your order #${order.shopOrderNumber} (total ${formatMoney(order.total, order.currency)}). We'll message you again once it's on its way.`;
     // Standalone literal, not shared with notifyOutForDelivery's own HTML
     // below — deliberately duplicated rather than factored into a common
@@ -118,6 +136,7 @@ export class OrderNotificationsService {
     idempotencyKey: string,
   ): Promise<{ email: boolean; whatsapp: boolean }> {
     const sent = { email: false, whatsapp: false };
+    if (await this.isMarketplaceOrder(shopId, order.id)) return sent;
     const bodyText = `Your order #${order.shopOrderNumber} is at your door. Give this code to the driver to confirm delivery: ${code}. Do not share it with anyone else.`;
     try {
       if (
@@ -187,6 +206,7 @@ export class OrderNotificationsService {
   }
 
   async notifyOutForDelivery(shopId: number, order: NotifiableOrder) {
+    if (await this.isMarketplaceOrder(shopId, order.id)) return;
     const isPickup = order.orderType === 'pickup';
     const subject = isPickup
       ? `Your order #${order.shopOrderNumber} is ready for pickup`
@@ -235,6 +255,7 @@ export class OrderNotificationsService {
   // moment — same "gated at the moment it happened, never retroactively
   // re-evaluated" discipline as ingredientsConsumedAt (see schema.prisma).
   async notifySurveyRequest(shopId: number, order: NotifiableOrder) {
+    if (await this.isMarketplaceOrder(shopId, order.id)) return;
     const shopRows = await this.db.query<RowDataPacket[]>(
       `SELECT subdomain, name, displayName,
               customDomain, customDomainStatus, domainType
@@ -325,6 +346,7 @@ export class OrderNotificationsService {
     surveyId: number,
     orderId: number,
   ) {
+    if (await this.isMarketplaceOrder(shopId, orderId)) return;
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT s.token, o.customerEmail, o.customerName, o.shopOrderNumber,
               sh.subdomain, sh.name, sh.displayName,
@@ -473,28 +495,12 @@ export class OrderNotificationsService {
   // two notification channels.
   private async sendMerchantAlert(shopId: number, order: NotifiableOrder) {
     try {
-      const outletRows = await this.db.query<RowDataPacket[]>(
-        `SELECT o.phone, o.whatsapp, s.countryCode
-         FROM outlet o JOIN shop s ON s.id = o.shopId
-         WHERE o.id = ? AND o.shopId = ?`,
-        [order.outletId, shopId],
+      const to = await this.resolveMerchantAlertRecipient(
+        shopId,
+        order.outletId,
+        order.id,
       );
-      const outlet = outletRows[0];
-      const rawPhone = outlet?.whatsapp || outlet?.phone;
-      if (!rawPhone) return;
-
-      const to = normalizePhoneToE164(
-        rawPhone as string,
-        outlet.countryCode as string | null,
-      );
-      if (!to) {
-        logger.warn(
-          `order #${order.id}: outlet phone could not be normalized to E.164 — skipping merchant alert`,
-          { orderId: order.id, shopId },
-        );
-        return;
-      }
-
+      if (!to) return;
       const body = `New order #${order.shopOrderNumber} from ${order.customerName}. Total: ${formatMoney(order.total, order.currency)}.`;
       await this.jobsService.enqueue(
         shopId,
@@ -512,5 +518,37 @@ export class OrderNotificationsService {
         },
       );
     }
+  }
+
+  // The E.164 number that receives merchant alerts for an outlet (its WhatsApp,
+  // else its phone), or null. Shared with the marketplace channels, which alert
+  // the merchant about an order waiting for acceptance. A pool read: call it
+  // BEFORE opening a transaction, never inside one.
+  async resolveMerchantAlertRecipient(
+    shopId: number,
+    outletId: number,
+    logOrderId?: number,
+  ): Promise<string | null> {
+    const outletRows = await this.db.query<RowDataPacket[]>(
+      `SELECT o.phone, o.whatsapp, s.countryCode
+       FROM outlet o JOIN shop s ON s.id = o.shopId
+       WHERE o.id = ? AND o.shopId = ?`,
+      [outletId, shopId],
+    );
+    const outlet = outletRows[0];
+    const rawPhone = outlet?.whatsapp || outlet?.phone;
+    if (!rawPhone) return null;
+    const to = normalizePhoneToE164(
+      rawPhone as string,
+      outlet.countryCode as string | null,
+    );
+    if (!to) {
+      logger.warn(
+        `outlet phone could not be normalized to E.164 — skipping merchant alert`,
+        { orderId: logOrderId, outletId, shopId },
+      );
+      return null;
+    }
+    return to;
   }
 }

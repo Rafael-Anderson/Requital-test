@@ -17,6 +17,7 @@ import type { OrderRow, OrderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { withShopOrderNumber } from './order-number';
+import { isMarketplaceChannel } from '../channels/marketplace-channels';
 import { withTrackingToken } from '../common/token-hash';
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -644,6 +645,14 @@ export class OrdersService {
       order.outletId,
       'orders.manage',
     );
+    // A marketplace order's figures are what the marketplace charged. Re-pricing
+    // it here would apply this shop's own tax and delivery rules to money the
+    // aggregator collected, so it is changed on the marketplace, not here.
+    if (isMarketplaceChannel(order.channel)) {
+      throw new ConflictException(
+        'This order came from a marketplace and cannot be edited here',
+      );
+    }
     if (order.status === 'delivered' || order.status === 'cancelled') {
       throw new BadRequestException(
         `Cannot edit delivery fee for an order that is already '${order.status}'`,
@@ -968,6 +977,14 @@ export class OrdersService {
       order.outletId,
       'orders.manage',
     );
+    // A marketplace order's figures are what the marketplace charged. Re-pricing
+    // it here would apply this shop's own tax and delivery rules to money the
+    // aggregator collected, so it is changed on the marketplace, not here.
+    if (isMarketplaceChannel(order.channel)) {
+      throw new ConflictException(
+        'This order came from a marketplace and cannot be edited here',
+      );
+    }
     if (!EDITABLE_ORDER_STATUSES.includes(order.status as OrderStatus)) {
       throw new BadRequestException(
         `Order items can only be edited while status is one of: ${EDITABLE_ORDER_STATUSES.join(', ')} (current: '${order.status}')`,
