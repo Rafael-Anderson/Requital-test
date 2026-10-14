@@ -99,6 +99,7 @@ function checkFixedWidthInputs(file, src, violations) {
 }
 
 const ALLOWLIST = [
+  { file: "storefront/app/[shop]/orders/[token]/page.tsx", detail: "grid grid-cols-5 gap-1", reason: "order progress stepper, one column per status step, labels are short and wrap" },
   { file: "admin/app/affiliate/page.tsx", detail: "grid grid-cols-3 text-center", reason: "three stat tiles (approved/pending/rejected), a summary strip not a form" },
   { file: "admin/components/PresetThumbnails.tsx", detail: "grid grid-cols-3 gap-1 flex-1", reason: "fixed 3x3 thumbnail of a layout preset" },
   { file: "admin/components/theme-builder/SchemePicker.tsx", detail: "grid grid-cols-4 gap-2", reason: "colour-scheme swatch tiles, fixed geometry" },
