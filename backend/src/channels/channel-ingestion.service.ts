@@ -618,10 +618,10 @@ export class ChannelIngestionService {
       c.query(
         `INSERT INTO \`order\` (
            shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId,
-           customerName, customerPhone, customerEmail, customerAddress, regionId, deliveryNotes,
+           customerName, customerPhone, customerEmail, customerAddress, deliveryNotes,
            channel, orderType, paymentMethod, status, paymentStatus, deliveryFee, taxAmount,
            discountAmount, total, trackingToken, shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-         ) VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
         [
           conn.shopId,
           conn.outletId,

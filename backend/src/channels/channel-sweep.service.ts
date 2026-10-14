@@ -49,7 +49,9 @@ export class ChannelSweepService {
   @Cron(CronExpression.EVERY_MINUTE)
   async tick(): Promise<void> {
     if (process.env.NODE_ENV === 'test') return;
-    await this.scheduler.runLocked('channel-sweep', 55, () => this.runOnce());
+    await this.scheduler.runLocked('channel-sweep', 55, async () => {
+      await this.runOnce();
+    });
   }
 
   // Split out so a test drives it directly. Each step is isolated: one failing
