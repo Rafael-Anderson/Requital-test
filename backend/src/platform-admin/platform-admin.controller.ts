@@ -227,11 +227,16 @@ export class PlatformAdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: VerifyChannelLocationDto,
   ) {
-    return this.channelConnections.platformVerifyLocation(admin.id, shopId, id, {
-      externalLocationId: dto.externalLocationId,
-      externalBrandId: dto.externalBrandId,
-      externalSiteId: dto.externalSiteId,
-    });
+    return this.channelConnections.platformVerifyLocation(
+      admin.id,
+      shopId,
+      id,
+      {
+        externalLocationId: dto.externalLocationId,
+        externalBrandId: dto.externalBrandId,
+        externalSiteId: dto.externalSiteId,
+      },
+    );
   }
 
   @Post('shops/:shopId/channel-connections/:id/unverify-location')
@@ -240,7 +245,11 @@ export class PlatformAdminController {
     @Param('shopId', ParseIntPipe) shopId: number,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return this.channelConnections.platformUnverifyLocation(admin.id, shopId, id);
+    return this.channelConnections.platformUnverifyLocation(
+      admin.id,
+      shopId,
+      id,
+    );
   }
 
   @Post('shops/:shopId/slider-test-dispatch')

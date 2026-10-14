@@ -245,7 +245,7 @@ describe('Marketplace channels (E1)', () => {
       .send({ email, password: 'platform-password-123' })
       .expect(201);
     const jar: Record<string, string> = {};
-    for (const line of (login.get('Set-Cookie') ?? []) as string[]) {
+    for (const line of login.get('Set-Cookie') ?? []) {
       const pair = line.split(';')[0];
       const i = pair.indexOf('=');
       jar[pair.slice(0, i)] = pair.slice(i + 1);
@@ -1670,7 +1670,9 @@ describe('Marketplace channels (E1)', () => {
         `SELECT metadata FROM platformauditlogentry WHERE action = 'shop.channel_connection.location_verified' AND shopId = ? AND platformAdminId = ?`,
         [a.shopId, platform.id],
       );
-      expect(JSON.stringify(audit.map((x) => x.metadata))).toContain(c.loc);
+      expect(JSON.stringify(audit.map((x) => x.metadata as unknown))).toContain(
+        c.loc,
+      );
       // A merchant cannot set it through its own API.
       await r()
         .patch(`/channels/connections/${c.id}`)
@@ -1818,7 +1820,8 @@ describe('Marketplace channels (E1)', () => {
       stub.testConnection = async (conn) => {
         const t = await orig(conn);
         return {
-          ...t,
+          ok: t.ok,
+          provesLocation: t.provesLocation,
           message: `bad token ${conn.credentials?.token ?? ''} for you`,
         };
       };
@@ -1951,12 +1954,14 @@ describe('Marketplace channels (E1)', () => {
         co.id,
       ]);
       const jobs = app.get(JobsService);
-      const real = jobs.enqueue.bind(jobs);
-      const spy = jest.spyOn(jobs, 'enqueue').mockImplementation((...args) => {
-        if (String(args[3]) === `channelorder:${co.id}:stale-alert`)
-          return Promise.reject(new Error('queue down'));
-        return real(...args);
-      });
+      const real = jobs.enqueue.bind(jobs) as typeof jobs.enqueue;
+      const spy = jest
+        .spyOn(jobs, 'enqueue')
+        .mockImplementation((shopId, type, payload, key, opts) => {
+          if (key === `channelorder:${co.id}:stale-alert`)
+            return Promise.reject(new Error('queue down'));
+          return real(shopId, type, payload, key, opts);
+        });
       await expect(sweep.staleOrders()).rejects.toThrow('queue down');
       spy.mockRestore();
       expect(
@@ -2030,19 +2035,17 @@ describe('Marketplace channels (E1)', () => {
         .expect(201);
       // And below the DTO, in the service.
       await expect(
-        app
-          .get(OrdersService)
-          .create(
-            { userId: 1, shopId: a.shopId, role: 'admin', outletId: null },
-            {
-              customerName: 'X',
-              customerPhone: '1',
-              customerAddress: 'x',
-              outletId: a.outletId,
-              channel: 'Talabat',
-              items: [{ productId: p.id, quantity: 1 }],
-            } as never,
-          ),
+        app.get(OrdersService).create(
+          { userId: 1, shopId: a.shopId, role: 'admin', outletId: null },
+          {
+            customerName: 'X',
+            customerPhone: '1',
+            customerAddress: 'x',
+            outletId: a.outletId,
+            channel: 'Talabat',
+            items: [{ productId: p.id, quantity: 1 }],
+          },
+        ),
       ).rejects.toThrow(/reserved/);
     });
   });
