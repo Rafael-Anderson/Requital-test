@@ -45,6 +45,8 @@ import type { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto
 import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandoned-cart.dto';
 import { ValidateGiftCardDto } from '../gift-cards/dto/validate-gift-card.dto';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
+import { QuoteDeliveryDto } from './dto/quote-delivery.dto';
+import { DeliveryAddressRequiredException } from './delivery-address-required.exception';
 import { SubmitSurveyDto } from './dto/submit-survey.dto';
 import { ReviewsService } from '../reviews/reviews.service';
 import { FeaturedReviewsQueryDto } from '../reviews/dto/featured-reviews-query.dto';
@@ -1578,7 +1580,25 @@ export class PublicService {
       }
     }
 
-    let subtotal = 0;
+    // Region, delivery fee, discount code and tax/total: ONE function shared
+    // with the public delivery-fee quote, so the quote can never diverge from
+    // what this order is charged.
+    // Required for delivery only: a pickup customer gives no address to place in
+    // a region (the storefront no longer asks; it used to send a silent
+    // "Dubai"). Resolved before the fee, because zone matching needs the
+    // region's name.
+    const region = await this.regionsService.resolveForShop(shop.id, dto, {
+      required: dto.orderType === 'delivery',
+    });
+    const {
+      deliveryFee,
+      discount,
+      discountAmount,
+      discountCodeSnapshot,
+      totals,
+      orderTotal,
+    } = await this.priceCheckout(shop, outlet, dto, resolvedItems, region);
+    const { taxAmount, total } = totals;
     const itemsData = resolvedItems.map(
       (
         {
@@ -1593,123 +1613,24 @@ export class PublicService {
           taxRate,
         },
         idx,
-      ) => {
-        subtotal += Number(price) * quantity;
-        return {
-          productId: product.id as number,
-          productName: product.name as string,
-          variantId: variant?.id ?? null,
-          variantLabel: variantLabel ?? null,
-          quantity,
-          priceAtPurchase: price,
-          autoDiscountAmount,
-          unitCost,
-          note: dto.items[idx].note || null,
-          taxClassId,
-          taxRate,
-          // Filled in below, once computeOrderTotals has apportioned the
-          // order-level discount across the lines.
-          taxAmount: null as string | null,
-        };
-      },
+      ) => ({
+        productId: product.id as number,
+        productName: product.name as string,
+        variantId: variant?.id ?? null,
+        variantLabel: variantLabel ?? null,
+        quantity,
+        priceAtPurchase: price,
+        autoDiscountAmount,
+        unitCost,
+        note: dto.items[idx].note || null,
+        taxClassId,
+        taxRate,
+        // Each line's own captured tax, rounded once at persist to this
+        // currency's real precision - the same round-once-per-stored-column
+        // policy the order total follows.
+        taxAmount: String(roundMoney(totals.lines[idx].taxAmount, shop.currency)),
+      }),
     );
-
-    // Required for delivery only: a pickup customer gives no address to place in
-    // a region (the storefront no longer asks; it used to send a silent
-    // "Dubai"). Resolved here, before the fee, because zone matching needs the
-    // region's name.
-    const region = await this.regionsService.resolveForShop(shop.id, dto, {
-      required: dto.orderType === 'delivery',
-    });
-
-    let deliveryFee =
-      dto.orderType === 'pickup'
-        ? 0
-        : Number(
-            await this.resolveDeliveryFee(
-              shop,
-              outlet,
-              dto,
-              subtotal,
-              region.regionName ?? '',
-              region.regionId,
-            ),
-          );
-
-    // Resolved before the transaction (doesn't need order.id) — an
-    // invalid/expired/exhausted code throws here rather than silently
-    // checking out at full price, unlike affiliate attribution below (which
-    // never blocks checkout) — a discount the customer explicitly entered
-    // and expects applied is a different UX contract than passive referral
-    // tracking.
-    let discount: {
-      id: number;
-      usageLimit: number | null;
-      usageLimitPerCustomer: number | null;
-    } | null = null;
-    let discountAmount = 0;
-    let discountCodeSnapshot: string | undefined;
-    if (dto.discountCode) {
-      const resolved = await this.discountsService.resolveByCode(
-        shop.id,
-        dto.discountCode,
-      );
-      // Eligibility and the amount come from the resolved lines (server
-      // prices, server collection membership), never from client-supplied ids.
-      const evaluated = await this.discountsService.evaluate(resolved, {
-        lines: await this.discountsService.buildLines(
-          shop.id,
-          itemsData.map((d) => ({
-            productId: d.productId,
-            price: d.priceAtPurchase,
-            quantity: d.quantity,
-          })),
-        ),
-        currency: shop.currency,
-      });
-      if (!evaluated.valid) {
-        throw new BadRequestException(
-          evaluated.message ?? 'This discount code cannot be applied',
-        );
-      }
-      discount = resolved!;
-      discountAmount = evaluated.discountAmount ?? 0;
-      discountCodeSnapshot = evaluated.code;
-      if (evaluated.freeShipping) {
-        deliveryFee = 0;
-      }
-    }
-    // Tax is computed PER LINE against each product's own tax class, and the
-    // order-level discount is apportioned across the lines inside
-    // computeOrderTotals - tax is owed on what the customer actually pays for
-    // the goods, not the pre-discount list price.
-    const totals = computeOrderTotals({
-      lines: itemsData.map((d) => ({
-        amount: Number(d.priceAtPurchase) * d.quantity,
-        taxRate: d.taxRate,
-        taxClassId: d.taxClassId,
-      })),
-      deliveryFee,
-      discountAmount,
-      taxInclusive: shop.taxInclusive,
-      taxOnDelivery: Boolean(shop.taxOnDelivery),
-      // Delivery is the shop's own service, so it carries the shop's default
-      // (standard) rate rather than any product's class.
-      deliveryTaxRate: Number(shop.taxRate),
-    });
-    const { taxAmount, total } = totals;
-    // Each line's own captured tax, rounded once at persist to this currency's
-    // real precision - the same round-once-per-stored-column policy the order
-    // total follows.
-    totals.lines.forEach((line, i) => {
-      itemsData[i].taxAmount = String(
-        roundMoney(line.taxAmount, shop.currency),
-      );
-    });
-    // Rounded once, here, to the smallest unit this shop's currency actually
-    // has - not a hardcoded 2dp, which silently truncated the third decimal of
-    // a KWD/BHD/OMR total.
-    const orderTotal = roundMoney(total, shop.currency);
 
     // Gift card applies against the final total (after tax/delivery), not
     // the pre-tax subtotal a discount reduces — it's a payment credit, not
@@ -2157,6 +2078,268 @@ export class PublicService {
     return { order, checkoutUrl: null };
   }
 
+  // The single pricing path for a storefront checkout, used by createOrder AND
+  // quoteDelivery. Throws the same exceptions createOrder always threw (region,
+  // radius, zone, minimum order, discount code); nothing here writes.
+  private async priceCheckout(
+    shop: ShopRow,
+    outlet: OutletRow,
+    input: Pick<
+      CreatePublicOrderDto,
+      | 'orderType'
+      | 'regionId'
+      | 'area'
+      | 'latitude'
+      | 'longitude'
+      | 'discountCode'
+    >,
+    resolvedItems: Awaited<
+      ReturnType<ProductsService['resolveOrderItems']>
+    >,
+    // Already checked against the shop's own country by the caller
+    // (RegionsService.resolveForShop): the caller is the one that writes it.
+    region: { regionId: number | null; regionName: string | null },
+    // A quote is re-asked on every debounced address change: it must not write
+    // the "matched no zone" warning createOrder logs once per real order.
+    opts: { quiet?: boolean } = {},
+  ) {
+    const lines = resolvedItems.map((r) => ({
+      productId: r.product.id as number,
+      price: r.price,
+      quantity: r.quantity,
+      amount: Number(r.price) * r.quantity,
+      taxRate: r.taxRate,
+      taxClassId: r.taxClassId,
+    }));
+    let subtotal = 0;
+    for (const l of lines) subtotal += l.amount;
+
+    let zoneName: string | null = null;
+    let deliveryFee = 0;
+    if (input.orderType !== 'pickup') {
+      const resolved = await this.resolveDeliveryFee(
+        shop,
+        outlet,
+        input,
+        subtotal,
+        region.regionName ?? '',
+        region.regionId,
+        opts.quiet,
+      );
+      deliveryFee = Number(resolved.fee);
+      zoneName = resolved.zoneName;
+    }
+
+    // Resolved before any write - an invalid/expired/exhausted code throws here
+    // rather than silently checking out at full price, unlike affiliate
+    // attribution (which never blocks checkout): a discount the customer
+    // explicitly entered and expects applied is a different UX contract than
+    // passive referral tracking.
+    let discount: {
+      id: number;
+      usageLimit: number | null;
+      usageLimitPerCustomer: number | null;
+    } | null = null;
+    let discountAmount = 0;
+    let discountCodeSnapshot: string | undefined;
+    if (input.discountCode) {
+      const resolved = await this.discountsService.resolveByCode(
+        shop.id,
+        input.discountCode,
+      );
+      // Eligibility and the amount come from the resolved lines (server
+      // prices, server collection membership), never from client-supplied ids.
+      const evaluated = await this.discountsService.evaluate(resolved, {
+        lines: await this.discountsService.buildLines(
+          shop.id,
+          lines.map((d) => ({
+            productId: d.productId,
+            price: d.price,
+            quantity: d.quantity,
+          })),
+        ),
+        currency: shop.currency,
+      });
+      if (!evaluated.valid) {
+        throw new BadRequestException(
+          evaluated.message ?? 'This discount code cannot be applied',
+        );
+      }
+      discount = resolved!;
+      discountAmount = evaluated.discountAmount ?? 0;
+      discountCodeSnapshot = evaluated.code;
+      if (evaluated.freeShipping) {
+        deliveryFee = 0;
+      }
+    }
+    // Tax is computed PER LINE against each product's own tax class, and the
+    // order-level discount is apportioned across the lines inside
+    // computeOrderTotals - tax is owed on what the customer actually pays for
+    // the goods, not the pre-discount list price.
+    const totals = computeOrderTotals({
+      lines: lines.map((d) => ({
+        amount: d.amount,
+        taxRate: d.taxRate,
+        taxClassId: d.taxClassId,
+      })),
+      deliveryFee,
+      discountAmount,
+      taxInclusive: shop.taxInclusive,
+      taxOnDelivery: Boolean(shop.taxOnDelivery),
+      // Delivery is the shop's own service, so it carries the shop's default
+      // (standard) rate rather than any product's class.
+      deliveryTaxRate: Number(shop.taxRate),
+    });
+    // Rounded once, here, to the smallest unit this shop's currency actually
+    // has - not a hardcoded 2dp, which silently truncated the third decimal of
+    // a KWD/BHD/OMR total.
+    const orderTotal = roundMoney(totals.total, shop.currency);
+    return {
+      region,
+      subtotal,
+      deliveryFee,
+      zoneName,
+      discount,
+      discountAmount,
+      discountCodeSnapshot,
+      totals,
+      orderTotal,
+    };
+  }
+
+  // Public, read-only delivery-fee quote for the cart and checkout summary. It
+  // creates nothing and runs the exact pricing createOrder runs (priceCheckout),
+  // so what it returns is what the order will be charged. Gift card and store
+  // credit are payment credits applied after the total and are deliberately not
+  // part of a quote. A rejection createOrder would answer with a 400 comes back
+  // as status 'unavailable' carrying that same message.
+  async quoteDelivery(shopSlug: string, dto: QuoteDeliveryDto) {
+    const shop = await this.resolveShop(shopSlug);
+    this.assertPublished(shop);
+    const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
+      [dto.outletId, shop.id],
+    );
+    const outlet = outletRows[0];
+    if (!outlet) {
+      throw new BadRequestException('outletId is invalid for this shop');
+    }
+    // Uniform refusal BEFORE anything is priced: an id that is not an Available
+    // product of THIS shop (unpublished, archived, deleted, another tenant's)
+    // gets one identical answer with no amount in it, so this unauthenticated
+    // route can neither read an unpublished product's price nor tell which
+    // ids exist.
+    const askedIds = [...new Set(dto.items.map((i) => i.productId))];
+    const availableRows = await this.db.query<({ id: number } & RowDataPacket)[]>(
+      `SELECT id FROM product WHERE shopId = ? AND status = 'Available' AND id IN (${askedIds
+        .map(() => '?')
+        .join(', ')})`,
+      [shop.id, ...askedIds],
+    );
+    if (availableRows.length !== askedIds.length) {
+      return {
+        currency: shop.currency,
+        orderType: dto.orderType,
+        taxInclusive: shop.taxInclusive,
+        status: 'unavailable' as const,
+        reason: 'An item in your cart is no longer available',
+        zone: null,
+        subtotal: null,
+        discountAmount: null,
+        discountCode: null,
+        taxAmount: null,
+        deliveryFee: null,
+        total: null,
+      };
+    }
+    const resolvedItems = await this.productsService.resolveOrderItems(
+      shop.id,
+      dto.items.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+        variantId: i.variantId,
+        giftCardAmount: i.giftCardAmount,
+      })),
+    );
+    const base = {
+      currency: shop.currency,
+      orderType: dto.orderType,
+      taxInclusive: shop.taxInclusive,
+      status: 'quoted' as 'quoted' | 'pickup_free' | 'needs_address' | 'unavailable',
+      reason: null as string | null,
+      zone: null as string | null,
+      subtotal: null as string | null,
+      discountAmount: null as string | null,
+      discountCode: null as string | null,
+      taxAmount: null as string | null,
+      deliveryFee: null as string | null,
+      total: null as string | null,
+    };
+    const money = (n: number) => String(roundMoney(n, shop.currency));
+    const goodsSubtotal = resolvedItems.reduce(
+      (sum, r) => sum + Number(r.price) * r.quantity,
+      0,
+    );
+    const unquoted = (
+      status: 'needs_address' | 'unavailable',
+      reason: string | null,
+    ) => ({ ...base, status, reason, subtotal: money(goodsSubtotal) });
+
+    if (dto.orderType === 'delivery' && !outlet.deliveryEnabled) {
+      return unquoted('unavailable', 'This outlet does not offer delivery');
+    }
+    if (dto.orderType === 'pickup' && !outlet.pickupEnabled) {
+      return unquoted('unavailable', 'This outlet does not offer pickup');
+    }
+    // Nothing to place the customer with yet: never a fee, never a guess.
+    if (
+      dto.orderType === 'delivery' &&
+      dto.regionId == null &&
+      dto.latitude == null &&
+      !dto.area
+    ) {
+      return unquoted('needs_address', null);
+    }
+    try {
+      // Delivery in a country that has regions needs one chosen first; until
+      // then it is an incomplete address, not an unavailable one.
+      const region = await this.regionsService
+        .resolveForShop(shop.id, dto, { required: dto.orderType === 'delivery' })
+        .catch((err: unknown) => {
+          throw err instanceof BadRequestException && dto.regionId == null
+            ? new DeliveryAddressRequiredException(err.message)
+            : err;
+        });
+      const priced = await this.priceCheckout(
+        shop,
+        outlet,
+        dto,
+        resolvedItems,
+        region,
+        { quiet: true },
+      );
+      return {
+        ...base,
+        status: dto.orderType === 'pickup' ? ('pickup_free' as const) : ('quoted' as const),
+        zone: priced.zoneName,
+        subtotal: money(priced.subtotal),
+        discountAmount: money(priced.discountAmount),
+        discountCode: priced.discountCodeSnapshot ?? null,
+        taxAmount: money(priced.totals.taxAmount),
+        deliveryFee: money(priced.deliveryFee),
+        total: String(priced.orderTotal),
+      };
+    } catch (err) {
+      if (err instanceof DeliveryAddressRequiredException) {
+        return unquoted('needs_address', err.message);
+      }
+      if (err instanceof BadRequestException) {
+        return unquoted('unavailable', err.message);
+      }
+      throw err;
+    }
+  }
+
   private async resolveDeliveryFee(
     shop: { id: number; defaultDeliveryFee: string },
     outlet: {
@@ -2165,17 +2348,18 @@ export class PublicService {
       longitude: number | null;
       deliveryRadiusKm: number | null;
     },
-    dto: CreatePublicOrderDto,
+    dto: Pick<CreatePublicOrderDto, 'area' | 'latitude' | 'longitude'>,
     subtotal: number,
     regionName: string,
     regionId: number | null,
-  ): Promise<string> {
+    quiet = false,
+  ): Promise<{ fee: string; zoneName: string | null }> {
     // Radius is the eligibility boundary — if configured, coordinates are
     // required to prove the customer is inside it. Zones (below) then
     // decide the actual fee; radius never itself sets a fee.
     if (outlet.deliveryRadiusKm != null) {
       if (dto.latitude == null || dto.longitude == null) {
-        throw new BadRequestException(
+        throw new DeliveryAddressRequiredException(
           'Your location is required to confirm delivery is available at this address',
         );
       }
@@ -2237,7 +2421,7 @@ export class PublicService {
           `Minimum order amount for this area is ${zone.minOrderAmount}`,
         );
       }
-      return zone.fee;
+      return { fee: zone.fee, zoneName: zone.name };
     }
 
     if (zones.length > 0) {
@@ -2256,7 +2440,8 @@ export class PublicService {
           'Delivery is not available to this address — it did not match any configured delivery zone',
         );
       }
-      logger.warn(
+      if (!quiet) {
+        logger.warn(
         'address matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
         {
           outletId: outlet.id,
@@ -2266,9 +2451,10 @@ export class PublicService {
           zoneMatchingMode: mode,
         },
       );
+      }
     }
 
-    return shop.defaultDeliveryFee;
+    return { fee: shop.defaultDeliveryFee, zoneName: null };
   }
 
   private async assertPaymentMethodAvailable(

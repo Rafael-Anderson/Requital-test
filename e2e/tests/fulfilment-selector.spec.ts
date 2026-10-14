@@ -13,6 +13,9 @@ test.setTimeout(120_000);
 
 let seed: SeedState;
 test.beforeAll(async () => {
+  // seedShop waits out the per-IP signup limit (up to ~65s) when earlier specs
+  // used the budget; the hook gets its own timeout, the file-level one is not it.
+  test.setTimeout(150_000);
   seed = await seedShop();
 });
 

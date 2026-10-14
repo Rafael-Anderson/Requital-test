@@ -79,6 +79,15 @@ describe("CartDrawer cart.subtotalAnimation (§8.13.C item 13)", () => {
   });
 });
 
+describe("CartDrawer delivery line", () => {
+  it("says delivery is calculated at checkout, never a zero amount", () => {
+    themeConfig = { globalSettings: {} };
+    items = [{ productId: 1, variantId: null, name: "x", price: "10", quantity: 1, maxStock: null, thumbnail: "" }];
+    const { getByTestId } = render(<CartDrawer />);
+    expect(getByTestId("cart-drawer-delivery-row").textContent).toContain("Calculated at checkout");
+  });
+});
+
 describe("CartDrawer drawers chrome (§8.18 follow-up)", () => {
   it("no-op: unset drawers ⇒ bg-drawer + shadow-2xl, no panel border", () => {
     themeConfig = { globalSettings: {} };

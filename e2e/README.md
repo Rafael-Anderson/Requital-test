@@ -45,7 +45,7 @@ shared fixture state would be a self-inflicted flake to chase, not a real one.
 ## What's covered vs. not
 
 Per spec file:
-- `merchant-onboarding.spec.ts` — signup wizard (all 4 steps) → lands
+- `00-merchant-onboarding.spec.ts` — signup wizard (all 4 steps) → lands
   authenticated → creates a product in Simple mode → switches to Advanced
   mode → creates a second product there → publishes the shop.
 - `customer-checkout.spec.ts` — browse → PDP → select a variant → add to
@@ -74,7 +74,7 @@ on pickup is exercised — it needs no external gateway interaction).
   guest-only-path redirect (`/signup` → `/`) reacts to that same `user`
   update — the redirect won every time this was tested locally, unmounting
   the modal before it could ever be observed (by a real user or this spec).
-  See `merchant-onboarding.spec.ts`'s own comment.
+  See `00-merchant-onboarding.spec.ts`'s own comment.
 - `CheckoutSinglePage.tsx`'s Name/Phone fields render a `<label>` next to an
   `<input>` with no `htmlFor`/`id` pairing — a real accessibility gap
   (`getByLabel` can't find them; `customer-checkout.spec.ts` works around it
@@ -84,5 +84,5 @@ on pickup is exercised — it needs no external gateway interaction).
   compiles routes on demand) — silently no-ops the file selection instead
   of erroring or waiting. Worked around with an explicit
   `waitFor({ state: 'attached' })` before every `setInputFiles` call in
-  `merchant-onboarding.spec.ts`; worth the same treatment anywhere else in
+  `00-merchant-onboarding.spec.ts`; worth the same treatment anywhere else in
   this app that uploads a file right after a fresh navigation.

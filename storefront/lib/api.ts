@@ -88,11 +88,12 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, data: unknown): Promise<T> {
+async function post<T>(path: string, data: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
+    signal,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
@@ -304,6 +305,43 @@ export function getRegions(shopSlug: string) {
 
 export function listDeliveryZones(shopSlug: string, outletId: number) {
   return get<DeliveryZone[]>(`/public/${shopSlug}/outlets/${outletId}/delivery-zones`);
+}
+
+// Delivery fee + totals for the cart in its current state (POST delivery-quote).
+// Money fields are decimal strings in the shop currency, rounded to its minor
+// unit; null when a fee cannot be given (needs_address / unavailable).
+export type DeliveryQuoteStatus = "quoted" | "pickup_free" | "needs_address" | "unavailable";
+export interface DeliveryQuote {
+  status: DeliveryQuoteStatus;
+  reason: string | null;
+  zone: string | null;
+  currency: string;
+  subtotal: string | null;
+  discountAmount: string | null;
+  discountCode: string | null;
+  taxAmount: string | null;
+  deliveryFee: string | null;
+  total: string | null;
+}
+export interface DeliveryQuoteRequest {
+  outletId: number;
+  orderType: "delivery" | "pickup";
+  regionId?: number;
+  area?: string;
+  latitude?: number;
+  longitude?: number;
+  discountCode?: string;
+  items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number }[];
+}
+export function quoteDelivery(shopSlug: string, payload: DeliveryQuoteRequest, signal?: AbortSignal) {
+  // authedFetch, not post: a logged-in shopper carries the customer session
+  // cookie, and any POST under /public/:shop then needs the CSRF header (the
+  // backend 403s without it). Logged out it behaves like a plain POST.
+  return authedFetch<DeliveryQuote>(shopSlug, `/public/${shopSlug}/delivery-quote`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
 }
 
 export function createOrder(shopSlug: string, payload: CreateOrderPayload) {

@@ -13,6 +13,7 @@ import { Throttle } from '@nestjs/throttler';
 import { PublicService } from './public.service';
 import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
+import { QuoteDeliveryDto } from './dto/quote-delivery.dto';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { CaptureAbandonedCartDto } from '../abandoned-carts/dto/capture-abandoned-cart.dto';
@@ -325,6 +326,21 @@ export class PublicController {
       ? await this.customerAuth.authenticate(req)
       : null;
     return this.publicService.createOrder(shopSlug, dto, customer);
+  }
+
+  // Read-only delivery-fee + totals quote for the cart/checkout summary (see
+  // PublicService.quoteDelivery): runs the same pricing as POST orders but writes
+  // nothing. Re-fired (debounced) as the address changes, so a little looser than
+  // order creation, but still per-IP bounded: it prices a cart and tests discount
+  // codes, so it is not free to hammer.
+  @Throttle({ default: { limit: 40, ttl: 60000 } })
+  @Public()
+  @Post('delivery-quote')
+  quoteDelivery(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: QuoteDeliveryDto,
+  ) {
+    return this.publicService.quoteDelivery(shopSlug, dto);
   }
 
   // Fired by the checkout page once name+phone are both filled in — see
