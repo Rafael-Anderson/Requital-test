@@ -7,7 +7,10 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { TenantContext } from '../common/tenant-context';
 import { AuditLogService } from '../audit-log/audit-log.service';
-import type { ChannelitemmappingRow, ChannelunmappeditemRow } from '../db/types';
+import type {
+  ChannelitemmappingRow,
+  ChannelunmappeditemRow,
+} from '../db/types';
 import { ChannelIngestionService } from './channel-ingestion.service';
 import { ChannelProviderRegistry } from './channel-provider.registry';
 import type {
@@ -49,14 +52,18 @@ export class ChannelMappingsService {
       `SELECT id, isGiftCard FROM product WHERE id = ? AND shopId = ?`,
       [productId, shopId],
     );
-    if (products.length === 0) throw new BadRequestException('productId is invalid for this shop');
-    if (products[0].isGiftCard) throw new BadRequestException('A gift card cannot be a marketplace item');
+    if (products.length === 0)
+      throw new BadRequestException('productId is invalid for this shop');
+    if (products[0].isGiftCard)
+      throw new BadRequestException('A gift card cannot be a marketplace item');
     const options = await this.db.query<RowDataPacket[]>(
       `SELECT 1 FROM productoption WHERE productId = ? LIMIT 1`,
       [productId],
     );
     if (options.length > 0 && variantId === undefined) {
-      throw new BadRequestException('This product has options: choose a variant');
+      throw new BadRequestException(
+        'This product has options: choose a variant',
+      );
     }
     if (options.length === 0 && variantId !== undefined) {
       throw new BadRequestException('This product has no variants');
@@ -67,13 +74,16 @@ export class ChannelMappingsService {
           WHERE v.id = ? AND v.productId = ? AND p.shopId = ?`,
         [variantId, productId, shopId],
       );
-      if (v.length === 0) throw new BadRequestException('variantId is invalid for this product');
+      if (v.length === 0)
+        throw new BadRequestException('variantId is invalid for this product');
     }
   }
 
   async create(ctx: TenantContext, dto: CreateChannelMappingDto) {
     if (!this.registry.has(dto.provider)) {
-      throw new BadRequestException(`Unknown channel provider '${dto.provider}'`);
+      throw new BadRequestException(
+        `Unknown channel provider '${dto.provider}'`,
+      );
     }
     await this.assertTarget(ctx.shopId, dto.productId, dto.variantId);
     await this.db.execute(
@@ -90,7 +100,13 @@ export class ChannelMappingsService {
         dto.externalName ?? null,
       ],
     );
-    return this.afterMapped(ctx, dto.provider, dto.externalItemId, dto.productId, dto.variantId);
+    return this.afterMapped(
+      ctx,
+      dto.provider,
+      dto.externalItemId,
+      dto.productId,
+      dto.variantId,
+    );
   }
 
   async remove(ctx: TenantContext, id: number) {
@@ -98,7 +114,8 @@ export class ChannelMappingsService {
       `DELETE FROM channelitemmapping WHERE id = ? AND shopId = ?`,
       [id, ctx.shopId],
     );
-    if (res.affectedRows === 0) throw new NotFoundException('Mapping not found');
+    if (res.affectedRows === 0)
+      throw new NotFoundException('Mapping not found');
     await this.audit.logCtx(ctx, {
       action: 'channel.mapping_deleted',
       entityType: 'channelitemmapping',
@@ -110,7 +127,9 @@ export class ChannelMappingsService {
   // The queue the merchant works through: each unmapped item with the orders
   // that are waiting on it.
   async listUnmapped(ctx: TenantContext, includeResolved = false) {
-    const items = await this.db.query<(ChannelunmappeditemRow & RowDataPacket)[]>(
+    const items = await this.db.query<
+      (ChannelunmappeditemRow & RowDataPacket)[]
+    >(
       `SELECT * FROM channelunmappeditem
         WHERE shopId = ? ${includeResolved ? '' : 'AND resolvedAt IS NULL'}
         ORDER BY lastSeenAt DESC`,
@@ -138,11 +157,17 @@ export class ChannelMappingsService {
   }
 
   // Resolving maps the item and re-evaluates every order that was waiting on it.
-  async resolveUnmapped(ctx: TenantContext, id: number, dto: ResolveUnmappedItemDto) {
-    const rows = await this.db.query<(ChannelunmappeditemRow & RowDataPacket)[]>(
-      `SELECT * FROM channelunmappeditem WHERE id = ? AND shopId = ?`,
-      [id, ctx.shopId],
-    );
+  async resolveUnmapped(
+    ctx: TenantContext,
+    id: number,
+    dto: ResolveUnmappedItemDto,
+  ) {
+    const rows = await this.db.query<
+      (ChannelunmappeditemRow & RowDataPacket)[]
+    >(`SELECT * FROM channelunmappeditem WHERE id = ? AND shopId = ?`, [
+      id,
+      ctx.shopId,
+    ]);
     const item = rows[0];
     if (!item) throw new NotFoundException('Unmapped item not found');
     return this.create(ctx, {
@@ -165,14 +190,28 @@ export class ChannelMappingsService {
       `UPDATE channelunmappeditem SET resolvedAt = ? WHERE shopId = ? AND provider = ? AND externalItemId = ?`,
       [new Date(), ctx.shopId, provider, externalItemId],
     );
-    const ordersCreated = await this.ingestion.reevaluateWaiting(ctx.shopId, provider, [
-      externalItemId,
-    ]);
+    const ordersCreated = await this.ingestion.reevaluateWaiting(
+      ctx.shopId,
+      provider,
+      [externalItemId],
+    );
     await this.audit.logCtx(ctx, {
       action: 'channel.mapping_saved',
       entityType: 'channelitemmapping',
-      after: { provider, externalItemId, productId, variantId: variantId ?? null, ordersCreated },
+      after: {
+        provider,
+        externalItemId,
+        productId,
+        variantId: variantId ?? null,
+        ordersCreated,
+      },
     });
-    return { provider, externalItemId, productId, variantId: variantId ?? null, ordersCreated };
+    return {
+      provider,
+      externalItemId,
+      productId,
+      variantId: variantId ?? null,
+      ordersCreated,
+    };
   }
 }

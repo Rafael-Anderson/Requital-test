@@ -11,7 +11,9 @@ export const MARKETPLACE_ORDER_CHANNELS = [
   'stub_marketplace',
 ] as const;
 
-export function isMarketplaceChannel(channel: string | null | undefined): boolean {
+export function isMarketplaceChannel(
+  channel: string | null | undefined,
+): boolean {
   return (
     typeof channel === 'string' &&
     (MARKETPLACE_ORDER_CHANNELS as readonly string[]).includes(channel)

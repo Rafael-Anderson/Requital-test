@@ -1,6 +1,9 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
-export function hmacSha256Hex(secret: string, message: Buffer | string): string {
+export function hmacSha256Hex(
+  secret: string,
+  message: Buffer | string,
+): string {
   return createHmac('sha256', secret).update(message).digest('hex');
 }
 

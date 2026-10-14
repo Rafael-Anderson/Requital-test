@@ -15,9 +15,7 @@
 //       deliver, so the order must never reach the driver-dispatch lists)
 //   merchant_delivery                    -> 'delivery'
 export type ChannelHandover =
-  | 'marketplace_courier'
-  | 'merchant_delivery'
-  | 'customer_pickup';
+  'marketplace_courier' | 'merchant_delivery' | 'customer_pickup';
 
 export interface CanonicalChannelLine {
   // The id the marketplace uses for the item (Deliveroo pos_item_id, Talabat
@@ -212,9 +210,9 @@ export interface ChannelProvider {
   platformWebhookSecrets?(): string[];
 
   // --- outbound (each optional; guarded by capabilities) -------------------
-  testConnection?(conn: BoundChannelConnection): Promise<
-    ProviderCallResult & { provesLocation: boolean }
-  >;
+  testConnection?(
+    conn: BoundChannelConnection,
+  ): Promise<ProviderCallResult & { provesLocation: boolean }>;
   acceptOrder?(
     conn: BoundChannelConnection,
     externalOrderId: string,
@@ -252,7 +250,13 @@ export interface ChannelProvider {
   // Menu / catalogue push. Item ids MUST be stable across pushes.
   pushCatalogue?(
     conn: BoundChannelConnection,
-    items: { externalItemId: string; name: string; priceMinor: number; currency: string; available: boolean }[],
+    items: {
+      externalItemId: string;
+      name: string;
+      priceMinor: number;
+      currency: string;
+      available: boolean;
+    }[],
   ): Promise<ProviderCallResult>;
   adjustPrepTime?(
     conn: BoundChannelConnection,
