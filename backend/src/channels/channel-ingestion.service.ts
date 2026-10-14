@@ -436,7 +436,7 @@ export class ChannelIngestionService {
       }
 
       if (alertTo) {
-        const label = order.displayId ?? order.externalOrderId;
+        const label = clip(order.displayId ?? order.externalOrderId, 64);
         const body = complete
           ? `New ${conn.provider} order ${label} is waiting for you to accept it.`
           : `New ${conn.provider} order ${label} has items that are not set up yet. Map them in Requital so the order can be accepted.`;

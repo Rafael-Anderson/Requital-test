@@ -1542,6 +1542,13 @@ describe('Marketplace channels (E1)', () => {
       );
       const c = await connect(a, o2.id);
       await r().delete(`/outlets/${o2.id}`).set(h(a)).expect(409);
+      // An enabled connection cannot be deleted at all.
+      await r().delete(`/channels/connections/${c.id}`).set(h(a)).expect(409);
+      await r()
+        .post(`/channels/connections/${c.id}/enabled`)
+        .set(h(a))
+        .send({ enabled: false })
+        .expect(201);
       await r().delete(`/channels/connections/${c.id}`).set(h(a)).expect(200);
       await r().delete(`/outlets/${o2.id}`).set(h(a)).expect(200);
     });
@@ -2184,6 +2191,11 @@ describe('Marketplace channels (E1)', () => {
       );
       const c = await connect(a, o.id);
       const dead = await deliver(c, { type: 'order.new' });
+      await r()
+        .post(`/channels/connections/${c.id}/enabled`)
+        .set(h(a))
+        .send({ enabled: false })
+        .expect(201);
       await r().delete(`/channels/connections/${c.id}`).set(h(a)).expect(409);
       await db.execute(
         `UPDATE channelinboundevent SET status = 'processed' WHERE id = ?`,
@@ -2218,6 +2230,234 @@ describe('Marketplace channels (E1)', () => {
       await svc.enqueuePurchase(co.orderId);
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('second review round', () => {
+    it('M-A: an order with a marketplace channel string but no link is never locked or scrubbed', async () => {
+      const p = await product(a, 10);
+      const o = await f.adminOrder(a, [{ productId: p.id, quantity: 1 }], {
+        customerName: 'Legacy Person',
+      });
+      await db.execute(
+        `UPDATE \`order\` SET channel = 'deliveroo' WHERE id = ?`,
+        [o.id],
+      );
+      // Not locked: the generic routes still work.
+      await f
+        .editItems(a, o.id, [{ productId: p.id, quantity: 2 }])
+        .expect(200);
+      await r()
+        .patch(`/orders/${o.id}/delivery-fee`)
+        .set(h(a))
+        .send({ deliveryFee: 3 })
+        .expect(200);
+      await r()
+        .patch(`/orders/${o.id}/status`)
+        .set(h(a))
+        .send({ status: 'confirmed' })
+        .expect(200);
+      await r().post(`/orders/${o.id}/cancel`).set(h(a)).expect(201);
+      // Not scrubbed: cancelled long ago, would match on channel alone.
+      await db.execute(
+        `UPDATE auditlog SET createdAt = ? WHERE entityType = 'order' AND entityId = ?`,
+        [new Date(Date.now() - 40 * 86_400_000), o.id],
+      );
+      await sweep.scrubClosedOrders();
+      expect((await f.orderRow(o.id)).customerName).toBe('Legacy Person');
+    });
+
+    it('M-B: deleting a connection cannot race an inbound delivery into losing it', async () => {
+      const ob = body<{ id: number }>(
+        await r()
+          .post('/outlets')
+          .set(h(a))
+          .send({ name: `MB ${f.uniq()}` })
+          .expect(201),
+      );
+      const c = await connect(a, ob.id);
+      await r()
+        .post(`/channels/connections/${c.id}/enabled`)
+        .set(h(a))
+        .send({ enabled: false })
+        .expect(201);
+      // A delivery is acknowledged between the guard checks and the DELETE.
+      const real = db.execute.bind(db) as typeof db.execute;
+      let raced: { inboxId: number } | undefined;
+      const spy = jest
+        .spyOn(db, 'execute')
+        .mockImplementation(async (sql, params) => {
+          if (
+            typeof sql === 'string' &&
+            sql.startsWith('DELETE FROM channelconnection') &&
+            !raced
+          ) {
+            raced = { inboxId: 0 };
+            await real(
+              `INSERT INTO channelinboundevent (shopId, connectionId, provider, eventId, signatureVerified, payloadHash, payload, receivedAt, nextAttemptAt)
+             VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+              [
+                a.shopId,
+                c.id,
+                STUB_PROVIDER,
+                `race-${f.uniq()}`,
+                'h'.repeat(64),
+                JSON.stringify({ type: 'noop' }),
+                new Date(),
+                new Date(),
+              ],
+            );
+          }
+          return real(sql, params);
+        });
+      await r().delete(`/channels/connections/${c.id}`).set(h(a)).expect(409);
+      spy.mockRestore();
+      expect(
+        await db.query<RowDataPacket[]>(
+          `SELECT 1 FROM channelinboundevent WHERE connectionId = ?`,
+          [c.id],
+        ),
+      ).toHaveLength(1);
+      expect(
+        await db.query<RowDataPacket[]>(
+          `SELECT 1 FROM channelconnection WHERE id = ?`,
+          [c.id],
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('L1: a failing poll does not leak a credential into lastError', async () => {
+      const ob = body<{ id: number }>(
+        await r()
+          .post('/outlets')
+          .set(h(a))
+          .send({ name: `L1p ${f.uniq()}` })
+          .expect(201),
+      );
+      const c = await connect(a, ob.id);
+      const orig = stub.listOpenOrders.bind(stub);
+      stub.listOpenOrders = () =>
+        Promise.reject(new Error('401 for token tok-leak-check'));
+      await r()
+        .post(`/channels/connections/${c.id}/enabled`)
+        .set(h(a))
+        .send({ enabled: false })
+        .expect(201);
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ credentials: { token: 'tok-leak-check' } })
+        .expect(200);
+      await staffVerify(a, c.id, { externalLocationId: c.locationId }).expect(
+        201,
+      );
+      await r()
+        .post(`/channels/connections/${c.id}/enabled`)
+        .set(h(a))
+        .send({ enabled: true })
+        .expect(201);
+      await db.execute(
+        `UPDATE channelconnection SET lastSyncAt = NULL WHERE id = ?`,
+        [c.id],
+      );
+      await sweep.pollConnections();
+      stub.listOpenOrders = orig;
+      const [row] = await db.query<RowDataPacket[]>(
+        `SELECT lastSyncStatus, lastError FROM channelconnection WHERE id = ?`,
+        [c.id],
+      );
+      expect(row.lastSyncStatus).toBe('failed');
+      expect(row.lastError).not.toContain('tok-leak-check');
+    });
+
+    it('L2: credentials and the webhook secret of an ENABLED connection cannot be replaced or cleared', async () => {
+      await r()
+        .patch(`/channels/connections/${ca.id}`)
+        .set(h(a))
+        .send({ credentials: { token: 'z' } })
+        .expect(409);
+      await r()
+        .patch(`/channels/connections/${ca.id}`)
+        .set(h(a))
+        .send({ credentials: null })
+        .expect(409);
+      await r()
+        .patch(`/channels/connections/${ca.id}`)
+        .set(h(a))
+        .send({ webhookSecret: 'another-secret-1' })
+        .expect(409);
+      await r()
+        .patch(`/channels/connections/${ca.id}`)
+        .set(h(a))
+        .send({ webhookSecret: null })
+        .expect(409);
+      const [row] = await db.query<RowDataPacket[]>(
+        `SELECT credentials, webhookSecret FROM channelconnection WHERE id = ?`,
+        [ca.id],
+      );
+      expect(row.credentials).not.toBeNull();
+      expect(row.webhookSecret).not.toBeNull();
+    });
+
+    it('L3 and L8: the alert label is clipped, and commission is for admins only', async () => {
+      const p = await product(a, 10);
+      await mapItem(a, 'l3-sku', p.id);
+      const o = canon(
+        [{ id: 'l3-sku', priceMinor: 1000 }],
+        {},
+        { commissionMinor: 250 },
+      );
+      o.displayId = 'Q'.repeat(150);
+      await newOrder(ca, o);
+      const co = await link(ca, o.externalOrderId);
+      const [job] = await jobsOf(
+        a.shopId,
+        'send_merchant_whatsapp_alert',
+        `channelorder:${co.id}:alert`,
+      );
+      expect(JSON.stringify(job.payload)).not.toContain('Q'.repeat(65));
+      const adminList = await r().get('/channels/orders').set(h(a)).expect(200);
+      expect(
+        adminList.body.data.find((x: { id: number }) => x.id === co.id)
+          .commissionAmount,
+      ).toBe('2.5');
+      const branch = await createStaff(
+        app,
+        a.adminToken,
+        'cm',
+        'branch',
+        a.outletId,
+      );
+      const om = await createStaff(app, a.adminToken, 'cm', 'order_manager');
+      for (const t of [branch.token, om.token]) {
+        const l = await r()
+          .get('/channels/orders')
+          .set({ Authorization: `Bearer ${t}` })
+          .expect(200);
+        const row = l.body.data.find((x: { id: number }) => x.id === co.id);
+        expect(row).toBeDefined();
+        expect(row.commissionAmount).toBeNull();
+      }
+    });
+
+    it('L5: a marketplace-accepted order that still needs mapping is not treated as settled', async () => {
+      const o = canon([{ id: `l5-${f.uniq()}`, priceMinor: 1000 }]);
+      await newOrder(ca, o);
+      const co = await link(ca, o.externalOrderId);
+      await db.execute(`UPDATE channelorder SET acceptBy = ? WHERE id = ?`, [
+        new Date(Date.now() - 60_000),
+        co.id,
+      ]);
+      stub.statuses.set(o.externalOrderId, 'accepted');
+      await sweep.staleOrders();
+      expect(
+        await jobsOf(
+          a.shopId,
+          'send_merchant_whatsapp_alert',
+          `channelorder:${co.id}:stale-alert`,
+        ),
+      ).toHaveLength(1);
     });
   });
 });

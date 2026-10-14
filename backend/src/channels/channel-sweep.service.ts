@@ -8,7 +8,6 @@ import { JobsService } from '../jobs/jobs.service';
 import { createLogger } from '../common/logging/logger';
 import { OrderNotificationsService } from '../orders/order-notifications.service';
 import type { ChannelconnectionRow, ChannelorderRow } from '../db/types';
-import { MARKETPLACE_ORDER_CHANNELS } from './marketplace-channels';
 import { ChannelConnectionsService } from './channel-connections.service';
 import {
   ChannelIngestionService,
@@ -157,7 +156,10 @@ export class ChannelSweepService {
           `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'failed', lastError = ? WHERE id = ?`,
           [
             new Date(),
-            (err instanceof Error ? err.message : String(err)).slice(0, 500),
+            this.connections.safeMessage(
+              conn,
+              err instanceof Error ? err.message : String(err),
+            ),
             conn.id,
           ],
         );
@@ -264,7 +266,9 @@ export class ChannelSweepService {
       if (!s) return false;
       if (s.status === 'accepted') {
         await this.ingestion.markAcceptedExternally(co, s.externalStatus);
-        return true;
+        // An order still waiting for item mappings is NOT settled by the
+        // marketplace having accepted it: the merchant still has to map it.
+        return co.state !== 'needs_mapping';
       }
       if (s.status === 'rejected' || s.status === 'cancelled') {
         await this.ingestion.closeUpstream(
@@ -308,7 +312,7 @@ export class ChannelSweepService {
     const cutoff = new Date(Date.now() - PAYLOAD_RETENTION_DAYS * 86_400_000);
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT o.id, o.shopId FROM \`order\` o
-        WHERE o.channel IN (${MARKETPLACE_ORDER_CHANNELS.map(() => '?').join(', ')})
+        WHERE EXISTS (SELECT 1 FROM channelorder co WHERE co.orderId = o.id AND co.shopId = o.shopId)
           AND o.status IN ('delivered', 'cancelled')
           AND (o.customerName <> '' OR o.customerPhone <> '' OR o.customerAddress <> ''
                OR o.deliveryNotes IS NOT NULL OR o.receiverMessage IS NOT NULL)
@@ -317,7 +321,7 @@ export class ChannelSweepService {
                            AND a.entityId = o.id AND a.action = 'order.status_changed'),
                        o.createdAt) < ?
         LIMIT ?`,
-      [...MARKETPLACE_ORDER_CHANNELS, cutoff, BATCH],
+      [cutoff, BATCH],
     );
     for (const r of rows) {
       await this.db.transaction(async (c) => {

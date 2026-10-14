@@ -182,6 +182,8 @@ export class ChannelConnectionsService {
     dto: UpdateChannelConnectionDto,
   ) {
     const before = await this.load(ctx, id);
+    const secretChange =
+      dto.credentials !== undefined || dto.webhookSecret !== undefined;
     const sets: string[] = ['updatedAt = ?'];
     const params: QueryParam[] = [new Date()];
     const idChange =
@@ -195,6 +197,17 @@ export class ChannelConnectionsService {
     if (idChange && before.enabled) {
       throw new ConflictException(
         'Disable the connection before changing its ids',
+      );
+    }
+    // Credentials and the webhook secret are what the marketplace's deliveries
+    // are checked against: replacing or clearing them under a live connection
+    // would silently stop (or redirect) order intake. Disable first.
+    if (
+      before.enabled &&
+      (dto.credentials !== undefined || dto.webhookSecret !== undefined)
+    ) {
+      throw new ConflictException(
+        'Disable the connection before changing its credentials or webhook secret',
       );
     }
     if (dto.externalLocationId !== undefined) {
@@ -239,7 +252,7 @@ export class ChannelConnectionsService {
     // enable cannot slip between them.
     const res = await this.db.execute(
       `UPDATE channelconnection SET ${sets.join(', ')}
-        WHERE id = ? AND shopId = ? ${idChange ? 'AND enabled = 0' : ''}`,
+        WHERE id = ? AND shopId = ? ${idChange || secretChange ? 'AND enabled = 0' : ''}`,
       [...params, id, ctx.shopId],
     );
     if (res.affectedRows === 0) {
@@ -366,7 +379,7 @@ export class ChannelConnectionsService {
 
   // A provider's message is stored and shown to the merchant: cap it and strip
   // any credential value a careless provider echoed into it.
-  private safeMessage(row: ChannelconnectionRow, message?: string): string {
+  safeMessage(row: ChannelconnectionRow, message?: string): string {
     let out = (
       message ??
       'the marketplace did not accept the credentials for this location'
@@ -385,6 +398,9 @@ export class ChannelConnectionsService {
 
   async remove(ctx: TenantContext, id: number) {
     const row = await this.load(ctx, id);
+    if (row.enabled) {
+      throw new ConflictException('Disable the connection before deleting it');
+    }
     const orders = await this.db.query<RowDataPacket[]>(
       `SELECT 1 FROM channelorder WHERE connectionId = ? LIMIT 1`,
       [id],
@@ -405,10 +421,22 @@ export class ChannelConnectionsService {
         'This connection has unprocessed marketplace deliveries; disable it instead',
       );
     }
-    await this.db.execute(
-      `DELETE FROM channelconnection WHERE id = ? AND shopId = ?`,
+    // The checks above are advice; THIS statement is the guard. A webhook that
+    // slipped in after them (an enabled flip, a new inbox row, a new order)
+    // makes it match nothing, so an acknowledged delivery is never cascaded away.
+    const del = await this.db.execute(
+      `DELETE FROM channelconnection
+        WHERE id = ? AND shopId = ? AND enabled = 0
+          AND NOT EXISTS (SELECT 1 FROM channelinboundevent e
+                           WHERE e.connectionId = channelconnection.id AND e.status <> 'processed')
+          AND NOT EXISTS (SELECT 1 FROM channelorder o WHERE o.connectionId = channelconnection.id)`,
       [id, ctx.shopId],
     );
+    if (del.affectedRows === 0) {
+      throw new ConflictException(
+        'The connection received something while it was being deleted; check it and try again',
+      );
+    }
     await this.audit.logCtx(ctx, {
       action: 'channel.connection_deleted',
       entityType: 'channelconnection',

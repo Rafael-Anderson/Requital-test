@@ -259,6 +259,23 @@ export class OrdersService {
     };
   }
 
+  // True only for an order the marketplace ingestion actually created: it has a
+  // channelorder link. The channel string alone is not enough (an order that
+  // predates the reserved-name rule could carry one), and a lock on an order
+  // with no link would have nothing to point the merchant to.
+  private async isChannelLinked(order: {
+    id: number;
+    shopId: number;
+    channel: string | null;
+  }): Promise<boolean> {
+    if (!isMarketplaceChannel(order.channel)) return false;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT 1 FROM channelorder WHERE orderId = ? AND shopId = ? LIMIT 1`,
+      [order.id, order.shopId],
+    );
+    return rows.length > 0;
+  }
+
   // reserveStock: off by default (admin-entered orders defer stock
   // decrement to the confirm transition — see adjustStockForOrder below),
   // but draft-order completion needs the same immediate atomic reservation
@@ -659,7 +676,7 @@ export class OrdersService {
     // A marketplace order's figures are what the marketplace charged. Re-pricing
     // it here would apply this shop's own tax and delivery rules to money the
     // aggregator collected, so it is changed on the marketplace, not here.
-    if (isMarketplaceChannel(order.channel)) {
+    if (await this.isChannelLinked(order)) {
       throw new ConflictException(
         'This order came from a marketplace and cannot be edited here',
       );
@@ -817,9 +834,9 @@ export class OrdersService {
     // else, and a later desk "accept" on a cancelled order. Every other step
     // (preparing, out for delivery, delivered) is the kitchen's and stays open.
     if (
-      isMarketplaceChannel(order.channel) &&
       !options.channelDesk &&
-      (dto.status === 'cancelled' || dto.status === 'confirmed')
+      (dto.status === 'cancelled' || dto.status === 'confirmed') &&
+      (await this.isChannelLinked(order))
     ) {
       throw new ConflictException(
         'Accept or reject marketplace orders from the Marketplace desk, so the marketplace is told',
@@ -1006,7 +1023,7 @@ export class OrdersService {
     // A marketplace order's figures are what the marketplace charged. Re-pricing
     // it here would apply this shop's own tax and delivery rules to money the
     // aggregator collected, so it is changed on the marketplace, not here.
-    if (isMarketplaceChannel(order.channel)) {
+    if (await this.isChannelLinked(order)) {
       throw new ConflictException(
         'This order came from a marketplace and cannot be edited here',
       );
@@ -1575,7 +1592,7 @@ export class OrdersService {
     options: { channelDesk?: boolean } = {},
   ) {
     const order = await this.findOne(ctx, id);
-    if (isMarketplaceChannel(order.channel) && !options.channelDesk) {
+    if (!options.channelDesk && (await this.isChannelLinked(order))) {
       throw new ConflictException(
         'Reject marketplace orders from the Marketplace desk, so the marketplace is told',
       );

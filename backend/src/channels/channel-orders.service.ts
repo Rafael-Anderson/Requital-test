@@ -71,7 +71,7 @@ export class ChannelOrdersService {
       params,
     );
     return {
-      data: rows.map((r) => this.view(r)),
+      data: rows.map((r) => this.view(r, ctx)),
       page,
       pageSize,
       total: Number(n),
@@ -80,7 +80,7 @@ export class ChannelOrdersService {
 
   // Never returns the canonical snapshot as stored: only the item names and
   // quantities the merchant needs to decide, and no customer details.
-  private view(r: RowDataPacket) {
+  private view(r: RowDataPacket, ctx: TenantContext) {
     const canonical = r.canonical as CanonicalChannelOrder | null;
     return {
       id: r.id as number,
@@ -102,9 +102,11 @@ export class ChannelOrdersService {
           ? minorToDecimal(canonical.totals.totalMinor, r.currency as string)
           : null,
       // NULL = the marketplace did not say.
-      commissionAmount: r.commissionAmount
-        ? trimDecimal(r.commissionAmount as string)
-        : null,
+      // The marketplace's cut is a margin figure: admins only (NULL = unknown).
+      commissionAmount:
+        ctx.role === 'admin' && r.commissionAmount
+          ? trimDecimal(r.commissionAmount as string)
+          : null,
       priceMismatch: (r.priceMismatch as unknown[] | null) ?? null,
       waitingItems: canonical
         ? canonical.lines.map((l) => ({
@@ -140,7 +142,7 @@ export class ChannelOrdersService {
         WHERE co.id = ? AND co.shopId = ?`,
       [id, ctx.shopId],
     );
-    return this.view(rows[0]);
+    return this.view(rows[0], ctx);
   }
 
   async accept(ctx: TenantContext, id: number) {
