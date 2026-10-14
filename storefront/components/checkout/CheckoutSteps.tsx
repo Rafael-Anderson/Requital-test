@@ -9,6 +9,7 @@ import PromoCodeField from "@/components/PromoCodeField";
 import GiftCardCodeField from "@/components/GiftCardCodeField";
 import StoreCreditField from "@/components/StoreCreditField";
 import DeliveryAddressFields from "./DeliveryAddressFields";
+import FulfilmentSection, { FulfilmentUnavailable } from "./FulfilmentSection";
 import PaymentMethodPicker from "./PaymentMethodPicker";
 import DeliveryDateCalendar from "./DeliveryDateCalendar";
 import TimeSlotPicker from "./TimeSlotPicker";
@@ -53,12 +54,6 @@ export default function CheckoutSteps(state: CheckoutFormState) {
     discountAmount,
     giftCardAmount,
     orderType,
-    setOrderType,
-    deliveryAvailable,
-    pickupAvailable,
-    outletOptions,
-    outletId,
-    setOutletId,
     selectedOutlet,
     customerName,
     setCustomerName,
@@ -91,6 +86,8 @@ export default function CheckoutSteps(state: CheckoutFormState) {
   const contactValid = !!customerName.trim() && !!customerPhone.trim();
   const deliveryValid = orderType === "pickup" ? true : customerAddress.trim().length > 0;
 
+  if (state.fulfilment.mode === "none") return <FulfilmentUnavailable state={state} />;
+
   return (
     <div>
       <h1 className="text-2xl font-semibold mb-6">Checkout</h1>
@@ -99,47 +96,7 @@ export default function CheckoutSteps(state: CheckoutFormState) {
       <form onSubmit={handleSubmit} className="space-y-6">
         {step === 0 && (
           <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-2">Fulfillment</p>
-              <div className="flex gap-2">
-                {deliveryAvailable && (
-                  <button
-                    type="button"
-                    onClick={() => setOrderType("delivery")}
-                    className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
-                      orderType === "delivery" ? "border-accent bg-accent/10 text-accent-text" : "border-black/15 bg-white text-zinc-600"
-                    }`}
-                  >
-                    Delivery
-                  </button>
-                )}
-                {pickupAvailable && (
-                  <button
-                    type="button"
-                    onClick={() => setOrderType("pickup")}
-                    className={`flex-1 h-10 rounded-lg border font-medium cursor-pointer transition-colors ${
-                      orderType === "pickup" ? "border-accent bg-accent/10 text-accent-text" : "border-black/15 bg-white text-zinc-600"
-                    }`}
-                  >
-                    Pickup
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {outletOptions.length > 1 && (
-              <div>
-                <label className="text-sm font-medium block mb-1">{orderType === "pickup" ? "Pickup location" : "Branch"}</label>
-                <select value={outletId ?? ""} onChange={(e) => setOutletId(Number(e.target.value))} className={FIELD_CLASS}>
-                  {outletOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name} {o.isOpen ? "" : "(closed)"}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {selectedOutlet && !selectedOutlet.isOpen && <p className="text-sm text-red-600">This location is currently closed.</p>}
+            <FulfilmentSection state={state} />
 
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
