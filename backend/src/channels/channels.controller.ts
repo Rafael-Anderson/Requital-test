@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -179,11 +180,19 @@ export class ChannelsController {
     return this.ingestion.stats({ shopId: ctx.shopId, sinceMinutes: n });
   }
 
+  // Replays only the rows named. An empty or all-invalid list is a 400, never
+  // "everything": a malformed request must not re-run a shop's whole backlog.
   @Post('inbox/replay')
-  replay(@CurrentUser() ctx: TenantContext, @Body() body: { ids?: number[] }) {
-    const ids = Array.isArray(body?.ids)
-      ? body.ids.filter((i) => Number.isInteger(i)).slice(0, 200)
-      : undefined;
+  replay(@CurrentUser() ctx: TenantContext, @Body() body: { ids?: unknown }) {
+    const raw = Array.isArray(body?.ids) ? body.ids : [];
+    const ids = raw.filter(
+      (i): i is number => Number.isInteger(i) && (i as number) > 0,
+    );
+    if (raw.length === 0 || ids.length !== raw.length || ids.length > 200) {
+      throw new BadRequestException(
+        'ids must be a list of 1 to 200 valid inbox ids',
+      );
+    }
     return this.ingestion.replay(ctx.shopId, ids);
   }
 }

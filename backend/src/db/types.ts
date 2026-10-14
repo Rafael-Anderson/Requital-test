@@ -1690,6 +1690,9 @@ export interface ChannelconnectionRow {
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
   lastError: string | null;
+  // Platform-staff confirmation of the location (NULL = not verified).
+  locationVerifiedAt: Date | null;
+  locationVerifiedBy: number | null;
   createdAt: Date;
   updatedAt: Date;
   // Generated: non-NULL only while enabled with a location id (UNIQUE).

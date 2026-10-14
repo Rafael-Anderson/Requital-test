@@ -6,6 +6,9 @@ import type { CanonicalChannelOrder } from './channel.types';
 // wrong figure into an order. Providers may call it on their own output too.
 
 const MAX_LINES = 200;
+// Free text is never rejected for fitting a column (the core truncates to the
+// real width when it writes); this is only a sanity bound under the 1 MB body cap.
+const TEXT_SANITY = 100_000;
 const HANDOVERS = [
   'marketplace_courier',
   'merchant_delivery',
@@ -48,7 +51,7 @@ export function assertCanonicalOrder(o: CanonicalChannelOrder): void {
     o.externalOrderId.length > 191
   )
     fail('externalOrderId must be 1 to 191 characters');
-  nullableText(o.displayId, 'displayId', 64);
+  nullableText(o.displayId, 'displayId', TEXT_SANITY);
   if (
     typeof o.externalStatus !== 'string' ||
     o.externalStatus.length < 1 ||
@@ -74,8 +77,8 @@ export function assertCanonicalOrder(o: CanonicalChannelOrder): void {
       l.externalItemId.length > 191
     )
       fail(`lines[${i}].externalItemId must be 1 to 191 characters`);
-    if (typeof l.name !== 'string' || l.name.length > 255)
-      fail(`lines[${i}].name must be a string up to 255 characters`);
+    if (typeof l.name !== 'string' || l.name.length > TEXT_SANITY)
+      fail(`lines[${i}].name must be a string`);
     if (
       !Number.isSafeInteger(l.quantity) ||
       l.quantity < 1 ||
@@ -86,7 +89,7 @@ export function assertCanonicalOrder(o: CanonicalChannelOrder): void {
       fail(`lines[${i}].unitPriceMinor must be a non-negative integer`);
     nullableMinor(l.discountMinor, `lines[${i}].discountMinor`);
     nullableMinor(l.taxMinor, `lines[${i}].taxMinor`);
-    nullableText(l.note, `lines[${i}].note`, 1000);
+    nullableText(l.note, `lines[${i}].note`, TEXT_SANITY);
   }
   const t = o.totals;
   if (!t || typeof t !== 'object') fail('totals missing');
@@ -103,8 +106,8 @@ export function assertCanonicalOrder(o: CanonicalChannelOrder): void {
     nullableMinor(t[k], `totals.${k}`);
   const c = o.customer;
   if (!c || typeof c !== 'object') fail('customer missing');
-  nullableText(c.name, 'customer.name', 255);
-  nullableText(c.phone, 'customer.phone', 64);
-  nullableText(c.address, 'customer.address', 1000);
-  nullableText(c.notes, 'customer.notes', 1000);
+  nullableText(c.name, 'customer.name', TEXT_SANITY);
+  nullableText(c.phone, 'customer.phone', TEXT_SANITY);
+  nullableText(c.address, 'customer.address', TEXT_SANITY);
+  nullableText(c.notes, 'customer.notes', TEXT_SANITY);
 }

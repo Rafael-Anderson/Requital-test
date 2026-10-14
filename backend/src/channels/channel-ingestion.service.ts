@@ -87,6 +87,19 @@ interface LinePlan {
   priceMismatch: unknown[] | null;
 }
 
+// Cuts to a column's real width in CHARACTERS (code points, as MySQL counts
+// them), never in the middle of a surrogate pair, and drops lone surrogates that
+// would make the whole insert fail. An accepted order is never rejected for the
+// length of a free-text field.
+export function clip(value: string | null | undefined, max: number): string {
+  if (!value) return '';
+  const wf = (value as string & { toWellFormed?: () => string }).toWellFormed
+    ? (value as string & { toWellFormed: () => string }).toWellFormed()
+    : value;
+  const chars = Array.from(wf);
+  return chars.length <= max ? wf : chars.slice(0, max).join('');
+}
+
 function sha256(buf: Buffer | string): string {
   return createHash('sha256').update(buf).digest('hex');
 }
@@ -136,6 +149,10 @@ export class ChannelIngestionService {
     );
     const conn = rows[0];
     if (!conn) return reject();
+    // Defence in depth: an enabled connection whose location nobody has proven
+    // (no merchant-bound proof and no staff verification) is treated as unknown.
+    if (!provider.capabilities.provesLocationOwnership && !conn.locationVerifiedAt)
+      return reject();
 
     const secrets: string[] = [];
     try {
@@ -291,7 +308,7 @@ export class ChannelIngestionService {
         `UPDATE channelinboundevent
             SET status = 'processed', processedAt = ?, lastError = NULL, externalOrderId = ?
           WHERE id = ?`,
-        [new Date(), externalOrderId, inboxId],
+        [new Date(), externalOrderId ? clip(externalOrderId, 191) : null, inboxId],
       );
       return 'processed';
     } catch (e) {
@@ -314,7 +331,7 @@ export class ChannelIngestionService {
         WHERE id = ?`,
       [
         status,
-        message.slice(0, 500),
+        clip(message, 500),
         new Date(Date.now() + inboxBackoffSeconds(row.attempts) * 1000),
         row.id,
       ],
@@ -388,7 +405,7 @@ export class ChannelIngestionService {
             conn.outletId,
             conn.provider,
             order.externalOrderId,
-            order.displayId,
+            order.displayId ? clip(order.displayId, 64) : null,
             complete ? 'pending_acceptance' : 'needs_mapping',
             order.externalStatus.slice(0, 32),
             acceptBy,
@@ -525,7 +542,7 @@ export class ChannelIngestionService {
       .filter(({ i }) => mapped[i] === null)
       .map(({ l }) => ({
         externalItemId: l.externalItemId,
-        externalName: l.name || null,
+        externalName: clip(l.name, 255) || null,
       }));
     const dedup = [
       ...new Map(unmapped.map((u) => [u.externalItemId, u])).values(),
@@ -656,10 +673,12 @@ export class ChannelIngestionService {
           new Date(),
           // Minimal personal data: only what the marketplace sent. The NOT NULL
           // columns get '' (never a placeholder that looks like data).
-          customer.name ?? '',
-          customer.phone ?? '',
-          customer.address ?? '',
-          customer.notes,
+          // Cut to the real column widths (order.customerName/Phone are
+          // VARCHAR(191), address and notes TEXT).
+          clip(customer.name, 191),
+          clip(customer.phone, 191),
+          clip(customer.address, 20000),
+          customer.notes ? clip(customer.notes, 20000) : null,
           conn.provider,
           order.handover === 'merchant_delivery' ? 'delivery' : 'pickup',
           conn.provider,
@@ -697,7 +716,7 @@ export class ChannelIngestionService {
           null,
           r.unitCost,
           decimalOrNull(line.taxMinor, currency),
-          line.note,
+          line.note ? clip(line.note, 255) : null,
         ];
       }),
     );
@@ -848,7 +867,12 @@ export class ChannelIngestionService {
     if (co.orderId === null) return;
     const ctx = actor ?? (await this.systemContext(co.shopId));
     try {
-      await this.orders.updateStatus(ctx, co.orderId, { status: 'confirmed' });
+      await this.orders.updateStatus(
+        ctx,
+        co.orderId,
+        { status: 'confirmed' },
+        { channelDesk: true },
+      );
     } catch (e) {
       // Already confirmed / moved on / cancelled: the state machine said no,
       // which is the idempotent answer.
@@ -866,22 +890,50 @@ export class ChannelIngestionService {
     externalStatus: string,
     actor?: TenantContext,
   ): Promise<void> {
-    const res = await this.db.execute(
-      `UPDATE channelorder SET state = ?, externalStatus = ?, updatedAt = ?
+    // canonical is dropped with the close: a never-mapped order that is now
+    // finished has no use for the customer details it still holds.
+    await this.db.execute(
+      `UPDATE channelorder SET state = ?, externalStatus = ?, canonical = NULL, updatedAt = ?
         WHERE id = ? AND shopId = ? AND state IN ('needs_mapping', 'pending_acceptance', 'accepted')`,
       [newState, externalStatus.slice(0, 32), new Date(), co.id, co.shopId],
     );
-    if (res.affectedRows === 0 || co.orderId === null) return;
-    const ctx = actor ?? (await this.systemContext(co.shopId));
+    await this.cancelOrderOfClosedLink(co.id, co.shopId, actor);
+  }
+
+  // Cancels the order behind a link that is closed (rejected / cancelled
+  // upstream). Deliberately does NOT depend on whether THIS call won the state
+  // CAS: a first attempt that moved the state and then failed to cancel must be
+  // finished by the retry (and by the sweep), or the order would be live on a
+  // closed link forever. orderId is read AFTER the state is closed, so an order
+  // a concurrent mapping retry created in between is seen.
+  async cancelOrderOfClosedLink(
+    channelOrderId: number,
+    shopId: number,
+    actor?: TenantContext,
+  ): Promise<void> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT orderId, state FROM channelorder WHERE id = ? AND shopId = ?`,
+      [channelOrderId, shopId],
+    );
+    const link = rows[0];
+    if (
+      !link ||
+      link.orderId === null ||
+      (link.state !== 'rejected' && link.state !== 'cancelled_upstream')
+    )
+      return;
+    const ctx = actor ?? (await this.systemContext(shopId));
     try {
-      await this.orders.cancel(ctx, co.orderId);
+      await this.orders.cancel(ctx, link.orderId as number, {
+        channelDesk: true,
+      });
     } catch (e) {
       if (e instanceof BadRequestException || e instanceof ConflictException) {
         // Already delivered or already cancelled. Delivered is worth a visible
         // note: the marketplace cancelled something the kitchen already sent.
         await this.db.execute(
           `UPDATE channelorder SET lastError = ?, updatedAt = ? WHERE id = ? AND shopId = ?`,
-          [e.message.slice(0, 500), new Date(), co.id, co.shopId],
+          [clip(e.message, 500), new Date(), channelOrderId, shopId],
         );
         return;
       }

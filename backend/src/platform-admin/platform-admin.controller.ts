@@ -23,6 +23,8 @@ import { SetSliderAccountIdDto } from '../delivery-providers/dto/set-slider-acco
 import { ListShopsQueryDto } from './dto/list-shops-query.dto';
 import { SetFeatureOverrideDto } from './dto/set-feature-override.dto';
 import { ListWebhookLogQueryDto } from './dto/list-webhook-log-query.dto';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { VerifyChannelLocationDto } from '../channels/dto/channels.dto';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
 import { SetCurrencyRateDto } from '../currency-rates/dto/set-currency-rate.dto';
 import { PlatformAdminGuard } from '../platform-auth/guards/platform-admin.guard';
@@ -59,6 +61,7 @@ export class PlatformAdminController {
     private readonly webhookLogService: WebhookLogService,
     private readonly sliderSettingsService: SliderSettingsService,
     private readonly currencyRatesService: CurrencyRatesService,
+    private readonly channelConnections: ChannelConnectionsService,
   ) {}
 
   @Get('shops')
@@ -207,6 +210,37 @@ export class PlatformAdminController {
         );
         return result;
       });
+  }
+
+  // Marketplace channels: the ids a merchant typed are only a claim. Staff
+  // confirm them with the marketplace's integration team, then record it here;
+  // enabling a connection needs it (see ChannelConnectionsService.setEnabled).
+  @Get('shops/:shopId/channel-connections')
+  listChannelConnections(@Param('shopId', ParseIntPipe) shopId: number) {
+    return this.channelConnections.listForShop(shopId);
+  }
+
+  @Post('shops/:shopId/channel-connections/:id/verify-location')
+  verifyChannelLocation(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: VerifyChannelLocationDto,
+  ) {
+    return this.channelConnections.platformVerifyLocation(admin.id, shopId, id, {
+      externalLocationId: dto.externalLocationId,
+      externalBrandId: dto.externalBrandId,
+      externalSiteId: dto.externalSiteId,
+    });
+  }
+
+  @Post('shops/:shopId/channel-connections/:id/unverify-location')
+  unverifyChannelLocation(
+    @CurrentPlatformAdmin() admin: PlatformAdminContext,
+    @Param('shopId', ParseIntPipe) shopId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.channelConnections.platformUnverifyLocation(admin.id, shopId, id);
   }
 
   @Post('shops/:shopId/slider-test-dispatch')

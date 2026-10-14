@@ -15,6 +15,12 @@
 --                     The three varchar columns it is built from are utf8mb4_bin
 --                     so the concatenation has one collation and ids are matched
 --                     exactly.
+--                     `locationVerifiedAt/By` is the PLATFORM-STAFF confirmation
+--                     that this external location really belongs to this shop
+--                     (checked with the marketplace's integration team). Set only
+--                     through the platform-admin tier, cleared whenever an id or
+--                     the credentials change, and required to enable unless the
+--                     provider has a merchant-bound ownership proof.
 -- channelinboundevent the DURABLE INBOX. A verified delivery is written here
 --                     BEFORE any processing and only then acknowledged. UNIQUE
 --                     (connectionId, eventId) makes a duplicate delivery a no-op
@@ -45,6 +51,8 @@ CREATE TABLE `channelconnection` (
     `lastSyncAt` DATETIME(3) NULL,
     `lastSyncStatus` VARCHAR(16) NULL,
     `lastError` VARCHAR(500) NULL,
+    `locationVerifiedAt` DATETIME(3) NULL,
+    `locationVerifiedBy` INTEGER NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `routingKey` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
@@ -61,6 +69,7 @@ CREATE TABLE `channelconnection` (
 
 ALTER TABLE `channelconnection` ADD CONSTRAINT `channelconnection_shopId_fkey` FOREIGN KEY (`shopId`) REFERENCES `shop`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `channelconnection` ADD CONSTRAINT `channelconnection_outletId_fkey` FOREIGN KEY (`outletId`) REFERENCES `outlet`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `channelconnection` ADD CONSTRAINT `channelconnection_locationVerifiedBy_fkey` FOREIGN KEY (`locationVerifiedBy`) REFERENCES `platformadmin`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 CREATE TABLE `channelinboundevent` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,

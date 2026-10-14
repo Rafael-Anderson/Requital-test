@@ -8,6 +8,7 @@ import { JobsService } from '../jobs/jobs.service';
 import { createLogger } from '../common/logging/logger';
 import { OrderNotificationsService } from '../orders/order-notifications.service';
 import type { ChannelconnectionRow, ChannelorderRow } from '../db/types';
+import { MARKETPLACE_ORDER_CHANNELS } from './marketplace-channels';
 import { ChannelConnectionsService } from './channel-connections.service';
 import {
   ChannelIngestionService,
@@ -57,7 +58,7 @@ export class ChannelSweepService {
   // Split out so a test drives it directly. Each step is isolated: one failing
   // never starves the others.
   async runOnce() {
-    const out = { replayed: 0, polled: 0, stale: 0, repaired: 0, purged: 0 };
+    const out = { replayed: 0, polled: 0, stale: 0, repaired: 0, purged: 0, scrubbed: 0 };
     const step = async (name: string, fn: () => Promise<void>) => {
       try {
         await fn();
@@ -83,6 +84,10 @@ export class ChannelSweepService {
     await step(
       'purge',
       async () => void (out.purged = await this.purgePayloads()),
+    );
+    await step(
+      'scrub',
+      async () => void (out.scrubbed = await this.scrubClosedOrders()),
     );
     return out;
   }
@@ -169,29 +174,34 @@ export class ChannelSweepService {
     let alerted = 0;
     for (const co of overdue) {
       if (await this.reconcileOne(co)) continue;
-      // Claim the alert first (once per order), then send it.
-      const claim = await this.db.execute(
-        `UPDATE channelorder SET staleAlertedAt = ?, updatedAt = ?
-          WHERE id = ? AND shopId = ? AND staleAlertedAt IS NULL AND state IN ('needs_mapping', 'pending_acceptance')`,
-        [now, now, co.id, co.shopId],
-      );
-      if (claim.affectedRows === 0) continue;
+      // Claim and enqueue in ONE transaction: a failed enqueue rolls the claim
+      // back (the next tick tries again), and a lost claim sends nothing.
       const to = await this.notifications.resolveMerchantAlertRecipient(
         co.shopId,
         co.outletId,
       );
-      if (to) {
-        await this.jobs.enqueue(
-          co.shopId,
-          'send_merchant_whatsapp_alert',
-          {
-            to,
-            body: `${co.provider} order ${co.displayId ?? co.externalOrderId} passed its acceptance deadline and is still waiting. Open Requital to accept or reject it.`,
-          },
-          `channelorder:${co.id}:stale-alert`,
+      const sent = await this.db.transaction(async (tx) => {
+        const [claim] = await tx.query(
+          `UPDATE channelorder SET staleAlertedAt = ?, updatedAt = ?
+            WHERE id = ? AND shopId = ? AND staleAlertedAt IS NULL AND state IN ('needs_mapping', 'pending_acceptance')`,
+          [now, now, co.id, co.shopId],
         );
-      }
-      alerted += 1;
+        if ((claim as { affectedRows: number }).affectedRows === 0) return false;
+        if (to) {
+          await this.jobs.enqueue(
+            co.shopId,
+            'send_merchant_whatsapp_alert',
+            {
+              to,
+              body: `${co.provider} order ${co.displayId ?? co.externalOrderId} passed its acceptance deadline and is still waiting. Open Requital to accept or reject it.`,
+            },
+            `channelorder:${co.id}:stale-alert`,
+            { tx },
+          );
+        }
+        return true;
+      });
+      if (sent) alerted += 1;
     }
 
     const stuck = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
@@ -204,6 +214,28 @@ export class ChannelSweepService {
     for (const co of stuck) {
       await this.ingestion.confirmOrder(co);
       repaired += 1;
+    }
+
+    // Mirror of the confirm repair: a link the marketplace closed whose order is
+    // still live (the cancel failed after the state moved) is finished here.
+    const live = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
+      `SELECT co.* FROM channelorder co JOIN \`order\` o ON o.id = co.orderId AND o.shopId = co.shopId
+        WHERE co.state IN ('rejected', 'cancelled_upstream')
+          AND o.status IN ('pending', 'confirmed', 'preparing', 'out_for_delivery')
+          AND co.updatedAt < ?
+        LIMIT ?`,
+      [new Date(now.getTime() - 60_000), BATCH],
+    );
+    for (const co of live) {
+      try {
+        await this.ingestion.cancelOrderOfClosedLink(co.id, co.shopId);
+        repaired += 1;
+      } catch (e) {
+        logger.warn('cancel repair failed', {
+          channelOrderId: co.id,
+          error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+        });
+      }
     }
     return { alerted, repaired };
   }
@@ -243,13 +275,53 @@ export class ChannelSweepService {
     return false;
   }
 
+  // Stored delivery bodies hold customer details. Processed ones go after the
+  // retention period; failed and dead ones too (they are replayable only inside
+  // the same window), measured from when they arrived.
   async purgePayloads(): Promise<number> {
     const cutoff = new Date(Date.now() - PAYLOAD_RETENTION_DAYS * 86_400_000);
     const res = await this.db.execute(
       `UPDATE channelinboundevent SET payload = NULL, payloadPurgedAt = ?
-        WHERE status = 'processed' AND payloadPurgedAt IS NULL AND processedAt < ?`,
-      [new Date(), cutoff],
+        WHERE payloadPurgedAt IS NULL AND payload IS NOT NULL
+          AND ((status = 'processed' AND processedAt < ?)
+               OR (status IN ('failed', 'dead') AND receivedAt < ?))`,
+      [new Date(), cutoff, cutoff],
     );
     return res.affectedRows;
+  }
+
+  // Retention for the order itself: once a marketplace order has been delivered
+  // or cancelled for PAYLOAD_RETENTION_DAYS, the customer's name, phone,
+  // address and notes are blanked. The order, its lines and totals stay (they
+  // are the merchant's sales record). Idempotent: an already blanked order does
+  // not match. "Closed at" is the last status change in the audit log (an order
+  // cannot move after delivered/cancelled), falling back to its creation.
+  async scrubClosedOrders(): Promise<number> {
+    const cutoff = new Date(Date.now() - PAYLOAD_RETENTION_DAYS * 86_400_000);
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT o.id, o.shopId FROM \`order\` o
+        WHERE o.channel IN (${MARKETPLACE_ORDER_CHANNELS.map(() => '?').join(', ')})
+          AND o.status IN ('delivered', 'cancelled')
+          AND (o.customerName <> '' OR o.customerPhone <> '' OR o.customerAddress <> ''
+               OR o.deliveryNotes IS NOT NULL OR o.receiverMessage IS NOT NULL)
+          AND COALESCE((SELECT MAX(a.createdAt) FROM auditlog a
+                         WHERE a.shopId = o.shopId AND a.entityType = 'order'
+                           AND a.entityId = o.id AND a.action = 'order.status_changed'),
+                       o.createdAt) < ?
+        LIMIT ?`,
+      [...MARKETPLACE_ORDER_CHANNELS, cutoff, BATCH],
+    );
+    for (const r of rows) {
+      await this.db.transaction(async (c) => {
+        await c.query(
+          `UPDATE \`order\` SET customerName = '', customerPhone = '', customerAddress = '',
+                  deliveryNotes = NULL, receiverMessage = NULL
+            WHERE id = ? AND shopId = ?`,
+          [r.id, r.shopId],
+        );
+        await c.query(`UPDATE orderitem SET note = NULL WHERE orderId = ?`, [r.id]);
+      });
+    }
+    return rows.length;
   }
 }

@@ -53,15 +53,21 @@ export interface StubCall {
 
 export class StubChannelProvider implements ChannelProvider {
   readonly name = STUB_PROVIDER;
-  readonly capabilities = {
-    ...NO_CAPABILITIES,
-    acceptReject: true,
-    markReady: true,
-    itemAvailability: true,
-    fetchOrderStatus: true,
-    pollOrders: true,
-    provesLocationOwnership: true,
-  };
+  // Whether testConnection() gives a merchant-bound location proof. FALSE by
+  // default, so the stub exercises the real path (platform staff verify the
+  // location); tests flip it to cover the merchant-bound branch.
+  merchantBoundProof = false;
+  get capabilities() {
+    return {
+      ...NO_CAPABILITIES,
+      acceptReject: true,
+      markReady: true,
+      itemAvailability: true,
+      fetchOrderStatus: true,
+      pollOrders: true,
+      provesLocationOwnership: this.merchantBoundProof,
+    };
+  }
 
   // Test seams. A static log is fine: the provider is a process-wide singleton
   // in the app under test and tests reset it in beforeEach.
@@ -84,6 +90,7 @@ export class StubChannelProvider implements ChannelProvider {
     this.openOrders.clear();
     this.statuses.clear();
     this.testConnectionOk = true;
+    this.merchantBoundProof = false;
   }
 
   private header(

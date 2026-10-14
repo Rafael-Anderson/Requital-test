@@ -170,3 +170,22 @@ export class RejectChannelOrderDto {
   @MaxLength(200)
   reason?: string;
 }
+
+// What platform staff confirmed with the marketplace. All three are required
+// keys (brand/site may be an explicit null) so staff state the whole tuple.
+export class VerifyChannelLocationDto {
+  @IsString()
+  @MinLength(ID.min)
+  @MaxLength(ID.max)
+  externalLocationId: string;
+
+  @ValidateIf((_o, v) => v !== null)
+  @IsString()
+  @MaxLength(ID.max)
+  externalBrandId: string | null;
+
+  @ValidateIf((_o, v) => v !== null)
+  @IsString()
+  @MaxLength(ID.max)
+  externalSiteId: string | null;
+}
