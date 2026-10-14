@@ -19,7 +19,7 @@ import { StubChannelProvider } from './providers/stub-channel.provider';
 // E2 (Deliveroo) and E3 (Talabat) register their providers on
 // ChannelProviderRegistry from their own modules and call
 // ChannelIngestionService.receive() from their webhook controllers.
-function stubAllowed(): boolean {
+export function stubAllowed(): boolean {
   const env = process.env.NODE_ENV;
   return (
     env === 'test' ||

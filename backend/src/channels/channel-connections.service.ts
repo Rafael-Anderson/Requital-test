@@ -367,7 +367,10 @@ export class ChannelConnectionsService {
   // A provider's message is stored and shown to the merchant: cap it and strip
   // any credential value a careless provider echoed into it.
   private safeMessage(row: ChannelconnectionRow, message?: string): string {
-    let out = (message ?? 'the marketplace did not accept the credentials for this location').slice(0, 500);
+    let out = (
+      message ??
+      'the marketplace did not accept the credentials for this location'
+    ).slice(0, 500);
     try {
       const secrets = [
         ...Object.values(this.bind(row).credentials ?? {}),
@@ -432,7 +435,10 @@ export class ChannelConnectionsService {
         ctx.shopId,
       ],
     );
-    return { ok: test.ok, message: test.ok ? null : this.safeMessage(row, test.message) };
+    return {
+      ok: test.ok,
+      message: test.ok ? null : this.safeMessage(row, test.message),
+    };
   }
 
   // ---- platform staff (called only from the platform-admin tier) ----------
@@ -489,7 +495,9 @@ export class ChannelConnectionsService {
         conn,
       );
     });
-    return ChannelConnectionsService.view(await this.requireForShop(shopId, id));
+    return ChannelConnectionsService.view(
+      await this.requireForShop(shopId, id),
+    );
   }
 
   async platformUnverifyLocation(
@@ -514,7 +522,9 @@ export class ChannelConnectionsService {
         conn,
       );
     });
-    return ChannelConnectionsService.view(await this.requireForShop(shopId, id));
+    return ChannelConnectionsService.view(
+      await this.requireForShop(shopId, id),
+    );
   }
 
   private async requireForShop(shopId: number, id: number) {

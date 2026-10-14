@@ -81,6 +81,8 @@ export class StubChannelProvider implements ChannelProvider {
   >();
   // Status per external order id for fetchOrderStatus.
   readonly statuses = new Map<string, CanonicalOrderStatus>();
+  // Runs inside testConnection (a seam for the enable race tests).
+  onTestConnection?: () => Promise<void>;
   // What testConnection answers; flip to false to model a bad credential.
   testConnectionOk = true;
 
@@ -91,6 +93,7 @@ export class StubChannelProvider implements ChannelProvider {
     this.statuses.clear();
     this.testConnectionOk = true;
     this.merchantBoundProof = false;
+    this.onTestConnection = undefined;
   }
 
   private header(
@@ -173,10 +176,11 @@ export class StubChannelProvider implements ChannelProvider {
     }
   }
 
-  testConnection(conn: BoundChannelConnection) {
+  async testConnection(conn: BoundChannelConnection) {
     this.record('testConnection', undefined, {
       location: conn.externalLocationId,
     });
+    if (this.onTestConnection) await this.onTestConnection();
     return Promise.resolve({
       ok: this.testConnectionOk,
       provesLocation: this.testConnectionOk,

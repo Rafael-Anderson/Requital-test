@@ -2,11 +2,16 @@
 import 'dotenv/config';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import * as bcrypt from 'bcryptjs';
 import type { App } from 'supertest/types';
 import type { RowDataPacket } from 'mysql2/promise';
 import { bootApp, makeFixtures, body, type W5Shop } from './helpers/w5-fixture';
 import { createStaff } from './helpers/staff-login';
 import { DatabaseService } from '../src/database/database.service';
+import { OrdersService } from '../src/orders/orders.service';
+import { JobsService } from '../src/jobs/jobs.service';
+import { ShopAnalyticsService } from '../src/shop-analytics/shop-analytics.service';
+import { ConversionEventsService } from '../src/shop-analytics/conversion-events.service';
 import { ChannelIngestionService } from '../src/channels/channel-ingestion.service';
 import { ChannelSweepService } from '../src/channels/channel-sweep.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
@@ -41,6 +46,7 @@ describe('Marketplace channels (E1)', () => {
     outletId: number;
   }
 
+  let platform: { cookie: string; csrf: string; id: number };
   let a: W5Shop;
   let b: W5Shop;
   let ca: Conn;
@@ -74,12 +80,35 @@ describe('Marketplace channels (E1)', () => {
       })
       .expect(201);
     const id = body<{ id: number }>(created).id;
+    // Platform staff confirm the location with the marketplace first.
+    await staffVerify(shop, id, { externalLocationId: locationId }).expect(201);
     await r()
       .post(`/channels/connections/${id}/enabled`)
       .set(h(shop))
       .send({ enabled: true })
       .expect(201);
     return { shop, id, locationId, secret, outletId };
+  }
+
+  // The platform-admin tier: only staff can record that a location is the
+  // shop's. The tuple is what staff say they confirmed with the marketplace.
+  function staffVerify(
+    shop: W5Shop,
+    connectionId: number,
+    t: {
+      externalLocationId: string;
+      externalBrandId?: string | null;
+      externalSiteId?: string | null;
+    },
+    auth = platform,
+  ) {
+    return r()
+      .post(
+        `/platform-admin/shops/${shop.shopId}/channel-connections/${connectionId}/verify-location`,
+      )
+      .set('Cookie', auth.cookie)
+      .set('X-CSRF-Token', auth.csrf)
+      .send({ externalBrandId: null, externalSiteId: null, ...t });
   }
 
   function canon(
@@ -206,6 +235,33 @@ describe('Marketplace channels (E1)', () => {
     ingestion = app.get(ChannelIngestionService);
     sweep = app.get(ChannelSweepService);
     stub = app.get(StubChannelProvider);
+    const email = `mkt-staff-${f.runId}@test.com`;
+    await db.execute(
+      `INSERT INTO platformadmin (email, passwordHash, name) VALUES (?, ?, ?)`,
+      [email, await bcrypt.hash('platform-password-123', 10), 'Mkt Staff'],
+    );
+    const login = await r()
+      .post('/platform-auth/login')
+      .send({ email, password: 'platform-password-123' })
+      .expect(201);
+    const jar: Record<string, string> = {};
+    for (const line of (login.get('Set-Cookie') ?? []) as string[]) {
+      const pair = line.split(';')[0];
+      const i = pair.indexOf('=');
+      jar[pair.slice(0, i)] = pair.slice(i + 1);
+    }
+    platform = {
+      cookie: Object.entries(jar)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('; '),
+      csrf: login.get('X-CSRF-Token') as string,
+      id: (
+        await db.query<RowDataPacket[]>(
+          `SELECT id FROM platformadmin WHERE email = ?`,
+          [email],
+        )
+      )[0].id as number,
+    };
     a = await f.setupShop('mkt-a');
     b = await f.setupShop('mkt-b');
     await grantFlag(a);
@@ -297,6 +353,7 @@ describe('Marketplace channels (E1)', () => {
           webhookSecret: 'abcdefgh-secret',
         })
         .expect(201);
+      stub.merchantBoundProof = true;
       stub.testConnectionOk = false;
       await r()
         .post(`/channels/connections/${created.body.id}/enabled`)
@@ -446,6 +503,11 @@ describe('Marketplace channels (E1)', () => {
           webhookSecret: 'abcdefgh-secret',
         })
         .expect(201);
+      // Even a staff-verified duplicate cannot be enabled: one enabled
+      // connection per location, platform-wide.
+      await staffVerify(b, created.body.id, {
+        externalLocationId: ca.locationId,
+      }).expect(201);
       const res = await r()
         .post(`/channels/connections/${created.body.id}/enabled`)
         .set(h(b))
@@ -1511,6 +1573,648 @@ describe('Marketplace channels (E1)', () => {
       expect(ev.status).toBe('processed');
       expect(ev.payload).toBeNull();
       expect(ev.payloadPurgedAt).not.toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('location ownership (review H1)', () => {
+    async function pending(shop: W5Shop, loc = `LOC-${f.uniq()}`) {
+      const o = body<{ id: number }>(
+        await r()
+          .post('/outlets')
+          .set(h(shop))
+          .send({ name: `own ${f.uniq()}` })
+          .expect(201),
+      );
+      const created = await r()
+        .post('/channels/connections')
+        .set(h(shop))
+        .send({
+          outletId: o.id,
+          provider: STUB_PROVIDER,
+          externalLocationId: loc,
+          credentials: { token: 'x' },
+          webhookSecret: 'abcdefgh-secret',
+        })
+        .expect(201);
+      return { id: created.body.id as number, loc };
+    }
+    const enable = (shop: W5Shop, id: number) =>
+      r()
+        .post(`/channels/connections/${id}/enabled`)
+        .set(h(shop))
+        .send({ enabled: true });
+    const row = async (id: number) =>
+      (
+        await db.query<RowDataPacket[]>(
+          `SELECT * FROM channelconnection WHERE id = ?`,
+          [id],
+        )
+      )[0];
+
+    it('enabling needs staff verification unless the provider has a merchant-bound proof', async () => {
+      const c = await pending(a);
+      const res = await enable(a, c.id).expect(409);
+      expect(res.body.message).toMatch(/staff/i);
+      expect((await row(c.id)).enabled).toBe(false);
+      stub.merchantBoundProof = true;
+      await enable(a, c.id).expect(201);
+    });
+
+    it('staff must state the very ids they checked, only platform staff can verify, and it is audited', async () => {
+      const c = await pending(a);
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ externalBrandId: 'BR-1' })
+        .expect(200);
+      await staffVerify(a, c.id, { externalLocationId: c.loc }).expect(409); // brand differs
+      await staffVerify(a, c.id, {
+        externalLocationId: 'other',
+        externalBrandId: 'BR-1',
+      }).expect(409);
+      await staffVerify(b, c.id, {
+        externalLocationId: c.loc,
+        externalBrandId: 'BR-1',
+      }).expect(409); // wrong shop
+      // Not staff: no cookie, or a merchant admin token, is refused (the CSRF layer answers 403 before the guard's 404).
+      await r()
+        .post(
+          `/platform-admin/shops/${a.shopId}/channel-connections/${c.id}/verify-location`,
+        )
+        .send({
+          externalLocationId: c.loc,
+          externalBrandId: 'BR-1',
+          externalSiteId: null,
+        })
+        .then((res) => expect([403, 404]).toContain(res.status));
+      await r()
+        .post(
+          `/platform-admin/shops/${a.shopId}/channel-connections/${c.id}/verify-location`,
+        )
+        .set(h(a))
+        .send({
+          externalLocationId: c.loc,
+          externalBrandId: 'BR-1',
+          externalSiteId: null,
+        })
+        .then((res) => expect([403, 404]).toContain(res.status));
+      await staffVerify(a, c.id, {
+        externalLocationId: c.loc,
+        externalBrandId: 'BR-1',
+      }).expect(201);
+      const r1 = await row(c.id);
+      expect(r1.locationVerifiedAt).not.toBeNull();
+      expect(r1.locationVerifiedBy).toBe(platform.id);
+      const audit = await db.query<RowDataPacket[]>(
+        `SELECT metadata FROM platformauditlogentry WHERE action = 'shop.channel_connection.location_verified' AND shopId = ? AND platformAdminId = ?`,
+        [a.shopId, platform.id],
+      );
+      expect(JSON.stringify(audit.map((x) => x.metadata))).toContain(c.loc);
+      // A merchant cannot set it through its own API.
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ locationVerifiedAt: new Date() })
+        .expect(400);
+      await enable(a, c.id).expect(201);
+    });
+
+    it('changing any id or the credentials clears the verification; a webhook secret rotation does not', async () => {
+      const c = await pending(a);
+      const verify = () =>
+        staffVerify(a, c.id, {
+          externalLocationId: c.loc,
+          externalBrandId: null,
+          externalSiteId: null,
+        }).expect(201);
+      const clear = async () => (await row(c.id)).locationVerifiedAt === null;
+      await verify();
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ credentials: { token: 'new' } })
+        .expect(200);
+      expect(await clear()).toBe(true);
+      await enable(a, c.id).expect(409);
+      for (const patch of [
+        { externalSiteId: 'S1' },
+        { externalBrandId: 'B1' },
+      ]) {
+        await staffVerify(a, c.id, {
+          externalLocationId: c.loc,
+          externalBrandId: (await row(c.id)).externalBrandId,
+          externalSiteId: (await row(c.id)).externalSiteId,
+        }).expect(201);
+        await r()
+          .patch(`/channels/connections/${c.id}`)
+          .set(h(a))
+          .send(patch)
+          .expect(200);
+        expect(await clear()).toBe(true);
+      }
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ externalLocationId: `${c.loc}-2` })
+        .expect(200);
+      await staffVerify(a, c.id, {
+        externalLocationId: `${c.loc}-2`,
+        externalBrandId: 'B1',
+        externalSiteId: 'S1',
+      }).expect(201);
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ webhookSecret: 'rotated-secret-1' })
+        .expect(200);
+      expect(await clear()).toBe(false);
+    });
+
+    it('an id changed during the connection test cannot be enabled (staff-verified and merchant-bound paths)', async () => {
+      const victim = ca.locationId;
+      for (const bound of [false, true]) {
+        const c = await pending(a);
+        if (!bound)
+          await staffVerify(a, c.id, { externalLocationId: c.loc }).expect(201);
+        stub.merchantBoundProof = bound;
+        stub.onTestConnection = async () => {
+          await r()
+            .patch(`/channels/connections/${c.id}`)
+            .set(h(a))
+            .send({ externalLocationId: victim })
+            .expect(200);
+        };
+        await enable(a, c.id).expect(409);
+        const after = await row(c.id);
+        expect(after.enabled).toBe(false);
+        expect(after.externalLocationId).toBe(victim);
+        expect(after.routingKey).toBeNull();
+        stub.reset();
+      }
+      // The same for a credential swapped during the test.
+      const c = await pending(a);
+      stub.merchantBoundProof = true;
+      stub.onTestConnection = async () => {
+        await r()
+          .patch(`/channels/connections/${c.id}`)
+          .set(h(a))
+          .send({ credentials: { token: 'swapped' } })
+          .expect(200);
+      };
+      await enable(a, c.id).expect(409);
+      expect((await row(c.id)).enabled).toBe(false);
+    });
+
+    it('parallel enable and id change never leaves an enabled connection holding an unproven id', async () => {
+      const victim = cb.locationId;
+      for (let i = 0; i < 6; i++) {
+        const c = await pending(a);
+        await staffVerify(a, c.id, { externalLocationId: c.loc }).expect(201);
+        await Promise.allSettled([
+          enable(a, c.id),
+          r()
+            .patch(`/channels/connections/${c.id}`)
+            .set(h(a))
+            .send({ externalLocationId: victim }),
+        ]);
+        const after = await row(c.id);
+        // Either it was enabled with the verified id, or it was not enabled at all.
+        if (after.enabled) {
+          expect(after.externalLocationId).toBe(c.loc);
+          expect(after.locationVerifiedAt).not.toBeNull();
+        } else {
+          expect(after.routingKey).toBeNull();
+        }
+      }
+    });
+
+    it('ids of an enabled connection cannot change, and staff can withdraw verification (which disables it)', async () => {
+      const c = await pending(a);
+      await staffVerify(a, c.id, { externalLocationId: c.loc }).expect(201);
+      await enable(a, c.id).expect(201);
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ externalBrandId: 'X' })
+        .expect(409);
+      await r()
+        .post(
+          `/platform-admin/shops/${a.shopId}/channel-connections/${c.id}/unverify-location`,
+        )
+        .set('Cookie', platform.cookie)
+        .set('X-CSRF-Token', platform.csrf)
+        .expect(201);
+      const after = await row(c.id);
+      expect(after.enabled).toBe(false);
+      expect(after.locationVerifiedAt).toBeNull();
+    });
+
+    it('a provider that echoes a credential in its message does not leak it into lastError', async () => {
+      const c = await pending(a);
+      stub.merchantBoundProof = true;
+      stub.testConnectionOk = false;
+      const orig = stub.testConnection.bind(stub);
+      stub.testConnection = async (conn) => {
+        const t = await orig(conn);
+        return {
+          ...t,
+          message: `bad token ${conn.credentials?.token ?? ''} for you`,
+        };
+      };
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ credentials: { token: 'ultra-secret-token' } })
+        .expect(200);
+      const res = await enable(a, c.id).expect(400);
+      stub.testConnection = orig;
+      expect(JSON.stringify(res.body)).not.toContain('ultra-secret-token');
+      expect((await row(c.id)).lastError).not.toContain('ultra-secret-token');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('closing a link finishes the cancel (review M1, L4)', () => {
+    async function fresh(stock = 10) {
+      const p = await product(a, stock);
+      const sku = `cl-${f.uniq()}`;
+      await mapItem(a, sku, p.id);
+      const o = canon([{ id: sku, qty: 2, priceMinor: 2500 }]);
+      await newOrder(ca, o);
+      return { p, o, co: await link(ca, o.externalOrderId) };
+    }
+
+    it('a cancel that failed after the state moved is finished by the inbox retry', async () => {
+      const { p, o, co } = await fresh();
+      const orders = app.get(OrdersService);
+      const spy = jest
+        .spyOn(orders, 'cancel')
+        .mockRejectedValueOnce(new Error('db hiccup'));
+      const ev = await statusEvent(ca, o.externalOrderId, 'cancelled');
+      spy.mockRestore();
+      expect((await link(ca, o.externalOrderId)).state).toBe(
+        'cancelled_upstream',
+      );
+      expect((await f.orderRow(co.orderId)).status).toBe('pending');
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT status FROM channelinboundevent WHERE id = ?`,
+            [ev.inboxId],
+          )
+        )[0].status,
+      ).toBe('failed');
+      await db.execute(
+        `UPDATE channelinboundevent SET nextAttemptAt = ? WHERE id = ?`,
+        [new Date(Date.now() - 1000), ev.inboxId],
+      );
+      await sweep.replayDue();
+      expect((await f.orderRow(co.orderId)).status).toBe('cancelled');
+      expect(await f.productStock(a.outletId, p.id)).toBe(10);
+    });
+
+    it('and by the sweep when no retry comes', async () => {
+      const { p, o, co } = await fresh();
+      const spy = jest
+        .spyOn(app.get(OrdersService), 'cancel')
+        .mockRejectedValueOnce(new Error('db hiccup'));
+      await statusEvent(ca, o.externalOrderId, 'rejected');
+      spy.mockRestore();
+      // Take the retry out of play: mark the inbox row processed.
+      await db.execute(
+        `UPDATE channelinboundevent SET status = 'processed' WHERE connectionId = ? AND externalOrderId = ?`,
+        [ca.id, o.externalOrderId],
+      );
+      expect((await f.orderRow(co.orderId)).status).toBe('pending');
+      await db.execute(`UPDATE channelorder SET updatedAt = ? WHERE id = ?`, [
+        new Date(Date.now() - 3600_000),
+        co.id,
+      ]);
+      const out = await sweep.staleOrders();
+      expect(out.repaired).toBeGreaterThanOrEqual(1);
+      expect((await f.orderRow(co.orderId)).status).toBe('cancelled');
+      expect(await f.productStock(a.outletId, p.id)).toBe(10);
+    });
+
+    it('reads the order id AFTER closing, so an order created meanwhile is still cancelled', async () => {
+      const { p, co } = await fresh();
+      const stale = { ...co, orderId: null };
+      await ingestion.closeUpstream(
+        stale as never,
+        'cancelled_upstream',
+        'canceled',
+      );
+      expect((await f.orderRow(co.orderId)).status).toBe('cancelled');
+      expect(await f.productStock(a.outletId, p.id)).toBe(10);
+    });
+
+    it('closing drops the canonical snapshot of a never-mapped order (review M4b)', async () => {
+      const o = canon([{ id: `never2-${f.uniq()}`, priceMinor: 1000 }]);
+      o.customer = {
+        name: 'Private Person',
+        phone: '0501234567',
+        address: 'Secret street',
+        notes: null,
+      };
+      await newOrder(ca, o);
+      expect((await link(ca, o.externalOrderId)).canonical).not.toBeNull();
+      await statusEvent(ca, o.externalOrderId, 'cancelled');
+      expect((await link(ca, o.externalOrderId)).canonical).toBeNull();
+    });
+
+    it('cancel and confirm through the generic order routes are refused; the desk is the way (L4)', async () => {
+      const { o, co } = await fresh();
+      await r().post(`/orders/${co.orderId}/cancel`).set(h(a)).expect(409);
+      await r()
+        .patch(`/orders/${co.orderId}/status`)
+        .set(h(a))
+        .send({ status: 'confirmed' })
+        .expect(409);
+      await r()
+        .patch(`/orders/${co.orderId}/status`)
+        .set(h(a))
+        .send({ status: 'cancelled' })
+        .expect(409);
+      expect((await link(ca, o.externalOrderId)).state).toBe(
+        'pending_acceptance',
+      );
+      await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
+      // The kitchen steps stay open.
+      await f.setStatus(a, co.orderId, 'preparing');
+    });
+
+    it('a failed alert enqueue rolls the stale claim back, so the next tick alerts (L4)', async () => {
+      const { co } = await fresh();
+      await db.execute(`UPDATE channelorder SET acceptBy = ? WHERE id = ?`, [
+        new Date(Date.now() - 60_000),
+        co.id,
+      ]);
+      const jobs = app.get(JobsService);
+      const real = jobs.enqueue.bind(jobs);
+      const spy = jest.spyOn(jobs, 'enqueue').mockImplementation((...args) => {
+        if (String(args[3]) === `channelorder:${co.id}:stale-alert`)
+          return Promise.reject(new Error('queue down'));
+        return real(...args);
+      });
+      await expect(sweep.staleOrders()).rejects.toThrow('queue down');
+      spy.mockRestore();
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT staleAlertedAt FROM channelorder WHERE id = ?`,
+            [co.id],
+          )
+        )[0].staleAlertedAt,
+      ).toBeNull();
+      await sweep.staleOrders();
+      expect(
+        await jobsOf(
+          a.shopId,
+          'send_merchant_whatsapp_alert',
+          `channelorder:${co.id}:stale-alert`,
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('replay needs an explicit, valid list of ids (L4)', async () => {
+      for (const b2 of [
+        {},
+        { ids: [] },
+        { ids: ['x'] },
+        { ids: [1, 'x'] },
+        { ids: [-1] },
+        { ids: 'all' },
+      ]) {
+        await r().post('/channels/inbox/replay').set(h(a)).send(b2).expect(400);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('reserved channel names (review M2)', () => {
+    it('hand-made orders cannot claim a marketplace channel, in any spelling', async () => {
+      const p = await product(a, 10);
+      for (const ch of [
+        'deliveroo',
+        'Deliveroo ',
+        ' TALABAT',
+        'stub_marketplace',
+      ]) {
+        await r()
+          .post('/orders')
+          .set(h(a))
+          .send({
+            customerName: 'X',
+            customerPhone: '0501234567',
+            customerAddress: 'Pickup',
+            outletId: a.outletId,
+            orderType: 'pickup',
+            channel: ch,
+            items: [{ productId: p.id, quantity: 1 }],
+          })
+          .expect(400);
+      }
+      await r()
+        .post('/orders')
+        .set(h(a))
+        .send({
+          customerName: 'X',
+          customerPhone: '0501234567',
+          customerAddress: 'Pickup',
+          outletId: a.outletId,
+          orderType: 'pickup',
+          channel: 'Instagram',
+          items: [{ productId: p.id, quantity: 1 }],
+        })
+        .expect(201);
+      // And below the DTO, in the service.
+      await expect(
+        app
+          .get(OrdersService)
+          .create(
+            { userId: 1, shopId: a.shopId, role: 'admin', outletId: null },
+            {
+              customerName: 'X',
+              customerPhone: '1',
+              customerAddress: 'x',
+              outletId: a.outletId,
+              channel: 'Talabat',
+              items: [{ productId: p.id, quantity: 1 }],
+            } as never,
+          ),
+      ).rejects.toThrow(/reserved/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('column widths (review M3)', () => {
+    it('never dead-letters an accepted order for the length of a free-text field', async () => {
+      const p = await product(a, 10);
+      await mapItem(a, 'len-sku', p.id);
+      const o = canon([{ id: 'len-sku', priceMinor: 1000 }]);
+      o.displayId = 'D'.repeat(200);
+      o.lines[0].name = 'N'.repeat(600);
+      o.lines[0].note = '😀'.repeat(900);
+      o.customer = {
+        name: 'ñ'.repeat(400),
+        phone: '9'.repeat(400),
+        address: '😀'.repeat(30000),
+        notes: 'n'.repeat(50000),
+      };
+      const res = await newOrder(ca, o);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT status, lastError FROM channelinboundevent WHERE id = ?`,
+            [res.inboxId],
+          )
+        )[0],
+      ).toMatchObject({ status: 'processed' });
+      const co = await link(ca, o.externalOrderId);
+      expect(co.displayId.length).toBe(64);
+      const [ord] = await db.query<RowDataPacket[]>(
+        `SELECT CHAR_LENGTH(customerName) AS n, CHAR_LENGTH(customerPhone) AS p, CHAR_LENGTH(customerAddress) AS a, CHAR_LENGTH(deliveryNotes) AS d FROM \`order\` WHERE id = ?`,
+        [co.orderId],
+      );
+      expect(Number(ord.n)).toBe(191);
+      expect(Number(ord.p)).toBe(191);
+      expect(Number(ord.a)).toBe(10000);
+      expect(Number(ord.d)).toBe(10000);
+      const [it] = await db.query<RowDataPacket[]>(
+        `SELECT CHAR_LENGTH(note) AS n FROM orderitem WHERE orderId = ?`,
+        [co.orderId],
+      );
+      expect(Number(it.n)).toBe(255);
+      // Unmapped item names too.
+      const o2 = canon([
+        { id: `len2-${f.uniq()}`, priceMinor: 1000, name: 'Z'.repeat(900) },
+      ]);
+      const r2 = await newOrder(ca, o2);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT status FROM channelinboundevent WHERE id = ?`,
+            [r2.inboxId],
+          )
+        )[0].status,
+      ).toBe('processed');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('retention (review M4, L1, L3)', () => {
+    it('purges old failed and dead payloads like processed ones', async () => {
+      const dead = await deliver(ca, { type: 'order.new' });
+      await db.execute(
+        `UPDATE channelinboundevent SET receivedAt = ? WHERE id = ?`,
+        [new Date(Date.now() - 40 * 86_400_000), dead.inboxId],
+      );
+      await sweep.purgePayloads();
+      const [ev] = await db.query<RowDataPacket[]>(
+        `SELECT status, payload FROM channelinboundevent WHERE id = ?`,
+        [dead.inboxId],
+      );
+      expect(ev.status).toBe('dead');
+      expect(ev.payload).toBeNull();
+    });
+
+    it('blanks the customer details of old closed marketplace orders, keeps the sale, and is idempotent', async () => {
+      const p = await product(a, 10);
+      await mapItem(a, 'ret-sku', p.id);
+      const mk = async () => {
+        const o = canon([{ id: 'ret-sku', priceMinor: 1000 }]);
+        o.customer = {
+          name: 'Sam K',
+          phone: '0501234567',
+          address: 'Street 1',
+          notes: 'ring twice',
+        };
+        o.lines[0].note = 'no card';
+        await newOrder(ca, o);
+        return link(ca, o.externalOrderId);
+      };
+      const old = await mk();
+      await r().post(`/channels/orders/${old.id}/accept`).set(h(a)).expect(201);
+      for (const st of ['preparing', 'out_for_delivery', 'delivered'])
+        await f.setStatus(a, old.orderId, st);
+      const recent = await mk();
+      await r()
+        .post(`/channels/orders/${recent.id}/accept`)
+        .set(h(a))
+        .expect(201);
+      for (const st of ['preparing', 'out_for_delivery', 'delivered'])
+        await f.setStatus(a, recent.orderId, st);
+      const open = await mk();
+      await db.execute(
+        `UPDATE auditlog SET createdAt = ? WHERE entityType = 'order' AND entityId = ?`,
+        [new Date(Date.now() - 40 * 86_400_000), old.orderId],
+      );
+      await db.execute(`UPDATE \`order\` SET createdAt = ? WHERE id = ?`, [
+        new Date(Date.now() - 40 * 86_400_000),
+        open.orderId,
+      ]);
+      await sweep.scrubClosedOrders();
+      const o1 = await f.orderRow(old.orderId);
+      expect([o1.customerName, o1.customerPhone, o1.customerAddress]).toEqual([
+        '',
+        '',
+        '',
+      ]);
+      expect(o1.deliveryNotes).toBeNull();
+      expect(Number(o1.total)).toBe(10);
+      expect((await f.orderItems(old.orderId))[0].note).toBeNull();
+      expect(await f.orderItems(old.orderId)).toHaveLength(1);
+      expect((await f.orderRow(recent.orderId)).customerName).toBe('Sam K');
+      expect((await f.orderRow(open.orderId)).customerName).toBe('Sam K');
+      await sweep.scrubClosedOrders();
+      expect((await f.orderRow(old.orderId)).customerName).toBe('');
+    });
+
+    it('a connection with an unprocessed delivery cannot be deleted (L1)', async () => {
+      const o = body<{ id: number }>(
+        await r()
+          .post('/outlets')
+          .set(h(a))
+          .send({ name: `L1 ${f.uniq()}` })
+          .expect(201),
+      );
+      const c = await connect(a, o.id);
+      const dead = await deliver(c, { type: 'order.new' });
+      await r().delete(`/channels/connections/${c.id}`).set(h(a)).expect(409);
+      await db.execute(
+        `UPDATE channelinboundevent SET status = 'processed' WHERE id = ?`,
+        [dead.inboxId],
+      );
+      await r().delete(`/channels/connections/${c.id}`).set(h(a)).expect(200);
+    });
+
+    it('a marketplace order is never reported to an ad platform (L3)', async () => {
+      const p = await product(a, 10);
+      await mapItem(a, 'capi-sku', p.id);
+      const o = canon([{ id: 'capi-sku', priceMinor: 1000 }]);
+      await newOrder(ca, o);
+      const co = await link(ca, o.externalOrderId);
+      const consent = JSON.stringify({ consent: { marketing: true } });
+      await db.execute(
+        `UPDATE \`order\` SET attributionJson = ? WHERE id = ?`,
+        [consent, co.orderId],
+      );
+      const normal = await f.adminOrder(a, [{ productId: p.id, quantity: 1 }]);
+      await db.execute(
+        `UPDATE \`order\` SET attributionJson = ? WHERE id = ?`,
+        [consent, normal.id],
+      );
+      const spy = jest
+        .spyOn(app.get(ShopAnalyticsService), 'resolveMetaCapiCredentials')
+        .mockResolvedValue(null);
+      const svc = app.get(ConversionEventsService);
+      await svc.enqueuePurchase(normal.id);
+      expect(spy).toHaveBeenCalledTimes(1); // control: the guard is what stops the marketplace order
+      spy.mockClear();
+      await svc.enqueuePurchase(co.orderId);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
     });
   });
 });
